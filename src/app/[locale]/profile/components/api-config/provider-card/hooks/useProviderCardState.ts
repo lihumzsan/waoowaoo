@@ -16,6 +16,7 @@ import type {
 } from '../types'
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
 import { apiFetch } from '@/lib/api-fetch'
 
 type KeyTestStepStatus = 'pass' | 'fail' | 'skip'
@@ -70,6 +71,7 @@ type BuildCustomPricingResult =
 interface ProviderConnectionPayload {
   apiType: string
   apiKey: string
+  baseUrl?: string
   llmModel?: string
 }
 
@@ -86,14 +88,17 @@ function pickConfiguredLlmModel(params: {
 export function buildProviderConnectionPayload(params: {
   providerKey: string
   apiKey: string
+  baseUrl?: string
   llmModel?: string
 }): ProviderConnectionPayload {
   const apiKey = params.apiKey.trim()
+  const baseUrl = params.baseUrl?.trim()
   const llmModel = params.llmModel?.trim()
 
   return {
     apiType: params.providerKey,
     apiKey,
+    ...(params.providerKey === CODEX_PROVIDER_KEY && baseUrl ? { baseUrl } : {}),
     ...(llmModel ? { llmModel } : {}),
   }
 }
@@ -350,6 +355,7 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: tempKey,
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -373,7 +379,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, doSaveKey, models, providerKey, tempKey])
+  }, [defaultModels.analysisModel, doSaveKey, models, provider.baseUrl, providerKey, tempKey])
 
   const handleForceSaveKey = useCallback(() => {
     doSaveKey()
@@ -391,6 +397,7 @@ export function useProviderCardState({
       const payload = buildProviderConnectionPayload({
         providerKey,
         apiKey: provider.apiKey || '',
+        baseUrl: provider.baseUrl,
         llmModel: fallbackLlmModel,
       })
       const res = await apiFetch('/api/user/api-config/test-provider', {
@@ -405,7 +412,7 @@ export function useProviderCardState({
       setKeyTestSteps([{ name: 'models', status: 'fail', message: 'Network error' }])
       setKeyTestStatus('failed')
     }
-  }, [defaultModels.analysisModel, models, provider.apiKey, providerKey])
+  }, [defaultModels.analysisModel, models, provider.apiKey, provider.baseUrl, providerKey])
 
   const handleDismissTest = useCallback(() => {
     setKeyTestStatus('idle')

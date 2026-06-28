@@ -3,6 +3,10 @@
 import type { ProviderCardProps, ProviderCardTranslator } from './types'
 import type { UseProviderCardStateResult } from './hooks/useProviderCardState'
 import { AppIcon } from '@/components/ui/icons'
+import {
+  CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_PROVIDER_KEY,
+} from '@/lib/ai-providers/codex/constants'
 
 interface ProviderBaseFieldsProps {
   provider: ProviderCardProps['provider']
@@ -11,16 +15,27 @@ interface ProviderBaseFieldsProps {
 }
 
 export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsProps) {
-  const baseUrlPlaceholder = provider.baseUrl || 'https://api.example.com'
+  const isCodexProvider = state.providerKey === CODEX_PROVIDER_KEY
+  const baseUrlPlaceholder = isCodexProvider
+    ? CODEX_DEFAULT_EXECUTABLE_PATH
+    : provider.baseUrl || 'https://api.example.com'
+  const baseUrlLabel = isCodexProvider ? t('codexPathLabel') : t('baseUrl')
+  const configureBaseUrlLabel = isCodexProvider ? t('configureCodexPath') : t('configureBaseUrl')
 
   return (
     <>
       <div className="px-3.5 pt-2.5">
         <div className="glass-surface-soft flex items-center gap-2.5 rounded-xl px-3 py-2">
           <span className="w-[64px] shrink-0 whitespace-nowrap text-[12px] font-semibold text-[var(--glass-text-primary)]">
-            {t('apiKeyLabel')}
+            {isCodexProvider ? t('codexCliLabel') : t('apiKeyLabel')}
           </span>
-          {state.isEditing ? (
+          {isCodexProvider ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap rounded-lg bg-[var(--glass-bg-surface)] px-3 py-1.5 text-[12px] font-semibold text-[var(--glass-text-secondary)]">
+                {t('codexLocalCli')}
+              </span>
+            </div>
+          ) : state.isEditing ? (
             <div className="flex flex-1 items-center gap-2">
               <input
                 type="text"
@@ -213,7 +228,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
         <div className="px-3.5 pb-2.5 pt-2">
           <div className="glass-surface-soft flex items-center gap-2.5 rounded-xl px-3 py-2">
             <span className="w-[64px] shrink-0 whitespace-nowrap text-[12px] font-semibold text-[var(--glass-text-tertiary)]">
-              {t('baseUrl')}
+              {baseUrlLabel}
             </span>
             {state.isEditingUrl ? (
               <div className="flex flex-1 items-center gap-2">
@@ -263,7 +278,7 @@ export function ProviderBaseFields({ provider, t, state }: ProviderBaseFieldsPro
                     className="glass-btn-base glass-btn-tone-info h-7 px-2.5 text-[12px] font-semibold"
                   >
                     <AppIcon name="plus" className="h-3.5 w-3.5" />
-                    <span>{t('configureBaseUrl')}</span>
+                    <span>{configureBaseUrlLabel}</span>
                   </button>
                 )}
               </div>

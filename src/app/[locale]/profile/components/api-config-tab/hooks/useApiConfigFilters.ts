@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { CustomModel, Provider } from '../../api-config'
 import { getProviderKey } from '../../api-config'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
 
 interface UseApiConfigFiltersParams {
   providers: Provider[]
@@ -14,13 +15,14 @@ interface EnabledModelOption extends CustomModel {
 }
 
 const ALWAYS_SHOW_PROVIDERS: string[] = []
-const ALLOWED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google'])
+const ALLOWED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google', CODEX_PROVIDER_KEY])
 const PROVIDER_MODEL_TYPES: Array<'llm' | 'image' | 'video' | 'music'> = ['llm', 'image', 'video', 'music']
 const MODEL_PROVIDER_KEYS = [
   'ark',
   'google',
   'openrouter',
   'fal',
+  CODEX_PROVIDER_KEY,
 ]
 
 function isProviderModelType(type: CustomModel['type']): type is 'llm' | 'image' | 'video' | 'music' {
@@ -35,6 +37,7 @@ function hasProviderApiKey(provider: Provider | undefined): boolean {
   if (!provider) return false
   if (provider.hasApiKey === true) return true
   const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : ''
+  if (getProviderKey(provider.id) === CODEX_PROVIDER_KEY) return true
   return apiKey.length > 0
 }
 

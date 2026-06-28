@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CustomModel, Provider } from '../types'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
 
 export interface ProviderCardDefaultModels {
   analysisModel?: string
@@ -54,5 +55,5 @@ export type ProviderCardTranslator = (
  * UI 层（是否显示"测试连接"按钮）和 逻辑层（保存时是否自动测试）共享此列表
  */
 export const VERIFIABLE_PROVIDER_KEYS = new Set([
-  'ark', 'google', 'openrouter', 'fal',
+  'ark', 'google', 'openrouter', 'fal', CODEX_PROVIDER_KEY,
 ])

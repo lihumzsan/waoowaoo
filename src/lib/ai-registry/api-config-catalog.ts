@@ -1,5 +1,6 @@
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
+import { CODEX_DEFAULT_EXECUTABLE_PATH } from '@/lib/ai-providers/codex/constants'
 import { resolveBuiltinCapabilitiesByModelKey } from './capabilities-catalog'
 import { cloneCapabilities, isPlainObject, isUnifiedModelType, readTrimmedString } from './catalog-utils'
 
@@ -47,7 +48,7 @@ function requireBuiltinApiConfigCatalog(): BuiltinApiConfigCatalogRegistration {
 
 export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
   { id: 'ark', name: 'Volcengine Ark' },
-  { id: 'codex', name: 'Codex Local', baseUrl: 'codex' },
+  { id: 'codex', name: 'Codex Local', baseUrl: CODEX_DEFAULT_EXECUTABLE_PATH },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },

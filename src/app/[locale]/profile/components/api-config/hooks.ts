@@ -7,14 +7,17 @@ import {
     Provider,
     CustomModel,
     encodeModelKey,
+    getProviderKey,
     isPresetComingSoonModelKey,
     resolvePresetProviderName,
 } from './types'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
 import { useUserApiConfigQuery } from './query'
 import {
+    applyCodexPresetDefaults,
     clearMissingDefaultModels,
     applyMissingCapabilityDefaults,
     type CapabilityFieldDefaults,
@@ -66,7 +69,7 @@ export function useProviders(): UseProvidersReturn {
     const [defaultModels, setDefaultModels] = useState<DefaultModels>({})
     const [workflowConcurrency, setWorkflowConcurrency] = useState<WorkflowConcurrency>(DEFAULT_WORKFLOW_CONCURRENCY)
     const [capabilityDefaults, setCapabilityDefaults] = useState<CapabilitySelections>({})
-    const { data, loading: queryLoading, error: queryError, reload } = useUserApiConfigQuery()
+    const { data, loading: queryLoading, error: queryError } = useUserApiConfigQuery()
     const catalogProviderIdsRef = useRef<Set<string>>(new Set())
     const catalogModelKeysRef = useRef<Set<string>>(new Set())
 
@@ -111,14 +114,44 @@ export function useProviders(): UseProvidersReturn {
         }))
 
         const savedProviders: Provider[] = data.providers || []
-        setProviders(mergeProvidersForDisplay(savedProviders, serverCatalogProviders))
-        setModels(mergeModelsForDisplay(data.models || [], catalogModels, pricingDisplay))
-        if (data.defaultModels) setDefaultModels(data.defaultModels)
-        setWorkflowConcurrency(parseWorkflowConcurrency(data.workflowConcurrency))
-        if (data.capabilityDefaults && typeof data.capabilityDefaults === 'object') {
-            setCapabilityDefaults(data.capabilityDefaults as CapabilitySelections)
+        const savedModels: CustomModel[] = data.models || []
+        const mergedProviders = mergeProvidersForDisplay(savedProviders, serverCatalogProviders)
+        const mergedModels = mergeModelsForDisplay(savedModels, catalogModels, pricingDisplay)
+        const normalizedDefaultModels = data.defaultModels || {}
+        const parsedWorkflowConcurrency = parseWorkflowConcurrency(data.workflowConcurrency)
+        const parsedCapabilityDefaults: CapabilitySelections =
+            data.capabilityDefaults && typeof data.capabilityDefaults === 'object'
+                ? data.capabilityDefaults as CapabilitySelections
+                : {}
+        const hasSavedCodexConfig =
+            savedProviders.some((provider) => getProviderKey(provider.id) === CODEX_PROVIDER_KEY) ||
+            savedModels.some((model) => getProviderKey(model.provider) === CODEX_PROVIDER_KEY) ||
+            Object.values(normalizedDefaultModels).some((modelKey) =>
+                typeof modelKey === 'string' && modelKey.startsWith(`${CODEX_PROVIDER_KEY}::`),
+            )
+        const codexResolved = applyCodexPresetDefaults({
+            models: mergedModels,
+            defaultModels: normalizedDefaultModels,
+            shouldAutoSelectText: !hasSavedCodexConfig,
+        })
+        setProviders(mergedProviders)
+        latestProvidersRef.current = mergedProviders
+        setModels(codexResolved.models)
+        latestModelsRef.current = codexResolved.models
+        setDefaultModels(codexResolved.defaultModels)
+        latestDefaultModelsRef.current = codexResolved.defaultModels
+        setWorkflowConcurrency(parsedWorkflowConcurrency)
+        latestWorkflowConcurrencyRef.current = parsedWorkflowConcurrency
+        setCapabilityDefaults(parsedCapabilityDefaults)
+        latestCapabilityDefaultsRef.current = parsedCapabilityDefaults
+        if (codexResolved.changed) {
+            void performSave({
+                defaultModels: codexResolved.defaultModels,
+                workflowConcurrency: parsedWorkflowConcurrency,
+                capabilityDefaults: parsedCapabilityDefaults,
+            })
         }
-    }, [data, queryError, locale])
+    }, [data, queryError, locale, performSave])
 
     // 默认模型操作：选中即立刻保存（与项目设置一致）
     const updateDefaultModel = useCallback((
@@ -209,9 +242,11 @@ export function useProviders(): UseProvidersReturn {
     // 提供商操作
     const updateProviderApiKey = useCallback((providerId: string, apiKey: string) => {
         setProviders(prev => {
-            const next = prev.map(p =>
-                p.id === providerId ? { ...p, apiKey, hasApiKey: !!apiKey } : p
-            )
+            const next = prev.map((provider) => {
+                if (provider.id !== providerId) return provider
+                const isCodex = getProviderKey(providerId) === CODEX_PROVIDER_KEY
+                return { ...provider, apiKey, hasApiKey: isCodex || !!apiKey }
+            })
             latestProvidersRef.current = next
             void performSave()
             return next
@@ -288,9 +323,11 @@ export function useProviders(): UseProvidersReturn {
 
     const updateProviderBaseUrl = useCallback((providerId: string, baseUrl: string) => {
         setProviders(prev => {
-            const next = prev.map(p =>
-                p.id === providerId ? { ...p, baseUrl } : p
-            )
+            const next = prev.map((provider) => {
+                if (provider.id !== providerId) return provider
+                const isCodex = getProviderKey(providerId) === CODEX_PROVIDER_KEY
+                return { ...provider, baseUrl, hasApiKey: isCodex || !!provider.apiKey }
+            })
             latestProvidersRef.current = next
             void performSave()
             return next

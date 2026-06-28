@@ -3,6 +3,7 @@ import {
   getAddableModelTypesForProvider,
   getVisibleModelTypesForProvider,
 } from '@/app/[locale]/profile/components/api-config/provider-card/ProviderAdvancedFields'
+import { buildProviderConnectionPayload } from '@/app/[locale]/profile/components/api-config/provider-card/hooks/useProviderCardState'
 import { getDefaultModelEmptyStateText } from '@/app/[locale]/profile/components/api-config-tab/default-model-empty-state'
 import type { CustomModel } from '@/app/[locale]/profile/components/api-config/types'
 
@@ -24,6 +25,7 @@ describe('api config provider scope', () => {
     expect(getAddableModelTypesForProvider('openrouter')).toEqual(['llm', 'video'])
     expect(getAddableModelTypesForProvider('fal')).toEqual(['image', 'video'])
     expect(getAddableModelTypesForProvider('google')).toEqual(['llm', 'image', 'video', 'music'])
+    expect(getAddableModelTypesForProvider('codex')).toEqual(['llm', 'image'])
     expect(getAddableModelTypesForProvider('unsupported-provider')).toEqual([])
   })
 
@@ -42,5 +44,19 @@ describe('api config provider scope', () => {
     expect(getDefaultModelEmptyStateText('image', t).description).toBe('defaultModelEmptyState.imageDescription')
     expect(getDefaultModelEmptyStateText('video', t).description).toBe('defaultModelEmptyState.videoDescription')
     expect(getDefaultModelEmptyStateText('music', t).description).toBe('defaultModelEmptyState.musicDescription')
+  })
+
+  it('includes Codex local path and llm model in provider connection test payload', () => {
+    expect(buildProviderConnectionPayload({
+      providerKey: 'codex',
+      apiKey: ' ',
+      baseUrl: ' %LOCALAPPDATA%\\OpenAI\\Codex\\bin\\codex.exe ',
+      llmModel: ' gpt-5.5 ',
+    })).toEqual({
+      apiType: 'codex',
+      apiKey: '',
+      baseUrl: '%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\codex.exe',
+      llmModel: 'gpt-5.5',
+    })
   })
 })

@@ -1,5 +1,7 @@
 import OpenAI from 'openai'
 import { ARK_PROVIDER_TEST_LLM_MODEL_ID } from '@/lib/ai-providers/ark/models'
+import { CodexExecError, runCodexSelfCheck } from '@/lib/ai-providers/codex/client'
+import { CODEX_DEFAULT_MODEL_ID, CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
 
 export type TestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
 export type TestStepStatus = 'pass' | 'fail' | 'skip'
@@ -17,12 +19,12 @@ export interface TestProviderResult {
   steps: TestStep[]
 }
 
-type PresetProviderType = 'ark' | 'google' | 'openrouter' | 'fal'
+type PresetProviderType = 'ark' | 'google' | 'openrouter' | 'fal' | 'codex'
 
 type TestProviderPayload = {
   apiType: PresetProviderType
   baseUrl?: string
-  apiKey: string
+  apiKey?: string
   llmModel?: string
 }
 
@@ -131,9 +133,76 @@ async function testFalProvider(apiKey: string): Promise<TestProviderResult> {
   }
 }
 
+function toCodexProbeMessage(error: unknown): string {
+  if (error instanceof CodexExecError) {
+    switch (error.code) {
+      case 'CODEX_EXECUTABLE_NOT_FOUND':
+        return 'Codex CLI executable not found. Install Codex desktop or configure the executable path.'
+      case 'CODEX_EXEC_TIMEOUT':
+        return 'Codex CLI timed out. The local Codex process may be busy or stuck.'
+      case 'CODEX_EMPTY_OUTPUT':
+        return 'Codex CLI returned empty output.'
+      default:
+        return `Codex CLI self-check failed: ${error.message.slice(0, 200)}`
+    }
+  }
+  if (error instanceof Error) return `Codex CLI self-check failed: ${error.message.slice(0, 200)}`
+  return `Codex CLI self-check failed: ${String(error).slice(0, 200)}`
+}
+
+function toCodexProbeDetail(error: unknown): string | undefined {
+  if (!(error instanceof CodexExecError)) {
+    if (error instanceof Error) return error.message.slice(0, 500)
+    return String(error).slice(0, 500)
+  }
+
+  const parts: string[] = [`code=${error.code}`]
+  if (error.exitCode !== undefined) parts.push(`exitCode=${String(error.exitCode)}`)
+  if (error.signal !== undefined && error.signal !== null) parts.push(`signal=${String(error.signal)}`)
+  if (error.stdout) parts.push(`stdout=${error.stdout}`)
+  if (error.stderr) parts.push(`stderr=${error.stderr}`)
+  return parts.join(' | ').slice(0, 500)
+}
+
+async function testCodexProvider(input: {
+  codexPath?: string
+  model?: string
+}): Promise<TestProviderResult> {
+  const model = input.model?.trim() || CODEX_DEFAULT_MODEL_ID
+
+  try {
+    const result = await runCodexSelfCheck({
+      codexPath: input.codexPath?.trim() || undefined,
+      model,
+    })
+    const seconds = Math.max(1, Math.round(result.durationMs / 1000))
+    return {
+      success: true,
+      steps: [{
+        name: 'textGen',
+        status: 'pass',
+        model,
+        message: `Codex CLI OK (${seconds}s): ${result.text.trim()}`,
+        detail: 'Local Codex CLI self-check; no API key or routekey used.',
+      }],
+    }
+  } catch (error) {
+    return {
+      success: false,
+      steps: [{
+        name: 'textGen',
+        status: 'fail',
+        model,
+        message: toCodexProbeMessage(error),
+        detail: toCodexProbeDetail(error),
+      }],
+    }
+  }
+}
+
 export async function testProviderConnection(payload: TestProviderPayload): Promise<TestProviderResult> {
-  const apiKey = payload.apiKey.trim()
-  if (!apiKey) {
+  const apiKey = payload.apiKey?.trim() || ''
+  if (!apiKey && payload.apiType !== CODEX_PROVIDER_KEY) {
     return {
       success: false,
       steps: [{ name: 'models', status: 'fail', message: 'Missing apiKey' }],
@@ -159,6 +228,11 @@ export async function testProviderConnection(payload: TestProviderPayload): Prom
       return await testGoogleProvider(apiKey)
     case 'fal':
       return await testFalProvider(apiKey)
+    case 'codex':
+      return await testCodexProvider({
+        codexPath: payload.baseUrl,
+        model: payload.llmModel,
+      })
     default:
       return {
         success: false,

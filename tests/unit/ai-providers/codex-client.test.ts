@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -36,6 +37,64 @@ function createMockChild() {
 describe('codex cli client', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('auto-detects the newest desktop Codex executable before falling back to the configured path', async () => {
+    const previousLocalAppData = process.env.LOCALAPPDATA
+    const previousCodexCliPath = process.env.CODEX_CLI_PATH
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-path-test-'))
+    const binDir = path.join(tempRoot, 'OpenAI', 'Codex', 'bin')
+    const olderPath = path.join(binDir, '0.1.0', 'codex.exe')
+    const newerPath = path.join(binDir, '0.2.0', 'codex.exe')
+    const directPath = path.join(binDir, 'codex.exe')
+
+    try {
+      process.env.LOCALAPPDATA = tempRoot
+      delete process.env.CODEX_CLI_PATH
+      await fs.mkdir(path.dirname(olderPath), { recursive: true })
+      await fs.mkdir(path.dirname(newerPath), { recursive: true })
+      await fs.writeFile(olderPath, '')
+      await fs.writeFile(newerPath, '')
+      await fs.writeFile(directPath, '')
+      const olderTime = new Date('2026-01-01T00:00:00.000Z')
+      const newerTime = new Date('2026-01-02T00:00:00.000Z')
+      await fs.utimes(olderPath, olderTime, olderTime)
+      await fs.utimes(newerPath, newerTime, newerTime)
+
+      expect(resolveCodexExecutablePath()).toBe(newerPath)
+    } finally {
+      if (previousLocalAppData === undefined) {
+        delete process.env.LOCALAPPDATA
+      } else {
+        process.env.LOCALAPPDATA = previousLocalAppData
+      }
+      if (previousCodexCliPath === undefined) {
+        delete process.env.CODEX_CLI_PATH
+      } else {
+        process.env.CODEX_CLI_PATH = previousCodexCliPath
+      }
+      await fs.rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers CODEX_CLI_PATH when auto-detecting the local executable', async () => {
+    const previousCodexCliPath = process.env.CODEX_CLI_PATH
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-env-test-'))
+    const configuredPath = path.join(tempRoot, 'custom-codex.exe')
+
+    try {
+      await fs.writeFile(configuredPath, '')
+      process.env.CODEX_CLI_PATH = configuredPath
+
+      expect(resolveCodexExecutablePath()).toBe(configuredPath)
+    } finally {
+      if (previousCodexCliPath === undefined) {
+        delete process.env.CODEX_CLI_PATH
+      } else {
+        process.env.CODEX_CLI_PATH = previousCodexCliPath
+      }
+      await fs.rm(tempRoot, { recursive: true, force: true })
+    }
   })
 
   it('expands Windows-style environment variables in the executable path', () => {
