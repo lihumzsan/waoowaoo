@@ -48,10 +48,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video' | 'music'
+  apiType: 'image' | 'video'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'music' | 'second' | 'call'
+  unit: 'image' | 'video' | 'second' | 'call'
   maxFrozenCost?: number
 }
 
@@ -84,15 +84,14 @@ function shouldExposeCredits(): boolean {
 }
 
 type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
-type FixedPriceMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'music'>
+type PreconfirmMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video'>
 
-function isFixedPriceMediaBillingInfo(
+function isPreconfirmMediaBillingInfo(
   info: TaskBillingInfo | null | undefined,
-): info is BillableTaskBillingInfo & { apiType: FixedPriceMediaApiType } {
+): info is BillableTaskBillingInfo & { apiType: PreconfirmMediaApiType } {
   return info?.billable === true && (
     info.apiType === 'image'
     || info.apiType === 'video'
-    || info.apiType === 'music'
   )
 }
 
@@ -104,7 +103,7 @@ function toPositiveMoney(value: number): number {
 export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQuoteView> {
   const showCredits = shouldExposeCredits()
   const billingMode = await getBillingMode()
-  const mediaTasks = plan.tasks.filter((task) => isFixedPriceMediaBillingInfo(task.billingInfo))
+  const mediaTasks = plan.tasks.filter((task) => isPreconfirmMediaBillingInfo(task.billingInfo))
   const totalMaxFrozenCost = toPositiveMoney(mediaTasks.reduce((total, task) => {
     const info = task.billingInfo as Extract<TaskBillingInfo, { billable: true }>
     return total + info.maxFrozenCost
@@ -121,7 +120,7 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
       currency: 'credits' as const,
     } : {}),
     items: mediaTasks.map((task) => {
-      const info = task.billingInfo as BillableTaskBillingInfo & { apiType: FixedPriceMediaApiType }
+      const info = task.billingInfo as BillableTaskBillingInfo & { apiType: PreconfirmMediaApiType }
       return {
         id: task.id,
         taskType: task.taskType,

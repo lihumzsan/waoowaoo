@@ -32,6 +32,14 @@ function requiresConfirmationByEffects(effects: {
   )
 }
 
+function isToolConfirmationExemptOperationId(operationId: string): boolean {
+  return (
+    isEditFirstAutoApprovedOperationId(operationId)
+    || operationId === 'generate_project_music'
+    || operationId === 'generate_episode_bgm_score'
+  )
+}
+
 function validateOperationRegistry(registry: Record<string, unknown>) {
   for (const [operationId, operation] of Object.entries(registry)) {
     if (!operation || typeof operation !== 'object' || Array.isArray(operation)) {
@@ -137,7 +145,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       needsConfirm
       && channels.tool === true
       && confirmation.required !== true
-      && !isEditFirstAutoApprovedOperationId(operationId)
+      && !isToolConfirmationExemptOperationId(operationId)
     ) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_MISMATCH:${operationId}`)
     }

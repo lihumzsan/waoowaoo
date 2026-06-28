@@ -127,17 +127,16 @@ describe('operation planning billing quote', () => {
     }
   })
 
-  it('quotes fixed-price media from PlannedTask.billingInfo without counting text tasks', async () => {
+  it('quotes pre-confirm media from PlannedTask.billingInfo without counting text or music tasks', async () => {
     const quote = await quoteOperationPlan(buildPlan())
 
     expect(quote.showCredits).toBe(true)
     expect(quote.taskCount).toBe(4)
-    expect(quote.mediaTaskCount).toBe(3)
-    expect(quote.totalMaxFrozenCost).toBe(12.25)
+    expect(quote.mediaTaskCount).toBe(2)
+    expect(quote.totalMaxFrozenCost).toBe(9.75)
     expect(quote.items.map((item) => item.model)).toEqual([
       'planned-image-model',
       'planned-video-model',
-      'planned-music-model',
     ])
   })
 
@@ -148,7 +147,7 @@ describe('operation planning billing quote', () => {
     const view = await toOperationPlanView(buildPlan())
 
     expect(view.quote.showCredits).toBe(false)
-    expect(view.quote.mediaTaskCount).toBe(3)
+    expect(view.quote.mediaTaskCount).toBe(2)
     expect(Object.prototype.hasOwnProperty.call(view.quote, 'totalMaxFrozenCost')).toBe(false)
     expect(view.quote.items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'maxFrozenCost'))).toBe(true)
   })
@@ -156,13 +155,13 @@ describe('operation planning billing quote', () => {
   it('rejects commit when the planned media cost exceeds the confirmed maximum', async () => {
     await expect(assertOperationPlanConfirmedCost({
       plan: buildPlan(),
-      confirmedMaxCost: 12.24,
+      confirmedMaxCost: 9.74,
     })).rejects.toMatchObject({
       code: 'CONFLICT',
       details: {
         code: 'OPERATION_QUOTE_EXCEEDED_CONFIRMED_MAX_COST',
-        actual: 12.25,
-        confirmedMaxCost: 12.24,
+        actual: 9.75,
+        confirmedMaxCost: 9.74,
       },
     })
   })

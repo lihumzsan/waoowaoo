@@ -66,10 +66,8 @@ describe('cloud music generation runtime options', () => {
 
   afterEach(() => restoreEnv())
 
-  it('uses platform music model and platform output format when submitting a task', async () => {
+  it('uses platform music model and platform output format without pre-confirm cost', async () => {
     const result = await createMusicGenerationOperations().generate_project_music.execute(buildContext(), {
-      confirmed: true,
-      confirmedMaxCost: 999,
       prompt: 'quiet tension cue',
       durationSeconds: 30,
     })

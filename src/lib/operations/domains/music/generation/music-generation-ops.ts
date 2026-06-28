@@ -384,8 +384,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        required: true,
-        summary: '将生成音乐/配乐资产（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        required: false,
       },
       inputSchema: musicGenerationInputSchema,
       outputSchema: taskSubmitOutput,
@@ -415,8 +414,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        required: true,
-        summary: '将根据已完成的视频编排生成连续 BGM 多音轨工程并混成最终 BGM（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        required: false,
       },
       inputSchema: bgmScoreGenerationInputSchema,
       outputSchema: taskSubmitOutput,

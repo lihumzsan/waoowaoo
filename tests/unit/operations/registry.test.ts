@@ -90,14 +90,14 @@ describe('project agent operation registry', () => {
     expect(operation.summary).toContain('Do not call merely to confirm the current phase, next action, projectId, or episodeId')
   })
 
-  it('registers project music generation as a confirmed billable tool/api operation', () => {
+  it('registers project music generation as a billable tool/api operation without pre-confirmation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.generate_project_music
 
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: true })
     expect(operation.groupPath).toEqual(['media', 'music'])
-    expect(operation.confirmation.required).toBe(true)
+    expect(operation.confirmation.required).toBe(false)
     expect(operation.effects).toEqual({
       writes: true,
       billable: true,
