@@ -472,10 +472,13 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   }
   readonly actionLabel?: string
   readonly action?: WorkspaceCanvasNodeAction
+  readonly actionBillingQuoteLabel?: string
   readonly secondaryActionLabel?: string
   readonly secondaryAction?: WorkspaceCanvasNodeAction
+  readonly secondaryActionBillingQuoteLabel?: string
   readonly tertiaryActionLabel?: string
   readonly tertiaryAction?: WorkspaceCanvasNodeAction
+  readonly tertiaryActionBillingQuoteLabel?: string
   readonly actionDisabled?: boolean
   readonly onAction?: WorkspaceCanvasNodeActionHandler
   readonly expanded?: boolean

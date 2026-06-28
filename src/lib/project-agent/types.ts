@@ -93,6 +93,12 @@ export interface ProjectAgentInterruptionPartData {
   operationPlan?: OperationPlanView | null
 }
 
+export interface ProjectAgentOperationPlanPreviewPartData {
+  operationId: string
+  toolCallId?: string | null
+  operationPlan: OperationPlanView
+}
+
 export type ProjectAgentInterruptionOutcome = 'approved' | 'rejected' | 'superseded'
 
 export interface ProjectAgentInterruptionResolvedPartData {
@@ -287,6 +293,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'
   | 'data-agent-operation-start'
+  | 'data-agent-operation-plan-preview'
   | 'data-agent-activity'
   | 'data-agent-stop'
   | 'data-assistant-choice-card'

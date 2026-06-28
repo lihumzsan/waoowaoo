@@ -5,17 +5,19 @@ import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import {
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
+import { commitOperationPlan, planOperation, resolveConfirmedMaxCostForExecution, toOperationPlanView } from '@/lib/operations/planning'
 import {
   shouldRequireAssistantToolApproval,
   type AssistantPermissionMode,
 } from '@/lib/project-agent/permission-mode'
-import type { ProjectAgentContext } from '@/lib/project-agent/types'
+import type { ProjectAgentContext, ProjectAgentOperationPlanPreviewPartData } from '@/lib/project-agent/types'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import {
   buildToolError,
   normalizeOperationExecutionToolError,
   withOperationErrorDetails,
 } from '@/lib/adapters/operation-error-normalizer'
+import { writeOperationDataPart } from '@/lib/operations/types'
 
 function attachConfirmedMaxCost(input: unknown, confirmedMaxCost: number | undefined): unknown {
   if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) return input
@@ -135,17 +137,45 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
+  const operationContext = {
+    request: params.request,
+    userId: params.userId,
+    projectId: params.projectId,
+    context: params.context,
+    source: params.source,
+    writer: params.writer,
+    toolCallId: params.toolCallId,
+  }
   let result: unknown
   try {
-    result = await operation.execute({
-      request: params.request,
-      userId: params.userId,
-      projectId: params.projectId,
-      context: params.context,
-      source: params.source,
-      writer: params.writer,
-      toolCallId: params.toolCallId,
-    }, parsedInput)
+    if (!requiresConfirmation && operation.plan && operation.commit) {
+      const plan = await planOperation({
+        operation,
+        ctx: operationContext,
+        input: parsedInput,
+      })
+      const operationPlan = await toOperationPlanView(plan)
+      if (operationPlan.quote.billable) {
+        writeOperationDataPart<ProjectAgentOperationPlanPreviewPartData>(params.writer, 'data-agent-operation-plan-preview', {
+          operationId: params.operationId,
+          ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
+          operationPlan,
+        })
+      }
+      result = await commitOperationPlan({
+        operation,
+        ctx: operationContext,
+        input: parsedInput,
+        plan,
+        confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+          ctx: operationContext,
+          input: parsedInput,
+          plan,
+        }),
+      })
+    } else {
+      result = await operation.execute(operationContext, parsedInput)
+    }
   } catch (error) {
     return {
       ok: false,

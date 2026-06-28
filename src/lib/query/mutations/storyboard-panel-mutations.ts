@@ -11,7 +11,7 @@ import {
     invalidateQueryTemplates,
     requestJsonWithError,
 } from './mutation-shared'
-import { useConfirmMediaOperationPlan } from '../use-confirm-media-operation-plan'
+import { useMediaOperationBillingPlan } from '../use-media-operation-billing-plan'
 
 function invalidateStoryboardMutationCaches(
     queryClient: ReturnType<typeof useQueryClient>,
@@ -31,7 +31,7 @@ function invalidateStoryboardMutationCaches(
 
 export function useRegenerateProjectPanelImage(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async ({
             panelId,
@@ -56,7 +56,7 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
                 ...(extraImageUrls && extraImageUrls.length > 0 ? { extraImageUrls } : {}),
                 ...(referenceImageNotes && referenceImageNotes.length > 0 ? { referenceImageNotes } : {}),
             }
-            const confirmedMaxCost = await confirmMediaOperationPlan('regenerate_panel_image', requestBody)
+            const confirmedMaxCost = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -127,7 +127,7 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
 
 export function useGenerateStoryboardGridImages(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async (payload: {
             episodeId: string
@@ -135,7 +135,7 @@ export function useGenerateStoryboardGridImages(projectId: string, episodeId?: s
             sourceVideoBlockId: string
             panelIds: readonly string[]
         }) => {
-            const confirmedMaxCost = await confirmMediaOperationPlan('generate_storyboard_grid_images', {
+            const confirmedMaxCost = await mediaOperationBillingPlan('generate_storyboard_grid_images', {
                 episodeId: payload.episodeId,
                 editScriptId: payload.editScriptId,
                 sourceVideoBlockId: payload.sourceVideoBlockId,
@@ -477,7 +477,7 @@ export function useInsertProjectPanel(projectId: string, episodeId?: string | nu
 
 export function useCreateProjectPanelVariant(projectId: string, episodeId?: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
     return useMutation({
         mutationFn: async (payload: {
             storyboardId: string
@@ -493,7 +493,7 @@ export function useCreateProjectPanelVariant(projectId: string, episodeId?: stri
             includeCharacterAssets: boolean
             includeLocationAsset: boolean
         }) => {
-            const confirmedMaxCost = await confirmMediaOperationPlan('panel_variant', {
+            const confirmedMaxCost = await mediaOperationBillingPlan('panel_variant', {
                 storyboardId: payload.storyboardId,
                 insertAfterPanelId: payload.insertAfterPanelId,
                 sourcePanelId: payload.sourcePanelId,

@@ -46,6 +46,8 @@ export function makeTestOperation<Input, Output>(params: {
   agentFlow?: OperationAgentFlow
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
+  plan?: ProjectAgentOperationDefinition<Input, Output>['plan']
+  commit?: ProjectAgentOperationDefinition<Input, Output>['commit']
   execute: (ctx: ProjectAgentOperationContext, input: Input) => Promise<Output>
 }): ProjectAgentOperationDefinition<Input, Output> {
   return {
@@ -64,6 +66,8 @@ export function makeTestOperation<Input, Output>(params: {
     }),
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,
+    ...(params.plan ? { plan: params.plan } : {}),
+    ...(params.commit ? { commit: params.commit } : {}),
     execute: params.execute,
   }
 }

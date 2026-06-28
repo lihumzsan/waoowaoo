@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { resolveTaskResponse } from '@/lib/task/client'
-import { useConfirmAssetOperationPlan } from '@/lib/query/use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '@/lib/query/use-asset-operation-billing-plan'
 import { queryKeys } from '@/lib/query/keys'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import {
@@ -268,7 +268,7 @@ export function useRefreshAssets(input: { scope: 'global' | 'project'; projectId
 
 export function useAssetActions(input: AssetActionScopeInput) {
   const queryClient = useQueryClient()
-  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+  const assetOperationBillingPlan = useAssetOperationBillingPlan()
 
   const create = async (payload: Record<string, unknown>) => {
     const response = await apiFetch('/api/assets', {
@@ -331,7 +331,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
       projectId: input.projectId,
       ...payload,
     }
-    const confirmedMaxCost = await confirmAssetOperationPlan(assetId, 'generate', requestBody)
+    const confirmedMaxCost = await assetOperationBillingPlan(assetId, 'generate', requestBody)
     const overlayTarget = resolveGenerateOverlayTarget(input, payload)
     if (overlayTarget) {
       upsertTaskTargetOverlay(queryClient, {
@@ -406,7 +406,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
       projectId: input.projectId,
       ...payload,
     }
-    const confirmedMaxCost = await confirmAssetOperationPlan(assetId, 'modify-render', requestBody)
+    const confirmedMaxCost = await assetOperationBillingPlan(assetId, 'modify-render', requestBody)
     const response = await apiFetch(`/api/assets/${assetId}/modify-render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

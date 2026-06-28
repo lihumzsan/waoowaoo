@@ -359,6 +359,15 @@ function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boo
   return kind !== 'editRequiredAsset' && kind !== 'editScript'
 }
 
+function nodeBillingQuoteLabels(data: WorkspaceCanvasFlowNode['data']): readonly string[] {
+  return [
+    data.actionBillingQuoteLabel,
+    data.secondaryActionBillingQuoteLabel,
+    data.tertiaryActionBillingQuoteLabel,
+  ].filter((label): label is string => typeof label === 'string' && label.trim().length > 0)
+    .filter((label, index, labels) => labels.indexOf(label) === index)
+}
+
 export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
   return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'editCinematographyShotPlan' || kind === 'editProcessGroup' || kind === 'editAssetGroup' || kind === 'videoPlan' || kind === 'bgmScore'
 }
@@ -2325,6 +2334,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
   const tertiaryAction = data.tertiaryAction
+  const billingQuoteLabels = nodeBillingQuoteLabels(data)
   const secondaryActionIcon: AppIconName = secondaryAction?.type === 'open_video_block_arrangement'
     ? 'link'
     : 'externalLink'
@@ -2424,9 +2434,16 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
             {shouldShowFooter ? (
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <p className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>
-                  {data.kind === 'editRequiredAsset' ? '' : data.meta}
-                </p>
+                <div className="min-w-0">
+                  <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs text-[var(--glass-text-tertiary)]`}>
+                    {data.kind === 'editRequiredAsset' ? '' : data.meta}
+                  </p>
+                  {billingQuoteLabels.length > 0 ? (
+                    <p className={`${SELECTABLE_TEXT_CLASS} mt-1 truncate text-[11px] font-medium text-[var(--glass-tone-info-fg)]`}>
+                      {billingQuoteLabels.join(' · ')}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {showDetailsToggle ? (
                     <button

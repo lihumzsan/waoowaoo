@@ -15,7 +15,7 @@ import {
   GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalCharacters,
 } from './asset-hub-mutations-shared'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectCharacterImageContext {
   previousQueries: Array<{
@@ -199,7 +199,7 @@ function restoreUnifiedQuerySnapshots(
 
 export function useGenerateCharacterImage() {
   const queryClient = useQueryClient()
-  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+  const assetOperationBillingPlan = useAssetOperationBillingPlan()
   const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
@@ -221,7 +221,7 @@ export function useGenerateCharacterImage() {
         appearanceIndex,
         count,
       }
-      const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
+      const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
       return await requestJsonWithError<GenerateCharacterImageResponse>(`/api/assets/${characterId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -307,7 +307,7 @@ export function useGenerateCharacterImage() {
 
 export function useModifyCharacterImage() {
   const queryClient = useQueryClient()
-  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+  const assetOperationBillingPlan = useAssetOperationBillingPlan()
   const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
 
   return useMutation({
@@ -332,7 +332,7 @@ export function useModifyCharacterImage() {
         modifyPrompt,
         extraImageUrls,
       }
-      const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'modify-render', requestBody)
+      const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'modify-render', requestBody)
       return await requestJsonWithError(`/api/assets/${characterId}/modify-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

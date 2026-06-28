@@ -13,7 +13,7 @@ import {
     requestTaskResponseWithError,
 } from './mutation-shared'
 import { resolveTaskResponse } from '@/lib/task/client'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectProjectLocationImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -71,7 +71,7 @@ function applyLocationSelectionToProject(
 
 export function useGenerateProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -91,7 +91,7 @@ export function useGenerateProjectLocationImage(projectId: string) {
                 imageIndex,
                 count,
             })
-            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -174,7 +174,7 @@ export function useUploadProjectLocationImage(projectId: string) {
 
 export function useModifyProjectLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssetAndProjectData = () =>
         invalidateQueryTemplates(queryClient, [
             queryKeys.projectAssets.all(projectId),
@@ -194,7 +194,7 @@ export function useModifyProjectLocationImage(projectId: string) {
                 projectId,
                 ...params,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(params.locationId, 'modify-render', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(params.locationId, 'modify-render', requestBody)
             const response = await requestTaskResponseWithError(`/api/assets/${params.locationId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -230,7 +230,7 @@ export function useModifyProjectLocationImage(projectId: string) {
 
 export function useRegenerateLocationGroup(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -242,7 +242,7 @@ export function useRegenerateLocationGroup(projectId: string) {
                 projectId,
                 count,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -277,7 +277,7 @@ export function useRegenerateLocationGroup(projectId: string) {
 
 export function useRegenerateSingleLocationImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -289,7 +289,7 @@ export function useRegenerateSingleLocationImage(projectId: string) {
                 projectId,
                 imageIndex,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

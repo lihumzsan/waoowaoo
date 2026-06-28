@@ -48,10 +48,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video'
+  apiType: 'image' | 'video' | 'music'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'second' | 'call'
+  unit: 'image' | 'video' | 'music' | 'second' | 'call'
   maxFrozenCost?: number
 }
 
@@ -84,11 +84,22 @@ function shouldExposeCredits(): boolean {
 }
 
 type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
-type PreconfirmMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video'>
+type QuoteVisibleMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'music'>
+type ConfirmedCostMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video'>
 
-function isPreconfirmMediaBillingInfo(
+function isQuoteVisibleMediaBillingInfo(
   info: TaskBillingInfo | null | undefined,
-): info is BillableTaskBillingInfo & { apiType: PreconfirmMediaApiType } {
+): info is BillableTaskBillingInfo & { apiType: QuoteVisibleMediaApiType } {
+  return info?.billable === true && (
+    info.apiType === 'image'
+    || info.apiType === 'video'
+    || info.apiType === 'music'
+  )
+}
+
+function isConfirmedCostMediaBillingInfo(
+  info: TaskBillingInfo | null | undefined,
+): info is BillableTaskBillingInfo & { apiType: ConfirmedCostMediaApiType } {
   return info?.billable === true && (
     info.apiType === 'image'
     || info.apiType === 'video'
@@ -103,7 +114,7 @@ function toPositiveMoney(value: number): number {
 export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQuoteView> {
   const showCredits = shouldExposeCredits()
   const billingMode = await getBillingMode()
-  const mediaTasks = plan.tasks.filter((task) => isPreconfirmMediaBillingInfo(task.billingInfo))
+  const mediaTasks = plan.tasks.filter((task) => isQuoteVisibleMediaBillingInfo(task.billingInfo))
   const totalMaxFrozenCost = toPositiveMoney(mediaTasks.reduce((total, task) => {
     const info = task.billingInfo as Extract<TaskBillingInfo, { billable: true }>
     return total + info.maxFrozenCost
@@ -120,7 +131,7 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
       currency: 'credits' as const,
     } : {}),
     items: mediaTasks.map((task) => {
-      const info = task.billingInfo as BillableTaskBillingInfo & { apiType: PreconfirmMediaApiType }
+      const info = task.billingInfo as BillableTaskBillingInfo & { apiType: QuoteVisibleMediaApiType }
       return {
         id: task.id,
         taskType: task.taskType,
@@ -136,6 +147,13 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
       }
     }),
   }
+}
+
+function confirmedCostMediaTotal(plan: OperationPlan): number {
+  return toPositiveMoney(plan.tasks.reduce((total, task) => {
+    if (!isConfirmedCostMediaBillingInfo(task.billingInfo)) return total
+    return total + task.billingInfo.maxFrozenCost
+  }, 0))
 }
 
 export function createPlannedTask(params: {
@@ -216,8 +234,9 @@ export async function assertOperationPlanConfirmedCost(params: {
   plan: OperationPlan
   confirmedMaxCost?: number | null
 }): Promise<void> {
-  const quote = await quoteOperationPlan(params.plan)
-  if (!quote.billable || !quote.showCredits) return
+  if (!shouldExposeCredits()) return
+  const actual = confirmedCostMediaTotal(params.plan)
+  if (actual <= 0) return
   const confirmedMaxCost = params.confirmedMaxCost
   if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) {
     throw new ApiError('INVALID_PARAMS', {
@@ -225,7 +244,6 @@ export async function assertOperationPlanConfirmedCost(params: {
       message: 'confirmedMaxCost is required for billable fixed-price media operations',
     })
   }
-  const actual = quote.totalMaxFrozenCost ?? 0
   if (actual > confirmedMaxCost) {
     throw new ApiError('CONFLICT', {
       code: 'OPERATION_QUOTE_EXCEEDED_CONFIRMED_MAX_COST',

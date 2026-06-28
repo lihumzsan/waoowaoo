@@ -20,6 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import type {
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
+  ProjectAgentOperationPlanPreviewPartData,
   ProjectAgentStopPartData,
   ProjectContextPartData,
   ProjectPhasePartData,
@@ -198,6 +199,29 @@ export function WorkspaceAssistantReasoningPart(props: ReasoningMessagePartProps
   )
 }
 
+function BillingQuoteBlock(props: {
+  quote: OperationPlanView['quote'] | null
+}) {
+  const t = useTranslations('assistantAgent')
+  const quote = props.quote
+  const quoteText = quote?.billable === true && quote.mediaTaskCount > 0
+    ? quote.showCredits && typeof quote.totalMaxFrozenCost === 'number'
+      ? t('cards.billingQuoteWithCredits', {
+        count: quote.mediaTaskCount,
+        cost: quote.totalMaxFrozenCost,
+      })
+      : t('cards.billingQuoteWithoutCredits', {
+        count: quote.mediaTaskCount,
+      })
+    : null
+  if (!quoteText) return null
+  return (
+    <div className="mt-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2.5 py-2 leading-5 text-[var(--glass-text-primary)]">
+      {quoteText}
+    </div>
+  )
+}
+
 export function ConfirmationActionCard(props: {
   operationId: string
   title: string
@@ -209,26 +233,11 @@ export function ConfirmationActionCard(props: {
   cancelPending: boolean
 }) {
   const t = useTranslations('assistantAgent')
-  const quote = props.operationPlan?.quote ?? null
-  const quoteText = quote?.billable === true && quote.mediaTaskCount > 0
-    ? quote.showCredits && typeof quote.totalMaxFrozenCost === 'number'
-      ? t('cards.billingQuoteWithCredits', {
-        count: quote.mediaTaskCount,
-        cost: quote.totalMaxFrozenCost,
-      })
-      : t('cards.billingQuoteWithoutCredits', {
-        count: quote.mediaTaskCount,
-      })
-    : null
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
-      {quoteText ? (
-        <div className="mt-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2.5 py-2 leading-5 text-[var(--glass-text-primary)]">
-          {quoteText}
-        </div>
-      ) : null}
+      <BillingQuoteBlock quote={props.operationPlan?.quote ?? null} />
       <div className="mt-3 flex gap-2">
         <button
           type="button"
@@ -247,6 +256,19 @@ export function ConfirmationActionCard(props: {
           {props.cancelPending ? t('cards.cancelRunning') : t('cards.cancelAction')}
         </button>
       </div>
+    </div>
+  )
+}
+
+function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOperationPlanPreviewPartData>) {
+  const t = useTranslations('assistantAgent')
+  const locale = normalizeProjectAgentLocale(useLocale())
+  const title = localizeProjectAgentOperationTitle(props.data.operationId, locale)
+  return (
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+      <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</div>
+      <div className="mt-1 leading-5">{t('cards.billingQuotePreview')}</div>
+      <BillingQuoteBlock quote={props.data.operationPlan.quote} />
     </div>
   )
 }
@@ -1262,6 +1284,7 @@ export function useWorkspaceAssistantMessagePartComponents({
       by_name: {
         'agent-run': HiddenRuntimeContextDataCard,
         'agent-operation-start': HiddenRuntimeContextDataCard,
+        'agent-operation-plan-preview': OperationPlanPreviewDataCard,
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,
         'assistant-choice-card': hideChoiceCards

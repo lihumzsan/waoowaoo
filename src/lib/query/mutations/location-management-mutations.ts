@@ -14,7 +14,7 @@ import {
     requestTaskResponseWithError,
     requestVoidWithError,
 } from './mutation-shared'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface DeleteProjectLocationContext {
     previousAssets: ProjectAssetsData | undefined
@@ -301,7 +301,7 @@ export function useConfirmProjectLocationSelection(
 
 export function useBatchGenerateLocationImages(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
 
     return useMutation({
         mutationFn: async (locationIds: string[]) => {
@@ -312,7 +312,7 @@ export function useBatchGenerateLocationImages(projectId: string) {
                         kind: 'location',
                         projectId,
                     }
-                    const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
+                    const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
                     return await apiFetch(`/api/assets/${locationId}/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

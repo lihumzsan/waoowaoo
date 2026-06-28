@@ -12,7 +12,7 @@ import {
     requestJsonWithError,
     requestVoidWithError,
 } from './mutation-shared'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectProjectCharacterImageContext {
     previousAssets: ProjectAssetsData | undefined
@@ -104,7 +104,7 @@ function removeCharacterFromProject(
 
 export function useGenerateProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -125,7 +125,7 @@ export function useGenerateProjectCharacterImage(projectId: string) {
                 appearanceId,
                 count,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

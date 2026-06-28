@@ -15,7 +15,7 @@ import {
   GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectLocationImageContext {
   previousQueries: Array<{
@@ -128,7 +128,7 @@ function restoreUnifiedQuerySnapshots(
 
 export function useGenerateLocationImage() {
   const queryClient = useQueryClient()
-  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+  const assetOperationBillingPlan = useAssetOperationBillingPlan()
   const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
@@ -144,7 +144,7 @@ export function useGenerateLocationImage() {
         kind: 'location',
         count,
       }
-      const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'generate', requestBody)
+      const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
       return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,7 +175,7 @@ export function useGenerateLocationImage() {
 
 export function useModifyLocationImage() {
   const queryClient = useQueryClient()
-  const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+  const assetOperationBillingPlan = useAssetOperationBillingPlan()
   const invalidateLocations = () => invalidateGlobalLocations(queryClient)
 
   return useMutation({
@@ -197,7 +197,7 @@ export function useModifyLocationImage() {
         modifyPrompt,
         extraImageUrls,
       }
-      const confirmedMaxCost = await confirmAssetOperationPlan(locationId, 'modify-render', requestBody)
+      const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'modify-render', requestBody)
       return await requestJsonWithError(`/api/assets/${locationId}/modify-render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -11,11 +11,11 @@ import {
     requestTaskResponseWithError,
 } from './mutation-shared'
 import { resolveTaskResponse } from '@/lib/task/client'
-import { useConfirmAssetOperationPlan } from '../use-confirm-asset-operation-plan'
+import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 export function useModifyProjectCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssetAndProjectData = () =>
         invalidateQueryTemplates(queryClient, [
             queryKeys.projectAssets.all(projectId),
@@ -36,7 +36,7 @@ export function useModifyProjectCharacterImage(projectId: string) {
                 projectId,
                 ...params,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(params.characterId, 'modify-render', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(params.characterId, 'modify-render', requestBody)
             const response = await requestTaskResponseWithError(`/api/assets/${params.characterId}/modify-render`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -72,7 +72,7 @@ export function useModifyProjectCharacterImage(projectId: string) {
 
 export function useRegenerateCharacterGroup(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -93,7 +93,7 @@ export function useRegenerateCharacterGroup(projectId: string) {
                 appearanceId,
                 count,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -128,7 +128,7 @@ export function useRegenerateCharacterGroup(projectId: string) {
 
 export function useRegenerateSingleCharacterImage(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
     const invalidateProjectAssets = () =>
         invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
 
@@ -149,7 +149,7 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
                 appearanceId,
                 imageIndex,
             }
-            const confirmedMaxCost = await confirmAssetOperationPlan(characterId, 'generate', requestBody)
+            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -217,7 +217,7 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
 
 export function useBatchGenerateCharacterImages(projectId: string) {
     const queryClient = useQueryClient()
-    const confirmAssetOperationPlan = useConfirmAssetOperationPlan()
+    const assetOperationBillingPlan = useAssetOperationBillingPlan()
 
     return useMutation({
         mutationFn: async (items: Array<{ characterId: string; appearanceId: string }>) => {
@@ -229,7 +229,7 @@ export function useBatchGenerateCharacterImages(projectId: string) {
                         projectId,
                         appearanceId: item.appearanceId,
                     }
-                    const confirmedMaxCost = await confirmAssetOperationPlan(item.characterId, 'generate', requestBody)
+                    const confirmedMaxCost = await assetOperationBillingPlan(item.characterId, 'generate', requestBody)
                     return await apiFetch(`/api/assets/${item.characterId}/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

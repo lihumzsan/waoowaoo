@@ -127,16 +127,17 @@ describe('operation planning billing quote', () => {
     }
   })
 
-  it('quotes pre-confirm media from PlannedTask.billingInfo without counting text or music tasks', async () => {
+  it('quotes fixed-price media from PlannedTask.billingInfo without counting text tasks', async () => {
     const quote = await quoteOperationPlan(buildPlan())
 
     expect(quote.showCredits).toBe(true)
     expect(quote.taskCount).toBe(4)
-    expect(quote.mediaTaskCount).toBe(2)
-    expect(quote.totalMaxFrozenCost).toBe(9.75)
+    expect(quote.mediaTaskCount).toBe(3)
+    expect(quote.totalMaxFrozenCost).toBe(12.25)
     expect(quote.items.map((item) => item.model)).toEqual([
       'planned-image-model',
       'planned-video-model',
+      'planned-music-model',
     ])
   })
 
@@ -147,12 +148,12 @@ describe('operation planning billing quote', () => {
     const view = await toOperationPlanView(buildPlan())
 
     expect(view.quote.showCredits).toBe(false)
-    expect(view.quote.mediaTaskCount).toBe(2)
+    expect(view.quote.mediaTaskCount).toBe(3)
     expect(Object.prototype.hasOwnProperty.call(view.quote, 'totalMaxFrozenCost')).toBe(false)
     expect(view.quote.items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'maxFrozenCost'))).toBe(true)
   })
 
-  it('rejects commit when the planned media cost exceeds the confirmed maximum', async () => {
+  it('rejects commit when the planned image and video cost exceeds the confirmed maximum', async () => {
     await expect(assertOperationPlanConfirmedCost({
       plan: buildPlan(),
       confirmedMaxCost: 9.74,
@@ -164,6 +165,23 @@ describe('operation planning billing quote', () => {
         confirmedMaxCost: 9.74,
       },
     })
+  })
+
+  it('does not require confirmed maximum cost for music-only fixed-price media plans', async () => {
+    const basePlan = buildPlan()
+    const musicOnlyPlan: OperationPlan = {
+      ...basePlan,
+      tasks: basePlan.tasks.filter((task) => task.taskType === TASK_TYPE.MUSIC_GENERATE),
+    }
+
+    const quote = await quoteOperationPlan(musicOnlyPlan)
+    expect(quote.billable).toBe(true)
+    expect(quote.mediaTaskCount).toBe(1)
+    expect(quote.totalMaxFrozenCost).toBe(2.5)
+    await expect(assertOperationPlanConfirmedCost({
+      plan: musicOnlyPlan,
+      confirmedMaxCost: null,
+    })).resolves.toBeUndefined()
   })
 
   it('exposes plan and commit only for the migrated fixed-price media operations in this batch', () => {

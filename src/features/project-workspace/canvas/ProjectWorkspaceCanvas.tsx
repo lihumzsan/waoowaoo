@@ -35,6 +35,10 @@ import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
+  useWorkspaceCanvasActionBillingPreviews,
+  workspaceCanvasActionBillingPreviewKey,
+} from './hooks/useWorkspaceCanvasActionBillingPreviews'
+import {
   buildWorkspaceNodeCanvasProjection,
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
@@ -198,6 +202,44 @@ function CanvasViewportControls({
   )
 }
 
+function attachWorkspaceCanvasBillingPreviewLabels(params: {
+  readonly projectId?: string | null
+  readonly episodeId?: string | null
+  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+  readonly previews: ReadonlyMap<string, string>
+}): WorkspaceCanvasFlowNode[] {
+  return params.nodes.map((node) => {
+    const actionKey = workspaceCanvasActionBillingPreviewKey({
+      projectId: params.projectId,
+      episodeId: params.episodeId,
+      action: node.data.action,
+    })
+    const secondaryActionKey = workspaceCanvasActionBillingPreviewKey({
+      projectId: params.projectId,
+      episodeId: params.episodeId,
+      action: node.data.secondaryAction,
+    })
+    const tertiaryActionKey = workspaceCanvasActionBillingPreviewKey({
+      projectId: params.projectId,
+      episodeId: params.episodeId,
+      action: node.data.tertiaryAction,
+    })
+    const actionBillingQuoteLabel = actionKey ? params.previews.get(actionKey) : undefined
+    const secondaryActionBillingQuoteLabel = secondaryActionKey ? params.previews.get(secondaryActionKey) : undefined
+    const tertiaryActionBillingQuoteLabel = tertiaryActionKey ? params.previews.get(tertiaryActionKey) : undefined
+    if (!actionBillingQuoteLabel && !secondaryActionBillingQuoteLabel && !tertiaryActionBillingQuoteLabel) return node
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        ...(actionBillingQuoteLabel ? { actionBillingQuoteLabel } : {}),
+        ...(secondaryActionBillingQuoteLabel ? { secondaryActionBillingQuoteLabel } : {}),
+        ...(tertiaryActionBillingQuoteLabel ? { tertiaryActionBillingQuoteLabel } : {}),
+      },
+    }
+  })
+}
+
 function ProjectWorkspaceCanvasContent({
   onAssistantSelectionChange,
   editScriptPending = false,
@@ -205,6 +247,7 @@ function ProjectWorkspaceCanvasContent({
   styleBibleFocusRequestId = 0,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
+  const billingT = useTranslations('assistantAgent')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
   const { episodeName, novelText, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
@@ -573,11 +616,35 @@ function ProjectWorkspaceCanvasContent({
     () => applyWorkspaceStructuredStreamPatches(projection.nodes, structuredStreamRuntime.patches),
     [projection.nodes, structuredStreamRuntime.patches],
   )
+  const billingQuoteWithCredits = useCallback(
+    (values: { count: number; cost: number }) => billingT('cards.billingQuoteWithCredits', values),
+    [billingT],
+  )
+  const billingQuoteWithoutCredits = useCallback(
+    (values: { count: number }) => billingT('cards.billingQuoteWithoutCredits', values),
+    [billingT],
+  )
+  const actionBillingPreviews = useWorkspaceCanvasActionBillingPreviews({
+    projectId,
+    episodeId,
+    nodes: projectedNodes,
+    withCredits: billingQuoteWithCredits,
+    withoutCredits: billingQuoteWithoutCredits,
+  })
+  const projectedNodesWithBilling = useMemo(
+    () => attachWorkspaceCanvasBillingPreviewLabels({
+      projectId,
+      episodeId,
+      nodes: projectedNodes,
+      previews: actionBillingPreviews,
+    }),
+    [actionBillingPreviews, episodeId, projectId, projectedNodes],
+  )
   const projectionEdges = projection.edges
-  projectedNodeByIdRef.current = new Map(projectedNodes.map((node) => [node.id, node]))
+  projectedNodeByIdRef.current = new Map(projectedNodesWithBilling.map((node) => [node.id, node]))
   const workspaceRuntimeTargets = useMemo(
-    () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
-    [projectedNodes],
+    () => collectWorkspaceNodeRuntimeTargets(projectedNodesWithBilling),
+    [projectedNodesWithBilling],
   )
   const workspaceTaskStateMap = useTaskTargetStateMap(projectId, workspaceRuntimeTargets, {
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
@@ -603,8 +670,8 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const projectionNodeSignature = useMemo(
-    () => buildWorkspaceCanvasNodeSignature(projectedNodes),
-    [projectedNodes],
+    () => buildWorkspaceCanvasNodeSignature(projectedNodesWithBilling),
+    [projectedNodesWithBilling],
   )
   const projectionEdgeSignature = useMemo(
     () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
@@ -656,10 +723,10 @@ function ProjectWorkspaceCanvasContent({
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
     appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(attachNodeUiState(projectedNodes, {
+    setSourceNodes(attachNodeUiState(projectedNodesWithBilling, {
       preservedNodePositions: readExpansionAnchorNodePositions(),
     }))
-  }, [attachNodeUiState, projectedNodes, projectionNodeSignature, readExpansionAnchorNodePositions])
+  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature, readExpansionAnchorNodePositions])
 
   useEffect(() => {
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
@@ -672,7 +739,7 @@ function ProjectWorkspaceCanvasContent({
   ])
 
   useEffect(() => {
-    const projectionByNodeId = new Map(projectedNodes.map((node) => [node.id, node]))
+    const projectionByNodeId = new Map(projectedNodesWithBilling.map((node) => [node.id, node]))
     let changed = false
     const nextIds = new Set<string>()
     optimisticRunningNodeIdsRef.current.forEach((nodeId) => {
@@ -689,7 +756,7 @@ function ProjectWorkspaceCanvasContent({
       nextIds.add(nodeId)
     })
     if (changed) optimisticRunningNodeIdsRef.current = nextIds
-  }, [projectedNodes, projectionNodeSignature])
+  }, [projectedNodesWithBilling, projectionNodeSignature])
 
   useEffect(() => () => {
     optimisticRunningClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -705,7 +772,7 @@ function ProjectWorkspaceCanvasContent({
   }, [attachNodeUiState, readExpansionAnchorNodePositions])
 
   useEffect(() => {
-    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
+    const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))
     const nextAnchorPositions = new Map<string, { readonly x: number; readonly y: number }>()
     expansionAnchorNodePositionsRef.current.forEach((position, nodeId) => {
       if (projectedNodeIds.has(nodeId)) nextAnchorPositions.set(nodeId, position)
@@ -725,7 +792,7 @@ function ProjectWorkspaceCanvasContent({
       })
       return changed ? next : current
     })
-  }, [projectedNodes, projectionNodeSignature])
+  }, [projectedNodesWithBilling, projectionNodeSignature])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return

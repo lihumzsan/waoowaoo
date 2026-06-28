@@ -7,7 +7,11 @@ import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
-import { useConfirmMediaOperationPlan } from '../use-confirm-media-operation-plan'
+import { useMediaOperationBillingPlan } from '../use-media-operation-billing-plan'
+import {
+    buildBatchVideoGenerationPlanRequest,
+    type VideoGenerationOptions,
+} from '../media-operation-plan-input'
 
 // ============ 类型定义 ============
 export interface PanelCandidate {
@@ -46,9 +50,6 @@ export interface StoryboardData {
     groups: StoryboardGroup[]
 }
 
-type VideoGenerationOptionValue = string | number | boolean
-type VideoGenerationOptions = Record<string, VideoGenerationOptionValue>
-
 interface BatchVideoGenerationParams {
     generationOptions?: VideoGenerationOptions
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
@@ -56,20 +57,6 @@ interface BatchVideoGenerationParams {
     shotNumbers?: readonly number[]
     blockIndex?: number
     referenceImageUrls?: readonly string[]
-}
-
-function resolveVideoGenerationOperationId(params: {
-    all?: boolean
-    mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
-}) {
-    if (params.mode === 'auto') return 'generate_episode_videos_auto'
-    if (params.mode === 'asset-reference') {
-        return params.all === true ? 'generate_episode_asset_reference_videos' : 'generate_asset_reference_video'
-    }
-    if (params.mode === 'grid') {
-        return params.all === true ? 'generate_episode_video_groups' : 'generate_video_group'
-    }
-    return params.all === true ? 'generate_episode_videos' : 'generate_panel_video'
 }
 
 // ============ 查询 Hooks ============
@@ -98,13 +85,13 @@ export function useStoryboards(projectId: string | null, episodeId: string | nul
  */
 export function useRegeneratePanelImage(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async ({ panelId }: { panelId: string }) => {
             if (!projectId) throw new Error('Project ID is required')
             const requestBody = { panelId }
-            const confirmedMaxCost = await confirmMediaOperationPlan('regenerate_panel_image', requestBody)
+            const confirmedMaxCost = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -188,7 +175,7 @@ export function useModifyPanelImage(projectId: string | null, episodeId: string 
  */
 export function useGenerateVideo(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async (params: {
@@ -232,7 +219,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 requestBody.generationOptions = params.generationOptions
             }
 
-            const confirmedMaxCost = await confirmMediaOperationPlan('generate_panel_video', {
+            const confirmedMaxCost = await mediaOperationBillingPlan('generate_panel_video', {
                 ...requestBody,
             })
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
@@ -284,58 +271,28 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
  */
 export function useBatchGenerateVideos(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
-    const confirmMediaOperationPlan = useConfirmMediaOperationPlan(projectId, episodeId)
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async (params: BatchVideoGenerationParams) => {
             if (!projectId) throw new Error('Project ID is required')
             if (!episodeId) throw new Error('Episode ID is required')
 
-            const requestBody: {
-                all: boolean
-                episodeId: string
-                generationOptions?: VideoGenerationOptions
-                mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
-                gridMode?: '2x2' | '3x3'
-                shotNumbers?: readonly number[]
-                blockIndex?: number
-                referenceImageUrls?: readonly string[]
-            } = {
-                all: !(
-                    (params.mode === 'grid' && Array.isArray(params.shotNumbers) && params.shotNumbers.length > 0)
-                    || (params.mode === 'asset-reference' && typeof params.blockIndex === 'number')
-                ),
+            const request = buildBatchVideoGenerationPlanRequest({
                 episodeId,
-            }
-            if (params.mode === 'grid' || params.mode === 'auto' || params.mode === 'asset-reference') {
-                requestBody.mode = params.mode
-            }
-            if (params.mode === 'grid') {
-                requestBody.gridMode = params.gridMode === '3x3' ? '3x3' : '2x2'
-                if (Array.isArray(params.shotNumbers) && params.shotNumbers.length > 0) {
-                    requestBody.shotNumbers = params.shotNumbers
-                }
-            }
-            if (typeof params.blockIndex === 'number') requestBody.blockIndex = params.blockIndex
-            if (Array.isArray(params.referenceImageUrls) && params.referenceImageUrls.length > 0) {
-                requestBody.referenceImageUrls = params.referenceImageUrls
-            }
-            if (params.generationOptions && typeof params.generationOptions === 'object') {
-                requestBody.generationOptions = params.generationOptions
-            }
-
-            const operationId = resolveVideoGenerationOperationId({
-                all: requestBody.all,
-                mode: requestBody.mode,
+                generationOptions: params.generationOptions,
+                mode: params.mode,
+                gridMode: params.gridMode,
+                shotNumbers: params.shotNumbers,
+                blockIndex: params.blockIndex,
+                referenceImageUrls: params.referenceImageUrls,
             })
-            const confirmedMaxCost = await confirmMediaOperationPlan(operationId, {
-                ...requestBody,
-            })
+            const confirmedMaxCost = await mediaOperationBillingPlan(request.operationId, request.input)
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ...requestBody,
+                    ...request.input,
                     ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
                 }),
             })
@@ -413,18 +370,22 @@ export function useRenderFinalVideo(projectId: string | null, episodeId: string 
  */
 export function useGenerateBgmScore(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
 
     return useMutation({
         mutationFn: async () => {
             if (!projectId) throw new Error('Project ID is required')
             if (!episodeId) throw new Error('Episode ID is required')
 
+            const requestBody = { episodeId }
+            const confirmedMaxCost = await mediaOperationBillingPlan('generate_episode_bgm_score', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/generate-bgm`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     confirmed: true,
-                    episodeId,
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
                 }),
             })
             await checkApiResponse(res)

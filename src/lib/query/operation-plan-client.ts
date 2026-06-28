@@ -54,7 +54,7 @@ export function readPlanConfirmedMaxCost(plan: OperationPlanView): number | null
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export function buildOperationPlanConfirmationText(params: {
+export function buildOperationPlanBillingText(params: {
   plan: OperationPlanView
   withCredits: (values: { count: number; cost: number }) => string
   withoutCredits: (values: { count: number }) => string

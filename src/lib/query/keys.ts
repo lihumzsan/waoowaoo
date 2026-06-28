@@ -63,6 +63,11 @@ export const queryKeys = {
         all: () => ['user-models'] as const,
     },
 
+    operationPlans: {
+        preview: (projectId: string, operationId: string, inputKey: string) =>
+            ['operation-plan-preview', projectId, operationId, inputKey] as const,
+    },
+
     // ============ 任务轮询 ============
     tasks: {
         all: (projectId: string) => ['tasks', projectId] as const,
