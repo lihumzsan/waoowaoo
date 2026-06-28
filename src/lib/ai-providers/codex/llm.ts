@@ -26,6 +26,12 @@ import type {
 import type { AiLlmProviderConfig } from '@/lib/ai-registry/types'
 import { CODEX_PROVIDER_KEY } from './constants'
 import { runCodexTextCompletion, type CodexChatMessage } from './client'
+import {
+  buildCodexMessagesWithToolProtocol,
+  CODEX_TOOL_CALL_FINISH_REASON,
+  parseCodexToolProtocolOutput,
+  shouldUseCodexToolProtocol,
+} from './tool-call-protocol'
 
 type NonSystemPromptMessage = Extract<LanguageModelV3Message, { role: 'user' | 'assistant' | 'tool' }>
 type NonSystemPromptPart = NonSystemPromptMessage['content'][number]
@@ -48,20 +54,18 @@ function emptyLanguageModelUsage(): LanguageModelV3Usage {
   }
 }
 
-function warningsForUnsupportedOptions(options: LanguageModelV3CallOptions): SharedV3Warning[] {
+function warningsForUnsupportedOptions(
+  options: LanguageModelV3CallOptions,
+  toolProtocolEnabled: boolean,
+): SharedV3Warning[] {
+  if (toolProtocolEnabled) return []
+
   const warnings: SharedV3Warning[] = []
-  if (options.tools && options.tools.length > 0) {
-    warnings.push({
-      type: 'unsupported',
-      feature: 'tools',
-      details: 'Codex local language model returns text and does not emit AI SDK tool calls.',
-    })
-  }
   if (options.toolChoice && options.toolChoice.type !== 'none') {
     warnings.push({
       type: 'unsupported',
       feature: 'toolChoice',
-      details: 'Codex local language model does not support AI SDK tool choice semantics.',
+      details: 'Codex local language model requires declared tools before tool choice can be applied.',
     })
   }
   return warnings
@@ -220,38 +224,80 @@ export function createCodexLanguageModel(input: AiProviderLanguageModelContext):
     modelId: input.selection.modelId,
     supportedUrls: {},
     async doGenerate(options: LanguageModelV3CallOptions): Promise<LanguageModelV3GenerateResult> {
+      const toolProtocolEnabled = shouldUseCodexToolProtocol(options)
+      const usage = emptyLanguageModelUsage()
+      const warnings = warningsForUnsupportedOptions(options, toolProtocolEnabled)
       const result = await runCodexLanguageModelText({
         providerConfig: input.providerConfig,
         modelId: input.selection.modelId,
-        messages: promptToCodexMessages(options.prompt),
+        messages: buildCodexMessagesWithToolProtocol(promptToCodexMessages(options.prompt), options),
       })
+      if (toolProtocolEnabled) {
+        const parsed = parseCodexToolProtocolOutput(result.text, options)
+        if (parsed.kind === 'tool-call') {
+          return {
+            content: [parsed.toolCall],
+            finishReason: CODEX_TOOL_CALL_FINISH_REASON,
+            usage,
+            warnings,
+          }
+        }
+        return {
+          content: [{ type: 'text', text: parsed.text }],
+          finishReason: CODEX_FINISH_REASON,
+          usage,
+          warnings,
+        }
+      }
       return {
         content: [{ type: 'text', text: result.text }],
         finishReason: CODEX_FINISH_REASON,
-        usage: emptyLanguageModelUsage(),
-        warnings: warningsForUnsupportedOptions(options),
+        usage,
+        warnings,
       }
     },
     async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
+      const toolProtocolEnabled = shouldUseCodexToolProtocol(options)
       const result = await runCodexLanguageModelText({
         providerConfig: input.providerConfig,
         modelId: input.selection.modelId,
-        messages: promptToCodexMessages(options.prompt),
+        messages: buildCodexMessagesWithToolProtocol(promptToCodexMessages(options.prompt), options),
       })
       const responseId = `codex-${Date.now()}`
       const usage = emptyLanguageModelUsage()
-      const warnings = warningsForUnsupportedOptions(options)
+      const warnings = warningsForUnsupportedOptions(options, toolProtocolEnabled)
+      const protocolOutput = toolProtocolEnabled
+        ? parseCodexToolProtocolOutput(result.text, options)
+        : null
       return {
         stream: new ReadableStream<LanguageModelV3StreamPart>({
           start(controller) {
             controller.enqueue({ type: 'stream-start', warnings })
             controller.enqueue({ type: 'response-metadata', id: responseId, modelId: input.selection.modelId, timestamp: new Date() })
-            controller.enqueue({ type: 'text-start', id: responseId })
-            if (result.text) {
-              controller.enqueue({ type: 'text-delta', id: responseId, delta: result.text })
+            if (protocolOutput?.kind === 'tool-call') {
+              const { toolCall } = protocolOutput
+              controller.enqueue({
+                type: 'tool-input-start',
+                id: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+              })
+              controller.enqueue({
+                type: 'tool-input-delta',
+                id: toolCall.toolCallId,
+                delta: toolCall.input,
+              })
+              controller.enqueue({ type: 'tool-input-end', id: toolCall.toolCallId })
+              controller.enqueue(toolCall)
+              controller.enqueue({ type: 'finish', usage, finishReason: CODEX_TOOL_CALL_FINISH_REASON })
+            } else {
+              const text = protocolOutput?.kind === 'text' ? protocolOutput.text : result.text
+              controller.enqueue({ type: 'text-start', id: responseId })
+              if (text) {
+                controller.enqueue({ type: 'text-delta', id: responseId, delta: text })
+              }
+              controller.enqueue({ type: 'text-end', id: responseId })
+              controller.enqueue({ type: 'finish', usage, finishReason: CODEX_FINISH_REASON })
             }
-            controller.enqueue({ type: 'text-end', id: responseId })
-            controller.enqueue({ type: 'finish', usage, finishReason: CODEX_FINISH_REASON })
             controller.close()
           },
         }),

@@ -43,6 +43,60 @@ vi.mock('@/lib/ai-providers/codex/client', () => ({
 import { codexAdapter } from '@/lib/ai-providers/codex/adapter'
 import { createCodexLanguageModel, runCodexLlmCompletion, runCodexLlmStream } from '@/lib/ai-providers/codex/llm'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
+import type { LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from '@ai-sdk/provider'
+
+type CodexTextCompletionInput = {
+  codexPath: string
+  model: string
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+}
+
+const projectPhaseTool: LanguageModelV3FunctionTool = {
+  type: 'function',
+  name: 'get_project_phase',
+  description: 'Read the project phase.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      detail: { type: 'string' },
+    },
+    required: ['detail'],
+    additionalProperties: false,
+  },
+}
+
+function createTestCodexLanguageModel() {
+  return createCodexLanguageModel({
+    providerKey: 'codex',
+    selection: {
+      provider: 'codex',
+      modelId: 'gpt-5.5',
+      modelKey: 'codex::gpt-5.5',
+    },
+    providerConfig: {
+      id: 'codex',
+      name: 'Codex Local',
+      apiKey: '',
+      baseUrl: '/opt/codex',
+    },
+  })
+}
+
+async function readLanguageModelStreamParts(
+  stream: ReadableStream<LanguageModelV3StreamPart>,
+): Promise<LanguageModelV3StreamPart[]> {
+  const reader = stream.getReader()
+  const parts: LanguageModelV3StreamPart[] = []
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) return parts
+      parts.push(result.value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
 
 describe('codex provider adapter', () => {
   beforeEach(() => {
@@ -144,20 +198,7 @@ describe('codex provider adapter', () => {
   })
 
   it('creates an AI SDK language model backed by Codex CLI text generation', async () => {
-    const model = createCodexLanguageModel({
-      providerKey: 'codex',
-      selection: {
-        provider: 'codex',
-        modelId: 'gpt-5.5',
-        modelKey: 'codex::gpt-5.5',
-      },
-      providerConfig: {
-        id: 'codex',
-        name: 'Codex Local',
-        apiKey: '',
-        baseUrl: '/opt/codex',
-      },
-    })
+    const model = createTestCodexLanguageModel()
 
     const result = await model.doGenerate({
       prompt: [
@@ -177,6 +218,88 @@ describe('codex provider adapter', () => {
         { role: 'user', content: 'say ok' },
       ],
     })
+  })
+
+  it('converts Codex structured output into an AI SDK tool call for doGenerate', async () => {
+    runCodexTextCompletionMock.mockResolvedValueOnce({
+      text: '{"type":"tool_call","toolName":"get_project_phase","input":{"detail":"full"}}',
+      stdout: '',
+      stderr: '',
+    })
+    const model = createTestCodexLanguageModel()
+
+    const result = await model.doGenerate({
+      prompt: [
+        { role: 'system', content: 'Use the project tools.' },
+        { role: 'user', content: [{ type: 'text', text: 'read phase' }] },
+      ],
+      tools: [projectPhaseTool],
+    })
+
+    const toolCall = result.content.find((part) => part.type === 'tool-call')
+    expect(toolCall).toBeDefined()
+    if (!toolCall || toolCall.type !== 'tool-call') throw new Error('EXPECTED_TOOL_CALL')
+    expect(toolCall.toolName).toBe('get_project_phase')
+    expect(JSON.parse(toolCall.input)).toEqual({ detail: 'full' })
+    expect(toolCall.toolCallId).toMatch(/^codex_tool_/)
+    expect(result.finishReason).toEqual({ unified: 'tool-calls', raw: 'tool_calls' })
+    expect(result.warnings).toEqual([])
+
+    const rawCall = runCodexTextCompletionMock.mock.calls[0] as unknown as [CodexTextCompletionInput] | undefined
+    const call = rawCall?.[0]
+    expect(call?.messages[0]?.content).toContain('Codex tool-call protocol')
+    expect(call?.messages[0]?.content).toContain('get_project_phase')
+  })
+
+  it('streams Codex structured output as AI SDK tool-call parts', async () => {
+    runCodexTextCompletionMock.mockResolvedValueOnce({
+      text: '{"type":"tool_call","toolName":"get_project_phase","input":{"detail":"summary"}}',
+      stdout: '',
+      stderr: '',
+    })
+    const model = createTestCodexLanguageModel()
+
+    const result = await model.doStream({
+      prompt: [
+        { role: 'system', content: 'Use the project tools.' },
+        { role: 'user', content: [{ type: 'text', text: 'read phase' }] },
+      ],
+      tools: [projectPhaseTool],
+    })
+    const parts = await readLanguageModelStreamParts(result.stream)
+
+    expect(parts).toContainEqual({ type: 'stream-start', warnings: [] })
+    expect(parts).toContainEqual(expect.objectContaining({
+      type: 'tool-input-start',
+      toolName: 'get_project_phase',
+    }))
+    expect(parts).toContainEqual(expect.objectContaining({
+      type: 'tool-call',
+      toolName: 'get_project_phase',
+      input: '{"detail":"summary"}',
+    }))
+    expect(parts).toContainEqual({
+      type: 'finish',
+      usage: expect.any(Object),
+      finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+    })
+  })
+
+  it('fails loudly when Codex requests an unavailable tool', async () => {
+    runCodexTextCompletionMock.mockResolvedValueOnce({
+      text: '{"type":"tool_call","toolName":"missing_tool","input":{}}',
+      stdout: '',
+      stderr: '',
+    })
+    const model = createTestCodexLanguageModel()
+
+    await expect(model.doGenerate({
+      prompt: [
+        { role: 'system', content: 'Use the project tools.' },
+        { role: 'user', content: [{ type: 'text', text: 'read phase' }] },
+      ],
+      tools: [projectPhaseTool],
+    })).rejects.toThrow('CODEX_TOOL_CALL_UNKNOWN_TOOL:missing_tool')
   })
 
   it('executes Codex local image generation with reference image normalization', async () => {
