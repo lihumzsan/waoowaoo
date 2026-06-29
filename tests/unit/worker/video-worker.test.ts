@@ -267,12 +267,6 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
 function buildGenerationSegmentExecution(segment: EditGenerationSegment): EditGenerationSegmentExecution {
   return {
     shotNumbers: segment.shotNumbers,
-    motionFlow: 'Continuous action carries from shot to shot without a time jump',
-    cameraFlow: 'Camera scale changes preserve the same axis and screen direction',
-    blockingFlow: 'Hero and chair keep a stable spatial relationship across the segment',
-    visibilityContinuity: 'Hero remains visible while the chair remains the blocking anchor',
-    soundFlow: segment.continuity,
-    continuityLocks: ['same room', 'same screen direction', 'same character positions'],
     continuousVideoPrompt: 'Stored continuous segment prompt from ShotExecutionPlan. [00:00-00:02] Shot 1: Hero and chair hold the same screen direction. <room tone continues>',
   }
 }

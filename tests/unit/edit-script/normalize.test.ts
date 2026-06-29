@@ -167,15 +167,6 @@ function executionPlan() {
     generationSegmentExecutions: [
       {
         shotNumbers: [1, 2],
-        motionFlow: 'Anna moves closer while the hidden subject stays seated.',
-        cameraFlow: 'The camera holds the same axis and slowly tightens.',
-        blockingFlow: 'The high-backed chair remains centered and hides the seated figure.',
-        visibilityContinuity: 'Disguised Grandmother stays hidden in both shots.',
-        soundFlow: 'Floor creak continues into chair hinge sound.',
-        continuityLocks: [
-          'same high-backed chair',
-          'Disguised Grandmother remains physically present',
-        ],
         continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and the hidden subject stays physically present. <chair hinge begins>',
       },
     ],
@@ -238,8 +229,32 @@ describe('shot execution plan normalization', () => {
     expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
     expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
     expect(normalizedExecution.shots[0]?.videoPrompt).toContain('Single-shot video prompt')
-    expect(normalizedExecution.generationSegmentExecutions[0]?.visibilityContinuity).toContain('stays hidden')
     expect(normalizedExecution.generationSegmentExecutions[0]?.continuousVideoPrompt).toContain('Cabin reveal continuous segment')
+    expect(normalizedExecution.generationSegmentExecutions[0]).toEqual({
+      shotNumbers: [1, 2],
+      continuousVideoPrompt: expect.stringContaining('hidden subject'),
+    })
+  })
+
+  it('rejects redundant generation segment continuity fields', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const plan = executionPlan()
+    const redundantPlan = {
+      ...plan,
+      generationSegmentExecutions: [
+        {
+          ...plan.generationSegmentExecutions[0],
+          motionFlow: 'redundant split continuity field',
+        },
+      ],
+    }
+
+    expect(() => normalizeEditShotExecutionPlan(
+      redundantPlan,
+      normalizedCore.shots,
+      normalizedCore.generationSegments,
+    ))
+      .toThrow(/Unrecognized key[\s\S]*motionFlow/)
   })
 
   it('rejects execution plans that drop in-scene characters or required objects', () => {

@@ -60,12 +60,6 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
       generationSegmentExecutions: [
         {
           shotNumbers: [1],
-          motionFlow: 'single shot motion',
-          cameraFlow: 'locked camera',
-          blockingFlow: 'Anna and chair keep their positions',
-          visibilityContinuity: 'Anna remains visible',
-          soundFlow: 'quiet room tone',
-          continuityLocks: ['same room', 'same axis'],
           continuousVideoPrompt: 'Continuous segment video prompt for Anna and the chair in the same room. [00:00-00:03] Shot 1 preserves the same chair axis and room tone.',
         },
       ],

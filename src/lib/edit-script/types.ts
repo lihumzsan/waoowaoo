@@ -120,12 +120,6 @@ export interface EditGenerationSegment {
 
 export interface EditGenerationSegmentExecution {
   readonly shotNumbers: readonly number[]
-  readonly motionFlow: string
-  readonly cameraFlow: string
-  readonly blockingFlow: string
-  readonly visibilityContinuity: string
-  readonly soundFlow: string
-  readonly continuityLocks: readonly string[]
   readonly continuousVideoPrompt: string
 }
 
@@ -354,12 +348,6 @@ export const editShotExecutionPlanSchema = z.object({
   }).strict()).min(1).max(60),
   generationSegmentExecutions: z.array(z.object({
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    motionFlow: z.string().trim().min(1),
-    cameraFlow: z.string().trim().min(1),
-    blockingFlow: z.string().trim().min(1),
-    visibilityContinuity: z.string().trim().min(1),
-    soundFlow: z.string().trim().min(1),
-    continuityLocks: z.array(z.string().trim().min(1)).min(1).max(16),
     continuousVideoPrompt: z.string().trim().min(1),
   }).strict()).min(1).max(60),
 }).strict()

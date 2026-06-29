@@ -97,12 +97,6 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
       generationSegmentExecutions: [
         {
           shotNumbers: [1],
-          motionFlow: 'Anna moves toward the chair.',
-          cameraFlow: 'Slow push preserves the same axis.',
-          blockingFlow: 'Chair remains centered and hides the seated figure.',
-          visibilityContinuity: 'Disguised Grandmother remains hidden.',
-          soundFlow: 'floorboards creak in the same room tone.',
-          continuityLocks: ['same chair', 'same hidden subject'],
           continuousVideoPrompt: 'Continuous segment prompt. [00:00-00:03] Shot 1 preserves the chair axis and hidden subject.',
         },
       ],

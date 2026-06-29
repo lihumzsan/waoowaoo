@@ -182,12 +182,6 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
 function buildSegmentExecution(segment: EditGenerationSegment): EditGenerationSegmentExecution {
   return {
     shotNumbers: segment.shotNumbers,
-    motionFlow: 'Hero steps closer without a time jump.',
-    cameraFlow: 'Locked shot becomes a slow push while keeping the same axis.',
-    blockingFlow: 'Hero stays screen left of Chair.',
-    visibilityContinuity: 'Hero remains visible and Chair remains the anchor.',
-    soundFlow: 'Room tone carries into floor creak.',
-    continuityLocks: ['same room', 'same chair', 'same screen direction'],
     continuousVideoPrompt: CONTINUOUS_PROMPT,
   }
 }

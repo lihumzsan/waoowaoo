@@ -150,12 +150,6 @@ export function normalizeEditShotExecutionPlan(
     .sort((left, right) => left.shotNumber - right.shotNumber)
   const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment): EditGenerationSegmentExecution => ({
     shotNumbers: [...segment.shotNumbers],
-    motionFlow: segment.motionFlow.trim(),
-    cameraFlow: segment.cameraFlow.trim(),
-    blockingFlow: segment.blockingFlow.trim(),
-    visibilityContinuity: segment.visibilityContinuity.trim(),
-    soundFlow: segment.soundFlow.trim(),
-    continuityLocks: segment.continuityLocks.map((lock) => lock.trim()),
     continuousVideoPrompt: segment.continuousVideoPrompt.trim(),
   }))
   assertContinuousShotNumbers(shots)
