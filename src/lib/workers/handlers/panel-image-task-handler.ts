@@ -177,8 +177,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   })
 
   const candidates: string[] = []
-  const effectiveReferenceImages = promptFieldOmissions.includes('render_facts.REFERENCE_IMAGES') ? [] : referenceImages
-
   for (let i = 0; i < candidateCount; i++) {
     await reportTaskProgress(job, 18 + Math.floor((i / Math.max(candidateCount, 1)) * 58), {
       stage: 'generate_panel_candidate',
@@ -191,7 +189,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
       prompt,
       options: {
         ...imageRuntimeOptions,
-        referenceImages: effectiveReferenceImages,
+        referenceImages,
       },
       // 单个任务内会串行生成多候选，若允许按 task.externalId 续接会复用上一候选外部任务结果。
       allowTaskExternalIdResume: candidateCount === 1,
@@ -214,7 +212,7 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
         prompt,
         contextJson,
         sourceText,
-        referenceImageCount: effectiveReferenceImages.length,
+        referenceImageCount: referenceImages.length,
       },
     }
   }

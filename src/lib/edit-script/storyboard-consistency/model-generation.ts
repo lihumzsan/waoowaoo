@@ -35,9 +35,6 @@ export function generateStoryboardPanelPrompts(input: {
     const built = buildStoryboardStillPromptFacts({
       shot,
       execution,
-      segment,
-      sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
-      assets: input.snapshot.assets,
       styleBible: input.snapshot.styleBible,
     })
     return {
@@ -45,7 +42,12 @@ export function generateStoryboardPanelPrompts(input: {
       sourceShotNumber: shot.shotNumber,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
       prompt: built.prompt,
-      videoPrompt: buildStoryboardPanelVideoPrompt({ facts: built.facts }),
+      videoPrompt: buildStoryboardPanelVideoPrompt({
+        facts: built.facts,
+        shot,
+        execution,
+        styleBible: input.snapshot.styleBible,
+      }),
       executionSnapshot: execution,
       renderFacts: built.facts,
     }

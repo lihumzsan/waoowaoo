@@ -179,12 +179,8 @@ function buildPanelDrafts(input: {
     const characters = shot.characters.map((character): StoryboardCharacterRef | null => {
       const refBase = input.characterRefsByAssetName.get(assetKey(character.name))
       const placement = execution.blocking.characters.find((candidate) => assetKey(candidate.name) === assetKey(character.name))
-      const promptCharacter = generated.renderFacts.CHARACTER_GRAPH
-      const referenceImageUrl = Array.isArray(promptCharacter)
-        ? promptCharacter
-            .map((item) => (typeof item === 'object' && item !== null ? item as Record<string, unknown> : null))
-            .find((item) => item?.name === character.name)?.referenceImageUrl
-        : null
+      const characterAsset = input.snapshot.assets.find((asset) =>
+        asset.kind === 'character' && assetKey(asset.name) === assetKey(character.name))
       if (!refBase) return null
       return {
         ...refBase,
@@ -195,7 +191,7 @@ function buildPanelDrafts(input: {
         screenPosition: placement?.screenPosition ?? null,
         facing: placement?.facing ?? null,
         eyeline: placement?.eyeline ?? null,
-        referenceImageUrl: typeof referenceImageUrl === 'string' ? referenceImageUrl : null,
+        referenceImageUrl: character.visibility === 'offscreen' ? null : characterAsset?.previewImageUrl ?? null,
       }
     }).filter((item): item is StoryboardCharacterRef => Boolean(item))
     const props = shot.keyObjects.map((object) => {

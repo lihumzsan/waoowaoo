@@ -13,18 +13,12 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function buildRenderFacts() {
   return {
-    SCENE_GRAPH: { sceneName: 'Attic', spatialNote: 'Chair stays center' },
-    CHARACTER_GRAPH: [{ name: 'Hero', visibility: 'visible' }],
-    PROP_GRAPH: [{ name: 'Chair', role: 'anchor' }],
-    REFERENCE_IMAGES: [{ kind: 'character', name: 'Hero', url: 'https://cdn.test/hero.png' }],
-    STILL_FRAME: {
-      shotNumber: 1,
-      action: 'Hero enters',
-      camera: { shotScale: 'medium', lighting: 'side light' },
-      blocking: { spatialNote: 'Hero stays left' },
-    },
+    SCENE: { name: 'Attic', action: 'Hero enters' },
+    CHARACTERS: [{ name: 'Hero', visibility: 'visible' }],
+    PROPS: [{ name: 'Chair', role: 'anchor' }],
+    CAMERA: { shotScale: 'medium', lighting: 'side light' },
+    AXIS: { subjects: ['Hero', 'Chair'], screenDirection: 'Hero stays left' },
     STYLE: { summary: 'cinematic' },
-    NEGATIVE: ['no text'],
   }
 }
 
@@ -38,8 +32,8 @@ describe('storyboard prompt field selection', () => {
     ])
 
     expect(parsed).toContain('style_bible')
-    expect(parsed).toContain('render_facts.SCENE_GRAPH')
-    expect(parsed).toContain('render_facts.STILL_FRAME.camera')
+    expect(parsed).toContain('render_facts.SCENE')
+    expect(parsed).toContain('render_facts.CAMERA')
     expect(parsed).not.toContain('unknown.field')
   })
 
@@ -47,18 +41,17 @@ describe('storyboard prompt field selection', () => {
     const source = buildRenderFacts()
 
     const filtered = applyPanelPromptFieldOmissions(source, [
-      'render_facts.SCENE_GRAPH',
-      'render_facts.STILL_FRAME.camera',
+      'render_facts.SCENE',
+      'render_facts.CAMERA',
       'style_bible',
     ])
 
     const output = asRecord(filtered)
-    const stillFrame = asRecord(output.STILL_FRAME)
-    expect(output.SCENE_GRAPH).toBeUndefined()
+    expect(output.SCENE).toBeUndefined()
     expect(output.STYLE).toBeUndefined()
-    expect(stillFrame.camera).toBeUndefined()
-    expect(stillFrame.blocking).toEqual({ spatialNote: 'Hero stays left' })
-    expect(source.SCENE_GRAPH).toEqual({ sceneName: 'Attic', spatialNote: 'Chair stays center' })
+    expect(output.CAMERA).toBeUndefined()
+    expect(output.AXIS).toEqual({ subjects: ['Hero', 'Chair'], screenDirection: 'Hero stays left' })
+    expect(source.SCENE).toEqual({ name: 'Attic', action: 'Hero enters' })
   })
 
   it('removes selected grid cell render facts and ignores unknown field ids', () => {
@@ -87,7 +80,7 @@ describe('storyboard prompt field selection', () => {
       'grid.source_generation_segment_id',
       'cell.cell_position',
       'cell.panel_id',
-      'render_facts.STILL_FRAME.blocking',
+      'render_facts.AXIS',
       'context.reference_images',
       'unknown.field',
     ]))
@@ -98,13 +91,12 @@ describe('storyboard prompt field selection', () => {
     const firstCell = cells[0]
     const panelFacts = asRecord(firstCell?.panel_facts)
     const renderFacts = asRecord(panelFacts.render_facts)
-    const stillFrame = asRecord(renderFacts.STILL_FRAME)
     const context = asRecord(output.context)
     expect(grid.source_generation_segment_id).toBeUndefined()
     expect(firstCell?.cell_index).toBe(0)
     expect(firstCell?.cell_position).toBeUndefined()
     expect(panelFacts.panel_id).toBeUndefined()
-    expect(stillFrame.blocking).toBeUndefined()
+    expect(renderFacts.AXIS).toBeUndefined()
     expect(context.reference_images).toBeUndefined()
     expect(context.additional_reference_images).toEqual([{ reference_image_order: 1, note: 'previous grid' }])
   })

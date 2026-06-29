@@ -10,7 +10,7 @@ describe('storyboard grid compare lab input parsing', () => {
       mode: 'grid_2x2',
       locale: 'zh',
       previousGridImageUrl: 'images/previous-grid.png',
-      omittedFields: ['render_facts.STILL_FRAME.camera'],
+      omittedFields: ['render_facts.CAMERA'],
     })
 
     expect(parsed).toEqual({
@@ -20,7 +20,7 @@ describe('storyboard grid compare lab input parsing', () => {
       mode: 'grid_2x2',
       locale: 'zh',
       previousGridImageUrl: 'images/previous-grid.png',
-      omittedFields: ['render_facts.STILL_FRAME.camera'],
+      omittedFields: ['render_facts.CAMERA'],
     })
   })
 })

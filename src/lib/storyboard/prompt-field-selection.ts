@@ -1,14 +1,11 @@
 export const STORYBOARD_PROMPT_FIELD_DEFINITIONS = [
   { id: 'style_bible', en: 'Style Bible', zh: '项目风格 Bible', scope: 'both' },
-  { id: 'render_facts.SCENE_GRAPH', en: 'Scene graph', zh: '场景图谱', scope: 'both' },
-  { id: 'render_facts.CHARACTER_GRAPH', en: 'Character graph', zh: '角色图谱', scope: 'both' },
-  { id: 'render_facts.PROP_GRAPH', en: 'Prop graph', zh: '道具图谱', scope: 'both' },
-  { id: 'render_facts.REFERENCE_IMAGES', en: 'Reference image facts', zh: '参考图事实', scope: 'single' },
-  { id: 'render_facts.STILL_FRAME', en: 'Still frame facts', zh: '单帧事实', scope: 'both' },
-  { id: 'render_facts.STILL_FRAME.camera', en: 'Camera execution', zh: '镜头执行', scope: 'both' },
-  { id: 'render_facts.STILL_FRAME.blocking', en: 'Blocking execution', zh: '空间 blocking', scope: 'both' },
+  { id: 'render_facts.SCENE', en: 'Scene facts', zh: '场景事实', scope: 'both' },
+  { id: 'render_facts.CHARACTERS', en: 'Character facts', zh: '角色事实', scope: 'both' },
+  { id: 'render_facts.PROPS', en: 'Prop facts', zh: '道具事实', scope: 'both' },
+  { id: 'render_facts.CAMERA', en: 'Camera facts', zh: '镜头事实', scope: 'both' },
+  { id: 'render_facts.AXIS', en: 'Axis facts', zh: '轴线事实', scope: 'both' },
   { id: 'render_facts.STYLE', en: 'Style facts', zh: '风格事实', scope: 'both' },
-  { id: 'render_facts.NEGATIVE', en: 'Negative constraints', zh: '负向约束', scope: 'both' },
   { id: 'grid.mode', en: 'Grid mode', zh: '网格模式', scope: 'grid' },
   { id: 'grid.source_generation_segment_id', en: 'Source generation segment ID', zh: '生成片段 ID', scope: 'grid' },
   { id: 'cell.cell_index', en: 'Cell index', zh: '格子序号', scope: 'grid' },
@@ -34,9 +31,9 @@ export const STORYBOARD_PROMPT_FIELD_PRESETS: readonly StoryboardPromptFieldPres
     en: 'No scene graph',
     zh: '无场景图谱',
     fieldIds: [
-      'render_facts.SCENE_GRAPH',
-      'render_facts.STILL_FRAME.camera',
-      'render_facts.STILL_FRAME.blocking',
+      'render_facts.SCENE',
+      'render_facts.CAMERA',
+      'render_facts.AXIS',
       'context.reference_images',
     ],
   },
@@ -47,7 +44,6 @@ export const STORYBOARD_PROMPT_FIELD_PRESETS: readonly StoryboardPromptFieldPres
     fieldIds: [
       'style_bible',
       'render_facts.STYLE',
-      'render_facts.NEGATIVE',
     ],
   },
 ]
@@ -76,24 +72,12 @@ function cloneRecord(value: unknown): Record<string, unknown> {
 }
 
 function applyRenderFactsOmissions(renderFacts: Record<string, unknown>, omitted: ReadonlySet<string>): void {
-  if (omitted.has('render_facts.SCENE_GRAPH')) delete renderFacts.SCENE_GRAPH
-  if (omitted.has('render_facts.CHARACTER_GRAPH')) delete renderFacts.CHARACTER_GRAPH
-  if (omitted.has('render_facts.PROP_GRAPH')) delete renderFacts.PROP_GRAPH
-  if (omitted.has('render_facts.REFERENCE_IMAGES')) delete renderFacts.REFERENCE_IMAGES
+  if (omitted.has('render_facts.SCENE')) delete renderFacts.SCENE
+  if (omitted.has('render_facts.CHARACTERS')) delete renderFacts.CHARACTERS
+  if (omitted.has('render_facts.PROPS')) delete renderFacts.PROPS
+  if (omitted.has('render_facts.CAMERA')) delete renderFacts.CAMERA
+  if (omitted.has('render_facts.AXIS')) delete renderFacts.AXIS
   if (omitted.has('style_bible') || omitted.has('render_facts.STYLE')) delete renderFacts.STYLE
-  if (omitted.has('render_facts.NEGATIVE')) delete renderFacts.NEGATIVE
-
-  if (omitted.has('render_facts.STILL_FRAME')) {
-    delete renderFacts.STILL_FRAME
-    return
-  }
-
-  if (!isRecord(renderFacts.STILL_FRAME)) return
-  const stillFrame = cloneRecord(renderFacts.STILL_FRAME)
-  if (omitted.has('render_facts.STILL_FRAME.camera')) delete stillFrame.camera
-  if (omitted.has('render_facts.STILL_FRAME.blocking')) delete stillFrame.blocking
-  if (Object.keys(stillFrame).length > 0) renderFacts.STILL_FRAME = stillFrame
-  else delete renderFacts.STILL_FRAME
 }
 
 function applyContextFieldOmissions(context: Record<string, unknown>, omitted: ReadonlySet<string>): void {

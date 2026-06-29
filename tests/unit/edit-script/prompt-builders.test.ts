@@ -12,7 +12,6 @@ import type {
   EditScriptStyleBible,
   EditShotExecution,
 } from '@/lib/edit-script/types'
-import type { StoryboardConsistencyAssetSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 
 const styleBible: EditScriptStyleBible = {
   rawUserStyle: null,
@@ -168,89 +167,71 @@ const execution12: EditShotExecution = {
   },
 }
 
-const assets: readonly StoryboardConsistencyAssetSnapshot[] = [
-  {
-    requirementId: 'req-location',
-    kind: 'location',
-    name: 'Cabin living room',
-    description: 'A cramped wooden room with a central high-backed chair.',
-    shotNumbers: [11, 12, 13],
-    targetId: 'location-1',
-    previewImageUrl: 'https://cdn.test/location.png',
-    spatialProfile: {
-      schemaVersion: 1,
-      sceneSummary: 'chair centered, door to the left',
-      anchors: [
-        {
-          id: 'chair',
-          label: 'High-backed chair',
-          screenArea: 'center frame',
-          depthLayer: 'midground',
-          spatialRelations: ['door remains left of the chair'],
-        },
-      ],
-      depthLayout: {
-        foreground: 'doorway and Anna approach path',
-        midground: 'high-backed chair',
-        background: 'wooden wall',
-      },
-      lightingDirection: 'cold top light',
-    },
-  },
-  {
-    requirementId: 'req-grandmother',
-    kind: 'character',
-    name: 'Disguised Grandmother',
-    description: 'A hidden seated figure.',
-    shotNumbers: [11, 12, 13],
-    targetId: 'character-1',
-    previewImageUrl: 'https://cdn.test/grandmother.png',
-  },
-  {
-    requirementId: 'req-anna',
-    kind: 'character',
-    name: 'Anna',
-    description: 'A cautious girl in a red hood.',
-    shotNumbers: [12, 13],
-    targetId: 'character-2',
-    previewImageUrl: 'https://cdn.test/anna.png',
-  },
-]
-
 describe('storyboard prompt builders', () => {
-  it('keeps hidden in-scene characters in CHARACTER_GRAPH and reference images', () => {
+  it('keeps hidden in-scene characters in minimal still facts without reference URL text', () => {
     const result = buildStoryboardStillPromptFacts({
       shot: shot11,
       execution: execution11,
-      segment,
-      sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-      assets,
       styleBible,
     })
 
-    expect(result.facts.CHARACTER_GRAPH).toEqual([
+    expect(result.facts.CHARACTERS).toEqual([
       expect.objectContaining({
         name: 'Disguised Grandmother',
         visibility: 'hidden',
         role: 'hidden_subject',
         position: 'seated inside the high-backed chair',
-        referenceImageUrl: 'https://cdn.test/grandmother.png',
       }),
     ])
-    expect(result.facts.REFERENCE_IMAGES).toContainEqual({
-      kind: 'character',
-      name: 'Disguised Grandmother',
-      visibility: 'hidden',
-      url: 'https://cdn.test/grandmother.png',
+    expect(result.facts.SCENE).toEqual({
+      name: 'Cabin living room',
+      action: 'A high-backed chair stands in the center of the room.',
     })
-    expect(result.prompt).toContain('CHARACTER_GRAPH')
+    expect(result.facts.CAMERA).toEqual({
+      shotScale: 'medium',
+      lens: '35mm',
+      focus: 'chair clear',
+      height: 'eye level',
+      angle: 'slightly low',
+      composition: 'chair centered',
+      lighting: 'top cold light hides the seated figure in shadow',
+    })
+    expect(result.facts.AXIS).toEqual({
+      subjects: ['High-backed chair', 'Anna'],
+      screenDirection: 'chair stays center; Anna later enters from screen left',
+    })
+    expect(result.prompt).toContain('SCENE')
+    expect(result.prompt).toContain('CHARACTERS')
+    expect(result.prompt).toContain('PROPS')
+    expect(result.prompt).toContain('CAMERA')
+    expect(result.prompt).toContain('AXIS')
+    expect(result.prompt).toContain('STYLE')
+    expect(result.prompt).not.toContain('NEGATIVE')
+    expect(result.prompt).not.toContain('REFERENCE_IMAGES')
+    expect(result.prompt).not.toContain('referenceImageUrl')
+    expect(result.prompt).not.toContain('spatialProfile')
+    expect(result.prompt).not.toContain('shotNumber')
+    expect(result.prompt).not.toContain('durationSec')
+    expect(result.prompt).not.toContain('generationSegment')
+    expect(result.prompt).not.toContain('movement')
+    expect(result.prompt).not.toContain('spatialNote')
+    expect(result.prompt).not.toContain('https://cdn.test')
     expect(result.prompt).not.toContain('videoPrompt')
     expect(result.prompt).not.toContain('cameraMove')
 
-    const videoPrompt = buildStoryboardPanelVideoPrompt({ facts: result.facts })
-    expect(videoPrompt).toContain('VIDEO_FRAME')
+    const videoPrompt = buildStoryboardPanelVideoPrompt({
+      facts: result.facts,
+      shot: shot11,
+      execution: execution11,
+      styleBible,
+    })
+    expect(videoPrompt).toContain('VIDEO')
     expect(videoPrompt).toContain('Disguised Grandmother')
     expect(videoPrompt).toContain('hidden_subject')
+    expect(videoPrompt).toContain('durationSec')
+    expect(videoPrompt).toContain('movement')
+    expect(videoPrompt).not.toContain('NEGATIVE')
+    expect(videoPrompt).not.toContain('REFERENCE_IMAGES')
   })
 
   it('keeps supporting conversation participants in grid blocking facts', () => {
@@ -259,11 +240,10 @@ describe('storyboard prompt builders', () => {
       sourceGenerationSegmentId: 'edit-1:generationSegment:1',
       shots: [shot11, shot12],
       executions: [execution11, execution12],
-      assets,
       styleBible,
     })
 
-    expect(result.facts.CHARACTER_GRAPH.map((character) => character.name)).toEqual([
+    expect(result.facts.CHARACTERS.map((character) => character.name)).toEqual([
       'Disguised Grandmother',
       'Anna',
       'Disguised Grandmother',
@@ -280,7 +260,6 @@ describe('storyboard prompt builders', () => {
       sourceGenerationSegmentId: 'edit-1:generationSegment:1',
       shots: [shot11, shot12],
       executions: [execution11, execution12],
-      assets,
       styleBible,
     })
 

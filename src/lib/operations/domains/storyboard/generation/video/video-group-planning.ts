@@ -194,7 +194,6 @@ async function buildGenerationSegmentPrompt(input: {
     sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
     shots,
     executions,
-    assets: sourceSnapshot.assets,
     styleBible: sourceSnapshot.styleBible,
   }).prompt
 }

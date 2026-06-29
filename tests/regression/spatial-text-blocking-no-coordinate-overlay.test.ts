@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildStoryboardStillPromptFacts } from '@/lib/edit-script/prompt-builders'
-import type { EditGenerationSegment, EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
+import type { EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
 import { buildZenStyleBibleFixture } from '../fixtures/edit-script-style-bible'
 
 const shot: EditScriptShot = {
@@ -61,25 +61,17 @@ const execution: EditShotExecution = {
   },
 }
 
-const segment: EditGenerationSegment = {
-  shotNumbers: [1],
-  continuity: '人物从门口移动到柜台前，空间左右关系保持不变。',
-}
-
 describe('spatial text blocking regression', () => {
   it('renders structured blocking facts without coordinate overlay fields', () => {
     const result = buildStoryboardStillPromptFacts({
       shot,
       execution,
-      segment,
-      sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-      assets: [],
       styleBible: buildZenStyleBibleFixture(),
     })
 
     expect(result.prompt).toContain('人物站在门廊左侧阴影里')
     expect(result.prompt).toContain('木质柜台')
-    expect(result.prompt).toContain('门廊连接柜台和窗边座位')
+    expect(result.prompt).not.toContain('门廊连接柜台和窗边座位')
     expect(result.prompt).not.toContain('placementZones')
     expect(result.prompt).not.toContain('"x"')
     expect(result.prompt).not.toContain('"y"')

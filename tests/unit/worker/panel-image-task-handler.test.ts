@@ -97,7 +97,7 @@ function panelRow(overrides: Record<string, unknown> = {}) {
     shotType: 'close-up',
     cameraMove: 'static',
     description: 'hero close-up',
-    imagePrompt: 'STILL_FRAME\nHero stands in the old town.',
+    imagePrompt: 'SCENE\nHero stands in the old town.',
     videoPrompt: 'video prompt',
     location: 'Old Town',
     characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
@@ -107,10 +107,12 @@ function panelRow(overrides: Record<string, unknown> = {}) {
     imageUrl: null,
     imageMediaId: null,
     renderFactsJson: {
-      SCENE_GRAPH: { location: 'Old Town' },
-      CHARACTER_GRAPH: [{ name: 'Hero', visibility: 'visible' }],
+      SCENE: { name: 'Old Town', action: 'Hero stands in the old town.' },
+      CHARACTERS: [{ name: 'Hero', visibility: 'visible' }],
+      PROPS: [],
+      CAMERA: { shotScale: 'close-up', lighting: 'soft light' },
+      AXIS: { subjects: ['Hero'], screenDirection: 'Hero faces camera' },
       STYLE: { imageFilter: 'soft light' },
-      STILL_FRAME: { action: 'Hero stands in the old town.' },
     },
     ...overrides,
   }
@@ -136,7 +138,7 @@ describe('worker panel-image-task-handler behavior', () => {
     })
     expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       modelId: 'storyboard-model-1',
-      prompt: 'STILL_FRAME\nHero stands in the old town.',
+      prompt: 'SCENE\nHero stands in the old town.',
       options: expect.objectContaining({
         aspectRatio: '16:9',
         referenceImages: [
@@ -165,8 +167,8 @@ describe('worker panel-image-task-handler behavior', () => {
       compareOnly: true,
       promptDebug: expect.objectContaining({
         omittedFields: ['style_bible'],
-        prompt: expect.stringContaining('STILL_FRAME'),
-        contextJson: expect.stringContaining('CHARACTER_GRAPH'),
+        prompt: expect.stringContaining('SCENE'),
+        contextJson: expect.stringContaining('CHARACTERS'),
         sourceText: '',
         referenceImageCount: 2,
       }),
