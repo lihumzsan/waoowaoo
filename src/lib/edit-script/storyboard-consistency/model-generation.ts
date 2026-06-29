@@ -1,5 +1,4 @@
 import {
-  buildStoryboardPanelVideoPrompt,
   buildStoryboardStillPromptFacts,
 } from '@/lib/edit-script/prompt-builders'
 import type {
@@ -42,12 +41,7 @@ export function generateStoryboardPanelPrompts(input: {
       sourceShotNumber: shot.shotNumber,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
       prompt: built.prompt,
-      videoPrompt: buildStoryboardPanelVideoPrompt({
-        facts: built.facts,
-        shot,
-        execution,
-        styleBible: input.snapshot.styleBible,
-      }),
+      videoPrompt: execution.videoPrompt,
       executionSnapshot: execution,
       renderFacts: built.facts,
     }

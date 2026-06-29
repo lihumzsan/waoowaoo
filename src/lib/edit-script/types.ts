@@ -126,6 +126,7 @@ export interface EditGenerationSegmentExecution {
   readonly visibilityContinuity: string
   readonly soundFlow: string
   readonly continuityLocks: readonly string[]
+  readonly continuousVideoPrompt: string
 }
 
 export interface EditAssetRequirement {
@@ -266,6 +267,7 @@ export interface EditShotExecution {
   readonly shotNumber: number
   readonly camera: EditShotExecutionCamera
   readonly blocking: EditShotExecutionBlocking
+  readonly videoPrompt: string
 }
 
 export interface EditShotExecutionPlanPayload {
@@ -348,6 +350,7 @@ export const editShotExecutionPlanSchema = z.object({
       }).strict()).min(0).max(20),
       spatialNote: z.string().trim().min(1),
     }).strict(),
+    videoPrompt: z.string().trim().min(1),
   }).strict()).min(1).max(60),
   generationSegmentExecutions: z.array(z.object({
     shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
@@ -357,6 +360,7 @@ export const editShotExecutionPlanSchema = z.object({
     visibilityContinuity: z.string().trim().min(1),
     soundFlow: z.string().trim().min(1),
     continuityLocks: z.array(z.string().trim().min(1)).min(1).max(16),
+    continuousVideoPrompt: z.string().trim().min(1),
   }).strict()).min(1).max(60),
 }).strict()
 

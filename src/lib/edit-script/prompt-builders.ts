@@ -1,6 +1,5 @@
 import type {
   EditGenerationSegment,
-  EditGenerationSegmentExecution,
   EditScriptKeyObject,
   EditScriptShot,
   EditScriptStyleBible,
@@ -47,11 +46,6 @@ export interface StoryboardPromptBuildResult {
   readonly prompt: string
 }
 
-export interface StoryboardVideoSegmentPromptFacts extends StoryboardGridPromptFacts {
-  readonly GENERATION_SEGMENT: Record<string, unknown>
-  readonly GENERATION_SEGMENT_EXECUTION: Record<string, unknown>
-}
-
 export interface StoryboardGridPromptFacts {
   readonly SCENE: unknown
   readonly BLOCKING_STATE: readonly unknown[]
@@ -63,11 +57,6 @@ export interface StoryboardGridPromptFacts {
 
 export interface StoryboardGridPromptBuildResult {
   readonly facts: StoryboardGridPromptFacts
-  readonly prompt: string
-}
-
-export interface StoryboardVideoSegmentPromptBuildResult {
-  readonly facts: StoryboardVideoSegmentPromptFacts
   readonly prompt: string
 }
 
@@ -89,15 +78,6 @@ function styleFacts(styleBible: EditScriptStyleBible): Record<string, unknown> {
   return {
     summary: styleBible.styleSummary,
     visual: styleBible.stylePolicy.visual,
-  }
-}
-
-function videoStyleFacts(styleBible: EditScriptStyleBible): Record<string, unknown> {
-  return {
-    summary: styleBible.styleSummary,
-    visual: styleBible.stylePolicy.visual,
-    camera: styleBible.stylePolicy.camera,
-    directing: styleBible.stylePolicy.directing,
   }
 }
 
@@ -180,30 +160,6 @@ export function buildStoryboardStillPromptFacts(input: {
   }
 }
 
-export function buildStoryboardPanelVideoPrompt(input: {
-  readonly facts: StoryboardStillPromptFacts
-  readonly shot: EditScriptShot
-  readonly execution: EditShotExecution
-  readonly styleBible: EditScriptStyleBible
-}): string {
-  return renderPrompt([
-    ['GLOBAL TASK', 'Generate one single-shot video from the structured facts. Animate only the current shot action, camera movement, lighting, sound, and blocking. Preserve every present character, including hidden, occluded, supporting, and listener characters.'],
-    ['SCENE', input.facts.SCENE],
-    ['CHARACTERS', input.facts.CHARACTERS],
-    ['PROPS', input.facts.PROPS],
-    ['CAMERA', {
-      ...input.facts.CAMERA,
-      movement: input.execution.camera.movement,
-    }],
-    ['AXIS', input.facts.AXIS],
-    ['VIDEO', {
-      durationSec: input.shot.durationSec,
-      sound: input.shot.sound,
-    }],
-    ['STYLE', videoStyleFacts(input.styleBible)],
-  ])
-}
-
 export function buildStoryboardGridPromptFacts(input: {
   readonly segment: EditGenerationSegment
   readonly sourceGenerationSegmentId: string
@@ -256,48 +212,6 @@ export function buildStoryboardGridPromptFacts(input: {
       ['PROPS', facts.PROPS],
       ['STYLE', facts.STYLE],
       ['CELLS', facts.CELLS],
-    ]),
-  }
-}
-
-export function buildStoryboardVideoSegmentPromptFacts(input: {
-  readonly segment: EditGenerationSegment
-  readonly segmentExecution: EditGenerationSegmentExecution
-  readonly sourceGenerationSegmentId: string
-  readonly shots: readonly EditScriptShot[]
-  readonly executions: readonly EditShotExecution[]
-  readonly styleBible: EditScriptStyleBible
-}): StoryboardVideoSegmentPromptBuildResult {
-  const facts = buildStoryboardGridPromptFacts(input).facts
-  const videoFacts: StoryboardVideoSegmentPromptFacts = {
-    ...facts,
-    GENERATION_SEGMENT: {
-      sourceGenerationSegmentId: input.sourceGenerationSegmentId,
-      shotNumbers: input.segment.shotNumbers,
-      continuity: input.segment.continuity,
-      sound: input.shots.map((shot) => ({ shotNumber: shot.shotNumber, sound: shot.sound })),
-    },
-    GENERATION_SEGMENT_EXECUTION: {
-      shotNumbers: input.segmentExecution.shotNumbers,
-      motionFlow: input.segmentExecution.motionFlow,
-      cameraFlow: input.segmentExecution.cameraFlow,
-      blockingFlow: input.segmentExecution.blockingFlow,
-      visibilityContinuity: input.segmentExecution.visibilityContinuity,
-      soundFlow: input.segmentExecution.soundFlow,
-      continuityLocks: input.segmentExecution.continuityLocks,
-    },
-  }
-  return {
-    facts: videoFacts,
-    prompt: renderPrompt([
-      ['GLOBAL TASK', 'Generate one continuous video segment from these structured facts. Preserve blocking, axis, lighting, character presence, and segment continuity.'],
-      ['GENERATION_SEGMENT', videoFacts.GENERATION_SEGMENT],
-      ['GENERATION_SEGMENT_EXECUTION', videoFacts.GENERATION_SEGMENT_EXECUTION],
-      ['SCENE', videoFacts.SCENE],
-      ['BLOCKING_STATE', videoFacts.BLOCKING_STATE],
-      ['CHARACTERS', videoFacts.CHARACTERS],
-      ['PROPS', videoFacts.PROPS],
-      ['STYLE', videoStyleFacts(input.styleBible)],
     ]),
   }
 }

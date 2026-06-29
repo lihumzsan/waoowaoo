@@ -59,6 +59,7 @@ const execution: EditShotExecution = {
     ],
     spatialNote: '门廊连接柜台和窗边座位。',
   },
+  videoPrompt: '单镜头视频提示词：人物站在门廊左侧阴影里，木质柜台保持画面右侧，空间关系不使用坐标覆盖。',
 }
 
 describe('spatial text blocking regression', () => {

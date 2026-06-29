@@ -47,11 +47,11 @@
           "srtStart": null,
           "srtEnd": null,
           "duration": 3,
-          "imagePrompt": "GLOBAL TASK\nGenerate one storyboard still image from the structured facts. The frame must show all present characters according to visibility and blocking.\n\nSCENE_GRAPH\n{\"sceneName\":\"木屋客厅\",\"axis\":{\"type\":\"subject_line\",\"subjects\":[\"高背椅\",\"安娜\"],\"screenDirection\":\"高背椅保持画面中心，安娜从画面左侧靠近\"},\"spatialNote\":\"椅中人物持续在场但被椅背隐藏\"}\n\nCHARACTER_GRAPH\n[{\"name\":\"安娜\",\"visibility\":\"visible\",\"role\":\"focus\",\"position\":\"门口内侧偏左\"},{\"name\":\"伪装的外婆\",\"visibility\":\"hidden\",\"role\":\"hidden_subject\",\"position\":\"坐在高背椅内\"}]",
+          "imagePrompt": "GLOBAL TASK\nGenerate one storyboard still image. Render only the listed scene, characters, props, camera, axis, and style facts. Every character listed in CHARACTERS is physically present unless visibility is \"offscreen\".\n\nSCENE\n{\"name\":\"木屋客厅\",\"action\":\"安娜停在门口观察背对门口的高背椅，伪装的外婆坐在椅中但被椅背完全隐藏。\"}\n\nCHARACTERS\n[{\"name\":\"安娜\",\"visibility\":\"visible\",\"role\":\"focus\",\"performance\":\"放轻脚步靠近\",\"position\":\"门口内侧偏左\",\"screenPosition\":\"画面左侧\",\"facing\":\"面向高背椅\",\"eyeline\":\"看向椅背\"},{\"name\":\"伪装的外婆\",\"visibility\":\"hidden\",\"role\":\"hidden_subject\",\"performance\":\"坐在高背椅中保持静止\",\"position\":\"坐在高背椅内\",\"screenPosition\":\"椅背后方\",\"facing\":\"背对门口\",\"eyeline\":\"不可见\"}]\n\nPROPS\n[{\"name\":\"高背椅\",\"role\":\"reveal_device\",\"position\":\"客厅中央\",\"screenPosition\":\"画面中心\"}]\n\nCAMERA\n{\"shotScale\":\"中景\",\"lens\":\"35mm\",\"focus\":\"高背椅区域清晰，房间边缘轻微虚化\",\"height\":\"视线高度\",\"angle\":\"平视略低\",\"composition\":\"高背椅位于画面中心，安娜保持画面左侧\",\"lighting\":\"顶部冷光落在椅背，椅中人物被阴影隐藏\"}\n\nAXIS\n{\"subjects\":[\"高背椅\",\"安娜\"],\"screenDirection\":\"高背椅保持画面中心，安娜从画面左侧靠近\"}\n\nSTYLE\n{\"summary\":\"潮湿木屋、低饱和红色斗篷、克制冷光和手工定格质感。\"}",
           "imageUrl": "/demo-assets/matrix-demo/eac5c85257de6569.jpg",
           "imageMediaId": null,
           "imageHistory": null,
-          "videoPrompt": "GLOBAL TASK\nGenerate one continuous video segment from these structured facts. Preserve blocking, axis, lighting, character presence, and segment continuity.\n\nGENERATION_SEGMENT\n{\"sourceGenerationSegmentId\":\"demo-edit-script:generationSegment:1\",\"shotNumbers\":[1],\"continuity\":\"安娜在同一客厅空间内靠近高背椅，椅中人物持续隐藏在椅背后\"}",
+          "videoPrompt": "单镜头视频提示词，16:9，暗黑童话定格动画质感，固定中景。安娜位于画面左侧，放轻脚步靠近客厅中央的高背椅；伪装的外婆持续坐在椅中但被高椅背和阴影完全隐藏。保持高背椅画面中心、安娜从左侧靠近的轴线关系，顶部冷光落在椅背，房间边缘轻微虚化。<微弱木板声和安静木屋空间声持续>",
           "firstLastFramePrompt": null,
           "videoUrl": null,
           "videoGenerationMode": null,
@@ -73,7 +73,6 @@
               "lens": "35mm",
               "focus": "高背椅区域清晰，房间边缘轻微虚化",
               "height": "视线高度",
-              "position": "客厅门口内侧偏左",
               "angle": "平视略低",
               "movement": "固定机位",
               "composition": "高背椅位于画面中心，安娜保持画面左侧",
@@ -111,19 +110,15 @@
                 }
               ],
               "spatialNote": "椅中人物持续在场但被椅背隐藏"
-            }
+            },
+            "videoPrompt": "单镜头视频提示词，16:9，暗黑童话定格动画质感，固定中景。安娜位于画面左侧，放轻脚步靠近客厅中央的高背椅；伪装的外婆持续坐在椅中但被高椅背和阴影完全隐藏。保持高背椅画面中心、安娜从左侧靠近的轴线关系，顶部冷光落在椅背，房间边缘轻微虚化。<微弱木板声和安静木屋空间声持续>"
           },
           "renderFactsJson": {
-            "SCENE_GRAPH": {
-              "sceneName": "木屋客厅",
-              "axis": {
-                "type": "subject_line",
-                "subjects": ["高背椅", "安娜"],
-                "screenDirection": "高背椅保持画面中心，安娜从画面左侧靠近"
-              },
-              "spatialNote": "椅中人物持续在场但被椅背隐藏"
+            "SCENE": {
+              "name": "木屋客厅",
+              "action": "安娜停在门口观察背对门口的高背椅，伪装的外婆坐在椅中但被椅背完全隐藏。"
             },
-            "CHARACTER_GRAPH": [
+            "CHARACTERS": [
               {
                 "name": "安娜",
                 "visibility": "visible",
@@ -132,8 +127,7 @@
                 "position": "门口内侧偏左",
                 "screenPosition": "画面左侧",
                 "facing": "面向高背椅",
-                "eyeline": "看向椅背",
-                "referenceImageUrl": "/demo-assets/matrix-demo/eac5c85257de6569.jpg"
+                "eyeline": "看向椅背"
               },
               {
                 "name": "伪装的外婆",
@@ -143,18 +137,33 @@
                 "position": "坐在高背椅内",
                 "screenPosition": "椅背后方",
                 "facing": "背对门口",
-                "eyeline": "不可见",
-                "referenceImageUrl": "/demo-assets/matrix-demo/b521791394ab9d37.jpg"
+                "eyeline": "不可见"
               }
             ],
-            "PROP_GRAPH": [
+            "PROPS": [
               {
                 "name": "高背椅",
                 "role": "reveal_device",
                 "position": "客厅中央",
                 "screenPosition": "画面中心"
               }
-            ]
+            ],
+            "CAMERA": {
+              "shotScale": "中景",
+              "lens": "35mm",
+              "focus": "高背椅区域清晰，房间边缘轻微虚化",
+              "height": "视线高度",
+              "angle": "平视略低",
+              "composition": "高背椅位于画面中心，安娜保持画面左侧",
+              "lighting": "顶部冷光落在椅背，椅中人物被阴影隐藏"
+            },
+            "AXIS": {
+              "subjects": ["高背椅", "安娜"],
+              "screenDirection": "高背椅保持画面中心，安娜从画面左侧靠近"
+            },
+            "STYLE": {
+              "summary": "潮湿木屋、低饱和红色斗篷、克制冷光和手工定格质感。"
+            }
           },
           "actingNotes": null,
           "previousImageUrl": null,
@@ -329,7 +338,7 @@
       "gridMode": "2x2",
       "shotNumbers": [1],
       "durationSec": 3,
-      "prompt": "GLOBAL TASK\nGenerate one continuous video segment from structured generation segment facts.",
+      "prompt": "连续视频片段提示词，16:9，暗黑童话定格动画质感，同一木屋客厅空间，高背椅始终位于画面中心，安娜从画面左侧靠近，伪装的外婆持续坐在椅中但被椅背和阴影隐藏。[00:00-00:03] 镜头1：固定中景，安娜停在门口观察高背椅，随后放轻脚步靠近；椅中人物保持物理在场但不可见，顶部冷光压在椅背上。<微弱木板声和安静木屋空间声持续>",
       "status": "pending",
       "taskId": null,
       "errorCode": null,

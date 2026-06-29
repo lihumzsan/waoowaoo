@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildStoryboardGridPromptFacts,
-  buildStoryboardPanelVideoPrompt,
   buildStoryboardStillPromptFacts,
-  buildStoryboardVideoSegmentPromptFacts,
 } from '@/lib/edit-script/prompt-builders'
 import type {
   EditGenerationSegment,
-  EditGenerationSegmentExecution,
   EditScriptShot,
   EditScriptStyleBible,
   EditShotExecution,
@@ -44,20 +41,6 @@ const styleBible: EditScriptStyleBible = {
 const segment: EditGenerationSegment = {
   shotNumbers: [11, 12, 13],
   continuity: 'Anna approaches the high-backed chair and the hidden seated figure remains present.',
-}
-
-const segmentExecution: EditGenerationSegmentExecution = {
-  shotNumbers: [11, 12, 13],
-  motionFlow: 'Anna approaches from screen left while the hidden figure stays seated in the chair.',
-  cameraFlow: 'The camera keeps the same subject line and tightens slowly.',
-  blockingFlow: 'The high-backed chair remains centered; Anna moves closer without reversing direction.',
-  visibilityContinuity: 'Disguised Grandmother is present but hidden until the reveal.',
-  soundFlow: 'Quiet room tone continues into floorboard creaks.',
-  continuityLocks: [
-    'same cabin living room',
-    'same high-backed chair',
-    'Disguised Grandmother remains physically present',
-  ],
 }
 
 const shot11: EditScriptShot = {
@@ -141,6 +124,7 @@ const execution11: EditShotExecution = {
     ],
     spatialNote: 'The hidden subject remains present but concealed.',
   },
+  videoPrompt: 'Single-shot video prompt for shot 11: hold on the centered high-backed chair while the hidden subject remains physically seated behind the chair back.',
 }
 
 const execution12: EditShotExecution = {
@@ -219,19 +203,6 @@ describe('storyboard prompt builders', () => {
     expect(result.prompt).not.toContain('videoPrompt')
     expect(result.prompt).not.toContain('cameraMove')
 
-    const videoPrompt = buildStoryboardPanelVideoPrompt({
-      facts: result.facts,
-      shot: shot11,
-      execution: execution11,
-      styleBible,
-    })
-    expect(videoPrompt).toContain('VIDEO')
-    expect(videoPrompt).toContain('Disguised Grandmother')
-    expect(videoPrompt).toContain('hidden_subject')
-    expect(videoPrompt).toContain('durationSec')
-    expect(videoPrompt).toContain('movement')
-    expect(videoPrompt).not.toContain('NEGATIVE')
-    expect(videoPrompt).not.toContain('REFERENCE_IMAGES')
   })
 
   it('keeps supporting conversation participants in grid blocking facts', () => {
@@ -253,39 +224,4 @@ describe('storyboard prompt builders', () => {
     expect(result.prompt).toContain('shotDelta')
   })
 
-  it('builds video segment prompts from generation segment continuity instead of saved segment prompts', () => {
-    const result = buildStoryboardVideoSegmentPromptFacts({
-      segment,
-      segmentExecution,
-      sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-      shots: [shot11, shot12],
-      executions: [execution11, execution12],
-      styleBible,
-    })
-
-    expect(result.facts.GENERATION_SEGMENT).toEqual({
-      sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-      shotNumbers: [11, 12, 13],
-      continuity: 'Anna approaches the high-backed chair and the hidden seated figure remains present.',
-      sound: [
-        { shotNumber: 11, sound: 'The room is quiet.' },
-        { shotNumber: 12, sound: 'Floorboards creak.' },
-      ],
-    })
-    expect(result.facts.GENERATION_SEGMENT_EXECUTION).toEqual({
-      shotNumbers: [11, 12, 13],
-      motionFlow: 'Anna approaches from screen left while the hidden figure stays seated in the chair.',
-      cameraFlow: 'The camera keeps the same subject line and tightens slowly.',
-      blockingFlow: 'The high-backed chair remains centered; Anna moves closer without reversing direction.',
-      visibilityContinuity: 'Disguised Grandmother is present but hidden until the reveal.',
-      soundFlow: 'Quiet room tone continues into floorboard creaks.',
-      continuityLocks: [
-        'same cabin living room',
-        'same high-backed chair',
-        'Disguised Grandmother remains physically present',
-      ],
-    })
-    expect(result.prompt).toContain('Generate one continuous video segment')
-    expect(result.prompt).toContain('GENERATION_SEGMENT_EXECUTION')
-  })
 })

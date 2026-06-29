@@ -8,7 +8,6 @@ import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingI
 import { inferVideoGridModeForShotCount, totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
-import { buildStoryboardVideoSegmentPromptFacts } from '@/lib/edit-script/prompt-builders'
 import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 import { applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
 
@@ -178,24 +177,7 @@ async function buildGenerationSegmentPrompt(input: {
   if (!segment) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotNumbers.join(',')}`)
   const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) => sameShotNumbers(candidate.shotNumbers, input.shotNumbers))
   if (!segmentExecution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SEGMENT_EXECUTION_NOT_FOUND:${input.shotNumbers.join(',')}`)
-  const shots = input.shotNumbers.map((shotNumber) => {
-    const shot = sourceSnapshot.shots.find((candidate) => candidate.shotNumber === shotNumber)
-    if (!shot) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SOURCE_SHOT_MISSING:${shotNumber}`)
-    return shot
-  })
-  const executions = input.shotNumbers.map((shotNumber) => {
-    const execution = sourceSnapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shotNumber)
-    if (!execution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SOURCE_EXECUTION_MISSING:${shotNumber}`)
-    return execution
-  })
-  return buildStoryboardVideoSegmentPromptFacts({
-    segment,
-    segmentExecution,
-    sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
-    shots,
-    executions,
-    styleBible: sourceSnapshot.styleBible,
-  }).prompt
+  return segmentExecution.continuousVideoPrompt
 }
 
 function validateAssetReferenceShotNumbers(shotNumbers: readonly number[]): number[] {

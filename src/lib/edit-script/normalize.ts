@@ -145,6 +145,7 @@ export function normalizeEditShotExecutionPlan(
         })),
         spatialNote: shot.blocking.spatialNote.trim(),
       },
+      videoPrompt: shot.videoPrompt.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
   const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment): EditGenerationSegmentExecution => ({
@@ -155,6 +156,7 @@ export function normalizeEditShotExecutionPlan(
     visibilityContinuity: segment.visibilityContinuity.trim(),
     soundFlow: segment.soundFlow.trim(),
     continuityLocks: segment.continuityLocks.map((lock) => lock.trim()),
+    continuousVideoPrompt: segment.continuousVideoPrompt.trim(),
   }))
   assertContinuousShotNumbers(shots)
   if (shots.length !== coreShots.length) {

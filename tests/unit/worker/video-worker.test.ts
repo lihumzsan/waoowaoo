@@ -260,6 +260,7 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
       ],
       spatialNote: 'Hero and chair preserve the same axis across shots',
     },
+    videoPrompt: `Single-shot video prompt for shot ${shot.shotNumber}: Hero remains screen left of Chair, preserve the same room tone and camera movement.`,
   }
 }
 
@@ -272,6 +273,7 @@ function buildGenerationSegmentExecution(segment: EditGenerationSegment): EditGe
     visibilityContinuity: 'Hero remains visible while the chair remains the blocking anchor',
     soundFlow: segment.continuity,
     continuityLocks: ['same room', 'same screen direction', 'same character positions'],
+    continuousVideoPrompt: 'Stored continuous segment prompt from ShotExecutionPlan. [00:00-00:02] Shot 1: Hero and chair hold the same screen direction. <room tone continues>',
   }
 }
 

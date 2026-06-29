@@ -66,6 +66,7 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
           visibilityContinuity: 'Anna remains visible',
           soundFlow: 'quiet room tone',
           continuityLocks: ['same room', 'same axis'],
+          continuousVideoPrompt: 'Continuous segment video prompt for Anna and the chair in the same room. [00:00-00:03] Shot 1 preserves the same chair axis and room tone.',
         },
       ],
       shots: [
@@ -106,6 +107,7 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
             ],
             spatialNote: 'same room',
           },
+          videoPrompt: 'Single-shot video prompt for Anna: locked medium shot, centered chair, same room tone.',
         },
       ],
     })

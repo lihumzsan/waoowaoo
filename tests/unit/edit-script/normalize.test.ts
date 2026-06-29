@@ -114,6 +114,7 @@ function executionPlan() {
           ],
           spatialNote: 'The hidden subject remains present but concealed by the chair back.',
         },
+        videoPrompt: 'Single-shot video prompt: Anna remains near the doorway while the high-backed chair hides the seated subject in shadow.',
       },
       {
         shotNumber: 2,
@@ -160,6 +161,7 @@ function executionPlan() {
           ],
           spatialNote: 'The hidden subject remains physically in the chair.',
         },
+        videoPrompt: 'Single-shot video prompt: Anna stays screen left beside the high-backed chair, the hidden subject remains physically seated behind the chair back, floor creak continues.',
       },
     ],
     generationSegmentExecutions: [
@@ -174,6 +176,7 @@ function executionPlan() {
           'same high-backed chair',
           'Disguised Grandmother remains physically present',
         ],
+        continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and the hidden subject stays physically present. <chair hinge begins>',
       },
     ],
   } as const
@@ -234,7 +237,9 @@ describe('shot execution plan normalization', () => {
     ])
     expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
     expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
+    expect(normalizedExecution.shots[0]?.videoPrompt).toContain('Single-shot video prompt')
     expect(normalizedExecution.generationSegmentExecutions[0]?.visibilityContinuity).toContain('stays hidden')
+    expect(normalizedExecution.generationSegmentExecutions[0]?.continuousVideoPrompt).toContain('Cabin reveal continuous segment')
   })
 
   it('rejects execution plans that drop in-scene characters or required objects', () => {
