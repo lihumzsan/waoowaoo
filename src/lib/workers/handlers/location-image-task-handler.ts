@@ -94,9 +94,10 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   const modelId = models.locationModel
   if (!modelId) throw new Error('Location model not configured')
   const assetType = payload.type === 'prop' ? 'prop' : 'location'
-  const spatialProfileModel = models.analysisModel
-  if (assetType === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+  let spatialProfileModel: string | null = null
   if (assetType === 'location') {
+    spatialProfileModel = models.analysisModel
+    if (!spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
     await assertVisionModelSupported({
       userId,
       model: spatialProfileModel,

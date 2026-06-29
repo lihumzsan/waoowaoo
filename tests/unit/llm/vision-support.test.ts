@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+type ProviderAdapterMock = {
+  readonly providerKey: string
+  readonly completeVision?: ReturnType<typeof vi.fn>
+}
+
 const resolveModelSelectionMock = vi.hoisted(() => vi.fn(async () => ({
   provider: 'openrouter',
   modelId: 'vision-model',
@@ -8,7 +13,7 @@ const resolveModelSelectionMock = vi.hoisted(() => vi.fn(async () => ({
   variantSubKind: 'official',
 })))
 
-const resolveAiProviderAdapterMock = vi.hoisted(() => vi.fn(() => ({
+const resolveAiProviderAdapterMock = vi.hoisted(() => vi.fn<() => ProviderAdapterMock>(() => ({
   providerKey: 'openrouter',
   completeVision: vi.fn(),
 })))

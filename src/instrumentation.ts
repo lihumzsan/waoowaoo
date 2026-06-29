@@ -164,6 +164,7 @@ export async function register() {
                 },
               })
               await syncTaskTargetFailure({
+                projectId: task.projectId,
                 type: taskType,
                 targetType: task.targetType,
                 targetId: task.targetId,

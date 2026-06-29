@@ -187,6 +187,7 @@ describe('codex provider adapter', () => {
         provider: 'codex',
         modelId: 'gpt-5.5',
         modelKey: 'codex::gpt-5.5',
+        variantSubKind: 'official',
       },
       textPrompt: 'Analyze the scene.',
       imageUrls: ['data:image/png;base64,QQ=='],
