@@ -170,10 +170,6 @@ function primaryPanelImageUrl(panel: ProjectPanel | null): string | null {
     ?? null
 }
 
-function hasPrompt(value: string | null | undefined): boolean {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
 function resolvePanelShotNumber(panel: ProjectPanel): number {
   return panel.sourceShotNumber ?? panel.panelNumber ?? panel.panelIndex + 1
 }
@@ -773,45 +769,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   const panelList = collectPanels(storyboards)
-  let imagePromptComposerNodeId: string | null = null
-  if (editScript && panelList.length > 0) {
-    const nodeId = workspaceNodeId.imagePromptComposer(editScript.id)
-    imagePromptComposerNodeId = nodeId
-    const readyCount = panelList.filter((panel) => hasPrompt(panel.imagePrompt)).length
-    const totalCount = panelList.length
-    const running = activeAssistantOperationId === 'compose_edit_image_prompts'
-    nodes.push(createNode({
-      id: nodeId,
-      position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 4, y: 120 }),
-      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-      height: 240,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'editPipelineStep',
-        layoutNodeType: 'editPipelineStep',
-        targetType: 'editPipelineStep',
-        targetId: nodeId,
-        title: translate('nodes.imagePromptComposer.title'),
-        eyebrow: translate('nodes.imagePromptComposer.eyebrow'),
-        body: translate('nodes.imagePromptComposer.body'),
-        meta: translate('nodes.imagePromptComposer.meta', { ready: readyCount, total: totalCount }),
-        statusLabel: readyCount === totalCount ? translate('status.ready') : translate('status.pending'),
-        isRunning: running,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditImagePromptComposer(editScript.id)),
-        actionLabel: readyCount === totalCount ? undefined : translate('actions.composeImagePrompts'),
-        action: readyCount === totalCount ? undefined : { type: 'compose_edit_image_prompts', editScriptId: editScript.id },
-        onAction,
-      },
-    }))
-    const composerSourceIds = storyboardGenerationNodeIds.size > 0
-      ? Array.from(storyboardGenerationNodeIds.values())
-      : executionNodeId ? [executionNodeId] : []
-    composerSourceIds.forEach((sourceId) => {
-      edges.push(createEdge(`edge:${sourceId}:${nodeId}`, sourceId, nodeId))
-    })
-  }
-
   const shotNodeIdsByShotNumber = new Map<number, string>()
   panelList.forEach((panel, index) => {
     const shotNumber = resolvePanelShotNumber(panel)
@@ -820,7 +777,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const column = index % SHOT_GRID_COLUMNS
     const row = Math.floor(index / SHOT_GRID_COLUMNS)
     const previewImageUrl = primaryPanelImageUrl(panel)
-    const storyboardSourceNodeId = imagePromptComposerNodeId ?? storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
+    const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
     nodes.push(createNode({
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
@@ -869,51 +826,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     }))
     edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
   })
-
-  let videoPromptComposerNodeId: string | null = null
-  if (editScript && panelList.length > 0) {
-    const nodeId = workspaceNodeId.videoPromptComposer(editScript.id)
-    videoPromptComposerNodeId = nodeId
-    const videoPromptReadyCount = panelList.filter((panel) => hasPrompt(panel.videoPrompt)).length
-    const expectedGroupSegments = editScript.generationSegments.filter((segment) => Boolean(inferGridMode(segment.shotNumbers.length)))
-    const groupPromptReadyCount = expectedGroupSegments.filter((segment) => {
-      const group = videoGroupForShotNumbers(videoGroups, segment.shotNumbers)
-      return hasPrompt(group?.prompt ?? null)
-    }).length
-    const readyCount = videoPromptReadyCount + groupPromptReadyCount
-    const totalCount = panelList.length + expectedGroupSegments.length
-    const running = activeAssistantOperationId === 'compose_edit_video_prompts'
-    nodes.push(createNode({
-      id: nodeId,
-      position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 4, y: 420 }),
-      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-      height: 240,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'editPipelineStep',
-        layoutNodeType: 'editPipelineStep',
-        targetType: 'editPipelineStep',
-        targetId: nodeId,
-        title: translate('nodes.videoPromptComposer.title'),
-        eyebrow: translate('nodes.videoPromptComposer.eyebrow'),
-        body: translate('nodes.videoPromptComposer.body'),
-        meta: translate('nodes.videoPromptComposer.meta', { ready: readyCount, total: totalCount }),
-        statusLabel: readyCount === totalCount ? translate('status.ready') : translate('status.pending'),
-        isRunning: running,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditVideoPromptComposer(editScript.id)),
-        actionLabel: readyCount === totalCount ? undefined : translate('actions.composeVideoPrompts'),
-        action: readyCount === totalCount ? undefined : { type: 'compose_edit_video_prompts', editScriptId: editScript.id },
-        onAction,
-      },
-    }))
-    if (imagePromptComposerNodeId) {
-      edges.push(createEdge(`edge:${imagePromptComposerNodeId}:${nodeId}`, imagePromptComposerNodeId, nodeId))
-    }
-    shotNodeIdsByShotNumber.forEach((shotNodeId, shotNumber) => {
-      edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotNumber}`, shotNodeId, nodeId))
-    })
-  }
 
   if (editScript?.generationSegments.length) {
     editScript.generationSegments.forEach((segment, index) => {
@@ -979,9 +891,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       })
       if (!segment.shotNumbers.some((shotNumber) => shotNodeIdsByShotNumber.has(shotNumber)) && executionNodeId) {
         edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
-      }
-      if (videoPromptComposerNodeId) {
-        edges.push(createEdge(`edge:${videoPromptComposerNodeId}:${nodeId}`, videoPromptComposerNodeId, nodeId))
       }
     })
   }

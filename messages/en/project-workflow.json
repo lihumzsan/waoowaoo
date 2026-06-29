@@ -193,9 +193,7 @@
         "generateEditScript": "Generate Edit Table",
         "generateShotExecutionPlan": "Generate Shot Execution Plan",
         "generateStoryboard": "Generate Storyboard",
-        "composeImagePrompts": "Compose Image Prompts",
         "generateImage": "Generate Image",
-        "composeVideoPrompts": "Compose Video Prompts",
         "generateStoryboardSingleImages": "Generate Single Images",
         "generateStoryboardGridImages": "Generate Group Images",
         "regenerateImage": "Regenerate",
@@ -776,18 +774,6 @@
           "eyebrow": "Storyboard Structure",
           "body": "The system is converting the shot execution plan, spatial profiles, and core edit table into per-shot storyboard facts.",
           "meta": "{panels} storyboard panel(s)"
-        },
-        "imagePromptComposer": {
-          "title": "Image Prompt Composer",
-          "eyebrow": "Final Image Prompts",
-          "body": "Composes final image prompts from storyboard facts, character graph, prop graph, scene graph, and Style Bible.",
-          "meta": "{ready}/{total} image prompt(s)"
-        },
-        "videoPromptComposer": {
-          "title": "Video Prompt Composer",
-          "eyebrow": "Final Video Prompts",
-          "body": "Composes single-shot and continuous video prompts from storyboard facts, generation segments, spatial blocking, and sound facts.",
-          "meta": "{ready}/{total} video prompt(s)"
         },
         "editAsset": {
           "meta": "Linked shots: {shots}"

@@ -154,7 +154,7 @@ type EditScriptGenerationStage =
   | 'edit_script_style_bible'
   | 'edit_script_primary'
   | 'edit_script_asset_extract'
-  | 'edit_script_video_prompt'
+  | 'edit_script_persist'
 
 const EDIT_SCRIPT_PROMPT_CACHE_MIN_CHARS = 1024
 
@@ -727,7 +727,7 @@ async function mapPersistedEditShotExecutionPlan(plan: PersistedEditShotExecutio
   const script = await getPersistedEditScript(plan.projectId, plan.episodeId, plan.editScriptId)
   if (!script) throw new Error(`EDIT_SCRIPT_NOT_FOUND:${plan.editScriptId}`)
   const core = normalizeEditScriptStructure(script.corePlanJson)
-  const parsed = normalizeEditShotExecutionPlan(plan.executionPlanJson, core.shots)
+  const parsed = normalizeEditShotExecutionPlan(plan.executionPlanJson, core.shots, core.generationSegments)
   return {
     id: plan.id,
     projectId: plan.projectId,
@@ -735,6 +735,7 @@ async function mapPersistedEditShotExecutionPlan(plan: PersistedEditShotExecutio
     editScriptId: plan.editScriptId,
     status: plan.status,
     shots: parsed.shots,
+    generationSegmentExecutions: parsed.generationSegmentExecutions,
   }
 }
 
@@ -1707,7 +1708,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       return nextScript
     })
     await notifyGenerationStep(input.onGenerationStepPersisted, {
-      stage: 'edit_script_video_prompt',
+      stage: 'edit_script_persist',
       stageLabel: 'progress.stage.editScriptPersist',
       progress: 92,
     })
@@ -1785,9 +1786,10 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     stepIndex: 1,
     stepTotal: 1,
   })
-  const parsed = normalizeEditShotExecutionPlan(raw, mappedEditScript.shots)
+  const parsed = normalizeEditShotExecutionPlan(raw, mappedEditScript.shots, mappedEditScript.generationSegments)
   const executionPlanJson = {
     shots: parsed.shots,
+    generationSegmentExecutions: parsed.generationSegmentExecutions,
   }
   const saved = await prisma.projectEditShotExecutionPlan.upsert({
     where: { episodeId: input.episodeId },

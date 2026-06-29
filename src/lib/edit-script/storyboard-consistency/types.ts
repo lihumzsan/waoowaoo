@@ -9,6 +9,7 @@ import { locationSpatialProfileSchema, type LocationSpatialProfile } from '@/lib
 import type {
   EditAssetRequirement,
   EditGenerationSegment,
+  EditGenerationSegmentExecution,
   EditScriptPayload,
   EditScriptShot,
   EditScriptStyleBible,
@@ -48,6 +49,7 @@ export interface StoryboardConsistencySourceSnapshot {
   readonly shots: readonly EditScriptShot[]
   readonly shotExecutionPlan: {
     readonly shots: readonly EditShotExecution[]
+    readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
   }
   readonly generationSegments: readonly StoryboardConsistencyGenerationSegment[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]

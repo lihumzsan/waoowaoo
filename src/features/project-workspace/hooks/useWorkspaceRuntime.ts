@@ -66,8 +66,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
   handleRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
-  handleComposeEditImagePrompts: (editScriptId: string) => Promise<void>
-  handleComposeEditVideoPrompts: (editScriptId: string) => Promise<void>
   handleUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,
@@ -109,8 +107,6 @@ export function useWorkspaceRuntime({
   handleGenerateEditShotExecutionPlan,
   handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
-  handleComposeEditImagePrompts,
-  handleComposeEditVideoPrompts,
   handleUpdateVideoPrompt,
   handleUpdateGenerationSegmentContinuity,
   handleArrangeGenerationSegments,
@@ -151,8 +147,6 @@ export function useWorkspaceRuntime({
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
     onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
-    onComposeEditImagePrompts: handleComposeEditImagePrompts,
-    onComposeEditVideoPrompts: handleComposeEditVideoPrompts,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateGenerationSegmentContinuity: handleUpdateGenerationSegmentContinuity,
     onArrangeGenerationSegments: handleArrangeGenerationSegments,
@@ -168,8 +162,6 @@ export function useWorkspaceRuntime({
     handleGenerateEditShotExecutionPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleComposeEditImagePrompts,
-    handleComposeEditVideoPrompts,
     handleGeneratePanelImage,
     handleGenerateStoryboardGridImages,
     handleSelectPanelCandidate,

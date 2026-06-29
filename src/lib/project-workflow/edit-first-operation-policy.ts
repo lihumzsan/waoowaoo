@@ -7,9 +7,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'revise_edit_script_assets',
   'generate_edit_shot_execution_plan',
   'generate_edit_script_storyboard',
-  'compose_edit_image_prompts',
   'generate_edit_script_storyboard_images',
-  'compose_edit_video_prompts',
   'generate_episode_videos',
   'render_final_video',
 ] as const
@@ -25,8 +23,6 @@ export const EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS = [
   'revise_edit_script_assets',
   'generate_edit_shot_execution_plan',
   'generate_edit_script_storyboard',
-  'compose_edit_image_prompts',
-  'compose_edit_video_prompts',
 ] as const satisfies readonly EditFirstWorkflowOperationId[]
 
 const EDIT_FIRST_AUTO_APPROVED_OPERATION_ID_SET: ReadonlySet<string> = new Set(EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS)

@@ -9,10 +9,6 @@ import {
   submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
-import {
-  submitEditImagePromptComposeTask,
-  submitEditVideoPromptComposeTask,
-} from '@/lib/edit-script/prompt-composer/submit'
 import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -113,11 +109,6 @@ const generateEditScriptStoryboardInputSchema = z.object({
   editScriptId: z.string().trim().min(1).optional(),
 }).passthrough()
 
-const composeEditPromptsInputSchema = z.object({
-  episodeId: z.string().trim().min(1).optional(),
-  editScriptId: z.string().trim().min(1).optional(),
-}).passthrough()
-
 type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
 type ReviseEditScreenplayInput = z.infer<typeof reviseEditScreenplayInputSchema>
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
@@ -127,7 +118,6 @@ type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInpu
 type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSchema>
 type GenerateEditShotExecutionPlanInput = z.infer<typeof generateEditShotExecutionPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
-type ComposeEditPromptsInput = z.infer<typeof composeEditPromptsInputSchema>
 
 const editScreenplayTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
@@ -755,98 +745,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...result,
           episodeId,
           taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-          targetType: 'ProjectEditScript',
-          targetId: result.editScriptId,
-        }
-      },
-    }),
-    compose_edit_image_prompts: defineOperation({
-      id: 'compose_edit_image_prompts',
-      summary: 'Compose final image prompts from storyboard render facts.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_WRITE,
-      confirmation: {
-        required: false,
-      },
-      inputSchema: composeEditPromptsInputSchema,
-      outputSchema: editScriptTaskSubmitOutputSchema,
-      execute: async (ctx, input: ComposeEditPromptsInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitEditImagePromptComposeTask({
-          request: ctx.request,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          source: ctx.source,
-          confirmed: true,
-          locale: resolveLocale(ctx.context.locale),
-          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
-        })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'compose_edit_image_prompts',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE,
-          targetType: 'ProjectEditScript',
-          targetId: result.editScriptId,
-        })
-
-        return {
-          ...result,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE,
-          targetType: 'ProjectEditScript',
-          targetId: result.editScriptId,
-        }
-      },
-    }),
-    compose_edit_video_prompts: defineOperation({
-      id: 'compose_edit_video_prompts',
-      summary: 'Compose final single-shot and continuous video prompts from storyboard render facts and generation segments.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_WRITE,
-      confirmation: {
-        required: false,
-      },
-      inputSchema: composeEditPromptsInputSchema,
-      outputSchema: editScriptTaskSubmitOutputSchema,
-      execute: async (ctx, input: ComposeEditPromptsInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitEditVideoPromptComposeTask({
-          request: ctx.request,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          source: ctx.source,
-          confirmed: true,
-          locale: resolveLocale(ctx.context.locale),
-          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
-        })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'compose_edit_video_prompts',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE,
-          targetType: 'ProjectEditScript',
-          targetId: result.editScriptId,
-        })
-
-        return {
-          ...result,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE,
           targetType: 'ProjectEditScript',
           targetId: result.editScriptId,
         }

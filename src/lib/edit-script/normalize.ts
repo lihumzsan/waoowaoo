@@ -1,6 +1,7 @@
 import type {
   EditAssetRequirement,
   EditGenerationSegment,
+  EditGenerationSegmentExecution,
   EditScriptPayload,
   EditScriptShot,
   EditShotExecution,
@@ -107,6 +108,7 @@ function names(values: readonly { readonly name: string }[]): Set<string> {
 export function normalizeEditShotExecutionPlan(
   raw: unknown,
   coreShots: readonly EditScriptShot[],
+  coreGenerationSegments: readonly EditGenerationSegment[],
 ): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'editScriptId' | 'status'> {
   const parsed = editShotExecutionPlanSchema.parse(raw)
   const shots = parsed.shots
@@ -145,6 +147,15 @@ export function normalizeEditShotExecutionPlan(
       },
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
+  const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment): EditGenerationSegmentExecution => ({
+    shotNumbers: [...segment.shotNumbers],
+    motionFlow: segment.motionFlow.trim(),
+    cameraFlow: segment.cameraFlow.trim(),
+    blockingFlow: segment.blockingFlow.trim(),
+    visibilityContinuity: segment.visibilityContinuity.trim(),
+    soundFlow: segment.soundFlow.trim(),
+    continuityLocks: segment.continuityLocks.map((lock) => lock.trim()),
+  }))
   assertContinuousShotNumbers(shots)
   if (shots.length !== coreShots.length) {
     throw new Error(`EDIT_SHOT_EXECUTION_PLAN_COVERAGE_INVALID:${shots.length}:${coreShots.length}`)
@@ -169,7 +180,20 @@ export function normalizeEditShotExecutionPlan(
       }
     })
   })
-  return { shots }
+  if (generationSegmentExecutions.length !== coreGenerationSegments.length) {
+    throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_COVERAGE_INVALID:${generationSegmentExecutions.length}:${coreGenerationSegments.length}`)
+  }
+  generationSegmentExecutions.forEach((segmentExecution, index) => {
+    const coreSegment = coreGenerationSegments[index]
+    if (!coreSegment) throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_MISSING:${index}`)
+    if (
+      segmentExecution.shotNumbers.length !== coreSegment.shotNumbers.length ||
+      segmentExecution.shotNumbers.some((shotNumber, shotIndex) => shotNumber !== coreSegment.shotNumbers[shotIndex])
+    ) {
+      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${segmentExecution.shotNumbers.join(',')}:${coreSegment.shotNumbers.join(',')}`)
+    }
+  })
+  return { shots, generationSegmentExecutions }
 }
 
 export function normalizeEditAssetRequirements(

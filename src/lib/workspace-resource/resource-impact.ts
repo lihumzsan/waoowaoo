@@ -183,7 +183,6 @@ function isGlobalAssetTaskType(taskType: string | null): boolean {
 
 function isStoryboardTaskType(taskType: string | null): boolean {
   return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
-    taskType === TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE ||
     taskType === TASK_TYPE.INSERT_PANEL ||
     taskType === TASK_TYPE.IMAGE_PANEL ||
     taskType === TASK_TYPE.PANEL_VARIANT ||
@@ -193,8 +192,7 @@ function isStoryboardTaskType(taskType: string | null): boolean {
 }
 
 function isMediaTaskType(taskType: string | null): boolean {
-  return taskType === TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE ||
-    taskType === TASK_TYPE.VIDEO_PANEL ||
+  return taskType === TASK_TYPE.VIDEO_PANEL ||
     taskType === TASK_TYPE.VIDEO_GROUP ||
     taskType === TASK_TYPE.FINAL_VIDEO_RENDER ||
     taskType === TASK_TYPE.BGM_SCORE_GENERATE

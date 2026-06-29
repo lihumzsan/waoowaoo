@@ -182,15 +182,5 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'compose_edit_image_prompts') {
-      await runtime.onComposeEditImagePrompts(action.editScriptId)
-      return
-    }
-
-    if (action.type === 'compose_edit_video_prompts') {
-      await runtime.onComposeEditVideoPrompts(action.editScriptId)
-      return
-    }
-
   }, [runtime])
 }

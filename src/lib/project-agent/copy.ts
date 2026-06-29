@@ -79,17 +79,9 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '从已 ready 的核心剪辑表和镜头执行计划生成正式分镜面板。只有镜头执行计划已 ready 且当前 workflow 暴露该工具时才调用。',
     en: 'Generate formal storyboard panels from the ready core edit plan and shot execution plan. Call it only after the shot execution plan is ready and the current workflow exposes this tool.',
   },
-  compose_edit_image_prompts: {
-    zh: '分镜面板事实 ready 后，合成最终图片提示词。该步骤自动批准，必须在生成分镜图片之前调用。',
-    en: 'Compose final image prompts after storyboard panel facts are ready. This step is auto-approved and must run before storyboard image generation.',
-  },
   generate_edit_script_storyboard_images: {
     zh: '为剪辑先行流程中已经生成分镜面板但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
     en: 'Batch-generate storyboard panel images for edit-first panels that already exist but have no image. Use only when storyboard panels exist and images are missing; do not substitute generate_episode_videos.',
-  },
-  compose_edit_video_prompts: {
-    zh: '分镜图片 ready 后，合成单镜头视频提示词和连续视频片段提示词。该步骤自动批准，必须在生成视频片段之前调用。',
-    en: 'Compose single-shot and continuous video prompts after storyboard images are ready. This step is auto-approved and must run before video segment generation.',
   },
 }
 
@@ -161,17 +153,9 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成分镜面板',
     en: 'Generate storyboard panels',
   },
-  compose_edit_image_prompts: {
-    zh: '合成图片提示词',
-    en: 'Compose image prompts',
-  },
   generate_edit_script_storyboard_images: {
     zh: '生成分镜图片',
     en: 'Generate storyboard images',
-  },
-  compose_edit_video_prompts: {
-    zh: '合成视频提示词',
-    en: 'Compose video prompts',
   },
   generate_episode_videos: {
     zh: '生成视频片段',

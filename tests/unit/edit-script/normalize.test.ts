@@ -76,7 +76,6 @@ function executionPlan() {
           lens: '35mm',
           focus: 'chair area sharp',
           height: 'eye level',
-          position: 'inside doorway left',
           angle: 'slightly low frontal',
           movement: 'locked off',
           composition: 'chair centered',
@@ -123,7 +122,6 @@ function executionPlan() {
           lens: '50mm',
           focus: 'Anna and chair edge sharp',
           height: 'eye level',
-          position: 'inside doorway left, closer',
           angle: 'frontal',
           movement: 'slow push',
           composition: 'Anna left, chair center',
@@ -162,6 +160,20 @@ function executionPlan() {
           ],
           spatialNote: 'The hidden subject remains physically in the chair.',
         },
+      },
+    ],
+    generationSegmentExecutions: [
+      {
+        shotNumbers: [1, 2],
+        motionFlow: 'Anna moves closer while the hidden subject stays seated.',
+        cameraFlow: 'The camera holds the same axis and slowly tightens.',
+        blockingFlow: 'The high-backed chair remains centered and hides the seated figure.',
+        visibilityContinuity: 'Disguised Grandmother stays hidden in both shots.',
+        soundFlow: 'Floor creak continues into chair hinge sound.',
+        continuityLocks: [
+          'same high-backed chair',
+          'Disguised Grandmother remains physically present',
+        ],
       },
     ],
   } as const
@@ -209,7 +221,11 @@ describe('edit-first core plan normalization', () => {
 describe('shot execution plan normalization', () => {
   it('requires execution blocking to cover every core character and object', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
-    const normalizedExecution = normalizeEditShotExecutionPlan(executionPlan(), normalizedCore.shots)
+    const normalizedExecution = normalizeEditShotExecutionPlan(
+      executionPlan(),
+      normalizedCore.shots,
+      normalizedCore.generationSegments,
+    )
 
     expect(normalizedExecution.shots).toHaveLength(2)
     expect(normalizedExecution.shots[0]?.blocking.characters.map((character) => character.name)).toEqual([
@@ -218,11 +234,13 @@ describe('shot execution plan normalization', () => {
     ])
     expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
     expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
+    expect(normalizedExecution.generationSegmentExecutions[0]?.visibilityContinuity).toContain('stays hidden')
   })
 
   it('rejects execution plans that drop in-scene characters or required objects', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
     const missingCharacter = {
+      generationSegmentExecutions: executionPlan().generationSegmentExecutions,
       shots: [
         {
           ...executionPlan().shots[0],
@@ -234,10 +252,15 @@ describe('shot execution plan normalization', () => {
         executionPlan().shots[1],
       ],
     }
-    expect(() => normalizeEditShotExecutionPlan(missingCharacter, normalizedCore.shots as readonly EditScriptShot[]))
+    expect(() => normalizeEditShotExecutionPlan(
+      missingCharacter,
+      normalizedCore.shots as readonly EditScriptShot[],
+      normalizedCore.generationSegments,
+    ))
       .toThrow('EDIT_SHOT_EXECUTION_CHARACTER_MISSING')
 
     const missingObject = {
+      generationSegmentExecutions: executionPlan().generationSegmentExecutions,
       shots: [
         {
           ...executionPlan().shots[0],
@@ -249,7 +272,11 @@ describe('shot execution plan normalization', () => {
         executionPlan().shots[1],
       ],
     }
-    expect(() => normalizeEditShotExecutionPlan(missingObject, normalizedCore.shots as readonly EditScriptShot[]))
+    expect(() => normalizeEditShotExecutionPlan(
+      missingObject,
+      normalizedCore.shots as readonly EditScriptShot[],
+      normalizedCore.generationSegments,
+    ))
       .toThrow('EDIT_SHOT_EXECUTION_OBJECT_MISSING')
   })
 })

@@ -95,12 +95,6 @@ export const TASK_RUNTIME_TARGETS = {
   projectEditShotExecutionPlan(editScriptId: string | null | undefined) {
     return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE])
   },
-  projectEditImagePromptComposer(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE])
-  },
-  projectEditVideoPromptComposer(editScriptId: string | null | undefined) {
-    return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE])
-  },
   projectEditStylePreviewImage(stylePreviewId: string | null | undefined) {
     return target('ProjectEditStylePreview', stylePreviewId, [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE])
   },

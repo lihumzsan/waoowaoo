@@ -48,8 +48,6 @@ export const TASK_TYPE = {
   EDIT_STYLE_PREVIEWS_GENERATE: 'edit_style_previews_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
-  EDIT_IMAGE_PROMPT_COMPOSE: 'edit_image_prompt_compose',
-  EDIT_VIDEO_PROMPT_COMPOSE: 'edit_video_prompt_compose',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
   MUSIC_GENERATE: 'music_generate',

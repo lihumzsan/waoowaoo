@@ -246,11 +246,11 @@ describe('workspace assistant panel layout', () => {
   it('resolves progress stage labels without crashing on missing translations', () => {
     const progressT = createProgressTranslator({
       stage: {
-        editScriptVideoPrompt: '生成视频提示词',
+        editScriptPersist: '保存剪辑先行表',
       },
     })
 
-    expect(resolveProgressStageLabel('progress.stage.editScriptVideoPrompt', progressT)).toBe('生成视频提示词')
+    expect(resolveProgressStageLabel('progress.stage.editScriptPersist', progressT)).toBe('保存剪辑先行表')
     expect(resolveProgressStageLabel('progress.stage.missingStage', progressT)).toBe('MISSING_MESSAGE:progress.stage.missingStage')
     expect(resolveProgressStageLabel('外部阶段', progressT)).toBe('外部阶段')
   })
@@ -591,12 +591,12 @@ describe('workspace assistant panel layout', () => {
     expect(enMessages.cards.runs).toBeUndefined()
   })
 
-  it('keeps edit script video prompt stage translated in supported locales', () => {
+  it('keeps edit script persist stage translated in supported locales', () => {
     const zhProgressSource = readFileSync(join(process.cwd(), 'messages/zh/progress.json'), 'utf8')
     const enProgressSource = readFileSync(join(process.cwd(), 'messages/en/progress.json'), 'utf8')
 
-    expect(zhProgressSource).toContain('"editScriptVideoPrompt"')
-    expect(enProgressSource).toContain('"editScriptVideoPrompt"')
+    expect(zhProgressSource).toContain('"editScriptPersist"')
+    expect(enProgressSource).toContain('"editScriptPersist"')
   })
 
   it('keeps style preview image modal state outside the volatile generation card', () => {

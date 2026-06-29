@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditGenerationSegment, EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
+import type { EditGenerationSegment, EditGenerationSegmentExecution, EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
 import type { StoryboardConsistencySourceSnapshot } from '@/lib/edit-script/storyboard-consistency/types'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
@@ -263,6 +263,18 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
   }
 }
 
+function buildGenerationSegmentExecution(segment: EditGenerationSegment): EditGenerationSegmentExecution {
+  return {
+    shotNumbers: segment.shotNumbers,
+    motionFlow: 'Continuous action carries from shot to shot without a time jump',
+    cameraFlow: 'Camera scale changes preserve the same axis and screen direction',
+    blockingFlow: 'Hero and chair keep a stable spatial relationship across the segment',
+    visibilityContinuity: 'Hero remains visible while the chair remains the blocking anchor',
+    soundFlow: segment.continuity,
+    continuityLocks: ['same room', 'same screen direction', 'same character positions'],
+  }
+}
+
 function buildStoryboardSourceResult(
   corePlan: { readonly shots: readonly EditScriptShot[]; readonly generationSegments: readonly EditGenerationSegment[] } = buildCorePlan(),
 ): {
@@ -289,6 +301,7 @@ function buildStoryboardSourceResult(
       shots: corePlan.shots,
       shotExecutionPlan: {
         shots: corePlan.shots.map((shot) => buildExecutionShot(shot)),
+        generationSegmentExecutions: corePlan.generationSegments.map((segment) => buildGenerationSegmentExecution(segment)),
       },
       generationSegments: corePlan.generationSegments.map((segment, index) => ({
         ...segment,

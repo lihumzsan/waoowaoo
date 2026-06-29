@@ -30,11 +30,6 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     panelCount: 0,
     storyboardPanelImagePromptMissingCount: 0,
     storyboardPanelVideoPromptMissingCount: 0,
-    imagePromptComposeFailed: false,
-    videoPromptComposeFailed: false,
-    activeImagePromptComposeTaskCount: 0,
-    activeVideoPromptComposeTaskCount: 0,
-    videoGroupPromptMissingCount: 0,
     storyboardPanelImageReadyCount: 0,
     storyboardPanelImageMissingCount: 0,
     storyboardPanelImageFailedCount: 0,
@@ -136,7 +131,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
   })
 
-  it('composes image prompts when panels exist without final image prompts', () => {
+  it('fails explicitly when generated storyboard panels are missing deterministic prompts', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
       screenplayStatus: 'ready',
@@ -151,9 +146,9 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 2,
     }))
 
-    expect(state.stage).toBe('ready_to_compose_image_prompts')
-    expect(state.nextAction?.operationId).toBe('compose_edit_image_prompts')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.stage).toBe('failed')
+    expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
   })
 
   it('generates storyboard images after image prompts are composed', () => {
@@ -176,7 +171,7 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.requiresUserConfirmation).toBe(true)
   })
 
-  it('composes video prompts after all storyboard panel images are ready', () => {
+  it('fails explicitly when generated storyboard panels are missing video prompts', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
       screenplayStatus: 'ready',
@@ -188,14 +183,13 @@ describe('edit-first workflow state', () => {
       panelCount: 3,
       storyboardPanelImagePromptMissingCount: 0,
       storyboardPanelVideoPromptMissingCount: 3,
-      videoGroupPromptMissingCount: 1,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 0,
     }))
 
-    expect(state.stage).toBe('ready_to_compose_video_prompts')
-    expect(state.nextAction?.operationId).toBe('compose_edit_video_prompts')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.stage).toBe('failed')
+    expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
+    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
   })
 
   it('allows video generation only after image and video prompts are ready', () => {
@@ -210,7 +204,6 @@ describe('edit-first workflow state', () => {
       panelCount: 3,
       storyboardPanelImagePromptMissingCount: 0,
       storyboardPanelVideoPromptMissingCount: 0,
-      videoGroupPromptMissingCount: 0,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 0,
     }))

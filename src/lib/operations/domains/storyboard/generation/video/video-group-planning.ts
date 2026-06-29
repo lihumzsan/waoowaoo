@@ -8,6 +8,8 @@ import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingI
 import { inferVideoGridModeForShotCount, totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
+import { buildStoryboardVideoSegmentPromptFacts } from '@/lib/edit-script/prompt-builders'
+import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 import { applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
 
 export function parseShotNumbersJson(value: unknown): number[] {
@@ -157,6 +159,44 @@ async function resolveVideoGroupInput(params: {
     shotNumbers,
     selectedShots,
   }
+}
+
+async function buildGenerationSegmentPrompt(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly editScriptId: string
+  readonly shotNumbers: readonly number[]
+}): Promise<string> {
+  const { sourceSnapshot } = await buildStoryboardConsistencySource({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    editScriptId: input.editScriptId,
+    userId: input.userId,
+  })
+  const segment = sourceSnapshot.generationSegments.find((candidate) => sameShotNumbers(candidate.shotNumbers, input.shotNumbers))
+  if (!segment) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotNumbers.join(',')}`)
+  const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) => sameShotNumbers(candidate.shotNumbers, input.shotNumbers))
+  if (!segmentExecution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SEGMENT_EXECUTION_NOT_FOUND:${input.shotNumbers.join(',')}`)
+  const shots = input.shotNumbers.map((shotNumber) => {
+    const shot = sourceSnapshot.shots.find((candidate) => candidate.shotNumber === shotNumber)
+    if (!shot) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SOURCE_SHOT_MISSING:${shotNumber}`)
+    return shot
+  })
+  const executions = input.shotNumbers.map((shotNumber) => {
+    const execution = sourceSnapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shotNumber)
+    if (!execution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SOURCE_EXECUTION_MISSING:${shotNumber}`)
+    return execution
+  })
+  return buildStoryboardVideoSegmentPromptFacts({
+    segment,
+    segmentExecution,
+    sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
+    shots,
+    executions,
+    assets: sourceSnapshot.assets,
+    styleBible: sourceSnapshot.styleBible,
+  }).prompt
 }
 
 function validateAssetReferenceShotNumbers(shotNumbers: readonly number[]): number[] {
@@ -447,6 +487,13 @@ export async function planVideoGroupTask(params: {
     gridMode: params.gridMode,
     shotNumbers: resolved.shotNumbers,
   })
+  const prompt = await buildGenerationSegmentPrompt({
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    episodeId: params.episodeId,
+    editScriptId: resolved.editScript.id,
+    shotNumbers: resolved.shotNumbers,
+  })
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotNumbers.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
@@ -473,6 +520,7 @@ export async function planVideoGroupTask(params: {
       shotNumbers: resolved.shotNumbers,
       durationSec,
       previous,
+      prompt,
     },
   }
 }

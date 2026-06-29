@@ -193,9 +193,7 @@
         "generateEditScript": "生成剪辑表",
         "generateShotExecutionPlan": "生成镜头执行计划",
         "generateStoryboard": "生成分镜",
-        "composeImagePrompts": "合成图片提示词",
         "generateImage": "生成图片",
-        "composeVideoPrompts": "合成视频提示词",
         "generateStoryboardSingleImages": "单张生成分镜",
         "generateStoryboardGridImages": "成组生成分镜",
         "regenerateImage": "重新生成",
@@ -776,18 +774,6 @@
           "eyebrow": "分镜结构",
           "body": "系统正在把镜头执行计划、空间档案和核心剪辑表转化为逐镜分镜事实。",
           "meta": "{panels} 个分镜面板"
-        },
-        "imagePromptComposer": {
-          "title": "图片 Prompt Composer",
-          "eyebrow": "最终图片提示词",
-          "body": "根据分镜事实、角色图谱、道具图谱、场景图谱和 Style Bible 合成最终图片提示词。",
-          "meta": "{ready}/{total} 个图片提示词"
-        },
-        "videoPromptComposer": {
-          "title": "视频 Prompt Composer",
-          "eyebrow": "最终视频提示词",
-          "body": "根据分镜事实、生成分段、空间 blocking 和声音事实合成单镜头与连续视频提示词。",
-          "meta": "{ready}/{total} 个视频提示词"
         },
         "editAsset": {
           "meta": "关联镜头：{shots}"

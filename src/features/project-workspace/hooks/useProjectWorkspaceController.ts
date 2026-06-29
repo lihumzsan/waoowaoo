@@ -23,8 +23,6 @@ import {
   useCreateProjectEditScreenplay,
   useCreateProjectEditScript,
   useCreateProjectEditShotExecutionPlan,
-  useComposeProjectEditImagePrompts,
-  useComposeProjectEditVideoPrompts,
   useArrangeProjectEditScriptGenerationSegments,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
@@ -128,8 +126,6 @@ export function useProjectWorkspaceController({
   const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
-  const composeEditImagePrompts = useComposeProjectEditImagePrompts(projectId)
-  const composeEditVideoPrompts = useComposeProjectEditVideoPrompts(projectId)
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
   const updateGenerationSegmentContinuity = useUpdateProjectEditScriptGenerationSegmentContinuity(projectId)
@@ -177,16 +173,6 @@ export function useProjectWorkspaceController({
     await generateEditStoryboard.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
-  const handleComposeEditImagePrompts = async (editScriptId: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await composeEditImagePrompts.mutateAsync({ episodeId, editScriptId })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleComposeEditVideoPrompts = async (editScriptId: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await composeEditVideoPrompts.mutateAsync({ episodeId, editScriptId })
-    await onRefresh({ mode: 'full' })
-  }
   const handleUpdateGenerationSegmentContinuity = async (editScriptId: string, segmentIndex: number, continuity: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await updateGenerationSegmentContinuity.mutateAsync({ episodeId, editScriptId, segmentIndex, continuity })
@@ -207,7 +193,7 @@ export function useProjectWorkspaceController({
     assetsLoading,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isAssistantWorkflowStarting: createEditScreenplay.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending || composeEditImagePrompts.isPending || composeEditVideoPrompts.isPending,
+    isAssistantWorkflowStarting: createEditScreenplay.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     videoModel: projectSnapshot.videoModel,
     singleShotVideoModel: projectSnapshot.singleShotVideoModel,
@@ -232,8 +218,6 @@ export function useProjectWorkspaceController({
     handleGenerateEditShotExecutionPlan,
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleComposeEditImagePrompts,
-    handleComposeEditVideoPrompts,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateGenerationSegmentContinuity,
     handleArrangeGenerationSegments,

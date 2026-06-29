@@ -1,4 +1,7 @@
-import { buildStoryboardStillPromptFacts } from '@/lib/edit-script/prompt-builders'
+import {
+  buildStoryboardPanelVideoPrompt,
+  buildStoryboardStillPromptFacts,
+} from '@/lib/edit-script/prompt-builders'
 import type {
   StoryboardConsistencyGenerationSegment,
   StoryboardConsistencySourceSnapshot,
@@ -41,8 +44,8 @@ export function generateStoryboardPanelPrompts(input: {
       panelIndex,
       sourceShotNumber: shot.shotNumber,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
-      prompt: null,
-      videoPrompt: null,
+      prompt: built.prompt,
+      videoPrompt: buildStoryboardPanelVideoPrompt({ facts: built.facts }),
       executionSnapshot: execution,
       renderFacts: built.facts,
     }

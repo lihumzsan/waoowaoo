@@ -1,5 +1,6 @@
 import type {
   EditGenerationSegment,
+  EditGenerationSegmentExecution,
   EditScriptKeyObject,
   EditScriptShot,
   EditScriptStyleBible,
@@ -34,6 +35,11 @@ export interface StoryboardPromptBuildResult {
   readonly prompt: string
 }
 
+export interface StoryboardVideoSegmentPromptFacts extends StoryboardGridPromptFacts {
+  readonly GENERATION_SEGMENT: Record<string, unknown>
+  readonly GENERATION_SEGMENT_EXECUTION: Record<string, unknown>
+}
+
 export interface StoryboardGridPromptFacts {
   readonly SCENE_GRAPH: unknown
   readonly BLOCKING_STATE: readonly unknown[]
@@ -46,6 +52,11 @@ export interface StoryboardGridPromptFacts {
 
 export interface StoryboardGridPromptBuildResult {
   readonly facts: StoryboardGridPromptFacts
+  readonly prompt: string
+}
+
+export interface StoryboardVideoSegmentPromptBuildResult {
+  readonly facts: StoryboardVideoSegmentPromptFacts
   readonly prompt: string
 }
 
@@ -189,6 +200,26 @@ export function buildStoryboardStillPromptFacts(input: {
   }
 }
 
+export function buildStoryboardPanelVideoPrompt(input: {
+  readonly facts: StoryboardStillPromptFacts
+}): string {
+  return renderPrompt([
+    ['GLOBAL TASK', 'Generate one single-shot video from the structured facts. Animate only the current shot action, camera movement, lighting, sound, and blocking. Preserve every present character, including hidden, occluded, supporting, and listener characters.'],
+    ['SCENE_GRAPH', input.facts.SCENE_GRAPH],
+    ['CHARACTER_GRAPH', input.facts.CHARACTER_GRAPH],
+    ['PROP_GRAPH', input.facts.PROP_GRAPH],
+    ['REFERENCE_IMAGES', input.facts.REFERENCE_IMAGES],
+    ['VIDEO_FRAME', input.facts.STILL_FRAME],
+    ['STYLE', input.facts.STYLE],
+    ['NEGATIVE', [
+      ...input.facts.NEGATIVE,
+      'Do not add background music, songs, lyrics, UI, subtitles, logos, watermarks, or non-story text.',
+      'Do not turn a hidden or occluded present character into an absent character.',
+      'Do not change screen direction, axis, blocking, costume, prop identity, or location identity.',
+    ]],
+  ])
+}
+
 export function buildStoryboardGridPromptFacts(input: {
   readonly segment: EditGenerationSegment
   readonly sourceGenerationSegmentId: string
@@ -239,14 +270,15 @@ export function buildStoryboardGridPromptFacts(input: {
 
 export function buildStoryboardVideoSegmentPromptFacts(input: {
   readonly segment: EditGenerationSegment
+  readonly segmentExecution: EditGenerationSegmentExecution
   readonly sourceGenerationSegmentId: string
   readonly shots: readonly EditScriptShot[]
   readonly executions: readonly EditShotExecution[]
   readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
   readonly styleBible: EditScriptStyleBible
-}): { readonly facts: Record<string, unknown>; readonly prompt: string } {
+}): StoryboardVideoSegmentPromptBuildResult {
   const facts = buildStoryboardGridPromptFacts(input).facts
-  const videoFacts = {
+  const videoFacts: StoryboardVideoSegmentPromptFacts = {
     ...facts,
     GENERATION_SEGMENT: {
       sourceGenerationSegmentId: input.sourceGenerationSegmentId,
@@ -254,18 +286,33 @@ export function buildStoryboardVideoSegmentPromptFacts(input: {
       continuity: input.segment.continuity,
       sound: input.shots.map((shot) => ({ shotNumber: shot.shotNumber, sound: shot.sound })),
     },
+    GENERATION_SEGMENT_EXECUTION: {
+      shotNumbers: input.segmentExecution.shotNumbers,
+      motionFlow: input.segmentExecution.motionFlow,
+      cameraFlow: input.segmentExecution.cameraFlow,
+      blockingFlow: input.segmentExecution.blockingFlow,
+      visibilityContinuity: input.segmentExecution.visibilityContinuity,
+      soundFlow: input.segmentExecution.soundFlow,
+      continuityLocks: input.segmentExecution.continuityLocks,
+    },
   }
   return {
     facts: videoFacts,
     prompt: renderPrompt([
       ['GLOBAL TASK', 'Generate one continuous video segment from these structured facts. Preserve blocking, axis, lighting, character presence, and segment continuity.'],
       ['GENERATION_SEGMENT', videoFacts.GENERATION_SEGMENT],
+      ['GENERATION_SEGMENT_EXECUTION', videoFacts.GENERATION_SEGMENT_EXECUTION],
       ['SCENE_GRAPH', videoFacts.SCENE_GRAPH],
       ['BLOCKING_STATE', videoFacts.BLOCKING_STATE],
       ['CHARACTER_GRAPH', videoFacts.CHARACTER_GRAPH],
       ['PROP_GRAPH', videoFacts.PROP_GRAPH],
       ['STYLE', videoFacts.STYLE],
-      ['NEGATIVE', videoFacts.NEGATIVE],
+      ['NEGATIVE', [
+        ...videoFacts.NEGATIVE,
+        'Do not mechanically restart the scene, sound field, or character positions at each shot.',
+        'Do not omit hidden, occluded, partial, supporting, listener, or background characters that are present in the facts.',
+        'Do not add background music, songs, lyrics, UI, subtitles, logos, watermarks, or non-story text.',
+      ]],
     ]),
   }
 }

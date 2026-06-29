@@ -57,6 +57,17 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
       episodeId: 'episode-1',
       editScriptId: 'script-1',
       status: 'ready',
+      generationSegmentExecutions: [
+        {
+          shotNumbers: [1],
+          motionFlow: 'single shot motion',
+          cameraFlow: 'locked camera',
+          blockingFlow: 'Anna and chair keep their positions',
+          visibilityContinuity: 'Anna remains visible',
+          soundFlow: 'quiet room tone',
+          continuityLocks: ['same room', 'same axis'],
+        },
+      ],
       shots: [
         {
           shotNumber: 1,

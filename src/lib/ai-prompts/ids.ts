@@ -23,8 +23,6 @@ export const AI_PROMPT_IDS = {
   EDIT_SCRIPT_STRUCTURE: 'structure',
   EDIT_SCRIPT_ASSET_EXTRACT: 'asset-extract',
   EDIT_SCRIPT_SHOT_EXECUTION_PLAN: 'shot-execution-plan',
-  EDIT_SCRIPT_IMAGE_PROMPT_COMPOSE: 'image-prompt-compose',
-  EDIT_SCRIPT_VIDEO_PROMPT_COMPOSE: 'video-prompt-compose',
 } as const
 
 export type AiPromptId = (typeof AI_PROMPT_IDS)[keyof typeof AI_PROMPT_IDS]

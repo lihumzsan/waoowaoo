@@ -85,8 +85,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/download-videos/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
-  'src/app/api/projects/[projectId]/edit-script/prompts/image/compose/route.ts',
-  'src/app/api/projects/[projectId]/edit-script/prompts/video/compose/route.ts',
   'src/app/api/projects/[projectId]/edit-script/screenplay/route.ts',
   'src/app/api/projects/[projectId]/edit-script/shot-execution-plan/route.ts',
   'src/app/api/projects/[projectId]/edit-script/storyboard/generate/route.ts',

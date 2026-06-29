@@ -14,17 +14,13 @@ const WORKFLOW_LAB_STAGE_ORDER: Record<EditFirstWorkflowStage, number> = {
   ready_to_generate_shot_execution_plan: 10,
   ready_to_generate_storyboard: 11,
   storyboard_generating: 12,
-  ready_to_compose_image_prompts: 13,
-  image_prompts_composing: 14,
-  ready_to_generate_storyboard_images: 15,
-  storyboard_images_generating: 16,
-  ready_to_compose_video_prompts: 17,
-  video_prompts_composing: 18,
-  ready_to_generate_videos: 19,
-  videos_generating: 20,
-  ready_to_render_final: 21,
-  completed: 22,
-  failed: 23,
+  ready_to_generate_storyboard_images: 13,
+  storyboard_images_generating: 14,
+  ready_to_generate_videos: 15,
+  videos_generating: 16,
+  ready_to_render_final: 17,
+  completed: 18,
+  failed: 19,
 }
 
 export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold: EditFirstWorkflowStage): boolean {
@@ -48,7 +44,7 @@ export function shouldWorkflowLabCloneShotExecutionPlan(stage: EditFirstWorkflow
 }
 
 export function shouldWorkflowLabCloneStoryboards(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'ready_to_compose_image_prompts')
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_storyboard_images')
 }
 
 export function shouldWorkflowLabCloneVideos(stage: EditFirstWorkflowStage): boolean {

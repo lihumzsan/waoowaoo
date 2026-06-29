@@ -288,7 +288,11 @@ export async function buildStoryboardConsistencySource(input: {
       message: 'Style Bible is required before storyboard generation',
     })
   }
-  const parsedExecutionPlan = normalizeEditShotExecutionPlan(executionPlan.executionPlanJson, editScript.shots)
+  const parsedExecutionPlan = normalizeEditShotExecutionPlan(
+    executionPlan.executionPlanJson,
+    editScript.shots,
+    editScript.generationSegments,
+  )
   const assets = await buildAssetSnapshots(editScript.requirements)
   const generationSegments: StoryboardConsistencyGenerationSegment[] = editScript.generationSegments.map((segment, segmentIndex) => ({
     ...segment,
@@ -314,6 +318,7 @@ export async function buildStoryboardConsistencySource(input: {
       shots: editScript.shots,
       shotExecutionPlan: {
         shots: parsedExecutionPlan.shots,
+        generationSegmentExecutions: parsedExecutionPlan.generationSegmentExecutions,
       },
       generationSegments,
       assets,
