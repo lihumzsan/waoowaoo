@@ -6,7 +6,7 @@ import { AppIcon } from '@/components/ui/icons'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
   CODEX_PROVIDER_KEY,
-} from '@/lib/ai-providers/codex/constants'
+} from '@/lib/ai-registry/codex-defaults'
 
 interface ProviderBaseFieldsProps {
   provider: ProviderCardProps['provider']

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { getProviderKey, isPresetComingSoonModel, type CustomModel } from '../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import type { UseProviderCardStateResult } from './hooks/useProviderCardState'
 import type {
   ProviderCardModelType,

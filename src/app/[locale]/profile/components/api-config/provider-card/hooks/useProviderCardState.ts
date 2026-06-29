@@ -16,7 +16,7 @@ import type {
 } from '../types'
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import { apiFetch } from '@/lib/api-fetch'
 
 type KeyTestStepStatus = 'pass' | 'fail' | 'skip'

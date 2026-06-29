@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { CustomModel, Provider } from '../../api-config'
 import { getProviderKey } from '../../api-config'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 
 interface UseApiConfigFiltersParams {
   providers: Provider[]

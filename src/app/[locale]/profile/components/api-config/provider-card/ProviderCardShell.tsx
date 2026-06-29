@@ -7,7 +7,7 @@ import { VERIFIABLE_PROVIDER_KEYS } from './types'
 import type { UseProviderCardStateResult } from './hooks/useProviderCardState'
 import { AppIcon } from '@/components/ui/icons'
 import { getProviderKey } from '../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 
 interface ProviderCardShellProps {
   provider: ProviderCardProps['provider']

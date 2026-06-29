@@ -5,7 +5,7 @@ import {
   CODEX_DEFAULT_IMAGE_MODEL_KEY,
   CODEX_DEFAULT_MODEL_KEY,
   CODEX_PROVIDER_KEY,
-} from '@/lib/ai-providers/codex/constants'
+} from '@/lib/ai-registry/codex-defaults'
 import {
   DEFAULT_ANALYSIS_WORKFLOW_CONCURRENCY,
   DEFAULT_IMAGE_WORKFLOW_CONCURRENCY,

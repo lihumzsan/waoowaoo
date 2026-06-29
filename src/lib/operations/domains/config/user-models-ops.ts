@@ -14,7 +14,7 @@ import { findBuiltinCapabilities } from '@/lib/ai-registry/capabilities-catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/ai-registry/pricing-catalog'
 import { type VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import { getProviderKey } from '@/lib/user-api/api-config-shared'
 
 type StoredModelType = UnifiedModelType | string

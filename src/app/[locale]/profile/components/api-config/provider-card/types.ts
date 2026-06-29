@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CustomModel, Provider } from '../types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 
 export interface ProviderCardDefaultModels {
   analysisModel?: string

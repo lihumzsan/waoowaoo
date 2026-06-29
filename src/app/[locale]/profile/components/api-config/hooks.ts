@@ -11,7 +11,7 @@ import {
     isPresetComingSoonModelKey,
     resolvePresetProviderName,
 } from './types'
-import { CODEX_PROVIDER_KEY } from '@/lib/ai-providers/codex/constants'
+import { CODEX_PROVIDER_KEY } from '@/lib/ai-registry/codex-defaults'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { normalizeWorkflowConcurrencyValue } from '@/lib/workflow-concurrency'
 import { useApiConfigSaver } from './editor'
