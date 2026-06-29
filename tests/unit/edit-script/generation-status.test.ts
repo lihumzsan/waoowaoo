@@ -90,6 +90,10 @@ const assetActionsMock = vi.hoisted(() => ({
   submitAssetGenerateTask: vi.fn(),
 }))
 
+const visionSupportMock = vi.hoisted(() => ({
+  assertVisionModelSupported: vi.fn(async () => undefined),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({ analysisModel: 'analysis-model-1', storyboardModel: 'image-model-1' })),
@@ -105,6 +109,7 @@ vi.mock('@/lib/edit-script/asset-design', () => ({
   designEditAssetRequirements: vi.fn(async (input: { requirements: unknown }) => input.requirements),
 }))
 vi.mock('@/lib/assets/services/asset-actions', () => assetActionsMock)
+vi.mock('@/lib/ai-exec/vision-support', () => visionSupportMock)
 vi.mock('@/lib/task/submitter', () => ({
   submitTask: vi.fn(async () => ({ taskId: 'style-preview-task-1', status: 'queued' })),
 }))
@@ -1136,6 +1141,97 @@ describe('edit script generation status persistence', () => {
         scope: 'project',
       }),
     }))
+  })
+
+  it('fails location asset requirement before creating assets when spatial profile model lacks vision support', async () => {
+    visionSupportMock.assertVisionModelSupported.mockRejectedValueOnce(
+      new Error('LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5'),
+    )
+    const pendingScript = {
+      id: 'edit-1',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userPrompt: structuredUserPrompt,
+      styleBibleJson: mockStyleBible,
+      screenplayText: 'Title: Test',
+      title: 'Sci-Fi Short',
+      logline: 'A quiet signal wakes a station.',
+      durationSec: 4,
+      shotCount: 1,
+      status: 'ready',
+      shotsJson: [
+        {
+          shotNumber: 1,
+          durationSec: 4,
+          dramaticPurpose: 'test dramatic purpose',
+          visibleAction: 'A station corridor flickers awake.',
+          audienceFocus: 'test audience focus',
+          viewpoint: 'test viewpoint',
+          revealPlan: 'test reveal plan',
+          performanceBeat: 'test performance beat',
+          continuityIn: 'test continuity in',
+          continuityOut: 'test continuity out',
+          charactersAndScene: 'Station corridor',
+          sound: 'low electrical hum',
+        },
+      ],
+      videoBlocksJson: [],
+      requirements: [
+        {
+          id: 'requirement-1',
+          kind: 'location',
+          name: 'Station Corridor',
+          description: 'A cold sci-fi corridor.',
+          shotIndexes: [1],
+          status: 'pending',
+          targetId: null,
+          errorMessage: null,
+        },
+      ],
+    }
+    const failedScript = {
+      ...pendingScript,
+      requirements: [{
+        ...pendingScript.requirements[0],
+        status: 'failed',
+        errorMessage: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5',
+      }],
+    }
+    prismaMock.projectEditScript.findFirst
+      .mockResolvedValueOnce(pendingScript)
+      .mockResolvedValueOnce(failedScript)
+
+    const result = await generateProjectEditScriptAssets({
+      request: createRequest(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+      editScriptId: 'edit-1',
+      requirementId: 'requirement-1',
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: false,
+      total: 0,
+      taskIds: [],
+    }))
+    expect(visionSupportMock.assertVisionModelSupported).toHaveBeenCalledWith({
+      userId: 'user-1',
+      model: 'analysis-model-1',
+      errorCode: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED',
+    })
+    expect(prismaMock.projectLocation.create).not.toHaveBeenCalled()
+    expect(assetActionsMock.submitAssetGenerateTask).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith({
+      where: { id: 'requirement-1' },
+      data: {
+        targetId: null,
+        status: 'failed',
+        errorMessage: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5',
+      },
+    })
   })
 
   it('persists a generating edit script before running the AI chain', async () => {

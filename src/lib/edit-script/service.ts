@@ -16,6 +16,7 @@ import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO } from '@/lib/edit-script/style-preview-image-constants'
+import { assertVisionModelSupported } from '@/lib/ai-exec/vision-support'
 import type { Locale } from '@/i18n/routing'
 import {
   normalizeDirectorDecoupage,
@@ -140,6 +141,14 @@ interface GenerateEditScriptAssetsInput {
   readonly locale: Locale
   readonly editScriptId?: string
   readonly requirementId?: string
+}
+
+function hasReadyLocationOutput(input: {
+  readonly imageUrl?: string | null
+  readonly imageMediaId?: string | null
+  readonly spatialProfileStatus?: string | null
+}): boolean {
+  return Boolean(input.imageMediaId || input.imageUrl) && input.spatialProfileStatus === 'ready'
 }
 
 interface UpdateEditScriptVideoBlockPromptInput {
@@ -674,7 +683,7 @@ async function resolveLocationAsset(projectId: string, targetId: string | null):
   return {
     id: location.id,
     previewImageUrl: image.imageUrl || null,
-    hasOutput: Boolean(image.imageMediaId || image.imageUrl),
+    hasOutput: hasReadyLocationOutput(image),
     taskTargetType: 'LocationImage',
     taskTargetId: location.id,
     spatialProfileJson: image.spatialProfileJson ?? null,
@@ -2012,6 +2021,7 @@ async function findExistingAsset(input: {
         select: {
           imageUrl: true,
           imageMediaId: true,
+          spatialProfileStatus: true,
         },
       },
     },
@@ -2022,7 +2032,7 @@ async function findExistingAsset(input: {
   return {
     id: location.id,
     previewImageUrl: image?.imageUrl || null,
-    hasOutput: Boolean(image?.imageMediaId || image?.imageUrl),
+    hasOutput: image ? hasReadyLocationOutput(image) : false,
     taskTargetType: 'LocationImage',
     taskTargetId: location.id,
   }
@@ -2253,6 +2263,25 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
+  let locationVisionCheck: Promise<void> | null = null
+
+  async function ensureLocationSpatialProfileModelSupported(): Promise<void> {
+    if (locationVisionCheck) {
+      await locationVisionCheck
+      return
+    }
+    const modelConfig = await getProjectModelConfig(input.projectId, input.userId)
+    const analysisModel = modelConfig.analysisModel?.trim() || ''
+    if (!analysisModel) {
+      throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+    }
+    locationVisionCheck = assertVisionModelSupported({
+      userId: input.userId,
+      model: analysisModel,
+      errorCode: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED',
+    })
+    await locationVisionCheck
+  }
 
   for (const requirement of requirements) {
     if (!isEditAssetKind(requirement.kind)) {
@@ -2266,8 +2295,8 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
     const existing = requirement.targetId
       ? await resolveRequirementAsset(input.projectId, requirement)
       : await findExistingAsset({
-        projectId: input.projectId,
-        kind: requirement.kind,
+          projectId: input.projectId,
+          kind: requirement.kind,
         name: requirement.name,
       })
     if (existing?.hasOutput) {
@@ -2276,6 +2305,22 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         data: { targetId: existing.id, status: 'completed', errorMessage: null },
       })
       continue
+    }
+
+    if (requirement.kind === 'location') {
+      try {
+        await ensureLocationSpatialProfileModelSupported()
+      } catch (error) {
+        await prisma.projectEditAssetRequirement.update({
+          where: { id: requirement.id },
+          data: {
+            targetId: existing?.id ?? requirement.targetId ?? null,
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+        })
+        continue
+      }
     }
 
     let createdAssetId: string | null = null

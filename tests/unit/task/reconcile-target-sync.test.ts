@@ -13,6 +13,12 @@ const prismaMock = vi.hoisted(() => ({
   projectVideoGroup: {
     updateMany: vi.fn(),
   },
+  projectEditAssetRequirement: {
+    updateMany: vi.fn(),
+  },
+  locationImage: {
+    findUnique: vi.fn(),
+  },
 }))
 
 const publisherMock = vi.hoisted(() => ({
@@ -51,6 +57,8 @@ describe('task reconcile target sync', () => {
     ])
     prismaMock.task.updateMany.mockResolvedValue({ count: 1 })
     prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.projectEditAssetRequirement.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.locationImage.findUnique.mockResolvedValue(null)
     queueMock.getJob.mockResolvedValue({
       getState: async () => 'failed',
     })
@@ -78,6 +86,38 @@ describe('task reconcile target sync', () => {
         status: 'failed',
         taskId: null,
         errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job already terminated but DB was not updated',
+      },
+    })
+  })
+
+  it('marks edit location requirement failed when orphan reconciliation fails its image task', async () => {
+    prismaMock.task.findMany.mockResolvedValueOnce([
+      {
+        id: 'task-location-1',
+        userId: 'user-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        type: TASK_TYPE.IMAGE_LOCATION,
+        targetType: 'LocationImage',
+        targetId: 'location-1',
+        billingInfo: null,
+        updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+      },
+    ])
+
+    const reconciled = await reconcileActiveTasks()
+
+    expect(reconciled).toEqual(['task-location-1'])
+    expect(prismaMock.projectEditAssetRequirement.updateMany).toHaveBeenCalledWith({
+      where: {
+        projectId: 'project-1',
+        kind: 'location',
+        targetId: { in: ['location-1'] },
+        status: { not: 'completed' },
+      },
+      data: {
+        status: 'failed',
         errorMessage: 'Queue job already terminated but DB was not updated',
       },
     })

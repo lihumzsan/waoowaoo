@@ -129,6 +129,7 @@ function resolveCompensationFailure(
 
 async function failTaskWithMissingLocale(task: {
   id: string
+  projectId: string
   type: string
   targetType: string
   targetId: string
@@ -156,6 +157,7 @@ async function failTaskWithMissingLocale(task: {
     },
   })
   await syncTaskTargetFailure({
+    projectId: task.projectId,
     type: task.type,
     targetType: task.targetType,
     targetId: task.targetId,
@@ -244,6 +246,7 @@ export async function createTask(input: CreateTaskInput) {
             },
           })
           await syncTaskTargetFailure({
+            projectId: existing.projectId,
             type: existing.type,
             targetType: existing.targetType,
             targetId: existing.targetId,
@@ -326,6 +329,7 @@ export async function createTask(input: CreateTaskInput) {
               },
             })
             await syncTaskTargetFailure({
+              projectId: collided.projectId,
               type: collided.type,
               targetType: collided.targetType,
               targetId: collided.targetId,
@@ -530,6 +534,15 @@ export async function tryMarkTaskCompleted(taskId: string, resultPayload?: Recor
 }
 
 export async function tryMarkTaskFailed(taskId: string, errorCode: string, errorMessage: string) {
+  const task = await taskModel.findUnique({
+    where: { id: taskId },
+    select: {
+      projectId: true,
+      type: true,
+      targetType: true,
+      targetId: true,
+    },
+  })
   const result = await taskModel.updateMany({
     where: activeTaskWhere(taskId),
     data: {
@@ -540,6 +553,16 @@ export async function tryMarkTaskFailed(taskId: string, errorCode: string, error
       heartbeatAt: null,
     },
   })
+  if (result.count > 0 && task) {
+    await syncTaskTargetFailure({
+      projectId: task.projectId,
+      type: task.type,
+      targetType: task.targetType,
+      targetId: task.targetId,
+      errorCode,
+      errorMessage,
+    })
+  }
   return result.count > 0
 }
 
@@ -684,6 +707,7 @@ export async function sweepStaleTasks(params: {
     })
     if (updated.count > 0) {
       await syncTaskTargetFailure({
+        projectId: task.projectId,
         type: task.type,
         targetType: task.targetType,
         targetId: task.targetId,

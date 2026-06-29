@@ -29,6 +29,7 @@ import {
 } from '@/lib/edit-script/style-bible-prompt'
 import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 import { markEditAssetRequirementsCompletedForTargets } from '@/lib/edit-script/asset-requirement-status'
+import { assertVisionModelSupported } from '@/lib/ai-exec/vision-support'
 
 interface LocationImageRecord {
   id: string
@@ -95,6 +96,13 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
   const assetType = payload.type === 'prop' ? 'prop' : 'location'
   const spatialProfileModel = models.analysisModel
   if (assetType === 'location' && !spatialProfileModel) throw new Error('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+  if (assetType === 'location') {
+    await assertVisionModelSupported({
+      userId,
+      model: spatialProfileModel,
+      errorCode: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED',
+    })
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
     throw new Error('LEGACY_ART_STYLE_REMOVED')
   }

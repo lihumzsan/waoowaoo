@@ -120,6 +120,7 @@ async function failOrphanedTask(
 
     if (result.count > 0) {
         await syncTaskTargetFailure({
+            projectId: task.projectId,
             type: task.type,
             targetType: task.targetType,
             targetId: task.targetId,

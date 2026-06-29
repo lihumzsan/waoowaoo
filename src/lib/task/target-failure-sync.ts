@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from './types'
 
 type TaskTargetFailure = {
+  readonly projectId: string
   readonly type: string
   readonly targetType: string
   readonly targetId: string
@@ -14,6 +15,31 @@ function truncate(value: string, maxLength: number): string {
 }
 
 export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
+  if (input.type === TASK_TYPE.IMAGE_LOCATION && input.targetType === 'LocationImage') {
+    const image = await prisma.locationImage.findUnique({
+      where: { id: input.targetId },
+      select: { locationId: true },
+    })
+    const targetIds = Array.from(new Set([
+      input.targetId,
+      ...(image?.locationId ? [image.locationId] : []),
+    ]))
+
+    await prisma.projectEditAssetRequirement.updateMany({
+      where: {
+        projectId: input.projectId,
+        kind: 'location',
+        targetId: { in: targetIds },
+        status: { not: 'completed' },
+      },
+      data: {
+        status: 'failed',
+        errorMessage: truncate(input.errorMessage, 2000),
+      },
+    })
+    return
+  }
+
   if (input.type !== TASK_TYPE.VIDEO_GROUP || input.targetType !== 'ProjectVideoGroup') return
 
   await prisma.projectVideoGroup.updateMany({

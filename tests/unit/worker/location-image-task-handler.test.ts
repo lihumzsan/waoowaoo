@@ -63,9 +63,14 @@ const textEngineMock = vi.hoisted(() => ({
   })),
 }))
 
+const visionSupportMock = vi.hoisted(() => ({
+  assertVisionModelSupported: vi.fn(async () => undefined),
+}))
+
 vi.mock('@/lib/workers/utils', () => utilsMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/ai-exec/engine', () => textEngineMock)
+vi.mock('@/lib/ai-exec/vision-support', () => visionSupportMock)
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: vi.fn(async () => undefined) }))
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
@@ -140,6 +145,24 @@ describe('worker location-image-task-handler behavior', () => {
   it('analysis model missing for location -> explicit spatial profile error', async () => {
     utilsMock.getProjectModels.mockResolvedValueOnce({ locationModel: 'location-model-1', analysisModel: '' })
     await expect(handleLocationImageTask(buildJob({ imageIndex: 0 }))).rejects.toThrow('LOCATION_SPATIAL_PROFILE_MODEL_REQUIRED')
+  })
+
+  it('unsupported location spatial profile model -> fails before generating image', async () => {
+    visionSupportMock.assertVisionModelSupported.mockRejectedValueOnce(
+      new Error('LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5'),
+    )
+
+    await expect(handleLocationImageTask(buildJob({ imageIndex: 0 }))).rejects.toThrow(
+      'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5',
+    )
+
+    expect(visionSupportMock.assertVisionModelSupported).toHaveBeenCalledWith({
+      userId: 'user-1',
+      model: 'analysis-model-1',
+      errorCode: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED',
+    })
+    expect(sharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
+    expect(spatialProfileServiceMock.analyzeAndPersistProjectLocationImageSpatialProfile).not.toHaveBeenCalled()
   })
 
   it('success path -> generates and persists concrete location image url', async () => {
