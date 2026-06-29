@@ -48,6 +48,21 @@ describe('ltx23 workflow router', () => {
     expect(result?.reasons).toContain('large_motion_or_camera_movement')
   })
 
+  it('keeps audio-backed Smart VBVR requests on the Smart VBVR workflow up to its profile max', () => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: DEFAULT_MODEL,
+      selectionMode: 'auto',
+      audioDurationSeconds: 19.56,
+      panel: {
+        videoPrompt: 'GLOBAL: rainy street. LOCAL: Scene 1: subject walks | Scene 2: camera moves up | Scene 3: subject turns | Scene 4: camera pulls back',
+      },
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise)
+    expect(result?.durationSeconds).toBe(19.56)
+    expect(result?.reasons).toContain('audio_backed_smart_vbvr')
+  })
+
   it('keeps slow Chinese push-in camera prompts on the single-image profile for 12s', () => {
     const result = resolveLtx23WorkflowRoute({
       modelKey: DEFAULT_MODEL,

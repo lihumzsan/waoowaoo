@@ -7,16 +7,23 @@ import {
 } from '@/lib/novel-promotion/video-model-defaults'
 
 describe('video model defaults', () => {
+  const SMART_VBVR_MODEL_KEY = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
+
   it('uses Bernini as the only default video model', () => {
     expect(DEFAULT_VIDEO_MODEL_KEY).toBe('comfyui::basevideo/seedance2/bernini-480p-i2v')
     expect(normalizeDefaultVideoModel(null)).toBe(DEFAULT_VIDEO_MODEL_KEY)
     expect(normalizeDefaultVideoModel('')).toBe(DEFAULT_VIDEO_MODEL_KEY)
   })
 
-  it('normalizes every removed LTX2.3 workflow key to Bernini', () => {
-    expect(LEGACY_LTX23_VIDEO_MODEL_KEYS).toContain(
-      'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+  it('preserves the current Smart VBVR LTX2.3 workflow key', () => {
+    expect(LEGACY_LTX23_VIDEO_MODEL_KEYS).not.toContain(SMART_VBVR_MODEL_KEY)
+    expect(normalizeVideoModelKey(SMART_VBVR_MODEL_KEY)).toBe(SMART_VBVR_MODEL_KEY)
+    expect(normalizeVideoModelKey(SMART_VBVR_MODEL_KEY.replace('comfyui::', ''))).toBe(
+      SMART_VBVR_MODEL_KEY.replace('comfyui::', ''),
     )
+  })
+
+  it('normalizes removed LTX2.3 workflow keys to Bernini', () => {
     for (const legacyKey of LEGACY_LTX23_VIDEO_MODEL_KEYS) {
       expect(normalizeVideoModelKey(legacyKey)).toBe(DEFAULT_VIDEO_MODEL_KEY)
       expect(normalizeVideoModelKey(legacyKey.replace('comfyui::', ''))).toBe(DEFAULT_VIDEO_MODEL_KEY)

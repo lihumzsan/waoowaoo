@@ -24,4 +24,20 @@ describe('Bernini default video model migration', () => {
     expect(sql).toContain(`WHERE \`videoModel\` = '${OLD_DEFAULT}'`)
     expect(sql).not.toContain('LIKE')
   })
+
+  it('adds a panel-level video model column for per-panel workflow persistence', () => {
+    const migrationPath = join(
+      process.cwd(),
+      'prisma',
+      'migrations',
+      '20260628120000_add_panel_video_model',
+      'migration.sql',
+    )
+
+    expect(existsSync(migrationPath)).toBe(true)
+    const sql = readFileSync(migrationPath, 'utf-8')
+
+    expect(sql).toContain('ALTER TABLE `novel_promotion_panels`')
+    expect(sql).toContain('ADD COLUMN `videoModel` LONGTEXT NULL')
+  })
 })

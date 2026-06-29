@@ -23,6 +23,25 @@ export function readTaskVideoUrl(result: unknown): string | null {
   return asNonEmptyString((result as Record<string, unknown>).videoUrl)
 }
 
+export function readTaskVideoModel(payload: unknown, result?: unknown): string | null {
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const modelFromResult = asNonEmptyString((result as Record<string, unknown>).videoModel)
+    if (modelFromResult) return modelFromResult
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const payloadRecord = payload as Record<string, unknown>
+  const modelFromPayload = asNonEmptyString(payloadRecord.videoModel)
+  if (modelFromPayload) return modelFromPayload
+
+  const firstLastFrame = payloadRecord.firstLastFrame
+  if (firstLastFrame && typeof firstLastFrame === 'object' && !Array.isArray(firstLastFrame)) {
+    return asNonEmptyString((firstLastFrame as Record<string, unknown>).flModel)
+  }
+
+  return null
+}
+
 export function readTaskGenerationMode(payload: unknown, result: unknown): VideoGenerationMode {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     const raw = (result as Record<string, unknown>).generationMode

@@ -47,6 +47,7 @@ export interface VideoPanelCardShellProps {
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
     customPrompt?: string,
+    customPromptEditedByUser?: boolean,
   ) => void
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => void
   onUpdatePanelVideoDurationBinding: (storyboardId: string, panelIndex: number, binding: VideoDurationBinding) => void

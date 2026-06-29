@@ -98,8 +98,10 @@ export function useVideoPanelActions({
 
   const effectiveShowLipSyncVideo = lipSyncEnabled ? showLipSyncVideo : false
 
+  const effectiveDefaultVideoModel = panel.videoModel?.trim() || defaultVideoModel
+
   const videoModel = usePanelVideoModel({
-    defaultVideoModel,
+    defaultVideoModel: effectiveDefaultVideoModel,
     capabilityOverrides,
     userVideoModels,
   })

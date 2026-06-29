@@ -16,6 +16,7 @@ type PanelRow = {
   firstLastFramePrompt: string | null
   firstLastFramePromptEditedByUser?: boolean
   duration: number | null
+  videoDurationBinding?: string | null
   shotType: string | null
   cameraMove: string | null
   location: string | null
@@ -323,10 +324,16 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    const result = await processor!(job) as { panelId: string; videoUrl: string; actualVideoTokens: number }
+    const result = await processor!(job) as {
+      panelId: string
+      videoUrl: string
+      videoModel: string
+      actualVideoTokens: number
+    }
     expect(result).toEqual({
       panelId: 'panel-1',
       videoUrl: 'cos/lip-sync/video.mp4',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       actualVideoTokens: 108000,
     })
   })
@@ -383,14 +390,14 @@ describe('worker video processor behavior', () => {
     await processor!(job)
 
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      durationSeconds: 6,
+      durationSeconds: 19.56,
       fps: 25,
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          duration: 6,
+          duration: 19.56,
           fps: 25,
           generationMode: 'normal',
         }),
@@ -403,6 +410,7 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: 'Doctor says "Please answer clearly so the lip sync can follow the voice." while leaning forward. No subtitles, no caption, no text overlay.',
       srtSegment: 'Spoken subtitle text that must remain audio-only.',
     }))
     prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
@@ -455,12 +463,17 @@ describe('worker video processor behavior', () => {
     }
     const prompt = generationCall.options?.prompt || ''
     expect(prompt).toContain('Dialogue lines: none')
+    expect(prompt.toLowerCase()).toContain('natural rhythmic mouth movement')
     expect(prompt).not.toContain('Please answer clearly so the lip sync can follow the voice.')
     expect(prompt).not.toContain('Spoken subtitle text that must remain audio-only.')
     expect(prompt).not.toContain('If dialogue is listed')
+    expect(prompt.toLowerCase()).not.toContain('subtitles')
+    expect(prompt.toLowerCase()).not.toContain('caption')
+    expect(prompt.toLowerCase()).not.toContain('text overlay')
+    expect(prompt.toLowerCase()).not.toContain('readable text')
   })
 
-  it('VIDEO_PANEL: auto-routes default LTX2.3 long linked audio to the long-video profile', async () => {
+  it('VIDEO_PANEL: blocks overlong audio-backed Smart VBVR requests instead of routing away', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -488,23 +501,10 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    await processor!(job)
+    await expect(processor!(job)).rejects.toThrow('VIDEO_AUDIO_DURATION_EXCEEDS_WORKFLOW_MAX')
 
-    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-    }))
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        modelId: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-        allowCustomDuration: true,
-        options: expect.objectContaining({
-          duration: 23.7,
-          fps: 25,
-          generationMode: 'normal',
-        }),
-      }),
-    )
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
   })
 
   it('VIDEO_PANEL: preserves exact routed LTX2.3 duration while keeping capability duration bucket in payload', async () => {
@@ -654,6 +654,132 @@ describe('worker video processor behavior', () => {
     )
   })
 
+  it('VIDEO_PANEL: uses the selected duration as the Smart VBVR target when linked audio is shorter', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: 'middle-aged doctor faces the camera and speaks with subtle mouth movement',
+      srtSegment: 'Please answer clearly so the visual prompt should not contain this transcript.',
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'Please answer clearly so the visual prompt should not contain this transcript.',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 10_342,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_DEFAULT_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 12,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      durationSeconds: 12,
+      audioTiming: expect.objectContaining({
+        audioDurationSeconds: 10.34,
+        targetDurationSeconds: 12,
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_DEFAULT_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 12,
+          fps: 25,
+          generationMode: 'normal',
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+        }),
+      }),
+    )
+
+    const generationCall = utilsMock.resolveVideoSourceFromGeneration.mock.calls[0]?.[1] as {
+      options?: { prompt?: string }
+    }
+    const prompt = generationCall.options?.prompt || ''
+    expect(prompt).toContain('Dialogue lines: none')
+    expect(prompt).not.toContain('Please answer clearly so the visual prompt should not contain this transcript.')
+  })
+
+  it('VIDEO_PANEL: does not treat the unchanged card prompt as user-edited for Smart VBVR audio shots', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mockResolvedValueOnce({
+      prompt: [
+        'GLOBAL: clinical office, middle-aged doctor seated behind the desk, frontal close-up, cool white light, same source-frame composition.',
+        'LOCAL: middle-aged doctor speaks calmly to camera with subtle mouth movement and tiny facial motion.',
+      ].join('\n'),
+      enhanced: true,
+      textModel: 'test-model',
+    })
+
+    const panel = buildPanel({
+      id: 'panel-smart-vbvr-edit-intent',
+      panelIndex: 2,
+      videoPrompt: 'middle-aged doctor sits behind the desk and speaks calmly to camera',
+      videoPromptEditedByUser: false,
+      videoDurationBinding: JSON.stringify({
+        mode: 'match_audio',
+        voiceLineIds: ['voice-line-1'],
+        targetDurationSeconds: 12,
+      }),
+    })
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(panel)
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'voice-line-1',
+        speaker: 'Doctor',
+        content: 'Hello Chen Ji, I need to ask you some questions.',
+        audioUrl: 'cos/voice-line-1.mp3',
+        audioDuration: 10_342,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      targetId: panel.id,
+      payload: {
+        videoModel: LTX23_DEFAULT_MODEL,
+        customPrompt: panel.videoPrompt,
+        customPromptEditedByUser: false,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['voice-line-1'],
+          targetDurationSeconds: 12,
+        },
+        generationOptions: {
+          duration: 12,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      userEdited: false,
+      originalPrompt: expect.stringContaining('Panel continuity packet:'),
+    }))
+  })
+
   it('VIDEO_PANEL: sends long linked audio to selected long-video workflow without split segments', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
@@ -682,11 +808,16 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    const result = await processor!(job) as { panelId: string; videoUrl: string }
+    const result = await processor!(job) as {
+      panelId: string
+      videoUrl: string
+      videoModel: string
+    }
 
     expect(result).toEqual({
       panelId: 'panel-1',
       videoUrl: 'cos/lip-sync/video.mp4',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
     })
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(1)
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(

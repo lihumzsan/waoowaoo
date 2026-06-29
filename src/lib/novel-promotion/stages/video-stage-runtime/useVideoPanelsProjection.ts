@@ -94,6 +94,8 @@ export function useVideoPanelsProjection({
           },
           imageUrl: panel.imageUrl || undefined,
           firstLastFramePrompt: panel.firstLastFramePrompt || undefined,
+          videoPromptEditedByUser: panel.videoPromptEditedByUser === true,
+          firstLastFramePromptEditedByUser: panel.firstLastFramePromptEditedByUser === true,
           videoDurationBinding: parseVideoDurationBinding(panel.videoDurationBinding),
           videoUrl: panel.videoUrl || undefined,
           videoGenerationMode: panel.videoGenerationMode || undefined,

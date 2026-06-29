@@ -51,7 +51,9 @@ export interface Panel {
   imagePrompt?: string | null
   imageUrl?: string | null  // 图片URL
   videoPrompt?: string | null
+  videoPromptEditedByUser?: boolean | null
   firstLastFramePrompt?: string | null
+  firstLastFramePromptEditedByUser?: boolean | null
   videoDurationBinding?: VideoDurationBinding | string | null
   videoUrl?: string | null
   videoGenerationMode?: VideoGenerationMode | null
@@ -93,6 +95,8 @@ export interface VideoPanel {
   panelIndex: number
   textPanel?: TextPanel
   firstLastFramePrompt?: string
+  videoPromptEditedByUser?: boolean
+  firstLastFramePromptEditedByUser?: boolean
   videoDurationBinding?: VideoDurationBinding
   imageUrl?: string
   videoUrl?: string
@@ -129,6 +133,7 @@ export interface FirstLastFrameParams {
   lastFramePanelIndex: number
   flModel: string
   customPrompt?: string
+  customPromptEditedByUser?: boolean
 }
 
 export type VideoGenerationOptionValue = string | number | boolean

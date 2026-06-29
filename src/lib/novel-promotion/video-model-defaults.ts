@@ -2,11 +2,15 @@ import {
   COMFYUI_SEEDANCE2_BERNINI_AUDIO_WORKFLOW_ID,
   COMFYUI_SEEDANCE2_BERNINI_MODEL_KEY,
 } from '@/lib/providers/comfyui/seedance2-bernini-workflow'
+import { COMFYUI_LTX23_WORKFLOW_KEYS } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 export const DEFAULT_VIDEO_MODEL_KEY = COMFYUI_SEEDANCE2_BERNINI_MODEL_KEY
 
+export const CURRENT_LTX23_VIDEO_MODEL_KEYS = [
+  `comfyui::${COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise}`,
+] as const
+
 export const LEGACY_LTX23_VIDEO_MODEL_KEYS = [
-  'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
   'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
   'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
   'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',

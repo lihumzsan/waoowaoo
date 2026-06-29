@@ -40,17 +40,39 @@ describe('codex cli client', () => {
     vi.clearAllMocks()
   })
 
-  it('expands the default Windows user profile path', () => {
+  it('expands Windows environment variables in explicit custom paths', () => {
     const previous = process.env.USERPROFILE
     process.env.USERPROFILE = 'C:\\Users\\Unit'
     try {
-      expect(resolveCodexExecutablePath('%USERPROFILE%\\.codex\\.sandbox-bin\\codex.exe'))
-        .toBe('C:\\Users\\Unit\\.codex\\.sandbox-bin\\codex.exe')
+      expect(resolveCodexExecutablePath('%USERPROFILE%\\tools\\codex.exe'))
+        .toBe('C:\\Users\\Unit\\tools\\codex.exe')
     } finally {
       if (previous === undefined) {
         delete process.env.USERPROFILE
       } else {
         process.env.USERPROFILE = previous
+      }
+    }
+  })
+
+  it('uses the current Codex CLI path when configured with the legacy sandbox default', () => {
+    const previousCliPath = process.env.CODEX_CLI_PATH
+    const previousUserProfile = process.env.USERPROFILE
+    process.env.CODEX_CLI_PATH = process.execPath
+    process.env.USERPROFILE = 'C:\\Users\\Unit'
+    try {
+      expect(resolveCodexExecutablePath('%USERPROFILE%\\.codex\\.sandbox-bin\\codex.exe'))
+        .toBe(process.execPath)
+    } finally {
+      if (previousCliPath === undefined) {
+        delete process.env.CODEX_CLI_PATH
+      } else {
+        process.env.CODEX_CLI_PATH = previousCliPath
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE
+      } else {
+        process.env.USERPROFILE = previousUserProfile
       }
     }
   })

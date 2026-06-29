@@ -188,6 +188,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
               panel.panelId,
               durationBinding.localBinding,
               promptEditor.localPrompt,
+              panel.videoPromptEditedByUser === true,
             )
           }}
           disabled={

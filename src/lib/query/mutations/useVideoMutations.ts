@@ -86,6 +86,44 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string) {
   })
 }
 
+export function useUpdateProjectPanelVideoModel(projectId: string, episodeId?: string | null) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      storyboardId,
+      panelIndex,
+      model,
+    }: {
+      storyboardId: string
+      panelIndex: number
+      model: string
+    }) =>
+      await requestJsonWithError(
+        `/api/novel-promotion/${projectId}/panel`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storyboardId,
+            panelIndex,
+            videoModel: model,
+          }),
+        },
+        'update failed',
+      ),
+    onSettled: () => {
+      invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+      if (episodeId) {
+        void Promise.all([
+          invalidateEpisodeQueries(queryClient, projectId, episodeId),
+          invalidateQueryTemplates(queryClient, [queryKeys.storyboards.all(episodeId)]),
+        ])
+      }
+    },
+  })
+}
+
 export function useUpdateProjectPanelVideoDurationBinding(projectId: string, episodeId?: string | null) {
   const queryClient = useQueryClient()
 

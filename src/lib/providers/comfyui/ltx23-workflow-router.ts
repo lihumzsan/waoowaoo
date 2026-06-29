@@ -27,6 +27,7 @@ export type ResolveLtx23WorkflowRouteInput = {
   requestedDurationSeconds?: number | null
   audioDurationSeconds?: number | null
   targetDurationSeconds?: number | null
+  hasReferenceAudio?: boolean | null
 }
 
 export type Ltx23WorkflowRoutingResult = {
@@ -314,6 +315,23 @@ export function resolveLtx23WorkflowRoute(
       selectionMode,
       confidence: 1,
       reasons: [...routingReasonPrefix, 'first_last_frame_generation'],
+      requestedDurationSeconds: targetDurationSeconds,
+    })
+  }
+
+  const hasReferenceAudio =
+    input.hasReferenceAudio === true
+    || readFinitePositiveNumber(input.audioDurationSeconds) !== null
+  if (
+    hasReferenceAudio
+    && routingProfile.workflowKey === COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
+  ) {
+    return buildResult({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      previousWorkflowKey: normalizedWorkflowKey,
+      selectionMode,
+      confidence: 1,
+      reasons: [...routingReasonPrefix, 'audio_backed_smart_vbvr'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }

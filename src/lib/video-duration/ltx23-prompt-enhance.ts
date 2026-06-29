@@ -360,11 +360,31 @@ function normalizeDialogueText(value: unknown): string {
   return readTrimmedString(value).replace(/\s+/g, ' ')
 }
 
+function hasLinkedReferenceAudio(
+  voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
+): boolean {
+  return Array.isArray(voiceLines)
+    && voiceLines.some((line) => readTrimmedString(line.audioUrl).length > 0)
+}
+
+function buildReferenceAudioDialogueContext(
+  voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
+): string {
+  const count = Array.isArray(voiceLines) ? voiceLines.length : 0
+  return [
+    'Reference audio dialogue rules:',
+    `1. ${count > 1 ? 'The linked reference audio clips are' : 'The linked reference audio clip is'} the source of spoken words, mouth rhythm, pauses, and timing.`,
+    '2. Do not include exact transcript text, quoted dialogue, subtitles, captions, or readable speech text in enhanced_prompt.',
+    '3. Describe only visual lip sync, mouth movement, facial motion, posture, and allowed camera movement.',
+  ].join('\n')
+}
+
 function buildStrictDialogueContextText(
   locale: Locale,
   voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
 ): string {
   if (!Array.isArray(voiceLines) || voiceLines.length === 0) return ''
+  if (hasLinkedReferenceAudio(voiceLines)) return buildReferenceAudioDialogueContext(voiceLines)
 
   type NormalizedDialogueLine = {
     speaker: string
@@ -427,9 +447,10 @@ function buildAudioContextText(
   const lineSummary = voiceLines
     .slice(0, 4)
     .map((line, index) => {
+      const referenceAudio = readTrimmedString(line.audioUrl)
       const parts = [
         `${index + 1}. ${readTrimmedString(line.speaker) || 'Unknown speaker'}`,
-        truncateText(line.content, 120),
+        referenceAudio ? 'reference audio clip' : truncateText(line.content, 120),
       ].filter(Boolean)
       const durationText = typeof line.audioDuration === 'number' && Number.isFinite(line.audioDuration) && line.audioDuration > 0
         ? ` (${(line.audioDuration / 1000).toFixed(2)}s)`
@@ -628,6 +649,9 @@ function buildVerbatimDialogueConstraint(
   voiceLines: Ltx23PromptEnhancementVoiceLine[] | null | undefined,
 ): string {
   if (!Array.isArray(voiceLines) || voiceLines.length === 0) return ''
+  if (hasLinkedReferenceAudio(voiceLines)) {
+    return 'Match mouth movement, pauses, and timing to the linked reference audio. Do not include exact transcript text, quoted dialogue, subtitles, captions, or readable speech text in the visual prompt.'
+  }
 
   const normalizedLines = voiceLines
     .slice(0, 4)
@@ -690,6 +714,117 @@ function appendLtx23SafetyConstraints(
   return appendDialogueConstraint(withDialogue, visualConstraint, 'en')
 }
 
+function isSmartVbvrWorkflowModel(modelKey: string | null | undefined): boolean {
+  return readTrimmedString(modelKey).toLowerCase().includes('t8-smart-vbvr')
+}
+
+function shouldUseSmartVbvrAudioPrompt(input: EnhanceLtx23VideoPromptInput): boolean {
+  return isSmartVbvrWorkflowModel(input.modelKey) && hasLinkedReferenceAudio(input.linkedVoiceLines)
+}
+
+const SMART_VBVR_PACKET_LINE_PATTERN =
+  /^\s*(?:Panel continuity packet|Mode|Source text|Current shot action|Visible characters|Location lock|Shot\/camera lock|Props lock|Previous shot context|Next shot context|Dialogue lines|Target duration|Creator prompt intent|Hard constraints|Source-frame continuity lock|Allowed visible subjects|Forbidden additions)\s*:/i
+const SMART_VBVR_NEGATIVE_LINE_PATTERN =
+  /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|avoid|never|forbidden|no\s+(?:subtitles?|captions?|readable\s+text|new\s+people|new\s+characters|extra\s+people|rotation|profile\s+turns?|head\s+turns?|crowds?|guards?|police|scene\s+cuts?|scene\s+changes?))\b|(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d)/iu
+const SMART_VBVR_UNSTABLE_SUBJECT_PATTERN =
+  /\b(?:subtitles?|captions?|watermarks?|crowds?|guards?|police|profile\s+turns?|head\s+turns?|extra\s+people|new\s+people|new\s+characters|rotation|rotating|orbiting|spinning|scene\s+cuts?|scene\s+changes?)\b/i
+
+function cleanSmartVbvrPositiveText(value: unknown, maxLength = 300): string {
+  const text = readTrimmedString(value)
+  if (!text) return ''
+
+  const cleaned = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) =>
+      line.length > 0
+      && !SMART_VBVR_PACKET_LINE_PATTERN.test(line)
+      && !SMART_VBVR_NEGATIVE_LINE_PATTERN.test(line)
+      && !SMART_VBVR_UNSTABLE_SUBJECT_PATTERN.test(line))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return truncateText(cleaned, maxLength)
+}
+
+function formatSmartVbvrVisibleSubjects(input: EnhanceLtx23VideoPromptInput): string {
+  const continuityNames = input.continuity?.characters
+    ?.map((character) => readTrimmedString(character.name))
+    .filter(Boolean) ?? []
+  const panelNames = parseNameList(input.panel.characters)
+  const names = continuityNames.length > 0 ? continuityNames : panelNames
+  if (names.length === 0) return 'the visible speaker'
+  return names.slice(0, 4).join(', ')
+}
+
+function buildSmartVbvrAudioPrompt(input: EnhanceLtx23VideoPromptInput): string {
+  const location = cleanSmartVbvrPositiveText(input.continuity?.location || input.panel.location, 120)
+    || 'the same source-image room'
+  const subjects = formatSmartVbvrVisibleSubjects(input)
+  const shotType = cleanSmartVbvrPositiveText(input.continuity?.shotType || input.panel.shotType, 80)
+    || 'frontal close-up'
+  const action = cleanSmartVbvrPositiveText(input.continuity?.currentAction, 300)
+    || cleanSmartVbvrPositiveText(input.panel.description, 300)
+    || cleanSmartVbvrPositiveText(input.originalPrompt, 300)
+    || 'the visible speaker speaks calmly'
+
+  return [
+    `GLOBAL: ${location}, ${subjects}, ${shotType}, same source-frame composition, stable identity, clothing, lighting, desk, and room layout.`,
+    `LOCAL: ${action}. The visible speaker stays frontal to camera and speaks with subtle reference audio mouth movement, tiny facial motion, restrained breathing, and a restrained slow push-in.`,
+  ].join('\n')
+}
+
+function sanitizeSmartVbvrAudioPromptCandidate(
+  prompt: string,
+  input: EnhanceLtx23VideoPromptInput,
+): string {
+  const cleaned = prompt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) =>
+      line.length > 0
+      && !SMART_VBVR_PACKET_LINE_PATTERN.test(line)
+      && !SMART_VBVR_NEGATIVE_LINE_PATTERN.test(line)
+      && !SMART_VBVR_UNSTABLE_SUBJECT_PATTERN.test(line))
+    .join('\n')
+    .trim()
+
+  if (PROMPT_RELAY_GLOBAL_MARKER_PATTERN.test(cleaned) && PROMPT_RELAY_LOCAL_MARKER_PATTERN.test(cleaned)) {
+    if (/\breference[-\s]audio\b/i.test(cleaned) && /\bmouth movement\b/i.test(cleaned)) {
+      return cleaned
+    }
+    return [
+      cleaned,
+      'Match mouth movement and timing to the reference audio with subtle lip motion.',
+    ].join('\n')
+  }
+
+  return buildSmartVbvrAudioPrompt(input)
+}
+
+function buildLtx23FallbackPrompt(
+  originalPrompt: string,
+  dialogueConstraint: string,
+  input: EnhanceLtx23VideoPromptInput,
+): string {
+  if (shouldUseSmartVbvrAudioPrompt(input)) {
+    return buildSmartVbvrAudioPrompt(input)
+  }
+  return appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input)
+}
+
+function finalizeLtx23Prompt(
+  prompt: string,
+  dialogueConstraint: string,
+  input: EnhanceLtx23VideoPromptInput,
+): string {
+  if (shouldUseSmartVbvrAudioPrompt(input)) {
+    return sanitizeSmartVbvrAudioPromptCandidate(prompt, input)
+  }
+  return appendLtx23SafetyConstraints(prompt, dialogueConstraint, input)
+}
+
 export async function enhanceLtx23VideoPrompt(
   input: EnhanceLtx23VideoPromptInput,
 ): Promise<Ltx23PromptEnhancementResult> {
@@ -713,7 +848,7 @@ export async function enhanceLtx23VideoPrompt(
   if (input.userEdited) {
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
-      prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+      prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,
       textModel: null,
     }
@@ -721,8 +856,9 @@ export async function enhanceLtx23VideoPrompt(
 
   const textModel = await resolveLtx23PromptTextModel(input.userId, input.projectId)
   if (!textModel) {
+    const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
-      prompt: originalPrompt,
+      prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,
       textModel: null,
     }
@@ -763,34 +899,34 @@ export async function enhanceLtx23VideoPrompt(
     const promptPolicy = resolveLtx23PromptPolicy(input.modelKey)
     if (!enhancedPrompt) {
       return {
-        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel,
       }
     }
     if (!hasRequiredPromptRelayStructure(enhancedPrompt, promptPolicy)) {
       return {
-        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel,
       }
     }
     if (!isEnhancedPromptAnchoredToOriginal(originalPrompt, enhancedPrompt)) {
       return {
-        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel: null,
       }
     }
     if (addsUnrequestedOrbitCameraMotion(originalPrompt, enhancedPrompt)) {
       return {
-        prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+        prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
         enhanced: false,
         textModel: null,
       }
     }
 
-    const finalPrompt = appendLtx23SafetyConstraints(enhancedPrompt, dialogueConstraint, input)
+    const finalPrompt = finalizeLtx23Prompt(enhancedPrompt, dialogueConstraint, input)
 
     return {
       prompt: finalPrompt,
@@ -800,7 +936,7 @@ export async function enhanceLtx23VideoPrompt(
   } catch {
     const dialogueConstraint = buildVerbatimDialogueConstraint(input.locale, input.linkedVoiceLines)
     return {
-      prompt: appendLtx23SafetyConstraints(originalPrompt, dialogueConstraint, input),
+      prompt: buildLtx23FallbackPrompt(originalPrompt, dialogueConstraint, input),
       enhanced: false,
       textModel,
     }

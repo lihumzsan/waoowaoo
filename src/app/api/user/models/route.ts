@@ -93,6 +93,13 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
     type: 'video',
     provider: 'comfyui',
   },
+  {
+    modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+    modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+    name: 'ComfyUI · LTX2.3 Smart VBVR I2V Audio',
+    type: 'video',
+    provider: 'comfyui',
+  },
 ]
 
 const AUDIO_MODEL_EXCLUDED_IDS = new Set([

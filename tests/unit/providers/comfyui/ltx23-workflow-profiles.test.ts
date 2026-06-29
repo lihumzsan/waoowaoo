@@ -16,8 +16,9 @@ describe('ltx23 workflow profiles', () => {
       category: 'single_image_precise',
       promptPolicy: 'stable_single_image',
       imageSlotPolicy: 'single',
-      maxDurationSeconds: 12,
-      durationOptions: [4, 5, 6, 8, 10, 12],
+      maxDurationSeconds: 20,
+      defaultDurationSeconds: 19.56,
+      durationOptions: [4, 5, 6, 8, 10, 12, 16, 20],
       selectableInPanel: true,
     })
   })

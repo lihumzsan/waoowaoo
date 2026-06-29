@@ -118,6 +118,7 @@ function resolveComfyUiVideoWorkflowSelection(
     selectionMode: options?.ltx23WorkflowSelection,
     generationMode: options?.generationMode,
     requestedDurationSeconds: typeof options?.duration === 'number' ? options.duration : null,
+    hasReferenceAudio: options?.hasReferenceAudio === true,
     panel: { videoPrompt: prompt },
   })
   const selectedWorkflowKey = route?.selectedWorkflowKey ?? trimmedWorkflowKey

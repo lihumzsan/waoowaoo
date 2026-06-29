@@ -863,7 +863,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(submitTaskMock).toHaveBeenCalledTimes(2)
   })
 
-  it('single generate-video normalizes removed LTX2.3 profile keys to Bernini in the submitted payload', async () => {
+  it('single generate-video auto-routes current Smart VBVR large-motion prompts before submit', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -910,13 +910,16 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
       generationOptions: expect.objectContaining({
-        duration: 6,
+        duration: 12,
         resolution: '720p',
       }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
+        reasons: expect.arrayContaining(['large_motion_or_camera_movement']),
+      }),
     }))
-    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
   })
 
   it('single generate-video normalizes the Bernini audio lipsync key and stale fps before submit', async () => {
@@ -997,7 +1000,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     }))
   })
 
-  it('single generate-video keeps slow locked camera prompts on Bernini after old LTX2.3 keys are normalized', async () => {
+  it('single generate-video keeps slow locked camera prompts on current Smart VBVR', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',
@@ -1044,13 +1047,16 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       generationOptions: expect.objectContaining({
-        duration: 4,
+        duration: 12,
         resolution: '720p',
       }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedWorkflowKey: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        reasons: expect.arrayContaining(['slow_stable_camera_movement']),
+      }),
     }))
-    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
     expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
   })
 
@@ -1111,7 +1117,7 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
   })
 
-  it('single generate-video blocks old LTX2.3 long-audio requests after normalizing to Bernini', async () => {
+  it('single generate-video blocks Smart VBVR long-audio requests instead of routing away', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
       storyboardId: 'storyboard-1',

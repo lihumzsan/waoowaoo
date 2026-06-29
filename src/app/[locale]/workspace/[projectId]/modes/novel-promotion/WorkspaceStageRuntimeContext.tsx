@@ -44,11 +44,13 @@ export interface WorkspaceStageRuntimeValue {
       lastFramePanelIndex: number
       flModel: string
       customPrompt?: string
+      customPromptEditedByUser?: boolean
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
     customPrompt?: string,
+    customPromptEditedByUser?: boolean,
   ) => Promise<void>
   onGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
   onUpdateVideoPrompt: (

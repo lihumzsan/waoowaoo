@@ -6,6 +6,7 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import {
   findPreviousCompletedVideoTask,
   readTaskGenerationMode,
+  readTaskVideoModel,
   readTaskVideoUrl,
 } from '@/lib/novel-promotion/video-restore-history'
 
@@ -93,11 +94,13 @@ export const POST = apiHandler(async (
   }
 
   const restoredGenerationMode = readTaskGenerationMode(previousTask.payload, previousTask.result)
+  const restoredVideoModel = readTaskVideoModel(previousTask.payload, previousTask.result)
 
   await prisma.novelPromotionPanel.update({
     where: { id: panel.id },
     data: {
       videoUrl: restoredVideoUrl,
+      videoModel: restoredVideoModel,
       videoGenerationMode: restoredGenerationMode,
       videoMediaId: null,
       lipSyncTaskId: null,
@@ -110,6 +113,7 @@ export const POST = apiHandler(async (
     success: true,
     panelId: panel.id,
     videoUrl: restoredVideoUrl,
+    videoModel: restoredVideoModel,
     videoGenerationMode: restoredGenerationMode,
     restoredFromTaskId: previousTask.id,
   })

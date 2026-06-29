@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { serializeStructuredJsonField } from '@/lib/novel-promotion/panel-ai-data-sync'
+import { parseModelKeyStrict } from '@/lib/model-config-contract'
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 
 function parseNullableNumberField(value: unknown): number | null {
   if (value === null || value === '') return null
@@ -52,6 +54,27 @@ function normalizePromptOverrideField(value: unknown): {
   }
 }
 
+function normalizeVideoModelField(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_MODEL_INVALID',
+      field: 'videoModel',
+    })
+  }
+
+  const normalized = value.trim()
+  if (!normalized) return null
+  if (!parseModelKeyStrict(normalized)) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'VIDEO_MODEL_INVALID',
+      field: 'videoModel',
+    })
+  }
+
+  return normalizeVideoModelKey(normalized)
+}
+
 /**
  * POST /api/novel-promotion/[projectId]/panel
  * 新增一个 Panel
@@ -85,6 +108,7 @@ export const POST = apiHandler(async (
     videoPrompt,
     firstLastFramePrompt,
     videoDurationBinding,
+    videoModel,
   } = body
 
   if (!storyboardId) {
@@ -134,6 +158,7 @@ export const POST = apiHandler(async (
       firstLastFramePrompt: normalizedFirstLastFramePrompt.value,
       firstLastFramePromptEditedByUser: normalizedFirstLastFramePrompt.editedByUser,
       videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
+      videoModel: videoModel !== undefined ? normalizeVideoModelField(videoModel) : null,
     }
   })
 
@@ -266,7 +291,7 @@ export const PATCH = apiHandler(async (
   const panelModel = prisma.novelPromotionPanel as unknown as {
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>
   }
-  const { panelId, storyboardId, panelIndex, imageModel, videoPrompt, firstLastFramePrompt, videoDurationBinding } = body
+  const { panelId, storyboardId, panelIndex, imageModel, videoPrompt, firstLastFramePrompt, videoDurationBinding, videoModel } = body
 
   // 🔥 方式1：通过 panelId 直接更新（优先）
   if (panelId) {
@@ -286,6 +311,7 @@ export const PATCH = apiHandler(async (
       firstLastFramePrompt?: string | null
       firstLastFramePromptEditedByUser?: boolean
       videoDurationBinding?: string | null
+      videoModel?: string | null
     } = {}
     if (imageModel !== undefined) updateData.imageModel = typeof imageModel === 'string' ? imageModel.trim() || null : null
     if (videoPrompt !== undefined) {
@@ -299,6 +325,7 @@ export const PATCH = apiHandler(async (
       updateData.firstLastFramePromptEditedByUser = normalizedFirstLastFramePrompt.editedByUser
     }
     if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
+    if (videoModel !== undefined) updateData.videoModel = normalizeVideoModelField(videoModel)
 
     await prisma.novelPromotionPanel.update({
       where: { id: panelId },
@@ -330,6 +357,7 @@ export const PATCH = apiHandler(async (
     firstLastFramePrompt?: string | null
     firstLastFramePromptEditedByUser?: boolean
     videoDurationBinding?: string | null
+    videoModel?: string | null
   } = {}
   if (imageModel !== undefined) {
     updateData.imageModel = typeof imageModel === 'string' ? imageModel.trim() || null : null
@@ -346,6 +374,9 @@ export const PATCH = apiHandler(async (
   }
   if (videoDurationBinding !== undefined) {
     updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
+  }
+  if (videoModel !== undefined) {
+    updateData.videoModel = normalizeVideoModelField(videoModel)
   }
 
   // 尝试更新 Panel
@@ -372,6 +403,7 @@ export const PATCH = apiHandler(async (
         firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,
         firstLastFramePromptEditedByUser: normalizePromptOverrideField(firstLastFramePrompt).editedByUser,
         videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
+        videoModel: videoModel !== undefined ? normalizeVideoModelField(videoModel) : null,
       }
     })
   }
@@ -417,6 +449,7 @@ export const PUT = apiHandler(async (
     photographyRules,  // 单镜头摄影规则
   } = body
   const videoDurationBinding = body.videoDurationBinding
+  const videoModel = body.videoModel
 
   if (!storyboardId || panelIndex === undefined) {
     throw new ApiError('INVALID_PARAMS')
@@ -449,6 +482,7 @@ export const PUT = apiHandler(async (
     firstLastFramePrompt?: string | null
     firstLastFramePromptEditedByUser?: boolean
     videoDurationBinding?: string | null
+    videoModel?: string | null
     actingNotes?: string | null
     photographyRules?: string | null
   } = {}
@@ -474,6 +508,7 @@ export const PUT = apiHandler(async (
     updateData.firstLastFramePromptEditedByUser = normalizedFirstLastFramePrompt.editedByUser
   }
   if (videoDurationBinding !== undefined) updateData.videoDurationBinding = toStructuredJsonField(videoDurationBinding, 'videoDurationBinding')
+  if (videoModel !== undefined) updateData.videoModel = normalizeVideoModelField(videoModel)
   // JSON 字段存为规范化 JSON 字符串
   if (actingNotes !== undefined) {
     updateData.actingNotes = toStructuredJsonField(actingNotes, 'actingNotes')
@@ -520,6 +555,7 @@ export const PUT = apiHandler(async (
         firstLastFramePrompt: normalizePromptOverrideField(firstLastFramePrompt).value,
         firstLastFramePromptEditedByUser: normalizePromptOverrideField(firstLastFramePrompt).editedByUser,
         videoDurationBinding: videoDurationBinding !== undefined ? toStructuredJsonField(videoDurationBinding, 'videoDurationBinding') : null,
+        videoModel: videoModel !== undefined ? normalizeVideoModelField(videoModel) : null,
         actingNotes: actingNotes !== undefined ? toStructuredJsonField(actingNotes, 'actingNotes') : null,
         photographyRules: photographyRules !== undefined ? toStructuredJsonField(photographyRules, 'photographyRules') : null,
       }

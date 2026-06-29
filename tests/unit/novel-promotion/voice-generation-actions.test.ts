@@ -89,4 +89,54 @@ describe('useVoiceGenerationActions', () => {
     expect(notifyVoiceLinesChanged).toHaveBeenCalledTimes(1)
     expect(setPendingVoiceGenerationByLineId).toHaveBeenCalledTimes(2)
   })
+
+  it('marks async single-line generation as regenerate when the line already has audio', async () => {
+    const setPendingVoiceGenerationByLineId = vi.fn()
+    const notifyVoiceLinesChanged = vi.fn()
+    const generateVoiceMutation = {
+      mutateAsync: vi.fn(async () => ({
+        success: true,
+        async: true,
+        taskId: 'task-voice-2',
+      })),
+    }
+
+    const runtime = useVoiceGenerationActions({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      t: (key: string) => key,
+      voiceLines: [{
+        id: 'line-1',
+        lineIndex: 1,
+        speaker: 'Narrator',
+        content: 'hello',
+        emotionPrompt: null,
+        emotionStrength: null,
+        audioUrl: 'https://audio.example/line-1.wav',
+        updatedAt: '2026-06-27T02:00:00.000Z',
+        lineTaskRunning: false,
+      }],
+      linesWithAudio: 1,
+      speakerCharacterMap: {},
+      speakerVoices: {},
+      analyzeVoiceMutation: { mutateAsync: vi.fn() },
+      generateVoiceMutation,
+      downloadVoicesMutation: { mutateAsync: vi.fn() },
+      loadData: vi.fn(),
+      notifyVoiceLinesChanged,
+      setPendingVoiceGenerationByLineId,
+    })
+
+    await runtime.handleGenerateLine('line-1')
+
+    expect(upsertTaskTargetOverlayMock).toHaveBeenCalledWith(
+      { id: 'query-client' },
+      expect.objectContaining({
+        targetType: 'NovelPromotionVoiceLine',
+        targetId: 'line-1',
+        intent: 'regenerate',
+        hasOutputAtStart: true,
+      }),
+    )
+  })
 })

@@ -4,10 +4,10 @@ import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core
 import { useGenerateVideo, useBatchGenerateVideos } from '@/lib/query/hooks/useStoryboards'
 import {
   useUpdateProjectPanelVideoPrompt,
+  useUpdateProjectPanelVideoModel,
   useUpdateProjectPanelVideoDurationBinding,
   useRestorePreviousProjectPanelVideo,
   useUpdateProjectClip,
-  useUpdateProjectConfig,
 } from '@/lib/query/hooks'
 import type { BatchVideoGenerationParams, VideoDurationBinding, VideoGenerationOptions } from '../components/video'
 import { useToast } from '@/contexts/ToastContext'
@@ -46,10 +46,10 @@ export function useWorkspaceVideoActions({
   const generateVideoMutation = useGenerateVideo(projectId, episodeId || null)
   const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId)
+  const updateProjectPanelVideoModelMutation = useUpdateProjectPanelVideoModel(projectId, episodeId || null)
   const updateProjectPanelVideoDurationBindingMutation = useUpdateProjectPanelVideoDurationBinding(projectId, episodeId || null)
   const restorePreviousProjectPanelVideoMutation = useRestorePreviousProjectPanelVideo(projectId, episodeId || null)
   const updateProjectClipMutation = useUpdateProjectClip(projectId)
-  const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
 
   const handleGenerateVideo = async (
     storyboardId: string,
@@ -65,6 +65,7 @@ export function useWorkspaceVideoActions({
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
     customPrompt?: string,
+    customPromptEditedByUser?: boolean,
   ) => {
     const normalizedVideoModel = typeof videoModel === 'string' ? videoModel.trim() : ''
     if (!normalizedVideoModel) {
@@ -81,6 +82,7 @@ export function useWorkspaceVideoActions({
         generationOptions,
         videoDurationBinding,
         customPrompt,
+        customPromptEditedByUser,
       })
     } catch (err: unknown) {
       if (isAbortError(err)) {
@@ -127,13 +129,14 @@ export function useWorkspaceVideoActions({
     await updateProjectPanelVideoPromptMutation.mutateAsync({ storyboardId, panelIndex, value, field })
   }
 
-  const handleUpdatePanelVideoModel = async (_storyboardId: string, _panelIndex: number, model: string) => {
+  const handleUpdatePanelVideoModel = async (storyboardId: string, panelIndex: number, model: string) => {
     const normalizedModel = model.trim()
     if (!normalizedModel) return
     try {
-      await updateProjectConfigMutation.mutateAsync({
-        key: 'videoModel',
-        value: normalizedModel,
+      await updateProjectPanelVideoModelMutation.mutateAsync({
+        storyboardId,
+        panelIndex,
+        model: normalizedModel,
       })
     } catch (err: unknown) {
       _ulogError(`${t('execution.updateFailed')}:`, err)

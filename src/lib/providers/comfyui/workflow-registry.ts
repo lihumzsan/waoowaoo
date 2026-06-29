@@ -1666,7 +1666,7 @@ function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
 function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: number): boolean {
   if (!node || !isRecord(node.inputs)) return false
 
-  for (const field of ['value', 'length', 'a', 'number']) {
+  for (const field of ['value', 'length', 'duration', 'a', 'number']) {
     if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
     if (isConnectionValue(node.inputs[field])) continue
     node.inputs[field] = value
@@ -1745,6 +1745,7 @@ function applyTemporalHeuristics(
 
 type Ltx23WorkflowNodeContract = {
   durationNodeIds?: string[]
+  audioTrimDurationNodeIds?: string[]
   fpsNodeIds?: string[]
   frameCountNodeIds?: string[]
   promptRelaySegmentCount?: number
@@ -1753,6 +1754,7 @@ type Ltx23WorkflowNodeContract = {
 
 const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> = {
   [COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise]: {
+    audioTrimDurationNodeIds: ['628'],
     promptRelaySmartSegmentCount: 4,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.microDetail]: {
@@ -1842,6 +1844,73 @@ const SLOW_CAMERA_STAGE_SUFFIXES = [
   'Stage 3: maintain the same slow restrained push-in speed; do not increase motion intensity or reframe the subjects.',
   'Stage 4: gently settle while keeping the final frame close to the source composition and visible subject count.',
 ]
+const AUDIO_TALKING_HEAD_PATTERNS = [
+  /\b(?:speak|speaks|speaking|talk|talks|talking|say|says|dialogue|voice|mouth|lip|lips|lip[-\s]?sync)\b/i,
+  /(?:\u8bf4\u8bdd|\u8bb2\u8bdd|\u53d1\u8a00|\u5f00\u53e3|\u53e3\u578b|\u5634\u5507|\u5634\u5df4|\u53f0\u8bcd|\u914d\u97f3|\u56de\u7b54|\u63d0\u95ee|\u95ee\u8bdd)/u,
+]
+const AUDIO_TALKING_HEAD_STABILITY_PROMPT = [
+  'Audio-backed talking-head:',
+  'same source-frame composition and same visible subject count throughout.',
+  'The speaker stays frontal to camera with stable identity, clothing, lighting, desk, and room layout.',
+  'Use subtle reference audio mouth movement, tiny facial motion, and a restrained slow push-in.',
+].join(' ')
+const AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN =
+  /^\s*(?:Panel continuity packet|Mode|Source text|Current shot action|Visible characters|Location lock|Shot\/camera lock|Props lock|Previous shot context|Next shot context|Dialogue lines|Target duration|Creator prompt intent|Hard constraints|Source-frame continuity lock|Allowed visible subjects|Forbidden additions)\s*:/i
+const AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN =
+  /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|avoid|never|forbidden|no\s+(?:subtitles?|captions?|readable\s+text|new\s+people|new\s+characters|extra\s+people|rotation|profile\s+turns?|head\s+turns?|crowds?|guards?|police|scene\s+cuts?|scene\s+changes?))\b|(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d)/iu
+const AUDIO_TALKING_HEAD_UNSTABLE_TERM_PATTERN =
+  /\b(?:subtitles?|captions?|watermarks?|crowds?|guards?|police|profile\s+turns?|head\s+turns?|extra\s+people|new\s+people|new\s+characters|rotation|rotating|orbiting|spinning|scene\s+cuts?|scene\s+changes?)\b/i
+
+function extractAudioTalkingHeadPositiveIntent(value: string): string {
+  const preferred = [
+    /^\s*Current shot action\s*:\s*(.+)$/im,
+    /^\s*Creator prompt intent\s*:\s*(.+)$/im,
+    /^\s*Source text\s*:\s*(.+)$/im,
+  ]
+
+  for (const pattern of preferred) {
+    const match = value.match(pattern)
+    const text = readTrimmedString(match?.[1])
+    if (text && !AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN.test(text)) {
+      return text
+    }
+  }
+
+  return ''
+}
+
+function sanitizeAudioTalkingHeadPrompt(value: string): string {
+  const text = readTrimmedString(value)
+  if (!text) return ''
+  const intent = extractAudioTalkingHeadPositiveIntent(text)
+  const source = intent || text
+
+  const cleaned = source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) =>
+      line.length > 0
+      && !AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN.test(line)
+      && !AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN.test(line)
+      && !AUDIO_TALKING_HEAD_UNSTABLE_TERM_PATTERN.test(line))
+    .join('\n')
+    .trim()
+
+  return cleaned || intent || text
+}
+
+function derivePromptRelayPositiveInput(
+  prompt: string,
+  field: 'global_prompt' | 'local_prompts',
+  audioTalkingHeadStages: boolean,
+): string {
+  const value = derivePromptRelayInput(prompt, field)
+  return audioTalkingHeadStages ? sanitizeAudioTalkingHeadPrompt(value) : value
+}
+
+function shouldUseAudioTalkingHeadStages(prompt: string): boolean {
+  return AUDIO_TALKING_HEAD_PATTERNS.some((pattern) => pattern.test(prompt))
+}
 
 function alignToMultiple(value: number, multiple: number): number {
   return Math.max(multiple, Math.round(value / multiple) * multiple)
@@ -1880,18 +1949,39 @@ const SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES = [
   'Dialogue must stay in audio and lip movement only; never convert spoken words, prompt text, or narration into on-screen text.',
 ]
 
-const SEEDANCE2_BERNINI_VISUAL_NEGATIVE_PROMPT = [
+const SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS = [
   'bad video',
+  'Font',
+  'Chinese characters',
+  'Subtitles',
+  'subtitle',
   'subtitles',
+  'caption',
   'captions',
   'closed captions',
+  'text',
+  'watermark',
+  'logo',
+  'signage',
+  'writing',
+  'letters',
+  'blurry text',
+  'distorted text',
+  'overlay',
+  'lower third',
   'burned-in subtitles',
   'hardcoded subtitles',
   'bottom subtitles',
+  'bottom-center subtitles',
+  'large white subtitles',
   'Chinese subtitles',
   'white subtitle line',
   'white subtitle text',
+  'white outlined glyphs',
+  'white text with black shadow',
   'SRT subtitles',
+  'incorrect dialogue',
+  'added dialogue',
   'karaoke lyrics',
   'lyrics text',
   'dialogue text',
@@ -1905,18 +1995,21 @@ const SEEDANCE2_BERNINI_VISUAL_NEGATIVE_PROMPT = [
   'text overlay',
   'UI text',
   'readable text',
-  'Chinese characters',
+  'unreadable text on shirt or hat',
+  'garbled Chinese glyphs',
+  'floating Chinese glyphs',
   'English letters',
-  'watermark',
-  'logo',
   '字幕',
   '中文字幕',
   '对白字幕',
   '文字',
-].join(', ')
+]
+
+const SEEDANCE2_BERNINI_VISUAL_NEGATIVE_PROMPT =
+  SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS.join(', ')
 
 const SEEDANCE2_BERNINI_LIPSYNC_POSITIVE_PROMPT = [
-  'natural speech lip sync',
+  'natural mouth movement',
   'stable facial identity',
   'clear mouth articulation',
   'subtle head movement',
@@ -1927,41 +2020,62 @@ const SEEDANCE2_BERNINI_LIPSYNC_POSITIVE_PROMPT = [
   'no scene change',
 ].join(', ')
 
-const SEEDANCE2_BERNINI_LIPSYNC_NEGATIVE_PROMPT = [
-  'subtitles',
-  'captions',
-  'closed captions',
-  'burned-in subtitles',
-  'hardcoded subtitles',
-  'bottom subtitles',
-  'Chinese subtitles',
-  'white subtitle line',
-  'white subtitle text',
-  'SRT subtitles',
-  'karaoke lyrics',
-  'lyrics text',
-  'dialogue text',
-  'spoken dialogue text',
-  'transcribed speech text',
-  'onscreen transcript',
-  'speaker labels',
-  'speech bubbles',
-  'lower thirds',
-  'lower-third text',
-  'text overlay',
-  'UI text',
-  'readable text',
-  'Chinese characters',
-  'English letters',
-  'watermark',
-  'logo',
-  '字幕',
-  '中文字幕',
-  '对白字幕',
-  '文字',
-].join(', ')
+const SEEDANCE2_BERNINI_LIPSYNC_NEGATIVE_PROMPT =
+  SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS.join(', ')
 
 const SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE = 'clean unmarked cinematic frame with plain surfaces and natural visual detail only'
+const CJK_TEXT_PATTERN = /[\u3400-\u9fff\uf900-\ufaff]/
+const SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK =
+  'the reference-image subject sits in a quiet office behind a desk, leans slightly forward, glasses reflecting cool overhead light, performs natural rhythmic mouth movement with restrained head and eye motion, and the camera makes a slow gentle push-in'
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_QUOTED_DIALOGUE_PATTERNS = [
+  /"[^"\n]{1,320}"/g,
+  /\u201c[^\u201d\n]{1,320}\u201d/g,
+  /\u300c[^\u300d\n]{1,320}\u300d/g,
+  /\u300e[^\u300f\n]{1,320}\u300f/g,
+]
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_SPEECH_CUE_PATTERNS = [
+  /\b(says?|speaks?|talks?|asks?|answers?|utters?)\s*[:\uff1a]\s*[^.\n]+/gi,
+  /((?:\u5bf9[^\n:\uff1a]{0,32})?[\u8bf4\u95ee\u7b54]\u9053?)\s*[:\uff1a]\s*[^.\u3002\n]+/g,
+]
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_TEXT_TERM_PATTERNS = [
+  /\b(?:no|without|avoid|never render|do not render|do not add)\s+(?:subtitles?|captions?|closed captions?|text overlays?|watermarks?|logos?|signs?|labels?|ui text|readable text|chinese characters|english letters|lower thirds?)\b/gi,
+  /\b(?:subtitles?|captions?|closed captions?|text overlays?|watermarks?|logos?|ui text|readable text|chinese characters|english letters|lower thirds?|karaoke text|lyrics text|dialogue text|speech bubbles|on-screen text)\b/gi,
+]
+
+function sanitizeSeedance2BerniniAudioVisualIntent(prompt: string): string {
+  let next = prompt.trim()
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_QUOTED_DIALOGUE_PATTERNS) {
+    next = next.replace(pattern, '')
+  }
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_SPEECH_CUE_PATTERNS) {
+    next = next.replace(pattern, '$1')
+  }
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_TEXT_TERM_PATTERNS) {
+    next = next.replace(pattern, '')
+  }
+
+  return next
+    .replace(/\blip[- ]sync\b/gi, 'mouth movement')
+    .replace(/\bspeech\b/gi, 'mouth movement')
+    .replace(/\bspeaking\b/gi, 'natural mouth movement')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*,[ \t]*(?=[,.;:\n])/g, '')
+    .replace(/(?:,[ \t]*){2,}/g, ', ')
+    .replace(/[ \t]+([,.;:])/g, '$1')
+    .replace(/^[\s,.;:-]+$/gm, '')
+    .trim()
+}
+
+function buildSeedance2BerniniAudioVisualIntent(prompt: string): string {
+  const trimmedPrompt = prompt.trim()
+  if (!trimmedPrompt || CJK_TEXT_PATTERN.test(trimmedPrompt)) {
+    return SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK
+  }
+  return sanitizeSeedance2BerniniAudioVisualIntent(trimmedPrompt) || SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK
+}
 
 function buildSeedance2BerniniRolePrompt(params: {
   durationSeconds: number
@@ -2030,59 +2144,21 @@ function buildSeedance2BerniniUserPrompt(params: {
   ].join('\n')
 }
 
-function buildSeedance2BerniniAudioFinalPromptRole(params: {
-  durationSeconds: number
-  fps: number
-  frameCount: number
-  motionStrength: number
-  motionLabel: string
-}): string {
-  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
-  return [
-    `You are writing the exact final positive prompt for a Seedance2.0 Bernini ${durationText}-second image-to-video talking-head shot.`,
-    `Target timing: ${params.frameCount} frames at ${params.fps} fps. Motion policy: ${params.motionStrength} (${params.motionLabel}).`,
-    'Use the reference image as visual authority for identity, face, clothing, room, lighting, desk, wall details, clock, blinds, and composition.',
-    'Keep spoken dialogue audio-only. Describe natural mouth articulation and facial motion, but do not render subtitles, captions, dialogue text, transcribed speech, lower thirds, UI, signs, labels, watermarks, logos, letters, Chinese characters, or any readable writing.',
-    `The final prompt must include this positive clean-frame phrase exactly: "${SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE}".`,
-    'Output one concise English paragraph only. Do not include explanations, labels, markdown, or JSON.',
-    'Important final-output rule: write the final paragraph with positive visual language and do not include the words subtitle, caption, text, transcript, Chinese, letters, watermark, logo, UI, lower third, or SRT in the final paragraph.',
-  ].join('\n')
-}
-
-function buildSeedance2BerniniAudioFinalPromptPrompt(params: {
+function buildSeedance2BerniniAudioFinalPositivePrompt(params: {
   prompt: string
   durationSeconds: number
   fps: number
   frameCount: number
-  motionStrength: number
   motionLabel: string
-  width: number
-  height: number
 }): string {
   const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  const intent = buildSeedance2BerniniAudioVisualIntent(params.prompt)
   return [
-    `Write the final Seedance2 Bernini i2v positive prompt for this ${durationText}-second audio-driven lip sync shot.`,
-    `Canvas: ${params.width}x${params.height}, ${params.frameCount} frames, ${params.fps} fps.`,
-    `Motion strength: ${params.motionStrength} (${params.motionLabel}).`,
-    'Subject behavior: visible mouth, natural speech articulation, stable facial identity, slight breathing, restrained blinks, and stable lighting.',
-    'Hard visual exclusion: do not render subtitles, captions, dialogue text, transcribed speech, lower thirds, UI, signs, labels, watermarks, logos, Chinese characters, English letters, or any readable writing.',
-    'Keep spoken dialogue audio-only; the video prompt should describe the person speaking and the clean visual scene, not visual words.',
-    `Mandatory clean-frame wording to include in the final paragraph: ${SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE}.`,
-    '',
-    'Creator prompt intent:',
-    params.prompt || 'a stable talking-head doctor shot in an office with natural audio-driven lip movement',
-  ].join('\n')
-}
-
-function buildSeedance2BerniniAudioFallbackPrompt(params: {
-  prompt: string
-  motionLabel: string
-}): string {
-  const intent = params.prompt || 'A realistic talking-head office shot with natural audio-driven mouth movement'
-  return [
-    intent,
-    'Preserve the reference image identity, room, lighting, clothing, desk, wall clock, blinds, and camera composition.',
-    `Use restrained ${params.motionLabel} with natural lip movement, slight breathing, subtle blinks, and stable facial detail.`,
+    `A ${durationText}-second vertical 480p image-to-video portrait shot, ${params.frameCount} frames at ${params.fps} fps.`,
+    `Creator visual intent: ${intent}.`,
+    'Preserve the reference image identity, face, clothing, office room, cool overhead lighting, desk, wall clock, blinds, and camera composition.',
+    `Use restrained ${params.motionLabel} with natural mouth articulation, slight breathing, subtle blinks, stable facial detail, and a gentle slow push-in when compatible with the scene.`,
+    'The lower frame stays clean, showing only natural clothing, desk edge, and shadow detail.',
     SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE,
   ].join(' ')
 }
@@ -2156,37 +2232,22 @@ function applySeedance2BerniniAudioFinalPromptControls(
     height: number
   },
 ): void {
-  const finalPromptNode = graph['386']
-  if (finalPromptNode && isRecord(finalPromptNode.inputs)) {
-    finalPromptNode.inputs.role = buildSeedance2BerniniAudioFinalPromptRole(params)
-    finalPromptNode.inputs.prompt = buildSeedance2BerniniAudioFinalPromptPrompt(params)
-    finalPromptNode._meta = {
-      ...(finalPromptNode._meta || {}),
-      title: finalPromptNode._meta?.title || 'Bernini final prompt guard',
+  const finalPositiveNode = graph['378']
+  if (finalPositiveNode && isRecord(finalPositiveNode.inputs)) {
+    finalPositiveNode.inputs.text = buildSeedance2BerniniAudioFinalPositivePrompt(params)
+    finalPositiveNode._meta = {
+      ...(finalPositiveNode._meta || {}),
+      title: finalPositiveNode._meta?.title || 'Bernini final positive prompt',
       waoowaooPromptTrace: {
-        stage: 'audio_lipsync_final_prompt_llm',
-        source: 'app-controlled',
+        stage: 'audio_lipsync_final_positive_prompt',
+        source: 'app-controlled-direct',
         cleanFramePhrase: SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE,
       },
     }
   }
 
-  const parserNode = graph['412']
-  if (parserNode && isRecord(parserNode.inputs)) {
-    parserNode.inputs.original_prompt = buildSeedance2BerniniAudioFallbackPrompt({
-      prompt: params.prompt,
-      motionLabel: params.motionLabel,
-    })
-    parserNode.inputs.json_mode = 'false'
-    parserNode._meta = {
-      ...(parserNode._meta || {}),
-      title: parserNode._meta?.title || 'Bernini guarded prompt parser',
-      waoowaooPromptTrace: {
-        stage: 'audio_lipsync_final_prompt_parser',
-        source: 'app-controlled-fallback',
-        cleanFramePhrase: SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE,
-      },
-    }
+  for (const nodeId of ['386', '412', '532', '409']) {
+    delete graph[nodeId]
   }
 }
 
@@ -2268,10 +2329,13 @@ function applySeedance2BerniniWorkflowControls(
 
   applySeedance2BerniniAudioFinalPromptControls(graph, promptParams)
 
+  const foleyMixNode = graph['2524']
   const finalVideoNode = graph['1503']
   if (finalVideoNode && isRecord(finalVideoNode.inputs)) {
     finalVideoNode.inputs.save_output = true
-    if (graph['1507']) {
+    if (foleyMixNode) {
+      finalVideoNode.inputs.audio = ['2524', 0]
+    } else if (graph['1507']) {
       finalVideoNode.inputs.audio = ['1507', 0]
     }
     if (!isConnectionValue(finalVideoNode.inputs.filename_prefix)) {
@@ -2307,9 +2371,51 @@ function shouldUseSlowCameraStages(prompt: string): boolean {
   return SLOW_CAMERA_MOTION_PATTERNS.some((pattern) => pattern.test(prompt))
 }
 
-function buildPromptRelaySegmentPrompts(prompt: string, segmentCount: number, largeMotionStages: boolean): string[] {
+function stripPromptRelayFrameRange(value: string): string {
+  return value.replace(/\s*\[\s*\d+\s*-\s*\d+\s*\]\s*$/g, '').trim()
+}
+
+function splitPromptRelayLocalSegments(prompt: string): string[] {
   const localPrompt = derivePromptRelayInput(prompt, 'local_prompts')
-  const fallbackPrompt = localPrompt || derivePromptRelayInput(prompt, 'global_prompt') || prompt
+  const segments = localPrompt
+    .split('|')
+    .map((segment) => stripPromptRelayFrameRange(segment))
+    .filter((segment) => segment.length > 0)
+  return segments.length > 1 ? segments : []
+}
+
+function countPromptRelayLocalSegments(prompt: string): number | null {
+  const count = splitPromptRelayLocalSegments(prompt).length
+  return count > 1 ? count : null
+}
+
+function buildPromptRelaySegmentPrompts(
+  prompt: string,
+  segmentCount: number,
+  largeMotionStages: boolean,
+  audioTalkingHeadStages: boolean = false,
+): string[] {
+  const explicitSegments = splitPromptRelayLocalSegments(prompt)
+  if (explicitSegments.length > 0) {
+    return Array.from({ length: segmentCount }, (_, index) => {
+      const segment = explicitSegments[index] || explicitSegments[explicitSegments.length - 1] || ''
+      if (!audioTalkingHeadStages || !shouldUseAudioTalkingHeadStages(segment)) return segment
+      return [
+        sanitizeAudioTalkingHeadPrompt(segment),
+        AUDIO_TALKING_HEAD_STABILITY_PROMPT,
+      ].filter(Boolean).join('\n')
+    })
+  }
+
+  const localPrompt = derivePromptRelayPositiveInput(prompt, 'local_prompts', audioTalkingHeadStages)
+  const fallbackPrompt = localPrompt || derivePromptRelayPositiveInput(prompt, 'global_prompt', audioTalkingHeadStages) || prompt
+  if (audioTalkingHeadStages && shouldUseAudioTalkingHeadStages(fallbackPrompt)) {
+    const stablePrompt = [
+      sanitizeAudioTalkingHeadPrompt(fallbackPrompt),
+      AUDIO_TALKING_HEAD_STABILITY_PROMPT,
+    ].filter(Boolean).join('\n')
+    return Array.from({ length: segmentCount }, () => stablePrompt)
+  }
   if (!largeMotionStages) {
     return Array.from({ length: segmentCount }, () => fallbackPrompt)
   }
@@ -2339,9 +2445,10 @@ function buildPromptRelaySmartPrompt(
   targetFrameCount: number,
   segmentCount: number,
   largeMotionStages: boolean,
+  audioTalkingHeadStages: boolean = false,
 ): string {
   const lengths = splitFramesEvenly(targetFrameCount, segmentCount)
-  const segmentPrompts = buildPromptRelaySegmentPrompts(prompt, lengths.length, largeMotionStages)
+  const segmentPrompts = buildPromptRelaySegmentPrompts(prompt, lengths.length, largeMotionStages, audioTalkingHeadStages)
   let startFrame = 0
 
   return lengths.map((length, index) => {
@@ -2361,6 +2468,7 @@ function applyPromptRelayTimelineControls(
     targetFrameCount: number | null
     segmentCount?: number
     largeMotionStages?: boolean
+    audioTalkingHeadStages?: boolean
   },
 ): void {
   if (!params.prompt || params.targetFrameCount === null) return
@@ -2368,14 +2476,25 @@ function applyPromptRelayTimelineControls(
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node)) continue
 
-    const segmentCount = params.segmentCount
+    const segmentCount = countPromptRelayLocalSegments(params.prompt)
+      || params.segmentCount
       || parsePromptRelaySegmentCount(node.inputs.segment_lengths)
       || 1
     const lengths = splitFramesEvenly(params.targetFrameCount, segmentCount)
-    const segmentPrompts = buildPromptRelaySegmentPrompts(params.prompt, lengths.length, params.largeMotionStages === true)
+    const segmentPrompts = buildPromptRelaySegmentPrompts(
+      params.prompt,
+      lengths.length,
+      params.largeMotionStages === true,
+      params.audioTalkingHeadStages === true,
+    )
 
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
-      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+      assignStringInputValue(
+        graph,
+        node,
+        'global_prompt',
+        derivePromptRelayPositiveInput(params.prompt, 'global_prompt', params.audioTalkingHeadStages === true),
+      )
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'local_prompts')) {
       assignStringInputValue(graph, node, 'local_prompts', segmentPrompts.join(' | '))
@@ -2408,6 +2527,7 @@ function applyPromptRelaySmartControls(
     targetFrameCount: number | null
     segmentCount?: number
     largeMotionStages?: boolean
+    audioTalkingHeadStages?: boolean
   },
 ): void {
   if (!params.prompt || params.targetFrameCount === null) return
@@ -2416,12 +2536,18 @@ function applyPromptRelaySmartControls(
     if (!isRecord(node.inputs) || !isPromptRelaySmartEncodeNode(node)) continue
 
     const currentSmartPrompt = readStaticInputValue(graph, node.inputs.smart_prompt, new Set())
-    const segmentCount = params.segmentCount
+    const segmentCount = countPromptRelayLocalSegments(params.prompt)
+      || params.segmentCount
       || parsePromptRelaySmartSegmentCount(currentSmartPrompt)
       || 1
 
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
-      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+      assignStringInputValue(
+        graph,
+        node,
+        'global_prompt',
+        derivePromptRelayPositiveInput(params.prompt, 'global_prompt', params.audioTalkingHeadStages === true),
+      )
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'smart_prompt')) {
       assignStringInputValue(
@@ -2433,6 +2559,7 @@ function applyPromptRelaySmartControls(
           params.targetFrameCount,
           segmentCount,
           params.largeMotionStages === true,
+          params.audioTalkingHeadStages === true,
         ),
       )
     }
@@ -2453,8 +2580,14 @@ function applyLtx23WorkflowProfileControls(
   const durationSeconds = clampPositiveFloat(inject.durationSeconds) ?? profile.defaultDurationSeconds
   const targetFrameCount = clampPositiveInteger(inject.targetFrameCount)
     ?? Math.max(1, Math.round(durationSeconds * fps))
+  const audioTalkingHeadStages = normalizedKey === COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
+    && Array.isArray(inject.audioFilenames)
+    && inject.audioFilenames.some((filename) => typeof filename === 'string' && filename.trim().length > 0)
 
   for (const nodeId of contract?.durationNodeIds || []) {
+    setNumericNodeValue(graph, nodeId, durationSeconds)
+  }
+  for (const nodeId of contract?.audioTrimDurationNodeIds || []) {
     setNumericNodeValue(graph, nodeId, durationSeconds)
   }
   for (const nodeId of contract?.fpsNodeIds || []) {
@@ -2470,12 +2603,14 @@ function applyLtx23WorkflowProfileControls(
     targetFrameCount,
     segmentCount: contract?.promptRelaySegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+    audioTalkingHeadStages,
   })
   applyPromptRelaySmartControls(graph, {
     prompt: readTrimmedString(inject.prompt),
     targetFrameCount,
     segmentCount: contract?.promptRelaySmartSegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+    audioTalkingHeadStages,
   })
 }
 

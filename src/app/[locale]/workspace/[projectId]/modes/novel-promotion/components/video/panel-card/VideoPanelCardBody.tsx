@@ -64,6 +64,20 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
       nextBinding,
     )
   }
+  const readSelectedVideoDurationSeconds = (override?: unknown): number | null => {
+    const raw = override ?? videoModel.generationOptions.duration
+    const value = typeof raw === 'string' ? Number(raw) : raw
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? Number(value.toFixed(2))
+      : null
+  }
+  const applySelectedVideoDurationTarget = (nextBinding: VideoDurationBinding, override?: unknown): VideoDurationBinding => {
+    const targetDurationSeconds = readSelectedVideoDurationSeconds(override)
+    if (targetDurationSeconds !== null) {
+      nextBinding.targetDurationSeconds = targetDurationSeconds
+    }
+    return nextBinding
+  }
 
   return (
     <div className="p-4 space-y-2">
@@ -203,8 +217,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         if ((nextBinding.voiceLineIds?.length ?? 0) === 0 && durationBinding.availableVoiceLines[0]?.id) {
                           nextBinding.voiceLineIds = [durationBinding.availableVoiceLines[0].id]
                         }
-                        delete nextBinding.targetDurationSeconds
-                        persistDurationBinding(nextBinding)
+                        persistDurationBinding(applySelectedVideoDurationTarget(nextBinding))
                       }}
                       className={`rounded-full px-3 py-1 text-[11px] transition-colors disabled:opacity-50 ${
                         durationBinding.isAudioDriven
@@ -241,8 +254,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                                     if (nextIds.has(voiceLine.id)) nextIds.delete(voiceLine.id)
                                     else nextIds.add(voiceLine.id)
                                     nextBinding.voiceLineIds = Array.from(nextIds)
-                                    delete nextBinding.targetDurationSeconds
-                                    persistDurationBinding(nextBinding)
+                                    persistDurationBinding(applySelectedVideoDurationTarget(nextBinding))
                                   }}
                                   className="mt-0.5 h-3.5 w-3.5"
                                 />
@@ -319,6 +331,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         panel.panelId,
                         durationBinding.localBinding,
                         promptEditor.localPrompt,
+                        panel.videoPromptEditedByUser === true,
                       )}
                     disabled={
                       taskStatus.isVideoTaskRunning
@@ -338,6 +351,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                       value={videoModel.selectedModel || undefined}
                       onModelChange={(modelKey) => {
                         videoModel.setSelectedModel(modelKey)
+                        void actions.onUpdatePanelVideoModel(panel.storyboardId, panel.panelIndex, modelKey)
                       }}
                       capabilityFields={videoModel.capabilityFields.map((field) => ({
                         field: field.field,
@@ -346,7 +360,16 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         disabledOptions: field.disabledOptions,
                       }))}
                       capabilityOverrides={videoModel.generationOptions}
-                      onCapabilityChange={(field, rawValue) => videoModel.setCapabilityValue(field, rawValue)}
+                      onCapabilityChange={(field, rawValue) => {
+                        videoModel.setCapabilityValue(field, rawValue)
+                        if (field !== 'duration' || !durationBinding.isAudioDriven) return
+                        const nextTargetDuration = readSelectedVideoDurationSeconds(rawValue)
+                        if (nextTargetDuration === null) return
+                        const nextBinding = normalizeVideoDurationBinding(durationBinding.localBinding)
+                        nextBinding.mode = 'match_audio'
+                        nextBinding.targetDurationSeconds = nextTargetDuration
+                        persistDurationBinding(nextBinding)
+                      }}
                       placeholder={t('panelCard.selectModel')}
                     />
                   </div>

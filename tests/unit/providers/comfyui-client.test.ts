@@ -246,6 +246,84 @@ describe('comfyui client media refs', () => {
     expect(result.dataBase64).toBe(Buffer.from([13, 14, 15]).toString('base64'))
   })
 
+  it('continues polling when a history request times out while the prompt is still running', async () => {
+    vi.useFakeTimers()
+    let historyPollCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString()
+
+      if (url.endsWith('/prompt')) {
+        return new Response(JSON.stringify({ prompt_id: 'prompt-busy-history' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/history/prompt-busy-history')) {
+        historyPollCount += 1
+        if (historyPollCount === 1) {
+          const error = new Error('The operation was aborted due to timeout')
+          error.name = 'TimeoutError'
+          throw error
+        }
+        if (historyPollCount < 3) {
+          return new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        return new Response(JSON.stringify({
+          'prompt-busy-history': {
+            outputs: {
+              '42': {
+                video_url: '/view?filename=busy-history.mp4&type=output',
+              },
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.endsWith('/queue')) {
+        return new Response(JSON.stringify({
+          queue_running: [[4, 'prompt-busy-history', {}]],
+          queue_pending: [],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/view?filename=busy-history.mp4')) {
+        return new Response(new Uint8Array([21, 22, 23]), {
+          status: 200,
+          headers: { 'Content-Type': 'video/mp4' },
+        })
+      }
+
+      throw new Error(`Unexpected fetch url: ${url}`)
+    })
+
+    const resultPromise = runComfyUiWorkflow({
+      baseUrl: 'http://127.0.0.1:8878',
+      workflow: { '1': { class_type: 'Dummy', inputs: {} } },
+      expect: 'video',
+    })
+
+    await vi.advanceTimersByTimeAsync(4_500)
+    const result = await resultPromise
+
+    expect(result.mimeType).toBe('video/mp4')
+    expect(result.dataBase64).toBe(Buffer.from([21, 22, 23]).toString('base64'))
+  })
+
   it('prefers the decoded final image over preview concat outputs', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string'

@@ -96,7 +96,7 @@ describe('ComfyUI video generator', () => {
       imageUrl: 'https://example.com/first.png',
       prompt: 'GLOBAL: rain alley\nLOCAL: [0-16] character runs forward',
       options: {
-        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+        modelId: COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
         referenceImageUrls: [
           'https://example.com/ref-a.png',
           123,
@@ -118,6 +118,74 @@ describe('ComfyUI video generator', () => {
     }))
   })
 
+  it('preserves Smart VBVR requests and forwards reference image and audio URLs', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'GLOBAL: quiet office\nLOCAL: person speaks calmly to camera',
+      options: {
+        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+        duration: 6,
+        fps: 25,
+        referenceImageUrls: [
+          'https://example.com/ref-a.png',
+          123,
+          ' ',
+          'https://example.com/ref-b.png',
+          null,
+        ] as unknown as string[],
+        referenceAudioUrls: [
+          'https://example.com/line-1.wav',
+          123,
+          ' ',
+          'https://example.com/line-2.mp3',
+          null,
+        ] as unknown as string[],
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      durationSeconds: 6,
+      fps: 25,
+      referenceImageUrls: [
+        'https://example.com/ref-a.png',
+        'https://example.com/ref-b.png',
+      ],
+      referenceAudioUrls: [
+        'https://example.com/line-1.wav',
+        'https://example.com/line-2.mp3',
+      ],
+    }))
+  })
+
+  it('preserves Smart VBVR reference-audio requests even when prompt and duration look like long PromptRelay', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'GLOBAL: rainy street. LOCAL: Scene 1: subject walks | Scene 2: camera moves up | Scene 3: subject turns | Scene 4: camera pulls back',
+      options: {
+        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+        duration: 19.56,
+        fps: 25,
+        referenceAudioUrls: ['https://example.com/line-1.wav'],
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
+      durationSeconds: 19.56,
+      fps: 25,
+      referenceAudioUrls: ['https://example.com/line-1.wav'],
+    }))
+  })
+
   it('routes Bernini video generation with reference audio to the audio lipsync workflow', async () => {
     const generator = new ComfyUIVideoGenerator()
 
@@ -126,7 +194,7 @@ describe('ComfyUI video generator', () => {
       imageUrl: 'https://example.com/first.png',
       prompt: 'doctor speaks to the selected line',
       options: {
-        modelId: COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+        modelId: BERNINI_WORKFLOW_ID,
         referenceAudioUrls: [
           'https://example.com/line-1.wav',
           123,

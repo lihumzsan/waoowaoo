@@ -73,6 +73,8 @@ const apiConfigMock = vi.hoisted(() => ({
   getProviderKey: vi.fn((providerId: string) => providerId.split(':')[0]),
 }))
 
+const hasVoiceLineAudioOutputMock = vi.hoisted(() => vi.fn(async () => false))
+
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
@@ -81,12 +83,13 @@ vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))
 vi.mock('@/lib/task/has-output', () => ({
-  hasVoiceLineAudioOutput: vi.fn(async () => false),
+  hasVoiceLineAudioOutput: hasVoiceLineAudioOutputMock,
 }))
 
 describe('api specific - voice generate default audio model', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hasVoiceLineAudioOutputMock.mockResolvedValue(false)
   })
 
   it('uses project audioModel when request does not provide one', async () => {
@@ -160,5 +163,29 @@ describe('api specific - voice generate default audio model', () => {
       audioModels.user,
       'audio',
     )
+  })
+
+  it('marks single-line task payload as regenerate when the voice line already has audio', async () => {
+    hasVoiceLineAudioOutputMock.mockResolvedValueOnce(true)
+
+    const mod = await import('@/app/api/novel-promotion/[projectId]/voice-generate/route')
+    const req = buildMockRequest({
+      path: '/api/novel-promotion/project-1/voice-generate',
+      method: 'POST',
+      body: {
+        episodeId: 'episode-1',
+        lineId: 'line-1',
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
+
+    expect(res.status).toBe(200)
+    const submitCall = submitTaskMock.mock.calls[0] as [{ payload?: Record<string, unknown> }] | undefined
+    const submitArg = submitCall?.[0]
+    expect(submitArg?.payload?.ui).toMatchObject({
+      intent: 'regenerate',
+      hasOutputAtStart: true,
+    })
   })
 })
