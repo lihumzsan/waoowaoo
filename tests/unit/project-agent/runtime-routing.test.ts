@@ -431,7 +431,9 @@ function createRegistry(): ProjectAgentOperationRegistry {
     'generate_edit_shot_execution_plan',
     'generate_edit_shot_execution_plan',
     'generate_edit_script_storyboard',
+    'compose_edit_image_prompts',
     'generate_edit_script_storyboard_images',
+    'compose_edit_video_prompts',
     'generate_episode_videos',
     'render_final_video',
   ]

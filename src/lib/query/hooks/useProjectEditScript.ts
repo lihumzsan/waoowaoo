@@ -79,6 +79,11 @@ interface GenerateEditScriptStoryboardResponse {
   deduped?: boolean
 }
 
+interface ComposeEditPromptsInput {
+  episodeId: string
+  editScriptId?: string
+}
+
 interface GenerateEditScriptTaskResponse {
   success: boolean
   async: true
@@ -368,6 +373,54 @@ export function useGenerateProjectEditScriptStoryboard(projectId: string | null)
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
       ])
     },
+  })
+}
+
+function useComposeProjectEditPromptsMutation(input: {
+  readonly projectId: string | null
+  readonly path: 'image' | 'video'
+  readonly errorMessage: string
+}) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (variables: ComposeEditPromptsInput) => {
+      if (!input.projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${input.projectId}/edit-script/prompts/${input.path}/compose`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(variables),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, input.errorMessage)
+      }
+      return await response.json() as GenerateEditScriptStoryboardResponse
+    },
+    onSuccess: async (_result, variables) => {
+      if (!input.projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(input.projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(input.projectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(input.projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(input.projectId), exact: false }),
+      ])
+    },
+  })
+}
+
+export function useComposeProjectEditImagePrompts(projectId: string | null) {
+  return useComposeProjectEditPromptsMutation({
+    projectId,
+    path: 'image',
+    errorMessage: 'Failed to compose image prompts',
+  })
+}
+
+export function useComposeProjectEditVideoPrompts(projectId: string | null) {
+  return useComposeProjectEditPromptsMutation({
+    projectId,
+    path: 'video',
+    errorMessage: 'Failed to compose video prompts',
   })
 }
 

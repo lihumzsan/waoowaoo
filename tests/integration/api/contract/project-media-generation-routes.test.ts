@@ -12,6 +12,10 @@ const apiAdapterMock = vi.hoisted(() => ({
 const planningMock = vi.hoisted(() => ({
   planProjectAgentOperationFromApi: vi.fn(),
 }))
+const promptComposerSubmitMock = vi.hoisted(() => ({
+  submitEditImagePromptComposeTask: vi.fn(),
+  submitEditVideoPromptComposeTask: vi.fn(),
+}))
 
 vi.mock('@/lib/api-auth', () => {
   const unauthorized = () => new Response(
@@ -21,6 +25,13 @@ vi.mock('@/lib/api-auth', () => {
 
   return {
     isErrorResponse: (value: unknown) => value instanceof Response,
+    requireProjectAuth: async (projectId: string) => {
+      if (!authState.authenticated) return unauthorized()
+      return {
+        session: { user: { id: 'user-1' } },
+        project: { id: projectId, userId: 'user-1', name: 'Project' },
+      }
+    },
     requireProjectAuthLight: async (projectId: string) => {
       if (!authState.authenticated) return unauthorized()
       return {
@@ -33,11 +44,14 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 vi.mock('@/lib/operations/planning', () => planningMock)
+vi.mock('@/lib/edit-script/prompt-composer/submit', () => promptComposerSubmitMock)
 
 import { POST as generateVideoPost } from '@/app/api/projects/[projectId]/generate-video/route'
 import { POST as finalVideoRenderPost } from '@/app/api/projects/[projectId]/final-video-render/route'
 import { POST as regeneratePanelImagePost } from '@/app/api/projects/[projectId]/regenerate-panel-image/route'
 import { POST as generateStoryboardGridImagesPost } from '@/app/api/projects/[projectId]/edit-script/storyboard/images/block-grid/generate/route'
+import { POST as composeImagePromptsPost } from '@/app/api/projects/[projectId]/edit-script/prompts/image/compose/route'
+import { POST as composeVideoPromptsPost } from '@/app/api/projects/[projectId]/edit-script/prompts/video/compose/route'
 import { POST as operationPlanPost } from '@/app/api/projects/[projectId]/operations/[operationId]/plan/route'
 
 describe('api contract - project media generation routes (operation adapter)', () => {
@@ -201,6 +215,58 @@ describe('api contract - project media generation routes (operation adapter)', (
       userId: 'user-1',
       source: 'project-ui',
       input: body,
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/edit-script/prompts/*/compose -> submits auto-approved prompt composer tasks', async () => {
+    promptComposerSubmitMock.submitEditImagePromptComposeTask.mockResolvedValueOnce({
+      success: true,
+      taskId: 'task-image-prompts',
+    })
+    promptComposerSubmitMock.submitEditVideoPromptComposeTask.mockResolvedValueOnce({
+      success: true,
+      taskId: 'task-video-prompts',
+    })
+
+    const imageBody = {
+      episodeId: 'episode-1',
+      editScriptId: 'edit-script-1',
+      meta: { locale: 'zh' },
+    }
+    const imageRes = await composeImagePromptsPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/edit-script/prompts/image/compose',
+        method: 'POST',
+        body: imageBody,
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+    const videoRes = await composeVideoPromptsPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/edit-script/prompts/video/compose',
+        method: 'POST',
+        body: imageBody,
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(imageRes.status).toBe(200)
+    expect(videoRes.status).toBe(200)
+    expect(promptComposerSubmitMock.submitEditImagePromptComposeTask).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-script-1',
+      userId: 'user-1',
+      source: 'project-ui',
+      confirmed: true,
+    }))
+    expect(promptComposerSubmitMock.submitEditVideoPromptComposeTask).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editScriptId: 'edit-script-1',
+      userId: 'user-1',
+      source: 'project-ui',
+      confirmed: true,
     }))
   })
 

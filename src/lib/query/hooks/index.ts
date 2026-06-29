@@ -192,6 +192,8 @@ export {
     useConfirmProjectEditStylePreview,
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
+    useComposeProjectEditImagePrompts,
+    useComposeProjectEditVideoPrompts,
     useArrangeProjectEditScriptGenerationSegments,
     useMergeProjectEditScriptGenerationSegments,
     useUpdateProjectEditScriptAssetRequirementDescription,

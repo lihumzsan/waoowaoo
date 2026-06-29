@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
+import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
+import { inferVideoGridModeForShotCount } from '@/lib/video-groups/core'
 import {
   isStoryboardPanelPromptsStageFailed,
   resolveLocationSpatialProfileReadiness,
@@ -29,8 +31,12 @@ export type EditFirstWorkflowStage =
   | 'ready_to_generate_shot_execution_plan'
   | 'ready_to_generate_storyboard'
   | 'storyboard_generating'
+  | 'ready_to_compose_image_prompts'
+  | 'image_prompts_composing'
   | 'ready_to_generate_storyboard_images'
   | 'storyboard_images_generating'
+  | 'ready_to_compose_video_prompts'
+  | 'video_prompts_composing'
   | 'ready_to_generate_videos'
   | 'videos_generating'
   | 'ready_to_render_final'
@@ -84,6 +90,13 @@ export interface EditFirstWorkflowSnapshot {
   storyboardPanelPromptFailed: boolean
   activeStoryboardPanelTaskCount: number
   panelCount: number
+  storyboardPanelImagePromptMissingCount: number
+  storyboardPanelVideoPromptMissingCount: number
+  imagePromptComposeFailed: boolean
+  videoPromptComposeFailed: boolean
+  activeImagePromptComposeTaskCount: number
+  activeVideoPromptComposeTaskCount: number
+  videoGroupPromptMissingCount: number
   storyboardPanelImageReadyCount: number
   storyboardPanelImageMissingCount: number
   storyboardPanelImageFailedCount: number
@@ -148,6 +161,22 @@ function readString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function hasText(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function readShotNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'number' ? item : Number(item)))
+    .filter((item) => Number.isInteger(item) && item > 0)
+}
+
+function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((shotNumber, index) => shotNumber === right[index])
 }
 
 function parseJsonRecord(value: string | null): Record<string, unknown> {
@@ -361,6 +390,30 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
+  if (snapshot.activeImagePromptComposeTaskCount > 0) {
+    return state({
+      stage: 'image_prompts_composing',
+      blocking: { kind: 'processing', reason: 'image prompts are still composing' },
+    })
+  }
+
+  if (snapshot.imagePromptComposeFailed) {
+    const nextAction = workflowAction('compose_edit_image_prompts', 'Recompose image prompts')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'image prompt composition failed' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
+  if (snapshot.storyboardPanelImagePromptMissingCount > 0) {
+    return state({
+      stage: 'ready_to_compose_image_prompts',
+      nextAction: workflowAction('compose_edit_image_prompts', 'Compose image prompts'),
+    })
+  }
+
   if (snapshot.storyboardPanelImageMissingCount > 0) {
     const nextAction = workflowAction('generate_edit_script_storyboard_images', 'Generate storyboard images')
     if (snapshot.activeStoryboardImageTaskCount > 0) {
@@ -380,6 +433,30 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'ready_to_generate_storyboard_images',
       nextAction,
+    })
+  }
+
+  if (snapshot.activeVideoPromptComposeTaskCount > 0) {
+    return state({
+      stage: 'video_prompts_composing',
+      blocking: { kind: 'processing', reason: 'video prompts are still composing' },
+    })
+  }
+
+  if (snapshot.videoPromptComposeFailed) {
+    const nextAction = workflowAction('compose_edit_video_prompts', 'Recompose video prompts')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'video prompt composition failed' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
+  if (snapshot.storyboardPanelVideoPromptMissingCount > 0 || snapshot.videoGroupPromptMissingCount > 0) {
+    return state({
+      stage: 'ready_to_compose_video_prompts',
+      nextAction: workflowAction('compose_edit_video_prompts', 'Compose video prompts'),
     })
   }
 
@@ -424,9 +501,17 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return ['generate_edit_script_storyboard']
     case 'storyboard_generating':
       return []
+    case 'ready_to_compose_image_prompts':
+      return ['compose_edit_image_prompts']
+    case 'image_prompts_composing':
+      return []
     case 'ready_to_generate_storyboard_images':
       return ['generate_edit_script_storyboard_images']
     case 'storyboard_images_generating':
+      return []
+    case 'ready_to_compose_video_prompts':
+      return ['compose_edit_video_prompts']
+    case 'video_prompts_composing':
       return []
     case 'ready_to_generate_videos':
       return ['generate_episode_videos']
@@ -492,6 +577,7 @@ export async function resolveEditFirstWorkflowState(params: {
         id: true,
         status: true,
         assetReviewStatus: true,
+        corePlanJson: true,
         requirements: {
           select: {
             kind: true,
@@ -536,6 +622,8 @@ export async function resolveEditFirstWorkflowState(params: {
         storyboardId: true,
         imageUrl: true,
         imageMediaId: true,
+        imagePrompt: true,
+        videoPrompt: true,
       },
     }),
   ])
@@ -619,6 +707,81 @@ export async function resolveEditFirstWorkflowState(params: {
       },
     })
     : 0
+  const [
+    activeImagePromptComposeTaskCount,
+    activeVideoPromptComposeTaskCount,
+    failedImagePromptComposeTaskCount,
+    failedVideoPromptComposeTaskCount,
+  ] = editScript?.id
+    ? await Promise.all([
+        prisma.task.count({
+          where: {
+            projectId: params.projectId,
+            episodeId: params.episodeId,
+            targetType: 'ProjectEditScript',
+            targetId: editScript.id,
+            type: TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE,
+            status: { in: ['queued', 'processing'] },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            projectId: params.projectId,
+            episodeId: params.episodeId,
+            targetType: 'ProjectEditScript',
+            targetId: editScript.id,
+            type: TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE,
+            status: { in: ['queued', 'processing'] },
+          },
+        }),
+        prisma.task.count({
+          where: {
+            projectId: params.projectId,
+            episodeId: params.episodeId,
+            targetType: 'ProjectEditScript',
+            targetId: editScript.id,
+            type: TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE,
+            status: 'failed',
+          },
+        }),
+        prisma.task.count({
+          where: {
+            projectId: params.projectId,
+            episodeId: params.episodeId,
+            targetType: 'ProjectEditScript',
+            targetId: editScript.id,
+            type: TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE,
+            status: 'failed',
+          },
+        }),
+      ])
+    : [0, 0, 0, 0]
+  const videoPromptSegments = editScript?.corePlanJson
+    ? normalizeEditScriptStructure(editScript.corePlanJson).generationSegments
+      .filter((segment) => segment.shotNumbers.length >= 2)
+      .map((segment) => ({
+        ...segment,
+        gridMode: inferVideoGridModeForShotCount(segment.shotNumbers.length),
+      }))
+    : []
+  const videoGroups = videoPromptSegments.length > 0
+    ? await prisma.projectVideoGroup.findMany({
+        where: {
+          projectId: params.projectId,
+          episodeId: params.episodeId,
+        },
+        select: {
+          gridMode: true,
+          shotNumbers: true,
+          prompt: true,
+        },
+      })
+    : []
+  const videoGroupPromptMissingCount = videoPromptSegments.filter((segment) => !videoGroups.some((group) => (
+    group.gridMode === segment.gridMode
+    && sameShotNumbers(readShotNumbers(group.shotNumbers), segment.shotNumbers)
+    && hasText(group.prompt)
+  ))).length
 
   return resolveEditFirstWorkflowStateFromSnapshot({
     hasEpisode: true,
@@ -642,6 +805,13 @@ export async function resolveEditFirstWorkflowState(params: {
     storyboardPanelPromptFailed: storyboardPlanStageSummary.storyboardPanelPromptFailed,
     activeStoryboardPanelTaskCount,
     panelCount: storyboardImageReadiness.panelCount,
+    storyboardPanelImagePromptMissingCount: editScriptPanels.filter((panel) => !hasText(panel.imagePrompt)).length,
+    storyboardPanelVideoPromptMissingCount: editScriptPanels.filter((panel) => !hasText(panel.videoPrompt)).length,
+    imagePromptComposeFailed: failedImagePromptComposeTaskCount > 0,
+    videoPromptComposeFailed: failedVideoPromptComposeTaskCount > 0,
+    activeImagePromptComposeTaskCount,
+    activeVideoPromptComposeTaskCount,
+    videoGroupPromptMissingCount,
     storyboardPanelImageReadyCount: storyboardImageReadiness.readyCount,
     storyboardPanelImageMissingCount: storyboardImageReadiness.missingCount,
     storyboardPanelImageFailedCount,

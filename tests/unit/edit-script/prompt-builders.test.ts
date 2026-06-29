@@ -96,7 +96,6 @@ const execution11: EditShotExecution = {
     lens: '35mm',
     focus: 'chair clear',
     height: 'eye level',
-    position: 'doorway left',
     angle: 'slightly low',
     movement: 'locked off',
     composition: 'chair centered',

@@ -8,7 +8,7 @@ import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingI
 import { inferVideoGridModeForShotCount, totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
-import { ASSET_REFERENCE_GRID_MODE, applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
+import { applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
 
 export function parseShotNumbersJson(value: unknown): number[] {
   if (!Array.isArray(value)) return []
@@ -220,6 +220,9 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
   if (!planTaskId || !projectId || !groupId || !episodeId || !gridMode || shotNumbers.length === 0 || !Number.isInteger(durationSec) || durationSec <= 0) {
     throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
   }
+  const prompt = Object.prototype.hasOwnProperty.call(value, 'prompt')
+    ? normalizeString(value.prompt) || null
+    : undefined
   return {
     planTaskId,
     projectId,
@@ -230,7 +233,7 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
     durationSec,
     previous: isRecord(value.previous) ? value.previous as ExistingVideoGroupRecord : null,
     sourceMode: value.sourceMode === 'asset_reference' ? 'asset_reference' : null,
-    prompt: normalizeString(value.prompt) || null,
+    ...(prompt !== undefined ? { prompt } : {}),
     referenceImageUrls: normalizeStringList(value.referenceImageUrls),
     segmentIndex: typeof value.segmentIndex === 'number' && Number.isInteger(value.segmentIndex) ? value.segmentIndex : undefined,
   }
@@ -257,6 +260,7 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
         taskId: null,
         errorCode: null,
         errorMessage: null,
+        ...(metadata.prompt !== undefined ? { prompt: metadata.prompt } : {}),
         ...(resetReferenceImage ? {
           referenceImageUrl: null,
           referenceImageMediaId: null,
@@ -274,6 +278,7 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
       gridMode: metadata.gridMode,
       shotNumbers: metadata.shotNumbers as unknown as Prisma.InputJsonValue,
       durationSec: metadata.durationSec,
+      prompt: metadata.prompt ?? null,
       status: 'queued',
     },
   })
@@ -370,6 +375,7 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
     gridMode,
     shotNumbers,
   })
+  const prompt = normalizeString(payload.prompt) || previous?.prompt || null
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotNumbers.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
@@ -397,6 +403,7 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
       durationSec,
       previous,
       sourceMode: 'asset_reference',
+      prompt,
       referenceImageUrls,
       segmentIndex: params.segmentIndex,
     },

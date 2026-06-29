@@ -52,6 +52,8 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_script_assets?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_shot_execution_plan?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_storyboard?.channels).toEqual({ tool: true, api: true })
+    expect(registry.compose_edit_image_prompts?.channels).toEqual({ tool: true, api: true })
+    expect(registry.compose_edit_video_prompts?.channels).toEqual({ tool: true, api: true })
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.channels).toEqual({ tool: true, api: true })
       expect(registry[operationId]?.intent).toBe('query')
@@ -66,6 +68,8 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_shot_execution_plan?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_storyboard?.groupPath).toEqual(['edit-script'])
+    expect(registry.compose_edit_image_prompts?.groupPath).toEqual(['edit-script'])
+    expect(registry.compose_edit_video_prompts?.groupPath).toEqual(['edit-script'])
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.groupPath).toEqual(['edit-script'])
     }
@@ -107,12 +111,17 @@ describe('project agent operation registry', () => {
 
   it('allows edit-first auto-approved operations to stay assistant-callable without confirmation', () => {
     const registry = createProjectAgentOperationRegistry()
-    const operation = registry.generate_edit_style_previews
-
-    expect(operation).toBeDefined()
-    expect(operation.channels).toEqual({ tool: true, api: true })
-    expect(operation.effects.bulk).toBe(true)
-    expect(operation.confirmation.required).toBe(false)
+    for (const operationId of [
+      'generate_edit_style_previews',
+      'compose_edit_image_prompts',
+      'compose_edit_video_prompts',
+    ] as const) {
+      const operation = registry[operationId]
+      expect(operation).toBeDefined()
+      expect(operation.channels).toEqual({ tool: true, api: true })
+      expect(operation.effects.bulk).toBe(true)
+      expect(operation.confirmation.required).toBe(false)
+    }
   })
 
   it('registers final video render as a confirmed but non-billable assistant-callable operation', () => {

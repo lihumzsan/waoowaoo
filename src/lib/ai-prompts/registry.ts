@@ -140,6 +140,14 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'spatial_profiles_json',
     ],
   },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_IMAGE_PROMPT_COMPOSE]: {
+    pathStem: 'edit-script/image-prompt-compose',
+    variableKeys: ['composer_input_json'],
+  },
+  [AI_PROMPT_IDS.EDIT_SCRIPT_VIDEO_PROMPT_COMPOSE]: {
+    pathStem: 'edit-script/video-prompt-compose',
+    variableKeys: ['composer_input_json'],
+  },
 }
 
 const OPERATION_TO_AI_PROMPT_ID = new Map<string, AiPromptId>()

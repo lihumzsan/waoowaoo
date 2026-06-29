@@ -40,6 +40,7 @@ export type GridPanel = {
   id: string
   storyboardId: string
   panelIndex: number
+  panelNumber: number | null
   shotType: string | null
   description: string | null
   imagePrompt: string | null
@@ -178,16 +179,14 @@ export function buildCompactGridCell(input: {
   readonly panel: GridPanel
   readonly index: number
 }) {
-  if (input.panel.renderFactsJson === null || input.panel.renderFactsJson === undefined) {
-    throw new Error(`PANEL_GRID_RENDER_FACTS_MISSING:${input.panel.id}`)
-  }
+  const imagePrompt = normalizeString(input.panel.imagePrompt)
+  if (!imagePrompt) throw new Error(`PANEL_GRID_IMAGE_PROMPT_MISSING:${input.panel.id}`)
   return {
     cell_index: input.index,
     cell_position: ['top_left', 'top_right', 'bottom_left', 'bottom_right'][input.index],
-    panel_facts: {
-      panel_id: input.panel.id,
-      render_facts: input.panel.renderFactsJson,
-    },
+    panel_id: input.panel.id,
+    shot_number: input.panel.panelNumber ?? input.panel.panelIndex + 1,
+    image_prompt: imagePrompt,
   }
 }
 
@@ -318,7 +317,7 @@ export async function handlePanelGridImageTask(
   })
   const prompt = [
     'GLOBAL TASK',
-    'Generate a storyboard grid from the structured render facts. Preserve shared scene graph, blocking, character presence, prop continuity, axis, lighting, and per-cell shot deltas.',
+    'Generate a 2x2 storyboard grid from the composed final image prompts. Preserve each cell prompt exactly, keep shared scene continuity when the prompts describe the same space, and do not omit hidden, occluded, partial, supporting, or listener characters named in any cell prompt.',
     '',
     contextJson,
   ].join('\n')

@@ -82,6 +82,7 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => undefined),
   },
   projectVideoGroup: {
+    findUnique: vi.fn(),
     update: vi.fn(async () => undefined),
   },
   project: {
@@ -229,7 +230,6 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
       lens: '35mm',
       focus: 'Hero and anchor object remain clear',
       height: '视线高度',
-      position: 'room entrance left',
       angle: '平视',
       movement: '固定机位',
       composition: 'Hero and chair preserve screen relation',
@@ -358,6 +358,9 @@ describe('worker video processor behavior', () => {
       id: 'edit-script-1',
       corePlanJson: defaultCorePlan,
     })
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValue({
+      prompt: 'composed video group prompt',
+    })
     prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
     storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValue(buildStoryboardSourceResult(defaultCorePlan))
 
@@ -407,7 +410,7 @@ describe('worker video processor behavior', () => {
         { url: 'images/panel-4.png', role: 'reference', order: 4, source: 'storyboard' },
       ],
       options: expect.objectContaining({
-        prompt: expect.stringContaining('GENERATION_SEGMENT'),
+        prompt: 'composed video group prompt',
         duration: 14,
         aspectRatio: '9:16',
       }),
@@ -429,26 +432,13 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP: appends Style Bible block to final generation prompt', async () => {
+  it('VIDEO_GROUP: fails when ProjectVideoGroup.prompt is missing', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
-    const twoShotCorePlan = buildCorePlan([
-      { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
-      { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
-    ])
-    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
-      id: 'edit-script-1',
-      corePlanJson: twoShotCorePlan,
-    })
-    storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValueOnce(buildStoryboardSourceResult(twoShotCorePlan))
-    prismaMock.projectPanel.findMany.mockResolvedValueOnce([
-      { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
-      { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
-    ])
-    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('group-video/group-1.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({ prompt: null })
 
-    await processor!(buildJob({
+    await expect(processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       targetId: 'group-1',
@@ -457,23 +447,9 @@ describe('worker video processor behavior', () => {
         gridMode: '2x2',
         shotNumbers: [1, 2],
       },
-    }))
+    }))).rejects.toThrow('VIDEO_GROUP_PROMPT_MISSING:group-1')
 
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      options: expect.objectContaining({
-        prompt: expect.stringContaining('GENERATION_SEGMENT'),
-      }),
-    }))
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      options: expect.objectContaining({
-        prompt: expect.stringContaining('STYLE'),
-      }),
-    }))
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      options: expect.objectContaining({
-        prompt: expect.stringContaining('禅意电影感'),
-      }),
-    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
   })
 
   it('VIDEO_GROUP asset_reference: uses reference assets and skips storyboard grid composition', async () => {
@@ -481,6 +457,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-asset.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'asset reference block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -528,7 +507,7 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP asset_reference: uses payload prompt without reading a stored segment prompt', async () => {
+  it('VIDEO_GROUP asset_reference: uses stored group prompt without building a source prompt', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -541,6 +520,9 @@ describe('worker video processor behavior', () => {
       corePlanJson: twoShotCorePlan,
     })
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-asset.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'stored asset reference block prompt',
+    })
 
     await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -550,7 +532,7 @@ describe('worker video processor behavior', () => {
         sourceMode: 'asset_reference',
         videoModel: 'ark::seedance',
         shotNumbers: [1, 2],
-        prompt: 'asset reference block prompt',
+        prompt: 'ignored payload prompt',
         referenceImageUrls: ['https://example.com/hero.png'],
       },
     }))
@@ -562,7 +544,7 @@ describe('worker video processor behavior', () => {
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       options: expect.objectContaining({
-        prompt: expect.stringContaining('asset reference block prompt'),
+        prompt: expect.stringContaining('stored asset reference block prompt'),
       }),
     }))
     expect(storyboardSourceMock.buildStoryboardConsistencySource).not.toHaveBeenCalled()
@@ -573,6 +555,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-seedance.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'seedance asset reference block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -615,6 +600,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-happy-horse.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'happy horse asset reference block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -657,6 +645,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-seedance-fast.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'seedance fast asset reference block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -699,6 +690,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-kling-v3.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'kling v3 asset reference block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -741,6 +735,9 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('asset-reference-video/group-kling-o3.mp4')
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'kling o3 two-frame block prompt',
+    })
 
     const result = await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
@@ -778,7 +775,7 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP: fails explicitly when no generation segment matches the requested shots', async () => {
+  it('VIDEO_GROUP: uses stored prompt without reading generation segment facts', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -793,13 +790,16 @@ describe('worker video processor behavior', () => {
       id: 'edit-script-1',
       corePlanJson: twoShotCorePlan,
     })
-    storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValueOnce(buildStoryboardSourceResult(twoShotCorePlan))
     prismaMock.projectPanel.findMany.mockResolvedValueOnce([
       { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
       { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
     ])
+    prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
+      prompt: 'stored segment prompt for unmatched generation segment',
+    })
+    utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('group-video/group-1.mp4')
 
-    await expect(processor!(buildJob({
+    await processor!(buildJob({
       type: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       targetId: 'group-1',
@@ -808,10 +808,15 @@ describe('worker video processor behavior', () => {
         gridMode: '2x2',
         shotNumbers: [1, 2],
       },
-    }))).rejects.toThrow('VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:1,2')
+    }))
 
+    expect(storyboardSourceMock.buildStoryboardConsistencySource).not.toHaveBeenCalled()
     expect(videoGroupMocks.executeAiTextStep).not.toHaveBeenCalled()
-    expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      options: expect.objectContaining({
+        prompt: 'stored segment prompt for unmatched generation segment',
+      }),
+    }))
   })
 
   it('VIDEO_PANEL: 缺少 payload.videoModel 时显式失败', async () => {

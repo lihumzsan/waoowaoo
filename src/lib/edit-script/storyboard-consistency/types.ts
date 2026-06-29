@@ -57,8 +57,8 @@ export interface StoryboardPanelPromptDraft {
   readonly panelIndex: number
   readonly sourceShotNumber: number
   readonly sourceGenerationSegmentId: string
-  readonly prompt: string
-  readonly videoPrompt: string
+  readonly prompt: string | null
+  readonly videoPrompt: string | null
   readonly executionSnapshot: EditShotExecution
   readonly renderFacts: StoryboardStillPromptFacts
 }

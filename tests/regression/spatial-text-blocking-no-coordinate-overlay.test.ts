@@ -29,7 +29,6 @@ const execution: EditShotExecution = {
     lens: '35mm',
     focus: '人物和柜台清晰',
     height: '视线高度',
-    position: '门口内侧',
     angle: '平视',
     movement: '固定机位',
     composition: '人物站在门廊左侧阴影里，柜台保持画面右侧',

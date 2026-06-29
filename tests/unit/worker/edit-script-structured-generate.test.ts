@@ -65,7 +65,6 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
             lens: '35mm',
             focus: 'chair',
             height: 'eye level',
-            position: 'doorway',
             angle: 'frontal',
             movement: 'locked',
             composition: 'centered chair',

@@ -41,8 +41,8 @@ export function generateStoryboardPanelPrompts(input: {
       panelIndex,
       sourceShotNumber: shot.shotNumber,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
-      prompt: built.prompt,
-      videoPrompt: built.prompt,
+      prompt: null,
+      videoPrompt: null,
       executionSnapshot: execution,
       renderFacts: built.facts,
     }

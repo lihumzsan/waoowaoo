@@ -25,6 +25,7 @@ Spatial Profiles：
 - `visibility` 只能使用 `visible`、`partial`、`hidden`、`occluded`、`offscreen`。
 - core shot 的所有 `keyObjects` 必须进入 `blocking.objects`。
 - 每个 shot 必须包含 `camera.lighting` 和 `blocking.axis`。
+- `camera.composition` 只能写画面内主体排列、前中后景、遮挡关系、留白和视觉中心；不得输出机位位置字段或把机位位置改名塞进去。
 - 严格只输出 Schema 中列出的字段，不增加最终渲染提示词、相邻镜头衔接字段或重复 blocking 包。
 
 # 输出 Schema
@@ -38,10 +39,9 @@ Spatial Profiles：
         "lens": "焦段",
         "focus": "焦点和景深",
         "height": "机位高度",
-        "position": "机位位置",
         "angle": "拍摄角度",
         "movement": "运镜",
-        "composition": "构图",
+        "composition": "画面内构图",
         "lighting": "镜头级光线"
       },
       "blocking": {

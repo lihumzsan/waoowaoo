@@ -23,8 +23,6 @@ import { handleFinalVideoRenderTask } from './final-video-render'
 import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
 import type { VideoGridMode, VideoGroupShot } from '@/lib/video-groups/types'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import { buildStoryboardVideoSegmentPromptFacts } from '@/lib/edit-script/prompt-builders'
-import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
@@ -34,11 +32,6 @@ type PanelRecord = NonNullable<Awaited<ReturnType<typeof prisma.projectPanel.fin
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function toDurationMs(value: number | null | undefined): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined
-  return value > 1000 ? Math.round(value) : Math.round(value * 1000)
 }
 
 function extractGenerationOptions(payload: AnyObj): VideoOptionMap {
@@ -316,58 +309,15 @@ function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
-  if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
-}
-
-async function buildVideoGroupPromptFromSource(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly userId: string
-  readonly shotNumbers: readonly number[]
-}): Promise<{ readonly prompt: string; readonly durationSec: number }> {
-  const editScript = await prisma.projectEditScript.findFirst({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      status: 'ready',
-    },
-    select: { id: true },
+async function requireProjectVideoGroupPrompt(groupId: string): Promise<string> {
+  const group = await prisma.projectVideoGroup.findUnique({
+    where: { id: groupId },
+    select: { prompt: true },
   })
-  if (!editScript) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_REQUIRED')
-  const { sourceSnapshot } = await buildStoryboardConsistencySource({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    editScriptId: editScript.id,
-    userId: input.userId,
-  })
-  const segment = sourceSnapshot.generationSegments.find((candidate) => (
-    sameShotNumbers(candidate.shotNumbers, input.shotNumbers)
-  ))
-  if (!segment) throw new Error(`VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotNumbers.join(',')}`)
-  const shots = input.shotNumbers.map((shotNumber) => {
-    const shot = sourceSnapshot.shots.find((candidate) => candidate.shotNumber === shotNumber)
-    if (!shot) throw new Error(`VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
-    return shot
-  })
-  const executions = input.shotNumbers.map((shotNumber) => {
-    const execution = sourceSnapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shotNumber)
-    if (!execution) throw new Error(`VIDEO_GROUP_EXECUTION_SHOT_NOT_FOUND:${shotNumber}`)
-    return execution
-  })
-  const built = buildStoryboardVideoSegmentPromptFacts({
-    segment,
-    sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
-    shots,
-    executions,
-    assets: sourceSnapshot.assets,
-    styleBible: sourceSnapshot.styleBible,
-  })
-  return {
-    prompt: built.prompt,
-    durationSec: totalVideoGroupDuration(shots),
-  }
+  if (!group) throw new Error(`VIDEO_GROUP_NOT_FOUND:${groupId}`)
+  const prompt = normalizeString(group.prompt)
+  if (!prompt) throw new Error(`VIDEO_GROUP_PROMPT_MISSING:${groupId}`)
+  return prompt
 }
 
 function buildAssetReferencePrompt(params: {
@@ -439,17 +389,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
   if (durationSec < 1 || durationSec > 15) {
     throw new Error(`ASSET_REFERENCE_VIDEO_DURATION_UNSUPPORTED:${durationSec}`)
   }
-  const payloadPrompt = normalizeString(payload.prompt)
-  const builtPrompt = payloadPrompt
-    ? null
-    : await buildVideoGroupPromptFromSource({
-      projectId: job.data.projectId,
-      episodeId: job.data.episodeId || normalizeString(payload.episodeId),
-      userId: job.data.userId,
-      shotNumbers,
-    })
-  const prompt = payloadPrompt || builtPrompt?.prompt
-  if (!prompt) throw new Error(`ASSET_REFERENCE_VIDEO_PROMPT_REQUIRED:${shotNumbers.join(',')}`)
+  const prompt = await requireProjectVideoGroupPrompt(groupId)
   const generationPrompt = prompt
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
@@ -573,7 +513,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   })
 
   await reportTaskProgress(job, 12, { stage: 'video_group_prepare', groupId })
-  const [project, editScript, panels] = await Promise.all([
+  const [project, editScript, panels, prompt] = await Promise.all([
     prisma.project.findUnique({
       where: { id: job.data.projectId },
       select: {
@@ -595,6 +535,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
         imageMedia: true,
       },
     }),
+    requireProjectVideoGroupPrompt(groupId),
   ])
   if (!project) throw new Error('VIDEO_GROUP_PROJECT_NOT_FOUND')
   if (!editScript) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_REQUIRED')
@@ -627,18 +568,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   })
 
   await reportTaskProgress(job, 26, { stage: 'video_group_prompt', groupId })
-  const builtPrompt = await buildVideoGroupPromptFromSource({
-    projectId: job.data.projectId,
-    episodeId: job.data.episodeId || normalizeString(payload.episodeId),
-    userId: job.data.userId,
-    shotNumbers,
-  })
-  const prompt = builtPrompt.prompt
   const generationPrompt = prompt
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
-    data: { prompt },
-  })
 
   await reportTaskProgress(job, 38, { stage: 'video_group_generate', groupId })
   const referenceImages = await Promise.all(orderedPanels.map(async (panel, index) => {

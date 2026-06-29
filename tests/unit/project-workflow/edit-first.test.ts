@@ -28,6 +28,13 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     storyboardPanelPromptFailed: false,
     activeStoryboardPanelTaskCount: 0,
     panelCount: 0,
+    storyboardPanelImagePromptMissingCount: 0,
+    storyboardPanelVideoPromptMissingCount: 0,
+    imagePromptComposeFailed: false,
+    videoPromptComposeFailed: false,
+    activeImagePromptComposeTaskCount: 0,
+    activeVideoPromptComposeTaskCount: 0,
+    videoGroupPromptMissingCount: 0,
     storyboardPanelImageReadyCount: 0,
     storyboardPanelImageMissingCount: 0,
     storyboardPanelImageFailedCount: 0,
@@ -129,7 +136,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
   })
 
-  it('generates storyboard images before video when panels exist without images', () => {
+  it('composes image prompts when panels exist without final image prompts', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
       screenplayStatus: 'ready',
@@ -139,6 +146,27 @@ describe('edit-first workflow state', () => {
       shotExecutionPlanStatus: 'ready',
       storyboardCount: 1,
       panelCount: 3,
+      storyboardPanelImagePromptMissingCount: 2,
+      storyboardPanelImageReadyCount: 1,
+      storyboardPanelImageMissingCount: 2,
+    }))
+
+    expect(state.stage).toBe('ready_to_compose_image_prompts')
+    expect(state.nextAction?.operationId).toBe('compose_edit_image_prompts')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+  })
+
+  it('generates storyboard images after image prompts are composed', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImagePromptMissingCount: 0,
       storyboardPanelImageReadyCount: 1,
       storyboardPanelImageMissingCount: 2,
     }))
@@ -148,7 +176,7 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.requiresUserConfirmation).toBe(true)
   })
 
-  it('allows video generation only after all storyboard panel images are ready', () => {
+  it('composes video prompts after all storyboard panel images are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasScreenplay: true,
       screenplayStatus: 'ready',
@@ -158,6 +186,31 @@ describe('edit-first workflow state', () => {
       shotExecutionPlanStatus: 'ready',
       storyboardCount: 1,
       panelCount: 3,
+      storyboardPanelImagePromptMissingCount: 0,
+      storyboardPanelVideoPromptMissingCount: 3,
+      videoGroupPromptMissingCount: 1,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_compose_video_prompts')
+    expect(state.nextAction?.operationId).toBe('compose_edit_video_prompts')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+  })
+
+  it('allows video generation only after image and video prompts are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImagePromptMissingCount: 0,
+      storyboardPanelVideoPromptMissingCount: 0,
+      videoGroupPromptMissingCount: 0,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 0,
     }))

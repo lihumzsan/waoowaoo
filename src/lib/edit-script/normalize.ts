@@ -117,7 +117,6 @@ export function normalizeEditShotExecutionPlan(
         lens: shot.camera.lens.trim(),
         focus: shot.camera.focus.trim(),
         height: shot.camera.height.trim(),
-        position: shot.camera.position.trim(),
         angle: shot.camera.angle.trim(),
         movement: shot.camera.movement.trim(),
         composition: shot.camera.composition.trim(),

@@ -277,7 +277,6 @@ export interface ProjectEditShotExecutionPlan {
       lens: string
       focus: string
       height: string
-      position: string
       angle: string
       movement: string
       composition: string

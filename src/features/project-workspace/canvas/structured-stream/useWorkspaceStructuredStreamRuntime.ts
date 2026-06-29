@@ -388,7 +388,6 @@ function pipelineItemsFromShotExecutionPlan(
       { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
       { label: translate('nodeFields.lens'), value: shot.camera.lens },
       { label: translate('nodeFields.focus'), value: shot.camera.focus },
-      { label: translate('nodeFields.cameraPosition'), value: shot.camera.position },
       { label: translate('nodeFields.cameraHeight'), value: shot.camera.height },
       { label: translate('nodeFields.cameraAngle'), value: shot.camera.angle },
       { label: translate('nodeFields.movement'), value: shot.camera.movement },

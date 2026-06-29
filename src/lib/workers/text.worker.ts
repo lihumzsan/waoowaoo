@@ -29,6 +29,10 @@ import { handleEditStylePreviewsGenerateTask } from './handlers/edit-style-previ
 import {
   handleEditScriptStoryboardCameraPlanTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
+import {
+  handleEditImagePromptComposeTask,
+  handleEditVideoPromptComposeTask,
+} from './handlers/edit-prompt-compose-task-handler'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
@@ -456,6 +460,10 @@ async function processTextTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
+    case TASK_TYPE.EDIT_IMAGE_PROMPT_COMPOSE:
+      return await handleEditImagePromptComposeTask(job)
+    case TASK_TYPE.EDIT_VIDEO_PROMPT_COMPOSE:
+      return await handleEditVideoPromptComposeTask(job)
     case TASK_TYPE.EPISODE_SPLIT_LLM:
       return await handleEpisodeSplitTask(job)
     case TASK_TYPE.EDIT_SCREENPLAY_GENERATE:

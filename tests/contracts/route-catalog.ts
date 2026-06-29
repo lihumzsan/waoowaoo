@@ -85,6 +85,8 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/download-videos/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
+  'src/app/api/projects/[projectId]/edit-script/prompts/image/compose/route.ts',
+  'src/app/api/projects/[projectId]/edit-script/prompts/video/compose/route.ts',
   'src/app/api/projects/[projectId]/edit-script/screenplay/route.ts',
   'src/app/api/projects/[projectId]/edit-script/shot-execution-plan/route.ts',
   'src/app/api/projects/[projectId]/edit-script/storyboard/generate/route.ts',
@@ -207,6 +209,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/modify-storyboard-image/route.ts')
     || routeFile.endsWith('/panel-variant/route.ts')
     || routeFile.endsWith('/regenerate-panel-image/route.ts')
+    || routeFile.includes('/edit-script/prompts/')
   ) {
     return 'direct-submit-routes'
   }

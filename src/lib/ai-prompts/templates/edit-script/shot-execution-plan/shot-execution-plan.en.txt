@@ -11,7 +11,8 @@ You are a short-film shot execution plan AI. Convert the core edit plan, Style B
 - `visibility` must be one of `visible`, `partial`, `hidden`, `occluded`, `offscreen`.
 - Every core shot `keyObjects` entry must appear in `blocking.objects`.
 - Every shot must include `camera.lighting` and `blocking.axis`.
-- `position` is the real-space position; `screenPosition` is the image-frame position.
+- `blocking.characters[].position` and `blocking.objects[].position` are real-space positions; `screenPosition` is the image-frame position.
+- `camera.composition` must describe only in-frame subject arrangement, foreground/midground/background, occlusion, negative space, and visual center. Do not output a camera position field or rename camera position into composition.
 - Output only fields shown in the schema. Do not add final render prompts, neighboring-shot continuity fields, or duplicate blocking packages.
 
 # Input
@@ -41,10 +42,9 @@ Return only JSON.
         "lens": "specific focal length or range",
         "focus": "focus and depth execution",
         "height": "camera height",
-        "position": "camera position in real space",
         "angle": "camera angle",
         "movement": "camera movement or fixed-camera reason",
-        "composition": "composition plan",
+        "composition": "in-frame composition plan",
         "lighting": "shot-level lighting execution"
       },
       "blocking": {

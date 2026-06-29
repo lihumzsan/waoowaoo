@@ -7,7 +7,7 @@
 # 术语说明
 
 - ShotExecutionPlan / 镜头执行计划：每个核心 shot 的摄影执行和空间 blocking 事实。
-- camera：景别、焦段、焦点、机位高度/位置/角度、运动、构图和光线。
+- camera：景别、焦段、焦点、机位高度、拍摄角度、运动、构图和光线。
 - blocking：轴线、人物位置、物体位置和空间说明。
 - axis：对话、揭示、运动或主体关系的屏幕方向约束，防止越轴和左右关系跳变。
 
@@ -27,7 +27,8 @@
 - core shot 的每个 keyObjects 都必须进入 blocking.objects。
 - 每个 shot 必须有 camera.lighting 和 blocking.axis。
 - 灯光必须写成镜头级执行事实，例如谁被照亮、谁在阴影中、光从哪里来。
-- position 写真实空间位置；screenPosition 写画面位置。
+- blocking.characters[].position 和 blocking.objects[].position 写真实空间位置；screenPosition 写画面位置。
+- camera.composition 只写画面内主体排列、前中后景、遮挡关系、留白和视觉中心；不得把“机位在真实空间中的位置”换名塞入 composition。
 - axis.screenDirection 必须表达主要主体/物体的屏幕方向、左右关系或中心关系。
 - 本任务只输出 Schema 中列出的字段，不输出最终渲染提示词、相邻镜头衔接字段或重复 blocking 包。
 
@@ -58,10 +59,9 @@ Spatial Profiles：
         "lens": "具体焦段或焦段范围",
         "focus": "焦点和景深执行",
         "height": "机位高度",
-        "position": "机位在真实空间中的位置",
         "angle": "拍摄角度",
         "movement": "运镜或固定机位理由",
-        "composition": "构图安排",
+        "composition": "画面内构图安排，不写机位位置",
         "lighting": "镜头级光线执行"
       },
       "blocking": {

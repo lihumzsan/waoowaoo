@@ -36,8 +36,8 @@ interface PanelDraft {
   readonly srtStart: number
   readonly srtEnd: number
   readonly duration: number
-  readonly imagePrompt: string
-  readonly videoPrompt: string
+  readonly imagePrompt: string | null
+  readonly videoPrompt: string | null
   readonly actingNotes: string | null
   readonly sourceShotNumber: number
   readonly sourceGenerationSegmentId: string

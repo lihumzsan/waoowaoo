@@ -218,7 +218,6 @@ export interface EditShotExecutionCamera {
   readonly lens: string
   readonly focus: string
   readonly height: string
-  readonly position: string
   readonly angle: string
   readonly movement: string
   readonly composition: string
@@ -312,7 +311,6 @@ export const editShotExecutionPlanSchema = z.object({
       lens: z.string().trim().min(1),
       focus: z.string().trim().min(1),
       height: z.string().trim().min(1),
-      position: z.string().trim().min(1),
       angle: z.string().trim().min(1),
       movement: z.string().trim().min(1),
       composition: z.string().trim().min(1),
