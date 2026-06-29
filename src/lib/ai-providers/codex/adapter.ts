@@ -2,7 +2,7 @@ import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { CODEX_PROVIDER_KEY } from './constants'
 import { executeCodexImageGeneration } from './image'
-import { createCodexLanguageModel, runCodexLlmCompletion, runCodexLlmStream } from './llm'
+import { createCodexLanguageModel, runCodexLlmCompletion, runCodexLlmStream, runCodexVisionCompletion } from './llm'
 import { resolveCodexOptionSchema } from './models'
 
 function describeCodexMediaVariant(
@@ -31,4 +31,5 @@ export const codexAdapter: AiProviderAdapter = {
     create: createCodexLanguageModel,
   },
   streamLlm: runCodexLlmStream,
+  completeVision: runCodexVisionCompletion,
 }

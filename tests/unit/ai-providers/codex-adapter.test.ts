@@ -41,7 +41,12 @@ vi.mock('@/lib/ai-providers/codex/client', () => ({
 }))
 
 import { codexAdapter } from '@/lib/ai-providers/codex/adapter'
-import { createCodexLanguageModel, runCodexLlmCompletion, runCodexLlmStream } from '@/lib/ai-providers/codex/llm'
+import {
+  createCodexLanguageModel,
+  runCodexLlmCompletion,
+  runCodexLlmStream,
+  runCodexVisionCompletion,
+} from '@/lib/ai-providers/codex/llm'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from '@ai-sdk/provider'
 
@@ -131,6 +136,7 @@ describe('codex provider adapter', () => {
   it('exposes local Codex LLM, language model, and image modalities', () => {
     expect(Object.keys(codexAdapter).sort()).toEqual([
       'completeLlm',
+      'completeVision',
       'image',
       'languageModel',
       'providerKey',
@@ -165,6 +171,45 @@ describe('codex provider adapter', () => {
       model: 'gpt-5.5',
       messages: [{ role: 'user', content: 'say ok' }],
     })
+  })
+
+  it('runs Codex vision completion through image inputs and text completion', async () => {
+    const result = await runCodexVisionCompletion({
+      userId: 'user-1',
+      providerKey: 'codex',
+      providerConfig: {
+        id: 'codex',
+        name: 'Codex Local',
+        apiKey: '',
+        baseUrl: '/opt/codex',
+      },
+      selection: {
+        provider: 'codex',
+        modelId: 'gpt-5.5',
+        modelKey: 'codex::gpt-5.5',
+      },
+      textPrompt: 'Analyze the scene.',
+      imageUrls: ['data:image/png;base64,QQ=='],
+      temperature: 0.2,
+      reasoning: false,
+    })
+
+    expect(result.text).toBe('Codex response')
+    expect(result.completion.model).toBe('gpt-5.5')
+    expect(prepareCodexImageInputsMock).toHaveBeenCalledWith(
+      ['data:image/png;base64,QQ=='],
+      expect.any(Function),
+    )
+    expect(runCodexTextCompletionMock).toHaveBeenCalledWith({
+      codexPath: '/opt/codex',
+      model: 'gpt-5.5',
+      imagePaths: ['/tmp/ref-a.png', '/tmp/ref-b.png'],
+      messages: [{
+        role: 'user',
+        content: expect.stringContaining('Analyze the scene.'),
+      }],
+    })
+    expect(cleanupMock).toHaveBeenCalledTimes(1)
   })
 
   it('streams Codex completion as a single text chunk without pretending provider token streaming exists', async () => {

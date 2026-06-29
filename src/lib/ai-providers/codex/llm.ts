@@ -22,10 +22,12 @@ import type {
   AiProviderLanguageModelContext,
   AiProviderLlmResult,
   AiProviderLlmStreamContext,
+  AiProviderVisionExecutionContext,
 } from '@/lib/ai-providers/runtime-types'
 import type { AiLlmProviderConfig } from '@/lib/ai-registry/types'
+import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { CODEX_PROVIDER_KEY } from './constants'
-import { runCodexTextCompletion, type CodexChatMessage } from './client'
+import { prepareCodexImageInputs, runCodexTextCompletion, type CodexChatMessage } from './client'
 import {
   buildCodexMessagesWithToolProtocol,
   CODEX_TOOL_CALL_FINISH_REASON,
@@ -164,11 +166,13 @@ async function runCodexLanguageModelText(input: {
   providerConfig: AiLlmProviderConfig
   modelId: string
   messages: CodexChatMessage[]
+  imagePaths?: string[]
 }) {
   return await runCodexTextCompletion({
     codexPath: input.providerConfig.baseUrl,
     model: input.modelId,
     messages: input.messages,
+    imagePaths: input.imagePaths,
   })
 }
 
@@ -186,6 +190,53 @@ export async function runCodexLlmCompletion(input: {
     reasoning: '',
     successDetails: { engine: 'codex_cli' },
   })
+}
+
+function buildCodexVisionPrompt(input: {
+  readonly textPrompt: string
+  readonly imageCount: number
+}): string {
+  return [
+    'You are analyzing image inputs through Codex vision.',
+    `Attached image count: ${input.imageCount}.`,
+    'Use the attached image files as visual evidence. Do not ignore them.',
+    'Answer the user request directly and preserve any requested output format.',
+    '',
+    'User request:',
+    input.textPrompt,
+  ].join('\n')
+}
+
+export async function runCodexVisionCompletion(input: AiProviderVisionExecutionContext): Promise<AiProviderLlmResult> {
+  const preparedImages = await prepareCodexImageInputs(input.imageUrls, normalizeToBase64ForGeneration)
+  try {
+    if (input.imageUrls.length > 0 && preparedImages.imagePaths.length === 0) {
+      throw new Error('CODEX_VISION_IMAGE_INPUTS_EMPTY: no readable vision images were prepared')
+    }
+
+    const result = await runCodexLanguageModelText({
+      providerConfig: input.providerConfig,
+      modelId: input.selection.modelId,
+      imagePaths: preparedImages.imagePaths,
+      messages: [{
+        role: 'user',
+        content: buildCodexVisionPrompt({
+          textPrompt: input.textPrompt,
+          imageCount: preparedImages.imagePaths.length,
+        }),
+      }],
+    })
+    const completion = buildOpenAIChatCompletion(input.selection.modelId, result.text)
+    return buildAiProviderLlmResult({
+      completion,
+      logProvider: CODEX_PROVIDER_KEY,
+      text: result.text,
+      reasoning: '',
+      successDetails: { engine: 'codex_cli_vision' },
+    })
+  } finally {
+    await preparedImages.cleanup().catch(() => undefined)
+  }
 }
 
 export async function runCodexLlmStream(input: AiProviderLlmStreamContext): Promise<AiProviderLlmResult> {

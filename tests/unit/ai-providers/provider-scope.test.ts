@@ -46,6 +46,7 @@ describe('provider scope', () => {
   it('exposes Codex local LLM and image models through the provider catalog', () => {
     expect(Object.keys(codexAdapter).sort()).toEqual([
       'completeLlm',
+      'completeVision',
       'image',
       'languageModel',
       'providerKey',

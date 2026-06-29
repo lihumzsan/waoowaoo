@@ -52,20 +52,20 @@ describe('vision model support guard', () => {
 
   it('rejects an llm model whose provider does not implement vision completion', async () => {
     resolveModelSelectionMock.mockResolvedValueOnce({
-      provider: 'codex',
-      modelId: 'gpt-5.5',
-      modelKey: 'codex::gpt-5.5',
+      provider: 'example',
+      modelId: 'text-only',
+      modelKey: 'example::text-only',
       mediaType: 'llm',
       variantSubKind: 'official',
     })
     resolveAiProviderAdapterMock.mockReturnValueOnce({
-      providerKey: 'codex',
+      providerKey: 'example',
     })
 
     await expect(assertVisionModelSupported({
       userId: 'user-1',
-      model: 'codex::gpt-5.5',
+      model: 'example::text-only',
       errorCode: 'LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED',
-    })).rejects.toThrow('LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:codex::gpt-5.5')
+    })).rejects.toThrow('LOCATION_SPATIAL_PROFILE_MODEL_UNSUPPORTED:example::text-only')
   })
 })
