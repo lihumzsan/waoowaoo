@@ -46,6 +46,7 @@ describe('ai prompt registry', () => {
     expect(executionTemplate).toContain('ShotExecutionPlan')
     expect(executionTemplate).toContain('camera.lighting')
     expect(executionTemplate).toContain('blocking.axis')
-    expect(executionTemplate).toContain('不输出最终渲染提示词')
+    expect(executionTemplate).toContain('continuousVideoPrompt')
+    expect(executionTemplate).toContain('只返回 JSON')
   })
 })
