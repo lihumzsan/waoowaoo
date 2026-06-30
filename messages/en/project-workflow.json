@@ -241,7 +241,9 @@
         "shotCount": "Shot Count",
         "shotCore": "Shot Info",
         "action": "Action",
+        "keyObjects": "Key Objects",
         "performance": "Performance State",
+        "generationMode": "Generation Mode",
         "generationSegments": "Generation Segments",
         "segmentContinuity": "Segment Continuity",
         "shotScale": "Shot Scale",
@@ -261,6 +263,7 @@
         "fullFinalPrompt": "Full Final Prompt",
         "videoPrompt": "Video Prompt",
         "executionSnapshot": "Shot Execution Snapshot",
+        "renderFacts": "Render Facts",
         "actingNotes": "Acting Notes",
         "promptShot": "Prompt Shot Data",
         "sequence": "Sequence",
@@ -618,10 +621,10 @@
           "readyMissingPromptDesign": "BGM ready · prompt design missing",
           "failed": "BGM generation failed"
         },
-        "final": {
+        "finalTimeline": {
           "title": "Final Timeline",
           "eyebrow": "Final Output",
-          "body": "{videos} video clips have entered the final chain.",
+          "body": "Waiting to assemble the final video.",
           "meta": "Order comes from domain data",
           "outputReady": "Final video generated. Preview it in details."
         },
@@ -657,6 +660,7 @@
           "meta": "{count} step(s) completed"
         },
         "editScript": {
+          "title": "Edit Table",
           "eyebrow": "Core Edit Table",
           "meta": "{shots} shots · {duration}s · assets {completed}/{assets}",
           "pendingTitle": "Generating Edit Table",

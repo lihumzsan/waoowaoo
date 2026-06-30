@@ -241,7 +241,9 @@
         "shotCount": "镜头数",
         "shotCore": "镜头信息",
         "action": "动作",
+        "keyObjects": "关键物体",
         "performance": "表演状态",
+        "generationMode": "生成模式",
         "generationSegments": "生成分段",
         "segmentContinuity": "分段连续性",
         "shotScale": "景别",
@@ -261,6 +263,7 @@
         "fullFinalPrompt": "完整最终提示词",
         "videoPrompt": "视频提示词",
         "executionSnapshot": "镜头执行快照",
+        "renderFacts": "渲染事实",
         "actingNotes": "表演指导",
         "promptShot": "Prompt 镜头数据",
         "sequence": "顺序",
@@ -618,10 +621,10 @@
           "readyMissingPromptDesign": "BGM 已完成 · 缺少提示词设计",
           "failed": "BGM 生成失败"
         },
-        "final": {
+        "finalTimeline": {
           "title": "成片时间线",
           "eyebrow": "最终输出",
-          "body": "{videos} 个视频片段已进入成片链路。",
+          "body": "等待将视频片段合成为最终成片。",
           "meta": "顺序来自业务数据",
           "outputReady": "成片已生成，可在详情中预览"
         },
@@ -657,6 +660,7 @@
           "meta": "{count} 步已完成"
         },
         "editScript": {
+          "title": "剪辑表",
           "eyebrow": "核心剪辑表",
           "meta": "{shots} 个镜头 · {duration} 秒 · 资产 {completed}/{assets}",
           "pendingTitle": "剪辑表生成中",
