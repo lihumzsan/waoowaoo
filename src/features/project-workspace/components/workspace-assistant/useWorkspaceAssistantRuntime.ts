@@ -33,6 +33,7 @@ import {
   hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex,
   hasWorkspaceAssistantReplyLoadingStop,
 } from './visible-output'
+import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
@@ -89,6 +90,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   storageError: string | null
   storageLoading: boolean
   pendingOperationId: string | null
+  activeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
   sendMessage: (text: string) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
@@ -249,6 +251,24 @@ export function resolveWorkspaceAssistantPendingOperationId(
   if (!trackedRun || trackedRun.intent === 'deny') return null
   if (trackedRun.status && !isWorkspaceAssistantOperationPendingStatus(trackedRun.status)) return null
   return trackedRun.operationId
+}
+
+export function resolveWorkspaceAssistantActiveFocusRequest(input: {
+  readonly pendingRun: { readonly runId: string } | null
+  readonly operationId: string | null
+  readonly activities: readonly (ProjectAgentSessionActivity | null)[]
+}): WorkspaceAssistantActiveFocusRequest | null {
+  if (!input.pendingRun || !input.operationId) return null
+  const activity = input.activities.find((candidate) => (
+    candidate?.runId === input.pendingRun?.runId
+    && resolveOperationIdFromActivity(candidate) === input.operationId
+  ))
+  return {
+    operationId: input.operationId,
+    requestKey: activity
+      ? `${activity.runId}:${activity.activityId}:${input.operationId}`
+      : `${input.pendingRun.runId}:${input.operationId}`,
+  }
 }
 
 export function shouldPollWorkspaceAssistantSessionState(input: {
@@ -893,6 +913,25 @@ export function useWorkspaceAssistantRuntime({
     : null
   const pendingRun = activeControlOperationRun ?? streamedActivityOperationRun ?? serverOperationRun
   const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(pendingRun)
+  const activeFocusRequest = useMemo(() => resolveWorkspaceAssistantActiveFocusRequest({
+    pendingRun,
+    operationId: pendingOperationId,
+    activities: [
+      streamedActivity,
+      sessionState?.currentActivity ?? null,
+    ],
+  }), [
+    pendingOperationId,
+    pendingRun?.runId,
+    sessionState?.currentActivity?.activityId,
+    sessionState?.currentActivity?.operationId,
+    sessionState?.currentActivity?.runId,
+    sessionState?.currentActivity?.sourceOperationId,
+    streamedActivity?.activityId,
+    streamedActivity?.operationId,
+    streamedActivity?.runId,
+    streamedActivity?.sourceOperationId,
+  ])
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
   const replyInFlight = chatReplyInFlight || controlPending
@@ -916,6 +955,7 @@ export function useWorkspaceAssistantRuntime({
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
     pendingOperationId,
+    activeFocusRequest,
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,

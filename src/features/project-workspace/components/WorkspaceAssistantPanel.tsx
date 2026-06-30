@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ChatStatus } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
@@ -54,6 +54,7 @@ import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity, ProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 
 const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
@@ -92,7 +93,7 @@ interface WorkspaceAssistantPanelProps {
   autoStartMessage?: string | null
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void
-  onActiveOperationChange?: (operationId: string | null) => void
+  onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
   onStyleBibleConfirmed?: () => void
 }
 
@@ -581,12 +582,23 @@ export default function WorkspaceAssistantPanel({
   }, [stylePreviewDockCardKey])
   const currentActivity = assistantRuntime.sessionState?.currentActivity ?? null
   const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
-  const activeAssistantOperationId = assistantRuntime.pendingOperationId ?? activeExternalTaskOperationId
+  const activeExternalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
+    activeExternalTaskOperationId && currentActivity
+      ? {
+          operationId: activeExternalTaskOperationId,
+          requestKey: `${currentActivity.runId}:${currentActivity.activityId}:${activeExternalTaskOperationId}`,
+        }
+      : null
+  ), [activeExternalTaskOperationId, currentActivity?.activityId, currentActivity?.runId])
+  const activeAssistantFocusRequest = useMemo(
+    () => assistantRuntime.activeFocusRequest ?? activeExternalTaskFocusRequest,
+    [activeExternalTaskFocusRequest, assistantRuntime.activeFocusRequest],
+  )
   useEffect(() => {
-    onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantOperationId)
+    onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantFocusRequest)
     return () => onActiveOperationChange?.(null)
   }, [
-    activeAssistantOperationId,
+    activeAssistantFocusRequest,
     assistantRuntime.storageLoading,
     onActiveOperationChange,
   ])

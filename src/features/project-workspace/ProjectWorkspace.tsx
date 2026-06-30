@@ -13,6 +13,7 @@ import WorkspaceHeaderShell from './components/WorkspaceHeaderShell'
 import WorkflowLabPanel from './components/WorkflowLabPanel'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantSelectionContext } from './canvas/ProjectWorkspaceCanvas'
+import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
 import { WorkspaceRuntimeProvider } from './WorkspaceRuntimeContext'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
@@ -30,7 +31,7 @@ function isDeploymentPayload(value: unknown): value is DeploymentPayload {
 function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const vm = useProjectWorkspaceController(props)
   const [assistantSelection, setAssistantSelection] = useState<WorkspaceAssistantSelectionContext>({})
-  const [activeAssistantOperationId, setActiveAssistantOperationId] = useState<string | null>(null)
+  const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
   const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
   const isEpisodeWorkspace = props.viewMode === 'episode'
@@ -114,7 +115,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             autoStartMessage={props.assistantAutoStartMessage ?? null}
             autoStartKey={props.assistantAutoStartKey ?? null}
             onAutoStartConsumed={props.onAssistantAutoStartConsumed}
-            onActiveOperationChange={setActiveAssistantOperationId}
+            onActiveOperationChange={setActiveAssistantFocusRequest}
             onStyleBibleConfirmed={() => setStyleBibleFocusRequestId((current) => current + 1)}
           />
           {props.workflowLabEnabled && isEpisodeWorkspace ? (
@@ -130,7 +131,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             <WorkspaceRuntimeProvider value={vm.runtime.workspaceRuntime}>
               <ProjectWorkspaceCanvas
                 onAssistantSelectionChange={setAssistantSelection}
-                activeAssistantOperationId={activeAssistantOperationId}
+                activeAssistantFocusRequest={activeAssistantFocusRequest}
                 styleBibleFocusRequestId={styleBibleFocusRequestId}
               />
             </WorkspaceRuntimeProvider>

@@ -95,8 +95,21 @@ describe('workspace canvas focus follow', () => {
     expect(resolveCanvasFocusFollowDecision({
       focusKey: buildWorkspaceCanvasFocusKey(nodeIds, 'style-bible-confirmed:2'),
       enabled: true,
-      suppressedFocusKey: null,
+      manualPauseActive: false,
       lastFocusedKey: buildWorkspaceCanvasFocusKey(nodeIds, 'style-bible-confirmed:1'),
+    })).toBe('focus')
+  })
+
+  it('uses operation request keys so the same running card can refocus on a later run', () => {
+    const nodeIds = ['edit-script:script-1']
+
+    expect(buildWorkspaceCanvasFocusKey(nodeIds, 'run-1:generate_edit_script'))
+      .toBe('run-1:generate_edit_script:edit-script:script-1')
+    expect(resolveCanvasFocusFollowDecision({
+      focusKey: buildWorkspaceCanvasFocusKey(nodeIds, 'run-2:generate_edit_script'),
+      enabled: true,
+      manualPauseActive: false,
+      lastFocusedKey: buildWorkspaceCanvasFocusKey(nodeIds, 'run-1:generate_edit_script'),
     })).toBe('focus')
   })
 
@@ -104,24 +117,26 @@ describe('workspace canvas focus follow', () => {
     expect(resolveCanvasFocusFollowDecision({
       focusKey: 'shot:panel-1',
       enabled: true,
-      suppressedFocusKey: null,
+      manualPauseActive: false,
       lastFocusedKey: 'shot:panel-1',
     })).toBe('skip_already_focused')
   })
 
-  it('keeps user-suppressed running group pending but allows the next group to focus', () => {
+  it('keeps focus pending while user interaction pause is active', () => {
     expect(resolveCanvasFocusFollowDecision({
       focusKey: 'shot:panel-1',
       enabled: true,
-      suppressedFocusKey: 'shot:panel-1',
-      lastFocusedKey: 'shot:panel-1',
+      manualPauseActive: true,
+      lastFocusedKey: null,
     })).toBe('pending')
+  })
 
+  it('allows the same running group to refocus after user interaction pause expires', () => {
     expect(resolveCanvasFocusFollowDecision({
-      focusKey: 'shot:panel-2',
+      focusKey: 'shot:panel-1',
       enabled: true,
-      suppressedFocusKey: 'shot:panel-1',
-      lastFocusedKey: 'shot:panel-1',
+      manualPauseActive: false,
+      lastFocusedKey: null,
     })).toBe('focus')
   })
 
@@ -129,7 +144,7 @@ describe('workspace canvas focus follow', () => {
     expect(resolveCanvasFocusFollowDecision({
       focusKey: 'shot:panel-1',
       enabled: false,
-      suppressedFocusKey: null,
+      manualPauseActive: false,
       lastFocusedKey: null,
     })).toBe('pending')
   })

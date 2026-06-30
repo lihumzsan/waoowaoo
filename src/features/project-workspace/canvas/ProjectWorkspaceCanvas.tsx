@@ -33,6 +33,7 @@ import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
+import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
   useWorkspaceCanvasActionBillingPreviews,
@@ -110,7 +111,7 @@ export interface WorkspaceAssistantSelectionContext {
 interface ProjectWorkspaceCanvasContentProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
-  activeAssistantOperationId?: string | null
+  activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
 }
 
@@ -243,7 +244,7 @@ function attachWorkspaceCanvasBillingPreviewLabels(params: {
 function ProjectWorkspaceCanvasContent({
   onAssistantSelectionChange,
   editScriptPending = false,
-  activeAssistantOperationId = null,
+  activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
@@ -278,6 +279,7 @@ function ProjectWorkspaceCanvasContent({
     signature: string
     edges: WorkspaceCanvasFlowEdge[]
   } | null>(null)
+  const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
 
   const {
     layout,
@@ -289,6 +291,16 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
+  const savedNodeLayoutPositions = useMemo(() => {
+    const positions = new Map<string, { readonly x: number; readonly y: number }>()
+    savedNodeLayouts.forEach((nodeLayout) => {
+      positions.set(nodeLayout.nodeKey, {
+        x: nodeLayout.x,
+        y: nodeLayout.y,
+      })
+    })
+    return positions
+  }, [savedNodeLayouts])
   const editScriptGenerationTargets = useMemo(
     () => {
       const target = TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)
@@ -506,6 +518,7 @@ function ProjectWorkspaceCanvasContent({
         ? new Map([[nodeId, measuredPosition]])
         : undefined
       const preservedNodePositions = mergePreservedNodePositions(
+        savedNodeLayoutPositions,
         expansionAnchorNodePositionsRef.current,
         measuredNodePosition,
       )
@@ -520,7 +533,7 @@ function ProjectWorkspaceCanvasContent({
         preservedNodePositions,
       })
     })
-  }, [])
+  }, [savedNodeLayoutPositions])
   const attachNodeUiState = useCallback((
     inputNodes: readonly WorkspaceCanvasFlowNode[],
     options?: WorkspaceNodeDynamicLayoutOptions,
@@ -578,9 +591,13 @@ function ProjectWorkspaceCanvasContent({
       preservedNodePositions: options?.preservedNodePositions,
     })
   }, [handleMeasuredNodeSize, nodeExpansionOverrides, nodeRunningStatusLabel, t, toggleNodeExpanded])
-  const readExpansionAnchorNodePositions = useCallback(() => (
-    expansionAnchorNodePositionsRef.current.size > 0 ? expansionAnchorNodePositionsRef.current : undefined
-  ), [])
+  const readCanvasManualNodePositions = useCallback((
+    additionalNodePositions?: ReadonlyMap<string, { readonly x: number; readonly y: number }>,
+  ) => mergePreservedNodePositions(
+    savedNodeLayoutPositions,
+    expansionAnchorNodePositionsRef.current,
+    additionalNodePositions,
+  ), [savedNodeLayoutPositions])
 
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
@@ -696,6 +713,10 @@ function ProjectWorkspaceCanvasContent({
     ? `style-bible-confirmed:${String(styleBibleFocusRequestId)}`
     : null
   const focusNodeIds = styleBibleFocusNodeIds.length > 0 ? styleBibleFocusNodeIds : operationFocusNodeIds
+  const operationFocusRequestKey = operationFocusNodeIds.length > 0
+    ? activeAssistantFocusRequest?.requestKey ?? null
+    : null
+  const focusRequestKey = styleBibleFocusRequestKey ?? operationFocusRequestKey
   const handleFocusComplete = useCallback((focusKey: string) => {
     if (!styleBibleFocusRequestKey) return
     if (!focusKey.startsWith(`${styleBibleFocusRequestKey}:`)) return
@@ -711,7 +732,7 @@ function ProjectWorkspaceCanvasContent({
     containerRef: canvasRef,
     enabled: autoFollowEnabled,
     focusNodeIds,
-    focusRequestKey: styleBibleFocusRequestKey,
+    focusRequestKey,
     onFocusComplete: handleFocusComplete,
   })
 
@@ -719,18 +740,18 @@ function ProjectWorkspaceCanvasContent({
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
     appliedProjectionNodeSignatureRef.current = projectionNodeSignature
     setSourceNodes(attachNodeUiState(projectedNodesWithBilling, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
+      preservedNodePositions: readCanvasManualNodePositions(),
     }))
-  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature, readExpansionAnchorNodePositions])
+  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature, readCanvasManualNodePositions])
 
   useEffect(() => {
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
+      preservedNodePositions: readCanvasManualNodePositions(),
     }))
   }, [
     attachNodeUiState,
     workspaceTaskStateSignature,
-    readExpansionAnchorNodePositions,
+    readCanvasManualNodePositions,
   ])
 
   useEffect(() => {
@@ -762,9 +783,9 @@ function ProjectWorkspaceCanvasContent({
 
   useEffect(() => {
     setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
-      preservedNodePositions: readExpansionAnchorNodePositions(),
+      preservedNodePositions: readCanvasManualNodePositions(),
     }))
-  }, [attachNodeUiState, readExpansionAnchorNodePositions])
+  }, [attachNodeUiState, readCanvasManualNodePositions])
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))
@@ -815,6 +836,7 @@ function ProjectWorkspaceCanvasContent({
   }, [notifyCanvasUserInteraction])
 
   const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
+    notifyCanvasUserInteraction()
     const movedNodesById = new Map<string, WorkspaceCanvasFlowNode>(
       [node, ...draggedNodes].map((movedNode) => [movedNode.id, movedNode]),
     )
@@ -832,7 +854,7 @@ function ProjectWorkspaceCanvasContent({
     const repairedNodes = attachNodeUiState(repairedLayoutNodes)
     setSourceNodes(repairedNodes)
     persistCurrentLayoutSafely(repairedNodes)
-  }, [attachNodeUiState, persistCurrentLayoutSafely, reactFlow])
+  }, [attachNodeUiState, notifyCanvasUserInteraction, persistCurrentLayoutSafely, reactFlow])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     if (node.data.kind === 'analysis') return
@@ -948,6 +970,9 @@ function ProjectWorkspaceCanvasContent({
           onMoveStart={(event) => {
             if (event) notifyCanvasUserInteraction()
           }}
+          onMoveEnd={(event) => {
+            if (event) notifyCanvasUserInteraction()
+          }}
           nodesDraggable
           nodesConnectable={false}
           elementsSelectable
@@ -1033,14 +1058,14 @@ function ProjectWorkspaceCanvasContent({
 interface ProjectWorkspaceCanvasProps {
   onAssistantSelectionChange?: (selection: WorkspaceAssistantSelectionContext) => void
   editScriptPending?: boolean
-  activeAssistantOperationId?: string | null
+  activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
 }
 
 export default function ProjectWorkspaceCanvas({
   onAssistantSelectionChange,
   editScriptPending = false,
-  activeAssistantOperationId = null,
+  activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
 }: ProjectWorkspaceCanvasProps) {
   return (
@@ -1048,7 +1073,7 @@ export default function ProjectWorkspaceCanvas({
       <ProjectWorkspaceCanvasContent
         onAssistantSelectionChange={onAssistantSelectionChange}
         editScriptPending={editScriptPending}
-        activeAssistantOperationId={activeAssistantOperationId}
+        activeAssistantFocusRequest={activeAssistantFocusRequest}
         styleBibleFocusRequestId={styleBibleFocusRequestId}
       />
     </ReactFlowProvider>

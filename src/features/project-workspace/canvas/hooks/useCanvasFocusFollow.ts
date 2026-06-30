@@ -5,6 +5,7 @@ import type { ReactFlowInstance } from '@xyflow/react'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 
 const FOCUS_FOLLOW_DEBOUNCE_MS = 240
+export const FOCUS_FOLLOW_MANUAL_PAUSE_MS = 3000
 const FOCUS_FIT_PADDING = 0.3
 const FOCUS_FIT_MAX_ZOOM = 1
 const FOCUS_FIT_DURATION_MS = 500
@@ -14,7 +15,7 @@ export type CanvasFocusFollowDecision = 'idle' | 'focus' | 'pending' | 'skip_alr
 interface ResolveCanvasFocusFollowDecisionInput {
   readonly focusKey: string
   readonly enabled: boolean
-  readonly suppressedFocusKey: string | null
+  readonly manualPauseActive: boolean
   readonly lastFocusedKey: string | null
 }
 
@@ -125,11 +126,11 @@ export function resolveWorkspaceCanvasStyleBibleFocusNodeIds(
 export function resolveCanvasFocusFollowDecision({
   focusKey,
   enabled,
-  suppressedFocusKey,
+  manualPauseActive,
   lastFocusedKey,
 }: ResolveCanvasFocusFollowDecisionInput): CanvasFocusFollowDecision {
   if (!focusKey) return 'idle'
-  if (!enabled || focusKey === suppressedFocusKey) return 'pending'
+  if (!enabled || manualPauseActive) return 'pending'
   if (focusKey === lastFocusedKey) return 'skip_already_focused'
   return 'focus'
 }
@@ -143,11 +144,13 @@ export function useCanvasFocusFollow({
   onFocusComplete,
 }: UseCanvasFocusFollowParams): CanvasFocusFollowResult {
   const debounceTimerRef = useRef<number | null>(null)
+  const manualPauseTimerRef = useRef<number | null>(null)
+  const manualPauseUntilRef = useRef<number | null>(null)
   const focusNodeIdsRef = useRef<readonly string[]>([])
   const currentFocusKeyRef = useRef('')
-  const suppressedFocusKeyRef = useRef<string | null>(null)
   const lastFocusedKeyRef = useRef<string | null>(null)
   const [pendingFocusNodeIds, setPendingFocusNodeIds] = useState<readonly string[]>([])
+  const [manualPauseRevision, setManualPauseRevision] = useState(0)
 
   const focusKey = useMemo(
     () => buildWorkspaceCanvasFocusKey(focusNodeIds, focusRequestKey),
@@ -172,22 +175,43 @@ export function useCanvasFocusFollow({
     })
   }, [reactFlow])
 
+  const clearManualPauseTimer = useCallback(() => {
+    if (manualPauseTimerRef.current === null) return
+    window.clearTimeout(manualPauseTimerRef.current)
+    manualPauseTimerRef.current = null
+  }, [])
+
+  const clearManualPause = useCallback(() => {
+    clearManualPauseTimer()
+    manualPauseUntilRef.current = null
+  }, [clearManualPauseTimer])
+
   const focusNow = useCallback(() => {
     const focusNodes = collectFocusNodes()
     const activeFocusKey = currentFocusKeyRef.current
-    suppressedFocusKeyRef.current = null
+    clearManualPause()
     lastFocusedKeyRef.current = activeFocusKey || null
     setPendingFocusNodeIds([])
     runFitView(focusNodes)
     if (focusNodes.length > 0 && activeFocusKey) onFocusComplete?.(activeFocusKey)
-  }, [collectFocusNodes, onFocusComplete, runFitView])
+  }, [clearManualPause, collectFocusNodes, onFocusComplete, runFitView])
 
   const notifyUserInteraction = useCallback(() => {
     const activeFocusKey = currentFocusKeyRef.current
     if (!activeFocusKey) return
-    suppressedFocusKeyRef.current = activeFocusKey
+    const pauseUntil = Date.now() + FOCUS_FOLLOW_MANUAL_PAUSE_MS
+    manualPauseUntilRef.current = pauseUntil
+    lastFocusedKeyRef.current = null
+    clearManualPauseTimer()
+    manualPauseTimerRef.current = window.setTimeout(() => {
+      if (manualPauseUntilRef.current !== pauseUntil) return
+      manualPauseUntilRef.current = null
+      manualPauseTimerRef.current = null
+      setManualPauseRevision((current) => current + 1)
+    }, FOCUS_FOLLOW_MANUAL_PAUSE_MS)
     setPendingFocusNodeIds(focusNodeIdsRef.current)
-  }, [])
+    setManualPauseRevision((current) => current + 1)
+  }, [clearManualPauseTimer])
 
   useEffect(() => {
     if (debounceTimerRef.current !== null) {
@@ -196,7 +220,7 @@ export function useCanvasFocusFollow({
     }
 
     if (!focusKey) {
-      suppressedFocusKeyRef.current = null
+      clearManualPause()
       lastFocusedKeyRef.current = null
       setPendingFocusNodeIds([])
       return undefined
@@ -209,7 +233,7 @@ export function useCanvasFocusFollow({
       const decision = resolveCanvasFocusFollowDecision({
         focusKey,
         enabled,
-        suppressedFocusKey: suppressedFocusKeyRef.current,
+        manualPauseActive: Boolean(manualPauseUntilRef.current && Date.now() < manualPauseUntilRef.current),
         lastFocusedKey: lastFocusedKeyRef.current,
       })
 
@@ -241,7 +265,11 @@ export function useCanvasFocusFollow({
         debounceTimerRef.current = null
       }
     }
-  }, [collectFocusNodes, containerRef, enabled, focusKey, onFocusComplete, runFitView])
+  }, [clearManualPause, collectFocusNodes, containerRef, enabled, focusKey, manualPauseRevision, onFocusComplete, runFitView])
+
+  useEffect(() => () => {
+    clearManualPauseTimer()
+  }, [clearManualPauseTimer])
 
   return {
     pendingFocusNodeIds,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { checkApiResponse } from '@/lib/error-handler'
 import { queryKeys } from '@/lib/query/keys'
@@ -8,6 +8,7 @@ import type {
   ProjectCanvasLayoutSnapshot,
   UpsertCanvasLayoutInput,
 } from '@/lib/project-canvas/layout/canvas-layout-contract'
+import { CANVAS_LAYOUT_SCHEMA_VERSION } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import {
   parseCanvasLayoutReadResponse,
   type CanvasLayoutReadWarningCode,
@@ -21,6 +22,23 @@ interface CanvasLayoutWriteResponse {
 interface CanvasLayoutPersistenceResult {
   readonly layout: ProjectCanvasLayoutSnapshot | null
   readonly warningCode: CanvasLayoutReadWarningCode | null
+}
+
+interface CanvasLayoutMutationContext {
+  readonly previous: CanvasLayoutPersistenceResult | undefined
+}
+
+export function buildOptimisticCanvasLayoutSnapshot(params: {
+  readonly projectId: string
+  readonly input: UpsertCanvasLayoutInput
+}): ProjectCanvasLayoutSnapshot {
+  return {
+    projectId: params.projectId,
+    episodeId: params.input.episodeId,
+    schemaVersion: CANVAS_LAYOUT_SCHEMA_VERSION,
+    viewport: params.input.viewport,
+    nodeLayouts: params.input.nodeLayouts,
+  }
 }
 
 async function readCanvasLayout(projectId: string, episodeId: string): Promise<CanvasLayoutPersistenceResult> {
@@ -60,17 +78,61 @@ export function useCanvasLayoutPersistence(params: {
   readonly projectId: string
   readonly episodeId: string
 }) {
+  const queryClient = useQueryClient()
+  const layoutQueryKey = queryKeys.project.canvasLayout(params.projectId, params.episodeId)
   const query = useQuery({
-    queryKey: queryKeys.project.canvasLayout(params.projectId, params.episodeId),
+    queryKey: layoutQueryKey,
     queryFn: () => readCanvasLayout(params.projectId, params.episodeId),
     enabled: Boolean(params.projectId && params.episodeId),
   })
 
+  const setLayoutCache = (layout: ProjectCanvasLayoutSnapshot | null) => {
+    queryClient.setQueryData<CanvasLayoutPersistenceResult>(layoutQueryKey, {
+      layout,
+      warningCode: null,
+    })
+  }
+
+  const restoreLayoutCache = (context: CanvasLayoutMutationContext | undefined) => {
+    if (context?.previous !== undefined) {
+      queryClient.setQueryData<CanvasLayoutPersistenceResult>(layoutQueryKey, context.previous)
+      return
+    }
+    queryClient.removeQueries({ queryKey: layoutQueryKey, exact: true })
+  }
+
   const mutation = useMutation({
     mutationFn: (input: UpsertCanvasLayoutInput) => writeCanvasLayout(params.projectId, input),
+    onMutate: async (input): Promise<CanvasLayoutMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: layoutQueryKey })
+      const previous = queryClient.getQueryData<CanvasLayoutPersistenceResult>(layoutQueryKey)
+      setLayoutCache(buildOptimisticCanvasLayoutSnapshot({
+        projectId: params.projectId,
+        input,
+      }))
+      return { previous }
+    },
+    onSuccess: (savedLayout) => {
+      setLayoutCache(savedLayout)
+    },
+    onError: (_error, _input, context) => {
+      restoreLayoutCache(context)
+    },
   })
   const resetMutation = useMutation({
     mutationFn: () => resetCanvasLayout(params.projectId, params.episodeId),
+    onMutate: async (): Promise<CanvasLayoutMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: layoutQueryKey })
+      const previous = queryClient.getQueryData<CanvasLayoutPersistenceResult>(layoutQueryKey)
+      setLayoutCache(null)
+      return { previous }
+    },
+    onSuccess: () => {
+      setLayoutCache(null)
+    },
+    onError: (_error, _input, context) => {
+      restoreLayoutCache(context)
+    },
   })
 
   return {
