@@ -55,19 +55,19 @@ export function getDeploymentConfig(): DeploymentConfig {
   }
 }
 
-export function isCloudDeployment(): boolean {
-  return getDeploymentConfig().edition === 'cloud'
+export function isCloudDeployment(config: DeploymentConfig = getDeploymentConfig()): boolean {
+  return config.edition === 'cloud'
 }
 
-export function isPlatformProviderCredentialMode(): boolean {
-  return getDeploymentConfig().providerCredentialMode === 'platform-key'
+export function isPlatformProviderCredentialMode(config: DeploymentConfig = getDeploymentConfig()): boolean {
+  return config.providerCredentialMode === 'platform-key'
 }
 
 export function toPublicDeploymentConfig(config: DeploymentConfig = getDeploymentConfig()) {
   return {
     edition: config.edition,
     providerCredentialMode: config.providerCredentialMode,
-    isCloud: config.edition === 'cloud',
-    usesPlatformProviderKeys: config.providerCredentialMode === 'platform-key',
+    isCloud: isCloudDeployment(config),
+    usesPlatformProviderKeys: isPlatformProviderCredentialMode(config),
   }
 }

@@ -23,6 +23,9 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
+const configServiceMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(),
+}))
 const executeAiTextStepMock = vi.hoisted(() => vi.fn())
 const generateMusicMock = vi.hoisted(() => vi.fn())
 const reportTaskProgressMock = vi.hoisted(() => vi.fn())
@@ -41,6 +44,8 @@ const storageMock = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
+
+vi.mock('@/lib/config-service', () => configServiceMock)
 
 vi.mock('@/lib/ai-exec/engine', () => ({
   executeAiTextStep: executeAiTextStepMock,
@@ -118,7 +123,6 @@ function buildCorePlan(sound: string = 'native video sound only') {
 
 function mockReadyProject(): void {
   prismaMock.project.findUnique.mockResolvedValue({
-    analysisModel: 'openai::gpt-4.1',
     videoRatio: '16:9',
     artStyle: null,
     artStylePrompt: null,
@@ -134,6 +138,9 @@ function mockReadyProject(): void {
       styleBibleJson: null,
     },
     corePlanJson: buildCorePlan(),
+  })
+  configServiceMock.getProjectModelConfig.mockResolvedValue({
+    analysisModel: 'openai::gpt-4.1',
   })
 }
 
@@ -295,6 +302,21 @@ describe('bgm score worker', () => {
       episodeId: 'episode-1',
       musicModel: 'google::lyria-3-pro-preview',
     }))).rejects.toThrow('BGM_SCORE_VIDEO_TIMELINE_INCOMPLETE')
+
+    expect(executeAiTextStepMock).not.toHaveBeenCalled()
+    expect(generateMusicMock).not.toHaveBeenCalled()
+  })
+
+  it('fails explicitly when shared project model config has no analysis model', async () => {
+    mockReadyProject()
+    configServiceMock.getProjectModelConfig.mockResolvedValue({ analysisModel: null })
+    mockCompleteTimeline()
+
+    const { handleBgmScoreGenerateTask } = await import('@/lib/bgm-score/generate')
+    await expect(handleBgmScoreGenerateTask(buildJob({
+      episodeId: 'episode-1',
+      musicModel: 'google::lyria-3-pro-preview',
+    }))).rejects.toThrow('BGM_SCORE_ANALYSIS_MODEL_REQUIRED')
 
     expect(executeAiTextStepMock).not.toHaveBeenCalled()
     expect(generateMusicMock).not.toHaveBeenCalled()

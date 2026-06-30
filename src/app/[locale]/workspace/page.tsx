@@ -84,6 +84,7 @@ export default function WorkspacePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [modelNotConfigured, setModelNotConfigured] = useState(false)
+  const [modelSetupCheckFailed, setModelSetupCheckFailed] = useState(false)
 
   const t = useTranslations('workspace')
   const tc = useTranslations('common')
@@ -138,17 +139,23 @@ export default function WorkspacePage() {
   // 打开新建项目弹窗并检测模型配置
   const openCreateModal = useCallback(() => {
     setCreateError(null)
+    setModelNotConfigured(false)
+    setModelSetupCheckFailed(false)
     setShowCreateModal(true)
     // 异步检测模型配置状态
     void (async () => {
       try {
         const res = await apiFetch('/api/user-preference')
-        if (res.ok) {
-          const payload: unknown = await res.json()
-          setModelNotConfigured(shouldGuideToModelSetup(payload))
+        if (!res.ok) {
+          _ulogError('检测用户模型配置失败:', { status: res.status })
+          setModelSetupCheckFailed(true)
+          return
         }
-      } catch {
-        // 忽略检测失败
+        const payload: unknown = await res.json()
+        setModelNotConfigured(shouldGuideToModelSetup(payload))
+      } catch (error) {
+        _ulogError('检测用户模型配置失败:', error)
+        setModelSetupCheckFailed(true)
       }
     })()
   }, [])
@@ -178,13 +185,20 @@ export default function WorkspacePage() {
       })
 
       if (response.ok) {
-        let shouldOpenModelSetup = true
-        const preferenceResponse = await apiFetch('/api/user-preference')
-        if (preferenceResponse.ok) {
-          const preferencePayload: unknown = await preferenceResponse.json()
-          shouldOpenModelSetup = shouldGuideToModelSetup(preferencePayload)
-        } else {
-          _ulogError('获取用户偏好失败:', { status: preferenceResponse.status })
+        let shouldOpenModelSetup = false
+        let modelSetupCheckFailedAfterCreate = false
+        try {
+          const preferenceResponse = await apiFetch('/api/user-preference')
+          if (preferenceResponse.ok) {
+            const preferencePayload: unknown = await preferenceResponse.json()
+            shouldOpenModelSetup = shouldGuideToModelSetup(preferencePayload)
+          } else {
+            modelSetupCheckFailedAfterCreate = true
+            _ulogError('获取用户偏好失败:', { status: preferenceResponse.status })
+          }
+        } catch (error) {
+          modelSetupCheckFailedAfterCreate = true
+          _ulogError('获取用户偏好失败:', error)
         }
 
         // 创建成功后刷新第一页
@@ -193,9 +207,12 @@ export default function WorkspacePage() {
         setPagination(prev => ({ ...prev, page: 1 }))
         void fetchProjects(1, '')
         setShowCreateModal(false)
+        setModelSetupCheckFailed(false)
         setFormData({ name: '', description: '' })
 
-        if (shouldOpenModelSetup) {
+        if (modelSetupCheckFailedAfterCreate) {
+          alert(t('modelSetupCheckFailedAfterCreate'))
+        } else if (shouldOpenModelSetup) {
           alert(t('analysisModelRequiredAfterCreate'))
           router.push({ pathname: '/profile' })
         }
@@ -576,6 +593,14 @@ export default function WorkspacePage() {
         <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="glass-surface-modal p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-bold text-[var(--glass-text-primary)] mb-4">{t('createProject')}</h2>
+            {modelSetupCheckFailed && (
+              <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+                <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="text-[12px] leading-relaxed">
+                  {t('modelSetupCheckFailedBeforeCreate')}
+                </span>
+              </div>
+            )}
             {modelNotConfigured && (
               <div className="flex items-start gap-2 mb-4 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
                 <AppIcon name="alert" className="w-4 h-4 shrink-0 mt-0.5" />

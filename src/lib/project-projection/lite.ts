@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getProjectModelConfig } from '@/lib/config-service'
 import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { resolveProjectContextPolicy } from '@/lib/project-context/policy'
 import type { ProjectProjectionLite, ProjectProjectionProgress } from './types'
@@ -68,14 +69,13 @@ export async function assembleProjectProjectionLite(params: {
   selectedScopeRef?: string | null
 }): Promise<ProjectProjectionLite> {
   const episodeId = params.episodeId || null
-  const [project, episode, progress, runs, latestArtifacts, approvals] = await Promise.all([
+  const [project, episode, progress, runs, latestArtifacts, approvals, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
       select: {
         id: true,
         name: true,
         videoRatio: true,
-        analysisModel: true,
       },
     }),
     episodeId
@@ -112,6 +112,7 @@ export async function assembleProjectProjectionLite(params: {
           take: 10,
         }) as Promise<ApprovalSummaryRow[]>
       : Promise.resolve([] as ApprovalSummaryRow[]),
+    getProjectModelConfig(params.projectId, params.userId),
   ])
 
   if (!project) {
@@ -124,8 +125,8 @@ export async function assembleProjectProjectionLite(params: {
     projectPolicy: {
       projectId: params.projectId,
       episodeId,
-      videoRatio: project.videoRatio,
-      analysisModel: project.analysisModel,
+      videoRatio: projectModelConfig.videoRatio || project.videoRatio,
+      analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },
   })

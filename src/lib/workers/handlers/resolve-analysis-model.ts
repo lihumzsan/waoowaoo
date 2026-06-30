@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import { getUserModelConfig } from '@/lib/config-service'
 
 type ResolveAnalysisModelInput = {
   userId: string
@@ -23,12 +23,9 @@ export async function resolveAnalysisModel(input: ResolveAnalysisModelInput): Pr
   const modelFromProject = normalizeModelKey(input.projectAnalysisModel)
   if (modelFromProject) return modelFromProject
 
-  const userPreference = await prisma.userPreference.findUnique({
-    where: { userId: input.userId },
-    select: { analysisModel: true },
-  })
-  const modelFromUserPreference = normalizeModelKey(userPreference?.analysisModel)
-  if (modelFromUserPreference) return modelFromUserPreference
+  const userConfig = await getUserModelConfig(input.userId)
+  const modelFromUserConfig = normalizeModelKey(userConfig.analysisModel)
+  if (modelFromUserConfig) return modelFromUserConfig
 
   throw new Error('ANALYSIS_MODEL_NOT_CONFIGURED: 请先在设置页面配置分析模型')
 }

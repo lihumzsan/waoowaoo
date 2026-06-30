@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { composeModelKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import { getProjectModelConfig } from '@/lib/config-service'
 
 function normalizeModelKey(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -14,22 +15,16 @@ export async function resolveAnalysisModel(projectId: string, userId: string): P
   id: string
   analysisModel: string
 }> {
-  const [project, userPreference] = await Promise.all([
+  const [project, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, analysisModel: true },
+      select: { id: true },
     }),
-    prisma.userPreference.findUnique({
-      where: { userId },
-      select: { analysisModel: true },
-    }),
+    getProjectModelConfig(projectId, userId),
   ])
   if (!project) throw new Error('Project not found')
 
-  // 优先读项目配置，fallback 到用户全局设置
-  const analysisModel =
-    normalizeModelKey(project.analysisModel) ??
-    normalizeModelKey(userPreference?.analysisModel)
+  const analysisModel = normalizeModelKey(projectModelConfig.analysisModel)
   if (!analysisModel) throw new Error('请先在项目设置中配置分析模型')
 
   return {

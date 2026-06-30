@@ -21,9 +21,15 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
+const configServiceMock = vi.hoisted(() => ({
+  getProjectModelConfig: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
+
+vi.mock('@/lib/config-service', () => configServiceMock)
 
 const planRunRuntimeMock = vi.hoisted(() => ({
   listPlanRuns: vi.fn(),
@@ -48,6 +54,10 @@ vi.mock('@/lib/project-workflow/edit-first', () => ({
 describe('assembleProjectContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configServiceMock.getProjectModelConfig.mockResolvedValue({
+      analysisModel: 'openrouter::platform-analysis',
+      videoRatio: '16:9',
+    })
   })
 
   it('includes panel image/video fields in episode detail snapshot', async () => {
@@ -183,5 +193,6 @@ describe('assembleProjectContext', () => {
       }),
     ])
     expect(JSON.stringify(context.recentOperationResults)).not.toContain('largeProviderPayload')
+    expect(context.policy.analysisModel).toBe('openrouter::platform-analysis')
   })
 })

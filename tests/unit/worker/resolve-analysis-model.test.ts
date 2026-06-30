@@ -1,21 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const prismaMock = vi.hoisted(() => ({
-  userPreference: {
-    findUnique: vi.fn(),
-  },
+const configServiceMock = vi.hoisted(() => ({
+  getUserModelConfig: vi.fn(),
 }))
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: prismaMock,
-}))
+vi.mock('@/lib/config-service', () => configServiceMock)
 
 import { resolveAnalysisModel } from '@/lib/workers/handlers/resolve-analysis-model'
 
 describe('resolveAnalysisModel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.userPreference.findUnique.mockResolvedValue({
+    configServiceMock.getUserModelConfig.mockResolvedValue({
       analysisModel: 'openrouter::openai/gpt-4.1-mini',
     })
   })
@@ -28,7 +24,7 @@ describe('resolveAnalysisModel', () => {
     })
 
     expect(result).toBe('openrouter::openai/gpt-4.1')
-    expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
+    expect(configServiceMock.getUserModelConfig).not.toHaveBeenCalled()
   })
 
   it('uses project analysisModel when inputModel is missing', async () => {
@@ -38,7 +34,7 @@ describe('resolveAnalysisModel', () => {
     })
 
     expect(result).toBe('openrouter::anthropic/claude-sonnet-4.5')
-    expect(prismaMock.userPreference.findUnique).not.toHaveBeenCalled()
+    expect(configServiceMock.getUserModelConfig).not.toHaveBeenCalled()
   })
 
   it('falls back to user preference analysisModel when project is missing', async () => {
@@ -48,10 +44,7 @@ describe('resolveAnalysisModel', () => {
     })
 
     expect(result).toBe('openrouter::openai/gpt-4.1-mini')
-    expect(prismaMock.userPreference.findUnique).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
-      select: { analysisModel: true },
-    })
+    expect(configServiceMock.getUserModelConfig).toHaveBeenCalledWith('user-1')
   })
 
   it('skips invalid input/project model keys and still falls back to user preference', async () => {
@@ -62,16 +55,31 @@ describe('resolveAnalysisModel', () => {
     })
 
     expect(result).toBe('openrouter::openai/gpt-4.1-mini')
-    expect(prismaMock.userPreference.findUnique).toHaveBeenCalledTimes(1)
+    expect(configServiceMock.getUserModelConfig).toHaveBeenCalledTimes(1)
   })
 
   it('throws explicit error when all levels are missing', async () => {
-    prismaMock.userPreference.findUnique.mockResolvedValueOnce({ analysisModel: null })
+    configServiceMock.getUserModelConfig.mockResolvedValueOnce({ analysisModel: null })
 
     await expect(resolveAnalysisModel({
       userId: 'user-1',
       inputModel: '',
       projectAnalysisModel: null,
     })).rejects.toThrow('ANALYSIS_MODEL_NOT_CONFIGURED')
+  })
+
+  it('uses platform/user config analysisModel from the shared config service', async () => {
+    configServiceMock.getUserModelConfig.mockResolvedValueOnce({
+      analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+    })
+
+    const result = await resolveAnalysisModel({
+      userId: 'cloud-user-1',
+      inputModel: null,
+      projectAnalysisModel: null,
+    })
+
+    expect(result).toBe('openrouter::anthropic/claude-sonnet-4.6')
+    expect(configServiceMock.getUserModelConfig).toHaveBeenCalledWith('cloud-user-1')
   })
 })

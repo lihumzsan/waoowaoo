@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { Job } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { executeAiTextStep, generateMusic } from '@/lib/ai-exec/engine'
+import { getProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { safeParseJsonObject } from '@/lib/json-repair'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
@@ -218,11 +219,10 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
 
   try {
     await reportTaskProgress(job, 8, { stage: 'bgm_score_prepare' })
-    const [project, episode, editScript, panels, videoGroups] = await Promise.all([
+    const [project, episode, editScript, panels, videoGroups, projectModelConfig] = await Promise.all([
       prisma.project.findUnique({
         where: { id: job.data.projectId },
         select: {
-          analysisModel: true,
           videoRatio: true,
         },
       }),
@@ -249,11 +249,12 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
         where: { episodeId, projectId: job.data.projectId },
         include: { videoMedia: true },
       }),
+      getProjectModelConfig(job.data.projectId, job.data.userId),
     ])
     if (!project) throw new Error('BGM_SCORE_PROJECT_NOT_FOUND')
     if (!episode) throw new Error('BGM_SCORE_EPISODE_NOT_FOUND')
     if (!editScript) throw new Error('BGM_SCORE_EDIT_SCRIPT_REQUIRED')
-    const analysisModel = readString(project.analysisModel)
+    const analysisModel = readString(projectModelConfig.analysisModel)
     if (!analysisModel) throw new Error('BGM_SCORE_ANALYSIS_MODEL_REQUIRED')
 
     const clips = buildFinalRenderClips({ panels, videoGroups, editScript })

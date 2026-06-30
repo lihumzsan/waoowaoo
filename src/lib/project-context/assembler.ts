@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getProjectModelConfig } from '@/lib/config-service'
 import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
@@ -92,7 +93,7 @@ export async function assembleProjectContext(params: {
   selectedPanelId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editScreenplay, editScript, runs, latestArtifacts, approvals, activeOperationTasks, recentOperationResults, editFirstWorkflow] = await Promise.all([
+  const [project, episode, editScreenplay, editScript, runs, latestArtifacts, approvals, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
     }),
@@ -205,6 +206,7 @@ export async function assembleProjectContext(params: {
       userId: params.userId,
       episodeId: params.episodeId || null,
     }),
+    getProjectModelConfig(params.projectId, params.userId),
   ])
 
   if (!project) {
@@ -217,8 +219,8 @@ export async function assembleProjectContext(params: {
     projectPolicy: {
       projectId: params.projectId,
       episodeId: params.episodeId || null,
-      videoRatio: project.videoRatio,
-      analysisModel: project.analysisModel,
+      videoRatio: projectModelConfig.videoRatio || project.videoRatio,
+      analysisModel: projectModelConfig.analysisModel,
       overrides: {},
     },
   })

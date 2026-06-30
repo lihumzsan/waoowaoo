@@ -9,7 +9,7 @@ import {
   validateProjectDraft,
   type ProjectDraftInput,
 } from '@/lib/projects/validation'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -224,33 +224,34 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         }
 
         const normalized = normalizeProjectDraft(draft)
+        const deployment = getDeploymentConfig()
+        const platformDefaults = isPlatformProviderCredentialMode(deployment)
+          ? getPlatformDefaultModels()
+          : null
+        const userPreference = platformDefaults
+          ? null
+          : await prisma.userPreference.findUnique({
+              where: { userId: ctx.userId },
+            })
 
-	        const userPreference = await prisma.userPreference.findUnique({
-	          where: { userId: ctx.userId },
-	        })
-	        const deployment = getDeploymentConfig()
-	        const platformDefaults = deployment.providerCredentialMode === 'platform-key'
-	          ? getPlatformDefaultModels()
-	          : null
-
-	        const project = await prisma.project.create({
-	          data: {
-	            name: normalized.name.trim(),
-	            description: normalized.description?.trim() || null,
-	            userId: ctx.userId,
-	            ...(platformDefaults && {
-	              analysisModel: platformDefaults.analysisModel,
-	              characterModel: platformDefaults.characterModel,
-	              locationModel: platformDefaults.locationModel,
-	              storyboardModel: platformDefaults.storyboardModel,
-	              editModel: platformDefaults.editModel,
-	              videoModel: platformDefaults.videoModel,
-	              singleShotVideoModel: platformDefaults.videoModel,
-	              sequenceVideoModel: platformDefaults.videoModel,
-	              musicModel: platformDefaults.musicModel,
-	            }),
-	            ...(!platformDefaults && userPreference && {
-	              analysisModel: userPreference.analysisModel,
+        const project = await prisma.project.create({
+          data: {
+            name: normalized.name.trim(),
+            description: normalized.description?.trim() || null,
+            userId: ctx.userId,
+            ...(platformDefaults && {
+              analysisModel: platformDefaults.analysisModel,
+              characterModel: platformDefaults.characterModel,
+              locationModel: platformDefaults.locationModel,
+              storyboardModel: platformDefaults.storyboardModel,
+              editModel: platformDefaults.editModel,
+              videoModel: platformDefaults.videoModel,
+              singleShotVideoModel: platformDefaults.videoModel,
+              sequenceVideoModel: platformDefaults.videoModel,
+              musicModel: platformDefaults.musicModel,
+            }),
+            ...(!platformDefaults && userPreference && {
+              analysisModel: userPreference.analysisModel,
               characterModel: userPreference.characterModel,
               locationModel: userPreference.locationModel,
               storyboardModel: userPreference.storyboardModel,

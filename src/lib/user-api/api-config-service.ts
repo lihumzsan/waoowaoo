@@ -11,7 +11,7 @@ import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getBillingMode } from '@/lib/billing/mode'
-import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { normalizeWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency'
 import { getDefaultWorkflowConcurrencyConfig } from '@/lib/workflow-concurrency-env'
 import type { ApiConfigPutBody, DefaultModelsPayload } from './api-config-types'
@@ -135,7 +135,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     : normalizeWorkflowConcurrencyInput(payload.workflowConcurrency)
   const billingMode = await getBillingMode()
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     throw new ApiError('FORBIDDEN', {
       code: 'API_CONFIG_MANAGED_BY_PLATFORM',
     })

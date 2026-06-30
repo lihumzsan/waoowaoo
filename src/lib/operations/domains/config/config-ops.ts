@@ -11,7 +11,7 @@ import {
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { resolveBuiltinModelContext, getCapabilityOptionFields, validateCapabilitySelectionsPayload, type CapabilityModelContext } from '@/lib/ai-registry/capabilities-catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
-import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isCloudDeployment, toPublicDeploymentConfig } from '@/lib/deployment/config'
 
 const MODEL_FIELDS = [
   'analysisModel',
@@ -247,7 +247,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       }).passthrough(),
       execute: async (ctx) => {
         const deployment = getDeploymentConfig()
-        if (deployment.edition === 'cloud') {
+        if (isCloudDeployment(deployment)) {
           return {
             configurable: false,
             capabilityOverrides: {},
@@ -328,9 +328,10 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const deployment = getDeploymentConfig()
+        const cloudDeployment = isCloudDeployment(deployment)
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyStyleFields(body)
-        if (deployment.edition === 'cloud') {
+        if (cloudDeployment) {
           assertCloudProjectConfigFields(body)
         }
 
@@ -355,9 +356,9 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const allowedProjectFields = [
-          ...(deployment.edition === 'cloud' ? [] : MODEL_FIELDS),
+          ...(cloudDeployment ? [] : MODEL_FIELDS),
           'videoRatio',
-          ...(deployment.edition === 'cloud' ? [] : ['capabilityOverrides'] as const),
+          ...(cloudDeployment ? [] : ['capabilityOverrides'] as const),
         ] as const
 
         const updateData: Record<string, unknown> = {}

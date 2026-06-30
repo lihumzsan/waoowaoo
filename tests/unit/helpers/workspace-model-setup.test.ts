@@ -17,10 +17,12 @@ describe('workspace model setup guidance', () => {
   it('cloud runtime default analysisModel -> 不需要引导设置', () => {
     const payload = {
       preference: {
-        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
+        analysisModel: null,
       },
       deployment: {
         isCloud: true,
+        providerCredentialMode: 'platform-key',
+        usesPlatformProviderKeys: true,
       },
       runtimeDefaults: {
         analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
@@ -29,6 +31,21 @@ describe('workspace model setup guidance', () => {
 
     expect(hasConfiguredAnalysisModel(payload)).toBe(true)
     expect(readConfiguredAnalysisModel(payload)).toBe('openrouter::anthropic/claude-sonnet-4.6')
+    expect(shouldGuideToModelSetup(payload)).toBe(false)
+  })
+
+  it('platform-key deployment without a readable runtime default -> 不引导用户配置个人模型', () => {
+    const payload = {
+      preference: {
+        analysisModel: null,
+      },
+      deployment: {
+        providerCredentialMode: 'platform-key',
+      },
+    }
+
+    expect(hasConfiguredAnalysisModel(payload)).toBe(false)
+    expect(readConfiguredAnalysisModel(payload)).toBeNull()
     expect(shouldGuideToModelSetup(payload)).toBe(false)
   })
 

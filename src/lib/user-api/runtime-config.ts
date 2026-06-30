@@ -10,7 +10,7 @@
 import { prisma } from '@/lib/prisma'
 import { decryptApiKey } from '@/lib/crypto-utils'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformModels } from '@/lib/platform-models/catalog'
 import type { UnifiedModelType } from '@/lib/ai-registry/types'
 import {
@@ -234,7 +234,7 @@ async function readUserConfig(userId: string): Promise<{ models: CustomModel[]; 
 
 async function getRuntimeModels(userId: string): Promise<CustomModel[]> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     return getPlatformModels()
   }
 
@@ -296,7 +296,7 @@ export interface ProviderConfig {
 
 export async function getProviderConfig(userId: string, providerId: string): Promise<ProviderConfig> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     const platform = resolvePlatformProviderEnv(providerId)
     return {
       id: providerId,
@@ -351,7 +351,7 @@ export async function getModelPrice(userId: string, model: string): Promise<numb
 }
 
 export async function hasApiConfig(userId: string): Promise<boolean> {
-  if (getDeploymentConfig().providerCredentialMode === 'platform-key') return true
+  if (isPlatformProviderCredentialMode()) return true
 
   const pref = await prisma.userPreference.findUnique({
     where: { userId },

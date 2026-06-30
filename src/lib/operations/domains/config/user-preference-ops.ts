@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig, toPublicDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -65,7 +65,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
           create: { userId: ctx.userId },
         })
 
-        if (deployment.providerCredentialMode === 'platform-key') {
+        if (isPlatformProviderCredentialMode(deployment)) {
           const runtimeDefaults = getPlatformDefaultModels()
           return {
             preference: {
@@ -106,7 +106,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       execute: async (ctx, input) => {
         const deployment = getDeploymentConfig()
         const body = isRecord(input) ? input : {}
-        if (deployment.providerCredentialMode === 'platform-key') {
+        if (isPlatformProviderCredentialMode(deployment)) {
           const attemptedModelField = Object.keys(body).find((field) => MODEL_FIELDS.has(field))
           if (attemptedModelField) {
             throw new ApiError('FORBIDDEN', {

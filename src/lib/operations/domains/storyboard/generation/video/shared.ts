@@ -6,7 +6,7 @@ import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabili
 import { resolveBuiltinPricing } from '@/lib/ai-registry/pricing-resolution'
 import { resolveProjectModelCapabilityGenerationOptions } from '@/lib/config-service'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { isCloudDeployment } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
@@ -126,7 +126,7 @@ async function applySystemVideoModel(params: {
     firstLast.flModel = systemVideoModel
   }
 
-  if (getDeploymentConfig().edition !== 'cloud') return
+  if (!isCloudDeployment()) return
 
   const plan = getPlatformRuntimePlan('video')
   if (systemVideoModel !== plan.modelKey) {

@@ -1,5 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getProjectModelConfig, getUserModelConfig, type ProjectModelConfig } from '@/lib/config-service'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 
@@ -50,7 +50,7 @@ export async function resolveSystemModelKey(input: {
   purpose: SystemModelPurpose
 }): Promise<string> {
   const deployment = getDeploymentConfig()
-  if (deployment.edition === 'cloud') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     return resolvePlatformModel(input.purpose)
   }
 

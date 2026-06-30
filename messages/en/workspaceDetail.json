@@ -18,7 +18,9 @@
     "selectModelPlaceholder": "Select an analysis model",
     "selectModelFirst": "Please select an analysis model first",
     "noModelOptions": "No text model is available. Go to the provider pool in Profile settings, configure a text model, and enable it first.",
-    "saveFailed": "Failed to save default analysis model. Please try again."
+    "saveFailed": "Failed to save default analysis model. Please try again.",
+    "checkFailedTitle": "Unable to Confirm Model Setup",
+    "checkFailedDescription": "The account model setup cannot be read right now. Refresh and try again; self-hosted deployments must have a default analysis model configured."
   },
   "sidebar": {
     "dragToMove": "Drag to move position",

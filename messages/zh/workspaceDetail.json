@@ -18,7 +18,9 @@
     "selectModelPlaceholder": "请选择分析模型",
     "selectModelFirst": "请先选择分析模型",
     "noModelOptions": "当前没有可用的文本模型，请先去个人设置的厂商资源池配置文本模型并开启模型。",
-    "saveFailed": "保存默认分析模型失败，请稍后重试"
+    "saveFailed": "保存默认分析模型失败，请稍后重试",
+    "checkFailedTitle": "无法确认模型配置状态",
+    "checkFailedDescription": "当前无法读取账号模型配置。请刷新重试；如果是自托管环境，请先确认默认分析模型已配置。"
   },
   "sidebar": {
     "dragToMove": "拖动调整位置",

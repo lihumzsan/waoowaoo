@@ -67,6 +67,8 @@ export default function ProjectDetailPage() {
   const [isGlobalAssetsView, setIsGlobalAssetsView] = useState(false)
   const [isCheckingModelSetup, setIsCheckingModelSetup] = useState(true)
   const [needsModelSetup, setNeedsModelSetup] = useState(false)
+  const [modelSetupCheckFailed, setModelSetupCheckFailed] = useState(false)
+  const [modelSetupCheckAttempt, setModelSetupCheckAttempt] = useState(0)
   const [analysisModelDraft, setAnalysisModelDraft] = useState('')
   const [isModelSetupModalOpen, setIsModelSetupModalOpen] = useState(false)
   const [modelSetupSaving, setModelSetupSaving] = useState(false)
@@ -169,12 +171,14 @@ export default function ProjectDetailPage() {
     let canceled = false
     const checkDefaultModelSetup = async () => {
       setIsCheckingModelSetup(true)
+      setModelSetupCheckFailed(false)
       try {
         const response = await apiFetch('/api/user-preference')
         if (!response.ok) {
           _ulogError('[ProjectDetail] 获取用户默认模型失败:', { status: response.status })
           if (!canceled) {
-            setNeedsModelSetup(true)
+            setNeedsModelSetup(false)
+            setModelSetupCheckFailed(true)
             setAnalysisModelDraft('')
           }
           return
@@ -185,11 +189,13 @@ export default function ProjectDetailPage() {
         if (!canceled) {
           setAnalysisModelDraft(configuredModel || '')
           setNeedsModelSetup(shouldGuideToModelSetup(payload))
+          setModelSetupCheckFailed(false)
         }
       } catch (err) {
         _ulogError('[ProjectDetail] 检查默认模型失败:', err)
         if (!canceled) {
-          setNeedsModelSetup(true)
+          setNeedsModelSetup(false)
+          setModelSetupCheckFailed(true)
           setAnalysisModelDraft('')
         }
       } finally {
@@ -203,7 +209,7 @@ export default function ProjectDetailPage() {
     return () => {
       canceled = true
     }
-  }, [shouldGateImportWizardByModel])
+  }, [modelSetupCheckAttempt, shouldGateImportWizardByModel])
 
   // 初始化 URL：无效/缺失 episode 时，统一回写默认 episode
   useEffect(() => {
@@ -429,6 +435,28 @@ export default function ProjectDetailPage() {
           ) : shouldShowImportWizard && !isGlobalAssetsView ? (
             isCheckingModelSetup ? (
               <BrandLoading className="min-h-[320px]" />
+            ) : modelSetupCheckFailed ? (
+              <div className="glass-surface p-8 max-w-2xl mx-auto">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)] flex items-center justify-center shrink-0">
+                    <AppIcon name="alert" className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-[var(--glass-text-primary)] mb-2">
+                      {t('modelSetup.checkFailedTitle')}
+                    </h2>
+                    <p className="text-[var(--glass-text-secondary)] mb-5">
+                      {t('modelSetup.checkFailedDescription')}
+                    </p>
+                    <button
+                      onClick={() => setModelSetupCheckAttempt((value) => value + 1)}
+                      className="glass-btn-base glass-btn-primary px-4 py-2"
+                    >
+                      {tc('refresh')}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : needsModelSetup ? (
               <div className="glass-surface p-8 max-w-2xl mx-auto">
                 <div className="flex items-start gap-4">

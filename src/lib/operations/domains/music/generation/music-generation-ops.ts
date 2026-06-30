@@ -8,7 +8,8 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft }
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { ApiError } from '@/lib/api-errors'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { isCloudDeployment, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
+import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
@@ -63,11 +64,7 @@ function requireModelKey(value: string): string {
   return parsed.modelKey
 }
 
-function isCloudDeployment(): boolean {
-  return getDeploymentConfig().edition === 'cloud'
-}
-
-function assertCloudMusicModelInput(requested: string, systemModel: string): void {
+function assertPlatformMusicModelInput(requested: string, systemModel: string): void {
   if (!requested || requested === systemModel) return
   throw new ApiError('FORBIDDEN', {
     code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
@@ -114,48 +111,30 @@ function hashPayload(payload: Record<string, unknown>): string {
 
 async function resolveMusicModel(input: MusicGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
-  if (isCloudDeployment()) {
+  if (isPlatformProviderCredentialMode()) {
     const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
-    assertCloudMusicModelInput(requested, systemModel)
+    assertPlatformMusicModelInput(requested, systemModel)
     return systemModel
   }
   if (requested) return requireModelKey(requested)
 
-  const [project, pref] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: { musicModel: true },
-    }),
-    prisma.userPreference.findUnique({
-      where: { userId },
-      select: { musicModel: true },
-    }),
-  ])
-  const configured = normalizeString(project?.musicModel) || normalizeString(pref?.musicModel)
+  const projectModelConfig = await getProjectModelConfig(projectId, userId)
+  const configured = normalizeString(projectModelConfig.musicModel)
   if (!configured) throw new Error('PROJECT_AGENT_MUSIC_MODEL_REQUIRED')
   return requireModelKey(configured)
 }
 
 async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
-  if (isCloudDeployment()) {
+  if (isPlatformProviderCredentialMode()) {
     const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
-    assertCloudMusicModelInput(requested, systemModel)
+    assertPlatformMusicModelInput(requested, systemModel)
     return systemModel
   }
   if (requested) return requireModelKey(requested)
 
-  const [project, pref] = await Promise.all([
-    prisma.project.findUnique({
-      where: { id: projectId },
-      select: { musicModel: true },
-    }),
-    prisma.userPreference.findUnique({
-      where: { userId },
-      select: { musicModel: true },
-    }),
-  ])
-  const configured = normalizeString(project?.musicModel) || normalizeString(pref?.musicModel)
+  const projectModelConfig = await getProjectModelConfig(projectId, userId)
+  const configured = normalizeString(projectModelConfig.musicModel)
   if (!configured) throw new Error('PROJECT_AGENT_BGM_SCORE_MUSIC_MODEL_REQUIRED')
   return requireModelKey(configured)
 }

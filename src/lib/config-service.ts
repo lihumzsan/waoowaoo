@@ -18,7 +18,7 @@ import {
 } from '@/lib/ai-registry/selection'
 import { findBuiltinCapabilities, resolveGenerationOptionsForModel } from '@/lib/ai-registry/capabilities-catalog'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { getDeploymentConfig } from '@/lib/deployment/config'
+import { getDeploymentConfig, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
 import { getPlatformCapabilityDefaults } from '@/lib/platform-runtime/presets'
 import {
@@ -159,7 +159,7 @@ export async function getProjectModelConfig(
   userId: string,
 ): Promise<ProjectModelConfig> {
   const deployment = getDeploymentConfig()
-  const platformDefaults = deployment.providerCredentialMode === 'platform-key'
+  const platformDefaults = isPlatformProviderCredentialMode(deployment)
     ? getPlatformDefaultModels()
     : null
   const projectDataPromise = prisma.project.findUnique({ where: { id: projectId } })
@@ -208,7 +208,7 @@ export async function getProjectModelConfig(
  */
 export async function getUserModelConfig(userId: string): Promise<UserModelConfig> {
   const deployment = getDeploymentConfig()
-  if (deployment.providerCredentialMode === 'platform-key') {
+  if (isPlatformProviderCredentialMode(deployment)) {
     const platformDefaults = getPlatformDefaultModels()
 
     return {
