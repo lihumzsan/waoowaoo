@@ -235,7 +235,7 @@ describe('resource-change-sync', () => {
     }
   })
 
-  it('actively refetches edit script when project asset resources change for an episode', async () => {
+  it('actively refetches edit script and workflow context when project asset resources change for an episode', async () => {
     const queryClient = new QueryClient()
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
     const refetchQueries = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
@@ -257,6 +257,14 @@ describe('resource-change-sync', () => {
     })
     expect(refetchQueries).toHaveBeenCalledWith({
       queryKey: editScriptQueryKey,
+      type: 'active',
+    })
+    const projectContextQueryKey = queryKeys.project.context('project-1', 'episode-1')
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: projectContextQueryKey,
+    })
+    expect(refetchQueries).toHaveBeenCalledWith({
+      queryKey: projectContextQueryKey,
       type: 'active',
     })
   })

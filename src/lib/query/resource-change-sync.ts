@@ -62,9 +62,12 @@ function policyForResource(ref: WorkspaceResourceRef): ResourceSyncPolicy {
     const projectAssetKeys: QueryKey[] = [
       queryKeys.assets.all('project', ref.projectId),
       queryKeys.projectAssets.all(ref.projectId),
+      queryKeys.projectData(ref.projectId),
     ]
     if (ref.episodeId) {
       projectAssetKeys.push(queryKeys.project.editScript(ref.projectId, ref.episodeId))
+      projectAssetKeys.push(queryKeys.episodeData(ref.projectId, ref.episodeId))
+      projectAssetKeys.push(queryKeys.project.context(ref.projectId, ref.episodeId))
     }
     return {
       invalidate: projectAssetKeys,

@@ -25,10 +25,10 @@ import {
   TASK_RUNTIME_TARGETS,
   type TaskRuntimeStateLike,
 } from '@/lib/task/runtime-targets'
+import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectEditScreenplay, useProjectEditScript, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
-import { useProjectAssets } from '@/lib/query/hooks/useProjectAssets'
+import { useProjectContext, useProjectEditScreenplay, useProjectEditScript, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -251,11 +251,11 @@ function ProjectWorkspaceCanvasContent({
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
   const { episodeName, novelText, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
-  const { data: projectAssets } = useProjectAssets(projectId)
-  const locations = projectAssets.locations
+  const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -591,8 +591,8 @@ function ProjectWorkspaceCanvasContent({
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
     storyText: novelText,
-    locations,
     storyboards,
+    editFirstWorkflow,
     editScreenplay,
     editScript: projectedEditScript,
     editShotExecutionPlan,
@@ -870,8 +870,8 @@ function ProjectWorkspaceCanvasContent({
       episodeId,
       episodeName,
       storyText: novelText,
-      locations,
       storyboards,
+      editFirstWorkflow,
       editScreenplay,
       editScript: projectedEditScript,
       editShotExecutionPlan,
@@ -889,7 +889,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, locations, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()

@@ -64,8 +64,11 @@ function invalidateProjectAssetLists(params: {
     params.queryClient.invalidateQueries({ queryKey: queryKeys.projectAssets.locations(params.projectId) })
   }
   params.queryClient.invalidateQueries({ queryKey: queryKeys.projectAssets.all(params.projectId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.projectData(params.projectId) })
   if (params.episodeId) {
     params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(params.projectId, params.episodeId) })
+    params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
+    params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
   }
 }
 

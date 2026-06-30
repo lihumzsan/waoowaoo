@@ -3,9 +3,10 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type {
-  Location,
   ProjectEditAssetRequirement,
   ProjectEditScreenplay,
   ProjectEditScript,
@@ -66,8 +67,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly episodeId: string
   readonly episodeName?: string
   readonly storyText: string
-  readonly locations?: readonly Location[]
   readonly storyboards: readonly ProjectStoryboard[]
+  readonly editFirstWorkflow: EditFirstWorkflowState
   readonly editScreenplay?: ProjectEditScreenplay | null
   readonly editScript?: ProjectEditScript | null
   readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
@@ -192,7 +193,13 @@ function resolvePanelShotNumber(panel: ProjectPanel): number {
 }
 
 function collectPanels(storyboards: readonly ProjectStoryboard[]): ProjectPanel[] {
-  return storyboards.flatMap((storyboard) => storyboard.panels ?? [])
+  return storyboards
+    .flatMap((storyboard) => storyboard.panels ?? [])
+    .sort((left, right) => (
+      resolvePanelShotNumber(left) - resolvePanelShotNumber(right)
+      || left.panelIndex - right.panelIndex
+      || left.id.localeCompare(right.id)
+    ))
 }
 
 function panelByShotNumber(storyboards: readonly ProjectStoryboard[]): ReadonlyMap<number, ProjectPanel> {
@@ -260,12 +267,6 @@ function confirmedStylePreviewImageUrl(screenplay: ProjectEditScreenplay | null 
   return screenplay?.stylePreviews?.find((preview) => (
     preview.status === 'confirmed' && Boolean(stringValue(preview.imageUrl))
   ))?.imageUrl ?? null
-}
-
-function locationPreviewUrl(location: Location): string | null {
-  const selected = location.images.find((image) => image.id === location.selectedImageId)
-  const first = selected ?? location.images.find((image) => Boolean(image.imageUrl || image.media?.url))
-  return first?.media?.url ?? first?.imageUrl ?? null
 }
 
 function assetPreviewUrl(requirement: ProjectEditAssetRequirement): string | null {
@@ -472,8 +473,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     episodeId,
     episodeName,
     storyText,
-    locations = [],
     storyboards,
+    editFirstWorkflow,
     editScreenplay = null,
     editScript = null,
     editShotExecutionPlan = null,
@@ -492,6 +493,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const nodes: WorkspaceCanvasFlowNode[] = []
   const edges: WorkspaceCanvasFlowEdge[] = []
   const panelsByShot = panelByShotNumber(storyboards)
+  const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
   const styleBibleDetails = buildStyleBibleDetails(editScreenplay?.styleBible)
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editScreenplay)
   const screenplayRunning = activeAssistantOperationId === 'generate_edit_screenplay'
@@ -594,7 +596,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let editScriptNodeId: string | null = null
-  if (editScript || editScriptPending) {
+  if (editFirstCanvasVisibility.editScript || editScript || editScriptPending) {
     const editScriptTargetId = editScript?.id ?? `pending:${episodeId}`
     editScriptNodeId = workspaceNodeId.editScript(episodeId)
     const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
@@ -663,7 +665,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let assetGroupNodeId: string | null = null
-  if (editScript) {
+  if (editScript && editFirstCanvasVisibility.editAssetGroup) {
     assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
     const characterRequirements = countEditAssetRequirements(editScript.requirements, 'character')
     const locationRequirements = countEditAssetRequirements(editScript.requirements, 'location')
@@ -727,7 +729,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let executionNodeId: string | null = null
-  if (editScript) {
+  if (editScript && editFirstCanvasVisibility.editShotExecutionPlan) {
     const matchingExecutionPlan = editShotExecutionPlan?.editScriptId === editScript.id ? editShotExecutionPlan : null
     const executionRunning = activeAssistantOperationId === 'generate_edit_shot_execution_plan'
       || hasStreamTarget(streamTargets, 'editShotExecutionPlan', editScript.id)
@@ -770,7 +772,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   const storyboardGenerationNodeIds = new Map<string, string>()
-  if (editScript && executionNodeId) {
+  if (editScript && executionNodeId && editFirstCanvasVisibility.storyboardPanelGeneration) {
     storyboards.forEach((storyboard, index) => {
       const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
       const storyboardPresentation = storyboard.storyboardTaskRunning
@@ -834,67 +836,69 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
 
   const panelList = collectPanels(storyboards)
   const shotNodeIdsByShotNumber = new Map<number, string>()
-  panelList.forEach((panel, index) => {
-    const shotNumber = resolvePanelShotNumber(panel)
-    const nodeId = workspaceNodeId.shot(panel.id)
-    shotNodeIdsByShotNumber.set(shotNumber, nodeId)
-    const column = index % SHOT_GRID_COLUMNS
-    const row = Math.floor(index / SHOT_GRID_COLUMNS)
-    const previewImageUrl = primaryPanelImageUrl(panel)
-    const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
-    const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
-    const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
-    const shotPresentation = shotRunning
-      ? workspaceCanvasRunningPresentation(phaseLabels)
-      : shotFailed
-        ? workspaceCanvasFailedPresentation(phaseLabels)
-        : workspaceCanvasSucceededPresentation(phaseLabels)
-    nodes.push(createNode({
-      id: nodeId,
-      position: layoutPosition(savedLayouts, nodeId, {
-        x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width + SHOT_GRID_GAP_X),
-        y: 460 + row * SHOT_GRID_GAP_Y,
-      }),
-      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-      height: SHOT_NODE_HEIGHT,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'shot',
-        layoutNodeType: 'shot',
-        targetType: 'panel',
-        targetId: panel.id,
-        storyboardId: panel.storyboardId,
-        panelIndex: panel.panelIndex,
-        title: translate('nodes.shot.title', { shot: shotNumber }),
-        eyebrow: translate('nodes.shot.eyebrow'),
-        body: panel.description ?? translate('empty.panel'),
-        meta: panel.location ?? translate('empty.location'),
-        ...shotPresentation,
-        previewImageUrl,
-        loadingStyleImageUrl: stylePreviewImageUrl,
-        runtimeTargets: runtimeTargets(
-          TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
-          TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
-        ),
-        actionLabel: translate('actions.generateImage'),
-        action: { type: 'generate_image', panelId: panel.id },
-        shotDetails: shotDetails(panel),
-        imageDetails: imageDetails(panel),
-        videoDetails: {
-          videoPrompt: panel.videoPrompt,
-          lastVideoGenerationOptions: [],
-          videoUrl: panel.videoMedia?.url ?? panel.videoUrl,
-          videoModel: panel.videoModel,
-          errorMessage: panel.videoErrorMessage ?? null,
+  if (editFirstCanvasVisibility.storyboardPanels) {
+    panelList.forEach((panel, index) => {
+      const shotNumber = resolvePanelShotNumber(panel)
+      const nodeId = workspaceNodeId.shot(panel.id)
+      shotNodeIdsByShotNumber.set(shotNumber, nodeId)
+      const column = index % SHOT_GRID_COLUMNS
+      const row = Math.floor(index / SHOT_GRID_COLUMNS)
+      const previewImageUrl = primaryPanelImageUrl(panel)
+      const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
+      const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
+      const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
+      const shotPresentation = shotRunning
+        ? workspaceCanvasRunningPresentation(phaseLabels)
+        : shotFailed
+          ? workspaceCanvasFailedPresentation(phaseLabels)
+          : workspaceCanvasSucceededPresentation(phaseLabels)
+      nodes.push(createNode({
+        id: nodeId,
+        position: layoutPosition(savedLayouts, nodeId, {
+          x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width + SHOT_GRID_GAP_X),
+          y: 460 + row * SHOT_GRID_GAP_Y,
+        }),
+        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
+        height: SHOT_NODE_HEIGHT,
+        data: {
+          projectId,
+          episodeName,
+          kind: 'shot',
+          layoutNodeType: 'shot',
+          targetType: 'panel',
+          targetId: panel.id,
+          storyboardId: panel.storyboardId,
+          panelIndex: panel.panelIndex,
+          title: translate('nodes.shot.title', { shot: shotNumber }),
+          eyebrow: translate('nodes.shot.eyebrow'),
+          body: panel.description ?? translate('empty.panel'),
+          meta: panel.location ?? translate('empty.location'),
+          ...shotPresentation,
+          previewImageUrl,
+          loadingStyleImageUrl: stylePreviewImageUrl,
+          runtimeTargets: runtimeTargets(
+            TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
+            TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
+          ),
+          actionLabel: translate('actions.generateImage'),
+          action: { type: 'generate_image', panelId: panel.id },
+          shotDetails: shotDetails(panel),
+          imageDetails: imageDetails(panel),
+          videoDetails: {
+            videoPrompt: panel.videoPrompt,
+            lastVideoGenerationOptions: [],
+            videoUrl: panel.videoMedia?.url ?? panel.videoUrl,
+            videoModel: panel.videoModel,
+            errorMessage: panel.videoErrorMessage ?? null,
+          },
+          onAction,
         },
-        onAction,
-      },
-    }))
-    edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
-  })
+      }))
+      edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
+    })
+  }
 
-  if (editScript?.generationSegments.length) {
+  if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
     editScript.generationSegments.forEach((segment, index) => {
       const nodeId = workspaceNodeId.videoPlan(editScript.id, index + 1)
       const videoGroup = videoGroupForShotNumbers(videoGroups, segment.shotNumbers)
@@ -1043,39 +1047,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     },
   }))
 
-  if (editScript?.generationSegments.length) {
+  if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
     editScript.generationSegments.forEach((_segment, index) => {
       edges.push(createEdge(`edge:video-plan-final:${index}`, workspaceNodeId.videoPlan(editScript.id, index + 1), finalNodeId))
     })
   }
   edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
-
-  locations.forEach((location, index) => {
-    const preview = locationPreviewUrl(location)
-    if (!preview) return
-    const nodeId = `location-asset:${location.id}`
-    nodes.push(createNode({
-      id: nodeId,
-      position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 860 + index * 260 }),
-      width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-      height: 240,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'imageAsset',
-        layoutNodeType: 'imageAsset',
-        targetType: 'projectLocation',
-        targetId: location.id,
-        title: location.name,
-        eyebrow: translate('nodeFields.location'),
-        body: location.summary ?? '',
-        meta: '',
-        ...workspaceCanvasSucceededPresentation(phaseLabels),
-        previewImageUrl: preview,
-        onAction,
-      },
-    }))
-  })
 
   return { nodes, edges }
 }
@@ -1086,8 +1063,8 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeId,
     episodeName,
     storyText,
-    locations,
     storyboards,
+    editFirstWorkflow,
     editScreenplay,
     editScript,
     editShotExecutionPlan,
@@ -1108,8 +1085,8 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeId,
     episodeName,
     storyText,
-    locations,
     storyboards,
+    editFirstWorkflow,
     editScreenplay,
     editScript,
     editShotExecutionPlan,
@@ -1128,8 +1105,8 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeId,
     episodeName,
     storyText,
-    locations,
     storyboards,
+    editFirstWorkflow,
     editScreenplay,
     editScript,
     editShotExecutionPlan,

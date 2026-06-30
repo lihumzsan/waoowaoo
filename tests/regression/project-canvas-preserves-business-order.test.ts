@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import type { ProjectPanel, ProjectStoryboard } from '@/types/project'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
 
 function t(key: string): string {
   return key
+}
+
+function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
+  return {
+    active: true,
+    stage,
+    blocking: {
+      kind: 'none',
+      reason: null,
+    },
+    nextAction: null,
+    allowedOperationIds: [],
+  }
 }
 
 function panel(id: string, panelIndex: number): ProjectPanel {
@@ -65,6 +79,7 @@ describe('project canvas preserves business order', () => {
       episodeId: 'episode-1',
       storyText: 'story',
       storyboards: [storyboard([panel('panel-2', 1), panel('panel-1', 0)])],
+      editFirstWorkflow: workflow('ready_to_generate_storyboard_images'),
       savedLayouts: [
         {
           nodeKey: 'shot:panel-2',

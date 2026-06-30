@@ -11,6 +11,7 @@ import {
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import type { DemoProjectSnapshot } from '@/lib/demo/demo-snapshot'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
@@ -30,6 +31,16 @@ import {
 
 const DEMO_NODE_TYPES: NodeTypes = workspaceNodeTypes
 const DEMO_VIDEO_PLAN_ASPECT_RATIO = 16 / 9
+const DEMO_EDIT_FIRST_WORKFLOW: EditFirstWorkflowState = {
+  active: true,
+  stage: 'ready_to_generate_videos',
+  blocking: {
+    kind: 'none',
+    reason: null,
+  },
+  nextAction: null,
+  allowedOperationIds: [],
+}
 
 function demoNodeDefaultExpanded(node: WorkspaceCanvasFlowNode): boolean {
   const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
@@ -104,6 +115,7 @@ function DemoProjectCanvasContent({ snapshot }: { readonly snapshot: DemoProject
       episodeName: snapshot.episode.name,
       storyText: snapshot.episode.novelText ?? '',
       storyboards: snapshot.storyboards,
+      editFirstWorkflow: DEMO_EDIT_FIRST_WORKFLOW,
       editScreenplay: snapshot.editScreenplay,
       editScript: snapshot.editScript,
       editScriptPending: false,

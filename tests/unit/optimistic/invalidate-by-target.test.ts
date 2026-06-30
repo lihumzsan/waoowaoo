@@ -188,7 +188,7 @@ describe('invalidateByTarget', () => {
     })).toBe(true)
   })
 
-  it('CharacterAppearance invalidates episode scoped edit script query', () => {
+  it('CharacterAppearance invalidates episode scoped edit script and workflow context queries', () => {
     const testClient = createQueryClient()
 
     invalidateByTarget({
@@ -204,6 +204,14 @@ describe('invalidateByTarget', () => {
         && key[0] === queryKeys.project.editScript('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
         && key[2] === 'edit-script'
+        && key[3] === 'episode-1'
+    })).toBe(true)
+    expect(hasInvalidation(testClient, (arg) => {
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.project.context('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'context'
         && key[3] === 'episode-1'
     })).toBe(true)
   })

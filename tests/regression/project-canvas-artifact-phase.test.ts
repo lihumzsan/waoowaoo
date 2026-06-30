@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProjectEditScreenplay } from '@/types/project'
+import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
@@ -7,6 +8,19 @@ import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canva
 
 function t(key: string): string {
   return key
+}
+
+function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
+  return {
+    active: true,
+    stage,
+    blocking: {
+      kind: 'none',
+      reason: null,
+    },
+    nextAction: null,
+    allowedOperationIds: [],
+  }
 }
 
 function screenplay(status: string): ProjectEditScreenplay {
@@ -28,6 +42,7 @@ function editScreenplayNode(status: string, activeAssistantOperationId?: string)
     episodeName: 'Episode 1',
     storyText: 'story',
     storyboards: [],
+    editFirstWorkflow: workflow('screenplay_ready_for_review'),
     editScreenplay: screenplay(status),
     activeAssistantOperationId,
     savedLayouts: [],
@@ -46,6 +61,7 @@ describe('project canvas artifact phase', () => {
       episodeName: 'Episode 1',
       storyText: '',
       storyboards: [],
+      editFirstWorkflow: workflow('ready_to_generate_screenplay'),
       savedLayouts: [],
       translate: t,
     })

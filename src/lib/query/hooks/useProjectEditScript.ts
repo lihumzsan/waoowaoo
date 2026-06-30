@@ -200,6 +200,7 @@ export function useCreateProjectEditScript(projectId: string | null) {
       if (!projectId) return
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
@@ -230,6 +231,7 @@ export function useCreateProjectEditScreenplay(projectId: string | null) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
@@ -262,6 +264,7 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
@@ -290,6 +293,7 @@ export function useCreateProjectEditShotExecutionPlan(projectId: string | null) 
       if (!projectId) return
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
@@ -334,6 +338,7 @@ export function useGenerateProjectEditScriptAssets(projectId: string | null) {
       })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editScript.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, editScript.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editScript.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.assets.all('project', projectId) }),
@@ -363,6 +368,7 @@ export function useGenerateProjectEditScriptStoryboard(projectId: string | null)
       if (!projectId) return
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
