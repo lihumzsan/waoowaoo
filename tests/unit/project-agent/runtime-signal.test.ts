@@ -63,7 +63,7 @@ describe('project agent runtime signal', () => {
     })
   })
 
-  it('[running command] -> active_status signal', () => {
+  it('[non-status command] -> done signal', () => {
     expect(normalizeOperationRuntimeSignal({
       toolName: 'list_recent_commands',
       output: {
@@ -74,10 +74,7 @@ describe('project agent runtime signal', () => {
         ],
       },
     })).toEqual({
-      kind: 'active_status',
-      operationId: 'list_recent_commands',
-      taskIds: ['task-1'],
-      phases: ['approved'],
+      kind: 'done',
     })
   })
 
@@ -104,19 +101,19 @@ describe('project agent runtime signal', () => {
 
   it('[confirmation required] -> await_user_confirmation signal before tool_error', () => {
     expect(normalizeOperationRuntimeSignal({
-      toolName: 'delete_storyboard_panel',
+      toolName: 'generate_edit_script',
       output: {
         ok: false,
         confirmationRequired: true,
         error: {
-          operationId: 'delete_storyboard_panel',
+          operationId: 'generate_edit_script',
           code: 'CONFIRMATION_REQUIRED',
           message: 'requires confirmation',
         },
       },
     })).toEqual({
       kind: 'await_user_confirmation',
-      operationId: 'delete_storyboard_panel',
+      operationId: 'generate_edit_script',
       message: 'requires confirmation',
     })
   })

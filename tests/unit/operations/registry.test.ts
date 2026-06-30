@@ -36,7 +36,7 @@ describe('project agent operation registry', () => {
     expect(registry.generate_video).toBeUndefined()
     expect(registry.modify_character_image).toBeUndefined()
     expect(registry.modify_location_image).toBeUndefined()
-    expect(registry.delete_storyboard_panel?.channels?.tool ?? true).toBe(true)
+    expect(registry.delete_storyboard_panel).toBeUndefined()
     expect(registry.update_storyboard_panel_prompt?.channels?.tool ?? true).toBe(true)
     expect(registry.generate_panel_video?.channels?.tool ?? true).toBe(true)
     expect(registry.generate_episode_videos?.channels?.api ?? false).toBe(true)
@@ -57,7 +57,6 @@ describe('project agent operation registry', () => {
       expect(registry[operationId]?.intent).toBe('query')
     }
 
-    expect(registry.delete_storyboard_panel?.groupPath).toEqual(['storyboard', 'edit'])
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])
     expect(registry.generate_edit_screenplay?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_style_previews?.groupPath).toEqual(['edit-script'])

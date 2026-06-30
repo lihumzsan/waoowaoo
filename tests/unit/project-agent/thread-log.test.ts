@@ -17,19 +17,19 @@ describe('project assistant thread log', () => {
         {
           id: 'user-1',
           role: 'user',
-          parts: [{ type: 'text', text: '删除第七个分镜' }],
+          parts: [{ type: 'text', text: '修改第七个分镜提示词' }],
         },
         {
           id: 'assistant-1',
           role: 'assistant',
           parts: [
-            { type: 'text', text: '好的，我先确认删除对象。' },
+            { type: 'text', text: '好的，我先确认要修改的分镜。' },
             {
-              type: 'tool-delete_storyboard_panel',
+              type: 'tool-update_storyboard_panel_prompt',
               toolCallId: 'tool-call-1',
               state: 'output-available',
-              input: { panelNumber: 7, confirmed: false },
-              output: { ok: true, operationId: 'delete_storyboard_panel' },
+              input: { panelNumber: 7, prompt: '更强的逆光', confirmed: false },
+              output: { ok: true, operationId: 'update_storyboard_panel_prompt' },
             },
             {
               type: 'data-agent-stop',
@@ -50,8 +50,8 @@ describe('project assistant thread log', () => {
 
     expect(text).toContain('# Workspace Assistant Thread Log')
     expect(text).toContain('## 01 USER')
-    expect(text).toContain('删除第七个分镜')
-    expect(text).toContain('### Tool delete_storyboard_panel')
+    expect(text).toContain('修改第七个分镜提示词')
+    expect(text).toContain('### Tool update_storyboard_panel_prompt')
     expect(text).toContain('"panelNumber": 7')
     expect(text).toContain('### data-agent-stop')
     expect(text).toContain('"reason": "awaiting_external_task"')

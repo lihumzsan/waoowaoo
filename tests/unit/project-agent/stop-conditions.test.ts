@@ -168,12 +168,12 @@ describe('project agent business stop signals', () => {
   it('[confirmation required] -> keeps a business confirmation stop signal for legacy operation errors', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([{
-      toolName: 'delete_storyboard_panel',
+      toolName: 'generate_edit_script',
       output: {
         ok: false,
         confirmationRequired: true,
         error: {
-          operationId: 'delete_storyboard_panel',
+          operationId: 'generate_edit_script',
           code: 'CONFIRMATION_REQUIRED',
         },
       },
@@ -182,7 +182,7 @@ describe('project agent business stop signals', () => {
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
       stepCount: 1,
-      operationIds: ['delete_storyboard_panel'],
+      operationIds: ['generate_edit_script'],
     })
   })
 

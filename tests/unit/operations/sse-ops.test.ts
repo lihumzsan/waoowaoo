@@ -142,7 +142,7 @@ describe('sse bootstrap operations', () => {
       projectId: 'project-1',
       userId: 'user-1',
       ts: '2026-04-24T00:00:00.000Z',
-      operationId: 'delete_storyboard_panel',
+      operationId: 'update_storyboard_panel_prompt',
       episodeId: 'episode-1',
       targets: [{ targetType: 'ProjectStoryboard', targetId: 'storyboard-1' }],
     }
