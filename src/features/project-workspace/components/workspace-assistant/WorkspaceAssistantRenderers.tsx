@@ -183,14 +183,14 @@ export function ConfirmationActionCard(props: {
 }) {
   const t = useTranslations('assistantAgent')
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
       <BillingQuoteBlock quote={props.operationPlan?.quote ?? null} />
       <div className="mt-3 flex gap-2">
         <button
           type="button"
-          className="flex-1 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)]"
+          className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700"
           onClick={() => { void props.onConfirm() }}
           disabled={props.confirmPending}
         >
@@ -214,7 +214,7 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
   const locale = normalizeProjectAgentLocale(useLocale())
   const title = localizeProjectAgentOperationTitle(props.data.operationId, locale)
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</div>
       <div className="mt-1 leading-5">{t('cards.billingQuotePreview')}</div>
       <BillingQuoteBlock quote={props.data.operationPlan.quote} />
@@ -229,7 +229,7 @@ export function WorkspaceAssistantActiveRunCard(props: {
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.operationId ?? '', locale)
   return (
-    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="flex items-center gap-2">
         <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
         <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
@@ -259,7 +259,7 @@ function RatioChoiceShape(props: {
   return (
     <div className="flex h-9 w-12 items-center justify-center">
       <div
-        className={`rounded-[4px] border-2 transition-colors ${props.selected ? 'border-[var(--glass-accent-from)] bg-[var(--glass-accent-from)]/10' : 'border-[var(--glass-stroke-strong)] bg-white'}`}
+        className={`rounded-[4px] border-2 transition-colors ${props.selected ? 'border-neutral-900 bg-neutral-900/10' : 'border-[var(--glass-stroke-strong)] bg-white'}`}
         style={{
           width: `${String(Math.max(14, Math.round(34 * (width / max))))}px`,
           height: `${String(Math.max(14, Math.round(34 * (height / max))))}px`,
@@ -432,7 +432,7 @@ export function AssistantChoiceCardView(props: {
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+    <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="flex items-center gap-2">
         {canGoBack ? (
           <button
@@ -460,7 +460,7 @@ export function AssistantChoiceCardView(props: {
         <div className="mt-3">
           <button
             type="button"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             onClick={() => { void handleSubmit() }}
             disabled={!ready || submitting}
           >
@@ -471,7 +471,7 @@ export function AssistantChoiceCardView(props: {
         <div className="mt-3 space-y-2">
           <button
             type="button"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             onClick={() => { void handleSubmit() }}
             disabled={!ready || submitting}
           >
@@ -491,7 +491,7 @@ export function AssistantChoiceCardView(props: {
                 submitFromEnterKey(event, () => { void handleReplySubmit() })
               }}
               placeholder={card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
-              className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-[var(--glass-accent-from)] focus:bg-white"
+              className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white"
               disabled={submitting}
             />
             <button
@@ -514,7 +514,7 @@ export function AssistantChoiceCardView(props: {
                 <button
                   key={`${activeGroup.key}:${option.value}`}
                   type="button"
-                  className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-[var(--glass-accent-from)] bg-[var(--glass-accent-from)]/5 ring-1 ring-[var(--glass-accent-from)]/30' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
+                  className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
                   onClick={() => {
                     const nextSelections = {
                       ...selections,
@@ -544,8 +544,8 @@ export function AssistantChoiceCardView(props: {
                   <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-0.5'}`}>
                     {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
                     <div className="flex min-w-0 items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-[var(--glass-accent-from)]' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
-                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-accent-from)]" /> : null}
+                      <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
                     </div>
                     {!isAspectRatioGroup && option.description ? (
                       <div className="line-clamp-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
@@ -565,7 +565,7 @@ export function AssistantChoiceCardView(props: {
         <>
           <button
             type="button"
-            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--glass-accent-to)] disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             onClick={() => { void handleSubmit() }}
             disabled={!ready || submitting}
           >
