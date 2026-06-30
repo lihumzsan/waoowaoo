@@ -385,6 +385,17 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
   }
 }
 
+function countEditAssetRequirements(
+  requirements: readonly ProjectEditAssetRequirement[],
+  kind: ProjectEditAssetRequirement['kind'],
+): number {
+  return requirements.filter((requirement) => requirement.kind === kind).length
+}
+
+function countCompletedEditAssetRequirements(requirements: readonly ProjectEditAssetRequirement[]): number {
+  return requirements.filter((requirement) => requirement.status === 'completed').length
+}
+
 function videoPlanDetails(input: {
   readonly editScript: ProjectEditScript
   readonly segmentIndex: number
@@ -602,7 +613,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: editScript?.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.action}`).join('\n')
           ?? translate('nodes.editScript.pendingBody'),
         meta: editScript
-          ? translate('nodes.editScript.meta', { shots: editScript.shotCount, duration: editScript.durationSec })
+          ? translate('nodes.editScript.meta', {
+              shots: editScript.shotCount,
+              duration: editScript.durationSec,
+              assets: editScript.requirements.length,
+              completed: countCompletedEditAssetRequirements(editScript.requirements),
+            })
           : translate('nodes.editScript.pendingMeta'),
         statusLabel: editScript ? statusLabel(editScript.status, translate) : translate('status.processing'),
         isRunning: editScriptRunning || Boolean(editScript && editScript.status !== 'ready'),
@@ -620,6 +636,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   let assetGroupNodeId: string | null = null
   if (editScript) {
     assetGroupNodeId = workspaceNodeId.editAssetGroup(editScript.id)
+    const characterRequirements = countEditAssetRequirements(editScript.requirements, 'character')
+    const locationRequirements = countEditAssetRequirements(editScript.requirements, 'location')
     const assetsReady = editScript.requirements.length > 0
       && editScript.requirements.every((requirement) => requirement.status === 'completed')
     nodes.push(createNode({
@@ -637,7 +655,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         title: translate('nodes.editAssetGroup.title'),
         eyebrow: translate('nodes.editAssetGroup.eyebrow'),
         body: editScript.requirements.map((requirement) => `${requirement.name} / ${requirement.kind}`).join('\n') || translate('empty.editAsset'),
-        meta: translate('nodes.editAssetGroup.meta', { assets: editScript.requirements.length }),
+        meta: translate('nodes.editAssetGroup.meta', {
+          characters: characterRequirements,
+          locations: locationRequirements,
+        }),
         statusLabel: assetsReady ? translate('status.ready') : translate('status.pending'),
         actionLabel: assetsReady ? undefined : translate('actions.generateEditAssets'),
         action: { type: 'generate_edit_assets', editScriptId: editScript.id },
@@ -849,7 +870,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           title: translate('nodes.videoPlan.title', { index: index + 1 }),
           eyebrow: translate('nodes.videoPlan.eyebrow'),
           body: segment.continuity,
-          meta: translate('nodes.videoPlan.meta', { shots: segment.shotNumbers.length, duration: details.durationSec }),
+          meta: translate('nodes.videoPlan.meta', {
+            mode: translate('nodeFields.videoPlanGroup'),
+            shots: segment.shotNumbers.length,
+            duration: details.durationSec,
+          }),
           statusLabel: videoGroup ? statusLabel(videoGroup.status, translate) : translate('status.pending'),
           isRunning: Boolean(videoGroup && (videoGroup.status === 'queued' || videoGroup.status === 'generating')),
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
@@ -904,7 +929,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       targetId: episodeId,
       title: translate('nodes.bgmScore.title'),
       eyebrow: translate('nodes.bgmScore.eyebrow'),
-      body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body'),
+      body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
       meta: bgmDetails?.musicModel ?? '',
       statusLabel: bgmDetails ? statusLabel(bgmDetails.status, translate) : translate('status.pending'),
       actionLabel: translate('actions.generateBgmScore'),

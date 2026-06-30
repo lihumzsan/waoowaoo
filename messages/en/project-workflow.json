@@ -230,7 +230,7 @@
         "soundFilterPrompt": "Sound Filter",
         "hardBans": "Hard Bans",
         "selectAspectRatio": "Choose Aspect Ratio",
-        "scene": "Scene {index}",
+        "scene": "Scene",
         "characters": "Characters",
         "scenes": "Scenes",
         "locations": "Locations",
@@ -586,7 +586,7 @@
           "meta": "Characters / locations / pacing / visual direction"
         },
         "shot": {
-          "title": "Shot {index}",
+          "title": "Shot {shot}",
           "eyebrow": "Single Shot",
           "meta": "Location: {location}"
         },

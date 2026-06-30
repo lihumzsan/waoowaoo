@@ -230,7 +230,7 @@
         "soundFilterPrompt": "声音滤镜",
         "hardBans": "硬禁用项",
         "selectAspectRatio": "选择画面比例",
-        "scene": "场景 {index}",
+        "scene": "场景",
         "characters": "出场角色",
         "scenes": "场景",
         "locations": "场景",
@@ -586,7 +586,7 @@
           "meta": "人物 / 场景 / 节奏 / 视觉方向"
         },
         "shot": {
-          "title": "镜头 {index}",
+          "title": "镜头 {shot}",
           "eyebrow": "单个镜头",
           "meta": "场景：{location}"
         },

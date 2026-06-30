@@ -19,6 +19,11 @@ const WORKSPACE_NODE_CANVAS_PROJECTION_PATH = join(
   'src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts',
 )
 
+interface StaticMessageCall {
+  readonly key: string
+  readonly valueKeys: readonly string[]
+}
+
 function readProjectWorkflowMessages(locale: 'en' | 'zh'): ProjectWorkflowMessages {
   return JSON.parse(
     readFileSync(join(REPO_ROOT, `messages/${locale}/project-workflow.json`), 'utf8'),
@@ -41,6 +46,17 @@ function readWorkspaceProjectionTranslationKeys(): readonly string[] {
     .sort()
 }
 
+function readStaticMessageCalls(path: string, callee: 'labels' | 'translate'): readonly StaticMessageCall[] {
+  const source = readFileSync(path, 'utf8')
+  const callPattern = new RegExp(`${callee}\\(\\s*['"]([^'"]+)['"](?:\\s*,\\s*\\{([\\s\\S]*?)\\})?\\s*\\)`, 'g')
+  return Array.from(source.matchAll(callPattern), (match) => ({
+    key: match[1],
+    valueKeys: Array.from((match[2] ?? '').matchAll(/([A-Za-z_$][\w$]*)\s*:/g), (valueMatch) => valueMatch[1])
+      .filter((key, index, keys) => keys.indexOf(key) === index)
+      .sort(),
+  })).sort((left, right) => left.key.localeCompare(right.key))
+}
+
 function isJsonRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -54,6 +70,13 @@ function readNestedMessageValue(messages: JsonRecord | undefined, key: string): 
     current = current[segment]
   }
   return current
+}
+
+function readMessagePlaceholders(value: unknown): readonly string[] {
+  if (typeof value !== 'string') return []
+  return Array.from(value.matchAll(/\{\s*([A-Za-z_]\w*)\s*\}/g), (match) => match[1])
+    .filter((key, index, keys) => keys.indexOf(key) === index)
+    .sort()
 }
 
 describe('WorkspaceNode i18n messages', () => {
@@ -80,6 +103,36 @@ describe('WorkspaceNode i18n messages', () => {
 
       const missingKeys = usedKeys.filter((key) => readNestedMessageValue(workspaceMessages, key) === undefined)
       expect(missingKeys, `${locale} missing workspace canvas projection messages`).toEqual([])
+    }
+  })
+
+  it('passes every required placeholder for static workspace canvas message calls', () => {
+    const callSets = [
+      {
+        calls: readStaticMessageCalls(WORKSPACE_NODE_CANVAS_PROJECTION_PATH, 'translate'),
+        readMessage: (workspaceMessages: JsonRecord | undefined, key: string) => readNestedMessageValue(workspaceMessages, key),
+      },
+      {
+        calls: readStaticMessageCalls(WORKSPACE_NODE_PATH, 'labels'),
+        readMessage: (workspaceMessages: JsonRecord | undefined, key: string) => readNestedMessageValue(
+          isJsonRecord(workspaceMessages?.nodeFields) ? workspaceMessages.nodeFields : undefined,
+          key,
+        ),
+      },
+    ] as const
+
+    for (const locale of ['en', 'zh'] as const) {
+      const messages = readProjectWorkflowMessages(locale)
+      const workspaceMessages = messages.canvas?.workspace
+
+      const missingPlaceholders = callSets.flatMap(({ calls, readMessage }) => calls.flatMap((call) => {
+        const placeholders = readMessagePlaceholders(readMessage(workspaceMessages, call.key))
+        return placeholders
+          .filter((placeholder) => !call.valueKeys.includes(placeholder))
+          .map((placeholder) => `${call.key}:${placeholder}`)
+      }))
+
+      expect(missingPlaceholders, `${locale} missing workspace canvas message placeholders`).toEqual([])
     }
   })
 })
