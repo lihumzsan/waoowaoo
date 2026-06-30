@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -24,10 +24,24 @@ interface StaticMessageCall {
   readonly valueKeys: readonly string[]
 }
 
+interface StaticProjectWorkflowMessageCall extends StaticMessageCall {
+  readonly namespace: string
+  readonly sourcePath: string
+}
+
 function readProjectWorkflowMessages(locale: 'en' | 'zh'): ProjectWorkflowMessages {
   return JSON.parse(
     readFileSync(join(REPO_ROOT, `messages/${locale}/project-workflow.json`), 'utf8'),
   ) as ProjectWorkflowMessages
+}
+
+function readSourceFiles(dir: string): readonly string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === 'node_modules' || entry.name === '.next' || entry.name === '.git') return []
+    const entryPath = join(dir, entry.name)
+    if (entry.isDirectory()) return readSourceFiles(entryPath)
+    return /\.(ts|tsx)$/.test(entry.name) ? [entryPath] : []
+  })
 }
 
 function readWorkspaceNodeFieldKeys(): readonly string[] {
@@ -36,6 +50,26 @@ function readWorkspaceNodeFieldKeys(): readonly string[] {
     .filter((key): key is string => typeof key === 'string')
     .filter((key, index, keys) => keys.indexOf(key) === index)
     .sort()
+}
+
+function readStaticProjectWorkflowMessageCalls(): readonly StaticProjectWorkflowMessageCall[] {
+  return readSourceFiles(join(REPO_ROOT, 'src')).flatMap((sourcePath) => {
+    const source = readFileSync(sourcePath, 'utf8')
+    const bindings = new Map<string, string>()
+    for (const match of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*useTranslations\(\s*['"](projectWorkflow(?:\.[^'"]+)?)['"]\s*\)/g)) {
+      bindings.set(match[1], match[2])
+    }
+
+    return Array.from(bindings.entries()).flatMap(([callee, namespace]) => {
+      const callPattern = new RegExp(`\\b${callee}\\(\\s*['"]([^'"]+)['"](?:\\s*,\\s*\\{([\\s\\S]*?)\\})?\\s*\\)`, 'g')
+      return Array.from(source.matchAll(callPattern), (match): StaticProjectWorkflowMessageCall => ({
+        sourcePath,
+        namespace,
+        key: match[1],
+        valueKeys: readStaticObjectKeys(match[2] ?? ''),
+      }))
+    })
+  }).sort((left, right) => `${left.sourcePath}:${left.namespace}:${left.key}`.localeCompare(`${right.sourcePath}:${right.namespace}:${right.key}`))
 }
 
 function readWorkspaceProjectionTranslationKeys(): readonly string[] {
@@ -51,10 +85,14 @@ function readStaticMessageCalls(path: string, callee: 'labels' | 'translate'): r
   const callPattern = new RegExp(`${callee}\\(\\s*['"]([^'"]+)['"](?:\\s*,\\s*\\{([\\s\\S]*?)\\})?\\s*\\)`, 'g')
   return Array.from(source.matchAll(callPattern), (match) => ({
     key: match[1],
-    valueKeys: Array.from((match[2] ?? '').matchAll(/([A-Za-z_$][\w$]*)\s*:/g), (valueMatch) => valueMatch[1])
-      .filter((key, index, keys) => keys.indexOf(key) === index)
-      .sort(),
+    valueKeys: readStaticObjectKeys(match[2] ?? ''),
   })).sort((left, right) => left.key.localeCompare(right.key))
+}
+
+function readStaticObjectKeys(source: string): readonly string[] {
+  return Array.from(source.matchAll(/([A-Za-z_$][\w$]*)\s*:/g), (match) => match[1])
+    .filter((key, index, keys) => keys.indexOf(key) === index)
+    .sort()
 }
 
 function isJsonRecord(value: unknown): value is JsonRecord {
@@ -77,6 +115,10 @@ function readMessagePlaceholders(value: unknown): readonly string[] {
   return Array.from(value.matchAll(/\{\s*([A-Za-z_]\w*)\s*\}/g), (match) => match[1])
     .filter((key, index, keys) => keys.indexOf(key) === index)
     .sort()
+}
+
+function projectWorkflowNamespacePath(namespace: string, key: string): string {
+  return `${namespace}.${key}`.replace(/^projectWorkflow\./, '')
 }
 
 describe('WorkspaceNode i18n messages', () => {
@@ -133,6 +175,31 @@ describe('WorkspaceNode i18n messages', () => {
       }))
 
       expect(missingPlaceholders, `${locale} missing workspace canvas message placeholders`).toEqual([])
+    }
+  })
+
+  it('defines every static projectWorkflow message and passes required placeholders', () => {
+    const calls = readStaticProjectWorkflowMessageCalls()
+
+    for (const locale of ['en', 'zh'] as const) {
+      const messages = readProjectWorkflowMessages(locale) as JsonRecord
+
+      const missingMessages = calls.flatMap((call) => {
+        const messagePath = projectWorkflowNamespacePath(call.namespace, call.key)
+        return readNestedMessageValue(messages, messagePath) === undefined
+          ? [`${call.sourcePath}:${messagePath}`]
+          : []
+      })
+      expect(missingMessages, `${locale} missing static projectWorkflow messages`).toEqual([])
+
+      const missingPlaceholders = calls.flatMap((call) => {
+        const messagePath = projectWorkflowNamespacePath(call.namespace, call.key)
+        const placeholders = readMessagePlaceholders(readNestedMessageValue(messages, messagePath))
+        return placeholders
+          .filter((placeholder) => !call.valueKeys.includes(placeholder))
+          .map((placeholder) => `${call.sourcePath}:${messagePath}:${placeholder}`)
+      })
+      expect(missingPlaceholders, `${locale} missing static projectWorkflow placeholders`).toEqual([])
     }
   })
 })
