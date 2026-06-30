@@ -31,7 +31,6 @@ import { createUserModelsOperations } from './domains/config/user-models-ops'
 import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createAuthOperations } from './domains/auth/auth-ops'
-import { createAlwaysOnOperations } from './domains/ui/always-on-ops'
 import { createAssetImageOperations } from './domains/asset/generation'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
@@ -40,16 +39,9 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
   const CONFIRM_NONE = { required: false, summary: null, budget: null } as const
   const CHANNELS_TOOL_API = { tool: true, api: true } as const
   const CHANNELS_API_ONLY = { tool: false, api: true } as const
-  const CHANNELS_TOOL_ONLY = { tool: true, api: false } as const
   const PREREQ_EPISODE_OPTIONAL = { episodeId: 'optional' } as const
 
   return {
-    ...withOperationPack(createAlwaysOnOperations(), {
-      groupPath: ['ui'],
-      channels: CHANNELS_TOOL_ONLY,
-      prerequisites: PREREQ_EPISODE_OPTIONAL,
-      confirmation: CONFIRM_NONE,
-    }),
     ...withOperationPack(createSystemProjectOperations(), {
       groupPath: ['project', 'system'],
       channels: CHANNELS_TOOL_API,

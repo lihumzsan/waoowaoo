@@ -7,11 +7,6 @@ export type AssistantPermissionMode = 'ask' | 'auto'
 const ASSISTANT_PERMISSION_MODES: readonly AssistantPermissionMode[] = ['ask', 'auto'] as const
 
 const HUMAN_INPUT_OPERATION_IDS: ReadonlySet<string> = new Set([
-  'ui_cancel',
-  'ui_confirm',
-  'ui_single_select',
-  'ui_multi_select',
-  'ui_safety_ack',
   ...EDIT_FIRST_CHOICE_OPERATION_IDS,
 ])
 

@@ -12,18 +12,8 @@ import {
 import type { ProjectAgentContext } from './types'
 
 const CORE_OPERATION_IDS = [
-  'ui_cancel',
-  'ui_confirm',
-  'ui_single_select',
-  'ui_multi_select',
-  'ui_safety_ack',
-  'get_project_phase',
   'get_project_context',
   'get_project_snapshot',
-  'get_task_status',
-  'get_project_assets',
-  'get_project_costs',
-  'get_project_data',
   'get_task',
   'list_tasks',
 ] as const

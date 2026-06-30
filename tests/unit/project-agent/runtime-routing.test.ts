@@ -402,20 +402,8 @@ function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
 
 function createRegistry(): ProjectAgentOperationRegistry {
   const queryIds = [
-    'ui_cancel',
-    'ui_confirm',
-    'ui_single_select',
-    'ui_multi_select',
-    'ui_safety_ack',
-    'get_project_phase',
     'get_project_context',
     'get_project_snapshot',
-    'get_task_status',
-    'get_project_command',
-    'list_recent_commands',
-    'get_project_assets',
-    'get_project_costs',
-    'get_project_data',
     'get_task',
     'list_tasks',
     ...EDIT_FIRST_CHOICE_OPERATION_IDS,
@@ -505,11 +493,16 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([
-      'get_project_phase',
       'get_project_context',
+      'get_project_snapshot',
+      'get_task',
+      'list_tasks',
       ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       'generate_edit_screenplay',
     ]))
+    expect(streamState.capturedToolNames).not.toContain('get_task_status')
+    expect(streamState.capturedToolNames).not.toContain('get_project_assets')
+    expect(streamState.capturedToolNames).not.toContain('get_project_data')
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
     expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
@@ -995,7 +988,7 @@ describe('project agent runtime deterministic tool injection', () => {
       text: '继续生成剪辑表',
     })
 
-    expect(streamState.capturedToolNames).toContain('get_project_phase')
+    expect(streamState.capturedToolNames).toContain('get_project_context')
     expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.style)
     expect(streamState.capturedToolNames).toContain('generate_edit_script')
   })

@@ -2,13 +2,11 @@ import { z } from 'zod'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { withPrismaRetry } from '@/lib/prisma-retry'
 import { assembleProjectContext } from '@/lib/project-context/assembler'
-import { resolveProjectPhase } from '@/lib/project-agent/project-phase'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
 import { buildAssistantProjectContextSnapshot } from '@/lib/project-agent/presentation'
 import type {
   ProjectContextPartData,
-  ProjectPhasePartData,
 } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
@@ -50,26 +48,6 @@ function parseProjectionScope(scopeRef: string | undefined): { storyboardId?: st
 
 export function createReadOperations(): ProjectAgentOperationRegistryDraft {
   return {
-    get_project_phase: defineOperation({
-      id: 'get_project_phase',
-      summary: 'Resolve the current project phase, progress counts, active runs, failed items, stale artifacts, and available next actions. Use only when the injected project_state_snapshot is missing, stale, or insufficient; do not call by default before every action.',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: z.object({}),
-      outputSchema: z.unknown(),
-      execute: async (ctx) => {
-        const snapshot = await resolveProjectPhase({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId: ctx.context.episodeId || null,
-        })
-        writeOperationDataPart<ProjectPhasePartData>(ctx.writer, 'data-project-phase', {
-          phase: snapshot.phase,
-          snapshot,
-        })
-        return snapshot
-      },
-    }),
     get_project_snapshot: defineOperation({
       id: 'get_project_snapshot',
       summary: 'Load a project snapshot projection with progress, active runs, latest artifacts, and approvals. Use detail=full to inspect panel-level state including descriptions, prompts, and media URLs.',

@@ -64,15 +64,8 @@ describe('assistant permission mode', () => {
     })).toBe(false)
   })
 
-  it('exempts human input operations from ask approval', () => {
-    for (const operationId of [
-      'ui_cancel',
-      'ui_confirm',
-      'ui_single_select',
-      'ui_multi_select',
-      'ui_safety_ack',
-      ...EDIT_FIRST_CHOICE_OPERATION_IDS,
-    ]) {
+  it('exempts edit-first choice operations from ask approval', () => {
+    for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(shouldRequireAssistantToolApproval({
         mode: 'ask',
         operation: buildOperation(operationId),

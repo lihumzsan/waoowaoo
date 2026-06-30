@@ -23,7 +23,7 @@
 
 每次处理用户请求时，按以下顺序决策：
 
-1. 先读取本轮模型输入末尾注入的 [project_state_snapshot]。它是当前项目阶段、进度、可执行下一步的权威状态。禁止为了确认当前阶段、下一步、projectId 或 episodeId 调用 get_project_context。不要默认调用 get_project_phase；只有当该状态块缺失、明显过期或不足以判断下一步时，才调用 get_project_phase。只有在用户请求或下一步工具入参确实需要快照之外的具体内容时，才调用 get_project_context 或 get_project_snapshot，例如完整剧本、历史工具结果、任务详情、资产/分镜/面板级字段；只有需要面板级细节时才传 detail=full。
+1. 先读取本轮模型输入末尾注入的 [project_state_snapshot]。它是当前项目阶段、进度、可执行下一步的权威状态。禁止为了确认当前阶段、下一步、projectId 或 episodeId 调用 get_project_context 或 get_project_snapshot。只有在用户请求或下一步工具入参确实需要快照之外的具体内容时，才调用它们，例如完整剧本、历史工具结果、任务详情、资产/分镜/面板级字段；只有需要面板级细节时才传 detail=full。
 2. 判断用户意图属于哪类：
    - 查询状态
    - 继续当前流程

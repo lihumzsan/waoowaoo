@@ -86,10 +86,6 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
 }
 
 const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
-  get_project_phase: {
-    zh: '项目阶段',
-    en: 'Project phase',
-  },
   get_project_snapshot: {
     zh: '项目快照',
     en: 'Project snapshot',

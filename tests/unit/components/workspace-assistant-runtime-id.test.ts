@@ -282,7 +282,7 @@ describe('workspace assistant runtime chat id', () => {
           } as never,
           {
             type: 'dynamic-tool',
-            toolName: 'get_project_phase',
+            toolName: 'get_project_context',
             state: 'input-available',
           } as never,
         ],

@@ -51,10 +51,10 @@ function workflow(stage: EditFirstWorkflowState['stage'], operationIds: string[]
 
 function registry(): ProjectAgentOperationRegistry {
   const ids = [
-    'get_project_phase',
     'get_project_context',
     'get_project_snapshot',
-    'get_task_status',
+    'get_task',
+    'list_tasks',
     ...EDIT_FIRST_CHOICE_OPERATION_IDS,
     ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   ]
@@ -73,11 +73,16 @@ describe('project agent live toolset registration', () => {
 
     expect(result.source).toBe('live-workflow')
     expect(result.operationIds).toEqual(expect.arrayContaining([
-      'get_project_phase',
       'get_project_context',
+      'get_project_snapshot',
+      'get_task',
+      'list_tasks',
       ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
     ]))
+    expect(result.operationIds).not.toContain('get_task_status')
+    expect(result.operationIds).not.toContain('get_project_assets')
+    expect(result.operationIds).not.toContain('get_project_data')
   })
 
   it('keeps the choice tool available without forcing a continuation operation', () => {
@@ -200,7 +205,8 @@ describe('project agent live operation enablement', () => {
     const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
     const styleChoice = workflow('needs_style_choice', ['generate_edit_style_previews'])
 
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_phase')).toBe(true)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_context')).toBe(true)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_snapshot')).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,

@@ -201,8 +201,8 @@ describe('createProjectAgentOperationTool', () => {
     }
     const tool = createProjectAgentOperationTool({
       request: new Request('http://localhost') as unknown as NextRequest,
-      operation: buildOperation('get_project_phase', 'query'),
-      description: 'Get project phase',
+      operation: buildOperation('get_project_context', 'query'),
+      description: 'Get project context',
       projectId: 'project-1',
       userId: 'user-1',
       context: {
@@ -219,7 +219,7 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'get_project_phase',
+        name: 'get_project_context',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
@@ -230,7 +230,7 @@ describe('createProjectAgentOperationTool', () => {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'get_project_phase',
+        operationId: 'get_project_context',
         toolCallId: 'call-1',
       }),
     })
@@ -238,7 +238,7 @@ describe('createProjectAgentOperationTool', () => {
       type: 'data-agent-operation-start',
     }))
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
-      operationId: 'get_project_phase',
+      operationId: 'get_project_context',
     }))
   })
 
