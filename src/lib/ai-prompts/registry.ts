@@ -46,49 +46,6 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'prop/update-description',
     variableKeys: ['prop_name', 'original_description', 'modify_instruction', 'image_context'],
   },
-  [AI_PROMPT_IDS.SCRIPT_EPISODE_SPLIT]: {
-    pathStem: 'script/episode-split',
-    variableKeys: ['CONTENT'],
-  },
-  [AI_PROMPT_IDS.STORYBOARD_INSERT_PANEL]: {
-    pathStem: 'storyboard/insert-panel',
-    variableKeys: [
-      'prev_panel_json',
-      'next_panel_json',
-      'characters_full_description',
-      'locations_description',
-      'props_description',
-      'user_input',
-    ],
-  },
-  [AI_PROMPT_IDS.SHOT_VARIANT_ANALYZE]: {
-    pathStem: 'storyboard/shot-variant-analysis',
-    variableKeys: ['panel_description', 'shot_type', 'camera_move', 'location', 'characters_info'],
-  },
-  [AI_PROMPT_IDS.SHOT_VARIANT_GENERATE]: {
-    pathStem: 'storyboard/shot-variant-generate',
-    variableKeys: [
-      'original_description',
-      'original_shot_type',
-      'original_camera_move',
-      'location',
-      'characters_info',
-      'variant_title',
-      'variant_description',
-      'target_shot_type',
-      'target_camera_move',
-      'video_prompt',
-      'character_assets',
-      'location_asset',
-      'reference_images',
-      'aspect_ratio',
-      'style',
-    ],
-  },
-  [AI_PROMPT_IDS.IMAGE_UPDATE_SHOT_PROMPT]: {
-    pathStem: 'image/update-shot-prompt',
-    variableKeys: ['prompt_input', 'user_input', 'video_prompt_input'],
-  },
   [AI_PROMPT_IDS.MUSIC_FINAL_RENDER_BGM]: {
     pathStem: 'music/final-render-bgm',
     variableKeys: [

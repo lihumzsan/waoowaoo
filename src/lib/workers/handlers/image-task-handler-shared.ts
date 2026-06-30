@@ -69,7 +69,6 @@ export interface NovelProjectData {
 }
 
 interface PanelLike {
-  sketchImageUrl?: string | null
   characters?: string | null
   location?: string | null
 }
@@ -385,15 +384,6 @@ export async function collectPanelReferenceImageItemsWithDiagnostics(
     diagnostics: [],
     issues: [],
     expectedCharacterReferenceCount: 0,
-  }
-
-  const sketch = toSignedUrlIfCos(panel.sketchImageUrl, 3600)
-  if (sketch) {
-    pushReferenceImageItem(
-      collection,
-      { kind: 'sketch', inputIndex: null, sourceUrl: panel.sketchImageUrl || null },
-      { url: sketch, role: 'sketch', name: 'storyboard sketch' },
-    )
   }
 
   const panelCharacters = parsePanelCharacterReferences(panel.characters)

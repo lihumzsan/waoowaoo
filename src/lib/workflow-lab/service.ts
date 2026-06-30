@@ -444,7 +444,6 @@ export async function forkWorkflowLabCheckpointProject(params: {
         videoResolution: sourceProject.videoResolution,
         capabilityOverrides: sourceProject.capabilityOverrides,
         imageResolution: sourceProject.imageResolution,
-        importStatus: null,
       },
       select: {
         id: true,

@@ -38,9 +38,9 @@ export function getPanels(storyboard: ProjectStoryboard): ProjectPanel[] {
  * 处理 candidateImages JSON 字符串解析
  */
 export function getPanelCandidates(panel: ProjectPanel): string[] {
-    if (!panel.imageHistory) return []
+    if (!panel.candidateImages) return []
     try {
-        const parsed = JSON.parse(panel.imageHistory)
+        const parsed = JSON.parse(panel.candidateImages)
         return Array.isArray(parsed) ? parsed : []
     } catch {
         return []

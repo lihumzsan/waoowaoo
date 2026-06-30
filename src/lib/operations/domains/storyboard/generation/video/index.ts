@@ -48,7 +48,6 @@ const generatePanelVideoInputSchema = z.object({
   panelId: z.string().min(1).optional(),
   storyboardId: z.string().min(1).optional(),
   panelIndex: z.number().int().min(0).max(2000).optional(),
-  firstLastFrame: z.unknown().optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough().refine((value) => Boolean(value.panelId || (value.storyboardId && typeof value.panelIndex === 'number')), {
   message: 'panelId or (storyboardId + panelIndex) is required',
@@ -60,7 +59,6 @@ const generateEpisodeVideosInputSchema = z.object({
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
   limit: z.number().int().positive().max(50).optional(),
-  firstLastFrame: z.unknown().optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 

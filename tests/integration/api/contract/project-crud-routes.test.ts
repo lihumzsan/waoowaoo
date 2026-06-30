@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildMockRequest } from '../../../helpers/request'
 import {
   authState,
   crudRoutes,
@@ -75,35 +74,4 @@ describe('api contract - project crud routes (behavior)', () => {
     expect(checkedMethodCount).toBeGreaterThan(0)
   })
 
-  it('PUT /projects/[projectId]/panel writes provided props to prisma.projectPanel.update', async () => {
-    authState.authenticated = true
-    const mod = await import('@/app/api/projects/[projectId]/panel/route')
-    const req = buildMockRequest({
-      path: '/api/projects/project-1/panel',
-      method: 'PUT',
-      body: {
-        storyboardId: 'storyboard-1',
-        panelIndex: 0,
-        location: 'Old Town',
-        characters: JSON.stringify(['Alice']),
-        props: JSON.stringify(['Bronze Dagger']),
-        description: 'panel description',
-      },
-    })
-
-    const res = await mod.PUT(req, {
-      params: Promise.resolve({ projectId: 'project-1' }),
-    })
-
-    expect(res.status).toBe(200)
-    expect(prismaMock.projectPanel.update).toHaveBeenCalledWith({
-      where: { id: 'panel-1' },
-      data: {
-        location: 'Old Town',
-        characters: JSON.stringify(['Alice']),
-        props: JSON.stringify(['Bronze Dagger']),
-        description: 'panel description',
-      },
-    })
-  })
 })

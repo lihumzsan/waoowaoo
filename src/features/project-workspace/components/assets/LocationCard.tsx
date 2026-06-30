@@ -20,8 +20,6 @@ import { getImageGenerationCountOptions } from '@/lib/image-generation/count'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 import { countGeneratedImageSlots, resolveDisplayImageSlots } from '@/lib/image-generation/slot-state'
 import { AppIcon } from '@/components/ui/icons'
-import { AI_EDIT_BUTTON_CLASS, AI_EDIT_ICON_CLASS } from '@/components/ui/ai-edit-style'
-import AISparklesIcon from '@/components/ui/icons/AISparklesIcon'
 import { canGenerateLocationBackedAsset } from './location-backed-asset'
 
 interface LocationCardProps {
@@ -34,7 +32,6 @@ interface LocationCardProps {
   onUndo?: () => void  // 撤回到上一版本
   onImageClick: (imageUrl: string) => void
   onSelectImage?: (locationId: string, imageIndex: number | null) => void
-  onImageEdit?: (locationId: string, imageIndex: number) => void  // 新增：图片编辑
   onCopyFromGlobal?: () => void
   activeTaskKeys?: Set<string>
   onClearTaskKey?: (key: string) => void
@@ -52,7 +49,6 @@ export default function LocationCard({
   onUndo,
   onImageClick,
   onSelectImage,
-  onImageEdit,
   onCopyFromGlobal,
   activeTaskKeys = new Set(),
   projectId,
@@ -117,8 +113,6 @@ export default function LocationCard({
 
   // 当前显示的图片及其 imageIndex
   const currentImageUrl = selectedImage?.imageUrl || imagesWithUrl[0]?.imageUrl || null
-  const currentImageIndex = selectedIndex ?? imagesWithUrl[0]?.imageIndex ?? 0
-
   const isImageTaskRunning = (imageIndex: number) => {
     return activeTaskKeys.has(`location-${location.id}-${imageIndex}`)
   }
@@ -299,15 +293,6 @@ export default function LocationCard({
           <AppIcon name="upload" className="w-4 h-4 text-[var(--glass-tone-success-fg)]" />
         )}
       </button>
-      {!isTaskRunning && currentImageUrl && onImageEdit && (
-        <button
-          onClick={() => onImageEdit(location.id, currentImageIndex)}
-          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-95 ${AI_EDIT_BUTTON_CLASS}`}
-          title={t('image.edit')}
-        >
-          <AISparklesIcon className={`w-4 h-4 ${AI_EDIT_ICON_CLASS}`} />
-        </button>
-      )}
       <button
         onClick={() => onRegenerate()}
         disabled={uploadImage.isPending || isTaskRunning}

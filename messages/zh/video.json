@@ -101,29 +101,6 @@
     "downloadFailed": "下载失败",
     "unknownError": "未知错误"
   },
-  "firstLastFrame": {
-    "title": "首尾帧设置",
-    "firstFrame": "首帧",
-    "lastFrame": "尾帧",
-    "range": "镜头 {from} → 镜头 {to}",
-    "link": "链接",
-    "unlink": "解除链接",
-    "unlinkAction": "取消链接",
-    "asLastFrameFor": "作为镜头 {number} 的尾帧",
-    "asFirstFrameFor": "作为镜头 {number} 的首帧",
-    "customPrompt": "自定义提示词",
-    "promptPlaceholder": "输入首尾帧视频提示词...",
-    "useDefault": "使用默认",
-    "generate": "生成首尾帧视频",
-    "generated": "重新生成",
-    "model": "模型",
-    "withAudio": "包含音频",
-    "audioOn": "开",
-    "audioOff": "关",
-    "linkToNext": "链接到下一镜头（首尾帧）",
-    "asLastFrame": "作为镜头 {number} 的尾帧",
-    "thenTransitionTo": "然后镜头转换到"
-  },
   "editor": {
     "alert": {
       "saveSuccess": "保存成功",

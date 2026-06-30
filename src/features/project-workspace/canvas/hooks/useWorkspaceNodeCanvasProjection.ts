@@ -283,7 +283,6 @@ function shotDetails(panel: ProjectPanel): WorkspaceCanvasShotDetails {
     renderFacts: parseJsonRecord(panel.renderFactsJson),
     actingNotes: panel.actingNotes,
     storyboardTextJson: null,
-    photographyPlan: null,
     errorMessage: panel.imageErrorMessage ?? panel.videoErrorMessage ?? null,
   }
 }
@@ -293,9 +292,6 @@ function imageDetails(panel: ProjectPanel): WorkspaceCanvasImageDetails {
     imagePrompt: panel.imagePrompt,
     description: panel.description,
     candidateImages: parseStringList(panel.candidateImages),
-    imageHistory: panel.imageHistory,
-    sketchImageUrl: panel.sketchImageUrl,
-    previousImageUrl: panel.previousImageUrl,
     errorMessage: panel.imageErrorMessage ?? null,
   }
 }
@@ -813,12 +809,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         imageDetails: imageDetails(panel),
         videoDetails: {
           videoPrompt: panel.videoPrompt,
-          firstLastFramePrompt: panel.firstLastFramePrompt ?? null,
-          videoGenerationMode: panel.videoGenerationMode,
           lastVideoGenerationOptions: [],
           videoUrl: panel.videoMedia?.url ?? panel.videoUrl,
           videoModel: panel.videoModel,
-          linkedToNextPanel: panel.linkedToNextPanel,
           errorMessage: panel.videoErrorMessage ?? null,
         },
         onAction,

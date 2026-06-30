@@ -51,7 +51,6 @@ export type GridPanel = {
   actingNotes: string | null
   imageUrl: string | null
   imageMediaId: string | null
-  previousImageMediaId?: string | null
 }
 
 type GridCellCrop = {
@@ -396,8 +395,6 @@ export async function handlePanelGridImageTask(
         data: {
           imageUrl,
           candidateImages: null,
-          previousImageUrl: panel.imageUrl || null,
-          previousImageMediaId: panel.imageMediaId || null,
           imageMediaId: null,
         },
       })

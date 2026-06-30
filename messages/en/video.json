@@ -101,29 +101,6 @@
     "downloadFailed": "Download failed",
     "unknownError": "Unknown error"
   },
-  "firstLastFrame": {
-    "title": "First/Last Frame Settings",
-    "firstFrame": "First Frame",
-    "lastFrame": "Last Frame",
-    "range": "Shot {from} → Shot {to}",
-    "link": "Link",
-    "unlink": "Unlink",
-    "unlinkAction": "Unlink",
-    "asLastFrameFor": "As last frame for Shot {number}",
-    "asFirstFrameFor": "As first frame for Shot {number}",
-    "customPrompt": "Custom Prompt",
-    "promptPlaceholder": "Enter first/last frame video prompt...",
-    "useDefault": "Use Default",
-    "generate": "Generate First/Last Frame Video",
-    "generated": "Regenerate",
-    "model": "Model",
-    "withAudio": "With Audio",
-    "audioOn": "On",
-    "audioOff": "Off",
-    "linkToNext": "Link to next panel (First/Last Frame)",
-    "asLastFrame": "As last frame for Panel {number}",
-    "thenTransitionTo": "then transition to"
-  },
   "editor": {
     "alert": {
       "saveSuccess": "Saved successfully",

@@ -13,7 +13,6 @@ import {
   handleLocationImageTask,
   handleModifyAssetImageTask,
   handlePanelImageTask,
-  handlePanelVariantTask,
 } from './handlers/image-task-handlers'
 
 type AnyObj = Record<string, unknown>
@@ -43,8 +42,6 @@ async function processImageTask(job: Job<TaskJobData>) {
       return await handleAssetHubModifyTask(job)
     case TASK_TYPE.IMAGE_PANEL:
       return await handlePanelImageTask(job)
-    case TASK_TYPE.PANEL_VARIANT:
-      return await handlePanelVariantTask(job)
     default:
       throw new Error(`Unsupported image task type: ${job.data.type}`)
   }

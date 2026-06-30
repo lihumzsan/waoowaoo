@@ -28,7 +28,7 @@ import { useLocationActions } from './assets/hooks/useLocationActions'
 import { useBatchGeneration } from './assets/hooks/useBatchGeneration'
 import { useAssetModals } from './assets/hooks/useAssetModals'
 import { useAssetsCopyFromHub } from './assets/hooks/useAssetsCopyFromHub'
-import { useAssetsImageEdit } from './assets/hooks/useAssetsImageEdit'
+import { useAssetImageMaintenance } from './assets/hooks/useAssetImageMaintenance'
 
 // Components
 import CharacterSection from './assets/CharacterSection'
@@ -208,47 +208,35 @@ export default function ProjectAssetLibrary({
     showAddCharacter,
     showAddLocation,
     showAddProp,
-    imageEditModal,
-    characterImageEditModal,
     setShowAddCharacter,
     setShowAddLocation,
     setShowAddProp,
     handleEditAppearance,
     handleEditLocation,
     handleEditProp,
-    handleOpenLocationImageEdit,
-    handleOpenCharacterImageEdit,
     closeEditingAppearance,
     closeEditingLocation,
     closeEditingProp,
     closeAddCharacter,
     closeAddLocation,
-    closeAddProp,
-    closeImageEditModal,
-    closeCharacterImageEditModal
+    closeAddProp
   } = useAssetModals({
     projectId
   })
   const {
     handleUndoCharacter,
     handleUndoLocation,
-    handleLocationImageEdit,
-    handleCharacterImageEdit,
     handleUpdateAppearanceDescription,
     handleUpdateLocationDescription,
-  } = useAssetsImageEdit({
+  } = useAssetImageMaintenance({
     projectId,
     t,
     showToast,
     onRefresh,
     editingAppearance,
     editingLocation,
-    imageEditModal,
-    characterImageEditModal,
     closeEditingAppearance,
     closeEditingLocation,
-    closeImageEditModal,
-    closeCharacterImageEditModal,
   })
 
   return (
@@ -299,7 +287,6 @@ export default function ProjectAssetLibrary({
             onRegenerateGroup={handleRegenerateCharacterGroup}
             onUndo={handleUndoCharacter}
             onImageClick={setPreviewImage}
-            onImageEdit={(charId, appIdx, imgIdx, name) => handleOpenCharacterImageEdit(charId, appIdx, imgIdx, name)}
             onCopyFromGlobal={handleCopyFromGlobal}
             getAppearances={getAppearances}
             filterIds={null}
@@ -322,7 +309,6 @@ export default function ProjectAssetLibrary({
             onRegenerateGroup={handleRegenerateLocationGroup}
             onUndo={handleUndoLocation}
             onImageClick={setPreviewImage}
-            onImageEdit={(locId, imgIdx) => handleOpenLocationImageEdit(locId, imgIdx, 'location')}
             onCopyFromGlobal={handleCopyLocationFromGlobal}
             filterIds={null}
           />
@@ -347,7 +333,6 @@ export default function ProjectAssetLibrary({
               void propAssetActions.revertRender({ id: propId }).catch(() => undefined)
             }}
             onImageClick={setPreviewImage}
-            onImageEdit={(propId, imgIdx) => handleOpenLocationImageEdit(propId, imgIdx, 'prop')}
             onCopyFromGlobal={handleCopyPropFromGlobal}
             filterIds={null}
           />
@@ -360,8 +345,6 @@ export default function ProjectAssetLibrary({
         handleGenerateImage={handleGenerateImage}
         handleUpdateAppearanceDescription={handleUpdateAppearanceDescription}
         handleUpdateLocationDescription={handleUpdateLocationDescription}
-        handleLocationImageEdit={handleLocationImageEdit}
-        handleCharacterImageEdit={handleCharacterImageEdit}
         handleCloseCopyPicker={handleCloseCopyPicker}
         handleConfirmCopyFromGlobal={handleConfirmCopyFromGlobal}
         closeEditingAppearance={closeEditingAppearance}
@@ -370,11 +353,7 @@ export default function ProjectAssetLibrary({
         closeAddCharacter={closeAddCharacter}
         closeAddLocation={closeAddLocation}
         closeAddProp={closeAddProp}
-        closeImageEditModal={closeImageEditModal}
-        closeCharacterImageEditModal={closeCharacterImageEditModal}
         previewImage={previewImage}
-        imageEditModal={imageEditModal}
-        characterImageEditModal={characterImageEditModal}
         editingAppearance={editingAppearance}
         editingLocation={editingLocation}
         editingProp={editingProp}

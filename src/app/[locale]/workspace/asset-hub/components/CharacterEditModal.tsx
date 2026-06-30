@@ -203,7 +203,7 @@ export function CharacterEditModal({
                                     disabled={updateName.isPending || !editingName.trim()}
                                     className="glass-btn-base glass-btn-tone-success px-3 py-2 rounded-lg text-sm whitespace-nowrap"
                                 >
-                                    {updateName.isPending ? t('smartImport.preview.saving') : t('modal.saveName')}
+                                    {updateName.isPending ? t('modal.processing') : t('modal.saveName')}
                                 </button>
                             )}
                         </div>

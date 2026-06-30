@@ -60,31 +60,6 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     ],
   },
   {
-    id: 'REQ-NP-INSERT-PANEL-AUTO-ANALYZE',
-    feature: 'Novel promotion insert panel',
-    userValue: 'AI 自动分析插入分镜时不会因空输入失败',
-    risk: 'route 与 worker 契约分叉导致异步任务直接报错',
-    priority: 'P0',
-    tests: [
-      'tests/unit/project-workflow/insert-panel-runtime.test.ts',
-      'tests/integration/api/contract/direct-submit-text-routes.test.ts',
-      'tests/unit/worker/llm-proxy.test.ts',
-    ],
-  },
-  {
-    id: 'REQ-NP-PANEL-VARIANT-SAFETY',
-    feature: 'Novel promotion panel variant',
-    userValue: '镜头变体只能插入当前 storyboard，任务失败可回滚，资产开关真实生效',
-    risk: '跨分镜误插入、创建脏 panel、参考图开关失效',
-    priority: 'P0',
-    tests: [
-      'tests/integration/api/specific/panel-variant-selection.test.ts',
-      'tests/integration/api/contract/direct-submit-media-routes.test.ts',
-      'tests/unit/worker/panel-variant-task-handler.test.ts',
-      'tests/regression/panel-variant-cross-storyboard.test.ts',
-    ],
-  },
-  {
     id: 'REQ-NP-TEXT-ANALYSIS',
     feature: 'Atomic text analysis tasks',
     userValue: '文本分析链路稳定并可回放结果',

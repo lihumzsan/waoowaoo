@@ -47,11 +47,10 @@ interface Character {
 interface CharacterCardProps {
     character: Character
     onImageClick?: (url: string) => void
-    onImageEdit?: (type: 'character' | 'location', id: string, name: string, imageIndex: number, appearanceIndex?: number) => void
     onEdit?: (character: Character, appearance: Appearance) => void
 }
 
-export function CharacterCard({ character, onImageClick, onImageEdit, onEdit }: CharacterCardProps) {
+export function CharacterCard({ character, onImageClick, onEdit }: CharacterCardProps) {
     // 🔥 使用 mutation hooks
     const generateImage = useGenerateCharacterImage()
     const selectImage = useSelectCharacterImage()
@@ -372,9 +371,6 @@ export function CharacterCard({ character, onImageClick, onImageEdit, onEdit }: 
                             <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => fileInputRef.current?.click()} disabled={uploadImage.isPending} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                                     <AppIcon name="upload" className="w-4 h-4 text-[var(--glass-tone-success-fg)]" />
-                                </button>
-                                <button onClick={() => onImageEdit?.('character', character.id, character.name, effectiveSelectedIndex ?? 0, appearance.appearanceIndex)} className="glass-btn-base glass-btn-tone-info h-7 w-7 rounded-full">
-                                    <AppIcon name="edit" className="w-4 h-4" />
                                 </button>
                         <button onClick={() => handleGenerate()} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                                     <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />

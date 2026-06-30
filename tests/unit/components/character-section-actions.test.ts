@@ -94,7 +94,6 @@ describe('CharacterSection actions', () => {
         onRegenerateGroup: async () => undefined,
         onUndo: () => undefined,
         onImageClick: () => undefined,
-        onImageEdit: () => undefined,
         onCopyFromGlobal: () => undefined,
         getAppearances: (character) => character.appearances,
       }),

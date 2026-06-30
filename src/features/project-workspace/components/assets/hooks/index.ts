@@ -6,4 +6,4 @@
 export { useCharacterActions } from './useCharacterActions'
 export { useLocationActions } from './useLocationActions'
 export { useAssetsCopyFromHub } from './useAssetsCopyFromHub'
-export { useAssetsImageEdit } from './useAssetsImageEdit'
+export { useAssetImageMaintenance } from './useAssetImageMaintenance'

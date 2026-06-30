@@ -156,6 +156,7 @@
     "subDescPlaceholder": "Describe only the changes...",
     "subDescTip": "Only describe changes (clothes, state), face/body inherits from primary",
     "adding": "Adding...",
+    "processing": "Processing...",
     "insufficientBalanceDefault": "Insufficient balance, please top up to continue",
     "addFailedGeneric": "Add Failed",
     "appearancesCount": "Appearances",
@@ -230,11 +231,6 @@
     "panelCard": {
       "generating": "Generating...",
       "editPrompt": "Edit Prompt"
-    }
-  },
-  "smartImport": {
-    "preview": {
-      "saving": "Saving..."
     }
   },
   "storyboard": {

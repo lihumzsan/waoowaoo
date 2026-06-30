@@ -21,8 +21,6 @@ const CORE_OPERATION_IDS = [
   'get_project_context',
   'get_project_snapshot',
   'get_task_status',
-  'get_project_command',
-  'list_recent_commands',
   'get_project_assets',
   'get_project_costs',
   'get_project_data',

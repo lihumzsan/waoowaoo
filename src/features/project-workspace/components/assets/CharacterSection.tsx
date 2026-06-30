@@ -37,7 +37,6 @@ interface CharacterSectionProps {
     onRegenerateGroup: (characterId: string, appearanceId: string, count?: number) => Promise<void>
     onUndo: (characterId: string, appearanceId: string) => void
     onImageClick: (imageUrl: string) => void
-    onImageEdit: (characterId: string, appearanceId: string, imageIndex: number, characterName: string) => void
     onCopyFromGlobal: (characterId: string) => void  // 🆕 从资产中心复制
     // 辅助函数
     getAppearances: (character: Character) => CharacterAppearance[]
@@ -64,7 +63,6 @@ export default function CharacterSection({
     onRegenerateGroup,
     onUndo,
     onImageClick,
-    onImageEdit,
     onCopyFromGlobal,
     getAppearances,
     filterIds = null,
@@ -260,7 +258,6 @@ export default function CharacterSection({
                                             onSelectImage={onSelectImage}
                                             activeTaskKeys={activeTaskKeys}
                                             onClearTaskKey={onClearTaskKey}
-                                            onImageEdit={(charId, _appearanceId, imageIndex) => onImageEdit(charId, appearance.id, imageIndex, character.name)}
                                             isPrimaryAppearance={isPrimary}
                                             primaryAppearanceSelected={primarySelected}
                                             projectId={projectId}

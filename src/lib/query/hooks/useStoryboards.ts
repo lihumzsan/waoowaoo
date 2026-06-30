@@ -31,7 +31,6 @@ export interface StoryboardPanel {
     media?: MediaRef | null
     motionPrompt: string | null
     videoUrl: string | null
-    videoGenerationMode?: 'normal' | 'firstlastframe' | null
     videoMedia?: MediaRef | null
     imageTaskRunning?: boolean
     videoTaskRunning?: boolean
@@ -119,58 +118,6 @@ export function useRegeneratePanelImage(projectId: string | null, episodeId: str
 }
 
 /**
- * 修改分镜图片
- */
-export function useModifyPanelImage(projectId: string | null, episodeId: string | null) {
-    const queryClient = useQueryClient()
-
-    return useMutation({
-        mutationFn: async (params: {
-            panelId: string
-            modifyPrompt: string
-            extraImageUrls?: string[]
-        }) => {
-            if (!projectId) throw new Error('Project ID is required')
-            const res = await apiFetch(`/api/projects/${projectId}/modify-panel-image`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(params),
-            })
-            if (!res.ok) {
-                const error = await res.json()
-                throw new Error(resolveTaskErrorMessage(error, 'Failed to modify'))
-            }
-            return res.json()
-        },
-        onMutate: async () => {
-            if (!projectId || !episodeId) return
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectEpisode',
-                targetId: episodeId,
-                runningTaskType: 'final_video_render',
-                intent: 'process',
-                stage: 'final_render_prepare',
-            })
-            await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
-        },
-        onError: () => {
-            if (!projectId || !episodeId) return
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectEpisode',
-                targetId: episodeId,
-            })
-        },
-        onSettled: () => {
-            if (episodeId) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(episodeId) })
-            }
-        },
-    })
-}
-
-/**
  * 生成视频
  */
 export function useGenerateVideo(projectId: string | null, episodeId: string | null) {
@@ -183,11 +130,6 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             panelIndex: number
             panelId?: string
             generationOptions?: VideoGenerationOptions
-            firstLastFrame?: {
-                lastFrameStoryboardId: string
-                lastFramePanelIndex: number
-                customPrompt?: string
-            }
         }) => {
             if (!projectId) throw new Error('Project ID is required')
 
@@ -195,11 +137,6 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             const requestBody: {
                 storyboardId: string
                 panelIndex: number
-                firstLastFrame?: {
-                    lastFrameStoryboardId: string
-                    lastFramePanelIndex: number
-                    customPrompt?: string
-                }
                 panelId?: string
                 generationOptions?: VideoGenerationOptions
             } = {
@@ -208,11 +145,6 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             }
             if (params.panelId) {
                 requestBody.panelId = params.panelId
-            }
-
-            // 如果是首尾帧模式
-            if (params.firstLastFrame) {
-                requestBody.firstLastFrame = params.firstLastFrame
             }
 
             if (params.generationOptions && typeof params.generationOptions === 'object') {

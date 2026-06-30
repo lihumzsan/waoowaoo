@@ -8,67 +8,8 @@ import {
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
-    requestTaskResponseWithError,
 } from './mutation-shared'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
-
-export function useModifyProjectCharacterImage(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssetAndProjectData = () =>
-        invalidateQueryTemplates(queryClient, [
-            queryKeys.projectAssets.all(projectId),
-            queryKeys.projectData(projectId),
-        ])
-
-    return useMutation({
-        mutationFn: async (params: {
-            characterId: string
-            appearanceId: string
-            imageIndex: number
-            modifyPrompt: string
-            extraImageUrls?: string[]
-        }) => {
-            const requestBody = {
-                scope: 'project',
-                kind: 'character',
-                projectId,
-                ...params,
-            }
-            const confirmedMaxCost = await assetOperationBillingPlan(params.characterId, 'modify-render', requestBody)
-            const response = await requestTaskResponseWithError(`/api/assets/${params.characterId}/modify-render`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
-                }),
-            }, 'Failed to modify image')
-            return await resolveTaskResponse(response)
-        },
-        onMutate: ({ appearanceId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
-                intent: 'modify',
-            })
-        },
-        onError: (_error, { appearanceId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
-            })
-        },
-        onSettled: invalidateProjectAssetAndProjectData,
-    })
-}
-
-/**
- * 修改项目场景图片
- */
 
 export function useRegenerateCharacterGroup(projectId: string) {
     const queryClient = useQueryClient()

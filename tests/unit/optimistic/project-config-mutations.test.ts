@@ -73,7 +73,6 @@ function buildProject(): Project {
     videoResolution: null,
     imageResolution: null,
     lastEpisodeId: null,
-    importStatus: null,
   }
 }
 

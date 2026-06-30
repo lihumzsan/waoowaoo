@@ -6,7 +6,6 @@
 export {
     // 角色相关
     useGenerateCharacterImage,
-    useModifyCharacterImage,
     useSelectCharacterImage,
     useUndoCharacterImage,
     useUploadCharacterImage,
@@ -14,7 +13,6 @@ export {
     useDeleteCharacterAppearance,
     // 场景相关
     useGenerateLocationImage,
-    useModifyLocationImage,
     useSelectLocationImage,
     useUndoLocationImage,
     useUploadLocationImage,

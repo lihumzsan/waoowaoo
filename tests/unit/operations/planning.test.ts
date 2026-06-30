@@ -190,7 +190,6 @@ describe('operation planning billing quote', () => {
       'generate_edit_script_storyboard_images',
       'generate_storyboard_grid_images',
       'regenerate_panel_image',
-      'panel_variant',
       'generate_panel_video',
       'generate_episode_videos',
       'generate_video_group',
@@ -202,10 +201,7 @@ describe('operation planning billing quote', () => {
       'generate_episode_bgm_score',
       'generate_character_image',
       'generate_location_image',
-      'modify_character_image',
-      'modify_location_image',
       'api_assets_generate',
-      'api_assets_modify_render',
     ]
 
     for (const operationId of mediaOperationIds) {

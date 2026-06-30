@@ -22,12 +22,9 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
     || taskType === 'edit_shot_execution_plan_generate'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
-    || taskType === 'ai_modify_shot_prompt'
-    || taskType === 'analyze_shot_variants'
     || taskType === 'ai_create_character'
     || taskType === 'ai_create_location'
     || taskType === 'reference_to_character'
-    || taskType === 'episode_split_llm'
     || taskType === 'asset_hub_ai_design_character'
     || taskType === 'asset_hub_ai_design_location'
     || taskType === 'asset_hub_ai_modify_character'
@@ -50,12 +47,9 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
   if (
     taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
-    || taskType === 'ai_modify_shot_prompt'
-    || taskType === 'analyze_shot_variants'
     || taskType === 'ai_create_character'
     || taskType === 'ai_create_location'
     || taskType === 'reference_to_character'
-    || taskType === 'episode_split_llm'
     || taskType === 'asset_hub_ai_design_character'
     || taskType === 'asset_hub_ai_design_location'
     || taskType === 'asset_hub_ai_modify_character'
@@ -72,16 +66,11 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     || taskType === 'video_group'
     || taskType === 'music_generate'
     || taskType === 'bgm_score_generate'
-    || taskType === 'insert_panel'
-    || taskType === 'panel_variant'
     || taskType === 'modify_asset_image'
     || taskType === 'regenerate_group'
     || taskType === 'asset_hub_image'
     || taskType === 'asset_hub_modify'
   ) {
-    if (taskType === 'insert_panel') {
-      return 'tests/integration/api/contract/direct-submit-text-routes.test.ts'
-    }
     return 'tests/integration/api/contract/direct-submit-media-routes.test.ts'
   }
   return 'tests/integration/api/contract/task-queue-routes.test.ts'

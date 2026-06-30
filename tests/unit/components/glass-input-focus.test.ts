@@ -14,9 +14,6 @@ describe('glass input focus style', () => {
       'src/components/shared/assets/AiModifyDescriptionField.tsx',
       'src/components/ui/config-modals/ModelCapabilityDropdown.tsx',
       'src/features/project-workspace/components/assets/AddLocationModal.tsx',
-      'src/features/project-workspace/components/assets/ImageEditModal.tsx',
-      'src/features/project-workspace/components/smart-import/steps/StepMapping.tsx',
-      'src/features/project-workspace/components/smart-import/steps/StepSource.tsx',
     ]
 
     const source = files.map((file) => readFileSync(file, 'utf8')).join('\n')

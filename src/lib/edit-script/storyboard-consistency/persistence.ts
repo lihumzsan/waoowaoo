@@ -121,7 +121,6 @@ function buildStoryboardTextJson(snapshot: StoryboardConsistencySourceSnapshot):
 
 export async function upsertEditScriptStoryboard(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
-  readonly photographyPlan: Record<string, unknown>
 }) {
   const editScriptId = input.snapshot.editScript.id
   const existing = await prisma.projectStoryboard.findUnique({
@@ -138,7 +137,6 @@ export async function upsertEditScriptStoryboard(input: {
       data: {
         panelCount: input.snapshot.shots.length,
         storyboardTextJson,
-        photographyPlan: JSON.stringify(input.photographyPlan),
       },
       include: {
         panels: { orderBy: { panelIndex: 'asc' } },
@@ -152,7 +150,6 @@ export async function upsertEditScriptStoryboard(input: {
       editScript: { connect: { id: editScriptId } },
       panelCount: input.snapshot.shots.length,
       storyboardTextJson,
-      photographyPlan: JSON.stringify(input.photographyPlan),
     },
     include: {
       panels: { orderBy: { panelIndex: 'asc' } },

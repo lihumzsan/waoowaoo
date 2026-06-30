@@ -16,54 +16,6 @@ function invalidateVideoPanelCaches(
 }
 
 /**
- * 获取剧集可下载视频列表（项目）
- */
-export function useListProjectEpisodeVideoUrls(projectId: string) {
-  return useMutation({
-    mutationFn: async (payload: {
-      episodeId: string
-      panelPreferences: Record<string, boolean>
-    }) =>
-      await requestJsonWithError(
-        `/api/projects/${projectId}/video-urls`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        '获取视频列表失败',
-      ),
-  })
-}
-
-/**
- * 更新 panel 首尾帧链接状态（项目）
- */
-export function useUpdateProjectPanelLink(projectId: string, episodeId?: string | null) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (payload: {
-      storyboardId: string
-      panelIndex: number
-      linked: boolean
-    }) =>
-      await requestJsonWithError(
-        `/api/projects/${projectId}/panel-link`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        '保存链接状态失败',
-      ),
-    onSettled: () => {
-      return invalidateVideoPanelCaches(queryClient, projectId, episodeId)
-    },
-  })
-}
-
-/**
  * 更新 Panel 视频提示词
  */
 export function useUpdateProjectPanelVideoPrompt(projectId: string, episodeId?: string | null) {
@@ -79,7 +31,7 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string, episodeId?: 
       storyboardId: string
       panelIndex: number
       value: string
-      field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt'
+      field?: 'imagePrompt' | 'videoPrompt'
     }) =>
       await requestJsonWithError(
         `/api/projects/${projectId}/panel`,
@@ -91,9 +43,7 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string, episodeId?: 
             panelIndex,
             ...(field === 'imagePrompt'
               ? { imagePrompt: value }
-              : field === 'firstLastFramePrompt'
-                ? { firstLastFramePrompt: value }
-                : { videoPrompt: value }),
+              : { videoPrompt: value }),
           }),
         },
         'update failed',

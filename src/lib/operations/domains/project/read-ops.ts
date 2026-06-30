@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
 import { withPrismaRetry } from '@/lib/prisma-retry'
 import { assembleProjectContext } from '@/lib/project-context/assembler'
-import { listProjectCommands, syncProjectCommandStatus } from '@/lib/command-center/executor'
 import { resolveProjectPhase } from '@/lib/project-agent/project-phase'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
@@ -143,63 +142,6 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           })
         ),
       }),
-    }),
-    list_recent_commands: defineOperation({
-      id: 'list_recent_commands',
-      summary: 'List recent command and run status for the current project or episode.',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: z.object({
-        limit: z.number().int().positive().max(50).optional(),
-        syncRunning: z.boolean().optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const limit = input.limit || 10
-        const syncRunning = input.syncRunning === true
-
-        const commands = await listProjectCommands({
-          projectId: ctx.projectId,
-          episodeId: ctx.context.episodeId || null,
-          limit,
-        })
-
-        if (!syncRunning) return commands
-
-        for (const command of commands) {
-          if (command.status === 'running' || command.status === 'approved') {
-            await syncProjectCommandStatus({ commandId: command.commandId })
-          }
-        }
-
-        return await listProjectCommands({
-          projectId: ctx.projectId,
-          episodeId: ctx.context.episodeId || null,
-          limit,
-        })
-      },
-    }),
-    get_project_command: defineOperation({
-      id: 'get_project_command',
-      summary: 'Get a single command by id (optionally sync status from its linked run).',
-      intent: 'query',
-      effects: EFFECTS_NONE,
-      inputSchema: z.object({
-        commandId: z.string().min(1),
-        sync: z.boolean().optional(),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        if (input.sync !== false) {
-          await syncProjectCommandStatus({ commandId: input.commandId })
-        }
-        const commands = await listProjectCommands({
-          projectId: ctx.projectId,
-          limit: 50,
-        })
-        const command = commands.find((item) => item.commandId === input.commandId) || null
-        return { command }
-      },
     }),
   }
 }

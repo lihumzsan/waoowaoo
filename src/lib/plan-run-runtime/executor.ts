@@ -115,7 +115,6 @@ export async function executeAgentPlan(params: {
   userId: string
   projectId: string
   episodeId?: string | null
-  planId?: string | null
   input: ExecutablePlanInput
   invokeStep: PlanStepInvoker
 }) {
@@ -123,7 +122,6 @@ export async function executeAgentPlan(params: {
     userId: params.userId,
     projectId: params.projectId,
     episodeId: params.episodeId || null,
-    planId: params.planId || null,
     goal: params.input.goal,
     steps: params.input.steps.map((step, index) => ({
       stepKey: step.stepKey,

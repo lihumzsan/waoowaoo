@@ -10,9 +10,7 @@ import {
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
-    requestTaskResponseWithError,
 } from './mutation-shared'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface SelectProjectLocationImageContext {
@@ -167,66 +165,6 @@ export function useUploadProjectLocationImage(projectId: string) {
         onSuccess: invalidateProjectAssets,
     })
 }
-
-/**
- * 修改项目角色图片
- */
-
-export function useModifyProjectLocationImage(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-    const invalidateProjectAssetAndProjectData = () =>
-        invalidateQueryTemplates(queryClient, [
-            queryKeys.projectAssets.all(projectId),
-            queryKeys.projectData(projectId),
-        ])
-
-    return useMutation({
-        mutationFn: async (params: {
-            locationId: string
-            imageIndex: number
-            modifyPrompt: string
-            extraImageUrls?: string[]
-        }) => {
-            const requestBody = {
-                scope: 'project',
-                kind: 'location',
-                projectId,
-                ...params,
-            }
-            const confirmedMaxCost = await assetOperationBillingPlan(params.locationId, 'modify-render', requestBody)
-            const response = await requestTaskResponseWithError(`/api/assets/${params.locationId}/modify-render`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
-                }),
-            }, 'Failed to modify image')
-            return await resolveTaskResponse(response)
-        },
-        onMutate: ({ locationId }) => {
-            upsertTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
-                intent: 'modify',
-            })
-        },
-        onError: (_error, { locationId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
-            })
-        },
-        onSettled: invalidateProjectAssetAndProjectData,
-    })
-}
-
-/**
- * 重新生成角色组图片
- */
 
 export function useRegenerateLocationGroup(projectId: string) {
     const queryClient = useQueryClient()

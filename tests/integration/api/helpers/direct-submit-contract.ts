@@ -67,18 +67,6 @@ function inferTaskContractFromOperation(params: {
               ? input.assetId
               : 'asset-1',
         }
-    case 'api_assets_modify_render':
-      return input.scope === 'project'
-        ? {
-          type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-          targetType: input.kind === 'location' ? 'ProjectLocation' : 'CharacterAppearance',
-          targetId: typeof input.assetId === 'string' ? input.assetId : 'asset-1',
-        }
-        : {
-          type: TASK_TYPE.ASSET_HUB_MODIFY,
-          targetType: input.kind === 'location' ? 'GlobalLocationImage' : 'GlobalCharacterAppearance',
-          targetId: typeof input.assetId === 'string' ? input.assetId : 'asset-1',
-        }
     case 'generate_character_image':
       return {
         type: TASK_TYPE.IMAGE_CHARACTER,
@@ -110,24 +98,6 @@ function inferTaskContractFromOperation(params: {
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
-    case 'modify_character_image':
-      return {
-        type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-        targetType: 'CharacterAppearance',
-        targetId: typeof input.characterId === 'string' ? input.characterId : 'character-1',
-      }
-    case 'modify_location_image':
-      return {
-        type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-        targetType: 'ProjectLocation',
-        targetId: typeof input.locationId === 'string' ? input.locationId : 'location-1',
-      }
-    case 'modify_storyboard_image':
-      return {
-        type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-        targetType: 'ProjectPanel',
-        targetId: 'panel-1',
-      }
     case 'regenerate_group':
       return {
         type: TASK_TYPE.REGENERATE_GROUP,
@@ -145,18 +115,6 @@ function inferTaskContractFromOperation(params: {
         type: input.type === 'location' ? TASK_TYPE.IMAGE_LOCATION : TASK_TYPE.IMAGE_CHARACTER,
         targetType: input.type === 'location' ? 'ProjectLocation' : 'CharacterAppearance',
         targetId: typeof input.id === 'string' ? input.id : 'asset-1',
-      }
-    case 'insert_storyboard_panel':
-      return {
-        type: TASK_TYPE.INSERT_PANEL,
-        targetType: 'ProjectStoryboard',
-        targetId: typeof input.storyboardId === 'string' ? input.storyboardId : 'storyboard-1',
-      }
-    case 'panel_variant':
-      return {
-        type: TASK_TYPE.PANEL_VARIANT,
-        targetType: 'ProjectStoryboard',
-        targetId: typeof input.storyboardId === 'string' ? input.storyboardId : 'storyboard-1',
       }
     default:
       throw new Error(`UNMOCKED_OPERATION:${params.operationId}`)
@@ -422,36 +380,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/assets/[assetId]/modify-render/route.ts',
-    body: {
-      scope: 'global',
-      kind: 'character',
-      modifyPrompt: 'sharpen details',
-      appearanceIndex: 0,
-      imageIndex: 0,
-      extraImageUrls: ['https://example.com/ref-a.png'],
-    },
-    params: { assetId: 'global-character-1' },
-    expectedTaskType: TASK_TYPE.ASSET_HUB_MODIFY,
-    expectedTargetType: 'GlobalCharacterAppearance',
-    expectedProjectId: 'global-asset-hub',
-  },
-  {
-    routeFile: 'src/app/api/assets/[assetId]/modify-render/route.ts',
-    body: {
-      scope: 'project',
-      kind: 'character',
-      projectId: 'project-1',
-      appearanceId: 'appearance-1',
-      modifyPrompt: 'enhance texture',
-      extraImageUrls: ['https://example.com/ref-b.png'],
-    },
-    params: { assetId: 'character-1' },
-    expectedTaskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
-    expectedTargetType: 'CharacterAppearance',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/generate-video/route.ts',
     body: {
       storyboardId: 'storyboard-1',
@@ -459,10 +387,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       generationOptions: {
         resolution: '720p',
         duration: 5,
-      },
-      firstLastFrame: {
-        lastFrameStoryboardId: 'storyboard-1',
-        lastFramePanelIndex: 1,
       },
     },
     params: { projectId: 'project-1' },
@@ -474,31 +398,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
         resolution: '720p',
         duration: 5,
       },
-      firstLastFrame: {
-        lastFrameStoryboardId: 'storyboard-1',
-        lastFramePanelIndex: 1,
-      },
-    },
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/generate-music/route.ts',
-    body: {
-      musicModel: 'google::lyria-3-clip-preview',
-      prompt: 'tense city chase score',
-      durationSeconds: 30,
-      vocalMode: 'instrumental',
-      outputFormat: 'mp3',
-    },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.MUSIC_GENERATE,
-    expectedTargetType: 'Project',
-    expectedProjectId: 'project-1',
-    expectedPayloadSubset: {
-      musicModel: 'google::lyria-3-clip-preview',
-      prompt: 'tense city chase score',
-      durationSeconds: 30,
-      vocalMode: 'instrumental',
-      outputFormat: 'mp3',
     },
   },
   {
@@ -520,20 +419,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     },
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
-    body: {
-      storyboardId: 'storyboard-1',
-      panelIndex: 0,
-      modifyPrompt: 'increase contrast',
-      extraImageUrls: ['https://example.com/ref-c.png'],
-      selectedAssets: [{ imageUrl: 'https://example.com/ref-d.png' }],
-    },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.MODIFY_ASSET_IMAGE,
-    expectedTargetType: 'ProjectPanel',
-    expectedProjectId: 'project-1',
-  },
-  {
     routeFile: 'src/app/api/projects/[projectId]/regenerate-panel-image/route.ts',
     body: { panelId: 'panel-1', count: 1 },
     params: { projectId: 'project-1' },
@@ -545,31 +430,4 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
 
 export const DIRECT_TEXT_CASES: ReadonlyArray<DirectRouteCase> = []
 
-export const DIRECT_RUN_CASES: ReadonlyArray<DirectRouteCase> = [
-  {
-    routeFile: 'src/app/api/projects/[projectId]/insert-panel/route.ts',
-    body: { storyboardId: 'storyboard-1', insertAfterPanelId: 'panel-ins' },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.INSERT_PANEL,
-    expectedTargetType: 'ProjectStoryboard',
-    expectedProjectId: 'project-1',
-    expectedPayloadSubset: {
-      storyboardId: 'storyboard-1',
-      insertAfterPanelId: 'panel-ins',
-      userInput: '请根据前后镜头自动分析并插入一个自然衔接的新分镜。',
-    },
-  },
-  {
-    routeFile: 'src/app/api/projects/[projectId]/panel-variant/route.ts',
-    body: {
-      storyboardId: 'storyboard-1',
-      insertAfterPanelId: 'panel-ins',
-      sourcePanelId: 'panel-src',
-      variant: { video_prompt: 'new prompt', description: 'variant desc' },
-    },
-    params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.PANEL_VARIANT,
-    expectedTargetType: 'ProjectPanel',
-    expectedProjectId: 'project-1',
-  },
-]
+export const DIRECT_RUN_CASES: ReadonlyArray<DirectRouteCase> = []

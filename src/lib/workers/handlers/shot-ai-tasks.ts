@@ -4,10 +4,8 @@ import {
   handleModifyAppearanceTask,
   handleModifyLocationTask,
   handleModifyPropTask,
-  handleModifyShotPromptTask,
   type AnyObj,
 } from './shot-ai-prompt'
-import { handleAnalyzeShotVariantsTask } from './shot-ai-variants'
 
 export async function handleShotAITask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as AnyObj
@@ -18,10 +16,6 @@ export async function handleShotAITask(job: Job<TaskJobData>) {
       return await handleModifyLocationTask(job, payload)
     case TASK_TYPE.AI_MODIFY_PROP:
       return await handleModifyPropTask(job, payload)
-    case TASK_TYPE.AI_MODIFY_SHOT_PROMPT:
-      return await handleModifyShotPromptTask(job, payload)
-    case TASK_TYPE.ANALYZE_SHOT_VARIANTS:
-      return await handleAnalyzeShotVariantsTask(job, payload)
     default:
       throw new Error(`Unsupported shot AI task type: ${job.data.type}`)
   }

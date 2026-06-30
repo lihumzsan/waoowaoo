@@ -183,12 +183,8 @@ function isGlobalAssetTaskType(taskType: string | null): boolean {
 
 function isStoryboardTaskType(taskType: string | null): boolean {
   return taskType === TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN ||
-    taskType === TASK_TYPE.INSERT_PANEL ||
     taskType === TASK_TYPE.IMAGE_PANEL ||
-    taskType === TASK_TYPE.PANEL_VARIANT ||
-    taskType === TASK_TYPE.REGENERATE_GROUP ||
-    taskType === TASK_TYPE.AI_MODIFY_SHOT_PROMPT ||
-    taskType === TASK_TYPE.ANALYZE_SHOT_VARIANTS
+    taskType === TASK_TYPE.REGENERATE_GROUP
 }
 
 function isMediaTaskType(taskType: string | null): boolean {

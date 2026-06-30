@@ -15,7 +15,6 @@ import {
   uploadVideoSourceToCos,
 } from './utils'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
-import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/ai-registry/capabilities-catalog'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { supportsAssetReferenceMultiReferenceVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
@@ -27,7 +26,6 @@ import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 type AnyObj = Record<string, unknown>
 type VideoOptionValue = string | number | boolean
 type VideoOptionMap = Record<string, VideoOptionValue>
-type VideoGenerationMode = 'normal' | 'firstlastframe'
 type PanelRecord = NonNullable<Awaited<ReturnType<typeof prisma.projectPanel.findUnique>>>
 
 function normalizeString(value: unknown): string {
@@ -109,19 +107,13 @@ async function generateVideoForPanel(
   modelId: string,
   projectVideoRatio: string | null | undefined,
   generationOptions: VideoOptionMap,
-): Promise<{ cosKey: string; generationMode: VideoGenerationMode; actualVideoTokens?: number }> {
+): Promise<{ cosKey: string; actualVideoTokens?: number }> {
   if (!panel.imageUrl) {
     throw new Error(`Panel ${panel.id} has no imageUrl`)
   }
 
-  const firstLastFramePayload =
-    typeof payload.firstLastFrame === 'object' && payload.firstLastFrame !== null
-      ? (payload.firstLastFrame as AnyObj)
-      : null
-  const firstLastCustomPrompt = typeof firstLastFramePayload?.customPrompt === 'string' ? firstLastFramePayload.customPrompt : null
-  const persistedFirstLastPrompt = firstLastFramePayload ? panel.firstLastFramePrompt : null
   const customPrompt = typeof payload.customPrompt === 'string' ? payload.customPrompt : null
-  const prompt = firstLastCustomPrompt || persistedFirstLastPrompt || customPrompt || panel.videoPrompt
+  const prompt = customPrompt || panel.videoPrompt
   if (!prompt) {
     throw new Error(`Panel ${panel.id} has no video prompt`)
   }
@@ -133,54 +125,24 @@ async function generateVideoForPanel(
   }
   const sourceImageBase64 = await normalizeToBase64ForGeneration(sourceImageUrl)
 
-  let lastFrameImageBase64: string | undefined
-  const generationMode: VideoGenerationMode = firstLastFramePayload ? 'firstlastframe' : 'normal'
   const requestedGenerateAudio = typeof generationOptions.generateAudio === 'boolean'
     ? generationOptions.generateAudio
     : undefined
   const durationSec = requirePanelVideoDurationSec(panel)
-  let model = modelId
-
-  if (firstLastFramePayload) {
-    model =
-      typeof firstLastFramePayload.flModel === 'string' && firstLastFramePayload.flModel
-        ? firstLastFramePayload.flModel
-        : modelId
-    const firstLastFrameCapabilities = resolveBuiltinCapabilitiesByModelKey('video', model)
-    if (firstLastFrameCapabilities?.video?.firstlastframe !== true) {
-      throw new Error(`VIDEO_FIRSTLASTFRAME_MODEL_UNSUPPORTED: ${model}`)
-    }
-    if (
-      typeof firstLastFramePayload.lastFrameStoryboardId === 'string' &&
-      firstLastFramePayload.lastFrameStoryboardId &&
-      firstLastFramePayload.lastFramePanelIndex !== undefined
-    ) {
-      const lastPanel = await fetchPanelByStoryboardIndex(
-        firstLastFramePayload.lastFrameStoryboardId,
-        Number(firstLastFramePayload.lastFramePanelIndex),
-      )
-      if (lastPanel?.imageUrl) {
-        const lastFrameUrl = toSignedUrlIfCos(lastPanel.imageUrl, 3600)
-        if (lastFrameUrl) {
-          lastFrameImageBase64 = await normalizeToBase64ForGeneration(lastFrameUrl)
-        }
-      }
-    }
-  }
+  const model = modelId
 
   const generatedVideo = await resolveVideoSourceFromGeneration(job, {
     userId: job.data.userId,
     modelId: model,
     referenceImages: [
-      { url: sourceImageBase64, role: lastFrameImageBase64 ? 'first_frame' : 'reference', order: 1, source: 'storyboard' },
-      ...(lastFrameImageBase64 ? [{ url: lastFrameImageBase64, role: 'last_frame' as const, order: 2, source: 'storyboard' as const }] : []),
+      { url: sourceImageBase64, role: 'reference', order: 1, source: 'storyboard' },
     ],
     options: {
       prompt: generationPrompt,
       ...(projectVideoRatio ? { aspectRatio: projectVideoRatio } : {}),
       ...generationOptions,
       duration: durationSec,
-      generationMode,
+      generationMode: 'normal',
       ...(typeof requestedGenerateAudio === 'boolean' ? { generateAudio: requestedGenerateAudio } : {}),
     },
   })
@@ -203,7 +165,6 @@ async function generateVideoForPanel(
   const cosKey = await uploadVideoSourceToCos(videoSource, 'panel-video', panel.id, downloadHeaders)
   return {
     cosKey,
-    generationMode,
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
       : {}),
@@ -226,7 +187,7 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     panelId: panel.id,
   })
 
-  const { cosKey, generationMode, actualVideoTokens } = await generateVideoForPanel(
+  const { cosKey, actualVideoTokens } = await generateVideoForPanel(
     job,
     panel,
     payload,
@@ -240,7 +201,6 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     where: { id: panel.id },
     data: {
       videoUrl: cosKey,
-      videoGenerationMode: generationMode,
       lastVideoGenerationOptions: toPersistedVideoGenerationOptions(generationOptions),
     },
   })

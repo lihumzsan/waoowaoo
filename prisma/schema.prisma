@@ -331,11 +331,8 @@ model ProjectPanel {
   imageUrl             String?                   @db.Text
   imageMediaId         String?
   imageMedia           MediaObject?              @relation("ProjectPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  imageHistory         String?                   @db.Text
   videoPrompt          String?                   @db.Text
-  firstLastFramePrompt String?                   @db.Text
   videoUrl             String?                   @db.Text
-  videoGenerationMode  String?                   @db.Text // 视频生成方式：normal | firstlastframe
   lastVideoGenerationOptions Json?
   videoMediaId         String?
   videoMedia           MediaObject?              @relation("ProjectPanelVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
@@ -343,58 +340,19 @@ model ProjectPanel {
   updatedAt            DateTime                  @default(now()) @updatedAt
   sceneType            String?
   candidateImages      String?                   @db.Text
-  linkedToNextPanel    Boolean                   @default(false)
-  sketchImageUrl       String?                   @db.Text
-  sketchImageMediaId   String?
-  sketchImageMedia     MediaObject?              @relation("ProjectPanelSketchMedia", fields: [sketchImageMediaId], references: [id], onDelete: SetNull)
   sourceShotNumber     Int?
   sourceGenerationSegmentId String?              @db.Text
   executionSnapshotJson Json?
   renderFactsJson      Json?
   actingNotes          String?                   @db.Text // 演技指导数据 JSON
-  previousImageUrl     String?                   @db.Text
-  previousImageMediaId String?
-  previousImageMedia   MediaObject?              @relation("ProjectPanelPreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
   storyboard           ProjectStoryboard  @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
 
   @@unique([storyboardId, panelIndex])
   @@index([storyboardId])
   @@index([imageMediaId])
   @@index([videoMediaId])
-  @@index([sketchImageMediaId])
-  @@index([previousImageMediaId])
   @@index([sourceShotNumber])
   @@map("project_panels")
-}
-
-model ProjectCommand {
-  id              String          @id @default(uuid())
-  projectId       String
-  userId          String
-  episodeId       String?
-  source          String
-  commandType     String
-  scopeRef        String?
-  status          String          @default("planned")
-  summary         String?         @db.Text
-  rawInput        Json?
-  normalizedInput Json?
-  currentPlanId   String?
-  errorCode       String?
-  errorMessage    String?         @db.Text
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plans           ExecutionPlan[]
-  approvals       PlanApproval[]
-  planRuns        PlanRun[]
-
-  @@index([projectId, createdAt])
-  @@index([projectId, episodeId, createdAt])
-  @@index([userId, createdAt])
-  @@index([status, createdAt])
-  @@map("project_commands")
 }
 
 model MutationBatch {
@@ -431,81 +389,6 @@ model MutationEntry {
   @@index([batchId])
   @@index([targetType, targetId])
   @@map("mutation_entries")
-}
-
-model ExecutionPlan {
-  id               String              @id @default(uuid())
-  commandId        String              @unique
-  projectId        String
-  episodeId        String?
-  status           String              @default("planned")
-  summary          String?             @db.Text
-  requiresApproval Boolean             @default(false)
-  riskSummary      Json?
-  policySnapshot   Json?
-  contextSnapshot  Json?
-  linkedTaskId     String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  command          ProjectCommand      @relation(fields: [commandId], references: [id], onDelete: Cascade)
-  project          Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  steps            ExecutionPlanStep[]
-  approvals        PlanApproval[]
-  planRuns         PlanRun[]
-
-  @@index([commandId])
-  @@index([projectId, createdAt])
-  @@index([projectId, episodeId, createdAt])
-  @@index([status, createdAt])
-  @@map("execution_plans")
-}
-
-model ExecutionPlanStep {
-  id                  String        @id @default(uuid())
-  planId              String
-  stepKey             String
-  operationId         String
-  orderIndex          Int
-  scopeRef            String?
-  dependsOnJson       Json?
-  inputArtifactsJson  Json?
-  outputArtifactsJson Json?
-  invalidatesJson     Json?
-  mutationKind        String
-  riskLevel           String
-  requiresApproval    Boolean       @default(false)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  plan                ExecutionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  @@unique([planId, stepKey])
-  @@index([planId, orderIndex])
-  @@map("execution_plan_steps")
-}
-
-model PlanApproval {
-  id           String         @id @default(uuid())
-  planId       String
-  commandId    String
-  projectId    String
-  userId       String
-  status       String         @default("pending")
-  reason       String?        @db.Text
-  responseNote String?        @db.Text
-  approvedAt   DateTime?
-  rejectedAt   DateTime?
-  expiresAt    DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  plan         ExecutionPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
-  command      ProjectCommand @relation(fields: [commandId], references: [id], onDelete: Cascade)
-  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([planId, createdAt])
-  @@index([commandId, createdAt])
-  @@index([projectId, status, createdAt])
-  @@map("plan_approvals")
 }
 
 model ProjectAssistantThread {
@@ -713,10 +596,7 @@ model ProjectStoryboard {
   updatedAt           DateTime              @default(now()) @updatedAt
   panelCount          Int                   @default(9)
   storyboardTextJson  String?               @db.Text
-  imageHistory        String?               @db.Text
-  candidateImages     String?               @db.Text
   lastError           String?
-  photographyPlan     String?               @db.Text
   panels              ProjectPanel[]
   editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
@@ -769,15 +649,11 @@ model Project {
   capabilityOverrides String?                 @db.LongText
   lastEpisodeId      String?
   imageResolution    String                   @default("2K")
-  importStatus       String?
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @default(now()) @updatedAt
   lastAccessedAt     DateTime?
   user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   usageCosts         UsageCost[]
-  commands           ProjectCommand[]
-  executionPlans     ExecutionPlan[]
-  planApprovals      PlanApproval[]
   assistantThreads   ProjectAssistantThread[]
   agentRuns          ProjectAgentRun[]
   agentActivities    ProjectAgentActivity[]
@@ -902,8 +778,6 @@ model User {
   taskEvents              TaskEvent[]
   planRuns                PlanRun[]
   planRunEvents           PlanRunEvent[]
-  projectCommands         ProjectCommand[]
-  planApprovals           PlanApproval[]
   projectAssistantThreads ProjectAssistantThread[]
   projectAgentRuns        ProjectAgentRun[]
   projectAgentActivities  ProjectAgentActivity[]
@@ -1133,8 +1007,6 @@ model PlanRun {
   userId            String
   projectId         String
   episodeId         String?
-  commandId         String?
-  planId            String?
   goal              String?         @db.Text
   status            String          @default("queued")
   currentStepKey    String?
@@ -1149,16 +1021,12 @@ model PlanRun {
   updatedAt         DateTime        @updatedAt
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  command           ProjectCommand? @relation(fields: [commandId], references: [id], onDelete: SetNull)
-  plan              ExecutionPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
   steps             PlanStepRun[]
   events            PlanRunEvent[]
   artifacts         PlanArtifact[]
 
   @@index([projectId, status, updatedAt])
   @@index([userId, createdAt])
-  @@index([commandId])
-  @@index([planId])
   @@index([episodeId, status, updatedAt])
   @@map("plan_runs")
 }
@@ -1369,8 +1237,6 @@ model MediaObject {
   projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
   projectPanelImages             ProjectPanel[]       @relation("ProjectPanelImageMedia")
   projectPanelVideos             ProjectPanel[]       @relation("ProjectPanelVideoMedia")
-  projectPanelSketchImages       ProjectPanel[]       @relation("ProjectPanelSketchMedia")
-  projectPanelPreviousImages     ProjectPanel[]       @relation("ProjectPanelPreviousImageMedia")
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")

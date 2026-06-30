@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
-import { AI_EDIT_BUTTON_CLASS } from '@/components/ui/ai-edit-style'
 
 const locationImageListMock = vi.hoisted(() => vi.fn((props: { overlayActions?: React.ReactNode }) => createElement('div', null, props.overlayActions ?? null)))
 const uploadMutationMock = vi.hoisted(() => ({
@@ -30,10 +29,6 @@ vi.mock('@/features/project-workspace/components/assets/location-card/LocationIm
 
 vi.mock('@/components/ui/icons', () => ({
   AppIcon: () => createElement('span', null),
-}))
-
-vi.mock('@/components/ui/icons/AISparklesIcon', () => ({
-  default: (props: { className?: string }) => createElement('svg', { className: props.className, 'data-icon': 'ai-sparkles' }),
 }))
 
 vi.mock('@/components/task/TaskStatusInline', () => ({
@@ -88,8 +83,8 @@ const TestIntlProvider = NextIntlClientProvider as React.ComponentType<{
   children?: React.ReactNode
 }>
 
-describe('LocationCard AI edit button', () => {
-  it('uses the shared AI edit button style in single-image mode', async () => {
+describe('LocationCard image slots', () => {
+  it('passes a wide image slot to project prop cards without rendering image edit actions', async () => {
     locationImageListMock.mockClear()
     Reflect.set(globalThis, 'React', React)
     const { default: LocationCard } = await import('@/features/project-workspace/components/assets/LocationCard')
@@ -125,16 +120,12 @@ describe('LocationCard AI edit button', () => {
           onRegenerate: () => undefined,
           onGenerate: () => undefined,
           onImageClick: () => undefined,
-          onImageEdit: () => undefined,
           projectId: 'project-1',
         }),
       ),
     )
 
-    expect(html).toContain('data-icon=\"ai-sparkles\"')
-    for (const token of AI_EDIT_BUTTON_CLASS.split(' ')) {
-      expect(html).toContain(token)
-    }
+    expect(html).not.toContain('data-icon=\"ai-sparkles\"')
     const firstCall = locationImageListMock.mock.calls[0]?.[0] as { aspectClassName?: string } | undefined
     expect(firstCall?.aspectClassName).toBe('aspect-[3/2]')
   })
@@ -175,7 +166,6 @@ describe('LocationCard AI edit button', () => {
           onRegenerate: () => undefined,
           onGenerate: () => undefined,
           onImageClick: () => undefined,
-          onImageEdit: () => undefined,
           projectId: 'project-1',
         }),
       ),

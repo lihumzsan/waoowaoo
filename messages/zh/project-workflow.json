@@ -14,82 +14,6 @@
     "refreshData": "刷新项目数据",
     "enterVideoGeneration": "进入视频生成 →"
   },
-  "smartImport": {
-    "title": "开启你的创作之旅",
-    "subtitle": "首先，选择你的创作方式",
-    "manualCreate": {
-      "title": "从第一集开始创作",
-      "description": "从第一集开始，适合边写边播或单集短视频制作",
-      "button": "开始创作"
-    },
-    "smartImport": {
-      "title": "智能全书导入",
-      "description": "上传整本小说或剧本，AI 引擎自动识别章节结构，一键完成智能分集。",
-      "button": "立即导入",
-      "recommended": "推荐"
-    },
-    "upload": {
-      "title": "上传原始素材",
-      "subtitle": "AI 引擎已准备就绪，一键自动分集与格式化",
-      "maxWords": "（最大支持 3 万字）",
-      "textInput": "输入文本内容",
-      "documentUpload": "上传完整文档",
-      "placeholder": "在此处粘贴你的小说章节或剧本内容...",
-      "filePlaceholder": "已上传文件模式",
-      "clickUpload": "点击上传文档",
-      "clearTextFirst": "请先清空左侧文本",
-      "supportedFormats": "支持 Word, TXT 格式",
-      "preview": "预览",
-      "expandPreview": "展开更多",
-      "collapsePreview": "收起预览",
-      "deleteFile": "删除文件",
-      "startAnalysis": "开始智能分析",
-      "back": "返回",
-      "words": "字"
-    },
-    "analyzing": {
-      "title": "AI 正在分析你的故事",
-      "description": "识别章节结构，智能分集中...",
-      "autoSave": "分析完成后将自动保存"
-    },
-    "preview": {
-      "title": "智能分集完成",
-      "episodeCount": "已为你自动分为 {count} 集",
-      "totalWords": "总计 {count} 字",
-      "autoSaved": "✓ 已自动保存",
-      "reanalyze": "重新分析",
-      "confirm": "确认完成",
-      "saving": "保存中...",
-      "episodeList": "剧集列表",
-      "addEpisode": "添加剧集",
-      "averageWords": "平均每集",
-      "episodeContent": "剧集内容",
-      "episodePlaceholder": "输入剧集标题...",
-      "summaryPlaceholder": "输入剧情简介...",
-      "newEpisode": "新剧集",
-      "deleteEpisode": "删除剧集",
-      "deleteConfirm": {
-        "title": "确认删除",
-        "message": "确定要删除「{title}」吗？",
-        "cancel": "取消",
-        "confirm": "确认删除"
-      },
-      "tip": {
-        "title": "提示",
-        "content": "你可以直接编辑标题、简介和内容。点击【确认完成】后，剧集将正式导入到项目中"
-      }
-    },
-    "errors": {
-      "fileTooLarge": "文件过大，请上传小于 10MB 的文件",
-      "docNotSupported": "不支持 .doc 格式，请使用 Word 转换为 .docx",
-      "fileEmpty": "文件内容为空",
-      "fileReadError": "文件读取失败，请重试",
-      "uploadFirst": "请先上传或粘贴内容",
-      "analyzeFailed": "分析失败",
-      "saveFailed": "保存失败"
-    },
-    "cancelConfirm": "确定要取消吗？已分析的剧集将被清空。"
-  },
   "execution": {
     "creating": "AI 创作中...",
     "selectEpisode": "请先选择剧集",
@@ -351,12 +275,7 @@
         "candidateImageAlt": "候选图 {index}",
         "selectCandidate": "采纳",
         "cancelCandidate": "取消候选",
-        "imageHistory": "图片历史",
-        "sketchImage": "草图",
-        "previousImage": "参考图",
-        "firstLastFramePrompt": "首尾帧提示词",
         "videoMeta": "视频信息",
-        "generationMode": "生成模式",
         "gridMode": "参考布局",
         "reason": "判断理由",
         "videoPlanMeta": "片段信息",
@@ -417,7 +336,6 @@
         "generateAssetReferenceVideo": "全能参考生视频",
         "videoPlanModelMissing": "请先在项目设置中选择视频片段生成模型。",
         "videoModel": "视频模型",
-        "linkedToNextPanel": "衔接下镜",
         "baseVideo": "基础视频",
         "lastOptions": "上次生成参数",
         "finalStats": "成片统计",
@@ -489,7 +407,6 @@
           "assetCoverage": "资产覆盖",
           "aiData": "AI Data",
           "errors": "错误状态",
-          "firstLastFrame": "首尾帧模式",
           "batchVideo": "批量视频"
         },
         "fields": {
@@ -515,8 +432,6 @@
           "sound": "声音",
           "executionSnapshot": "镜头执行快照 JSON",
           "actingNotes": "表演指导 JSON",
-          "insertPrompt": "插入镜头要求",
-          "variantTitle": "变体标题",
           "imagePrompt": "图片提示词",
           "candidateImage": "候选图",
           "count": "数量",
@@ -524,10 +439,7 @@
           "assetImageGenerationMode": "资产参考生成",
           "storyboardImageGenerationMode": "分镜图片生成",
           "referenceUrls": "参考图 URL",
-          "modifyPrompt": "图片修改要求",
-          "firstLastFramePrompt": "首尾帧提示词",
           "videoModel": "视频模型",
-          "linkedToNextPanel": "衔接下一个镜头",
           "generationOptions": "生成参数 JSON",
           "autoVideoMode": "按视频片段",
           "singleVideoMode": "单镜头",
@@ -586,9 +498,7 @@
           "expandPreviewDetails": "展开提示词",
           "collapsePreviewDetails": "收起提示词"
         },
-        "defaults": {
-          "variantTitle": "镜头变体"
-        },
+        "defaults": {},
         "placeholders": {
           "assetReferenceImages": "每行一个参考图 URL，也可以点击上传添加"
         },

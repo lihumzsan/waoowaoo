@@ -4,12 +4,6 @@ import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { resolveProjectContextPolicy } from '@/lib/project-context/policy'
 import type { ProjectProjectionLite, ProjectProjectionProgress } from './types'
 
-type ApprovalSummaryRow = {
-  id: string
-  status: string
-  createdAt: Date
-}
-
 async function listLatestArtifactsForContext(params: {
   userId: string
   projectId: string
@@ -69,7 +63,7 @@ export async function assembleProjectProjectionLite(params: {
   selectedScopeRef?: string | null
 }): Promise<ProjectProjectionLite> {
   const episodeId = params.episodeId || null
-  const [project, episode, progress, runs, latestArtifacts, approvals, projectModelConfig] = await Promise.all([
+  const [project, episode, progress, runs, latestArtifacts, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
       select: {
@@ -97,21 +91,6 @@ export async function assembleProjectProjectionLite(params: {
       projectId: params.projectId,
       episodeId: episodeId || undefined,
     }),
-    episodeId
-      ? prisma.planApproval.findMany({
-          where: {
-            projectId: params.projectId,
-            status: {
-              in: ['pending', 'approved'],
-            },
-            plan: {
-              episodeId,
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }) as Promise<ApprovalSummaryRow[]>
-      : Promise.resolve([] as ApprovalSummaryRow[]),
     getProjectModelConfig(params.projectId, params.userId),
   ])
 
@@ -146,11 +125,6 @@ export async function assembleProjectProjectionLite(params: {
       status: run.status,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
-    })),
-    approvals: approvals.map((approval) => ({
-      id: approval.id,
-      status: approval.status,
-      createdAt: approval.createdAt.toISOString(),
     })),
   }
 }

@@ -37,7 +37,6 @@ type ProjectWorkflowSource = {
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null
-  importStatus?: string | null
   characters?: ProjectRecord[]
   locations?: ProjectLocationLike[]
   episodes?: ProjectRecord[]
@@ -73,7 +72,6 @@ function buildProjectWorkflowData(source: ProjectWorkflowSource): ProjectWorkflo
     videoResolution: source.videoResolution ?? null,
     imageResolution: source.imageResolution ?? null,
     lastEpisodeId: source.lastEpisodeId ?? null,
-    importStatus: source.importStatus ?? null,
     characters: (source.characters || []) as unknown as Character[],
     locations: assets.locations || [],
     props: assets.props || [],

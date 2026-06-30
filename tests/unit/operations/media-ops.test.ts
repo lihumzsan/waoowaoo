@@ -121,21 +121,4 @@ describe('media operations', () => {
       targetType: 'CharacterAppearance',
     }))
   })
-
-  it('modify_storyboard_image -> submits MODIFY_ASSET_IMAGE task', async () => {
-    const ops = createMediaOperations()
-    const ctx = buildCtx()
-    await ops.modify_storyboard_image.execute(ctx as never, {
-      storyboardId: 'storyboard-1',
-      panelIndex: 0,
-      modifyPrompt: 'increase contrast',
-      extraImageUrls: ['https://example.com/ref.png'],
-      selectedAssets: [{ imageUrl: 'https://example.com/asset.png' }],
-    })
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.MODIFY_ASSET_IMAGE,
-      targetType: 'ProjectPanel',
-      targetId: 'panel-1',
-    }))
-  })
 })

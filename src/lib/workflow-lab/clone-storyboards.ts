@@ -34,10 +34,7 @@ export async function cloneWorkflowLabStoryboards(params: {
         storyboardImageUrl: storyboard.storyboardImageUrl,
         panelCount: storyboard.panelCount,
         storyboardTextJson: storyboard.storyboardTextJson,
-        imageHistory: storyboard.imageHistory,
-        candidateImages: storyboard.candidateImages,
         lastError: storyboard.lastError,
-        photographyPlan: storyboard.photographyPlan,
       },
       select: { id: true },
     })
@@ -67,20 +64,14 @@ export async function cloneWorkflowLabStoryboards(params: {
           imagePrompt: panel.imagePrompt,
           imageUrl: panel.imageUrl,
           imageMediaId: panel.imageMediaId,
-          imageHistory: panel.imageHistory,
           videoPrompt: panel.videoPrompt,
-          firstLastFramePrompt: panel.firstLastFramePrompt,
           videoUrl: panel.videoUrl,
-          videoGenerationMode: panel.videoGenerationMode,
           lastVideoGenerationOptions: panel.lastVideoGenerationOptions === null
             ? Prisma.JsonNull
             : toInputJson(panel.lastVideoGenerationOptions),
           videoMediaId: panel.videoMediaId,
           sceneType: panel.sceneType,
           candidateImages: panel.candidateImages,
-          linkedToNextPanel: panel.linkedToNextPanel,
-          sketchImageUrl: panel.sketchImageUrl,
-          sketchImageMediaId: panel.sketchImageMediaId,
           sourceShotNumber: panel.sourceShotNumber,
           sourceGenerationSegmentId: panel.sourceGenerationSegmentId,
           executionSnapshotJson: panel.executionSnapshotJson === null
@@ -90,8 +81,6 @@ export async function cloneWorkflowLabStoryboards(params: {
             ? Prisma.JsonNull
             : toInputJson(panel.renderFactsJson),
           actingNotes: panel.actingNotes,
-          previousImageUrl: panel.previousImageUrl,
-          previousImageMediaId: panel.previousImageMediaId,
         },
         select: { id: true },
       })

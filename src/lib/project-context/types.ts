@@ -29,12 +29,6 @@ export interface ProjectContextRunSummary {
   updatedAt: string
 }
 
-export interface ProjectContextApprovalSummary {
-  id: string
-  status: string
-  createdAt: string
-}
-
 export interface ProjectContextEpisodeSnapshot {
   novelText: string | null
   storyboardCount: number
@@ -82,7 +76,6 @@ export interface ProjectContextEpisodeDetailSnapshot {
   editScreenplay: ProjectContextEditScreenplaySnapshot | null
   editScript: ProjectContextEditScriptSnapshot | null
   panels: ProjectContextPanelSnapshot[]
-  approvals: ProjectContextApprovalSummary[]
 }
 
 export interface ProjectContextSnapshot {

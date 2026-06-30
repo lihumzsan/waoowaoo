@@ -152,21 +152,13 @@ export interface ProjectPanel {
   imageUrl: string | null
   candidateImages?: string | null
   media?: MediaRef | null
-  imageHistory: string | null
   videoPrompt: string | null
-  firstLastFramePrompt?: string | null
   videoUrl: string | null
   videoModel?: string | null
   videoErrorCode?: string | null
   videoErrorMessage?: string | null
-  videoGenerationMode?: 'normal' | 'firstlastframe' | null
   lastVideoGenerationOptions?: ProjectVideoGenerationOptions | null
   videoMedia?: MediaRef | null
-  linkedToNextPanel?: boolean | null
-  sketchImageUrl?: string | null
-  sketchImageMedia?: MediaRef | null
-  previousImageUrl?: string | null
-  previousImageMedia?: MediaRef | null
   sourceShotNumber?: number | null
   sourceGenerationSegmentId?: string | null
   executionSnapshotJson?: unknown | null
@@ -189,9 +181,7 @@ export interface ProjectStoryboard {
   storyboardImageUrl: string | null
   media?: MediaRef | null
   storyboardTaskRunning?: boolean
-  candidateImages?: string | null
   lastError?: string | null  // 最后一次生成失败的错误信息
-  photographyPlan?: string | null  // 摄影方案JSON
   panels?: ProjectPanel[]
 }
 
@@ -442,7 +432,6 @@ export interface ProjectWorkflowData {
   videoResolution?: string | null
   imageResolution?: string | null
   lastEpisodeId?: string | null
-  importStatus?: string | null
   characters?: Character[]
   locations?: Location[]
   props?: Prop[]

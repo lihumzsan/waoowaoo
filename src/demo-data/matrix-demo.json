@@ -28,7 +28,6 @@
       "updatedAt": "2026-06-29T00:00:00.000Z",
       "panelCount": 1,
       "storyboardTextJson": "{\"source\":\"edit_script\",\"editScriptId\":\"demo-edit-script\",\"sourceGenerationSegmentIds\":[\"demo-edit-script:generationSegment:1\"]}",
-      "imageHistory": null,
       "candidateImages": null,
       "lastError": null,
       "panels": [
@@ -50,20 +49,14 @@
           "imagePrompt": "GLOBAL TASK\nGenerate one storyboard still image. Render only the listed scene, characters, props, camera, axis, and style facts. Every character listed in CHARACTERS is physically present unless visibility is \"offscreen\".\n\nSCENE\n{\"name\":\"木屋客厅\",\"action\":\"安娜停在门口观察背对门口的高背椅，伪装的外婆坐在椅中但被椅背完全隐藏。\"}\n\nCHARACTERS\n[{\"name\":\"安娜\",\"visibility\":\"visible\",\"role\":\"focus\",\"performance\":\"放轻脚步靠近\",\"position\":\"门口内侧偏左\",\"screenPosition\":\"画面左侧\",\"facing\":\"面向高背椅\",\"eyeline\":\"看向椅背\"},{\"name\":\"伪装的外婆\",\"visibility\":\"hidden\",\"role\":\"hidden_subject\",\"performance\":\"坐在高背椅中保持静止\",\"position\":\"坐在高背椅内\",\"screenPosition\":\"椅背后方\",\"facing\":\"背对门口\",\"eyeline\":\"不可见\"}]\n\nPROPS\n[{\"name\":\"高背椅\",\"role\":\"reveal_device\",\"position\":\"客厅中央\",\"screenPosition\":\"画面中心\"}]\n\nCAMERA\n{\"shotScale\":\"中景\",\"lens\":\"35mm\",\"focus\":\"高背椅区域清晰，房间边缘轻微虚化\",\"height\":\"视线高度\",\"angle\":\"平视略低\",\"composition\":\"高背椅位于画面中心，安娜保持画面左侧\",\"lighting\":\"顶部冷光落在椅背，椅中人物被阴影隐藏\"}\n\nAXIS\n{\"subjects\":[\"高背椅\",\"安娜\"],\"screenDirection\":\"高背椅保持画面中心，安娜从画面左侧靠近\"}\n\nSTYLE\n{\"summary\":\"潮湿木屋、低饱和红色斗篷、克制冷光和手工定格质感。\"}",
           "imageUrl": "/demo-assets/matrix-demo/eac5c85257de6569.jpg",
           "imageMediaId": null,
-          "imageHistory": null,
           "videoPrompt": "单镜头视频提示词，16:9，暗黑童话定格动画质感，固定中景。安娜位于画面左侧，放轻脚步靠近客厅中央的高背椅；伪装的外婆持续坐在椅中但被高椅背和阴影完全隐藏。保持高背椅画面中心、安娜从左侧靠近的轴线关系，顶部冷光落在椅背，房间边缘轻微虚化。<微弱木板声和安静木屋空间声持续>",
-          "firstLastFramePrompt": null,
           "videoUrl": null,
-          "videoGenerationMode": null,
           "lastVideoGenerationOptions": null,
           "videoMediaId": null,
           "createdAt": "2026-06-29T00:00:00.000Z",
           "updatedAt": "2026-06-29T00:00:00.000Z",
           "sceneType": null,
           "candidateImages": null,
-          "linkedToNextPanel": false,
-          "sketchImageUrl": null,
-          "sketchImageMediaId": null,
           "sourceShotNumber": 1,
           "sourceGenerationSegmentId": "demo-edit-script:generationSegment:1",
           "executionSnapshotJson": {
@@ -166,8 +159,6 @@
             }
           },
           "actingNotes": null,
-          "previousImageUrl": null,
-          "previousImageMediaId": null,
           "imageTaskRunning": false,
           "videoTaskRunning": false,
           "imageErrorMessage": null

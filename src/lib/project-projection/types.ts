@@ -1,5 +1,4 @@
 import type {
-  ProjectContextApprovalSummary,
   ProjectContextArtifactSummary,
   ProjectContextRunSummary,
   ProjectPolicySnapshot,
@@ -20,7 +19,6 @@ export interface ProjectProjectionLite {
   progress: ProjectProjectionProgress
   activePlanRuns: ProjectContextRunSummary[]
   latestArtifacts: ProjectContextArtifactSummary[]
-  approvals: ProjectContextApprovalSummary[]
 }
 
 export interface ProjectProjectionPanelSnapshot {

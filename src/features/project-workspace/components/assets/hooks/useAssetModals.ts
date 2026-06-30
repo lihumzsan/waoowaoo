@@ -35,20 +35,6 @@ interface EditingProp {
     variantId?: string
 }
 
-interface ImageEditModal {
-    assetType: 'location' | 'prop'
-    locationId: string
-    imageIndex: number
-    locationName: string
-}
-
-interface CharacterImageEditModal {
-    characterId: string
-    appearanceId: string
-    imageIndex: number
-    characterName: string
-}
-
 interface UseAssetModalsProps {
     projectId: string
 }
@@ -76,9 +62,6 @@ export function useAssetModals({
     const [showAddCharacter, setShowAddCharacter] = useState(false)
     const [showAddLocation, setShowAddLocation] = useState(false)
     const [showAddProp, setShowAddProp] = useState(false)
-    // 图片编辑弹窗
-    const [imageEditModal, setImageEditModal] = useState<ImageEditModal | null>(null)
-    const [characterImageEditModal, setCharacterImageEditModal] = useState<CharacterImageEditModal | null>(null)
     // 全局资产设定弹窗
     const [showAssetSettingModal, setShowAssetSettingModal] = useState(false)
 
@@ -149,30 +132,6 @@ export function useAssetModals({
         })
     }
 
-    // 打开场景图片编辑弹窗
-    const handleOpenLocationImageEdit = (locationId: string, imageIndex: number, assetType: 'location' | 'prop' = 'location') => {
-        const assetsOfType = assetType === 'prop' ? props : locations
-        const location = assetsOfType.find(l => l.id === locationId)
-        if (!location) return
-
-        setImageEditModal({
-            assetType,
-            locationId,
-            imageIndex,
-            locationName: location.name
-        })
-    }
-
-    // 打开人物图片编辑弹窗
-    const handleOpenCharacterImageEdit = (characterId: string, appearanceId: string, imageIndex: number, characterName: string) => {
-        setCharacterImageEditModal({
-            characterId,
-            appearanceId,
-            imageIndex,
-            characterName
-        })
-    }
-
     // 关闭所有弹窗
     const closeEditingAppearance = () => setEditingAppearance(null)
     const closeEditingLocation = () => setEditingLocation(null)
@@ -180,8 +139,6 @@ export function useAssetModals({
     const closeAddCharacter = () => setShowAddCharacter(false)
     const closeAddLocation = () => setShowAddLocation(false)
     const closeAddProp = () => setShowAddProp(false)
-    const closeImageEditModal = () => setImageEditModal(null)
-    const closeCharacterImageEditModal = () => setCharacterImageEditModal(null)
     const closeAssetSettingModal = () => setShowAssetSettingModal(false)
 
     return {
@@ -197,8 +154,6 @@ export function useAssetModals({
         showAddCharacter,
         showAddLocation,
         showAddProp,
-        imageEditModal,
-        characterImageEditModal,
         showAssetSettingModal,
         // Setters
         setEditingAppearance,
@@ -207,8 +162,6 @@ export function useAssetModals({
         setShowAddCharacter,
         setShowAddLocation,
         setShowAddProp,
-        setImageEditModal,
-        setCharacterImageEditModal,
         setShowAssetSettingModal,
         // Handlers
         handleEditCharacterDescription,
@@ -216,8 +169,6 @@ export function useAssetModals({
         handleEditAppearance,
         handleEditLocation,
         handleEditProp,
-        handleOpenLocationImageEdit,
-        handleOpenCharacterImageEdit,
         // Close helpers
         closeEditingAppearance,
         closeEditingLocation,
@@ -225,8 +176,6 @@ export function useAssetModals({
         closeAddCharacter,
         closeAddLocation,
         closeAddProp,
-        closeImageEditModal,
-        closeCharacterImageEditModal,
         closeAssetSettingModal
     }
 }

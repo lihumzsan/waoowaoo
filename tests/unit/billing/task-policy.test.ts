@@ -23,7 +23,6 @@ describe('billing/task-policy', () => {
     TASK_TYPE.REGENERATE_GROUP,
     TASK_TYPE.ASSET_HUB_IMAGE,
     TASK_TYPE.ASSET_HUB_MODIFY,
-    TASK_TYPE.PANEL_VARIANT,
   ])
   const videoTaskTypes = new Set<TaskType>([
     TASK_TYPE.VIDEO_PANEL,
@@ -172,15 +171,13 @@ describe('billing/task-policy', () => {
     })).toThrow(/BILLING_CAPABILITY_PRICE_NOT_FOUND/)
   })
 
-  it('builds video billing info from firstLastFrame.flModel', () => {
+  it('builds video billing info from the explicit video model', () => {
     const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {
-      firstLastFrame: {
-        flModel: 'doubao-seedance-1-0-pro-250528',
-      },
+      videoModel: 'openrouter::bytedance/seedance-2.0-fast',
       duration: 8,
     }))
     expect(info.apiType).toBe('video')
-    expect(info.model).toBe('doubao-seedance-1-0-pro-250528')
+    expect(info.model).toBe('openrouter::bytedance/seedance-2.0-fast')
     expect(info.quantity).toBe(1)
   })
 

@@ -1,5 +1,4 @@
-import { createHash, randomUUID } from 'crypto'
-import { prisma } from '@/lib/prisma'
+import { createHash } from 'crypto'
 import { ApiError } from '@/lib/api-errors'
 
 export function normalizeString(value: unknown): string {
@@ -86,64 +85,5 @@ export function assertNoLegacyArtStyle(input: Record<string, unknown>) {
     code: 'LEGACY_ART_STYLE_REMOVED',
     field: 'artStyle',
     message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
-  })
-}
-
-export function createPanelVariantId(): string {
-  try {
-    return randomUUID()
-  } catch {
-    return `panel-variant-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-  }
-}
-
-export async function rollbackCreatedVariantPanel(params: {
-  panelId: string
-  storyboardId: string
-  panelIndex: number
-}) {
-  await prisma.$transaction(async (tx) => {
-    await tx.projectPanel.delete({
-      where: { id: params.panelId },
-    })
-
-    const maxPanel = await tx.projectPanel.findFirst({
-      where: { storyboardId: params.storyboardId },
-      orderBy: { panelIndex: 'desc' },
-      select: { panelIndex: true },
-    })
-    const maxPanelIndex = maxPanel?.panelIndex ?? -1
-    const offset = maxPanelIndex + 1000
-
-    await tx.projectPanel.updateMany({
-      where: {
-        storyboardId: params.storyboardId,
-        panelIndex: { gt: params.panelIndex },
-      },
-      data: {
-        panelIndex: { increment: offset },
-        panelNumber: { increment: offset },
-      },
-    })
-
-    await tx.projectPanel.updateMany({
-      where: {
-        storyboardId: params.storyboardId,
-        panelIndex: { gt: params.panelIndex + offset },
-      },
-      data: {
-        panelIndex: { decrement: offset + 1 },
-        panelNumber: { decrement: offset + 1 },
-      },
-    })
-
-    const panelCount = await tx.projectPanel.count({
-      where: { storyboardId: params.storyboardId },
-    })
-
-    await tx.projectStoryboard.update({
-      where: { id: params.storyboardId },
-      data: { panelCount },
-    })
   })
 }

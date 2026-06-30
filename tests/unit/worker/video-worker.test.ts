@@ -12,7 +12,6 @@ type PanelRow = {
   videoUrl: string | null
   imageUrl: string | null
   description: string | null
-  firstLastFramePrompt: string | null
   videoPrompt: string | null
   duration: number | null
 }
@@ -181,7 +180,6 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
     videoUrl: 'cos/base-video.mp4',
     imageUrl: 'cos/panel-image.png',
     description: 'panel description',
-    firstLastFramePrompt: null,
     videoPrompt: 'panel video prompt',
     duration: 5,
     ...(overrides || {}),
@@ -964,7 +962,6 @@ describe('worker video processor behavior', () => {
       where: { id: 'panel-1' },
       data: {
         videoUrl: 'cos/video/video.mp4',
-        videoGenerationMode: 'normal',
         lastVideoGenerationOptions: {
           resolution: '720p',
           generateAudio: true,

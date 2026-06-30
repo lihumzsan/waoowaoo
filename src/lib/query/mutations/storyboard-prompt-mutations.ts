@@ -5,10 +5,6 @@ import {
   requestJsonWithError,
 } from './mutation-shared'
 
-/**
- * 更新摄影规则（项目）
- */
-
 function invalidateStoryboardPromptCaches(
     queryClient: ReturnType<typeof useQueryClient>,
     projectId: string,
@@ -20,28 +16,6 @@ function invalidateStoryboardPromptCaches(
         queryTemplates.push(queryKeys.storyboards.all(episodeId))
     }
     return invalidateQueryTemplates(queryClient, queryTemplates)
-}
-
-export function useUpdateProjectPhotographyPlan(projectId: string, episodeId?: string | null) {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: async (payload: {
-            storyboardId: string
-            photographyPlan: string
-        }) =>
-            await requestJsonWithError(
-                `/api/projects/${projectId}/photography-plan`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                },
-                '保存摄影规则失败',
-            ),
-        onSettled: () => {
-            return invalidateStoryboardPromptCaches(queryClient, projectId, episodeId)
-        },
-    })
 }
 
 /**
@@ -59,7 +33,7 @@ export function useUpdateProjectPanelActingNotes(projectId: string, episodeId?: 
             await requestJsonWithError(
                 `/api/projects/${projectId}/panel`,
                 {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 },

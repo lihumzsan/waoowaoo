@@ -43,11 +43,6 @@ export function useWorkspaceVideoActions({
   const handleGenerateVideo = async (
     storyboardId: string,
     panelIndex: number,
-    firstLastFrame?: {
-      lastFrameStoryboardId: string
-      lastFramePanelIndex: number
-      customPrompt?: string
-    },
     generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => {
@@ -60,7 +55,6 @@ export function useWorkspaceVideoActions({
         storyboardId,
         panelIndex,
         panelId,
-        firstLastFrame,
         generationOptions,
       })
     } catch (err: unknown) {
@@ -138,7 +132,7 @@ export function useWorkspaceVideoActions({
     storyboardId: string,
     panelIndex: number,
     value: string,
-    field: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt' = 'videoPrompt',
+    field: 'imagePrompt' | 'videoPrompt' = 'videoPrompt',
   ) => {
     await updateProjectPanelVideoPromptMutation.mutateAsync({ storyboardId, panelIndex, value, field })
   }

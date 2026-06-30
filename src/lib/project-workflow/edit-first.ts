@@ -1,7 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
-  isStoryboardPanelPromptsStageFailed,
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
@@ -138,31 +137,11 @@ function state(params: {
 type StoryboardSpatialCandidate = {
   readonly id: string
   readonly editScriptId: string | null
-  readonly photographyPlan: string | null
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
-
-function readString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed || null
+  readonly lastError: string | null
 }
 
 function hasText(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
-}
-
-function parseJsonRecord(value: string | null): Record<string, unknown> {
-  if (!value) return {}
-  try {
-    return readRecord(JSON.parse(value))
-  } catch {
-    return {}
-  }
 }
 
 interface StoryboardPlanStageSummary {
@@ -182,15 +161,14 @@ function resolveStoryboardPlanStageSummary(input: {
   }
   const matching = input.storyboards.flatMap((storyboard) => {
     if (storyboard.editScriptId !== input.editScriptId) return []
-    const plan = parseJsonRecord(storyboard.photographyPlan)
     return [{
       id: storyboard.id,
-      stage: readString(plan.currentStage),
+      hasError: hasText(storyboard.lastError),
     }]
   })
   return {
     matchingStoryboardIds: matching.map((storyboard) => storyboard.id),
-    storyboardPanelPromptFailed: matching.some((storyboard) => isStoryboardPanelPromptsStageFailed(storyboard.stage)),
+    storyboardPanelPromptFailed: matching.some((storyboard) => storyboard.hasError),
   }
 }
 
@@ -539,7 +517,7 @@ export async function resolveEditFirstWorkflowState(params: {
       select: {
         id: true,
         editScriptId: true,
-        photographyPlan: true,
+        lastError: true,
       },
     }),
     prisma.projectPanel.findMany({

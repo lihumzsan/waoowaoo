@@ -49,8 +49,6 @@ const ROUTE_FILES = [
   'src/app/api/assets/[assetId]/copy/route.ts',
   'src/app/api/assets/[assetId]/generate/plan/route.ts',
   'src/app/api/assets/[assetId]/generate/route.ts',
-  'src/app/api/assets/[assetId]/modify-render/plan/route.ts',
-  'src/app/api/assets/[assetId]/modify-render/route.ts',
   'src/app/api/assets/[assetId]/revert-render/route.ts',
   'src/app/api/assets/[assetId]/route.ts',
   'src/app/api/assets/[assetId]/select-render/route.ts',
@@ -72,17 +70,12 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/ai-modify-appearance/route.ts',
   'src/app/api/projects/[projectId]/ai-modify-location/route.ts',
   'src/app/api/projects/[projectId]/ai-modify-prop/route.ts',
-  'src/app/api/projects/[projectId]/ai-modify-shot-prompt/route.ts',
-  'src/app/api/projects/[projectId]/analyze-shot-variants/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/session-state/route.ts',
   'src/app/api/projects/[projectId]/canvas-layout/route.ts',
   'src/app/api/projects/[projectId]/character/appearance/route.ts',
   'src/app/api/projects/[projectId]/character/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/character/route.ts',
-  'src/app/api/projects/[projectId]/cleanup-unselected-images/route.ts',
-  'src/app/api/projects/[projectId]/download-images/route.ts',
-  'src/app/api/projects/[projectId]/download-videos/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
   'src/app/api/projects/[projectId]/edit-script/screenplay/route.ts',
@@ -90,36 +83,20 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/edit-script/storyboard/generate/route.ts',
   'src/app/api/projects/[projectId]/edit-script/storyboard/images/block-grid/generate/route.ts',
   'src/app/api/projects/[projectId]/episodes/[episodeId]/route.ts',
-  'src/app/api/projects/[projectId]/episodes/batch/route.ts',
   'src/app/api/projects/[projectId]/episodes/route.ts',
-  'src/app/api/projects/[projectId]/episodes/split-by-markers/route.ts',
-  'src/app/api/projects/[projectId]/episodes/split/route.ts',
   'src/app/api/projects/[projectId]/final-video-render/route.ts',
   'src/app/api/projects/[projectId]/generate-bgm/route.ts',
-  'src/app/api/projects/[projectId]/generate-music/route.ts',
   'src/app/api/projects/[projectId]/generate-video/route.ts',
-  'src/app/api/projects/[projectId]/insert-panel/route.ts',
   'src/app/api/projects/[projectId]/location/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/location/route.ts',
-  'src/app/api/projects/[projectId]/modify-storyboard-image/route.ts',
   'src/app/api/projects/[projectId]/operations/[operationId]/plan/route.ts',
-  'src/app/api/projects/[projectId]/panel-link/route.ts',
-  'src/app/api/projects/[projectId]/panel-variant/route.ts',
-  'src/app/api/projects/[projectId]/panel/copy/route.ts',
   'src/app/api/projects/[projectId]/panel/route.ts',
-  'src/app/api/projects/[projectId]/panel/revert-image/route.ts',
   'src/app/api/projects/[projectId]/panel/select-candidate/route.ts',
-  'src/app/api/projects/[projectId]/photography-plan/route.ts',
   'src/app/api/projects/[projectId]/reference-to-character/route.ts',
   'src/app/api/projects/[projectId]/regenerate-panel-image/route.ts',
   'src/app/api/projects/[projectId]/config/route.ts',
-  'src/app/api/projects/[projectId]/storyboard-group/copy/route.ts',
-  'src/app/api/projects/[projectId]/storyboard-group/route.ts',
   'src/app/api/projects/[projectId]/storyboards/route.ts',
-  'src/app/api/projects/[projectId]/update-appearance/route.ts',
-  'src/app/api/projects/[projectId]/update-location/route.ts',
   'src/app/api/projects/[projectId]/video-proxy/route.ts',
-  'src/app/api/projects/[projectId]/video-urls/route.ts',
   'src/app/api/projects/[projectId]/workflow-lab/route.ts',
   'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/chat/route.ts',
@@ -129,16 +106,12 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route.ts',
   'src/app/api/projects/[projectId]/assistant/waits/route.ts',
-  'src/app/api/projects/[projectId]/commands/[commandId]/route.ts',
-  'src/app/api/projects/[projectId]/commands/route.ts',
   'src/app/api/projects/[projectId]/context/route.ts',
   'src/app/api/projects/[projectId]/costs/route.ts',
   'src/app/api/projects/[projectId]/data/route.ts',
   'src/app/api/projects/[projectId]/debug/storyboard-grid-compare/prompt-preview/route.ts',
   'src/app/api/projects/[projectId]/debug/storyboard-grid-compare/route.ts',
   'src/app/api/projects/[projectId]/debug/storyboard-grid-compare/source/route.ts',
-  'src/app/api/projects/[projectId]/plans/[planId]/approve/route.ts',
-  'src/app/api/projects/[projectId]/plans/[planId]/reject/route.ts',
   'src/app/api/projects/[projectId]/route.ts',
   'src/app/api/projects/route.ts',
   'src/app/api/plan-runs/[planRunId]/cancel/route.ts',
@@ -189,23 +162,16 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     routeFile.includes('/ai-')
     || routeFile.includes('/analyze')
     || routeFile.includes('/reference-to-character/')
-    || routeFile.endsWith('/episodes/split/route.ts')
   ) {
     return 'llm-observe-routes'
   }
   if (
     routeFile.endsWith('/generate-bgm/route.ts')
-    || routeFile.endsWith('/generate-music/route.ts')
     || routeFile.endsWith('/generate-video/route.ts')
     || routeFile.endsWith('/final-video-render/route.ts')
     || routeFile.endsWith('/generate/route.ts')
-    || routeFile.endsWith('/modify-render/route.ts')
     || routeFile.endsWith('/generate/plan/route.ts')
-    || routeFile.endsWith('/modify-render/plan/route.ts')
     || routeFile.endsWith('/operations/[operationId]/plan/route.ts')
-    || routeFile.endsWith('/insert-panel/route.ts')
-    || routeFile.endsWith('/modify-storyboard-image/route.ts')
-    || routeFile.endsWith('/panel-variant/route.ts')
     || routeFile.endsWith('/regenerate-panel-image/route.ts')
     || routeFile.includes('/edit-script/prompts/')
   ) {

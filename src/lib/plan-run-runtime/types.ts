@@ -58,8 +58,6 @@ export interface CreatePlanRunInput {
   userId: string
   projectId: string
   episodeId?: string | null
-  commandId?: string | null
-  planId?: string | null
   goal?: string | null
   steps?: PlanRunStepInput[]
 }

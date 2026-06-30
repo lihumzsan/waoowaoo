@@ -28,10 +28,6 @@ const EFFECTS_DESTRUCTIVE_BULK_LONG_RUNNING = {
   longRunning: true,
 } as const
 
-function normalizeString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 export function createEditOperations(): ProjectAgentOperationRegistryDraft {
   return {
     select_asset_render: defineOperation({

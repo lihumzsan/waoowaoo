@@ -1,7 +1,6 @@
 'use client'
 
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
-import ImageEditModal from './ImageEditModal'
 import {
   CharacterCreationModal,
   CharacterEditModal,
@@ -36,15 +35,6 @@ interface EditingPropState {
   variantId?: string
 }
 
-interface LocationImageEditModalState {
-  assetType: 'location' | 'prop'
-  locationName: string
-}
-
-interface CharacterImageEditModalState {
-  characterName: string
-}
-
 interface ProjectAssetLibraryModalsProps {
   projectId: string
   onRefresh: () => void
@@ -52,8 +42,6 @@ interface ProjectAssetLibraryModalsProps {
   handleGenerateImage: (type: 'character' | 'location' | 'prop', id: string, appearanceId?: string) => Promise<void>
   handleUpdateAppearanceDescription: (newDescription: string) => Promise<void>
   handleUpdateLocationDescription: (newDescription: string) => Promise<void>
-  handleLocationImageEdit: (modifyPrompt: string, extraImageUrls?: string[]) => Promise<void>
-  handleCharacterImageEdit: (modifyPrompt: string, extraImageUrls?: string[]) => Promise<void>
   handleCloseCopyPicker: () => void
   handleConfirmCopyFromGlobal: (globalAssetId: string) => Promise<void>
   closeEditingAppearance: () => void
@@ -62,11 +50,7 @@ interface ProjectAssetLibraryModalsProps {
   closeAddCharacter: () => void
   closeAddLocation: () => void
   closeAddProp: () => void
-  closeImageEditModal: () => void
-  closeCharacterImageEditModal: () => void
   previewImage: string | null
-  imageEditModal: LocationImageEditModalState | null
-  characterImageEditModal: CharacterImageEditModalState | null
   editingAppearance: EditingAppearanceState | null
   editingLocation: EditingLocationState | null
   editingProp: EditingPropState | null
@@ -84,8 +68,6 @@ export default function ProjectAssetLibraryModals({
   handleGenerateImage,
   handleUpdateAppearanceDescription,
   handleUpdateLocationDescription,
-  handleLocationImageEdit,
-  handleCharacterImageEdit,
   handleCloseCopyPicker,
   handleConfirmCopyFromGlobal,
   closeEditingAppearance,
@@ -94,11 +76,7 @@ export default function ProjectAssetLibraryModals({
   closeAddCharacter,
   closeAddLocation,
   closeAddProp,
-  closeImageEditModal,
-  closeCharacterImageEditModal,
   previewImage,
-  imageEditModal,
-  characterImageEditModal,
   editingAppearance,
   editingLocation,
   editingProp,
@@ -111,24 +89,6 @@ export default function ProjectAssetLibraryModals({
   return (
     <>
       {previewImage && <ImagePreviewModal imageUrl={previewImage} onClose={onClosePreview} />}
-
-      {imageEditModal && (
-        <ImageEditModal
-          type={imageEditModal.assetType}
-          name={imageEditModal.locationName}
-          onClose={closeImageEditModal}
-          onConfirm={handleLocationImageEdit}
-        />
-      )}
-
-      {characterImageEditModal && (
-        <ImageEditModal
-          type="character"
-          name={characterImageEditModal.characterName}
-          onClose={closeCharacterImageEditModal}
-          onConfirm={handleCharacterImageEdit}
-        />
-      )}
 
       {editingAppearance && (
         <CharacterEditModal

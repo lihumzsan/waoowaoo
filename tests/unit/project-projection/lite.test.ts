@@ -13,9 +13,6 @@ const prismaMock = vi.hoisted(() => ({
   projectPanel: {
     count: vi.fn(),
   },
-  planApproval: {
-    findMany: vi.fn(),
-  },
 }))
 
 const configServiceMock = vi.hoisted(() => ({
@@ -45,7 +42,6 @@ describe('assembleProjectProjectionLite', () => {
     })
     prismaMock.projectStoryboard.count.mockResolvedValue(0)
     prismaMock.projectPanel.count.mockResolvedValue(0)
-    prismaMock.planApproval.findMany.mockResolvedValue([])
     planRunRuntimeMock.listPlanRuns.mockResolvedValue([])
     planRunRuntimeMock.listPlanArtifacts.mockResolvedValue([])
     configServiceMock.getProjectModelConfig.mockResolvedValue({

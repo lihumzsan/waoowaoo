@@ -232,7 +232,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     await prisma.projectPanel.update({
       where: { id: panel.id },
       data: {
-        previousImageUrl: panel.imageUrl,
         candidateImages: JSON.stringify(candidates),
       },
     })

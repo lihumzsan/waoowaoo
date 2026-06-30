@@ -23,8 +23,6 @@ const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.BGM_SCORE_GENERATE,
   TASK_TYPE.VIDEO_PANEL,
   TASK_TYPE.VIDEO_GROUP,
-  TASK_TYPE.INSERT_PANEL,
-  TASK_TYPE.PANEL_VARIANT,
   TASK_TYPE.MODIFY_ASSET_IMAGE,
   TASK_TYPE.REGENERATE_GROUP,
   TASK_TYPE.ASSET_HUB_IMAGE,
@@ -36,12 +34,9 @@ const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.AI_MODIFY_APPEARANCE,
   TASK_TYPE.AI_MODIFY_LOCATION,
   TASK_TYPE.AI_MODIFY_PROP,
-  TASK_TYPE.AI_MODIFY_SHOT_PROMPT,
-  TASK_TYPE.ANALYZE_SHOT_VARIANTS,
   TASK_TYPE.AI_CREATE_CHARACTER,
   TASK_TYPE.AI_CREATE_LOCATION,
   TASK_TYPE.REFERENCE_TO_CHARACTER,
-  TASK_TYPE.EPISODE_SPLIT_LLM,
   TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER,
   TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION,
   TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER,
@@ -136,13 +131,10 @@ function buildImageTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
 }
 
 function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
-  const firstLastFramePayload = toRecord(payload?.firstLastFrame)
-  const generationMode = Object.keys(firstLastFramePayload).length > 0 ? 'firstlastframe' : 'normal'
   const model = pickFirstString([
     payload?.videoModel,
     payload?.modelId,
     payload?.model,
-    firstLastFramePayload.flModel,
   ])
   if (!model) return null
   const generationOptions = toRecord(payload?.generationOptions)
@@ -157,7 +149,7 @@ function buildVideoTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     ...(resolution ? { resolution } : {}),
     ...(typeof duration === 'number' ? { duration } : {}),
     ...(aspectRatio ? { aspectRatio } : {}),
-    generationMode,
+    generationMode: 'normal',
     ...(typeof generateAudio === 'boolean' ? { generateAudio } : {}),
     containsVideoInput: false,
   }
@@ -237,7 +229,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
       return buildMusicTaskInfo(taskType, payload)
     case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
-    case TASK_TYPE.INSERT_PANEL:
     case TASK_TYPE.EDIT_SCREENPLAY_GENERATE:
     case TASK_TYPE.EDIT_SCREENPLAY_REVISE:
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:
@@ -245,12 +236,9 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
     case TASK_TYPE.AI_MODIFY_APPEARANCE:
     case TASK_TYPE.AI_MODIFY_LOCATION:
     case TASK_TYPE.AI_MODIFY_PROP:
-    case TASK_TYPE.AI_MODIFY_SHOT_PROMPT:
-    case TASK_TYPE.ANALYZE_SHOT_VARIANTS:
     case TASK_TYPE.AI_CREATE_CHARACTER:
     case TASK_TYPE.AI_CREATE_LOCATION:
     case TASK_TYPE.REFERENCE_TO_CHARACTER:
-    case TASK_TYPE.EPISODE_SPLIT_LLM:
     case TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER:
     case TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION:
     case TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER:
@@ -258,8 +246,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
     case TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP:
     case TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER:
       return buildTextTaskInfo(taskType, payload)
-    case TASK_TYPE.PANEL_VARIANT:
-      return buildImageTaskInfo(taskType, payload)
     default:
       return null
   }

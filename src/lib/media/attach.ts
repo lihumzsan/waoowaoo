@@ -79,8 +79,6 @@ export async function attachMediaFieldsToGlobalLocation<T extends Record<string,
 async function attachMediaFieldsToPanel<T extends Record<string, unknown>>(panel: T) {
   const imageMedia = await resolveMediaRef(panel.imageMediaId, panel.imageUrl)
   const videoMedia = await resolveMediaRef(panel.videoMediaId, panel.videoUrl)
-  const sketchImageMedia = await resolveMediaRef(panel.sketchImageMediaId, panel.sketchImageUrl)
-  const previousImageMedia = await resolveMediaRef(panel.previousImageMediaId, panel.previousImageUrl)
 
   const candidateRaw = parseStringArray(panel.candidateImages)
   const candidateMediaUrls: string[] = []
@@ -98,12 +96,8 @@ async function attachMediaFieldsToPanel<T extends Record<string, unknown>>(panel
     media: imageMedia,
     imageMedia,
     videoMedia,
-    sketchImageMedia,
-    previousImageMedia,
     imageUrl: imageMedia?.url || panel.imageUrl || null,
     videoUrl: videoMedia?.url || panel.videoUrl || null,
-    sketchImageUrl: sketchImageMedia?.url || panel.sketchImageUrl || null,
-    previousImageUrl: previousImageMedia?.url || panel.previousImageUrl || null,
     candidateImages: candidateRaw.length > 0 ? JSON.stringify(candidateMediaUrls) : panel.candidateImages,
   }
 }

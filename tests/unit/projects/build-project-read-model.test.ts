@@ -16,7 +16,6 @@ describe('buildProjectReadModel', () => {
     const readModel = buildProjectReadModel(project, {
       analysisModel: 'llm::analysis',
       videoRatio: '9:16',
-      importStatus: 'pending',
       episodes: [{
         id: 'episode-1',
         episodeNumber: 1,
@@ -54,7 +53,6 @@ describe('buildProjectReadModel', () => {
     })
 
     expect(readModel.analysisModel).toBe('llm::analysis')
-    expect(readModel.importStatus).toBe('pending')
     expect(readModel.episodes?.map((episode) => episode.id)).toEqual(['episode-1'])
     expect(readModel.locations?.map((location) => location.id)).toEqual(['location-1'])
     expect(readModel.props?.map((prop) => prop.id)).toEqual(['prop-1'])

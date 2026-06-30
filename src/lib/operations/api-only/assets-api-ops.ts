@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, planAssetModifyTask, removeAsset, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
+import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, removeAsset, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
 import { uploadProjectAssetRender } from '@/lib/assets/services/project-upload-render'
 import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
@@ -160,45 +160,6 @@ async function commitAssetGenerateOperation(
   })
 }
 
-async function planAssetModifyRenderOperation(
-  ctx: ProjectAgentOperationContext,
-  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
-): Promise<OperationPlan> {
-  const projectId = requireProjectId(input.scope, input.projectId)
-  const body = omitBodyKeys(input, ['assetId'])
-  const planned = await planAssetModifyTask({
-    request: ctx.request,
-    kind: input.kind,
-    assetId: input.assetId,
-    body,
-    access: input.scope === 'project'
-      ? { scope: 'project', userId: ctx.userId, projectId }
-      : { scope: 'global', userId: ctx.userId },
-  })
-  return {
-    kind: 'task_submission',
-    operationId: 'api_assets_modify_render',
-    projectId: planned.projectId,
-    userId: planned.userId,
-    tasks: [planned.task],
-  }
-}
-
-async function commitAssetModifyRenderOperation(
-  ctx: ProjectAgentOperationContext,
-  input: z.infer<ReturnType<typeof buildAssetGenerateSchema>>,
-  plan: OperationPlan,
-) {
-  const task = plan.tasks[0]
-  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  return await submitPlannedOperationTask({
-    ctx,
-    task,
-    operationId: 'api_assets_modify_render',
-    confirmed: input.confirmed === true,
-  })
-}
-
 function buildAssetGenerateSchema() {
   return z.object({
     confirmed: z.boolean().optional(),
@@ -331,25 +292,6 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
         return await commitAssetGenerateOperation(ctx, input, plan)
-      },
-    }),
-
-    api_assets_modify_render: defineOperation({
-      id: 'api_assets_modify_render',
-      summary: 'API-only: Submit asset modify-render task (global or project scope).',
-      intent: 'act',
-      effects: EFFECTS_LONG_RUNNING,
-      inputSchema: buildAssetGenerateSchema(),
-      outputSchema: z.unknown(),
-      plan: async (ctx, input) => planAssetModifyRenderOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitAssetModifyRenderOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planAssetModifyRenderOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitAssetModifyRenderOperation(ctx, input, plan)
       },
     }),
 

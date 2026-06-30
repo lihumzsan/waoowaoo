@@ -97,26 +97,6 @@ async function collectProjectStorageKeys(projectId: string): Promise<string[]> {
       const storyboardKey = await resolveStorageKeyFromMediaValue(storyboard.storyboardImageUrl)
       if (storyboardKey) keys.push(storyboardKey)
 
-      if (storyboard.candidateImages) {
-        const raw = storyboard.candidateImages
-        const parsed = (() => {
-          try {
-            return JSON.parse(raw) as unknown
-          } catch (error) {
-            throw new ApiError('EXTERNAL_ERROR', {
-              code: 'PROJECT_CANDIDATE_IMAGES_JSON_INVALID',
-              message: error instanceof Error ? error.message : 'candidateImages JSON parse failed',
-            })
-          }
-        })()
-        if (Array.isArray(parsed)) {
-          for (const value of parsed) {
-            const key = await resolveStorageKeyFromMediaValue(value)
-            if (key) keys.push(key)
-          }
-        }
-      }
-
       for (const panel of storyboard.panels) {
         const imageKey = await resolveStorageKeyFromMediaValue(panel.imageUrl)
         if (imageKey) keys.push(imageKey)

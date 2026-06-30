@@ -51,11 +51,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
-    firstLastFrame?: {
-      lastFrameStoryboardId: string
-      lastFramePanelIndex: number
-      customPrompt?: string
-    },
     generationOptions?: WorkspaceVideoGenerationOptions,
     panelId?: string,
   ) => Promise<void>
@@ -70,7 +65,7 @@ interface UseWorkspaceRuntimeParams {
     storyboardId: string,
     panelIndex: number,
     value: string,
-    field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
+    field?: 'imagePrompt' | 'videoPrompt',
   ) => Promise<void>
   handleUpdateGenerationSegmentContinuity: (editScriptId: string, segmentIndex: number, continuity: string) => Promise<void>
   handleArrangeGenerationSegments: (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => Promise<void>

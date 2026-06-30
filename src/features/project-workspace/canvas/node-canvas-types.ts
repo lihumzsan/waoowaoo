@@ -46,21 +46,6 @@ export type WorkspaceCanvasNodeAction =
     }
   | { readonly type: 'delete_panel'; readonly storyboardId: string; readonly panelId: string }
   | { readonly type: 'copy_panel'; readonly panelId: string }
-  | { readonly type: 'insert_panel'; readonly storyboardId: string; readonly panelId: string; readonly userInput: string }
-  | {
-      readonly type: 'create_panel_variant'
-      readonly storyboardId: string
-      readonly panelId: string
-      readonly variant: {
-        readonly title: string
-        readonly description: string
-        readonly shot_type: string
-        readonly camera_move: string
-        readonly video_prompt: string
-      }
-      readonly includeCharacterAssets: boolean
-      readonly includeLocationAsset: boolean
-    }
   | { readonly type: 'generate_image'; readonly panelId: string }
   | {
       readonly type: 'generate_storyboard_grid_images'
@@ -73,31 +58,18 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'select_candidate'; readonly panelId: string; readonly imageUrl: string }
   | { readonly type: 'cancel_candidate'; readonly panelId: string }
   | {
-      readonly type: 'modify_image'
-      readonly storyboardId: string
-      readonly panelIndex: number
-      readonly modifyPrompt: string
-      readonly extraImageUrls: readonly string[]
-    }
-  | { readonly type: 'download_images' }
-  | {
       readonly type: 'generate_video'
       readonly storyboardId: string
       readonly panelIndex: number
       readonly panelId: string
       readonly generationOptions?: Record<string, string | number | boolean>
-      readonly firstLastFrame?: {
-        readonly lastFrameStoryboardId: string
-        readonly lastFramePanelIndex: number
-        readonly customPrompt?: string
-      }
     }
   | {
       readonly type: 'update_video_prompt'
       readonly storyboardId: string
       readonly panelIndex: number
       readonly value: string
-      readonly field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt'
+      readonly field?: 'imagePrompt' | 'videoPrompt'
     }
   | {
       readonly type: 'update_video_plan_prompt'
@@ -117,7 +89,6 @@ export type WorkspaceCanvasNodeAction =
       readonly description: string
     }
   | { readonly type: 'update_panel_video_model'; readonly storyboardId: string; readonly panelIndex: number; readonly model: string }
-  | { readonly type: 'toggle_panel_link'; readonly storyboardId: string; readonly panelIndex: number; readonly linked: boolean }
   | {
       readonly type: 'generate_all_videos'
       readonly generationOptions?: Record<string, string | number | boolean>
@@ -172,7 +143,6 @@ export interface WorkspaceCanvasShotDetails {
   readonly renderFacts?: Record<string, unknown> | null
   readonly actingNotes?: string | null
   readonly storyboardTextJson?: string | null
-  readonly photographyPlan?: string | null
   readonly errorMessage?: string | null
 }
 
@@ -180,20 +150,14 @@ export interface WorkspaceCanvasImageDetails {
   readonly imagePrompt?: string | null
   readonly description?: string | null
   readonly candidateImages: readonly string[]
-  readonly imageHistory?: string | null
-  readonly sketchImageUrl?: string | null
-  readonly previousImageUrl?: string | null
   readonly errorMessage?: string | null
 }
 
 export interface WorkspaceCanvasVideoDetails {
   readonly videoPrompt?: string | null
-  readonly firstLastFramePrompt?: string | null
-  readonly videoGenerationMode?: string | null
   readonly lastVideoGenerationOptions?: readonly WorkspaceCanvasTextLine[]
   readonly videoUrl?: string | null
   readonly videoModel?: string | null
-  readonly linkedToNextPanel?: boolean | null
   readonly errorMessage?: string | null
 }
 

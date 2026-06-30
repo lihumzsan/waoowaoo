@@ -29,7 +29,6 @@ vi.mock('@/lib/api-auth', () => {
 
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 
-import { POST as videoUrlsPost } from '@/app/api/projects/[projectId]/video-urls/route'
 import { GET as videoProxyGet } from '@/app/api/projects/[projectId]/video-proxy/route'
 
 describe('api contract - project video routes (operation adapter)', () => {
@@ -42,30 +41,6 @@ describe('api contract - project video routes (operation adapter)', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch
-  })
-
-  it('POST /api/projects/[projectId]/video-urls -> uses get_project_video_urls operation', async () => {
-    apiAdapterMock.executeProjectAgentOperationFromApi.mockResolvedValueOnce({
-      projectName: 'Project',
-      videos: [],
-    })
-
-    const res = await videoUrlsPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/video-urls',
-        method: 'POST',
-        body: { episodeId: 'episode-1', panelPreferences: {} },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(res.status).toBe(200)
-    expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'get_project_video_urls',
-      projectId: 'project-1',
-      userId: 'user-1',
-      input: { episodeId: 'episode-1', panelPreferences: {} },
-    }))
   })
 
   it('GET /api/projects/[projectId]/video-proxy -> resolves via operation then fetches', async () => {
@@ -97,4 +72,3 @@ describe('api contract - project video routes (operation adapter)', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/video.mp4')
   })
 })
-

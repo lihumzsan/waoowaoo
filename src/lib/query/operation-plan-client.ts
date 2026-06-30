@@ -31,7 +31,7 @@ export async function fetchOperationPlanView(params: {
 
 export async function fetchAssetOperationPlanView(params: {
   assetId: string
-  action: 'generate' | 'modify-render'
+  action: 'generate'
   input: Record<string, unknown>
 }): Promise<OperationPlanView> {
   const response = await apiFetch(`/api/assets/${params.assetId}/${params.action}/plan`, {

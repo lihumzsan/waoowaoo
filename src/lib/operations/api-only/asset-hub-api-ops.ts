@@ -54,11 +54,6 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
   })
 }
 
-function resolveExt(filename: string): string {
-  const match = filename.toLowerCase().match(/\\.([a-z0-9]+)$/)
-  return match?.[1] || ''
-}
-
 export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraft {
   return {
     api_asset_hub_upload_temp: defineOperation({

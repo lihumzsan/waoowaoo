@@ -103,58 +103,6 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
         }),
     }),
 
-    update_storyboard_photography_plan: defineOperation({
-      id: 'update_storyboard_photography_plan',
-      summary: 'Update a storyboard photography plan JSON payload.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        billable: false,
-        destructive: false,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: false,
-        longRunning: false,
-      },
-      inputSchema: z.object({
-        storyboardId: z.string().min(1),
-        photographyPlan: z.unknown().optional().nullable(),
-      }),
-      outputSchema: z.object({
-        success: z.literal(true),
-      }),
-      execute: async (ctx, input) => {
-        const storyboard = await prisma.projectStoryboard.findUnique({
-          where: { id: input.storyboardId },
-          select: { id: true, episodeId: true },
-        })
-
-        if (!storyboard) {
-          throw new ApiError('NOT_FOUND')
-        }
-
-        const episode = await prisma.projectEpisode.findUnique({
-          where: { id: storyboard.episodeId },
-          select: { projectId: true },
-        })
-
-        if (!episode || episode.projectId !== ctx.projectId) {
-          throw new ApiError('NOT_FOUND')
-        }
-
-        const photographyPlanJson = input.photographyPlan === undefined || input.photographyPlan === null
-          ? null
-          : JSON.stringify(input.photographyPlan)
-
-        await prisma.projectStoryboard.update({
-          where: { id: input.storyboardId },
-          data: { photographyPlan: photographyPlanJson },
-        })
-
-        return { success: true }
-      },
-    }),
-
     get_project_costs: defineOperation({
       id: 'get_project_costs',
       summary: 'Load project cost breakdown for the project owner.',

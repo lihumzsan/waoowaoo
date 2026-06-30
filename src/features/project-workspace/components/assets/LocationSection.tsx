@@ -34,7 +34,6 @@ interface LocationSectionProps {
     onRegenerateGroup: (locationId: string, count?: number) => Promise<void>
     onUndo: (locationId: string) => void
     onImageClick: (imageUrl: string) => void
-    onImageEdit: (locationId: string, imageIndex: number, locationName: string) => void
     onCopyFromGlobal: (locationId: string) => void  // 🆕 从资产中心复制
     /** 分集筛选：仅显示指定 ID 的场景/道具，null 表示显示全部 */
     filterIds?: Set<string> | null
@@ -57,7 +56,6 @@ export default function LocationSection({
     onRegenerateGroup,
     onUndo,
     onImageClick,
-    onImageEdit,
     onCopyFromGlobal,
     filterIds = null,
 }: LocationSectionProps) {
@@ -144,7 +142,6 @@ export default function LocationSection({
                         onUndo={() => onUndo(location.id)}
                         onImageClick={onImageClick}
                         onSelectImage={onSelectImage}
-                        onImageEdit={(locId, imgIdx) => onImageEdit(locId, imgIdx, location.name)}
                         onCopyFromGlobal={() => onCopyFromGlobal(location.id)}
                         activeTaskKeys={activeTaskKeys}
                         onClearTaskKey={onClearTaskKey}

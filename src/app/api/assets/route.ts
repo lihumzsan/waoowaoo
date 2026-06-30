@@ -69,10 +69,6 @@ type CreateAssetBody = {
   projectId?: string
 } & Record<string, unknown>
 
-function isCreatableKind(value: AssetKind | undefined): value is Extract<AssetKind, 'location' | 'prop'> {
-  return value === 'location' || value === 'prop'
-}
-
 export const POST = apiHandler(async (request: NextRequest) => {
   const body = await request.json() as CreateAssetBody
   if (body.scope !== 'project' && body.scope !== 'global') {

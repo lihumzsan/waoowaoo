@@ -6,7 +6,6 @@ import { refineTaskSubmitOperationOutputSchema, refineTaskBatchSubmitOperationOu
 import { commitGenerateEditScriptStoryboardImagesOperation, planGenerateEditScriptStoryboardImagesOperation } from './edit-script-storyboard-images'
 import { commitGenerateStoryboardGridImagesOperation, planGenerateStoryboardGridImagesOperation } from './storyboard-grid-images'
 import { commitRegeneratePanelImageOperation, planRegeneratePanelImageOperation } from './regenerate-panel-image'
-import { commitPanelVariantOperation, planPanelVariantOperation } from './panel-variant'
 
 export function createStoryboardPanelImageOperations(): ProjectAgentOperationRegistryDraft {
   const withMutationBatchBase = taskSubmitOperationOutputSchemaBase.extend({
@@ -149,46 +148,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
           confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
         return await commitRegeneratePanelImageOperation(ctx, input, plan)
-      },
-    }),
-
-    panel_variant: defineOperation({
-      id: 'panel_variant',
-      summary: 'Insert a variant panel after an existing panel and enqueue image generation (async task submission).',
-      intent: 'act',
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: false,
-        overwrite: false,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将创建新的分镜格并生成变体图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        confirmedMaxCost: z.number().nonnegative().optional(),
-        storyboardId: z.string().min(1),
-        insertAfterPanelId: z.string().min(1),
-        sourcePanelId: z.string().min(1),
-        variant: z.record(z.string(), z.unknown()),
-      }).passthrough(),
-      outputSchema: taskSubmitOutputWithMutationBatch({
-        panelId: z.string().min(1),
-      }),
-      plan: async (ctx, input) => planPanelVariantOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitPanelVariantOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planPanelVariantOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitPanelVariantOperation(ctx, input, plan)
       },
     }),
   }

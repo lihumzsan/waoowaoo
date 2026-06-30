@@ -3,7 +3,6 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { useAssetOperationBillingPlan } from '@/lib/query/use-asset-operation-billing-plan'
 import { queryKeys } from '@/lib/query/keys'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -398,31 +397,6 @@ export function useAssetActions(input: AssetActionScopeInput) {
     return response.json()
   }
 
-  const modifyRender = async (payload: Record<string, unknown>) => {
-    const assetId = String(payload.id ?? payload.characterId ?? payload.locationId)
-    const requestBody = {
-      scope: input.scope,
-      kind: input.kind,
-      projectId: input.projectId,
-      ...payload,
-    }
-    const confirmedMaxCost = await assetOperationBillingPlan(assetId, 'modify-render', requestBody)
-    const response = await apiFetch(`/api/assets/${assetId}/modify-render`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...requestBody,
-        ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
-      }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to modify asset render')
-    }
-    const result = await resolveTaskResponse(response)
-    invalidateScopeQueries(queryClient, input)
-    return result
-  }
-
   const copyFromGlobal = async (payload: { targetId: string; globalAssetId: string }) => {
     if (input.scope !== 'project' || !input.projectId) {
       throw new Error('copyFromGlobal is only available for project asset scope')
@@ -469,7 +443,6 @@ export function useAssetActions(input: AssetActionScopeInput) {
     generate,
     selectRender,
     revertRender,
-    modifyRender,
     copyFromGlobal,
   }
 }

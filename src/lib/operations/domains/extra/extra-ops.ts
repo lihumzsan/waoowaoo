@@ -4,7 +4,6 @@ import { ApiError } from '@/lib/api-errors'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { detectEpisodeMarkers, splitByMarkers } from '@/lib/episode-marker-detector'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
@@ -18,16 +17,6 @@ function parseReferenceImages(body: Record<string, unknown>): string[] {
   const single = typeof body.referenceImageUrl === 'string' ? body.referenceImageUrl.trim() : ''
   return single ? [single] : []
 }
-
-const EFFECTS_QUERY = {
-  writes: false,
-  billable: false,
-  destructive: false,
-  overwrite: false,
-  bulk: false,
-  externalSideEffects: false,
-  longRunning: false,
-} as const
 
 const EFFECTS_BILLABLE_LONG_RUNNING = {
   writes: true,
@@ -183,35 +172,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
         })
       },
     }),
-    episode_split_llm: defineOperation({
-      id: 'episode_split_llm',
-      summary: 'Submit episode split (LLM) task.',
-      intent: 'act',
-      effects: EFFECTS_BILLABLE_LONG_RUNNING,
-      confirmation: {
-        required: true,
-        summary: '将进行 AI 分集（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        content: z.string().min(100),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) =>
-        submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-          type: TASK_TYPE.EPISODE_SPLIT_LLM,
-          targetType: 'Project',
-          targetId: ctx.projectId,
-          operationId: 'episode_split_llm',
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-          payload: { content: input.content },
-          dedupeKey: `episode_split_llm:${ctx.projectId}:${input.content.length}`,
-        }),
-    }),
     reference_to_character: defineOperation({
       id: 'reference_to_character',
       summary: 'Submit reference-to-character task.',
@@ -262,30 +222,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           payload: body,
           dedupeKey: `reference_to_character:${targetId}:${count}:${styleBibleSignature}`,
         })
-      },
-    }),
-    split_episodes_by_markers: defineOperation({
-      id: 'split_episodes_by_markers',
-      summary: 'Split content into episodes by detecting episode markers (no LLM).',
-      intent: 'query',
-      effects: EFFECTS_QUERY,
-      inputSchema: z.object({
-        content: z.string().min(100),
-      }),
-      outputSchema: z.unknown(),
-      execute: async (_ctx, input) => {
-        const markerResult = detectEpisodeMarkers(input.content)
-        if (!markerResult.hasMarkers || markerResult.matches.length < 2) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-        const episodes = splitByMarkers(input.content, markerResult)
-        return {
-          success: true,
-          method: 'markers',
-          markerType: markerResult.markerType,
-          confidence: markerResult.confidence,
-          episodes,
-        }
       },
     }),
   }

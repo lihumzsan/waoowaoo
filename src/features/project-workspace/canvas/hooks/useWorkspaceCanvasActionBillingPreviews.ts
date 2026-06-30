@@ -98,7 +98,6 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
       storyboardId: params.action.storyboardId,
       panelIndex: params.action.panelIndex,
       panelId: params.action.panelId,
-      firstLastFrame: params.action.firstLastFrame,
       generationOptions: params.action.generationOptions,
     })
     return {

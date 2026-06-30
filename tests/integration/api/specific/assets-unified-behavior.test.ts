@@ -132,9 +132,6 @@ describe('api specific - unified assets routes', () => {
       if (params.operationId === 'api_assets_generate') {
         return { success: true, taskId: 'task-1' }
       }
-      if (params.operationId === 'api_assets_modify_render') {
-        return { success: true, taskId: 'task-1' }
-      }
       if (params.operationId === 'api_assets_update_variant') {
         return await updateAssetVariantMock({
           kind,
@@ -429,62 +426,6 @@ describe('api specific - unified assets routes', () => {
     })
     expect(executeProjectAgentOperationFromApiMock).not.toHaveBeenCalled()
     expect(body.quote.mediaTaskCount).toBe(1)
-  })
-
-  it('POST /api/assets/[assetId]/modify-render/plan returns a global asset operation plan without submitting', async () => {
-    planProjectAgentOperationFromApiMock.mockResolvedValueOnce({
-      operationId: 'api_assets_modify_render',
-      kind: 'task_submission',
-      taskCount: 1,
-      quote: {
-        showCredits: true,
-        billingMode: 'ENFORCE',
-        billable: true,
-        taskCount: 1,
-        mediaTaskCount: 1,
-        totalMaxFrozenCost: 1,
-        currency: 'credits',
-        items: [],
-      },
-      tasks: [],
-    })
-    const mod = await import('@/app/api/assets/[assetId]/modify-render/plan/route')
-    const req = buildMockRequest({
-      path: '/api/assets/asset-1/modify-render/plan',
-      method: 'POST',
-      body: {
-        scope: 'global',
-        kind: 'character',
-        appearanceIndex: 0,
-        imageIndex: 0,
-        modifyPrompt: 'make it brighter',
-      },
-    })
-
-    const res = await mod.POST(req, {
-      params: Promise.resolve({ assetId: 'asset-1' }),
-    })
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(authMock.requireUserAuth).toHaveBeenCalled()
-    expect(planProjectAgentOperationFromApiMock).toHaveBeenCalledWith({
-      request: req,
-      operationId: 'api_assets_modify_render',
-      projectId: 'global-asset-hub',
-      userId: 'user-1',
-      input: {
-        assetId: 'asset-1',
-        scope: 'global',
-        kind: 'character',
-        appearanceIndex: 0,
-        imageIndex: 0,
-        modifyPrompt: 'make it brighter',
-      },
-      source: 'project-ui',
-    })
-    expect(executeProjectAgentOperationFromApiMock).not.toHaveBeenCalled()
-    expect(body.operationId).toBe('api_assets_modify_render')
   })
 
   it('PATCH /api/assets/[assetId]/variants/[variantId] updates a prop variant through the unified route', async () => {

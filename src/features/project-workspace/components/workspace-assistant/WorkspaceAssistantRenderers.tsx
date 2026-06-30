@@ -130,57 +130,6 @@ export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentSto
   )
 }
 
-export function ApprovalCard(props: {
-  planId: string
-  summary: string
-  reasons: string[]
-  onApprove: (planId: string) => Promise<void>
-  onReject: (params: { planId: string; note?: string }) => Promise<void>
-  approvePending: boolean
-  rejectPending: boolean
-}) {
-  const t = useTranslations('assistantAgent')
-  const [note, setNote] = useState('')
-
-  return (
-    <div className="rounded-2xl border border-[var(--glass-tone-warn-fg)]/30 bg-[var(--glass-bg-muted)]/70 p-3">
-      <div className="text-sm font-medium text-[var(--glass-text-primary)]">{t('cards.approvalRequired')}</div>
-      <div className="mt-1 text-xs text-[var(--glass-text-secondary)]">{props.summary}</div>
-      {props.reasons.length > 0 ? (
-        <div className="mt-3 max-h-32 space-y-1 overflow-y-auto text-xs text-[var(--glass-tone-warn-fg)]">
-          {props.reasons.map((reason) => (
-            <div key={reason}>{reason}</div>
-          ))}
-        </div>
-      ) : null}
-      <textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder={t('cards.rejectNotePlaceholder')}
-        className="mt-3 min-h-20 w-full rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] px-3 py-2 text-sm text-[var(--glass-text-primary)] outline-none"
-      />
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          className="flex-1 rounded-xl bg-[var(--glass-accent-from)] px-3 py-2 text-sm font-medium text-white"
-          onClick={() => { void props.onApprove(props.planId) }}
-          disabled={props.approvePending}
-        >
-          {t('cards.approve')}
-        </button>
-        <button
-          type="button"
-          className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)]"
-          onClick={() => { void props.onReject({ planId: props.planId, note }) }}
-          disabled={props.rejectPending}
-        >
-          {t('cards.reject')}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 export function HiddenApprovalRequestDataCard() {
   return null
 }

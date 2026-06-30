@@ -28,8 +28,6 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/analyze(?:-|\/|$)/,
   /\/screenplay-conversion(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
-  /\/modify-storyboard-image(?:\/|$)/,
-  /\/modify-render(?:\/|$)/,
 ]
 
 function isGenerationOperationPath(pathname: string): boolean {

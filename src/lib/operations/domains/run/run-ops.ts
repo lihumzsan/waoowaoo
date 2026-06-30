@@ -114,7 +114,6 @@ export function createPlanRunOperations(): ProjectAgentOperationRegistryDraft {
       inputSchema: z.object({
         projectId: z.string().min(1),
         episodeId: z.string().optional().nullable(),
-        planId: z.string().optional().nullable(),
         goal: z.string().optional().nullable(),
         steps: z.array(z.object({
           stepKey: z.string().min(1),
@@ -134,7 +133,6 @@ export function createPlanRunOperations(): ProjectAgentOperationRegistryDraft {
           userId: ctx.userId,
           projectId: input.projectId,
           episodeId: input.episodeId || null,
-          planId: input.planId || null,
           goal: input.goal || null,
           steps: input.steps || [],
         })

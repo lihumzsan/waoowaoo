@@ -16,11 +16,6 @@ import {
   planCharacterImageGenerationOperation,
   planLocationImageGenerationOperation,
 } from './generate'
-import {
-  modifyCharacterImageInputSchema,
-  modifyLocationImageInputSchema,
-  planAssetImageModificationOperation,
-} from './modify'
 
 export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft {
   const withMutationBatchBase = taskSubmitOperationOutputSchemaBase.extend({
@@ -121,112 +116,5 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
       },
     }),
 
-    modify_character_image: defineOperation({
-      id: 'modify_character_image',
-      summary: 'Modify a project character image using the edit model.',
-      intent: 'act',
-      groupPath: ['asset', 'character'],
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: true,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将修改角色图片（可能覆盖现有结果且可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: modifyCharacterImageInputSchema,
-      outputSchema: taskSubmitOutputWithMutationBatch({
-        assetId: z.string().min(1),
-      }),
-      plan: async (ctx, input) => planAssetImageModificationOperation({
-        ctx,
-        input: input as Record<string, unknown>,
-        operationId: 'modify_character_image',
-        kind: 'character',
-      }),
-      commit: async (ctx, input, plan) => commitAssetImageOperation({
-        ctx,
-        input,
-        plan,
-        operationId: 'modify_character_image',
-      }),
-      execute: async (ctx, input) => {
-        const plan = await planAssetImageModificationOperation({
-          ctx,
-          input: input as Record<string, unknown>,
-          operationId: 'modify_character_image',
-          kind: 'character',
-        })
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitAssetImageOperation({
-          ctx,
-          input,
-          plan,
-          operationId: 'modify_character_image',
-        })
-      },
-    }),
-
-    modify_location_image: defineOperation({
-      id: 'modify_location_image',
-      summary: 'Modify a project location image using the edit model.',
-      intent: 'act',
-      groupPath: ['asset', 'location'],
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: true,
-        overwrite: true,
-        bulk: false,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将修改场景图片（可能覆盖现有结果且可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      inputSchema: modifyLocationImageInputSchema,
-      outputSchema: taskSubmitOutputWithMutationBatch({
-        assetId: z.string().min(1),
-      }),
-      plan: async (ctx, input) => planAssetImageModificationOperation({
-        ctx,
-        input: input as Record<string, unknown>,
-        operationId: 'modify_location_image',
-        kind: 'location',
-      }),
-      commit: async (ctx, input, plan) => commitAssetImageOperation({
-        ctx,
-        input,
-        plan,
-        operationId: 'modify_location_image',
-      }),
-      execute: async (ctx, input) => {
-        const plan = await planAssetImageModificationOperation({
-          ctx,
-          input: input as Record<string, unknown>,
-          operationId: 'modify_location_image',
-          kind: 'location',
-        })
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitAssetImageOperation({
-          ctx,
-          input,
-          plan,
-          operationId: 'modify_location_image',
-        })
-      },
-    }),
   }
 }

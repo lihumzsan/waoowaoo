@@ -75,11 +75,6 @@ interface BuildWorkspaceControllerViewModelParams {
     handleGenerateVideo: (
       storyboardId: string,
       panelIndex: number,
-      firstLastFrame?: {
-        lastFrameStoryboardId: string
-        lastFramePanelIndex: number
-        customPrompt?: string
-      },
       generationOptions?: WorkspaceVideoGenerationOptions,
       panelId?: string,
     ) => Promise<void>
@@ -88,7 +83,7 @@ interface BuildWorkspaceControllerViewModelParams {
       storyboardId: string,
       panelIndex: number,
       value: string,
-      field?: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
+      field?: 'imagePrompt' | 'videoPrompt',
     ) => Promise<void>
     handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   }

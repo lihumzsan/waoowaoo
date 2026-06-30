@@ -59,20 +59,11 @@ function hasRuntimeSelections(value: unknown): boolean {
   return Object.keys(toVideoRuntimeSelections(value)).length > 0
 }
 
-function resolveVideoGenerationMode(payload: unknown): 'normal' | 'firstlastframe' {
-  if (!isRecord(payload)) return 'normal'
-  return isRecord(payload.firstLastFrame) ? 'firstlastframe' : 'normal'
-}
-
 function usesVideoTokenPricing(modelKey: string): boolean {
   return !!resolveAiVideoTokenPricingContract(modelKey)
 }
 
 function resolveVideoModelKeyFromPayload(payload: UnknownObject): string | null {
-  const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
-  if (firstLast && typeof firstLast.flModel === 'string' && parseModelKeyStrict(firstLast.flModel)) {
-    return firstLast.flModel
-  }
   if (typeof payload.videoModel === 'string' && parseModelKeyStrict(payload.videoModel)) {
     return payload.videoModel
   }
@@ -100,10 +91,6 @@ export function assertNoManagedVideoModelInput(payload: UnknownObject): void {
   if (Object.prototype.hasOwnProperty.call(payload, 'groupVideoModel')) {
     rejectManagedVideoModelField('groupVideoModel')
   }
-  const firstLast = isRecord(payload.firstLastFrame) ? payload.firstLastFrame : null
-  if (firstLast && Object.prototype.hasOwnProperty.call(firstLast, 'flModel')) {
-    rejectManagedVideoModelField('firstLastFrame.flModel')
-  }
 }
 
 async function applySystemVideoModel(params: {
@@ -120,11 +107,7 @@ async function applySystemVideoModel(params: {
     purpose: params.purpose,
   })
 
-  const firstLast = isRecord(params.payload.firstLastFrame) ? params.payload.firstLastFrame : null
   params.payload.videoModel = systemVideoModel
-  if (firstLast) {
-    firstLast.flModel = systemVideoModel
-  }
 
   if (!isCloudDeployment()) return
 
@@ -170,23 +153,6 @@ async function applySystemVideoModel(params: {
   }
 }
 
-function validateFirstLastFrameModel(input: unknown) {
-  if (input === undefined || input === null) return
-  if (!isRecord(input)) {
-    throw new Error('PROJECT_AGENT_FIRSTLASTFRAME_PAYLOAD_INVALID')
-  }
-
-  const flModel = input.flModel
-  if (typeof flModel !== 'string' || !parseModelKeyStrict(flModel)) {
-    throw new Error('PROJECT_AGENT_FIRSTLASTFRAME_MODEL_INVALID')
-  }
-
-  const capabilities = resolveBuiltinCapabilitiesByModelKey('video', flModel)
-  if (capabilities?.video?.firstlastframe !== true) {
-    throw new Error('PROJECT_AGENT_FIRSTLASTFRAME_MODEL_UNSUPPORTED')
-  }
-}
-
 async function resolveVideoCapabilityOptions(input: {
   payload: unknown
   projectId: string
@@ -207,7 +173,7 @@ async function resolveVideoCapabilityOptions(input: {
     shouldApplyLastOptions ? input.lastVideoGenerationOptions : undefined,
     explicitRuntimeSelections,
   )
-  runtimeSelections.generationMode = resolveVideoGenerationMode(payload)
+  runtimeSelections.generationMode = 'normal'
 
   const resolveOptions = (selections: Record<string, CapabilityValue>) =>
     resolveProjectModelCapabilityGenerationOptions({
@@ -224,7 +190,7 @@ async function resolveVideoCapabilityOptions(input: {
   } catch (error) {
     if (!shouldApplyLastOptions) throw error
     const fallbackSelections = { ...explicitRuntimeSelections }
-    fallbackSelections.generationMode = resolveVideoGenerationMode(payload)
+    fallbackSelections.generationMode = 'normal'
     resolvedOptions = await resolveOptions(fallbackSelections)
   }
 
@@ -278,7 +244,6 @@ export async function validateVideoTaskPayloadOrThrow(params: {
     purpose: params.modelPurpose,
   })
   requireVideoModelKeyFromPayload(params.payload)
-  validateFirstLastFrameModel(params.payload.firstLastFrame)
   const resolvedOptions = await resolveVideoCapabilityOptions({
     payload: params.payload,
     projectId: params.projectId,

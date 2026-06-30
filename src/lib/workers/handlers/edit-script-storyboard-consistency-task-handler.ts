@@ -50,25 +50,6 @@ function parsePayload(job: Job<TaskJobData>): ParsedPayload {
   }
 }
 
-function buildPhotographyPlan(input: {
-  readonly stage: string
-  readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
-  readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
-  readonly errorMessage?: string | null
-}) {
-  return {
-    source: 'edit_script',
-    sourceType: 'editScriptStoryboard',
-    consistencyMode: 'shot_execution_plan',
-    currentStage: input.stage,
-    editScriptId: input.sourceSnapshot.editScript.id,
-    modelConfigSnapshot: input.modelConfigSnapshot,
-    executionShotCount: input.sourceSnapshot.shotExecutionPlan.shots.length,
-    generationSegmentCount: input.sourceSnapshot.generationSegments.length,
-    errorMessage: input.errorMessage ?? null,
-  }
-}
-
 export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobData>) {
   const parsed = parsePayload(job)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_build_facts' })
@@ -76,11 +57,6 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
   try {
     const storyboard = await upsertEditScriptStoryboard({
       snapshot: parsed.sourceSnapshot,
-      photographyPlan: buildPhotographyPlan({
-        stage: 'building_panel_facts',
-        sourceSnapshot: parsed.sourceSnapshot,
-        modelConfigSnapshot: parsed.modelConfigSnapshot,
-      }),
     })
     storyboardId = storyboard.id
     const generatedPanels = generateStoryboardPanelPrompts({
@@ -94,11 +70,6 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
     await prisma.projectStoryboard.update({
       where: { id: storyboard.id },
       data: {
-        photographyPlan: JSON.stringify(buildPhotographyPlan({
-          stage: 'panel_prompts_ready',
-          sourceSnapshot: parsed.sourceSnapshot,
-          modelConfigSnapshot: parsed.modelConfigSnapshot,
-        })),
         lastError: null,
       },
     })
@@ -110,12 +81,6 @@ export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobD
         where: { id: storyboardId },
         data: {
           lastError: message,
-          photographyPlan: JSON.stringify(buildPhotographyPlan({
-            stage: 'panel_prompts_failed',
-            sourceSnapshot: parsed.sourceSnapshot,
-            modelConfigSnapshot: parsed.modelConfigSnapshot,
-            errorMessage: message,
-          })),
         },
       }).catch(() => undefined)
     }

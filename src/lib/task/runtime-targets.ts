@@ -110,7 +110,6 @@ export const TASK_RUNTIME_TARGETS = {
   projectPanelImageOperations(panelId: string | null | undefined) {
     return target('ProjectPanel', panelId, [
       TASK_TYPE.IMAGE_PANEL,
-      TASK_TYPE.PANEL_VARIANT,
       TASK_TYPE.MODIFY_ASSET_IMAGE,
     ])
   },
@@ -137,12 +136,6 @@ export const TASK_RUNTIME_TARGETS = {
   },
   projectVideoGroup(groupId: string | null | undefined) {
     return target('ProjectVideoGroup', groupId, [TASK_TYPE.VIDEO_GROUP])
-  },
-  projectStoryboardText(storyboardId: string | null | undefined) {
-    return target('ProjectStoryboard', storyboardId, [TASK_TYPE.INSERT_PANEL])
-  },
-  projectEpisodeStoryboardText(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.INSERT_PANEL])
   },
   projectStoryboardPanelGeneration(storyboardId: string | null | undefined) {
     return target('ProjectStoryboard', storyboardId, [

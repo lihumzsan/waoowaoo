@@ -284,7 +284,7 @@ export function CharacterEditModal({
                                     className="glass-btn-base glass-btn-tone-success px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                                 >
                                     {(updateAssetHubName.isPending || updateProjectName.isPending)
-                                        ? t('smartImport.preview.saving')
+                                        ? t('modal.processing')
                                         : t('modal.saveName')}
                                 </button>
                             )}

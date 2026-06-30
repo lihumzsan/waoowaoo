@@ -30,10 +30,6 @@ export const POST = apiHandler(async (
   if (Object.prototype.hasOwnProperty.call(body, 'groupVideoModel')) {
     rejectManagedVideoModelField('groupVideoModel')
   }
-  const firstLastFrame = isRecord(body.firstLastFrame) ? body.firstLastFrame : null
-  if (firstLastFrame && Object.prototype.hasOwnProperty.call(firstLastFrame, 'flModel')) {
-    rejectManagedVideoModelField('firstLastFrame.flModel')
-  }
 
   const input: Record<string, unknown> = {}
   if (body.all === true) input.all = true
@@ -62,7 +58,6 @@ export const POST = apiHandler(async (
   if (typeof body.panelIndex === 'number') input.panelIndex = body.panelIndex
   if (typeof body.limit === 'number') input.limit = body.limit
   if (typeof body.confirmedMaxCost === 'number') input.confirmedMaxCost = body.confirmedMaxCost
-  if (body.firstLastFrame !== undefined) input.firstLastFrame = body.firstLastFrame
   if (isRecord(body.generationOptions)) input.generationOptions = body.generationOptions
 
   const operationId = body.mode === 'auto'

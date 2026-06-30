@@ -305,62 +305,6 @@ export function useGenerateCharacterImage() {
   })
 }
 
-export function useModifyCharacterImage() {
-  const queryClient = useQueryClient()
-  const assetOperationBillingPlan = useAssetOperationBillingPlan()
-  const invalidateCharacters = () => invalidateGlobalCharacters(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      characterId,
-      appearanceIndex,
-      imageIndex,
-      modifyPrompt,
-      extraImageUrls,
-    }: {
-      characterId: string
-      appearanceIndex: number
-      imageIndex: number
-      modifyPrompt: string
-      extraImageUrls?: string[]
-    }) => {
-      const requestBody = {
-        scope: 'global',
-        kind: 'character',
-        appearanceIndex,
-        imageIndex,
-        modifyPrompt,
-        extraImageUrls,
-      }
-      const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'modify-render', requestBody)
-      return await requestJsonWithError(`/api/assets/${characterId}/modify-render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...requestBody,
-          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
-        }),
-      }, 'Failed to modify image')
-    },
-    onMutate: ({ characterId, appearanceIndex, imageIndex }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: `${characterId}:${appearanceIndex}:${imageIndex}`,
-        intent: 'modify',
-      })
-    },
-    onError: (_error, { characterId, appearanceIndex, imageIndex }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: `${characterId}:${appearanceIndex}:${imageIndex}`,
-      })
-    },
-    onSettled: invalidateCharacters,
-  })
-}
-
 export function useSelectCharacterImage() {
   const queryClient = useQueryClient()
   const latestRequestIdByTargetRef = useRef<Record<string, number>>({})

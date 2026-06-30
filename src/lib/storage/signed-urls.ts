@@ -34,17 +34,13 @@ export interface ShotLike {
 
 export interface PanelLike {
   imageUrl: string | null
-  sketchImageUrl: string | null
   videoUrl: string | null
   candidateImages: string | null
-  panelImageHistory?: string | null
-  imageHistory?: string | null
   [key: string]: unknown
 }
 
 export interface StoryboardLike {
   panels?: PanelLike[]
-  imageHistory?: string | null
   storyboardImageUrl: string | null
   [key: string]: unknown
 }
@@ -139,17 +135,6 @@ export function addSignedUrlsToStoryboard(storyboard: StoryboardLike) {
   let panels: PanelLike[] = []
   if (storyboard.panels && Array.isArray(storyboard.panels)) {
     panels = storyboard.panels.map((dbPanel) => {
-      let panelHistoryCount = 0
-      const historyField = dbPanel.panelImageHistory || dbPanel.imageHistory
-      if (historyField) {
-        try {
-          const history = JSON.parse(historyField)
-          panelHistoryCount = Array.isArray(history) ? history.length : 0
-        } catch {
-          panelHistoryCount = 0
-        }
-      }
-
       let signedCandidateImages = dbPanel.candidateImages
       if (signedCandidateImages) {
         try {
@@ -170,31 +155,18 @@ export function addSignedUrlsToStoryboard(storyboard: StoryboardLike) {
       return {
         ...dbPanel,
         imageUrl: dbPanel.imageUrl ? keyToSignedUrl(dbPanel.imageUrl) : null,
-        sketchImageUrl: keyToSignedUrl(dbPanel.sketchImageUrl),
         videoUrl: dbPanel.videoUrl && !dbPanel.videoUrl.startsWith('http')
           ? getSignedUrl(dbPanel.videoUrl, 7200)
           : dbPanel.videoUrl,
         candidateImages: signedCandidateImages,
-        historyCount: panelHistoryCount,
       }
     })
-  }
-
-  let historyCount = 0
-  if (storyboard.imageHistory) {
-    try {
-      const history = JSON.parse(storyboard.imageHistory)
-      historyCount = Array.isArray(history) ? history.length : 0
-    } catch {
-      historyCount = 0
-    }
   }
 
   return {
     ...storyboard,
     storyboardImageUrl: keyToSignedUrl(storyboard.storyboardImageUrl),
     panels,
-    historyCount,
   }
 }
 

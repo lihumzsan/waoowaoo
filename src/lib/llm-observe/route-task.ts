@@ -100,8 +100,7 @@ export async function maybeSubmitLLMTask(params: {
   const hasModel = typeof payload.analysisModel === 'string' && payload.analysisModel.trim()
     || typeof payload.model === 'string' && payload.model.trim()
   if (!hasModel && isBillableTaskType(params.type)) {
-    const useUserLevelConfig = params.type === TASK_TYPE.EPISODE_SPLIT_LLM
-      || params.type === TASK_TYPE.REFERENCE_TO_CHARACTER
+    const useUserLevelConfig = params.type === TASK_TYPE.REFERENCE_TO_CHARACTER
     if (useUserLevelConfig) {
       const userConfig = await getUserModelConfig(params.userId)
       if (userConfig.analysisModel) {

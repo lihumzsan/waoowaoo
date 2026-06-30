@@ -20,8 +20,6 @@ import CharacterCardActions from './character-card/CharacterCardActions'
 import { getImageGenerationCountOptions } from '@/lib/image-generation/count'
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 import { AppIcon } from '@/components/ui/icons'
-import { AI_EDIT_BUTTON_CLASS, AI_EDIT_ICON_CLASS } from '@/components/ui/ai-edit-style'
-import AISparklesIcon from '@/components/ui/icons/AISparklesIcon'
 
 interface CharacterCardProps {
   character: Character
@@ -38,7 +36,6 @@ interface CharacterCardProps {
   onSelectImage?: (characterId: string, appearanceId: string, imageIndex: number | null) => void
   activeTaskKeys?: Set<string>
   onClearTaskKey?: (key: string) => void
-  onImageEdit?: (characterId: string, appearanceId: string, imageIndex: number) => void
   isPrimaryAppearance?: boolean
   primaryAppearanceSelected?: boolean
   projectId: string
@@ -59,7 +56,6 @@ export default function CharacterCard({
   appearanceCount = 1,
   onSelectImage,
   activeTaskKeys = new Set(),
-  onImageEdit,
   isPrimaryAppearance = false,
   primaryAppearanceSelected = false,
   projectId,
@@ -312,15 +308,6 @@ export default function CharacterCard({
           ) : (
             <AppIcon name="upload" className="w-4 h-4 text-[var(--glass-tone-success-fg)]" />
           )}
-        </button>
-      )}
-      {!isAppearanceTaskRunning && !isAnyTaskRunning && currentImageUrl && onImageEdit && (
-        <button
-          onClick={() => onImageEdit(character.id, appearance.id, selectedIndex !== null ? selectedIndex : 0)}
-          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-95 ${AI_EDIT_BUTTON_CLASS}`}
-          title={t('image.edit')}
-        >
-          <AISparklesIcon className={`w-4 h-4 ${AI_EDIT_ICON_CLASS}`} />
         </button>
       )}
       <button

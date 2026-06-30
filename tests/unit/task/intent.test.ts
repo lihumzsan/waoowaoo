@@ -12,7 +12,6 @@ describe('resolveTaskIntent', () => {
 
   it('maps regenerate and modify task types', () => {
     expect(resolveTaskIntent(TASK_TYPE.REGENERATE_GROUP)).toBe('regenerate')
-    expect(resolveTaskIntent(TASK_TYPE.PANEL_VARIANT)).toBe('regenerate')
     expect(resolveTaskIntent(TASK_TYPE.MODIFY_ASSET_IMAGE)).toBe('modify')
   })
 

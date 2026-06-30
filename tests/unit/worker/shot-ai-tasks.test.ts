@@ -5,18 +5,13 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const handlersMock = vi.hoisted(() => ({
   handleModifyAppearanceTask: vi.fn(),
   handleModifyLocationTask: vi.fn(),
-  handleModifyShotPromptTask: vi.fn(),
-  handleAnalyzeShotVariantsTask: vi.fn(),
+  handleModifyPropTask: vi.fn(),
 }))
 
 vi.mock('@/lib/workers/handlers/shot-ai-prompt', () => ({
   handleModifyAppearanceTask: handlersMock.handleModifyAppearanceTask,
   handleModifyLocationTask: handlersMock.handleModifyLocationTask,
-  handleModifyShotPromptTask: handlersMock.handleModifyShotPromptTask,
-}))
-
-vi.mock('@/lib/workers/handlers/shot-ai-variants', () => ({
-  handleAnalyzeShotVariantsTask: handlersMock.handleAnalyzeShotVariantsTask,
+  handleModifyPropTask: handlersMock.handleModifyPropTask,
 }))
 
 import { handleShotAITask } from '@/lib/workers/handlers/shot-ai-tasks'
@@ -42,8 +37,7 @@ describe('worker shot-ai-tasks behavior', () => {
     vi.clearAllMocks()
     handlersMock.handleModifyAppearanceTask.mockResolvedValue({ type: 'appearance' })
     handlersMock.handleModifyLocationTask.mockResolvedValue({ type: 'location' })
-    handlersMock.handleModifyShotPromptTask.mockResolvedValue({ type: 'shot-prompt' })
-    handlersMock.handleAnalyzeShotVariantsTask.mockResolvedValue({ type: 'variants' })
+    handlersMock.handleModifyPropTask.mockResolvedValue({ type: 'prop' })
   })
 
   it('AI_MODIFY_APPEARANCE -> routes to appearance handler with payload', async () => {
@@ -56,21 +50,16 @@ describe('worker shot-ai-tasks behavior', () => {
     expect(handlersMock.handleModifyAppearanceTask).toHaveBeenCalledWith(job, payload)
   })
 
-  it('AI_MODIFY_LOCATION / AI_MODIFY_SHOT_PROMPT / ANALYZE_SHOT_VARIANTS route correctly', async () => {
+  it('AI_MODIFY_LOCATION and AI_MODIFY_PROP route correctly', async () => {
     const locationPayload = { locationId: 'loc-1' }
     const locationJob = buildJob(TASK_TYPE.AI_MODIFY_LOCATION, locationPayload)
     await handleShotAITask(locationJob)
     expect(handlersMock.handleModifyLocationTask).toHaveBeenCalledWith(locationJob, locationPayload)
 
-    const shotPayload = { currentPrompt: 'old prompt', modifyInstruction: 'new angle' }
-    const shotJob = buildJob(TASK_TYPE.AI_MODIFY_SHOT_PROMPT, shotPayload)
-    await handleShotAITask(shotJob)
-    expect(handlersMock.handleModifyShotPromptTask).toHaveBeenCalledWith(shotJob, shotPayload)
-
-    const variantPayload = { panelId: 'panel-1' }
-    const variantJob = buildJob(TASK_TYPE.ANALYZE_SHOT_VARIANTS, variantPayload)
-    await handleShotAITask(variantJob)
-    expect(handlersMock.handleAnalyzeShotVariantsTask).toHaveBeenCalledWith(variantJob, variantPayload)
+    const propPayload = { propId: 'prop-1' }
+    const propJob = buildJob(TASK_TYPE.AI_MODIFY_PROP, propPayload)
+    await handleShotAITask(propJob)
+    expect(handlersMock.handleModifyPropTask).toHaveBeenCalledWith(propJob, propPayload)
   })
 
   it('unsupported type -> throws explicit error', async () => {

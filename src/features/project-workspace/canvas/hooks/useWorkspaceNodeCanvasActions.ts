@@ -44,14 +44,6 @@ export function useWorkspaceNodeCanvasActions() {
       throw new Error('copy_panel must be handled by the canvas detail command bridge')
     }
 
-    if (action.type === 'insert_panel') {
-      throw new Error('insert_panel must be handled by the canvas detail command bridge')
-    }
-
-    if (action.type === 'create_panel_variant') {
-      throw new Error('create_panel_variant must be handled by the canvas detail command bridge')
-    }
-
     if (action.type === 'generate_image') {
       await runtime.onGeneratePanelImage(action.panelId)
       return
@@ -78,19 +70,10 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'modify_image') {
-      throw new Error('modify_image must be handled by the canvas detail command bridge')
-    }
-
-    if (action.type === 'download_images') {
-      throw new Error('download_images must be handled by the canvas detail command bridge')
-    }
-
     if (action.type === 'generate_video') {
       await runtime.onGenerateVideo(
         action.storyboardId,
         action.panelIndex,
-        action.firstLastFrame,
         action.generationOptions,
         action.panelId,
       )
@@ -119,10 +102,6 @@ export function useWorkspaceNodeCanvasActions() {
     if (action.type === 'update_panel_video_model') {
       await runtime.onUpdatePanelVideoModel(action.storyboardId, action.panelIndex, action.model)
       return
-    }
-
-    if (action.type === 'toggle_panel_link') {
-      throw new Error('toggle_panel_link must be handled by the canvas detail command bridge')
     }
 
     if (action.type === 'generate_all_videos') {

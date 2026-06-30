@@ -43,8 +43,7 @@ export interface ToolCallSignatureInput {
 }
 
 const ACTIVE_TASK_PHASES = new Set(['queued', 'processing'])
-const ACTIVE_COMMAND_STATUSES = new Set(['running', 'approved'])
-const STATUS_TOOL_NAMES = new Set(['get_task_status', 'list_recent_commands', 'get_project_command', 'get_project_context'])
+const STATUS_TOOL_NAMES = new Set(['get_task_status', 'get_project_context'])
 
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -66,11 +65,6 @@ function readStringArray(value: unknown): string[] {
 
 function readWrappedData(output: unknown): UnknownRecord | null {
   if (!isRecord(output) || output.ok !== true || !isRecord(output.data)) return null
-  return output.data
-}
-
-function readWrappedPayload(output: unknown): unknown {
-  if (!isRecord(output) || output.ok !== true) return null
   return output.data
 }
 
@@ -152,46 +146,6 @@ function normalizeStatusStates(toolName: string, data: UnknownRecord | null): Op
   }
 }
 
-function readCommandTaskIds(command: UnknownRecord): string[] {
-  const direct = normalizeTaskIds(command)
-  const task = isRecord(command.task) ? normalizeTaskIds(command.task) : []
-  return [...direct, ...task]
-}
-
-function normalizeActiveCommands(toolName: string, payload: unknown): OperationRuntimeSignal | null {
-  if (!payload || (toolName !== 'list_recent_commands' && toolName !== 'get_project_command')) return null
-  const payloadRecord = isRecord(payload) ? payload : null
-  const commandCandidates = payloadRecord && Array.isArray(payloadRecord.commands)
-    ? payloadRecord.commands
-    : payloadRecord && Array.isArray(payloadRecord.items)
-      ? payloadRecord.items
-      : payloadRecord && isRecord(payloadRecord.command)
-        ? [payloadRecord.command]
-      : Array.isArray(payload)
-        ? payload
-        : payloadRecord
-          ? [payload]
-          : []
-
-  const activeCommands = commandCandidates.flatMap((command) => {
-    if (!isRecord(command)) return []
-    const status = readNonEmptyString(command.status)
-    if (!status || !ACTIVE_COMMAND_STATUSES.has(status)) return []
-    return [{
-      status,
-      taskIds: readCommandTaskIds(command),
-    }]
-  })
-  if (activeCommands.length === 0) return null
-
-  return {
-    kind: 'active_status',
-    operationId: toolName,
-    taskIds: normalizeTaskIdList(activeCommands.flatMap((command) => command.taskIds)),
-    phases: normalizePhases(activeCommands.map((command) => command.status)),
-  }
-}
-
 function normalizeActiveOperationTasks(toolName: string, data: UnknownRecord | null): OperationRuntimeSignal | null {
   if (!data || toolName !== 'get_project_context') return null
   const context = isRecord(data.context) ? data.context : data
@@ -258,15 +212,11 @@ export function normalizeOperationRuntimeSignal(input: NormalizeOperationRuntime
   }
 
   const data = readWrappedData(input.output)
-  const payload = readWrappedPayload(input.output)
   const asyncSignal = normalizeAsyncSignal(input.toolName, data)
   if (asyncSignal) return asyncSignal
 
   const taskStatusSignal = normalizeStatusStates(input.toolName, data)
   if (taskStatusSignal) return taskStatusSignal
-
-  const activeCommandSignal = normalizeActiveCommands(input.toolName, payload)
-  if (activeCommandSignal) return activeCommandSignal
 
   const activeTaskSignal = normalizeActiveOperationTasks(input.toolName, data)
   if (activeTaskSignal) return activeTaskSignal

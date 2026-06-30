@@ -378,7 +378,7 @@ export async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], 
 
 function panelPromptSaveHandler(
   data: WorkspaceCanvasFlowNode['data'],
-  field: 'imagePrompt' | 'videoPrompt' | 'firstLastFramePrompt',
+  field: 'imagePrompt' | 'videoPrompt',
 ): ((nextValue: string) => Promise<void>) | undefined {
   if (!data.onAction) return undefined
   if (typeof data.storyboardId !== 'string' || typeof data.panelIndex !== 'number') return undefined
@@ -762,9 +762,6 @@ function ImageContent({
                   ))}
                 </div>
               )) : null}
-              {renderTextSection(labels('imageHistory'), details.imageHistory)}
-              {renderValue(labels('sketchImage'), details.sketchImageUrl)}
-              {renderValue(labels('previousImage'), details.previousImageUrl)}
               {renderTextSection(labels('error'), details.errorMessage)}
             </>
           ) : null}
@@ -800,12 +797,9 @@ function VideoContent({
           />
           {expanded ? (
             <>
-              {renderTextSection(labels('firstLastFramePrompt'), details.firstLastFramePrompt)}
               {renderSection(labels('videoMeta'), (
                 <div className="space-y-1">
-                  {renderValue(labels('generationMode'), details.videoGenerationMode)}
                   {renderValue(labels('videoModel'), details.videoModel)}
-                  {renderValue(labels('linkedToNextPanel'), details.linkedToNextPanel === true ? labels('yes') : null)}
                   {renderValue(labels('baseVideo'), details.videoUrl)}
                 </div>
               ))}

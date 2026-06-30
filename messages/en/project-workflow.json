@@ -14,82 +14,6 @@
     "refreshData": "Refresh Data",
     "enterVideoGeneration": "Enter Video Generation →"
   },
-  "smartImport": {
-    "title": "Start Your Creative Journey",
-    "subtitle": "First, choose your creation method",
-    "manualCreate": {
-      "title": "Create from Episode 1",
-      "description": "Start from episode 1, suitable for episodic creation or single short videos",
-      "button": "Start Creating"
-    },
-    "smartImport": {
-      "title": "Smart Import Full Book",
-      "description": "Upload a complete novel or script, AI engine automatically recognizes chapter structure and splits into episodes.",
-      "button": "Import Now",
-      "recommended": "Recommended"
-    },
-    "upload": {
-      "title": "Upload Raw Material",
-      "subtitle": "AI engine is ready, automatic episode splitting and formatting",
-      "maxWords": "(Max 30,000 words)",
-      "textInput": "Enter Text Content",
-      "documentUpload": "Upload Full Document",
-      "placeholder": "Paste your novel chapters or script content here...",
-      "filePlaceholder": "File uploaded mode",
-      "clickUpload": "Click to upload document",
-      "clearTextFirst": "Please clear left text first",
-      "supportedFormats": "Supports Word, TXT formats",
-      "preview": "Preview",
-      "expandPreview": "Expand More",
-      "collapsePreview": "Collapse",
-      "deleteFile": "Delete File",
-      "startAnalysis": "Start Smart Analysis",
-      "back": "Back",
-      "words": "words"
-    },
-    "analyzing": {
-      "title": "AI is Analyzing Your Story",
-      "description": "Recognizing chapter structure, smart splitting in progress...",
-      "autoSave": "Will auto-save after analysis complete"
-    },
-    "preview": {
-      "title": "Smart Splitting Complete",
-      "episodeCount": "Automatically split into {count} episodes",
-      "totalWords": "Total {count} words",
-      "autoSaved": "✓ Auto-saved",
-      "reanalyze": "Re-analyze",
-      "confirm": "Confirm Complete",
-      "saving": "Saving...",
-      "episodeList": "Episode List",
-      "addEpisode": "Add Episode",
-      "averageWords": "Average per episode",
-      "episodeContent": "Episode Content",
-      "episodePlaceholder": "Enter episode title...",
-      "summaryPlaceholder": "Enter plot summary...",
-      "newEpisode": "New Episode",
-      "deleteEpisode": "Delete Episode",
-      "deleteConfirm": {
-        "title": "Confirm Delete",
-        "message": "Are you sure you want to delete \"{title}\"?",
-        "cancel": "Cancel",
-        "confirm": "Confirm Delete"
-      },
-      "tip": {
-        "title": "Tip",
-        "content": "You can directly edit titles, summaries, and content. After clicking [Confirm Complete], episodes will be officially imported into the project"
-      }
-    },
-    "errors": {
-      "fileTooLarge": "File too large, please upload a file smaller than 10MB",
-      "docNotSupported": ".doc format not supported, please convert to .docx in Word",
-      "fileEmpty": "File content is empty",
-      "fileReadError": "File read failed, please try again",
-      "uploadFirst": "Please upload or paste content first",
-      "analyzeFailed": "Analysis failed",
-      "saveFailed": "Save failed"
-    },
-    "cancelConfirm": "Are you sure you want to cancel? Analyzed episodes will be cleared."
-  },
   "execution": {
     "creating": "AI Creating...",
     "selectEpisode": "Please select an episode first",
@@ -351,12 +275,7 @@
         "candidateImageAlt": "Candidate Image {index}",
         "selectCandidate": "Adopt",
         "cancelCandidate": "Cancel Candidates",
-        "imageHistory": "Image History",
-        "sketchImage": "Sketch",
-        "previousImage": "Reference Image",
-        "firstLastFramePrompt": "First/Last Frame Prompt",
         "videoMeta": "Video Info",
-        "generationMode": "Generation Mode",
         "gridMode": "Reference Layout",
         "reason": "Reason",
         "videoPlanMeta": "Segment Info",
@@ -417,7 +336,6 @@
         "generateAssetReferenceVideo": "Generate With References",
         "videoPlanModelMissing": "Choose a video segment generation model in project settings first.",
         "videoModel": "Video Model",
-        "linkedToNextPanel": "Linked To Next",
         "baseVideo": "Base Video",
         "lastOptions": "Last Generation Options",
         "finalStats": "Final Stats",
@@ -489,7 +407,6 @@
           "assetCoverage": "Asset Coverage",
           "aiData": "AI Data",
           "errors": "Error State",
-          "firstLastFrame": "First/Last Frame Mode",
           "batchVideo": "Batch Video"
         },
         "fields": {
@@ -515,8 +432,6 @@
           "sound": "Sound",
           "executionSnapshot": "Shot Execution Snapshot JSON",
           "actingNotes": "Acting Notes JSON",
-          "insertPrompt": "Insert Shot Request",
-          "variantTitle": "Variant Title",
           "imagePrompt": "Image Prompt",
           "candidateImage": "Candidate Image",
           "count": "Count",
@@ -524,10 +439,7 @@
           "assetImageGenerationMode": "Asset References",
           "storyboardImageGenerationMode": "Storyboard Images",
           "referenceUrls": "Reference Image URLs",
-          "modifyPrompt": "Image Edit Request",
-          "firstLastFramePrompt": "First/Last Frame Prompt",
           "videoModel": "Video Model",
-          "linkedToNextPanel": "Linked To Next Shot",
           "generationOptions": "Generation Options JSON",
           "autoVideoMode": "Video Segments",
           "singleVideoMode": "Single Shot",
@@ -586,9 +498,7 @@
           "expandPreviewDetails": "Expand Prompts",
           "collapsePreviewDetails": "Collapse Prompts"
         },
-        "defaults": {
-          "variantTitle": "Shot Variant"
-        },
+        "defaults": {},
         "placeholders": {
           "assetReferenceImages": "One reference image URL per line, or upload images to add them"
         },

@@ -103,7 +103,6 @@ function panelRow(overrides: Record<string, unknown> = {}) {
     characters: JSON.stringify([{ name: 'Hero', appearance: 'default' }]),
     srtSegment: 'source text',
     actingNotes: null,
-    sketchImageUrl: null,
     imageUrl: null,
     imageMediaId: null,
     renderFactsJson: {

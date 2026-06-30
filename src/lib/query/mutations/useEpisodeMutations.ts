@@ -1,115 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
-import { resolveTaskResponse } from '@/lib/task/client'
 import { queryKeys } from '../keys'
 import {
   invalidateQueryTemplates,
   requestBlobWithError,
   requestJsonWithError,
-  requestTaskResponseWithError,
 } from './mutation-shared'
-
-/**
- * 获取项目剧集列表
- */
-export function useListProjectEpisodes(projectId: string) {
-  return useMutation({
-    mutationFn: async () =>
-      await requestJsonWithError<{
-        episodes?: Array<{
-          episodeNumber?: number
-          name?: string
-          description?: string
-          novelText?: string
-        }>
-      }>(`/api/projects/${projectId}/episodes`, { method: 'GET' }, '获取剧集失败'),
-  })
-}
-
-/**
- * AI 智能分割剧集
- */
-export function useSplitProjectEpisodes(projectId: string) {
-  return useMutation({
-    mutationFn: async (payload: { content: string; async?: boolean }) => {
-      const response = await requestTaskResponseWithError(
-        `/api/projects/${projectId}/episodes/split`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        '分割失败',
-      )
-      return resolveTaskResponse<{
-        episodes: Array<{
-          number: number
-          title: string
-          summary: string
-          content: string
-          wordCount: number
-        }>
-      }>(response)
-    },
-  })
-}
-
-/**
- * 使用章节标记分割剧集
- */
-export function useSplitProjectEpisodesByMarkers(projectId: string) {
-  return useMutation({
-    mutationFn: async (payload: { content: string }) =>
-      await requestJsonWithError<{
-        episodes?: Array<{
-          number: number
-          title: string
-          summary: string
-          content: string
-          wordCount: number
-        }>
-      }>(
-        `/api/projects/${projectId}/episodes/split-by-markers`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        '分割失败',
-      ),
-  })
-}
-
-/**
- * 批量保存项目剧集
- */
-export function useSaveProjectEpisodesBatch(projectId: string) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (payload: {
-      episodes: Array<{
-        name: string
-        description?: string
-        novelText?: string
-      }>
-      clearExisting?: boolean
-      importStatus?: 'pending' | 'completed'
-    }) =>
-      await requestJsonWithError(
-        `/api/projects/${projectId}/episodes/batch`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        '保存剧集失败',
-      ),
-    onSettled: () => {
-      return invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
-    },
-  })
-}
 
 /**
  * 更新剧集字段

@@ -24,8 +24,6 @@ import {
   resolveDisplayImageSlots,
 } from '@/lib/image-generation/slot-state'
 import { AppIcon } from '@/components/ui/icons'
-import { AI_EDIT_BUTTON_CLASS, AI_EDIT_ICON_CLASS } from '@/components/ui/ai-edit-style'
-import AISparklesIcon from '@/components/ui/icons/AISparklesIcon'
 
 interface LocationImage {
   id: string
@@ -51,11 +49,10 @@ interface LocationCardProps {
   location: Location
   assetType?: 'location' | 'prop'
   onImageClick?: (url: string) => void
-  onImageEdit?: (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number) => void
   onEdit?: (location: Location, imageIndex: number) => void
 }
 
-export function LocationCard({ location, assetType = 'location', onImageClick, onImageEdit, onEdit }: LocationCardProps) {
+export function LocationCard({ location, assetType = 'location', onImageClick, onEdit }: LocationCardProps) {
   // 🔥 使用 mutation hooks
   const generateImage = useGenerateLocationImage()
   const selectImage = useSelectLocationImage()
@@ -98,7 +95,6 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
     requestedCount: generatedImageCount > 1 ? generatedImageCount : generationCount,
   })
   const displaySlotCount = displaySelectionImages.length
-  const hasMultipleImages = generatedImageCount > 1
   const singleImageAspectClassName = assetType === 'prop' ? 'aspect-[3/2]' : 'aspect-square'
   const displayTaskPresentation = isTaskRunning
     ? resolveTaskPresentationState({
@@ -401,12 +397,6 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
                 <button onClick={() => fileInputRef.current?.click()} disabled={uploadImage.isPending} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                   <AppIcon name="upload" className="w-4 h-4 text-[var(--glass-tone-success-fg)]" />
                 </button>
-                      <button
-                        onClick={() => onImageEdit?.(assetType === 'prop' ? 'prop' : 'location', location.id, location.name, currentImageIndex)}
-                        className={`h-7 w-7 rounded-full flex items-center justify-center transition-all active:scale-95 ${AI_EDIT_BUTTON_CLASS}`}
-                      >
-                        <AISparklesIcon className={`w-4 h-4 ${AI_EDIT_ICON_CLASS}`} />
-                      </button>
                 <button onClick={() => handleGenerate()} className="glass-btn-base glass-btn-secondary h-7 w-7 rounded-full">
                   <AppIcon name="refresh" className="w-4 h-4 text-[var(--glass-tone-info-fg)]" />
                 </button>

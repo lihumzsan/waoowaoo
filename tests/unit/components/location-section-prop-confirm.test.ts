@@ -102,7 +102,6 @@ describe('LocationSection prop confirm wiring', () => {
         onRegenerateGroup: async () => undefined,
         onUndo: () => undefined,
         onImageClick: () => undefined,
-        onImageEdit: () => undefined,
         onCopyFromGlobal: () => undefined,
         filterIds: null,
       }),

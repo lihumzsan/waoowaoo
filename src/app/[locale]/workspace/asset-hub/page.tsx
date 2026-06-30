@@ -12,7 +12,6 @@ import { AssetGrid } from './components/AssetGrid'
 import { CharacterCreationModal, LocationCreationModal, PropCreationModal, CharacterEditModal, LocationEditModal, PropEditModal } from '@/components/shared/assets'
 import { FolderModal } from './components/FolderModal'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
-import ImageEditModal from '@/features/project-workspace/components/assets/ImageEditModal'
 import {
     useAssets,
     useAssetActions,
@@ -42,7 +41,6 @@ export default function AssetHubPage() {
     })
     const characterActions = useAssetActions({ scope: 'global', kind: 'character' })
     const locationActions = useAssetActions({ scope: 'global', kind: 'location' })
-    const propActions = useAssetActions({ scope: 'global', kind: 'prop' })
     const refreshAssets = useRefreshAssets({ scope: 'global' })
 
     const loading = foldersLoading || assetsLoading
@@ -55,13 +53,6 @@ export default function AssetHubPage() {
     const [showFolderModal, setShowFolderModal] = useState(false)
     const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null)
     const [previewImage, setPreviewImage] = useState<string | null>(null)
-    const [imageEditModal, setImageEditModal] = useState<{
-        type: 'character' | 'location' | 'prop'
-        id: string
-        name: string
-        imageIndex: number
-        appearanceIndex?: number
-    } | null>(null)
 
     const [isDownloading, setIsDownloading] = useState(false)
 
@@ -144,49 +135,6 @@ export default function AssetHubPage() {
             }
         } catch (error) {
             _ulogError('删除文件夹失败:', error)
-        }
-    }
-
-    // 打开图片编辑弹窗
-    const handleOpenImageEdit = (type: 'character' | 'location' | 'prop', id: string, name: string, imageIndex: number, appearanceIndex?: number) => {
-        setImageEditModal({ type, id, name, imageIndex, appearanceIndex })
-    }
-
-    // 处理图片编辑确认 - 使用 mutation
-    const handleImageEdit = async (modifyPrompt: string, extraImageUrls?: string[]) => {
-        if (!imageEditModal) return
-
-        const { type, id, imageIndex, appearanceIndex } = imageEditModal
-        setImageEditModal(null)
-
-        if (type === 'character' && appearanceIndex !== undefined) {
-            void characterActions.modifyRender({
-                id,
-                appearanceIndex,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
-        } else if (type === 'location') {
-            void locationActions.modifyRender({
-                id,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
-        } else if (type === 'prop') {
-            void propActions.modifyRender({
-                id,
-                imageIndex,
-                modifyPrompt,
-                extraImageUrls,
-            }).catch(() => {
-                alert(t('editFailed'))
-            })
         }
     }
 
@@ -415,7 +363,6 @@ export default function AssetHubPage() {
                         isDownloading={isDownloading}
                         selectedFolderId={selectedFolderId}
                         onImageClick={setPreviewImage}
-                        onImageEdit={handleOpenImageEdit}
                         onCharacterEdit={handleOpenCharacterEdit}
                         onLocationEdit={handleOpenLocationEdit}
                         onPropEdit={handleOpenPropEdit}
@@ -484,16 +431,6 @@ export default function AssetHubPage() {
                 <ImagePreviewModal
                     imageUrl={previewImage}
                     onClose={() => setPreviewImage(null)}
-                />
-            )}
-
-            {/* 图片编辑弹窗 */}
-            {imageEditModal && (
-                <ImageEditModal
-                    type={imageEditModal.type}
-                    name={imageEditModal.name}
-                    onClose={() => setImageEditModal(null)}
-                    onConfirm={handleImageEdit}
                 />
             )}
 

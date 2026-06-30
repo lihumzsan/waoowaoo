@@ -8,7 +8,7 @@ import {
 export function useAssetOperationBillingPlan() {
   return async (
     assetId: string,
-    action: 'generate' | 'modify-render',
+    action: 'generate',
     input: Record<string, unknown>,
   ) => {
     const plan = await fetchAssetOperationPlanView({

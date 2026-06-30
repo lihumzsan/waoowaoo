@@ -326,11 +326,8 @@ model ProjectPanel {
   imageUrl          String?
   imageMediaId      String?
   imageMedia        MediaObject?              @relation("ProjectPanelImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  imageHistory      String?
   videoPrompt       String?
-  firstLastFramePrompt String?
   videoUrl          String?
-  videoGenerationMode String?                 // 视频生成方式：normal | firstlastframe
   lastVideoGenerationOptions Json?
   videoMediaId      String?
   videoMedia        MediaObject?              @relation("ProjectPanelVideoMedia", fields: [videoMediaId], references: [id], onDelete: SetNull)
@@ -338,26 +335,17 @@ model ProjectPanel {
   updatedAt         DateTime                  @default(now()) @updatedAt
   sceneType         String?
   candidateImages   String?
-  linkedToNextPanel Boolean                   @default(false)
-  sketchImageUrl    String?
-  sketchImageMediaId String?
-  sketchImageMedia  MediaObject?              @relation("ProjectPanelSketchMedia", fields: [sketchImageMediaId], references: [id], onDelete: SetNull)
   sourceShotNumber  Int?
   sourceGenerationSegmentId String?
   executionSnapshotJson Json?
   renderFactsJson   Json?
   actingNotes       String? // 演技指导数据 JSON
-  previousImageUrl  String?
-  previousImageMediaId String?
-  previousImageMedia MediaObject?             @relation("ProjectPanelPreviousImageMedia", fields: [previousImageMediaId], references: [id], onDelete: SetNull)
   storyboard        ProjectStoryboard  @relation(fields: [storyboardId], references: [id], onDelete: Cascade)
 
   @@unique([storyboardId, panelIndex])
   @@index([storyboardId])
   @@index([imageMediaId])
   @@index([videoMediaId])
-  @@index([sketchImageMediaId])
-  @@index([previousImageMediaId])
   @@index([sourceShotNumber])
   @@map("project_panels")
 }
@@ -371,10 +359,7 @@ model ProjectStoryboard {
   updatedAt           DateTime              @default(now()) @updatedAt
   panelCount          Int                   @default(9)
   storyboardTextJson  String?
-  imageHistory        String?
-  candidateImages     String?
   lastError           String?
-  photographyPlan     String?
   panels              ProjectPanel[]
   editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
@@ -427,7 +412,6 @@ model Project {
   capabilityOverrides String?
   lastEpisodeId      String?
   imageResolution    String                 @default("2K")
-  importStatus       String?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @default(now()) @updatedAt
   lastAccessedAt     DateTime?
@@ -845,8 +829,6 @@ model MediaObject {
   projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
   projectPanelImages             ProjectPanel[]       @relation("ProjectPanelImageMedia")
   projectPanelVideos             ProjectPanel[]       @relation("ProjectPanelVideoMedia")
-  projectPanelSketchImages       ProjectPanel[]       @relation("ProjectPanelSketchMedia")
-  projectPanelPreviousImages     ProjectPanel[]       @relation("ProjectPanelPreviousImageMedia")
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")

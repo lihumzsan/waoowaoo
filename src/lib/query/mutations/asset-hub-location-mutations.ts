@@ -173,59 +173,6 @@ export function useGenerateLocationImage() {
   })
 }
 
-export function useModifyLocationImage() {
-  const queryClient = useQueryClient()
-  const assetOperationBillingPlan = useAssetOperationBillingPlan()
-  const invalidateLocations = () => invalidateGlobalLocations(queryClient)
-
-  return useMutation({
-    mutationFn: async ({
-      locationId,
-      imageIndex,
-      modifyPrompt,
-      extraImageUrls,
-    }: {
-      locationId: string
-      imageIndex: number
-      modifyPrompt: string
-      extraImageUrls?: string[]
-    }) => {
-      const requestBody = {
-        scope: 'global',
-        kind: 'location',
-        imageIndex,
-        modifyPrompt,
-        extraImageUrls,
-      }
-      const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'modify-render', requestBody)
-      return await requestJsonWithError(`/api/assets/${locationId}/modify-render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...requestBody,
-          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
-        }),
-      }, 'Failed to modify image')
-    },
-    onMutate: ({ locationId, imageIndex }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocationImage',
-        targetId: `${locationId}:${imageIndex}`,
-        intent: 'modify',
-      })
-    },
-    onError: (_error, { locationId, imageIndex }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocationImage',
-        targetId: `${locationId}:${imageIndex}`,
-      })
-    },
-    onSettled: invalidateLocations,
-  })
-}
-
 export function useSelectLocationImage() {
   const queryClient = useQueryClient()
   const latestRequestIdByTargetRef = useRef<Record<string, number>>({})

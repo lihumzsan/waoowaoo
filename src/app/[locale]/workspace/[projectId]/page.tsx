@@ -1,5 +1,4 @@
 'use client'
-import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { apiFetch } from '@/lib/api-fetch'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
@@ -8,14 +7,10 @@ import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
 import Navbar from '@/components/Navbar'
 import { BrandLoading } from '@/components/ui/BrandLoading'
-import { useProjectData, useEpisodeData, useUserModels } from '@/lib/query/hooks'
+import { useProjectData, useEpisodeData } from '@/lib/query/hooks'
 import { queryKeys } from '@/lib/query/keys'
 import ProjectWorkspace from '@/features/project-workspace/ProjectWorkspace'
-import SmartImportWizard, { SplitEpisode } from '@/features/project-workspace/components/SmartImportWizard'
 import { resolveSelectedEpisodeId } from './episode-selection'
-import { ModelCapabilityDropdown } from '@/components/ui/config-modals/ModelCapabilityDropdown'
-import { AppIcon } from '@/components/ui/icons'
-import { readConfiguredAnalysisModel, shouldGuideToModelSetup } from '@/lib/workspace/model-setup'
 import { useRouter } from '@/i18n/navigation'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import {
@@ -51,7 +46,6 @@ export default function ProjectDetailPage() {
   }
   const projectId = params.projectId
   const t = useTranslations('workspaceDetail')
-  const tc = useTranslations('common')
 
   // 从URL读取参数
   const urlEpisodeId = searchParams.get('episode') ?? null
@@ -65,16 +59,6 @@ export default function ProjectDetailPage() {
 
   // 视图状态（仅 UI）
   const [isGlobalAssetsView, setIsGlobalAssetsView] = useState(false)
-  const [isCheckingModelSetup, setIsCheckingModelSetup] = useState(true)
-  const [needsModelSetup, setNeedsModelSetup] = useState(false)
-  const [modelSetupCheckFailed, setModelSetupCheckFailed] = useState(false)
-  const [modelSetupCheckAttempt, setModelSetupCheckAttempt] = useState(0)
-  const [analysisModelDraft, setAnalysisModelDraft] = useState('')
-  const [isModelSetupModalOpen, setIsModelSetupModalOpen] = useState(false)
-  const [modelSetupSaving, setModelSetupSaving] = useState(false)
-
-  const userModelsQuery = useUserModels()
-  const llmModelOptions = userModelsQuery.data?.llm || []
 
   const updateUrlParams = useCallback((updates: {
     episode?: string | null
@@ -148,13 +132,8 @@ export default function ProjectDetailPage() {
     clearAssistantAutoStart()
   }, [assistantAutoStartMessage, clearAssistantAutoStart, selectedEpisodeId, shouldAutoStartAssistant])
 
-  // 获取导入状态
-  const importStatus = project?.importStatus
-
-  // 零状态：无剧集且非导入中 → 自动创建第一集
-  const isZeroState = episodes.length === 0
-  const shouldShowImportWizard = importStatus === 'pending' // 仅分集预览中才显示 wizard
-  const shouldAutoCreateEpisode = isZeroState && importStatus !== 'pending'
+  // 零状态：无剧集时自动创建第一集
+  const shouldAutoCreateEpisode = episodes.length === 0
   const autoCreateTriggered = useRef(false)
 
   useEffect(() => {
@@ -162,54 +141,6 @@ export default function ProjectDetailPage() {
     autoCreateTriggered.current = true
     void handleCreateEpisode(`${t('episode')} 1`)
   }, [shouldAutoCreateEpisode, loading]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const shouldGateImportWizardByModel = shouldShowImportWizard && !isGlobalAssetsView
-
-  useEffect(() => {
-    if (!shouldGateImportWizardByModel) return
-
-    let canceled = false
-    const checkDefaultModelSetup = async () => {
-      setIsCheckingModelSetup(true)
-      setModelSetupCheckFailed(false)
-      try {
-        const response = await apiFetch('/api/user-preference')
-        if (!response.ok) {
-          _ulogError('[ProjectDetail] 获取用户默认模型失败:', { status: response.status })
-          if (!canceled) {
-            setNeedsModelSetup(false)
-            setModelSetupCheckFailed(true)
-            setAnalysisModelDraft('')
-          }
-          return
-        }
-
-        const payload: unknown = await response.json()
-        const configuredModel = readConfiguredAnalysisModel(payload)
-        if (!canceled) {
-          setAnalysisModelDraft(configuredModel || '')
-          setNeedsModelSetup(shouldGuideToModelSetup(payload))
-          setModelSetupCheckFailed(false)
-        }
-      } catch (err) {
-        _ulogError('[ProjectDetail] 检查默认模型失败:', err)
-        if (!canceled) {
-          setNeedsModelSetup(false)
-          setModelSetupCheckFailed(true)
-          setAnalysisModelDraft('')
-        }
-      } finally {
-        if (!canceled) {
-          setIsCheckingModelSetup(false)
-        }
-      }
-    }
-
-    void checkDefaultModelSetup()
-    return () => {
-      canceled = true
-    }
-  }, [modelSetupCheckAttempt, shouldGateImportWizardByModel])
 
   // 初始化 URL：无效/缺失 episode 时，统一回写默认 episode
   useEffect(() => {
@@ -239,30 +170,6 @@ export default function ProjectDetailPage() {
     setIsGlobalAssetsView(false)
     // 同步到URL
     updateUrlParams({ episode: data.episode.id })
-  }
-
-  // 智能导入 - 完成后刷新数据（数据已由 SmartImportWizard 保存）
-  const handleSmartImportComplete = async (_splitEpisodes: SplitEpisode[]) => {
-    _ulogInfo('[Page] handleSmartImportComplete 被调用')
-
-    try {
-      // 🔥 刷新项目数据
-      queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
-
-      // 刷新后重新获取最新的剧集列表
-      const res = await apiFetch(`/api/projects/${projectId}/data`)
-      const data = await res.json()
-      const newEpisodes = data?.project?.episodes || []
-      _ulogInfo('[Page] 获取到新剧集:', newEpisodes.length, '个')
-
-      // 如果有剧集，进入第一个
-      if (newEpisodes.length > 0) {
-        _ulogInfo('[Page] 更新 episode 参数')
-        updateUrlParams({ episode: newEpisodes[0].id })
-      }
-    } catch (err: unknown) {
-      _ulogError('刷新失败:', err)
-    }
   }
 
   // 重命名剧集
@@ -347,41 +254,11 @@ export default function ProjectDetailPage() {
     })
   }, [queryClient, router])
 
-  const handleSaveDefaultAnalysisModel = async () => {
-    const modelKey = analysisModelDraft.trim()
-    if (!modelKey) {
-      alert(t('modelSetup.selectModelFirst'))
-      return
-    }
-
-    setModelSetupSaving(true)
-    try {
-      const response = await apiFetch('/api/user-preference', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysisModel: modelKey }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      setNeedsModelSetup(false)
-      setIsModelSetupModalOpen(false)
-    } catch (err) {
-      _ulogError('[ProjectDetail] 保存默认分析模型失败:', err)
-      alert(t('modelSetup.saveFailed'))
-    } finally {
-      setModelSetupSaving(false)
-    }
-  }
-
   // Loading状态：等待项目数据和剧集数据都准备好
   // 条件：正在加载 或 (有剧集但episode数据未准备好)
-  // 排除：如果要显示导入向导，则不需要等待剧集数据
   const isInitializing = loading ||
-    (!shouldShowImportWizard && !isGlobalAssetsView && episodes.length > 0 && (!selectedEpisodeId || !currentEpisode))
-  const isEpisodeWorkspaceReady = !isGlobalAssetsView && !shouldShowImportWizard && Boolean(selectedEpisodeId && currentEpisode)
+    (!isGlobalAssetsView && episodes.length > 0 && (!selectedEpisodeId || !currentEpisode))
+  const isEpisodeWorkspaceReady = !isGlobalAssetsView && Boolean(selectedEpisodeId && currentEpisode)
   if (isInitializing) {
     return (
       <div className="glass-page min-h-screen">
@@ -432,127 +309,6 @@ export default function ProjectDetailPage() {
                 viewMode="global-assets"
               />
             </div>
-          ) : shouldShowImportWizard && !isGlobalAssetsView ? (
-            isCheckingModelSetup ? (
-              <BrandLoading className="min-h-[320px]" />
-            ) : modelSetupCheckFailed ? (
-              <div className="glass-surface p-8 max-w-2xl mx-auto">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)] flex items-center justify-center shrink-0">
-                    <AppIcon name="alert" className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-[var(--glass-text-primary)] mb-2">
-                      {t('modelSetup.checkFailedTitle')}
-                    </h2>
-                    <p className="text-[var(--glass-text-secondary)] mb-5">
-                      {t('modelSetup.checkFailedDescription')}
-                    </p>
-                    <button
-                      onClick={() => setModelSetupCheckAttempt((value) => value + 1)}
-                      className="glass-btn-base glass-btn-primary px-4 py-2"
-                    >
-                      {tc('refresh')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : needsModelSetup ? (
-              <div className="glass-surface p-8 max-w-2xl mx-auto">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)] flex items-center justify-center shrink-0">
-                    <AppIcon name="alert" className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold text-[var(--glass-text-primary)] mb-2">
-                      {t('modelSetup.title')}
-                    </h2>
-                    <p className="text-[var(--glass-text-secondary)] mb-5">
-                      {t('modelSetup.description')}
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        onClick={() => setIsModelSetupModalOpen(true)}
-                        className="glass-btn-base glass-btn-primary px-4 py-2"
-                      >
-                        {t('modelSetup.configureNow')}
-                      </button>
-                      <button
-                        onClick={() => router.push({ pathname: '/profile' })}
-                        className="glass-btn-base glass-btn-secondary px-4 py-2"
-                      >
-                        {t('modelSetup.goProfile')}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {isModelSetupModalOpen && (
-                  <div className="fixed inset-0 glass-overlay flex items-center justify-center z-50 backdrop-blur-sm">
-                    <div className="glass-surface-modal p-6 w-full max-w-xl mx-4">
-                      <h3 className="text-xl font-bold text-[var(--glass-text-primary)] mb-2">
-                        {t('modelSetup.modalTitle')}
-                      </h3>
-                      <p className="text-sm text-[var(--glass-text-secondary)] mb-5">
-                        {t('modelSetup.modalDescription')}
-                      </p>
-
-                      <div className="mb-6">
-                        <label className="glass-field-label block mb-2">{t('modelSetup.selectModelLabel')}</label>
-                        {userModelsQuery.isLoading ? (
-                          <div className="text-sm text-[var(--glass-text-tertiary)]">{tc('loading')}</div>
-                        ) : llmModelOptions.length === 0 ? (
-                          <div className="text-sm text-[var(--glass-tone-warning-fg)]">
-                            {t('modelSetup.noModelOptions')}
-                          </div>
-                        ) : (
-                          <ModelCapabilityDropdown
-                            models={llmModelOptions}
-                            value={analysisModelDraft || undefined}
-                            onModelChange={setAnalysisModelDraft}
-                            capabilityFields={[]}
-                            capabilityOverrides={{}}
-                            onCapabilityChange={(field, rawValue, sample) => {
-                              void field
-                              void rawValue
-                              void sample
-                            }}
-                            placeholder={t('modelSetup.selectModelPlaceholder')}
-                          />
-                        )}
-                      </div>
-
-                      <div className="flex justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setIsModelSetupModalOpen(false)}
-                          className="glass-btn-base glass-btn-secondary px-4 py-2"
-                          disabled={modelSetupSaving}
-                        >
-                          {tc('cancel')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { void handleSaveDefaultAnalysisModel() }}
-                          className="glass-btn-base glass-btn-primary px-4 py-2 disabled:opacity-50"
-                          disabled={modelSetupSaving || llmModelOptions.length === 0 || !analysisModelDraft.trim()}
-                        >
-                          {modelSetupSaving ? tc('loading') : tc('save')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              // 导入中（pending）：显示分集预览向导
-              <SmartImportWizard
-                projectId={projectId}
-                onManualCreate={() => handleCreateEpisode(`${t('episode')} 1`)}
-                onImportComplete={handleSmartImportComplete}
-                importStatus={importStatus}
-              />
-            )
           ) : selectedEpisodeId && currentEpisode ? (
             // 剧集工作区（确保所有数据都准备好）
             <ProjectWorkspace

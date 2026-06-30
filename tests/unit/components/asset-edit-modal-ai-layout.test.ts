@@ -78,11 +78,6 @@ const messages = {
       introductionPlaceholder: '输入角色介绍',
       introductionTip: '介绍角色在故事中的身份',
     },
-    smartImport: {
-      preview: {
-        saving: '保存中',
-      },
-    },
     errors: {
       saveFailed: '保存失败',
       failed: '失败',
