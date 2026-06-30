@@ -10,6 +10,7 @@ import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
+import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
 import type {
   WorkspaceCanvasAssetRef,
@@ -1330,21 +1331,6 @@ function EditScriptContent({
   )
 }
 
-const IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO = '16 / 9'
-
-export function imageThumbnailAspectRatio(image: Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'>): string | null {
-  const { naturalWidth, naturalHeight } = image
-  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return null
-  if (naturalWidth <= 0 || naturalHeight <= 0) return null
-  return `${naturalWidth} / ${naturalHeight}`
-}
-
-function numericAspectRatioStyleValue(aspectRatio: number | null | undefined): string | null {
-  if (typeof aspectRatio !== 'number') return null
-  if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) return null
-  return String(aspectRatio)
-}
-
 function EditAssetGroupThumbnailCard({
   asset,
   isOpen,
@@ -1360,20 +1346,9 @@ function EditAssetGroupThumbnailCard({
   readonly onPreviewImage: ImagePreviewHandler | null
   readonly onSelect: () => void
 }) {
-  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO)
   const previewSourceImageUrl = asset.previewImageUrl ?? null
   const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
   const loadingSize = 64
-
-  useEffect(() => {
-    setThumbnailAspectRatio(IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO)
-  }, [previewSourceImageUrl])
-
-  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    const nextAspectRatio = imageThumbnailAspectRatio(event.currentTarget)
-    if (!nextAspectRatio) return
-    setThumbnailAspectRatio(nextAspectRatio)
-  }
 
   return (
     <div
@@ -1389,42 +1364,46 @@ function EditAssetGroupThumbnailCard({
         onSelect()
       }}
     >
-      <div
+      <AdaptiveImageAspectFrame
+        sourceKey={previewSourceImageUrl}
         className="relative flex w-full items-center justify-center overflow-hidden bg-slate-100 text-[var(--glass-text-tertiary)]"
-        style={{ aspectRatio: thumbnailAspectRatio }}
       >
-        {imageUrl ? (
-          <MediaImageWithLoading
-            src={imageUrl}
-            alt={asset.name}
-            containerClassName="h-full w-full bg-slate-100"
-            className="h-full w-full object-contain"
-            onLoad={handleImageLoad}
-          />
-        ) : asset.isRunning ? null : (
-          <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
+        {({ onImageLoad }) => (
+          <>
+            {imageUrl ? (
+              <MediaImageWithLoading
+                src={imageUrl}
+                alt={asset.name}
+                containerClassName="h-full w-full bg-slate-100"
+                className="h-full w-full object-contain"
+                onLoad={onImageLoad}
+              />
+            ) : asset.isRunning ? null : (
+              <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
+            )}
+            <MediaGenerationLoading
+              taskState={asset.taskProgress}
+              styleImageUrl={loadingStyleImageUrl}
+              size={loadingSize}
+            />
+            {previewSourceImageUrl && imageUrl && onPreviewImage ? (
+              <button
+                type="button"
+                className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
+                aria-label={`${labels('previewLarge')}: ${asset.name}`}
+                title={labels('previewLarge')}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onPreviewImage(previewSourceImageUrl)
+                }}
+              >
+                <AppIcon name="searchPlus" className="h-4 w-4" />
+              </button>
+            ) : null}
+          </>
         )}
-        <MediaGenerationLoading
-          taskState={asset.taskProgress}
-          styleImageUrl={loadingStyleImageUrl}
-          size={loadingSize}
-        />
-        {previewSourceImageUrl && imageUrl && onPreviewImage ? (
-          <button
-            type="button"
-            className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
-            aria-label={`${labels('previewLarge')}: ${asset.name}`}
-            title={labels('previewLarge')}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation()
-              onPreviewImage(previewSourceImageUrl)
-            }}
-          >
-            <AppIcon name="searchPlus" className="h-4 w-4" />
-          </button>
-        ) : null}
-      </div>
+      </AdaptiveImageAspectFrame>
       <div className="px-2.5 py-1.5">
         <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
         <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
@@ -1545,6 +1524,39 @@ function EditAssetGroupContent({
   )
 }
 
+function StyleBiblePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
+  const sourceImageUrl = data.previewImageUrl ?? null
+  const displayImageUrl = toDisplayImageUrl(sourceImageUrl)
+  const running = data.__running === true
+  if (!sourceImageUrl || !displayImageUrl) return null
+
+  return (
+    <AdaptiveImageAspectFrame
+      sourceKey={sourceImageUrl}
+      initialAspectRatio={data.previewAspectRatio}
+      className={`relative flex w-full items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100 ${running ? 'workspace-node-loading-surface' : ''}`}
+    >
+      {({ onImageLoad }) => (
+        <>
+          <PreviewableImage
+            sourceImageUrl={sourceImageUrl}
+            displayImageUrl={displayImageUrl}
+            alt={data.title}
+            buttonClassName="flex h-full w-full cursor-zoom-in items-center justify-center overflow-hidden"
+            imageClassName="h-full w-full object-contain"
+            onImageLoad={onImageLoad}
+          />
+          <MediaGenerationLoading
+            taskState={data.taskProgress}
+            styleImageUrl={data.loadingStyleImageUrl}
+            size={64}
+          />
+        </>
+      )}
+    </AdaptiveImageAspectFrame>
+  )
+}
+
 function StyleBibleContent({
   data,
   labels,
@@ -1562,7 +1574,7 @@ function StyleBibleContent({
   if (!expanded) {
     return (
       <div className="space-y-2">
-        {shouldShowPreview ? <MediaPreview data={data} /> : null}
+        {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
         {details.styleSummary ? renderSection(labels('styleSummary'), renderTextBlock(details.styleSummary)) : null}
       </div>
     )
@@ -1594,7 +1606,7 @@ function StyleBibleContent({
   ]
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {shouldShowPreview ? <MediaPreview data={data} /> : null}
+      {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
       {renderTextSection(labels('styleSummary'), details.styleSummary)}
       {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
       <StyleBibleGroups groups={groups} />
@@ -1770,44 +1782,35 @@ function VideoPlanReferenceThumbnail({
   readonly label: string
   readonly initialAspectRatio?: number | null
 }) {
-  const initialAspectRatioStyle = numericAspectRatioStyleValue(initialAspectRatio) ?? IMAGE_THUMBNAIL_FALLBACK_ASPECT_RATIO
-  const [thumbnailAspectRatio, setThumbnailAspectRatio] = useState(initialAspectRatioStyle)
-
-  useEffect(() => {
-    setThumbnailAspectRatio(initialAspectRatioStyle)
-  }, [initialAspectRatioStyle, sourceImageUrl])
-
-  const handleImageLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
-    const nextAspectRatio = imageThumbnailAspectRatio(event.currentTarget)
-    if (!nextAspectRatio) return
-    setThumbnailAspectRatio(nextAspectRatio)
-  }
-
   if (!sourceImageUrl) {
     return (
-      <div
+      <AdaptiveImageAspectFrame
+        sourceKey={sourceImageUrl}
+        initialAspectRatio={initialAspectRatio}
         className="flex w-full items-center justify-center rounded-[10px] bg-slate-50 text-sm font-semibold text-slate-400 ring-1 ring-slate-200"
-        style={{ aspectRatio: thumbnailAspectRatio }}
       >
-        {label}
-      </div>
+        {() => label}
+      </AdaptiveImageAspectFrame>
     )
   }
 
   return (
-    <div
+    <AdaptiveImageAspectFrame
+      sourceKey={sourceImageUrl}
+      initialAspectRatio={initialAspectRatio}
       className="overflow-hidden rounded-[10px] bg-slate-50 ring-1 ring-slate-200"
-      style={{ aspectRatio: thumbnailAspectRatio }}
     >
-      <PreviewableImage
-        sourceImageUrl={sourceImageUrl}
-        displayImageUrl={displayImageUrl ?? undefined}
-        alt={alt}
-        buttonClassName="block h-full w-full cursor-zoom-in overflow-hidden"
-        imageClassName="h-full w-full object-contain"
-        onImageLoad={handleImageLoad}
-      />
-    </div>
+      {({ onImageLoad }) => (
+        <PreviewableImage
+          sourceImageUrl={sourceImageUrl}
+          displayImageUrl={displayImageUrl ?? undefined}
+          alt={alt}
+          buttonClassName="block h-full w-full cursor-zoom-in overflow-hidden"
+          imageClassName="h-full w-full object-contain"
+          onImageLoad={onImageLoad}
+        />
+      )}
+    </AdaptiveImageAspectFrame>
   )
 }
 
