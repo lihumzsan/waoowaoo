@@ -209,6 +209,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   if (runningState || input.isOptimisticallyRunning) {
     return {
       ...editAssetGroupPatch,
+      artifactPhase: 'running',
       isRunning: true,
       statusLabel: input.labels.running,
       taskProgress: runningState ?? optimisticTaskProgress(input.node),
@@ -219,6 +220,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   if (failedState) {
     return withRuntimeErrorMessage(input.node, {
       ...editAssetGroupPatch,
+      artifactPhase: 'failed',
       isRunning: false,
       statusLabel: input.labels.failed,
       taskProgress: failedState,
@@ -228,6 +230,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   if (typeof input.node.data.isRunning === 'boolean') {
     return {
       ...editAssetGroupPatch,
+      artifactPhase: input.node.data.artifactPhase,
       isRunning: input.node.data.isRunning,
       statusLabel: input.node.data.statusLabel,
       taskProgress: input.node.data.isRunning ? input.node.data.taskProgress ?? optimisticTaskProgress(input.node) : null,
@@ -235,6 +238,7 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   }
   return {
     ...editAssetGroupPatch,
+    artifactPhase: input.node.data.artifactPhase,
     statusLabel: input.node.data.statusLabel,
     taskProgress: null,
   }

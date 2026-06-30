@@ -46,6 +46,14 @@ import {
 } from '../node-presentation-profiles'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
 import type { WorkspaceCanvasStreamTarget } from '../structured-stream/workspace-structured-stream-runtime-types'
+import {
+  type WorkspaceCanvasArtifactPhaseLabels,
+  workspaceCanvasArtifactPhaseFromTaskBackedStatus,
+  workspaceCanvasArtifactPresentation,
+  workspaceCanvasFailedPresentation,
+  workspaceCanvasRunningPresentation,
+  workspaceCanvasSucceededPresentation,
+} from '../artifact-phase'
 
 interface TranslateValues {
   readonly [key: string]: string | number
@@ -155,11 +163,20 @@ function hasStreamTarget(
   return targets.some((target) => target.streamKind === streamKind && target.targetId === targetId)
 }
 
-function statusLabel(status: string | null | undefined, translate: Translate): string {
-  if (status === 'ready' || status === 'completed' || status === 'confirmed') return translate('status.ready')
-  if (status === 'failed') return translate('status.failed')
-  if (status === 'generating' || status === 'pending') return translate('status.processing')
-  return translate('status.pending')
+function artifactPhaseLabels(translate: Translate): WorkspaceCanvasArtifactPhaseLabels {
+  return {
+    running: translate('status.processing'),
+    succeeded: translate('status.succeeded'),
+    failed: translate('status.failed'),
+  }
+}
+
+function artifactPresentationFromTaskBackedStatus(
+  status: string | null | undefined,
+  labels: WorkspaceCanvasArtifactPhaseLabels,
+) {
+  const phase = workspaceCanvasArtifactPhaseFromTaskBackedStatus(status)
+  return phase ? workspaceCanvasArtifactPresentation(phase, labels) : null
 }
 
 function primaryPanelImageUrl(panel: ProjectPanel | null): string | null {
@@ -479,6 +496,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editScreenplay)
   const screenplayRunning = activeAssistantOperationId === 'generate_edit_screenplay'
     || (editScreenplay ? hasStreamTarget(streamTargets, 'editScreenplay', editScreenplay.id) : false)
+  const phaseLabels = artifactPhaseLabels(translate)
 
   const analysisNodeId = workspaceNodeId.analysis(episodeId)
   nodes.push(createNode({
@@ -497,13 +515,22 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       eyebrow: translate('nodes.analysis.eyebrow'),
       body: storyText?.trim() || translate('empty.screenplay'),
       meta: episodeName ?? translate('nodes.analysis.meta'),
-      statusLabel: storyText?.trim() ? translate('status.ready') : translate('status.empty'),
+      ...(storyText?.trim()
+        ? workspaceCanvasSucceededPresentation(phaseLabels)
+        : {
+            statusLabel: '',
+            isRunning: false,
+          }),
       onAction,
     },
   }))
 
   let screenplayNodeId: string | null = null
   if (editScreenplay || editScriptPending || screenplayRunning) {
+    const screenplayPresentation = screenplayRunning || !editScreenplay
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : artifactPresentationFromTaskBackedStatus(editScreenplay.status, phaseLabels)
+        ?? workspaceCanvasFailedPresentation(phaseLabels)
     screenplayNodeId = editScreenplay
       ? workspaceNodeId.editScreenplay(editScreenplay.id)
       : workspaceNodeId.editScreenplay(`pending:${episodeId}`)
@@ -522,9 +549,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         title: translate('nodes.editScreenplay.title'),
         eyebrow: translate('nodes.editScreenplay.eyebrow'),
         body: editScreenplay?.screenplayText ?? translate('nodes.editScreenplay.pendingBody'),
-        meta: editScreenplay ? statusLabel(editScreenplay.status, translate) : translate('status.processing'),
-        statusLabel: editScreenplay ? statusLabel(editScreenplay.status, translate) : translate('status.processing'),
-        isRunning: screenplayRunning || Boolean(editScreenplay && editScreenplay.status !== 'ready'),
+        meta: screenplayPresentation.statusLabel,
+        ...screenplayPresentation,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditScreenplay(editScreenplay?.id ?? null)),
         editScreenplayDetails: editScreenplay
           ? {
@@ -556,8 +582,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         title: translate('nodes.editStyleBible.title'),
         eyebrow: translate('nodes.editStyleBible.eyebrow'),
         body: styleBibleDetails.styleSummary ?? translate('nodes.editStyleBible.body'),
-        meta: translate('status.ready'),
-        statusLabel: translate('status.ready'),
+        meta: translate('status.succeeded'),
+        ...workspaceCanvasSucceededPresentation(phaseLabels),
         previewImageUrl: stylePreviewImageUrl,
         loadingStyleImageUrl: stylePreviewImageUrl,
         styleBibleDetails,
@@ -574,6 +600,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
       || (editScript ? hasStreamTarget(streamTargets, 'editScript', editScript.id) : false)
       || editScriptPending
+    const editScriptPresentation = editScriptRunning || !editScript
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : artifactPresentationFromTaskBackedStatus(editScript.status, phaseLabels)
+        ?? workspaceCanvasFailedPresentation(phaseLabels)
     const editScriptDetails = editScript
       ? {
           screenplayText: editScript.screenplayText,
@@ -620,8 +650,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
               completed: countCompletedEditAssetRequirements(editScript.requirements),
             })
           : translate('nodes.editScript.pendingMeta'),
-        statusLabel: editScript ? statusLabel(editScript.status, translate) : translate('status.processing'),
-        isRunning: editScriptRunning || Boolean(editScript && editScript.status !== 'ready'),
+        ...editScriptPresentation,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         actionLabel: editScript ? undefined : translate('actions.generateEditScript'),
         action: editScreenplay && !editScript ? { type: 'generate_edit_script', screenplayId: editScreenplay.id } : undefined,
@@ -640,6 +669,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const locationRequirements = countEditAssetRequirements(editScript.requirements, 'location')
     const assetsReady = editScript.requirements.length > 0
       && editScript.requirements.every((requirement) => requirement.status === 'completed')
+    const assetsRunning = editScript.requirements.some((requirement) => requirement.status === 'generating')
+    const assetsFailed = editScript.requirements.some((requirement) => requirement.status === 'failed')
+    const assetGroupPresentation = assetsRunning
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : assetsFailed
+        ? workspaceCanvasFailedPresentation(phaseLabels)
+        : assetsReady
+          ? workspaceCanvasSucceededPresentation(phaseLabels)
+          : null
     nodes.push(createNode({
       id: assetGroupNodeId,
       position: layoutPosition(savedLayouts, assetGroupNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 + 420 + ASSET_GROUP_Y_OFFSET }),
@@ -659,7 +697,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           characters: characterRequirements,
           locations: locationRequirements,
         }),
-        statusLabel: assetsReady ? translate('status.ready') : translate('status.pending'),
+        ...(assetGroupPresentation ?? { statusLabel: '', isRunning: false }),
         actionLabel: assetsReady ? undefined : translate('actions.generateEditAssets'),
         action: { type: 'generate_edit_assets', editScriptId: editScript.id },
         editAssetGroupDetails: {
@@ -671,7 +709,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             eyebrow: requirement.kind,
             description: requirement.description,
             shotNumbers: requirement.shotNumbers,
-            statusLabel: statusLabel(requirement.status, translate),
+            statusLabel: artifactPresentationFromTaskBackedStatus(requirement.status, phaseLabels)?.statusLabel ?? '',
             isRunning: requirement.status === 'generating',
             previewImageUrl: assetPreviewUrl(requirement),
             runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(requirement.taskTargetType ?? null, requirement.taskTargetId ?? null),
@@ -693,7 +731,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const matchingExecutionPlan = editShotExecutionPlan?.editScriptId === editScript.id ? editShotExecutionPlan : null
     const executionRunning = activeAssistantOperationId === 'generate_edit_shot_execution_plan'
       || hasStreamTarget(streamTargets, 'editShotExecutionPlan', editScript.id)
-      || Boolean(matchingExecutionPlan && matchingExecutionPlan.status !== 'ready')
+    const executionPresentation = executionRunning
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : matchingExecutionPlan
+        ? artifactPresentationFromTaskBackedStatus(matchingExecutionPlan.status, phaseLabels)
+          ?? workspaceCanvasFailedPresentation(phaseLabels)
+        : null
     executionNodeId = workspaceNodeId.editShotExecutionPlan(editScript.id)
     nodes.push(createNode({
       id: executionNodeId,
@@ -714,9 +757,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : translate('nodes.editShotExecutionPlan.pendingBody'),
         meta: matchingExecutionPlan
           ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
-          : translate('status.pending'),
-        statusLabel: matchingExecutionPlan ? statusLabel(matchingExecutionPlan.status, translate) : translate('status.pending'),
-        isRunning: executionRunning,
+          : '',
+        ...(executionPresentation ?? { statusLabel: '', isRunning: false }),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(editScript.id)),
         actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
         action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: editScript.id },
@@ -731,6 +773,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   if (editScript && executionNodeId) {
     storyboards.forEach((storyboard, index) => {
       const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
+      const storyboardPresentation = storyboard.storyboardTaskRunning
+        ? workspaceCanvasRunningPresentation(phaseLabels)
+        : storyboard.lastError
+          ? workspaceCanvasFailedPresentation(phaseLabels)
+          : workspaceCanvasSucceededPresentation(phaseLabels)
       storyboardGenerationNodeIds.set(storyboard.id, nodeId)
       nodes.push(createNode({
         id: nodeId,
@@ -748,8 +795,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
           body: storyboard.lastError ?? translate('nodes.storyboardPanelGeneration.body'),
           meta: translate('nodes.storyboardPanelGeneration.meta', { panels: storyboard.panels?.length ?? storyboard.panelCount }),
-          statusLabel: storyboard.storyboardTaskRunning ? translate('status.processing') : translate('status.ready'),
-          isRunning: storyboard.storyboardTaskRunning,
+          ...storyboardPresentation,
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration(storyboard.id)),
           onAction,
         },
@@ -774,8 +820,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           title: translate('nodes.storyboardPanelGeneration.title'),
           eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
           body: translate('nodes.storyboardPanelGeneration.body'),
-          meta: translate('status.pending'),
-          statusLabel: translate('status.pending'),
+          meta: '',
+          statusLabel: '',
+          isRunning: false,
           actionLabel: translate('actions.generateStoryboard'),
           action: { type: 'generate_edit_storyboard', editScriptId: editScript.id },
           onAction,
@@ -795,6 +842,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const row = Math.floor(index / SHOT_GRID_COLUMNS)
     const previewImageUrl = primaryPanelImageUrl(panel)
     const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
+    const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
+    const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
+    const shotPresentation = shotRunning
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : shotFailed
+        ? workspaceCanvasFailedPresentation(phaseLabels)
+        : workspaceCanvasSucceededPresentation(phaseLabels)
     nodes.push(createNode({
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
@@ -816,8 +870,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         eyebrow: translate('nodes.shot.eyebrow'),
         body: panel.description ?? translate('empty.panel'),
         meta: panel.location ?? translate('empty.location'),
-        statusLabel: panel.imageTaskRunning || panel.videoTaskRunning ? translate('status.processing') : translate('status.ready'),
-        isRunning: panel.imageTaskRunning || panel.videoTaskRunning,
+        ...shotPresentation,
         previewImageUrl,
         loadingStyleImageUrl: stylePreviewImageUrl,
         runtimeTargets: runtimeTargets(
@@ -855,6 +908,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       })
       const gridMode = inferGridMode(segment.shotNumbers.length)
       const canGenerateGroup = Boolean(gridMode && details.sourceImages.every((image) => Boolean(image.imageUrl)))
+      const videoGroupPresentation = videoGroup
+        ? artifactPresentationFromTaskBackedStatus(videoGroup.status, phaseLabels)
+          ?? workspaceCanvasFailedPresentation(phaseLabels)
+        : null
       nodes.push(createNode({
         id: nodeId,
         position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 5, y: 120 + index * (WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + 80) }),
@@ -875,8 +932,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             shots: segment.shotNumbers.length,
             duration: details.durationSec,
           }),
-          statusLabel: videoGroup ? statusLabel(videoGroup.status, translate) : translate('status.pending'),
-          isRunning: Boolean(videoGroup && (videoGroup.status === 'queued' || videoGroup.status === 'generating')),
+          ...(videoGroupPresentation ?? { statusLabel: '', isRunning: false }),
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
           actionLabel: canGenerateGroup ? translate('actions.generateVideo') : undefined,
           action: canGenerateGroup && gridMode
@@ -915,6 +971,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
 
   const bgmNodeId = workspaceNodeId.bgmScore(episodeId)
   const bgmDetails = bgmScoreDetails(finalVideo)
+  const bgmPresentation = bgmDetails
+    ? artifactPresentationFromTaskBackedStatus(bgmDetails.status, phaseLabels)
+      ?? workspaceCanvasFailedPresentation(phaseLabels)
+    : null
   nodes.push(createNode({
     id: bgmNodeId,
     position: layoutPosition(savedLayouts, bgmNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 }),
@@ -931,7 +991,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       eyebrow: translate('nodes.bgmScore.eyebrow'),
       body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
       meta: bgmDetails?.musicModel ?? '',
-      statusLabel: bgmDetails ? statusLabel(bgmDetails.status, translate) : translate('status.pending'),
+      ...(bgmPresentation ?? { statusLabel: '', isRunning: false }),
       actionLabel: translate('actions.generateBgmScore'),
       action: { type: 'generate_bgm_score' },
       runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
@@ -941,6 +1001,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }))
 
   const finalNodeId = workspaceNodeId.finalTimeline(episodeId)
+  const finalPresentation = finalVideo?.outputUrl
+    ? workspaceCanvasSucceededPresentation(phaseLabels)
+    : finalVideo?.renderStatus
+      ? artifactPresentationFromTaskBackedStatus(finalVideo.renderStatus, phaseLabels)
+        ?? workspaceCanvasFailedPresentation(phaseLabels)
+      : null
   nodes.push(createNode({
     id: finalNodeId,
     position: layoutPosition(savedLayouts, finalNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height + 120 }),
@@ -957,7 +1023,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       eyebrow: translate('nodes.finalTimeline.eyebrow'),
       body: finalVideo?.outputUrl ?? translate('nodes.finalTimeline.body'),
       meta: finalVideo?.renderStatus ?? '',
-      statusLabel: finalVideo?.outputUrl ? translate('status.finalReady') : statusLabel(finalVideo?.renderStatus, translate),
+      ...(finalPresentation ?? { statusLabel: '', isRunning: false }),
       actionLabel: translate('actions.renderFinalVideo'),
       action: { type: 'render_final_video' },
       runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
@@ -1004,7 +1070,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         eyebrow: translate('nodeFields.location'),
         body: location.summary ?? '',
         meta: '',
-        statusLabel: translate('status.ready'),
+        ...workspaceCanvasSucceededPresentation(phaseLabels),
         previewImageUrl: preview,
         onAction,
       },
@@ -1015,25 +1081,67 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
 }
 
 export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvasProjectionInput): WorkspaceCanvasProjection {
-  return useMemo(() => buildWorkspaceNodeCanvasProjection(input), [
-    input.projectId,
-    input.episodeId,
-    input.episodeName,
-    input.storyText,
-    input.locations,
-    input.storyboards,
-    input.editScreenplay,
-    input.editScript,
-    input.editShotExecutionPlan,
-    input.activeAssistantOperationId,
-    input.editScriptPending,
-    input.streamTargets,
-    input.finalVideo,
-    input.videoGroups,
-    input.defaultVideoModel,
-    input.defaultSequenceVideoModel,
-    input.savedLayouts,
-    input.translate,
-    input.onAction,
+  const {
+    projectId,
+    episodeId,
+    episodeName,
+    storyText,
+    locations,
+    storyboards,
+    editScreenplay,
+    editScript,
+    editShotExecutionPlan,
+    activeAssistantOperationId,
+    editScriptPending,
+    streamTargets,
+    finalVideo,
+    videoGroups,
+    defaultVideoModel,
+    defaultSequenceVideoModel,
+    savedLayouts,
+    translate,
+    onAction,
+  } = input
+
+  return useMemo(() => buildWorkspaceNodeCanvasProjection({
+    projectId,
+    episodeId,
+    episodeName,
+    storyText,
+    locations,
+    storyboards,
+    editScreenplay,
+    editScript,
+    editShotExecutionPlan,
+    activeAssistantOperationId,
+    editScriptPending,
+    streamTargets,
+    finalVideo,
+    videoGroups,
+    defaultVideoModel,
+    defaultSequenceVideoModel,
+    savedLayouts,
+    translate,
+    onAction,
+  }), [
+    projectId,
+    episodeId,
+    episodeName,
+    storyText,
+    locations,
+    storyboards,
+    editScreenplay,
+    editScript,
+    editShotExecutionPlan,
+    activeAssistantOperationId,
+    editScriptPending,
+    streamTargets,
+    finalVideo,
+    videoGroups,
+    defaultVideoModel,
+    defaultSequenceVideoModel,
+    savedLayouts,
+    translate,
+    onAction,
   ])
 }

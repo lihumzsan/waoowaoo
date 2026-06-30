@@ -458,6 +458,7 @@ function buildEditScreenplayRuntimeEntries(
       data: {
         body: screenplayText,
         meta: translate('nodes.editScreenplay.pendingMeta'),
+        artifactPhase: 'running',
         statusLabel: translate('status.processing'),
         isRunning: true,
         streamPresentation: textStreamPresentation(),
@@ -503,6 +504,7 @@ function buildEditScriptRuntimeEntry(
             assets: 0,
             completed: 0,
           }),
+      artifactPhase: error ? 'failed' : 'running',
       statusLabel: error ? translate('status.failed') : translate('status.processing'),
       isRunning: !error,
       streamPresentation: streamPresentation(rawItems),
@@ -551,6 +553,7 @@ function buildShotExecutionRuntimeEntry(
     data: {
       body: translate('nodes.editShotExecutionPlan.pendingBody'),
       meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
+      artifactPhase: 'running',
       statusLabel: translate('status.processing'),
       isRunning: true,
       streamPresentation: streamPresentation(rawItems),
@@ -588,7 +591,8 @@ function buildBgmRuntimeEntry(
     data: {
       body: error ?? translate('nodes.bgmScore.body', { videos: 0 }),
       meta: error ? error : translate('nodes.bgmScore.ready', { count: promptSections.length }),
-      statusLabel: error ? translate('status.failed') : translate('status.generatingBgm'),
+      artifactPhase: error ? 'failed' : 'running',
+      statusLabel: error ? translate('status.failed') : translate('status.processing'),
       isRunning: !error,
       streamPresentation: streamPresentation(rawItems),
       bgmScoreDetails: {

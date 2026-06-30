@@ -345,6 +345,7 @@ function EditablePromptSection({
 }
 
 function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
+  if (data.artifactPhase) return data.artifactPhase === 'running'
   return data.isRunning === true
 }
 
@@ -1349,6 +1350,7 @@ function EditAssetGroupThumbnailCard({
   const previewSourceImageUrl = asset.previewImageUrl ?? null
   const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
   const loadingSize = 64
+  const assetStatusSuffix = hasText(asset.statusLabel) ? ` · ${asset.statusLabel}` : ''
 
   return (
     <div
@@ -1406,7 +1408,7 @@ function EditAssetGroupThumbnailCard({
       </AdaptiveImageAspectFrame>
       <div className="px-2.5 py-1.5">
         <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
-        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow} · {asset.statusLabel}</p>
+        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow}{assetStatusSuffix}</p>
       </div>
     </div>
   )
@@ -1482,7 +1484,9 @@ function EditAssetGroupContent({
           <div className="flex items-center gap-2">
             <FieldGlyph name={current.kind === 'character' ? 'people' : 'pin'} className="h-4 w-4 text-[var(--glass-text-secondary)]" />
             <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{current.name}</span>
-            <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{current.statusLabel}</span>
+            {hasText(current.statusLabel) ? (
+              <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{current.statusLabel}</span>
+            ) : null}
           </div>
           {shotDetailIconGrid([
             { label: current.eyebrow, value: current.kind === 'character' ? labels('characters') : labels('locations') },
@@ -2124,6 +2128,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const showLargeTitle = data.kind !== 'shot'
   const isFocusHighlighted = data.focusHighlighted === true
   const isVisuallyEmphasized = isRunning || isFocusHighlighted
+  const showStatusBadge = typeof data.statusLabel === 'string' && data.statusLabel.trim().length > 0
   const shouldShowFooter = (
     showDetailsToggle ||
     Boolean(action && data.actionLabel && !showHeaderAction) ||
@@ -2195,10 +2200,12 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                   {data.actionLabel}
                 </button>
               ) : null}
-              <span className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${isRunning ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-[var(--glass-text-secondary)]'}`}>
-                {isRunning ? <LoadingSpinner /> : null}
-                {data.statusLabel}
-              </span>
+              {showStatusBadge ? (
+                <span className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${isRunning ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-[var(--glass-text-secondary)]'}`}>
+                  {isRunning ? <LoadingSpinner /> : null}
+                  {data.statusLabel}
+                </span>
+              ) : null}
             </div>
           </header>
 

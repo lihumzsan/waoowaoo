@@ -137,6 +137,7 @@
         "empty": "待输入",
         "pending": "待生成",
         "ready": "已就绪",
+        "succeeded": "成功",
         "confirmed": "已确认",
         "awaitingScreenplayReview": "等待剧本确认",
         "awaitingStyleConfirmation": "等待风格确认",

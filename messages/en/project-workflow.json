@@ -137,6 +137,7 @@
         "empty": "Empty",
         "pending": "Pending",
         "ready": "Ready",
+        "succeeded": "Succeeded",
         "confirmed": "Confirmed",
         "awaitingScreenplayReview": "Awaiting Screenplay Review",
         "awaitingStyleConfirmation": "Awaiting Style Confirmation",

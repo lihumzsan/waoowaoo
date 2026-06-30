@@ -11,6 +11,7 @@ export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   WorkspaceCanvasNodeData,
   | 'body'
   | 'meta'
+  | 'artifactPhase'
   | 'statusLabel'
   | 'isRunning'
   | 'streamPresentation'

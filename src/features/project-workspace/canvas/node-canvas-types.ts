@@ -5,6 +5,7 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import type { WorkspaceCanvasArtifactPhase } from './artifact-phase'
 
 export type WorkspaceCanvasNodeKind =
   | 'analysis'
@@ -369,6 +370,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly eyebrow: string
   readonly body: string
   readonly meta: string
+  readonly artifactPhase?: WorkspaceCanvasArtifactPhase
   readonly statusLabel: string
   readonly isRunning?: boolean
   readonly focusHighlighted?: boolean

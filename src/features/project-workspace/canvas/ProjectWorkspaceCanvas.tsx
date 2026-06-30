@@ -317,12 +317,8 @@ function ProjectWorkspaceCanvasContent({
   const effectiveEditScriptPending = editScriptPending
     || activeAssistantOperationId === 'generate_edit_script'
     || (editScriptGenerationActive && !editScript)
-  const nodeRunningStatusLabel = useCallback((node: WorkspaceCanvasFlowNode): string => (
-    node.data.kind === 'finalTimeline'
-      ? t('status.aiEditing')
-      : node.data.kind === 'bgmScore'
-        ? t('status.generatingBgm')
-        : t('status.processing')
+  const nodeRunningStatusLabel = useCallback((): string => (
+    t('status.processing')
   ), [t])
   const clearOptimisticRunningNode = useCallback((nodeId: string) => {
     const timer = optimisticRunningClearTimersRef.current.get(nodeId)
@@ -352,7 +348,7 @@ function ProjectWorkspaceCanvasContent({
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
         isOptimisticallyRunning: false,
         labels: {
-          running: nodeRunningStatusLabel(projectedNode),
+          running: nodeRunningStatusLabel(),
           failed: t('status.failed'),
         },
       })
@@ -381,8 +377,9 @@ function ProjectWorkspaceCanvasContent({
           ...node,
           data: {
             ...node.data,
+            artifactPhase: 'running',
             isRunning: true,
-            statusLabel: nodeRunningStatusLabel(node),
+            statusLabel: nodeRunningStatusLabel(),
           },
         }
       : node))
@@ -540,7 +537,7 @@ function ProjectWorkspaceCanvasContent({
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
         isOptimisticallyRunning,
         labels: {
-          running: nodeRunningStatusLabel(node),
+          running: nodeRunningStatusLabel(),
           failed: t('status.failed'),
         },
       })
