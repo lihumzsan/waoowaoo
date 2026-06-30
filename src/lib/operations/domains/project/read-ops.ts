@@ -50,7 +50,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_snapshot: defineOperation({
       id: 'get_project_snapshot',
-      summary: 'Load a project snapshot projection with progress, active runs, latest artifacts, and approvals. Use detail=full to inspect panel-level state including descriptions, prompts, and media URLs.',
+      summary: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or required next tool input. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or general status. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
@@ -75,7 +75,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Load concrete project or episode details only when project_state_snapshot is insufficient for the requested content, such as full screenplay text, historical operation results, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, next action, projectId, or episodeId.',
+      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or required next tool input, such as full screenplay text, historical operation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, or approval state.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({

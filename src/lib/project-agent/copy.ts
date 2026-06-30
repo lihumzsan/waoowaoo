@@ -8,8 +8,12 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
-    zh: '仅在本轮注入的 project_state_snapshot 不足以回答用户请求或补齐下一步工具入参时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、下一步、projectId 或 episodeId 调用。',
-    en: 'Load concrete project/episode content only when the injected project_state_snapshot is insufficient for the user request or the next tool input, such as full screenplay text, historical generation results, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, next step, projectId, or episodeId.',
+    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐下一步工具入参时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId 或审批状态调用。',
+    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or required next tool input, such as full screenplay text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, or approval state.',
+  },
+  get_project_snapshot: {
+    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐下一步工具入参时，读取详细项目投影。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或普通状态而调用。只有明确需要面板字段、提示词、描述或媒体 URL 时才使用 detail=full。',
+    en: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or required next tool input. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or general status. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
   },
   asset_hub_list_folders: {
     zh: '列出当前用户的全局资产文件夹。',

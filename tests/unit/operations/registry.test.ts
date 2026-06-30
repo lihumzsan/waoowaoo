@@ -74,14 +74,19 @@ describe('project agent operation registry', () => {
     }
   })
 
-  it('limits project context tool description to concrete detail reads', () => {
+  it('limits project read tool descriptions to concrete detail reads', () => {
     const registry = createProjectAgentOperationRegistry()
-    const operation = registry.get_project_context
+    const contextOperation = registry.get_project_context
+    const snapshotOperation = registry.get_project_snapshot
 
-    expect(operation).toBeDefined()
-    expect(operation.summary).toContain('only when project_state_snapshot is insufficient')
-    expect(operation.summary).toContain('full screenplay text, historical operation results, active task details, or asset/storyboard/panel fields')
-    expect(operation.summary).toContain('Do not call merely to confirm the current phase, next action, projectId, or episodeId')
+    expect(contextOperation).toBeDefined()
+    expect(contextOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
+    expect(contextOperation.summary).toContain('full screenplay text, historical operation results, failure details, active task details, or asset/storyboard/panel fields')
+    expect(contextOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, or approval state')
+    expect(snapshotOperation).toBeDefined()
+    expect(snapshotOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
+    expect(snapshotOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or general status')
+    expect(snapshotOperation.summary).toContain('Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed')
   })
 
   it('registers project music generation as a billable tool/api operation without pre-confirmation', () => {
