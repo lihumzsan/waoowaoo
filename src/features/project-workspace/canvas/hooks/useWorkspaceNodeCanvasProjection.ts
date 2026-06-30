@@ -973,86 +973,94 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     })
   }
 
-  const bgmNodeId = workspaceNodeId.bgmScore(episodeId)
-  const bgmDetails = bgmScoreDetails(finalVideo)
-  const bgmPresentation = bgmDetails
-    ? artifactPresentationFromTaskBackedStatus(bgmDetails.status, phaseLabels)
-      ?? workspaceCanvasFailedPresentation(phaseLabels)
-    : null
-  nodes.push(createNode({
-    id: bgmNodeId,
-    position: layoutPosition(savedLayouts, bgmNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 }),
-    width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
-    height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
-    data: {
-      projectId,
-      episodeName,
-      kind: 'bgmScore',
-      layoutNodeType: 'bgmScore',
-      targetType: 'episode',
-      targetId: episodeId,
-      title: translate('nodes.bgmScore.title'),
-      eyebrow: translate('nodes.bgmScore.eyebrow'),
-      body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
-      meta: bgmDetails?.musicModel ?? '',
-      ...(bgmPresentation ?? { statusLabel: '', isRunning: false }),
-      actionLabel: translate('actions.generateBgmScore'),
-      action: { type: 'generate_bgm_score' },
-      runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
-      bgmScoreDetails: bgmDetails,
-      onAction,
-    },
-  }))
-
-  const finalNodeId = workspaceNodeId.finalTimeline(episodeId)
-  const finalPresentation = finalVideo?.outputUrl
-    ? workspaceCanvasSucceededPresentation(phaseLabels)
-    : finalVideo?.renderStatus
-      ? artifactPresentationFromTaskBackedStatus(finalVideo.renderStatus, phaseLabels)
+  let bgmNodeId: string | null = null
+  if (editFirstCanvasVisibility.bgmScore) {
+    bgmNodeId = workspaceNodeId.bgmScore(episodeId)
+    const bgmDetails = bgmScoreDetails(finalVideo)
+    const bgmPresentation = bgmDetails
+      ? artifactPresentationFromTaskBackedStatus(bgmDetails.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
       : null
-  nodes.push(createNode({
-    id: finalNodeId,
-    position: layoutPosition(savedLayouts, finalNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height + 120 }),
-    width: WORKSPACE_CANVAS_FINAL_NODE_SIZE.width,
-    height: WORKSPACE_CANVAS_FINAL_NODE_SIZE.height,
-    data: {
-      projectId,
-      episodeName,
-      kind: 'finalTimeline',
-      layoutNodeType: 'finalTimeline',
-      targetType: 'episode',
-      targetId: episodeId,
-      title: translate('nodes.finalTimeline.title'),
-      eyebrow: translate('nodes.finalTimeline.eyebrow'),
-      body: finalVideo?.outputUrl ?? translate('nodes.finalTimeline.body'),
-      meta: finalVideo?.renderStatus ?? '',
-      ...(finalPresentation ?? { statusLabel: '', isRunning: false }),
-      actionLabel: translate('actions.renderFinalVideo'),
-      action: { type: 'render_final_video' },
-      runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
-      finalDetails: {
-        totalShots: editScript?.shotCount ?? panelList.length,
-        totalImages: panelList.filter((panel) => Boolean(primaryPanelImageUrl(panel))).length,
-        totalVideos: panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).length + videoGroups.filter((group) => Boolean(group.videoMedia?.url ?? group.videoUrl)).length,
-        totalDuration: editScript?.durationSec ?? null,
-        orderedVideoLabels: [
-          ...videoGroups.map((group) => group.shotNumbers).map((shotNumbers) => readShotNumbers(shotNumbers).join(', ')),
-          ...panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).map((panel) => String(resolvePanelShotNumber(panel))),
-        ],
-        outputUrl: finalVideo?.outputUrl,
-        renderStatus: finalVideo?.renderStatus,
+    nodes.push(createNode({
+      id: bgmNodeId,
+      position: layoutPosition(savedLayouts, bgmNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 }),
+      width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'bgmScore',
+        layoutNodeType: 'bgmScore',
+        targetType: 'episode',
+        targetId: episodeId,
+        title: translate('nodes.bgmScore.title'),
+        eyebrow: translate('nodes.bgmScore.eyebrow'),
+        body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
+        meta: bgmDetails?.musicModel ?? '',
+        ...(bgmPresentation ?? { statusLabel: '', isRunning: false }),
+        actionLabel: translate('actions.generateBgmScore'),
+        action: { type: 'generate_bgm_score' },
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
+        bgmScoreDetails: bgmDetails,
+        onAction,
       },
-      onAction,
-    },
-  }))
+    }))
+  }
 
-  if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
+  let finalNodeId: string | null = null
+  if (editFirstCanvasVisibility.finalTimeline) {
+    finalNodeId = workspaceNodeId.finalTimeline(episodeId)
+    const finalPresentation = finalVideo?.outputUrl
+      ? workspaceCanvasSucceededPresentation(phaseLabels)
+      : finalVideo?.renderStatus
+        ? artifactPresentationFromTaskBackedStatus(finalVideo.renderStatus, phaseLabels)
+          ?? workspaceCanvasFailedPresentation(phaseLabels)
+        : null
+    nodes.push(createNode({
+      id: finalNodeId,
+      position: layoutPosition(savedLayouts, finalNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height + 120 }),
+      width: WORKSPACE_CANVAS_FINAL_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_FINAL_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'finalTimeline',
+        layoutNodeType: 'finalTimeline',
+        targetType: 'episode',
+        targetId: episodeId,
+        title: translate('nodes.finalTimeline.title'),
+        eyebrow: translate('nodes.finalTimeline.eyebrow'),
+        body: finalVideo?.outputUrl ?? translate('nodes.finalTimeline.body'),
+        meta: finalVideo?.renderStatus ?? '',
+        ...(finalPresentation ?? { statusLabel: '', isRunning: false }),
+        actionLabel: translate('actions.renderFinalVideo'),
+        action: { type: 'render_final_video' },
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
+        finalDetails: {
+          totalShots: editScript?.shotCount ?? panelList.length,
+          totalImages: panelList.filter((panel) => Boolean(primaryPanelImageUrl(panel))).length,
+          totalVideos: panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).length + videoGroups.filter((group) => Boolean(group.videoMedia?.url ?? group.videoUrl)).length,
+          totalDuration: editScript?.durationSec ?? null,
+          orderedVideoLabels: [
+            ...videoGroups.map((group) => group.shotNumbers).map((shotNumbers) => readShotNumbers(shotNumbers).join(', ')),
+            ...panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).map((panel) => String(resolvePanelShotNumber(panel))),
+          ],
+          outputUrl: finalVideo?.outputUrl,
+          renderStatus: finalVideo?.renderStatus,
+        },
+        onAction,
+      },
+    }))
+  }
+
+  if (finalNodeId && editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
     editScript.generationSegments.forEach((_segment, index) => {
       edges.push(createEdge(`edge:video-plan-final:${index}`, workspaceNodeId.videoPlan(editScript.id, index + 1), finalNodeId))
     })
   }
-  edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
+  if (bgmNodeId && finalNodeId) {
+    edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
+  }
 
   return { nodes, edges }
 }

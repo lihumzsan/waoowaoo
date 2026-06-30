@@ -11,6 +11,8 @@ export interface EditFirstCanvasVisibility {
   readonly storyboardPanelGeneration: boolean
   readonly storyboardPanels: boolean
   readonly videoPlan: boolean
+  readonly bgmScore: boolean
+  readonly finalTimeline: boolean
 }
 
 export const EDIT_FIRST_CANVAS_PENDING_WORKFLOW: EditFirstWorkflowState = {
@@ -44,8 +46,11 @@ const EDIT_FIRST_STAGE_RANK = {
   storyboard_images_generating: 14,
   ready_to_generate_videos: 15,
   videos_generating: 16,
-  ready_to_render_final: 17,
-  completed: 18,
+  ready_to_generate_bgm_score: 17,
+  bgm_score_generating: 18,
+  ready_to_render_final: 19,
+  final_rendering: 20,
+  completed: 21,
 } as const satisfies Record<OrderedEditFirstWorkflowStage, number>
 
 function stageRank(stage: EditFirstWorkflowStage): number {
@@ -85,6 +90,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'generate_episode_bgm_score',
       'render_final_video',
     ])
 
@@ -94,6 +100,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'generate_episode_bgm_score',
       'render_final_video',
     ])
 
@@ -102,6 +109,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'generate_episode_bgm_score',
       'render_final_video',
     ])
 
@@ -109,12 +117,25 @@ export function resolveEditFirstCanvasVisibility(
     || canRunAnyOperation(operations, [
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'generate_episode_bgm_score',
       'render_final_video',
     ])
 
   const videoPlan = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
     || canRunAnyOperation(operations, [
       'generate_episode_videos',
+      'generate_episode_bgm_score',
+      'render_final_video',
+    ])
+
+  const bgmScore = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
+    || canRunAnyOperation(operations, [
+      'generate_episode_bgm_score',
+      'render_final_video',
+    ])
+
+  const finalTimeline = stageAtLeast(workflow.stage, 'ready_to_render_final')
+    || canRunAnyOperation(operations, [
       'render_final_video',
     ])
 
@@ -125,5 +146,7 @@ export function resolveEditFirstCanvasVisibility(
     storyboardPanelGeneration,
     storyboardPanels,
     videoPlan,
+    bgmScore,
+    finalTimeline,
   }
 }

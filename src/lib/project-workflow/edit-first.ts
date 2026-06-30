@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { parseBgmScoreJson, readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
+import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   resolveLocationSpatialProfileReadiness,
@@ -32,7 +34,10 @@ export type EditFirstWorkflowStage =
   | 'storyboard_images_generating'
   | 'ready_to_generate_videos'
   | 'videos_generating'
+  | 'ready_to_generate_bgm_score'
+  | 'bgm_score_generating'
   | 'ready_to_render_final'
+  | 'final_rendering'
   | 'completed'
   | 'failed'
 
@@ -89,6 +94,16 @@ export interface EditFirstWorkflowSnapshot {
   storyboardPanelImageMissingCount: number
   storyboardPanelImageFailedCount: number
   activeStoryboardImageTaskCount: number
+  videoPlanSegmentCount: number
+  completedVideoSegmentCount: number
+  failedVideoSegmentCount: number
+  activeVideoTaskCount: number
+  bgmScoreStatus: string | null
+  bgmScoreHasMix: boolean
+  activeBgmScoreTaskCount: number
+  finalRenderStatus: string | null
+  finalRenderHasOutput: boolean
+  activeFinalRenderTaskCount: number
 }
 
 export const EDIT_FIRST_WORKFLOW_EMPTY_STATE: EditFirstWorkflowState = {
@@ -140,8 +155,60 @@ type StoryboardSpatialCandidate = {
   readonly lastError: string | null
 }
 
+type WorkflowVideoGroupCandidate = {
+  readonly shotNumbers: readonly number[]
+  readonly status: string
+  readonly videoUrl: string | null
+  readonly videoMediaId: string | null
+}
+
+const ACTIVE_WORKFLOW_TASK_STATUSES = ['queued', 'processing'] as const
+
 function hasText(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function isActiveWorkflowStatus(status: string | null | undefined): boolean {
+  return status === 'queued' || status === 'processing'
+}
+
+function hasOutputReference(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((shotNumber, index) => shotNumber === right[index])
+}
+
+function readShotNumbers(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'number' ? item : Number(item)))
+    .filter((item) => Number.isInteger(item) && item > 0)
+}
+
+function readEditScriptGenerationSegments(corePlanJson: unknown): readonly { readonly shotNumbers: readonly number[] }[] {
+  const parsed = editScriptStructureSchema.safeParse(corePlanJson)
+  if (!parsed.success) return []
+  return parsed.data.generationSegments
+}
+
+function findVideoGroupForShotNumbers(
+  groups: readonly WorkflowVideoGroupCandidate[],
+  shotNumbers: readonly number[],
+): WorkflowVideoGroupCandidate | null {
+  return groups.find((group) => sameShotNumbers(group.shotNumbers, shotNumbers)) ?? null
+}
+
+function videoGroupHasOutput(group: WorkflowVideoGroupCandidate | null): boolean {
+  return Boolean(group && (hasOutputReference(group.videoUrl) || hasOutputReference(group.videoMediaId)))
+}
+
+function readBgmScoreStatus(bgmScoreJson: unknown): string | null {
+  const bgmScore = parseBgmScoreJson(bgmScoreJson)
+  const status = bgmScore?.status
+  return typeof status === 'string' && status.trim().length > 0 ? status.trim() : null
 }
 
 interface StoryboardPlanStageSummary {
@@ -377,16 +444,102 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  return {
-    active: true,
-    stage: 'ready_to_generate_videos',
-    blocking: {
-      kind: 'needs_confirmation',
-      reason: null,
-    },
-    nextAction: workflowAction('generate_episode_videos', 'Generate videos'),
-    allowedOperationIds: ['generate_episode_videos'],
+  if (snapshot.videoPlanSegmentCount === 0) {
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'video generation segments are missing' },
+    })
   }
+
+  const videoReady = snapshot.completedVideoSegmentCount >= snapshot.videoPlanSegmentCount
+  const bgmReady = snapshot.bgmScoreHasMix
+  const bgmRunning = snapshot.activeBgmScoreTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
+  const finalRendering = snapshot.activeFinalRenderTaskCount > 0 || isActiveWorkflowStatus(snapshot.finalRenderStatus)
+
+  if (snapshot.finalRenderHasOutput && snapshot.finalRenderStatus === 'completed') {
+    return state({
+      stage: 'completed',
+      blocking: { kind: 'none', reason: null },
+    })
+  }
+
+  if (finalRendering) {
+    return state({
+      stage: 'final_rendering',
+      blocking: { kind: 'processing', reason: 'final video render is still running' },
+    })
+  }
+
+  if (snapshot.finalRenderStatus === 'failed') {
+    const nextAction = workflowAction('render_final_video', 'Render final video')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'final video render failed' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
+  if (snapshot.failedVideoSegmentCount > 0) {
+    const nextAction = workflowAction('generate_episode_videos', 'Regenerate videos')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'one or more video segments failed' },
+      nextAction,
+      allowedOperationIds: bgmReady || bgmRunning
+        ? [nextAction.operationId]
+        : [nextAction.operationId, 'generate_episode_bgm_score'],
+    })
+  }
+
+  if (snapshot.bgmScoreStatus === 'failed') {
+    const nextAction = workflowAction('generate_episode_bgm_score', 'Regenerate BGM score')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'BGM score generation failed' },
+      nextAction,
+      allowedOperationIds: videoReady
+        ? [nextAction.operationId]
+        : ['generate_episode_videos', nextAction.operationId],
+    })
+  }
+
+  if (!videoReady) {
+    const canGenerateBgm = !bgmReady && !bgmRunning
+    const videoAction = workflowAction('generate_episode_videos', 'Generate videos')
+    if (snapshot.activeVideoTaskCount > 0) {
+      return state({
+        stage: 'videos_generating',
+        blocking: { kind: 'processing', reason: 'video segments are still generating' },
+        allowedOperationIds: canGenerateBgm ? ['generate_episode_bgm_score'] : [],
+      })
+    }
+    return state({
+      stage: 'ready_to_generate_videos',
+      nextAction: videoAction,
+      allowedOperationIds: canGenerateBgm
+        ? [videoAction.operationId, 'generate_episode_bgm_score']
+        : [videoAction.operationId],
+    })
+  }
+
+  if (!bgmReady) {
+    if (bgmRunning) {
+      return state({
+        stage: 'bgm_score_generating',
+        blocking: { kind: 'processing', reason: 'BGM score is still generating' },
+      })
+    }
+    return state({
+      stage: 'ready_to_generate_bgm_score',
+      nextAction: workflowAction('generate_episode_bgm_score', 'Generate BGM score'),
+    })
+  }
+
+  return state({
+    stage: 'ready_to_render_final',
+    nextAction: workflowAction('render_final_video', 'Render final video'),
+  })
 }
 
 export function resolveEditFirstWorkflowCapabilityOperationIds(
@@ -423,11 +576,17 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
     case 'storyboard_images_generating':
       return []
     case 'ready_to_generate_videos':
-      return ['generate_episode_videos']
+      return [...workflow.allowedOperationIds]
     case 'videos_generating':
-      return []
+      return [...workflow.allowedOperationIds]
+    case 'ready_to_generate_bgm_score':
+      return ['generate_episode_bgm_score']
+    case 'bgm_score_generating':
+      return [...workflow.allowedOperationIds]
     case 'ready_to_render_final':
       return ['render_final_video']
+    case 'final_rendering':
+      return []
     case 'completed':
       return []
     case 'failed':
@@ -461,6 +620,10 @@ export async function resolveEditFirstWorkflowState(params: {
     shotExecutionPlan,
     storyboards,
     panels,
+    videoGroups,
+    finalOutput,
+    activeBgmScoreTaskCount,
+    activeFinalRenderTaskCount,
   ] = await Promise.all([
     prisma.projectEditScreenplay.findFirst({
       where: {
@@ -535,6 +698,50 @@ export async function resolveEditFirstWorkflowState(params: {
         videoPrompt: true,
       },
     }),
+    prisma.projectVideoGroup.findMany({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+      },
+      select: {
+        id: true,
+        shotNumbers: true,
+        status: true,
+        videoUrl: true,
+        videoMediaId: true,
+      },
+    }),
+    prisma.projectEpisodeFinalOutput.findUnique({
+      where: {
+        episodeId: params.episodeId,
+      },
+      select: {
+        bgmScoreJson: true,
+        renderStatus: true,
+        outputUrl: true,
+        outputMediaId: true,
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEpisode',
+        targetId: params.episodeId,
+        type: TASK_TYPE.BGM_SCORE_GENERATE,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEpisode',
+        targetId: params.episodeId,
+        type: TASK_TYPE.FINAL_VIDEO_RENDER,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
   ])
 
   const locationTargetIds = Array.from(new Set((editScript?.requirements ?? [])
@@ -576,6 +783,18 @@ export async function resolveEditFirstWorkflowState(params: {
     editScriptId: editScript?.id ?? null,
     storyboards,
   })
+  const generationSegments = editScript
+    ? readEditScriptGenerationSegments(editScript.corePlanJson)
+    : []
+  const videoGroupCandidates: WorkflowVideoGroupCandidate[] = videoGroups.map((group) => ({
+    shotNumbers: readShotNumbers(group.shotNumbers),
+    status: group.status,
+    videoUrl: group.videoUrl,
+    videoMediaId: group.videoMediaId,
+  }))
+  const plannedVideoGroups = generationSegments.map((segment) =>
+    findVideoGroupForShotNumbers(videoGroupCandidates, segment.shotNumbers))
+  const bgmScoreStatus = readBgmScoreStatus(finalOutput?.bgmScoreJson ?? null)
   const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
   const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
   const storyboardImageReadiness = resolveStoryboardImageReadiness(editScriptPanels)
@@ -644,5 +863,18 @@ export async function resolveEditFirstWorkflowState(params: {
     storyboardPanelImageMissingCount: storyboardImageReadiness.missingCount,
     storyboardPanelImageFailedCount,
     activeStoryboardImageTaskCount,
+    videoPlanSegmentCount: generationSegments.length,
+    completedVideoSegmentCount: plannedVideoGroups.filter(videoGroupHasOutput).length,
+    failedVideoSegmentCount: plannedVideoGroups.filter((group) => group?.status === 'failed').length,
+    activeVideoTaskCount: plannedVideoGroups.filter((group) => isActiveWorkflowStatus(group?.status)).length,
+    bgmScoreStatus,
+    bgmScoreHasMix: Boolean(readCompletedBgmScoreMix(finalOutput?.bgmScoreJson ?? null)),
+    activeBgmScoreTaskCount,
+    finalRenderStatus: finalOutput?.renderStatus ?? null,
+    finalRenderHasOutput: Boolean(
+      hasOutputReference(finalOutput?.outputUrl ?? null)
+      || hasOutputReference(finalOutput?.outputMediaId ?? null),
+    ),
+    activeFinalRenderTaskCount,
   })
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { ProjectEditAssetRequirement, ProjectEditScript } from '@/types/project'
+import type { ProjectEditAssetRequirement, ProjectEditScript, ProjectFinalVideo, ProjectVideoGroup } from '@/types/project'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
@@ -45,6 +45,7 @@ function requirement(
 function editScript(input: {
   readonly status: string
   readonly requirements?: readonly ProjectEditAssetRequirement[]
+  readonly generationSegments?: ProjectEditScript['generationSegments']
 }): ProjectEditScript {
   return {
     id: 'edit-script-1',
@@ -55,12 +56,61 @@ function editScript(input: {
     styleBible: null,
     screenplayText: 'screenplay text',
     durationSec: 30,
-    shotCount: 0,
+    shotCount: input.generationSegments?.flatMap((segment) => segment.shotNumbers).length ?? 0,
     status: input.status,
     assetReviewStatus: 'pending',
     shots: [],
-    generationSegments: [],
+    generationSegments: [...(input.generationSegments ?? [])],
     requirements: [...(input.requirements ?? [])],
+  }
+}
+
+function videoGroup(overrides: Partial<ProjectVideoGroup> = {}): ProjectVideoGroup {
+  return {
+    id: 'video-group-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    gridMode: '2x2',
+    shotNumbers: [1],
+    durationSec: 3,
+    prompt: 'video prompt',
+    status: 'completed',
+    taskId: null,
+    errorCode: null,
+    errorMessage: null,
+    referenceImageUrl: null,
+    referenceImageMedia: null,
+    videoUrl: '/videos/group-1.mp4',
+    videoMedia: null,
+    ...overrides,
+  }
+}
+
+function finalVideo(overrides: Partial<ProjectFinalVideo> = {}): ProjectFinalVideo {
+  return {
+    id: 'final-1',
+    episodeId: 'episode-1',
+    renderStatus: null,
+    renderTaskId: null,
+    outputUrl: null,
+    updatedAt: null,
+    bgmScore: {
+      schemaVersion: 2,
+      status: 'completed',
+      taskId: 'task-bgm-1',
+      editScriptId: 'edit-script-1',
+      timelineSignature: 'timeline-signature',
+      durationSeconds: 30,
+      musicModel: 'music-model',
+      mix: {
+        mediaId: 'media-bgm-1',
+        url: '/music/bgm.mp3',
+        storageKey: 'music/bgm.mp3',
+        mimeType: 'audio/mpeg',
+        durationMs: 30_000,
+      },
+    },
+    ...overrides,
   }
 }
 
@@ -81,6 +131,8 @@ describe('project canvas edit-first visibility', () => {
     expect(projection.nodes.some((node) => node.data.kind === 'editScript')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'editAssetGroup')).toBe(false)
     expect(projection.nodes.some((node) => node.data.kind === 'editShotExecutionPlan')).toBe(false)
+    expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(false)
+    expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
   })
 
   it('renders required assets without rendering the shot execution plan before asset review advances', () => {
@@ -123,5 +175,71 @@ describe('project canvas edit-first visibility', () => {
     expect(assetGroup?.data.editAssetGroupDetails?.assets.map((asset) => asset.name)).toEqual(['客厅'])
     expect(projection.nodes.some((node) => node.id.startsWith('location-asset:'))).toBe(false)
     expect(projection.nodes.some((node) => node.data.kind === 'imageAsset')).toBe(false)
+  })
+
+  it('renders BGM from the video plan stage without rendering the final timeline', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyText: 'story',
+      storyboards: [],
+      editFirstWorkflow: workflow('ready_to_generate_videos'),
+      editScript: editScript({
+        status: 'ready',
+        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+      }),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.some((node) => node.data.kind === 'videoPlan')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
+    expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(false)
+  })
+
+  it('keeps the final timeline hidden while BGM is ready but video output is not complete', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyText: 'story',
+      storyboards: [],
+      editFirstWorkflow: workflow('ready_to_generate_videos'),
+      editScript: editScript({
+        status: 'ready',
+        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+      }),
+      finalVideo: finalVideo(),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
+  })
+
+  it('renders the final timeline only when the workflow reaches final render readiness', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyText: 'story',
+      storyboards: [],
+      editFirstWorkflow: workflow('ready_to_render_final'),
+      editScript: editScript({
+        status: 'ready',
+        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+      }),
+      videoGroups: [videoGroup()],
+      finalVideo: finalVideo(),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(true)
+    expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(true)
   })
 })

@@ -34,6 +34,16 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     storyboardPanelImageMissingCount: 0,
     storyboardPanelImageFailedCount: 0,
     activeStoryboardImageTaskCount: 0,
+    videoPlanSegmentCount: 0,
+    completedVideoSegmentCount: 0,
+    failedVideoSegmentCount: 0,
+    activeVideoTaskCount: 0,
+    bgmScoreStatus: null,
+    bgmScoreHasMix: false,
+    activeBgmScoreTaskCount: 0,
+    finalRenderStatus: null,
+    finalRenderHasOutput: false,
+    activeFinalRenderTaskCount: 0,
     ...overrides,
   }
 }
@@ -206,10 +216,176 @@ describe('edit-first workflow state', () => {
       storyboardPanelVideoPromptMissingCount: 0,
       storyboardPanelImageReadyCount: 3,
       storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 1,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_videos')
+    expect(state.nextAction?.operationId).toBe('generate_episode_videos')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+      'generate_episode_videos',
+      'generate_episode_bgm_score',
+    ])
+  })
+
+  it('keeps BGM available while video segments are generating', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 1,
+      activeVideoTaskCount: 1,
+    }))
+
+    expect(state.stage).toBe('videos_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+  })
+
+  it('does not allow final render until every video segment has output even when BGM is ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 1,
+      bgmScoreStatus: 'completed',
+      bgmScoreHasMix: true,
     }))
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('generate_episode_videos')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
+  })
+
+  it('requires BGM after all video segments are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_bgm_score')
+    expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+  })
+
+  it('waits while BGM is generating after videos are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      bgmScoreStatus: 'generating',
+      activeBgmScoreTaskCount: 1,
+    }))
+
+    expect(state.stage).toBe('bgm_score_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('allows final render only after videos and BGM are ready', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      bgmScoreStatus: 'completed',
+      bgmScoreHasMix: true,
+    }))
+
+    expect(state.stage).toBe('ready_to_render_final')
+    expect(state.nextAction?.operationId).toBe('render_final_video')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_final_video'])
+  })
+
+  it('tracks final render processing before completion', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      bgmScoreStatus: 'completed',
+      bgmScoreHasMix: true,
+      finalRenderStatus: 'processing',
+      activeFinalRenderTaskCount: 1,
+    }))
+
+    expect(state.stage).toBe('final_rendering')
+    expect(state.blocking.kind).toBe('processing')
+  })
+
+  it('marks the workflow completed only when final render has output', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasScreenplay: true,
+      screenplayStatus: 'ready',
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      bgmScoreStatus: 'completed',
+      bgmScoreHasMix: true,
+      finalRenderStatus: 'completed',
+      finalRenderHasOutput: true,
+    }))
+
+    expect(state.stage).toBe('completed')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 })

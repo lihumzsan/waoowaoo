@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
-import type { EditFirstWorkflowOperationId, EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import {
+  EDIT_FIRST_WORKFLOW_OPERATION_IDS,
+  type EditFirstWorkflowOperationId,
+  type EditFirstWorkflowState,
+} from '@/lib/project-workflow/edit-first'
 import type { ProjectAgentRunRecord } from '@/lib/project-agent/runs'
 import {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
@@ -409,19 +413,7 @@ function createRegistry(): ProjectAgentOperationRegistry {
     ...EDIT_FIRST_CHOICE_OPERATION_IDS,
   ]
   const actIds = [
-    'generate_edit_screenplay',
-    'revise_edit_screenplay',
-    'generate_edit_style_previews',
-    'generate_edit_script',
-    'generate_edit_script',
-    'generate_edit_script_assets',
-    'revise_edit_script_assets',
-    'generate_edit_shot_execution_plan',
-    'generate_edit_shot_execution_plan',
-    'generate_edit_script_storyboard',
-    'generate_edit_script_storyboard_images',
-    'generate_episode_videos',
-    'render_final_video',
+    ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   ]
   return Object.fromEntries([
     ...queryIds.map((id) => [id, makeOperation(id, 'query')] as const),

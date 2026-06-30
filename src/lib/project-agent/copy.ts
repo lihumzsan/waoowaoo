@@ -157,6 +157,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成分镜图片',
     en: 'Generate storyboard images',
   },
+  generate_episode_bgm_score: {
+    zh: '生成连续配乐',
+    en: 'Generate continuous BGM',
+  },
   generate_episode_videos: {
     zh: '生成视频片段',
     en: 'Generate video clips',
