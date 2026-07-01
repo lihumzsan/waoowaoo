@@ -119,6 +119,11 @@ interface CanvasViewportControlsProps {
   readonly onToggleAutoFollow: () => void
 }
 
+interface WorkspaceCanvasNodeDisclosureOverride {
+  readonly expanded: boolean
+  readonly layoutExpanded: boolean
+}
+
 function numericStyleDimension(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -254,8 +259,8 @@ function ProjectWorkspaceCanvasContent({
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
-  const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
-  const [layoutCollapseNodeIds, setLayoutCollapseNodeIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
+  const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
@@ -437,57 +442,62 @@ function ProjectWorkspaceCanvasContent({
       throw error
     }
   }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
-  const clearLayoutCollapseHold = useCallback((nodeId: string) => {
-    const timer = layoutCollapseClearTimersRef.current.get(nodeId)
-    if (timer !== undefined) {
-      window.clearTimeout(timer)
-      layoutCollapseClearTimersRef.current.delete(nodeId)
-    }
-    setLayoutCollapseNodeIds((current) => {
-      if (!current.has(nodeId)) return current
-      const next = new Set(current)
-      next.delete(nodeId)
+  const updateNodeDisclosureOverrides = useCallback((
+    updater: (current: ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>) => ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>,
+  ) => {
+    setNodeDisclosureOverrides((current) => {
+      const next = updater(current)
+      nodeDisclosureOverridesRef.current = next
       return next
     })
-  }, [])
-  const startLayoutCollapseHold = useCallback((nodeId: string) => {
-    const existingTimer = layoutCollapseClearTimersRef.current.get(nodeId)
-    if (existingTimer !== undefined) window.clearTimeout(existingTimer)
-
-    setLayoutCollapseNodeIds((current) => {
-      if (current.has(nodeId)) return current
-      const next = new Set(current)
-      next.add(nodeId)
-      return next
-    })
-
-    const timer = window.setTimeout(() => {
-      layoutCollapseClearTimersRef.current.delete(nodeId)
-      setLayoutCollapseNodeIds((current) => {
-        if (!current.has(nodeId)) return current
-        const next = new Set(current)
-        next.delete(nodeId)
-        return next
-      })
-    }, WORKSPACE_CANVAS_EXIT_DURATION_MS)
-    layoutCollapseClearTimersRef.current.set(nodeId, timer)
   }, [])
   const toggleNodeExpanded = useCallback((nodeId: string) => {
     const anchorNode = reactFlow.getNode(nodeId)
     if (anchorNode?.data.disclosure && !anchorNode.data.disclosure.canToggle) return
     setSelectedNodeId(nodeId)
-    setNodeExpansionOverrides((current) => {
-      const currentExpanded = anchorNode?.data.disclosure?.effectiveExpanded ?? current.get(nodeId) ?? false
-      if (currentExpanded) {
-        startLayoutCollapseHold(nodeId)
-      } else {
-        clearLayoutCollapseHold(nodeId)
-      }
+    const currentOverride = nodeDisclosureOverridesRef.current.get(nodeId)
+    const currentExpanded = currentOverride?.expanded ?? anchorNode?.data.disclosure?.effectiveExpanded ?? false
+    const existingTimer = layoutCollapseClearTimersRef.current.get(nodeId)
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer)
+      layoutCollapseClearTimersRef.current.delete(nodeId)
+    }
+
+    if (currentExpanded) {
+      updateNodeDisclosureOverrides((current) => {
+        const next = new Map(current)
+        next.set(nodeId, {
+          expanded: false,
+          layoutExpanded: true,
+        })
+        return next
+      })
+      const timer = window.setTimeout(() => {
+        layoutCollapseClearTimersRef.current.delete(nodeId)
+        updateNodeDisclosureOverrides((current) => {
+          const override = current.get(nodeId)
+          if (!override || override.expanded || !override.layoutExpanded) return current
+          const next = new Map(current)
+          next.set(nodeId, {
+            expanded: false,
+            layoutExpanded: false,
+          })
+          return next
+        })
+      }, WORKSPACE_CANVAS_EXIT_DURATION_MS)
+      layoutCollapseClearTimersRef.current.set(nodeId, timer)
+      return
+    }
+
+    updateNodeDisclosureOverrides((current) => {
       const next = new Map(current)
-      next.set(nodeId, !currentExpanded)
+      next.set(nodeId, {
+        expanded: true,
+        layoutExpanded: true,
+      })
       return next
     })
-  }, [clearLayoutCollapseHold, reactFlow, startLayoutCollapseHold])
+  }, [reactFlow, updateNodeDisclosureOverrides])
   const handleMeasuredNodeSize = useCallback((
     nodeId: string,
     size: { readonly width: number; readonly height: number },
@@ -552,14 +562,15 @@ function ProjectWorkspaceCanvasContent({
         && streamingDisclosureNodeIdsRef.current.has(node.id)
         && profile.disclosure.kind === 'collapsible'
         && profile.disclosure.collapseWhenStreamCompletes
+      const disclosureOverride = nodeDisclosureOverrides.get(node.id)
       const disclosure = resolveWorkspaceCanvasNodeDisclosure({
         kind: patchedData.kind,
-        userExpandedOverride: shouldCollapseCompletedStream ? false : nodeExpansionOverrides.get(node.id),
+        userExpandedOverride: shouldCollapseCompletedStream ? false : disclosureOverride?.expanded,
         defaultExpanded: patchedData.defaultExpanded,
         isStreaming,
       })
       const expanded = disclosure.effectiveExpanded
-      const layoutExpanded = expanded || layoutCollapseNodeIds.has(node.id)
+      const layoutExpanded = expanded || disclosureOverride?.layoutExpanded === true
       const size = resolveWorkspaceCanvasNodeSize({
         kind: patchedData.kind,
         expanded: layoutExpanded,
@@ -589,7 +600,7 @@ function ProjectWorkspaceCanvasContent({
         },
       }
     })
-  }, [handleMeasuredNodeSize, layoutCollapseNodeIds, nodeExpansionOverrides, nodeRunningStatusLabel, selectedNodeId, t, toggleNodeExpanded])
+  }, [handleMeasuredNodeSize, nodeDisclosureOverrides, nodeRunningStatusLabel, selectedNodeId, t, toggleNodeExpanded])
 
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
@@ -785,31 +796,41 @@ function ProjectWorkspaceCanvasContent({
     streamingDisclosureNodeIdsRef.current = currentStreamingNodeIds
     if (completedStreamingNodeIds.length === 0) return
 
-    setNodeExpansionOverrides((current) => {
+    updateNodeDisclosureOverrides((current) => {
       let changed = false
       const next = new Map(current)
       completedStreamingNodeIds.forEach((nodeId) => {
+        const timer = layoutCollapseClearTimersRef.current.get(nodeId)
+        if (timer !== undefined) {
+          window.clearTimeout(timer)
+          layoutCollapseClearTimersRef.current.delete(nodeId)
+        }
         changed = next.delete(nodeId) || changed
       })
       return changed ? next : current
     })
-  }, [sourceNodes])
+  }, [sourceNodes, updateNodeDisclosureOverrides])
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))
-    setNodeExpansionOverrides((current) => {
+    updateNodeDisclosureOverrides((current) => {
       let changed = false
-      const next = new Map<string, boolean>()
-      current.forEach((expanded, nodeId) => {
+      const next = new Map<string, WorkspaceCanvasNodeDisclosureOverride>()
+      current.forEach((override, nodeId) => {
         if (projectedNodeIds.has(nodeId)) {
-          next.set(nodeId, expanded)
+          next.set(nodeId, override)
         } else {
+          const timer = layoutCollapseClearTimersRef.current.get(nodeId)
+          if (timer !== undefined) {
+            window.clearTimeout(timer)
+            layoutCollapseClearTimersRef.current.delete(nodeId)
+          }
           changed = true
         }
       })
       return changed ? next : current
     })
-  }, [projectedNodesWithBilling, projectionNodeSignature])
+  }, [projectedNodesWithBilling, projectionNodeSignature, updateNodeDisclosureOverrides])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return
