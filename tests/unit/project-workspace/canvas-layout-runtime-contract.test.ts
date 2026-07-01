@@ -14,11 +14,78 @@ function cssRule(source: string, selector: string): string {
   return match?.groups?.body ?? ''
 }
 
+interface FunctionSource {
+  readonly name: string
+  readonly header: string
+  readonly body: string
+}
+
+function readFunctionSource(source: string, name: string): FunctionSource {
+  const functionIndex = source.indexOf(`function ${name}`)
+  if (functionIndex < 0) throw new Error(`Missing function ${name}`)
+
+  const parenStart = source.indexOf('(', functionIndex)
+  if (parenStart < 0) throw new Error(`Missing parameter list for ${name}`)
+
+  let parenDepth = 0
+  let parenEnd = -1
+  for (let index = parenStart; index < source.length; index += 1) {
+    const character = source[index]
+    if (character === '(') parenDepth += 1
+    if (character === ')') parenDepth -= 1
+    if (parenDepth === 0) {
+      parenEnd = index
+      break
+    }
+  }
+  if (parenEnd < 0) throw new Error(`Unclosed parameter list for ${name}`)
+
+  const bodyStart = source.indexOf('{', parenEnd)
+  if (bodyStart < 0) throw new Error(`Missing body for ${name}`)
+
+  let braceDepth = 0
+  let bodyEnd = -1
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const character = source[index]
+    if (character === '{') braceDepth += 1
+    if (character === '}') braceDepth -= 1
+    if (braceDepth === 0) {
+      bodyEnd = index
+      break
+    }
+  }
+  if (bodyEnd < 0) throw new Error(`Unclosed body for ${name}`)
+
+  return {
+    name,
+    header: source.slice(functionIndex, bodyStart),
+    body: source.slice(bodyStart + 1, bodyEnd),
+  }
+}
+
+function expandedContentFunctions(source: string): readonly FunctionSource[] {
+  const functions: FunctionSource[] = []
+  const functionNamePattern = /function\s+([A-Z][A-Za-z0-9_]*)\s*\(/g
+  const ignoredDispatchFunctions = new Set(['NodeContent'])
+  let match: RegExpExecArray | null
+  while ((match = functionNamePattern.exec(source)) !== null) {
+    const name = match[1]
+    if (!name || ignoredDispatchFunctions.has(name)) continue
+    const functionSource = readFunctionSource(source, name)
+    if (functionSource.header.includes('readonly expanded: boolean')) {
+      functions.push(functionSource)
+    }
+  }
+  return functions
+}
+
 describe('workspace canvas layout runtime contract', () => {
   it('animates React Flow node positions without transitioning node width or height', () => {
     const css = readRepoFile('src/styles/animations.css')
     const nodeTransitionRule = cssRule(css, '.workspace-canvas-layout-animated .react-flow__node:not(.dragging)')
     const shellRule = cssRule(css, '.workspace-canvas-node-shell')
+    const presenceEnterRule = cssRule(css, '.workspace-canvas-motion-presence[data-motion-state="entered"]')
+    const presenceExitRule = cssRule(css, '.workspace-canvas-motion-presence[data-motion-state="exiting"]')
 
     expect(nodeTransitionRule).toContain('transition: transform 240ms')
     expect(nodeTransitionRule).not.toContain('width')
@@ -27,8 +94,13 @@ describe('workspace canvas layout runtime contract', () => {
     expect(shellRule).not.toContain('animation')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
     expect(css).toContain('@keyframes workspaceCanvasGlideReveal')
+    expect(css).toContain('@keyframes workspaceCanvasGlideHide')
     expect(css).toContain('.workspace-canvas-soft-reveal')
     expect(css).toContain('transform: translateY(-8px)')
+    expect(css).toContain('transform: translateY(-6px)')
+    expect(presenceEnterRule).toContain('workspaceCanvasGlideReveal')
+    expect(presenceExitRule).toContain('workspaceCanvasGlideHide')
+    expect(presenceExitRule).toContain('pointer-events: none')
     expect(css).not.toContain('.workspace-canvas-node-shell[data-expanded="true"]')
     expect(css).not.toContain('workspaceCanvasNodeExpandIn')
     expect(css).not.toContain('workspaceCanvasNodeCollapseIn')
@@ -37,20 +109,46 @@ describe('workspace canvas layout runtime contract', () => {
     expect(css).not.toContain('filter: blur(8px)')
   })
 
-  it('uses internal reveal motion for clicked node details instead of animating the card shell', () => {
+  it('uses presence motion for clicked node details instead of animating the card shell', () => {
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
 
-    expect(node).toContain('workspace-canvas-soft-reveal space-y-2 rounded-[14px]')
-    expect(node).toContain('workspace-canvas-soft-reveal px-3.5 py-3')
-    expect(node).toContain('workspace-canvas-soft-reveal whitespace-pre-wrap')
+    expect(node).toContain('visible={Boolean(activeCard)}')
+    expect(node).toContain('visible={Boolean(current)}')
+    expect(node).toContain('visible={isOpen && hasText(asset.description)}')
+    expect(node).toContain('visible={on}')
+    expect(node).toContain("motionKey={activeCard?.key ?? 'none'}")
+    expect(node).toContain("motionKey={current?.key ?? 'none'}")
+    expect(node).toContain("motionKey={current?.name ?? 'none'}")
   })
 
-  it('applies reveal motion to expanded screenplay and edit table content roots', () => {
+  it('requires every expanded content function to use canvas motion presence', () => {
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
+    const expandedFunctions = expandedContentFunctions(node)
 
-    expect(node).toContain("nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')")
-    expect(node).toContain("nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-2.5')")
-    expect(node).toContain('nodeContentInteractionClass(data, `workspace-canvas-soft-reveal space-y-3 ${streamClassName}`)')
+    expect(expandedFunctions.map((entry) => entry.name)).toEqual([
+      'EditablePromptSection',
+      'ImageContent',
+      'VideoContent',
+      'FinalContent',
+      'BgmScoreContent',
+      'EditPipelineStepContent',
+      'ProcessGroupContent',
+      'EditScriptContent',
+      'EditShotExecutionPlanContent',
+      'StyleBibleContent',
+      'EditScreenplayContent',
+      'EditAssetContent',
+      'VideoPlanContent',
+    ])
+    expandedFunctions.forEach((entry) => {
+      expect(entry.body, `${entry.name} must wire expanded content through WorkspaceCanvasMotionPresence`).toContain('WorkspaceCanvasMotionPresence')
+    })
+    expect(node).not.toContain("'workspace-canvas-soft-reveal")
+    expect(node).not.toContain('"workspace-canvas-soft-reveal')
+    expect(motion).toContain("export const WORKSPACE_CANVAS_REVEAL_CLASS = 'workspace-canvas-soft-reveal'")
+    expect(motion).toContain('WORKSPACE_CANVAS_EXIT_DURATION_MS = 180')
+    expect(motion).toContain('readonly motionKey?: string | number')
   })
 
   it('keeps measurement local and removes collision failure flow from the canvas', () => {

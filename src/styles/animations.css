@@ -376,6 +376,15 @@
   animation: workspaceCanvasGlideReveal 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.workspace-canvas-motion-presence[data-motion-state="entered"] {
+  animation: workspaceCanvasGlideReveal 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.workspace-canvas-motion-presence[data-motion-state="exiting"] {
+  pointer-events: none;
+  animation: workspaceCanvasGlideHide 160ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace-canvas-layout-animated .react-flow__node:not(.dragging),
   .workspace-canvas-node-shell,
@@ -386,7 +395,8 @@
   .workspace-node-stream-soft-enter,
   .workspace-node-stream-soft-detail,
   .workspace-node-stream-soft-detail [data-stream-field="true"],
-  .workspace-canvas-soft-reveal {
+  .workspace-canvas-soft-reveal,
+  .workspace-canvas-motion-presence {
     animation: none;
   }
 }
@@ -400,6 +410,18 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes workspaceCanvasGlideHide {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
   }
 }
 

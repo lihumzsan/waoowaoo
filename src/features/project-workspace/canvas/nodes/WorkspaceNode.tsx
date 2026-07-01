@@ -13,6 +13,10 @@ import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
+import {
+  WorkspaceCanvasMotionPresence,
+  workspaceCanvasRevealClass,
+} from './workspace-node-motion'
 import type {
   WorkspaceCanvasEditAssetGroupItem,
   WorkspaceCanvasFlowNode,
@@ -234,7 +238,9 @@ function EditablePromptSection({
   }, [editing, value])
 
   const displayed = value ?? summaryValue ?? null
-  const content = expanded ? renderTextBlock(value) : renderSummaryText(displayed, 3)
+  const expandedContent = renderTextBlock(value)
+  const collapsedContent = renderSummaryText(displayed, 3)
+  const content = expanded ? expandedContent : collapsedContent
   if (!content && !onSave) return null
 
   const normalizedDraft = draft.trim()
@@ -329,7 +335,10 @@ function EditablePromptSection({
         </div>
       ) : (
         <>
-          {content}
+          {!expanded ? collapsedContent : null}
+          <WorkspaceCanvasMotionPresence visible={expanded}>
+            {expandedContent}
+          </WorkspaceCanvasMotionPresence>
           {status === 'saved' ? (
             <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-medium text-emerald-600`}>{labels('promptSaved')}</p>
           ) : status === 'failed' ? (
@@ -884,8 +893,7 @@ function ImageContent({
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'imagePrompt')}
           />
-          {expanded ? (
-            <div className="workspace-canvas-soft-reveal space-y-2">
+          <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
               {renderTextSection(labels('description'), details.description)}
               {details.candidateImages.length > 0 ? renderSection(labels('candidateImages'), (
                 <div className="grid grid-cols-3 gap-1.5">
@@ -903,8 +911,7 @@ function ImageContent({
                 </div>
               )) : null}
               {renderTextSection(labels('error'), details.errorMessage)}
-            </div>
-          ) : null}
+          </WorkspaceCanvasMotionPresence>
         </>
       ) : null}
     </div>
@@ -935,8 +942,7 @@ function VideoContent({
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'videoPrompt')}
           />
-          {expanded ? (
-            <div className="workspace-canvas-soft-reveal space-y-2">
+          <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
               {renderSection(labels('videoMeta'), (
                 <div className="space-y-1">
                   {renderValue(labels('videoModel'), details.videoModel)}
@@ -947,8 +953,7 @@ function VideoContent({
                 ? renderSection(labels('lastOptions'), renderLines(details.lastVideoGenerationOptions, labels))
                 : null}
               {renderTextSection(labels('error'), details.errorMessage)}
-            </div>
-          ) : null}
+          </WorkspaceCanvasMotionPresence>
         </>
       ) : null}
     </div>
@@ -989,7 +994,9 @@ function FinalContent({
         { label: labels('totalVideos'), value: details.totalVideos != null ? String(details.totalVideos) : '' },
         { label: labels('totalDuration'), value: details.totalDuration != null ? String(details.totalDuration) : '' },
       ]))}
-      {expanded ? renderChips(labels('videoOrder'), details.orderedVideoLabels) : null}
+      <WorkspaceCanvasMotionPresence visible={expanded}>
+        {renderChips(labels('videoOrder'), details.orderedVideoLabels)}
+      </WorkspaceCanvasMotionPresence>
     </div>
   )
 }
@@ -1078,42 +1085,49 @@ function BgmScoreContent({
   const finalPromptSection = expanded ? renderTextSection(labels('finalMusicPrompt'), details.finalPrompt) : null
   const errorSection = renderTextSection(labels('error'), details.errorMessage)
 
-  if (wideExpanded) {
-    return (
-      <div className={`grid gap-3 rounded-[18px] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
-        <div className="space-y-2">
-          {mixSection}
-          {statsSection}
-          {missingPromptSection}
-          {errorSection}
-        </div>
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <div className="space-y-2">
-            {overviewSection}
-            {designSections}
-            {virtualLayerSections}
-          </div>
-          <div className="space-y-2">
-            {promptSections}
-            {finalPromptSection}
-          </div>
-        </div>
+  const wideContent = (
+    <div className={`grid gap-3 rounded-[18px] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
+      <div className="space-y-2">
+        {mixSection}
+        {statsSection}
+        {missingPromptSection}
+        {errorSection}
       </div>
-    )
-  }
-
-  return (
+      <WorkspaceCanvasMotionPresence visible={expanded} className="grid min-w-0 gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          {overviewSection}
+          {designSections}
+          {virtualLayerSections}
+        </div>
+        <div className="space-y-2">
+          {promptSections}
+          {finalPromptSection}
+        </div>
+      </WorkspaceCanvasMotionPresence>
+    </div>
+  )
+  const standardContent = (
     <div className={`space-y-2 rounded-[18px] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
       {mixSection}
       {statsSection}
       {missingPromptSection}
-      {overviewSection}
-      {designSections}
-      {virtualLayerSections}
-      {promptSections}
-      {finalPromptSection}
+      <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
+        {overviewSection}
+        {designSections}
+        {virtualLayerSections}
+        {promptSections}
+        {finalPromptSection}
+      </WorkspaceCanvasMotionPresence>
       {errorSection}
     </div>
+  )
+  return (
+    <>
+      {!wideExpanded ? standardContent : null}
+      <WorkspaceCanvasMotionPresence visible={wideExpanded}>
+        {wideContent}
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1131,43 +1145,44 @@ function EditPipelineStepContent({
   if (details.items.length === 0) {
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
-  if (!expanded) {
-    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  }
+  const collapsedSummary = <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   return (
-    <div className="workspace-canvas-soft-reveal space-y-2">
-      {details.items.map((item, index) => (
-        <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
-            {item.chips && item.chips.length > 0 ? (
-              <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>
-                {labels('linkedShots')}
-              </span>
-            ) : null}
-          </div>
-          {item.fields.length > 0 ? (
-            <div className="space-y-1">
-              {item.fields.map((field) => (
-                <React.Fragment key={`${field.label}:${field.value}`}>
-                  {renderValue(field.label, field.value)}
-                </React.Fragment>
-              ))}
-            </div>
-          ) : null}
-          {renderSummaryText(item.body, expanded ? 4 : 2)}
-          {item.chips && item.chips.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {item.chips.map((chip) => (
-                <span key={chip} className={`${SELECTABLE_TEXT_CLASS} inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-2 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
-                  {chip}
+    <>
+      {!expanded ? collapsedSummary : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
+        {details.items.map((item, index) => (
+          <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
+              {item.chips && item.chips.length > 0 ? (
+                <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>
+                  {labels('linkedShots')}
                 </span>
-              ))}
+              ) : null}
             </div>
-          ) : null}
-        </section>
-      ))}
-    </div>
+            {item.fields.length > 0 ? (
+              <div className="space-y-1">
+                {item.fields.map((field) => (
+                  <React.Fragment key={`${field.label}:${field.value}`}>
+                    {renderValue(field.label, field.value)}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : null}
+            {renderSummaryText(item.body, expanded ? 4 : 2)}
+            {item.chips && item.chips.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {item.chips.map((chip) => (
+                  <span key={chip} className={`${SELECTABLE_TEXT_CLASS} inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-2 text-[10px] font-semibold text-slate-700 ring-1 ring-slate-200`}>
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ))}
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1189,10 +1204,15 @@ function ProcessGroupContent({
   if (!details || details.steps.length === 0) {
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
-  if (!expanded) {
-    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  }
-  return <ProcessStepGrid steps={details.steps} labels={labels} />
+  const collapsedSummary = <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  return (
+    <>
+      {!expanded ? collapsedSummary : null}
+      <WorkspaceCanvasMotionPresence visible={expanded}>
+        <ProcessStepGrid steps={details.steps} labels={labels} />
+      </WorkspaceCanvasMotionPresence>
+    </>
+  )
 }
 
 function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<WorkspaceCanvasFlowNode['data']['editProcessGroupDetails']>['steps']; readonly labels: ReturnType<typeof useTranslations> }) {
@@ -1220,26 +1240,33 @@ function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<Worksp
           )
         })}
       </div>
-      {current ? (
-        <section className="workspace-canvas-soft-reveal space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
-            <FieldGlyph name={PROCESS_STEP_GLYPHS[current.key] ?? 'dot'} className="h-3 w-3" />{current.title}
-          </p>
-          <div className="space-y-2">
-            {current.items.map((item, index) => (
-              <div key={`${item.title}-${index}`} className="space-y-1 rounded-[10px] bg-white p-2.5 ring-1 ring-slate-100">
-                <p className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
-                {item.fields.length > 0 ? item.fields.map((field) => (
-                  <React.Fragment key={`${field.label}:${field.value}`}>{renderValue(field.label, field.value)}</React.Fragment>
-                )) : null}
-                {renderSummaryText(item.body, 3)}
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : (
+      <WorkspaceCanvasMotionPresence
+        visible={Boolean(current)}
+        motionKey={current?.key ?? 'none'}
+        className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100"
+      >
+        {current ? (
+          <>
+            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
+              <FieldGlyph name={PROCESS_STEP_GLYPHS[current.key] ?? 'dot'} className="h-3 w-3" />{current.title}
+            </p>
+            <div className="space-y-2">
+              {current.items.map((item, index) => (
+                <div key={`${item.title}-${index}`} className="space-y-1 rounded-[10px] bg-white p-2.5 ring-1 ring-slate-100">
+                  <p className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
+                  {item.fields.length > 0 ? item.fields.map((field) => (
+                    <React.Fragment key={`${field.label}:${field.value}`}>{renderValue(field.label, field.value)}</React.Fragment>
+                  )) : null}
+                  {renderSummaryText(item.body, 3)}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </WorkspaceCanvasMotionPresence>
+      {!current ? (
         <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{labels('expandDetails')}</p>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -1404,16 +1431,22 @@ function ShotGrid({
                 )
               })}
             </div>
-            {activeCard ? (
-              <div className={`workspace-canvas-soft-reveal space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
-                  <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.detailTitle ?? activeCard.title}</span>
-                  {activeCard.detailMeta ?? activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.detailMeta ?? activeCard.meta}</span> : null}
-                </div>
-                {activeCard.detail}
-              </div>
-            ) : null}
+            <WorkspaceCanvasMotionPresence
+              visible={Boolean(activeCard)}
+              motionKey={activeCard?.key ?? 'none'}
+              className={`space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}
+            >
+              {activeCard ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
+                    <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.detailTitle ?? activeCard.title}</span>
+                    {activeCard.detailMeta ?? activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.detailMeta ?? activeCard.meta}</span> : null}
+                  </div>
+                  {activeCard.detail}
+                </>
+              ) : null}
+            </WorkspaceCanvasMotionPresence>
           </div>
         )
       })}
@@ -1456,7 +1489,6 @@ function EditScriptContent({
     </div>
   )
   const showShotGrid = expanded
-  if (!showShotGrid) return summaryLine
 
   const cards: ShotGridCard[] = details.shots.map((shot) => {
     const characterNames = editScriptShotCharacterNames(shot)
@@ -1484,27 +1516,30 @@ function EditScriptContent({
   })
 
   return (
-    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
-      {summaryLine}
-      <button
-        type="button"
-        className="nodrag inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900"
-        onClick={(event) => {
-          event.stopPropagation()
-          setPreviewOpen(true)
-        }}
-      >
-        <AppIcon name="playCircle" className="h-4 w-4" />
-        {labels('viewVideoPreview')}
-      </button>
-      {previewOpen ? (
-        <EditScriptPreviewDetail
-          details={details}
-          onClose={() => setPreviewOpen(false)}
-        />
-      ) : null}
-      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
-    </div>
+    <>
+      {!showShotGrid ? summaryLine : null}
+      <WorkspaceCanvasMotionPresence visible={showShotGrid} className={nodeContentInteractionClass(data, 'space-y-3')}>
+        {summaryLine}
+        <button
+          type="button"
+          className="nodrag inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900"
+          onClick={(event) => {
+            event.stopPropagation()
+            setPreviewOpen(true)
+          }}
+        >
+          <AppIcon name="playCircle" className="h-4 w-4" />
+          {labels('viewVideoPreview')}
+        </button>
+        {previewOpen ? (
+          <EditScriptPreviewDetail
+            details={details}
+            onClose={() => setPreviewOpen(false)}
+          />
+        ) : null}
+        <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1536,7 +1571,6 @@ function EditShotExecutionPlanContent({
       <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
     </div>
   )
-  if (!expanded) return summaryLine
 
   const cards: ShotGridCard[] = details.items.map((item, index) => {
     const fields = item.fields
@@ -1584,9 +1618,12 @@ function EditShotExecutionPlanContent({
   })
 
   return (
-    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-2.5')}>
-      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
-    </div>
+    <>
+      {!expanded ? summaryLine : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-2.5')}>
+        <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1717,11 +1754,11 @@ function EditAssetGroupHeroCard({
           </>
         )}
       </AdaptiveImageAspectFrame>
-      {isOpen && hasText(asset.description) ? (
-        <p className={`${SELECTABLE_TEXT_CLASS} workspace-canvas-soft-reveal px-3.5 py-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>
+      <WorkspaceCanvasMotionPresence visible={isOpen && hasText(asset.description)} motionKey={asset.requirementId}>
+        <p className={`${SELECTABLE_TEXT_CLASS} px-3.5 py-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>
           {asset.description}
         </p>
-      ) : null}
+      </WorkspaceCanvasMotionPresence>
     </div>
   )
 }
@@ -1758,7 +1795,7 @@ function EditAssetGroupContent({
   }>
   const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
   return (
-    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
+    <div className={nodeContentInteractionClass(data, workspaceCanvasRevealClass('space-y-3'))}>
       <div className="space-y-4">
         {groupedAssets.map((group) => (
           <section key={group.key} className="space-y-2.5">
@@ -1838,15 +1875,12 @@ function StyleBibleContent({
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const shouldShowPreview = (data.kind === 'editStylePreview' || data.kind === 'editStyleBible') && hasText(data.previewImageUrl)
 
-  // 一级（折叠）：预览图 + 完整风格总结
-  if (!expanded) {
-    return (
-      <div className="space-y-2">
-        {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
-        {details.styleSummary ? renderSection(labels('styleSummary'), renderTextBlock(details.styleSummary)) : null}
-      </div>
-    )
-  }
+  const collapsedContent = (
+    <div className="space-y-2">
+      {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
+      {details.styleSummary ? renderSection(labels('styleSummary'), renderTextBlock(details.styleSummary)) : null}
+    </div>
+  )
 
   // 二级（展开）：预览图 + 总结 + 分组属性网格
   const groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] = [
@@ -1873,12 +1907,15 @@ function StyleBibleContent({
     },
   ]
   return (
-    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
-      {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
-      {renderTextSection(labels('styleSummary'), details.styleSummary)}
-      {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
-      <StyleBibleGroups groups={groups} />
-    </div>
+    <>
+      {!expanded ? collapsedContent : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
+        {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
+        {renderTextSection(labels('styleSummary'), details.styleSummary)}
+        {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
+        <StyleBibleGroups groups={groups} />
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1902,11 +1939,9 @@ function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly nam
           )
         })}
       </div>
-      {current ? (
-        <div className="workspace-canvas-soft-reveal">
-          {shotDetailIconGrid(current.fields)}
-        </div>
-      ) : null}
+      <WorkspaceCanvasMotionPresence visible={Boolean(current)} motionKey={current?.name ?? 'none'}>
+        {current ? shotDetailIconGrid(current.fields) : null}
+      </WorkspaceCanvasMotionPresence>
     </div>
   )
 }
@@ -1925,35 +1960,36 @@ function EditScreenplayContent({
   const parsed = parseScreenplayOutline(details.screenplayText)
   const streamClassName = data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''
 
-  if (!expanded) {
-    return (
-      <div className={`space-y-2 ${streamClassName}`}>
-        {parsed.summary
-          ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
-          : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
-      </div>
-    )
-  }
+  const collapsedContent = (
+    <div className={`space-y-2 ${streamClassName}`}>
+      {parsed.summary
+        ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
+        : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
+    </div>
+  )
 
   return (
-    <div className={nodeContentInteractionClass(data, `workspace-canvas-soft-reveal space-y-3 ${streamClassName}`)}>
-      {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
-      {parsed.characters.length > 0 ? (
-        <div className="space-y-1.5">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="people" className="h-3 w-3" />{labels('characters')}</p>
-          <ScreenplayAccordion items={parsed.characters.map((c) => ({ key: c.name, title: c.name, body: c.desc }))} />
-        </div>
-      ) : null}
-      {parsed.scenes.length > 0 ? (
-        <div className="space-y-1.5">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="frame" className="h-3 w-3" />{labels('scenes')}</p>
-          <ScreenplayAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
-        </div>
-      ) : (
-        renderSection(labels('screenplay'), renderTextBlock(details.screenplayText))
-      )}
-      {renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt))}
-    </div>
+    <>
+      {!expanded ? collapsedContent : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
+        {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
+        {parsed.characters.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="people" className="h-3 w-3" />{labels('characters')}</p>
+            <ScreenplayAccordion items={parsed.characters.map((c) => ({ key: c.name, title: c.name, body: c.desc }))} />
+          </div>
+        ) : null}
+        {parsed.scenes.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="frame" className="h-3 w-3" />{labels('scenes')}</p>
+            <ScreenplayAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
+          </div>
+        ) : (
+          renderSection(labels('screenplay'), renderTextBlock(details.screenplayText))
+        )}
+        {renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt))}
+      </WorkspaceCanvasMotionPresence>
+    </>
   )
 }
 
@@ -1996,7 +2032,9 @@ function ScreenplayAccordion({ items }: { readonly items: readonly { readonly ke
               <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{it.title}</span>
               <AppIcon name={on ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
             </button>
-            {on ? <p className={`${SELECTABLE_TEXT_CLASS} workspace-canvas-soft-reveal whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{it.body}</p> : null}
+            <WorkspaceCanvasMotionPresence visible={on} motionKey={it.key}>
+              <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{it.body}</p>
+            </WorkspaceCanvasMotionPresence>
           </div>
         )
       })}
@@ -2033,10 +2071,14 @@ function EditAssetContent({
           {renderValue(labels('spatialProfileAnalyzedAt'), typeof details.spatialProfileAnalyzedAt === 'string' ? details.spatialProfileAnalyzedAt : null)}
           {renderValue(labels('spatialProfileModel'), details.spatialProfileModel)}
           {details.spatialProfileError ? renderSubsection(labels('spatialProfileError'), renderTextBlock(details.spatialProfileError)) : null}
-          {expanded && details.spatialProfileJson ? renderSubsection(labels('spatialProfileJson'), renderJsonBlock(details.spatialProfileJson)) : null}
+          <WorkspaceCanvasMotionPresence visible={expanded && Boolean(details.spatialProfileJson)}>
+            {renderSubsection(labels('spatialProfileJson'), renderJsonBlock(details.spatialProfileJson))}
+          </WorkspaceCanvasMotionPresence>
         </div>
       )) : null}
-      {expanded && details.errorMessage ? renderSection(labels('error'), renderTextBlock(details.errorMessage)) : null}
+      <WorkspaceCanvasMotionPresence visible={expanded && hasText(details.errorMessage)}>
+        {renderSection(labels('error'), renderTextBlock(details.errorMessage))}
+      </WorkspaceCanvasMotionPresence>
     </div>
   )
 }
@@ -2192,6 +2234,15 @@ function VideoPlanContent({
       })
     }
   }
+  const renderPromptSection = (promptExpanded: boolean) => details.prompt ? (
+    <EditablePromptSection
+      title={labels('videoPlanPrompt')}
+      value={details.prompt}
+      expanded={promptExpanded}
+      labels={labels}
+      onSave={videoPlanPromptSaveHandler(data)}
+    />
+  ) : null
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
       {displayOutputUrl ? (
@@ -2299,15 +2350,10 @@ function VideoPlanContent({
           {renderValue(labels('duration'), `${details.durationSec}s`)}
         </div>
       ))}
-      {details.prompt ? (
-        <EditablePromptSection
-          title={labels('videoPlanPrompt')}
-          value={details.prompt}
-          expanded={expanded}
-          labels={labels}
-          onSave={videoPlanPromptSaveHandler(data)}
-        />
-      ) : null}
+      {!expanded ? renderPromptSection(false) : null}
+      <WorkspaceCanvasMotionPresence visible={expanded}>
+        {renderPromptSection(true)}
+      </WorkspaceCanvasMotionPresence>
       {details.errorMessage ? renderSection(labels('error'), renderTextBlock(details.errorMessage)) : null}
       {details.validationMessage ? renderSection(labels('error'), renderTextBlock(details.validationMessage)) : null}
     </div>
