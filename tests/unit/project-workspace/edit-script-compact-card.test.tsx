@@ -65,6 +65,7 @@ const messages = {
           cameraAngle: '拍摄角度',
           cameraHeight: '机位高度',
           characters: '出场角色',
+          characterAsset: '需求人物',
           composition: '构图',
           collapseDetails: '收起',
           description: '描述',
@@ -75,6 +76,7 @@ const messages = {
           keyObjects: '关键物体',
           lens: '焦段',
           lighting: '光线',
+          locationAsset: '需求场景',
           listSeparator: '、',
           linkedShots: '关联镜头',
           locations: '场景',
@@ -84,6 +86,7 @@ const messages = {
           shotIndex: '镜头 {index}',
           shotScale: '景别',
           sound: '声音',
+          previewLarge: '查看大图',
           viewVideoPreview: '查看视频预览',
           focus: '焦点',
         },
@@ -397,12 +400,16 @@ describe('edit script compact canvas card', () => {
     expect(html).toContain('workspace-node-stream-soft-detail')
   })
 
-  it('renders the completed asset group expanded by default without a disclosure toggle', async () => {
+  it('renders the completed asset group as two-column hero cards without the top description block', async () => {
     const html = await renderWorkspaceNode(editAssetGroupNodeData())
 
     expect(html).toContain('人物与场景')
     expect(html).toContain('林晓')
     expect(html).toContain('客厅')
-    expect(html).not.toContain('展开')
+    expect(html).toContain('grid-cols-2')
+    expect(html).toContain('bg-gradient-to-t')
+    expect(html).toContain('data-icon="chevronDown"')
+    expect(html).not.toContain('林晓 / character')
+    expect(html).not.toContain('>展开</button>')
   })
 })

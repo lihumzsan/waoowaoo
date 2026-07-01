@@ -1457,12 +1457,47 @@ function EditShotExecutionPlanContent({
   )
 }
 
-function EditAssetGroupThumbnailCard({
+function editAssetKindLabel(
+  kind: WorkspaceCanvasEditAssetGroupItem['kind'],
+  labels: ReturnType<typeof useTranslations>,
+): string {
+  return kind === 'character' ? labels('characterAsset') : labels('locationAsset')
+}
+
+function editAssetEyebrow(
+  asset: WorkspaceCanvasEditAssetGroupItem,
+  labels: ReturnType<typeof useTranslations>,
+): string {
+  const kindLabel = editAssetKindLabel(asset.kind, labels)
+  const rawEyebrow = asset.eyebrow.trim()
+  if (!rawEyebrow || rawEyebrow === asset.kind || rawEyebrow === kindLabel) return kindLabel
+  return `${kindLabel} · ${rawEyebrow}`
+}
+
+function shouldShowEditAssetStatus(
+  asset: WorkspaceCanvasEditAssetGroupItem,
+  previewSourceImageUrl: string | null,
+): boolean {
+  if (!hasText(asset.statusLabel)) return false
+  const phase = asset.taskProgress?.phase
+  if (asset.isRunning || phase === 'queued' || phase === 'processing' || phase === 'failed') return true
+  return !hasText(previewSourceImageUrl)
+}
+
+function editAssetStatusIconName(asset: WorkspaceCanvasEditAssetGroupItem): AppIconName {
+  const phase = asset.taskProgress?.phase
+  if (asset.isRunning || phase === 'queued' || phase === 'processing') return 'loader'
+  if (phase === 'failed') return 'alert'
+  return 'clock'
+}
+
+function EditAssetGroupHeroCard({
   asset,
   isOpen,
   labels,
   loadingStyleImageUrl,
   onPreviewImage,
+  onRunAction,
   onSelect,
 }: {
   readonly asset: WorkspaceCanvasEditAssetGroupItem
@@ -1470,19 +1505,23 @@ function EditAssetGroupThumbnailCard({
   readonly labels: ReturnType<typeof useTranslations>
   readonly loadingStyleImageUrl?: string | null
   readonly onPreviewImage: ImagePreviewHandler | null
+  readonly onRunAction: (action: WorkspaceCanvasNodeAction) => void
   readonly onSelect: () => void
 }) {
   const previewSourceImageUrl = asset.previewImageUrl ?? null
   const imageUrl = toDisplayImageUrl(previewSourceImageUrl)
   const loadingSize = 64
-  const assetStatusSuffix = hasText(asset.statusLabel) ? ` · ${asset.statusLabel}` : ''
+  const showStatus = shouldShowEditAssetStatus(asset, previewSourceImageUrl)
+  const statusIconName = editAssetStatusIconName(asset)
+  const expandLabel = isOpen ? labels('collapseDetails') : labels('expandDetails')
 
   return (
     <div
       role="button"
       tabIndex={0}
       aria-pressed={isOpen}
-      className={`nodrag cursor-pointer overflow-hidden rounded-[14px] border bg-white text-left transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${isOpen ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
+      aria-label={`${expandLabel}: ${asset.name}`}
+      className={`nodrag cursor-pointer overflow-hidden rounded-[16px] border bg-white text-left shadow-[var(--glass-shadow-sm)] transition focus:outline-none focus:ring-2 focus:ring-slate-900/30 ${isOpen ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`}
       onClick={(event) => { event.stopPropagation(); onSelect() }}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return
@@ -1506,35 +1545,68 @@ function EditAssetGroupThumbnailCard({
                 onLoad={onImageLoad}
               />
             ) : asset.isRunning ? null : (
-              <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-6 w-6" />
+              <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-9 w-9 text-slate-300" />
             )}
             <MediaGenerationLoading
               taskState={asset.taskProgress}
               styleImageUrl={loadingStyleImageUrl}
               size={loadingSize}
             />
-            {previewSourceImageUrl && imageUrl && onPreviewImage ? (
-              <button
-                type="button"
-                className="nodrag nowheel absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/75 bg-slate-950/72 text-white shadow-sm backdrop-blur transition hover:bg-slate-950/85 focus:outline-none focus:ring-2 focus:ring-white/80"
-                aria-label={`${labels('previewLarge')}: ${asset.name}`}
-                title={labels('previewLarge')}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onPreviewImage(previewSourceImageUrl)
-                }}
-              >
-                <AppIcon name="searchPlus" className="h-4 w-4" />
-              </button>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3/5 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+            {showStatus ? (
+              <span className="pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex max-w-[calc(100%-5.5rem)] items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                <AppIcon name={statusIconName} className={`h-3 w-3 shrink-0 ${statusIconName === 'loader' ? 'animate-spin' : ''}`} />
+                <span className={`${SELECTABLE_TEXT_CLASS} truncate`}>{asset.statusLabel}</span>
+              </span>
             ) : null}
+            <div className="absolute right-2.5 top-2.5 z-30 flex items-center gap-1.5">
+              {previewSourceImageUrl && imageUrl && onPreviewImage ? (
+                <button
+                  type="button"
+                  className="nodrag nowheel inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-white/80"
+                  aria-label={`${labels('previewLarge')}: ${asset.name}`}
+                  title={labels('previewLarge')}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onPreviewImage(previewSourceImageUrl)
+                  }}
+                >
+                  <AppIcon name="searchPlus" className="h-4 w-4" />
+                </button>
+              ) : null}
+              {asset.action && asset.actionLabel ? (
+                <button
+                  type="button"
+                  className="nodrag nowheel inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/65 focus:outline-none focus:ring-2 focus:ring-white/80 disabled:cursor-not-allowed disabled:opacity-45"
+                  aria-label={`${asset.actionLabel}: ${asset.name}`}
+                  title={asset.actionLabel}
+                  disabled={asset.isRunning}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (asset.action && !asset.isRunning) onRunAction(asset.action)
+                  }}
+                >
+                  <AppIcon name={nodeActionIconName(asset.action)} className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3 pr-12">
+              <p className={`${SELECTABLE_TEXT_CLASS} truncate text-lg font-semibold text-white drop-shadow-sm`}>{asset.name}</p>
+              <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] text-white/75`}>{editAssetEyebrow(asset, labels)}</p>
+            </div>
+            <span className="pointer-events-none absolute bottom-2.5 right-2.5 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
+              <AppIcon name="chevronDown" className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </span>
           </>
         )}
       </AdaptiveImageAspectFrame>
-      <div className="px-2.5 py-1.5">
-        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] font-semibold text-[var(--glass-text-primary)]`}>{asset.name}</p>
-        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[10px] text-[var(--glass-text-tertiary)]`}>{asset.eyebrow}{assetStatusSuffix}</p>
-      </div>
+      {isOpen && hasText(asset.description) ? (
+        <p className={`${SELECTABLE_TEXT_CLASS} px-3.5 py-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>
+          {asset.description}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -1553,9 +1625,6 @@ function EditAssetGroupContent({
   if (!details || details.assets.length === 0) {
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
-  const current = details.assets.find((asset) => asset.requirementId === open) ?? null
-  const currentPreviewSourceImageUrl = current?.previewImageUrl ?? null
-  const currentPreviewDisplayImageUrl = toDisplayImageUrl(currentPreviewSourceImageUrl)
   const assetGroups = [
     {
       key: 'character',
@@ -1575,27 +1644,27 @@ function EditAssetGroupContent({
   const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {renderSection(labels('description'), renderTextBlock(data.body))}
       <div className="space-y-4">
         {groupedAssets.map((group) => (
-          <section key={group.key} className="space-y-2">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-1.5">
+          <section key={group.key} className="space-y-2.5">
+            <div className="flex items-center gap-2">
               <FieldGlyph name={group.key === 'character' ? 'people' : 'pin'} className="h-4 w-4 text-[var(--glass-text-secondary)]" />
               <span className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>{group.title}</span>
               <span className={`${SELECTABLE_TEXT_CLASS} text-[11px] text-[var(--glass-text-tertiary)]`}>{group.assets.length}</span>
             </div>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-3">
               {group.assets.map((asset) => {
                 const on = open === asset.requirementId
                 const selectAsset = () => setOpen(on ? null : asset.requirementId)
                 return (
-                  <EditAssetGroupThumbnailCard
+                  <EditAssetGroupHeroCard
                     key={asset.requirementId}
                     asset={asset}
                     isOpen={on}
                     labels={labels}
                     loadingStyleImageUrl={data.loadingStyleImageUrl}
                     onPreviewImage={onPreviewImage}
+                    onRunAction={(action) => data.onAction?.(action, data.nodeId)}
                     onSelect={selectAsset}
                   />
                 )
@@ -1604,50 +1673,6 @@ function EditAssetGroupContent({
           </section>
         ))}
       </div>
-      {current ? (
-        <section className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
-          <div className="flex items-center gap-2">
-            <FieldGlyph name={current.kind === 'character' ? 'people' : 'pin'} className="h-4 w-4 text-[var(--glass-text-secondary)]" />
-            <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{current.name}</span>
-            {hasText(current.statusLabel) ? (
-              <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{current.statusLabel}</span>
-            ) : null}
-          </div>
-          {shotDetailIconGrid([
-            { label: current.eyebrow, value: current.kind === 'character' ? labels('characters') : labels('locations') },
-            { label: labels('shotCount'), value: current.shotNumbers.join(', ') },
-          ])}
-          {renderTextBlock(current.description)}
-          <div className="flex flex-wrap items-center gap-2">
-            {currentPreviewSourceImageUrl && currentPreviewDisplayImageUrl && onPreviewImage ? (
-              <button
-                type="button"
-                className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onPreviewImage(currentPreviewSourceImageUrl)
-                }}
-              >
-                <AppIcon name="searchPlus" className="h-3.5 w-3.5" />
-                {labels('previewLarge')}
-              </button>
-            ) : null}
-            {current.action && current.actionLabel ? (
-              <BillingActionButton
-                type="button"
-                tone="secondary"
-                icon={nodeActionIconName(current.action)}
-                label={current.actionLabel}
-                disabled={current.isRunning}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  if (current.action && !current.isRunning) data.onAction?.(current.action, data.nodeId)
-                }}
-              />
-            ) : null}
-          </div>
-        </section>
-      ) : null}
     </div>
   )
 }
