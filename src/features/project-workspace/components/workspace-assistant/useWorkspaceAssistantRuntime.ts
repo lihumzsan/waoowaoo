@@ -244,6 +244,24 @@ export function resolveWorkspaceAssistantReplyInFlight(input: {
     || input.chatTransportActive
 }
 
+export function resolveWorkspaceAssistantActiveReplyRunStatus(input: {
+  activeReplyRun: Pick<WorkspaceAssistantTrackedRun, 'runId' | 'status'> | null
+  serverRun: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'runId' | 'status'> | null
+  replyActivityActive: boolean
+  chatTransportActive: boolean
+  controlRunActive: boolean
+}): WorkspaceAssistantRunStatus | null {
+  const activeReplyRun = input.activeReplyRun
+  if (!activeReplyRun) return null
+  if (input.serverRun?.runId === activeReplyRun.runId) return input.serverRun.status
+  if (
+    input.replyActivityActive
+    || input.chatTransportActive
+    || input.controlRunActive
+  ) return activeReplyRun.status
+  return null
+}
+
 export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
   return status === 'running' || status === 'awaiting_task'
 }
@@ -977,16 +995,13 @@ export function useWorkspaceAssistantRuntime({
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
   const serverRunActive = sessionState?.currentRun?.status === 'running'
-  const serverRunId = sessionState?.currentRun?.runId ?? null
-  const activeReplyRunStatus = activeReplyRun
-    && (
-      replyActivity
-      || chatReplyInFlight
-      || controlPending
-      || (serverRunId !== null && activeReplyRun.runId === serverRunId)
-    )
-    ? activeReplyRun.status
-    : null
+  const activeReplyRunStatus = resolveWorkspaceAssistantActiveReplyRunStatus({
+    activeReplyRun,
+    serverRun: sessionState?.currentRun ?? null,
+    replyActivityActive: Boolean(replyActivity),
+    chatTransportActive: chatReplyInFlight,
+    controlRunActive: controlPending,
+  })
   const replyInFlight = resolveWorkspaceAssistantReplyInFlight({
     requestActive: Boolean(replyActivity && !replyActivity.requestSettled),
     chatTransportActive: chatReplyInFlight,

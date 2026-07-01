@@ -9,6 +9,7 @@ import {
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import { WorkspaceAssistantPendingTurnPlaceholder } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import {
+  resolveWorkspaceAssistantActiveReplyRunStatus,
   findLatestWorkspaceAssistantRunAtOrAfterMessageIndex,
   resolveWorkspaceAssistantReplyInFlight,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
@@ -171,6 +172,37 @@ describe('workspace assistant reply loading indicator', () => {
       controlRunActive: true,
       serverRunActive: true,
       streamedRunStatus: 'completed',
+    })).toBe(false)
+  })
+
+  it('stops the three dots when session state reports failure despite a persisted running marker', () => {
+    const replyRunStatus = resolveWorkspaceAssistantActiveReplyRunStatus({
+      activeReplyRun: {
+        runId: 'run-failed',
+        status: 'running',
+      },
+      serverRun: {
+        runId: 'run-failed',
+        status: 'failed',
+      },
+      replyActivityActive: true,
+      chatTransportActive: false,
+      controlRunActive: false,
+    })
+
+    expect(replyRunStatus).toBe('failed')
+    expect(resolveWorkspaceAssistantReplyInFlight({
+      requestActive: false,
+      chatTransportActive: false,
+      controlRunActive: false,
+      serverRunActive: false,
+      streamedRunStatus: replyRunStatus,
+    })).toBe(false)
+    expect(shouldShowWorkspaceAssistantReplyLoading({
+      storageLoading: false,
+      replyInFlight: false,
+      awaitingUserInput: false,
+      awaitingExternalTask: false,
     })).toBe(false)
   })
 
