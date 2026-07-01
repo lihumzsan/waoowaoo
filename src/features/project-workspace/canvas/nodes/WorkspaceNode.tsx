@@ -1124,6 +1124,7 @@ function chunkShotCards(cards: readonly ShotGridCard[], size: number): ShotGridC
 
 type ShotField = { readonly label: string; readonly value: string | null | undefined }
 type EditScriptShotCardSource = NonNullable<WorkspaceCanvasFlowNode['data']['editScriptDetails']>['shots'][number]
+type EditPipelineStepCardSource = NonNullable<WorkspaceCanvasFlowNode['data']['editPipelineStepDetails']>['items'][number]
 
 function compactEntityName(value: string): string {
   const name = value.split('/')[0]?.trim()
@@ -1148,6 +1149,29 @@ function editScriptShotCharacterNames(shot: EditScriptShotCardSource): readonly 
 
 function compactList(values: readonly string[], separator: string): string {
   return values.join(separator)
+}
+
+function fieldValue(fields: readonly ShotField[], label: string): string | null {
+  return fields.find((field) => field.label === label)?.value ?? null
+}
+
+function numericChipValue(values: readonly string[] | undefined): string | null {
+  return values?.find((value) => /^\d+$/.test(value.trim()))?.trim() ?? null
+}
+
+function executionPlanShotKey(item: EditPipelineStepCardSource, index: number): string {
+  return numericChipValue(item.chips) ?? item.title.match(/\d+/)?.[0] ?? String(index + 1)
+}
+
+function executionPlanCharacterNames(item: EditPipelineStepCardSource): readonly string[] {
+  return uniqueCompactEntityNames((item.chips ?? []).filter((chip) => chip.includes('/')))
+}
+
+function executionPlanObjectNames(item: EditPipelineStepCardSource): readonly string[] {
+  return uniqueCompactEntityNames((item.chips ?? []).filter((chip) => {
+    const trimmed = chip.trim()
+    return trimmed.length > 0 && !trimmed.includes('/') && !/^\d+$/.test(trimmed)
+  }))
 }
 
 // 图标字段卡：图标 + 标签 + 值（可读性强的三级排版）
@@ -1336,6 +1360,87 @@ function EditScriptContent({
         />
       ) : null}
       <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
+    </div>
+  )
+}
+
+function EditShotExecutionPlanContent({
+  data,
+  labels,
+  expanded,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
+}) {
+  const details = data.editPipelineStepDetails
+  if (!details || details.items.length === 0) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
+
+  const listSeparator = labels('listSeparator')
+  const allCharacterNames = uniqueCompactEntityNames(details.items.flatMap((item) => executionPlanCharacterNames(item)))
+  const summaryText = allCharacterNames.length > 0
+    ? labels('editScriptCompactSummaryWithCharacters', {
+        count: details.items.length,
+        characters: compactList(allCharacterNames.slice(0, 4), listSeparator),
+      })
+    : labels('editScriptCompactSummary', { count: details.items.length })
+  const summaryLine = (
+    <div className="flex items-center gap-2.5 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+      <AppIcon name="image" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+      <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
+    </div>
+  )
+  if (!expanded) return summaryLine
+
+  const cards: ShotGridCard[] = details.items.map((item, index) => {
+    const fields = item.fields
+    const shotScale = fieldValue(fields, labels('shotScale'))
+    const lens = fieldValue(fields, labels('lens'))
+    const focus = fieldValue(fields, labels('focus'))
+    const cameraHeight = fieldValue(fields, labels('cameraHeight'))
+    const cameraAngle = fieldValue(fields, labels('cameraAngle'))
+    const movement = fieldValue(fields, labels('movement'))
+    const composition = fieldValue(fields, labels('composition'))
+    const lighting = fieldValue(fields, labels('lighting'))
+    const axisAndEyeline = fieldValue(fields, labels('axisAndEyeline'))
+    const characterNames = executionPlanCharacterNames(item)
+    const objectNames = executionPlanObjectNames(item)
+    const titleParts = [shotScale, lens].filter(hasText)
+    const metaParts = [movement ?? composition, lighting].filter(hasText)
+    return {
+      key: executionPlanShotKey(item, index),
+      badge: index + 1,
+      title: titleParts.length > 0 ? compactList(titleParts, ' · ') : item.title,
+      subtitle: item.body ?? undefined,
+      meta: metaParts.length > 0 ? compactList(metaParts, ' · ') : undefined,
+      characterCount: characterNames.length,
+      detail: (
+        <div className="space-y-2.5">
+          {shotDetailIconGrid([
+            { label: labels('shotScale'), value: shotScale },
+            { label: labels('lens'), value: lens },
+            { label: labels('focus'), value: focus },
+            { label: labels('cameraHeight'), value: cameraHeight },
+            { label: labels('cameraAngle'), value: cameraAngle },
+            { label: labels('movement'), value: movement },
+            { label: labels('composition'), value: composition },
+            { label: labels('lighting'), value: lighting },
+            { label: labels('axisAndEyeline'), value: axisAndEyeline },
+            { label: labels('characters'), value: compactList(characterNames, '\n') },
+            { label: labels('keyObjects'), value: compactList(objectNames, '\n') },
+            { label: labels('description'), value: item.body },
+          ])}
+        </div>
+      ),
+    }
+  })
+
+  return (
+    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {summaryLine}
+      <ShotGrid cards={cards} accent="cyan" streamPresentation={data.streamPresentation} />
     </div>
   )
 }
@@ -2100,7 +2205,7 @@ function NodeContent({
     case 'editScript':
       return <EditScriptContent data={data} labels={labels} expanded={expanded} />
     case 'editShotExecutionPlan':
-      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
+      return <EditShotExecutionPlanContent data={data} labels={labels} expanded={expanded} />
     case 'storyboardPanelGeneration':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':

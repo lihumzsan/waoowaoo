@@ -61,7 +61,11 @@ const messages = {
       workspace: {
         nodeFields: {
           action: '动作',
+          axisAndEyeline: '轴线与视线',
+          cameraAngle: '拍摄角度',
+          cameraHeight: '机位高度',
           characters: '出场角色',
+          composition: '构图',
           collapseDetails: '收起',
           description: '描述',
           duration: '时长',
@@ -69,14 +73,19 @@ const messages = {
           editScriptCompactSummaryWithCharacters: '{count} 个镜头 · 人物 {characters}',
           expandDetails: '展开',
           keyObjects: '关键物体',
+          lens: '焦段',
+          lighting: '光线',
           listSeparator: '、',
           linkedShots: '关联镜头',
           locations: '场景',
+          movement: '摄影运动',
           noCharacters: '无角色',
           scene: '场景',
           shotIndex: '镜头 {index}',
+          shotScale: '景别',
           sound: '声音',
           viewVideoPreview: '查看视频预览',
+          focus: '焦点',
         },
       },
     },
@@ -204,9 +213,35 @@ function editShotExecutionPlanNodeData(input?: {
       items: [
         {
           title: '镜头 1 · 低角度推进',
-          fields: [{ label: '运动', value: '缓慢推进' }],
-          body: '镜头执行细节。',
-          chips: ['1'],
+          fields: [
+            { label: '景别', value: '中远景' },
+            { label: '焦段', value: '24mm 广角镜头' },
+            { label: '焦点', value: '浅景深' },
+            { label: '机位高度', value: '略高于视平线' },
+            { label: '拍摄角度', value: '微俯视角度' },
+            { label: '摄影运动', value: '缓慢推进' },
+            { label: '构图', value: '窒息式不对称构图' },
+            { label: '光线', value: '冷暖极度冲突' },
+            { label: '轴线与视线', value: '前后纵深窥视对立' },
+          ],
+          body: '空间说明保留为字段网格里的描述。',
+          chips: ['林晓 / visible', '黑影人 / hidden', '沙发', '手机'],
+        },
+        {
+          title: '镜头 2 · 手机屏幕',
+          fields: [
+            { label: '景别', value: '特写' },
+            { label: '焦段', value: '50mm 宏观镜头' },
+            { label: '焦点', value: '极浅景深' },
+            { label: '机位高度', value: '低于视平线' },
+            { label: '拍摄角度', value: '垂直俯视' },
+            { label: '摄影运动', value: '轻微手持抖动' },
+            { label: '构图', value: '中心压迫构图' },
+            { label: '光线', value: '屏幕冷蓝光' },
+            { label: '轴线与视线', value: '垂直轴线' },
+          ],
+          body: '手机屏幕刺眼发光。',
+          chips: ['林晓 / visible', '手机'],
         },
       ],
     },
@@ -324,9 +359,37 @@ describe('edit script compact canvas card', () => {
   it('renders the completed shot execution plan as a collapsible top-level summary', async () => {
     const html = await renderWorkspaceNode(editShotExecutionPlanNodeData({ expanded: false }))
 
-    expect(html).toContain('2 个镜头 · 摄影执行计划')
+    expect(html).toContain('2 个镜头 · 人物 林晓、黑影人')
     expect(html).toContain('展开')
-    expect(html).not.toContain('镜头 1 · 低角度推进')
+    expect(html).not.toContain('中远景 · 24mm 广角镜头')
+  })
+
+  it('renders the expanded shot execution plan as compact shot cards with a field grid', async () => {
+    const html = await renderWorkspaceNode(editShotExecutionPlanNodeData({ expanded: true }))
+
+    expect(html).toContain('中远景 · 24mm 广角镜头')
+    expect(html).toContain('data-icon="usersRound"')
+    expect(html).not.toContain('关联镜头')
+  })
+
+  it('renders the streamed shot execution active item as a field grid', async () => {
+    const html = await renderWorkspaceNode(editShotExecutionPlanNodeData({
+      expanded: false,
+      streamPresentation: {
+        isStreaming: true,
+        activeItemKey: '1',
+        displayedItemKeys: ['1'],
+        pinnedItemKeys: [],
+        revealedFieldCountByKey: {
+          1: Number.MAX_SAFE_INTEGER,
+        },
+      },
+    }))
+
+    expect(html).toContain('中远景 · 24mm 广角镜头')
+    expect(html).toContain('浅景深')
+    expect(html).toContain('轴线与视线')
+    expect(html).toContain('workspace-node-stream-soft-detail')
   })
 
   it('renders the completed asset group expanded by default without a disclosure toggle', async () => {
