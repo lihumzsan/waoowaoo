@@ -23,6 +23,8 @@ describe('workspace canvas layout runtime contract', () => {
     expect(nodeTransitionRule).not.toContain('width')
     expect(nodeTransitionRule).not.toContain('height')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(css).toContain('.workspace-canvas-node-shell[data-expanded="true"]')
+    expect(css).toContain('workspaceCanvasNodeExpandIn')
     expect(css).toContain('.workspace-canvas-node-content[data-expanded="false"]')
   })
 
@@ -31,6 +33,7 @@ describe('workspace canvas layout runtime contract', () => {
 
     expect(canvas).toContain('if (expanded && profile.expanded) return node')
     expect(canvas).toContain('collisionAnchorNodeIds: options?.collisionAnchorNodeIds')
+    expect(canvas).not.toContain('measuredNodePosition')
     expect(canvas).not.toContain('savedNodeLayoutPositions')
     expect(canvas).not.toContain('captureLayoutBasePositions(alignedNodes')
   })

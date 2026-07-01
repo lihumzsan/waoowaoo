@@ -494,10 +494,8 @@ function ProjectWorkspaceCanvasContent({
     setSourceNodes((currentNodes) => {
       return resolveCanvasLayoutOrCurrent(currentNodes, () => {
         let changed = false
-        let measuredPosition: { readonly x: number; readonly y: number } | null = null
         const measuredNodes = currentNodes.map((node) => {
           if (node.id !== nodeId) return node
-          measuredPosition = node.position
 
           const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
           const expanded = node.data.disclosure?.effectiveExpanded ?? (node.data.expanded === true)
@@ -532,13 +530,7 @@ function ProjectWorkspaceCanvasContent({
 
         const normalizedNodes = normalizeNodesToLayoutBasePositions(measuredNodes)
         const relayoutedNodes = relayoutEditAssetsBelowScript(normalizedNodes)
-        const measuredNodePosition = measuredPosition
-          ? new Map([[nodeId, measuredPosition]])
-          : undefined
-        const preservedNodePositions = mergePreservedNodePositions(
-          expansionAnchorNodePositionsRef.current,
-          measuredNodePosition,
-        )
+        const preservedNodePositions = mergePreservedNodePositions(expansionAnchorNodePositionsRef.current)
         const alignOptions = { preservedNodeIds: preservedNodeIdSet(preservedNodePositions) }
         const alignedNodes = alignExecutionPlanNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
         const collisionAnchorNodeIds = new Set([
