@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildProfileBillingDetailParts,
+  buildProfileTransactionScopeLines,
   getProfileTransactionActionTranslationKey,
 } from '@/lib/profile/billing-transaction-display'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -15,6 +16,24 @@ describe('profile billing transaction display', () => {
     expect(getProfileTransactionActionTranslationKey('consume', 'shot-execution-plan')).toBe('actionTypes.shot-execution-plan')
     expect(getProfileTransactionActionTranslationKey('consume', 'asset-extract')).toBe('actionTypes.asset-extract')
     expect(getProfileTransactionActionTranslationKey('consume', 'unknown_action')).toBe('transactionKinds.consume')
+  })
+
+  it('keeps transaction subject display scoped to the project name only', () => {
+    expect(buildProfileTransactionScopeLines({
+      projectName: '新项目 06-30 21:06',
+      episodeNumber: 1,
+      episodeName: '剧集 1',
+      target: {
+        targetType: 'ProjectPanel',
+        targetId: 'group:ProjectPanel',
+        labelKey: 'transactionTargets.projectPanelGroup',
+        labelParams: { count: 3 },
+      },
+    })).toEqual(['新项目 06-30 21:06'])
+
+    expect(buildProfileTransactionScopeLines({
+      projectName: '  ',
+    })).toEqual([])
   })
 
   it('builds image billing detail parts with model and image specification', () => {

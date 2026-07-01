@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 import {
   buildProfileBillingDetailParts,
+  buildProfileTransactionScopeLines,
   getProfileTransactionActionTranslationKey,
   type ProfileTranslationParams,
 } from '@/lib/profile/billing-transaction-display'
@@ -48,15 +49,7 @@ export default function ProfileTransactionsTable({
   const t = useTranslations('profile')
 
   const renderTransactionScope = (item: ProfileTransactionItem) => {
-    const lines: string[] = []
-    if (item.projectName) lines.push(item.projectName)
-    if (typeof item.episodeNumber === 'number') {
-      const episodeLabel = t('episodeLabel', { number: item.episodeNumber })
-      lines.push(item.episodeName ? `${episodeLabel} · ${item.episodeName}` : episodeLabel)
-    }
-    if (item.target) {
-      lines.push(t(item.target.labelKey, item.target.labelParams))
-    }
+    const lines = buildProfileTransactionScopeLines(item)
 
     return lines.length > 0 ? (
       <div className="space-y-1">

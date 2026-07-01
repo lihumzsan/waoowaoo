@@ -28,6 +28,13 @@ export type ProfileBillingDetailPart =
     text: string
   }
 
+export type ProfileTransactionScopeInput = {
+  projectName?: string | null
+  episodeNumber?: number | null
+  episodeName?: string | null
+  target?: unknown | null
+}
+
 const LEGACY_PROFILE_ACTION_KEYS = [
   'regenerate_storyboard_text',
   'story_to_script_run',
@@ -127,6 +134,11 @@ export function getProfileTransactionActionTranslationKey(
     return `actionTypes.${action}`
   }
   return getProfileTransactionKindTranslationKey(type)
+}
+
+export function buildProfileTransactionScopeLines(item: ProfileTransactionScopeInput): string[] {
+  const projectName = readString(item.projectName)
+  return projectName ? [projectName] : []
 }
 
 export function buildProfileBillingDetailParts(meta: Record<string, unknown> | null | undefined): ProfileBillingDetailPart[] {
