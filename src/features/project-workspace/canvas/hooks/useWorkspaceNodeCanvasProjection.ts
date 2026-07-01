@@ -6,6 +6,7 @@ import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import { planStoryboardPanelImageSubmissionGroups } from '@/lib/storyboard/grid-image-groups'
 import type {
   ProjectEditAssetRequirement,
   ProjectEditScreenplay,
@@ -24,6 +25,7 @@ import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasImageDetails,
+  WorkspaceCanvasNodeAction,
   WorkspaceCanvasNodeActionHandler,
   WorkspaceCanvasNodeData,
   WorkspaceCanvasProjection,
@@ -217,6 +219,43 @@ function inferGridMode(shotCount: number): '2x2' | '3x3' | undefined {
   if (shotCount >= 2 && shotCount <= 4) return '2x2'
   if (shotCount >= 5 && shotCount <= 9) return '3x3'
   return undefined
+}
+
+function panelImageGenerationActions(input: {
+  readonly episodeId: string
+  readonly editScriptId?: string | null
+  readonly panels: readonly ProjectPanel[]
+}): ReadonlyMap<string, WorkspaceCanvasNodeAction> {
+  const actions = new Map<string, WorkspaceCanvasNodeAction>()
+  const groups = planStoryboardPanelImageSubmissionGroups(input.panels.map((panel) => ({
+    id: panel.id,
+    storyboardId: panel.storyboardId,
+    panelIndex: panel.panelIndex,
+    sourceGenerationSegmentId: panel.sourceGenerationSegmentId ?? null,
+  })), 'grid')
+
+  for (const group of groups) {
+    if (group.kind === 'grid2x2' && input.editScriptId) {
+      const action: WorkspaceCanvasNodeAction = {
+        type: 'generate_storyboard_grid_images',
+        episodeId: input.episodeId,
+        editScriptId: input.editScriptId,
+        sourceGenerationSegmentId: group.sourceGenerationSegmentId,
+        panelIds: group.panels.map((panel) => panel.id),
+        generationMode: 'grid',
+      }
+      for (const panel of group.panels) {
+        actions.set(panel.id, action)
+      }
+      continue
+    }
+
+    for (const panel of group.panels) {
+      actions.set(panel.id, { type: 'generate_image', panelId: panel.id })
+    }
+  }
+
+  return actions
 }
 
 function styleBibleHasPolicyText(details: WorkspaceCanvasStyleBibleDetails): boolean {
@@ -809,6 +848,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   const panelList = collectPanels(storyboards)
+  const panelImageActions = panelImageGenerationActions({
+    episodeId,
+    editScriptId: editScript?.id ?? null,
+    panels: panelList,
+  })
   const shotNodeIdsByShotNumber = new Map<number, string>()
   if (editFirstCanvasVisibility.storyboardPanels) {
     panelList.forEach((panel, index) => {
@@ -855,7 +899,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
           ),
           actionLabel: translate('actions.generateImage'),
-          action: { type: 'generate_image', panelId: panel.id },
+          action: panelImageActions.get(panel.id) ?? { type: 'generate_image', panelId: panel.id },
           shotDetails: shotDetails(panel),
           imageDetails: imageDetails(panel),
           videoDetails: {
@@ -922,17 +966,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             : undefined,
           secondaryActionLabel: translate('actions.arrangeGenerationSegments'),
           secondaryAction: { type: 'open_video_block_arrangement', editScriptId: editScript.id, segmentIndex: index },
-          tertiaryActionLabel: canGenerateGroup ? translate('actions.generateStoryboardGridImages') : undefined,
-          tertiaryAction: canGenerateGroup
-            ? {
-                type: 'generate_storyboard_grid_images',
-                episodeId,
-                editScriptId: editScript.id,
-                sourceGenerationSegmentId: `${editScript.id}:generationSegment:${index + 1}`,
-                panelIds: details.sourceImages.flatMap((image) => (image.panelId ? [image.panelId] : [])),
-                generationMode: 'grid',
-              }
-            : undefined,
           videoPlanDetails: details,
           onAction,
         },
