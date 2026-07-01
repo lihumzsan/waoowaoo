@@ -1860,6 +1860,26 @@ const AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN =
   /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|avoid|never|forbidden|no\s+(?:subtitles?|captions?|readable\s+text|new\s+people|new\s+characters|extra\s+people|rotation|profile\s+turns?|head\s+turns?|crowds?|guards?|police|scene\s+cuts?|scene\s+changes?))\b|(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d)/iu
 const AUDIO_TALKING_HEAD_UNSTABLE_TERM_PATTERN =
   /\b(?:subtitles?|captions?|watermarks?|crowds?|guards?|police|profile\s+turns?|head\s+turns?|extra\s+people|new\s+people|new\s+characters|rotation|rotating|orbiting|spinning|scene\s+cuts?|scene\s+changes?)\b/i
+const AUDIO_TALKING_HEAD_TEXT_CONTENT_TERM_PATTERN =
+  /(?:字幕|台词|对白字幕|对白文字|画面文字|屏幕文字|可读文字|可读文本|中文字符|英文字符|\bsubtitles?\b|\bcaptions?\b|\bclosed captions?\b|\btext overlays?\b|\breadable text\b|\bdialogue text\b|\bspeech text\b|\bon-screen text\b)/iu
+
+function stripAudioTalkingHeadTextContentClauses(value: string): string {
+  const pieces = value.split(/([，,。；;|])/u)
+  const kept: string[] = []
+
+  for (let index = 0; index < pieces.length; index += 2) {
+    const clause = readTrimmedString(pieces[index])
+    const separator = pieces[index + 1] || ''
+    if (!clause) continue
+    if (AUDIO_TALKING_HEAD_TEXT_CONTENT_TERM_PATTERN.test(clause)) continue
+    kept.push(`${clause}${separator}`)
+  }
+
+  return kept.join('')
+    .replace(/[，,。；;|]\s*$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 function extractAudioTalkingHeadPositiveIntent(value: string): string {
   const preferred = [
@@ -1884,10 +1904,12 @@ function sanitizeAudioTalkingHeadPrompt(value: string): string {
   if (!text) return ''
   const intent = extractAudioTalkingHeadPositiveIntent(text)
   const source = intent || text
+  const sanitizedIntent = intent ? stripAudioTalkingHeadTextContentClauses(intent) : ''
 
   const cleaned = source
     .split(/\r?\n/)
     .map((line) => line.trim())
+    .map(stripAudioTalkingHeadTextContentClauses)
     .filter((line) =>
       line.length > 0
       && !AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN.test(line)
@@ -1896,7 +1918,7 @@ function sanitizeAudioTalkingHeadPrompt(value: string): string {
     .join('\n')
     .trim()
 
-  return cleaned || intent || text
+  return cleaned || sanitizedIntent
 }
 
 function derivePromptRelayPositiveInput(

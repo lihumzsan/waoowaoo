@@ -514,6 +514,29 @@ describe('comfyui workflow registry', () => {
     expect(new Set(smartPrompt.split(' | ').map((segment) => segment.replace(/\s*\[\d+-\d+\]$/, '').trim())).size).toBe(1)
   })
 
+  it('keeps Chinese speaking action but strips subtitle and dialogue-text instructions from Smart VBVR audio prompts', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: '中年医生坐在办公室里正在说话，嘴唇开合，画面无字幕，不显示台词文字，字幕不能出现',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 10,
+      targetFrameCount: 250,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+
+    expect(smartPrompt).toContain('正在说话')
+    expect(smartPrompt).toContain('Audio-backed talking-head')
+    expect(smartPrompt).not.toMatch(/字幕|台词|文字/)
+  })
+
   it('does not inject continuity packet or negative concepts into Smart VBVR positive prompts', () => {
     const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
       prompt: [
