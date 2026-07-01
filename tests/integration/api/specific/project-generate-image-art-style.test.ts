@@ -48,7 +48,18 @@ const hasOutputMock = vi.hoisted(() => ({
 }))
 
 const billingMock = vi.hoisted(() => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ billable: false })),
+  buildDefaultTaskBillingInfo: vi.fn((taskType: string, payload: Record<string, unknown>) => ({
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'image',
+    model: typeof payload.imageModel === 'string' ? payload.imageModel : 'img::character',
+    quantity: 1,
+    unit: 'image',
+    maxFrozenCost: 1,
+    action: taskType,
+    status: 'quoted',
+  })),
 }))
 
 const mutationBatchMock = vi.hoisted(() => ({
@@ -120,6 +131,7 @@ describe('api specific - novel promotion generate image art style', () => {
         kind: 'character',
         projectId: 'project-1',
         appearanceId: 'appearance-1',
+        confirmedMaxCost: 1,
       },
     })
 
@@ -162,6 +174,7 @@ describe('api specific - novel promotion generate image art style', () => {
         projectId: 'project-1',
         appearanceId: 'appearance-1',
         count: 6,
+        confirmedMaxCost: 1,
       },
     })
 
@@ -187,6 +200,7 @@ describe('api specific - novel promotion generate image art style', () => {
         projectId: 'project-1',
         appearanceId: 'appearance-1',
         count: 1,
+        confirmedMaxCost: 1,
       },
     })
 
