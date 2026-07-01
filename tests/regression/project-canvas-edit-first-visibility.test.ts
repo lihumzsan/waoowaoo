@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { ProjectEditAssetRequirement, ProjectEditScript, ProjectFinalVideo, ProjectVideoGroup } from '@/types/project'
+import type { ProjectEditAssetRequirement, ProjectEditScreenplay, ProjectEditScript, ProjectFinalVideo, ProjectVideoGroup } from '@/types/project'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
@@ -38,6 +38,18 @@ function requirement(
     taskTargetId: 'location-1',
     errorMessage: null,
     previewImageUrl: '/images/living-room.png',
+    ...overrides,
+  }
+}
+
+function editScreenplay(overrides: Partial<ProjectEditScreenplay> = {}): ProjectEditScreenplay {
+  return {
+    id: 'screenplay-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    userPrompt: 'story prompt',
+    screenplayText: 'screenplay text',
+    status: 'ready',
     ...overrides,
   }
 }
@@ -115,6 +127,24 @@ function finalVideo(overrides: Partial<ProjectFinalVideo> = {}): ProjectFinalVid
 }
 
 describe('project canvas edit-first visibility', () => {
+  it('does not duplicate screenplay status in footer meta', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyText: 'story',
+      storyboards: [],
+      editFirstWorkflow: workflow('screenplay_ready_for_review'),
+      editScreenplay: editScreenplay(),
+      savedLayouts: [],
+      translate: t,
+    })
+    const screenplay = projection.nodes.find((node) => node.data.kind === 'editScreenplay')
+
+    expect(screenplay?.data.statusLabel).toBeTruthy()
+    expect(screenplay?.data.meta).toBe('')
+  })
+
   it('does not render asset or execution nodes while the edit script is still generating', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',

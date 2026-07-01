@@ -551,7 +551,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         title: translate('nodes.editScreenplay.title'),
         eyebrow: translate('nodes.editScreenplay.eyebrow'),
         body: editScreenplay?.screenplayText ?? translate('nodes.editScreenplay.pendingBody'),
-        meta: screenplayPresentation.statusLabel,
+        meta: '',
         ...screenplayPresentation,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditScreenplay(editScreenplay?.id ?? null)),
         editScreenplayDetails: editScreenplay
