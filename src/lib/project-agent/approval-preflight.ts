@@ -1,0 +1,169 @@
+import type { NextRequest } from 'next/server'
+import {
+  buildToolError,
+  normalizeOperationExecutionToolError,
+  withOperationErrorDetails,
+} from '@/lib/adapters/operation-error-normalizer'
+import { planOperation, toOperationPlanView, type OperationPlanView } from '@/lib/operations/planning'
+import type {
+  ProjectAgentOperationDefinition,
+  ProjectAgentToolResult,
+} from '@/lib/operations/types'
+import type { ProjectAgentContext } from './types'
+
+type ApprovalPreflightRecord =
+  | {
+      status: 'planned'
+      operationPlan: OperationPlanView
+    }
+  | {
+      status: 'failed'
+      result: ProjectAgentToolResult<never>
+    }
+
+export interface ProjectAgentApprovalPreflightStore {
+  setPlanned(params: ApprovalPreflightKeyParams & {
+    operationPlan: OperationPlanView
+  }): void
+  setFailed(params: ApprovalPreflightKeyParams & {
+    result: ProjectAgentToolResult<never>
+  }): void
+  getPlanned(params: ApprovalPreflightKeyParams): OperationPlanView | null
+  consumeFailed(params: ApprovalPreflightKeyParams): ProjectAgentToolResult<never> | null
+}
+
+interface ApprovalPreflightKeyParams {
+  operationId: string
+  toolCallId?: string | null
+  input: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeKeyValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeKeyValue)
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, normalizeKeyValue(child)]),
+  )
+}
+
+function stringifyKeyInput(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(normalizeKeyValue(value))
+    return serialized || 'null'
+  } catch {
+    return String(value)
+  }
+}
+
+function buildApprovalPreflightKey(params: ApprovalPreflightKeyParams): string {
+  const toolCallId = typeof params.toolCallId === 'string' ? params.toolCallId.trim() : ''
+  if (toolCallId) return `${params.operationId}:call:${toolCallId}`
+  return `${params.operationId}:input:${stringifyKeyInput(params.input)}`
+}
+
+export function createProjectAgentApprovalPreflightStore(): ProjectAgentApprovalPreflightStore {
+  const records = new Map<string, ApprovalPreflightRecord>()
+  return {
+    setPlanned(params) {
+      records.set(buildApprovalPreflightKey(params), {
+        status: 'planned',
+        operationPlan: params.operationPlan,
+      })
+    },
+    setFailed(params) {
+      records.set(buildApprovalPreflightKey(params), {
+        status: 'failed',
+        result: params.result,
+      })
+    },
+    getPlanned(params) {
+      const record = records.get(buildApprovalPreflightKey(params))
+      return record?.status === 'planned' ? record.operationPlan : null
+    },
+    consumeFailed(params) {
+      const key = buildApprovalPreflightKey(params)
+      const record = records.get(key)
+      if (record?.status !== 'failed') return null
+      records.delete(key)
+      return record.result
+    },
+  }
+}
+
+export async function preflightProjectAgentToolApproval<Input>(params: {
+  request: NextRequest
+  operation: ProjectAgentOperationDefinition<Input, unknown>
+  projectId: string
+  userId: string
+  context: ProjectAgentContext
+  source: string
+  input: unknown
+  toolCallId?: string | null
+  store: ProjectAgentApprovalPreflightStore
+}): Promise<boolean> {
+  if (!params.operation.plan) return true
+
+  const parsed = params.operation.inputSchema.safeParse(params.input)
+  if (!parsed.success) {
+    params.store.setFailed({
+      operationId: params.operation.id,
+      toolCallId: params.toolCallId,
+      input: params.input,
+      result: {
+        ok: false,
+        error: buildToolError({
+          code: 'OPERATION_INPUT_INVALID',
+          message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
+          operationId: params.operation.id,
+          details: withOperationErrorDetails(params.operation),
+          issues: parsed.error.issues,
+        }),
+      },
+    })
+    return false
+  }
+
+  try {
+    const plan = await planOperation({
+      operation: params.operation,
+      ctx: {
+        request: params.request,
+        userId: params.userId,
+        projectId: params.projectId,
+        context: params.context,
+        source: params.source,
+        writer: null,
+        toolCallId: params.toolCallId,
+      },
+      input: parsed.data,
+    })
+    params.store.setPlanned({
+      operationId: params.operation.id,
+      toolCallId: params.toolCallId,
+      input: params.input,
+      operationPlan: await toOperationPlanView(plan),
+    })
+    return true
+  } catch (error) {
+    params.store.setFailed({
+      operationId: params.operation.id,
+      toolCallId: params.toolCallId,
+      input: params.input,
+      result: {
+        ok: false,
+        error: normalizeOperationExecutionToolError({
+          error,
+          operation: params.operation,
+          operationId: params.operation.id,
+        }),
+      },
+    })
+    return false
+  }
+}

@@ -8,6 +8,10 @@ import { type GenerationSegmentVideoPlanItem } from '@/lib/video-groups/types'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
 import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, parseShotNumbersJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
 
+function hasExistingVideoOutput(metadata: PlannedVideoGroupTaskMetadata): boolean {
+  return Boolean(normalizeString(metadata.previous?.videoUrl) || normalizeString(metadata.previous?.videoMediaId))
+}
+
 export async function executeGenerateEpisodeVideosAutoOperation(params: {
   ctx: ProjectAgentOperationContext
   input: UnknownObject
@@ -70,6 +74,7 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
       gridMode: item.gridMode,
       shotNumbers: item.shotNumbers,
     })
+    if (hasExistingVideoOutput(groupPlan.metadata)) continue
     tasks.push(groupPlan.task)
     videoGroups.push(groupPlan.metadata)
     items.push({
@@ -150,6 +155,21 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     })
     : []
   const videoGroupMetadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
+  if (params.plan.tasks.length === 0) {
+    return {
+      success: true,
+      async: true,
+      total: 0,
+      taskIds: [],
+      results: [],
+      noop: true,
+      reason: 'NO_VIDEO_GROUPS_TO_GENERATE',
+      plan: {
+        items: generationSegmentItems,
+      },
+      groupVideoModel: normalizeString(metadata.groupVideoModel),
+    }
+  }
   const submitted: Array<{
     task: PlannedTask
     result: Awaited<ReturnType<typeof submitPlannedOperationTask>>

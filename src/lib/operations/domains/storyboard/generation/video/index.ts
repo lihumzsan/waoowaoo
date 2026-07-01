@@ -17,11 +17,6 @@ import {
   planGeneratePanelVideoOperation,
 } from './panel-video'
 import {
-  commitGenerateEpisodeVideosPlan,
-  executeGenerateEpisodeVideosOperation,
-  planGenerateEpisodeVideosOperation,
-} from './episode-panel-videos'
-import {
   commitGenerateEpisodeVideoGroupsPlan,
   commitGenerateVideoGroupPlan,
   executeGenerateEpisodeVideoGroupsOperation,
@@ -54,14 +49,6 @@ const generatePanelVideoInputSchema = z.object({
   message: 'panelId or (storyboardId + panelIndex) is required',
   path: ['panelId'],
 })
-
-const generateEpisodeVideosInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  limit: z.number().int().positive().max(50).optional(),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
 
 const generateVideoGroupInputSchema = z.object({
   confirmed: z.boolean().optional(),
@@ -109,15 +96,6 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
     taskSubmitOperationOutputSchemaBase.extend({
       mutationBatchId: z.string().min(1),
       panelId: z.string().min(1),
-    }).passthrough(),
-  )
-
-  const generateEpisodeVideosOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
-    taskBatchSubmitOperationOutputSchemaBase.extend({
-      results: z.array(z.object({
-        refId: z.string().min(1),
-        taskId: z.string().min(1),
-      }).passthrough()),
     }).passthrough(),
   )
 
@@ -192,6 +170,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_panel_video',
       summary: 'Generate video for a single storyboard panel.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         writes: true,
         billable: true,
@@ -227,7 +206,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
 
     generate_episode_videos: defineOperation({
       id: 'generate_episode_videos',
-      summary: 'Batch generate videos for pending panels in an episode.',
+      summary: 'Generate missing continuous video segments for the current episode from edit-first generation segments.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -241,23 +220,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       confirmation: {
         required: true,
-        summary: '将为整集待生成分镜批量生成视频（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑计划中的生成分段提交缺失的连续视频片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: generateEpisodeVideosInputSchema,
-      outputSchema: generateEpisodeVideosOutputSchema,
-      plan: async (ctx, input) => planGenerateEpisodeVideosOperation({
+      inputSchema: generateEpisodeVideosAutoInputSchema,
+      outputSchema: generateEpisodeVideosAutoOutputSchema,
+      plan: async (ctx, input) => planGenerateEpisodeVideosAutoOperation({
         ctx,
         input: input as UnknownObject,
         operationId: 'generate_episode_videos',
       }),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosPlan({
+      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosAutoPlan({
         ctx,
         input: input as UnknownObject,
         operationId: 'generate_episode_videos',
         plan,
       }),
-      execute: async (ctx, input) => executeGenerateEpisodeVideosOperation({
+      execute: async (ctx, input) => executeGenerateEpisodeVideosAutoOperation({
         ctx,
         input: input as UnknownObject,
         operationId: 'generate_episode_videos',
@@ -268,6 +247,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_video_group',
       summary: 'Generate one continuous video segment from ordered storyboard reference images.',
       intent: 'act',
+      channels: { tool: false, api: true },
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
@@ -306,6 +286,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_episode_video_groups',
       summary: 'Batch generate continuous video segments for an episode.',
       intent: 'act',
+      channels: { tool: false, api: true },
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
@@ -344,6 +325,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_episode_videos_auto',
       summary: 'Generate episode videos from edit-first generation segments.',
       intent: 'act',
+      channels: { tool: false, api: true },
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
@@ -382,6 +364,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_asset_reference_video',
       summary: 'Generate one edit-first generation segment directly from reference assets.',
       intent: 'act',
+      channels: { tool: false, api: true },
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
@@ -420,6 +403,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       id: 'generate_episode_asset_reference_videos',
       summary: 'Batch generate edit-first generation segments directly from reference assets.',
       intent: 'act',
+      channels: { tool: false, api: true },
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,

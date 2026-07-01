@@ -37,7 +37,7 @@ import {
   localizeSelectableToolDescription,
 } from './copy'
 import { buildProjectAgentSystemPrompt } from './system-prompt'
-import { normalizeProjectAgentLocale, type ProjectAgentLocale } from './locale'
+import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'
 import { resolveProjectAgentLanguageModel } from './model'
@@ -86,7 +86,11 @@ import {
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
-import { planOperation, toOperationPlanView, type OperationPlanView } from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/planning'
+import {
+  createProjectAgentApprovalPreflightStore,
+  type ProjectAgentApprovalPreflightStore,
+} from './approval-preflight'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -406,34 +410,22 @@ function readConfirmedMaxCostFromInterruptionPayload(value: unknown): number | n
 }
 
 async function buildApprovalOperationPlanView(params: {
-  request: NextRequest
   item: RunToolApprovalItem
   operation: ProjectAgentOperationRegistry[string] | undefined
-  projectId: string
-  userId: string
-  context: ProjectAgentContext
   toolCallId: string | null
+  approvalPreflightStore: ProjectAgentApprovalPreflightStore
 }): Promise<OperationPlanView | null> {
   if (!params.operation?.plan) return null
   const rawInput = readApprovalInput(params.item)
-  const parsed = params.operation.inputSchema.safeParse(rawInput)
-  if (!parsed.success) {
-    throw new Error(`PROJECT_AGENT_APPROVAL_PLAN_INPUT_INVALID:${params.operation.id}`)
-  }
-  const plan = await planOperation({
-    operation: params.operation,
-    ctx: {
-      request: params.request,
-      userId: params.userId,
-      projectId: params.projectId,
-      context: params.context,
-      source: 'assistant-panel',
-      writer: null,
-      toolCallId: params.toolCallId,
-    },
-    input: parsed.data,
+  const operationPlan = params.approvalPreflightStore.getPlanned({
+    operationId: params.operation.id,
+    toolCallId: params.toolCallId,
+    input: rawInput,
   })
-  return await toOperationPlanView(plan)
+  if (!operationPlan) {
+    throw new Error(`PROJECT_AGENT_APPROVAL_PREFLIGHT_PLAN_MISSING:${params.operation.id}`)
+  }
+  return operationPlan
 }
 
 function matchesApprovalItem(item: RunToolApprovalItem, approvalId: string): boolean {
@@ -641,6 +633,7 @@ export async function createProjectAgentChatResponse(input: {
     episodeId: context.episodeId || null,
     initial: phase.editFirstWorkflow,
   })
+  const approvalPreflightStore = createProjectAgentApprovalPreflightStore()
   const toolset = resolveProjectAgentToolset({
     registry: operations,
     context,
@@ -862,6 +855,7 @@ export async function createProjectAgentChatResponse(input: {
         }),
       }),
       onExecutionSettled: () => liveWorkflow.invalidate(),
+      approvalPreflightStore,
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
 
@@ -951,13 +945,10 @@ export async function createProjectAgentChatResponse(input: {
           const operationId = approvalItem.name ?? 'unknown_operation'
           const approvalToolCallId = readApprovalToolCallId(approvalItem)
           const operationPlan = await buildApprovalOperationPlanView({
-            request: input.request,
             item: approvalItem,
             operation: operations[operationId],
-            projectId: input.projectId,
-            userId: input.userId,
-            context,
             toolCallId: approvalToolCallId,
+            approvalPreflightStore,
           })
           const interruptionId = await createProjectAgentApprovalInterruption({
             runId: input.run.id,

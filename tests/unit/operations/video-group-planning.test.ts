@@ -83,6 +83,7 @@ vi.mock('@/lib/billing', () => ({
   })),
 }))
 
+import { createVideoGenerationOperations } from '@/lib/operations/domains/storyboard/generation/video'
 import { planVideoGroupTask } from '@/lib/operations/domains/storyboard/generation/video/video-group-planning'
 
 function buildContext(): ProjectAgentOperationContext {
@@ -283,5 +284,65 @@ describe('video group planning', () => {
       editScriptId: 'edit-script-1',
       userId: 'user-1',
     })
+  })
+
+  it('uses continuous video group planning for the main episode video operation', async () => {
+    const operation = createVideoGenerationOperations().generate_episode_videos
+    const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })
+
+    expect(plan).toBeDefined()
+    expect(plan?.operationId).toBe('generate_episode_videos')
+    expect(plan?.tasks).toHaveLength(1)
+    expect(plan?.tasks[0]?.taskType).toBe(TASK_TYPE.VIDEO_GROUP)
+    expect(plan?.tasks[0]?.target.targetType).toBe('ProjectVideoGroup')
+    expect(plan?.tasks[0]?.payload).toEqual(expect.objectContaining({
+      videoModel: 'google::veo-test',
+      episodeId: 'episode-1',
+      shotNumbers: [1, 2],
+      durationSec: 5,
+      generationOptions: expect.objectContaining({
+        duration: 5,
+      }),
+    }))
+    expect(plan?.metadata).toEqual(expect.objectContaining({
+      groupVideoModel: 'google::veo-test',
+    }))
+  })
+
+  it('skips existing completed continuous video groups in the main episode video operation', async () => {
+    prismaMock.projectVideoGroup.findMany.mockResolvedValueOnce([{
+      id: 'video-group-existing',
+      status: 'completed',
+      taskId: 'task-existing',
+      errorCode: null,
+      errorMessage: null,
+      durationSec: 5,
+      prompt: CONTINUOUS_PROMPT,
+      referenceImageUrl: null,
+      referenceImageMediaId: null,
+      videoUrl: 'videos/existing.mp4',
+      videoMediaId: null,
+      shotNumbers: [1, 2],
+    }])
+    const operation = createVideoGenerationOperations().generate_episode_videos
+    const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })
+
+    expect(plan).toBeDefined()
+    expect(plan?.operationId).toBe('generate_episode_videos')
+    expect(plan?.tasks).toEqual([])
+    expect(plan?.metadata).toEqual(expect.objectContaining({
+      items: [],
+      groupVideoModel: 'google::veo-test',
+    }))
+    const result = plan ? await operation.commit?.(buildContext(), { episodeId: 'episode-1' }, plan) : null
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      total: 0,
+      taskIds: [],
+      results: [],
+      noop: true,
+      reason: 'NO_VIDEO_GROUPS_TO_GENERATE',
+    }))
   })
 })

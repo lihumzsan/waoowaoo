@@ -18,6 +18,10 @@ import {
   shouldRequireAssistantToolApproval,
   type AssistantPermissionMode,
 } from './permission-mode'
+import {
+  preflightProjectAgentToolApproval,
+  type ProjectAgentApprovalPreflightStore,
+} from './approval-preflight'
 import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
 import { normalizeOperationRuntimeSignal } from './runtime-signal'
 import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
@@ -133,6 +137,7 @@ export interface CreateProjectAgentOperationToolParams {
    * isEnabled evaluations see the post-execution project state.
    */
   onExecutionSettled?: () => void
+  approvalPreflightStore?: ProjectAgentApprovalPreflightStore
 }
 
 export function createProjectAgentOperationTool(
@@ -142,19 +147,43 @@ export function createProjectAgentOperationTool(
     mode: params.assistantPermissionMode,
     operation: params.operation,
   })
+  const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
+    if (!requiresApproval) return false
+    if (!params.approvalPreflightStore) return true
+    return await preflightProjectAgentToolApproval({
+      request: params.request,
+      operation: params.operation,
+      projectId: params.projectId,
+      userId: params.userId,
+      context: params.context,
+      source: 'assistant-panel',
+      input: normalizeToolInputForExecution(toolInput),
+      toolCallId,
+      store: params.approvalPreflightStore,
+    })
+  }
 
   return tool({
     name: params.operation.id,
     description: params.description,
     parameters: params.operation.toolInputSchema as never,
     strict: true,
-    ...(requiresApproval ? { needsApproval: true } : {}),
+    ...(requiresApproval ? { needsApproval } : {}),
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
       const normalizedInput = injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval)
+      const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
+        operationId: params.operation.id,
+        toolCallId,
+        input: normalizeToolInputForExecution(toolInput),
+      }) ?? null
+      if (approvalPreflightFailure) {
+        params.onExecutionSettled?.()
+        return approvalPreflightFailure
+      }
       if (isInterruptingOperation(params.operation.agentFlow)) {
         try {
           const result = await executeProjectAgentOperationFromTool({

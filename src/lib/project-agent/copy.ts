@@ -87,6 +87,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '为短片生成流程中已经生成分镜面板但缺少图片的分镜格批量生成分镜图片。只有分镜面板已存在且缺少图片时使用；不要用 generate_episode_videos 代替它。',
     en: 'Batch-generate storyboard panel images for short-film storyboard panels that already exist but have no image. Use only when storyboard panels exist and images are missing; do not substitute generate_episode_videos.',
   },
+  generate_episode_videos: {
+    zh: '为短片生成流程中当前缺失视频的连续生成片段提交视频任务。模型只发起该工具，不传 episodeId、分镜、时长、模型、limit 或 generationOptions；系统会从当前项目上下文、核心剪辑计划、分镜图片和已有视频状态决定需要生成哪些连续片段。',
+    en: 'Submit video tasks for the current missing continuous generation segments in short-film production. The model only calls this tool and must not pass episodeId, panels, duration, model, limit, or generationOptions; the system resolves the required continuous segments from the current project context, core edit plan, storyboard images, and existing video state.',
+  },
 }
 
 const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {

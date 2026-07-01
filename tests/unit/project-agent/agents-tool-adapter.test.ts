@@ -3,6 +3,7 @@ import { RunContext } from '@openai/agents'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationTool } from '@/lib/project-agent/agents-tool-adapter'
+import { createProjectAgentApprovalPreflightStore } from '@/lib/project-agent/approval-preflight'
 import type { ProjectAgentOperationDefinition, RuntimeSchema } from '@/lib/operations/types'
 import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
@@ -146,6 +147,60 @@ describe('createProjectAgentOperationTool', () => {
         episodeId: 'episode-1',
         confirmed: true,
       },
+    }))
+  })
+
+  it('returns approval preflight failures as standard tool results without executing the operation', async () => {
+    const writer = {
+      write: vi.fn(),
+      merge: vi.fn(),
+      onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    }
+    const operation = {
+      ...buildOperation(),
+      plan: vi.fn(async () => {
+        throw new Error('CAPABILITY_VALUE_NOT_ALLOWED: duration value 3 is not allowed')
+      }),
+    }
+    const tool = createProjectAgentOperationTool({
+      request: new Request('http://localhost') as unknown as NextRequest,
+      operation,
+      description: 'Generate videos',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {
+        episodeId: 'episode-1',
+        runId: 'run-1',
+      },
+      assistantPermissionMode: 'ask',
+      writer,
+      approvalPreflightStore: createProjectAgentApprovalPreflightStore(),
+    })
+
+    expect(tool.type).toBe('function')
+    if (tool.type !== 'function') throw new Error('EXPECTED_FUNCTION_TOOL')
+    expect(await tool.needsApproval(new RunContext(), { episodeId: 'episode-1' }, 'call-1')).toBe(false)
+
+    const result = await tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-1',
+        name: 'generate_storyboard_grid_images',
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'OPERATION_EXECUTION_FAILED',
+        message: 'CAPABILITY_VALUE_NOT_ALLOWED: duration value 3 is not allowed',
+      },
+    })
+    expect(operation.plan).toHaveBeenCalledTimes(1)
+    expect(executeState.executeProjectAgentOperationFromTool).not.toHaveBeenCalled()
+    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: 'data-agent-operation-start',
     }))
   })
 

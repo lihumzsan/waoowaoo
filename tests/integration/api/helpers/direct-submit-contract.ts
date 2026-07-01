@@ -80,11 +80,16 @@ function inferTaskContractFromOperation(params: {
         targetId: typeof input.locationId === 'string' ? input.locationId : 'location-1',
       }
     case 'generate_panel_video':
-    case 'generate_episode_videos':
       return {
         type: TASK_TYPE.VIDEO_PANEL,
         targetType: 'ProjectPanel',
         targetId: typeof input.panelId === 'string' ? input.panelId : 'panel-1',
+      }
+    case 'generate_episode_videos':
+      return {
+        type: TASK_TYPE.VIDEO_GROUP,
+        targetType: 'ProjectVideoGroup',
+        targetId: typeof input.groupId === 'string' ? input.groupId : 'video-group-1',
       }
     case 'generate_project_music':
       return {
