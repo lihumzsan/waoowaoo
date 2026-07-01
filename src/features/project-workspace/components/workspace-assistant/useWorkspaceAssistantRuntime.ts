@@ -29,10 +29,6 @@ import {
   type UIMessagesPersistabilityError,
 } from '@/lib/project-agent/ui-message-validation'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
-import {
-  hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex,
-  hasWorkspaceAssistantReplyLoadingStop,
-} from './visible-output'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 
 export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
@@ -52,6 +48,12 @@ interface WorkspaceAssistantTrackedRun {
   status: WorkspaceAssistantRunStatus
   operationId: string | null
   intent: WorkspaceAssistantControlIntent | null
+}
+
+interface WorkspaceAssistantReplyActivity {
+  sequence: number
+  messageIndex: number
+  requestSettled: boolean
 }
 
 type WorkspaceAssistantPendingApproval = Extract<ProjectAgentSessionPendingInteraction, { kind: 'approval' }>
@@ -79,7 +81,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   pending: boolean
   replyInFlight: boolean
   controlPending: boolean
-  replyAwaitingFirstTextOutput: boolean
   pendingApprovalId: string | null
   approvalRespondedIds: ReadonlySet<string>
   sessionState: ProjectAgentSessionState | null
@@ -226,6 +227,23 @@ export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunS
   return status === 'running'
 }
 
+export function resolveWorkspaceAssistantReplyInFlight(input: {
+  requestActive: boolean
+  chatTransportActive: boolean
+  controlRunActive: boolean
+  serverRunActive: boolean
+  streamedRunStatus: WorkspaceAssistantRunStatus | null
+}): boolean {
+  const streamedRunActive = input.streamedRunStatus === 'running'
+  const streamedRunSettledOrYielded = input.streamedRunStatus !== null && !streamedRunActive
+  if (streamedRunSettledOrYielded) return false
+  return input.requestActive
+    || input.controlRunActive
+    || input.serverRunActive
+    || streamedRunActive
+    || input.chatTransportActive
+}
+
 export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
   return status === 'running' || status === 'awaiting_task'
 }
@@ -305,8 +323,15 @@ function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTracked
 }
 
 export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]): WorkspaceAssistantTrackedRun | null {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = messages[messageIndex]
+  return findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(messages, 0)
+}
+
+export function findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(
+  messages: readonly UIMessage[],
+  messageIndex: number,
+): WorkspaceAssistantTrackedRun | null {
+  for (let currentIndex = messages.length - 1; currentIndex >= Math.max(0, messageIndex); currentIndex -= 1) {
+    const message = messages[currentIndex]
     if (!message || message.role !== 'assistant') continue
     for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
       const run = readWorkspaceAssistantRunPart(message.parts[partIndex])
@@ -434,12 +459,11 @@ export function useWorkspaceAssistantRuntime({
   const lastPersistedSignatureRef = useRef('[]')
   const persistQueueRef = useRef<Promise<void>>(Promise.resolve())
   const persistTimerRef = useRef<number | null>(null)
-  const replyTextWaitSequenceRef = useRef(0)
-  const replyTextWaitMessageIndexRef = useRef<number | null>(null)
+  const replyActivitySequenceRef = useRef(0)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
-  const [replyAwaitingFirstTextOutput, setReplyAwaitingFirstTextOutput] = useState(false)
+  const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
   const [streamedActivity, setStreamedActivity] = useState<ProjectAgentSessionActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
 
@@ -451,26 +475,35 @@ export function useWorkspaceAssistantRuntime({
     latestSessionStateRef.current = sessionState
   }, [sessionState])
 
-  const beginReplyTextWait = useCallback((): number => {
-    replyTextWaitSequenceRef.current += 1
-    replyTextWaitMessageIndexRef.current = latestMessagesRef.current.length
-    setReplyAwaitingFirstTextOutput(true)
-    return replyTextWaitSequenceRef.current
+  const beginReplyActivity = useCallback((): number => {
+    replyActivitySequenceRef.current += 1
+    const sequence = replyActivitySequenceRef.current
+    setReplyActivity({
+      sequence,
+      messageIndex: latestMessagesRef.current.length,
+      requestSettled: false,
+    })
+    return sequence
   }, [])
 
-  const clearReplyTextWait = useCallback((sequence?: number): void => {
-    if (sequence !== undefined && replyTextWaitSequenceRef.current !== sequence) return
-    replyTextWaitMessageIndexRef.current = null
-    setReplyAwaitingFirstTextOutput(false)
+  const markReplyActivityRequestSettled = useCallback((sequence: number): void => {
+    setReplyActivity((current) => {
+      if (!current || current.sequence !== sequence) return current
+      if (current.requestSettled) return current
+      return {
+        ...current,
+        requestSettled: true,
+      }
+    })
   }, [])
 
-  useEffect(() => {
-    if (!replyAwaitingFirstTextOutput) return
-    const messageIndex = replyTextWaitMessageIndexRef.current
-    if (messageIndex === null) return
-    if (!hasWorkspaceAssistantReplyLoadingStopAtOrAfterMessageIndex(chat.messages, messageIndex)) return
-    clearReplyTextWait()
-  }, [chat.messages, clearReplyTextWait, replyAwaitingFirstTextOutput])
+  const clearReplyActivity = useCallback((sequence?: number): void => {
+    setReplyActivity((current) => {
+      if (!current) return current
+      if (sequence !== undefined && current.sequence !== sequence) return current
+      return null
+    })
+  }, [])
 
   const persistMessagesNow = useCallback(async (messages: UIMessage[]): Promise<boolean> => {
     const validation = validatePersistableUIMessages(messages)
@@ -513,18 +546,20 @@ export function useWorkspaceAssistantRuntime({
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
     setStreamedActivity(null)
-    const waitSequence = beginReplyTextWait()
+    const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({ text })
-    } finally {
-      clearReplyTextWait(waitSequence)
+      markReplyActivityRequestSettled(activitySequence)
+    } catch (error) {
+      clearReplyActivity(activitySequence)
+      throw error
     }
-  }, [beginReplyTextWait, chat, clearReplyTextWait])
+  }, [beginReplyActivity, chat, clearReplyActivity, markReplyActivityRequestSettled])
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
     setStreamedActivity(null)
-    const waitSequence = beginReplyTextWait()
+    const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({
         text,
@@ -534,10 +569,12 @@ export function useWorkspaceAssistantRuntime({
           },
         },
       })
-    } finally {
-      clearReplyTextWait(waitSequence)
+      markReplyActivityRequestSettled(activitySequence)
+    } catch (error) {
+      clearReplyActivity(activitySequence)
+      throw error
     }
-  }, [beginReplyTextWait, chat, clearReplyTextWait])
+  }, [beginReplyActivity, chat, clearReplyActivity, markReplyActivityRequestSettled])
 
   const appendMessages = useCallback((messages: UIMessage[]) => {
     if (messages.length === 0) return
@@ -551,14 +588,11 @@ export function useWorkspaceAssistantRuntime({
   const mergeStreamedAssistantMessage = useCallback((message: UIMessage): UIMessage[] => {
     const activity = findLatestWorkspaceAssistantActivityInMessage(message)
     if (activity) setStreamedActivity(activity)
-    if (hasWorkspaceAssistantReplyLoadingStop(message)) {
-      clearReplyTextWait()
-    }
     const nextMessages = mergeWorkspaceAssistantStreamedMessage(latestMessagesRef.current, message)
     latestMessagesRef.current = nextMessages
     chat.setMessages(nextMessages)
     return nextMessages
-  }, [chat, clearReplyTextWait])
+  }, [chat])
 
   const applySessionState = useCallback((nextState: ProjectAgentSessionState) => {
     latestSessionStateRef.current = nextState
@@ -632,7 +666,7 @@ export function useWorkspaceAssistantRuntime({
   }) => {
     chat.clearError()
     setStreamedActivity(null)
-    const waitSequence = beginReplyTextWait()
+    const activitySequence = beginReplyActivity()
     const controlMessageId = createWorkspaceAssistantControlMessageId({
       runId: params.runId,
       endpoint: params.endpoint,
@@ -643,6 +677,7 @@ export function useWorkspaceAssistantRuntime({
       operationId: params.operationId ?? null,
       intent: params.intent,
     })
+    let requestSucceeded = false
     try {
       const currentMessages = latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages
       const visibleUserText = params.visibleUserText?.trim() ?? ''
@@ -691,17 +726,24 @@ export function useWorkspaceAssistantRuntime({
         mergeStreamedAssistantMessage(message)
       }
       await persistMessagesNow(latestMessagesRef.current)
+      requestSucceeded = true
+    } catch (error) {
+      clearReplyActivity(activitySequence)
+      throw error
     } finally {
       await refreshSessionState().catch(() => undefined)
-      clearReplyTextWait(waitSequence)
+      if (requestSucceeded) {
+        markReplyActivityRequestSettled(activitySequence)
+      }
     }
   }, [
     assistantPermissionMode,
-    beginReplyTextWait,
+    beginReplyActivity,
     chat,
-    clearReplyTextWait,
+    clearReplyActivity,
     contextPayload,
     controlTransport,
+    markReplyActivityRequestSettled,
     mergeStreamedAssistantMessage,
     persistMessagesNow,
     projectId,
@@ -879,6 +921,12 @@ export function useWorkspaceAssistantRuntime({
     () => findLatestWorkspaceAssistantRun(chat.messages),
     [chat.messages],
   )
+  const activeReplyRun = useMemo(
+    () => replyActivity
+      ? findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(chat.messages, replyActivity.messageIndex)
+      : streamedRun,
+    [chat.messages, replyActivity, streamedRun],
+  )
   const streamedActivityOperationId = resolveOperationIdFromActivity(streamedActivity)
   const streamedActivityOperationRun: WorkspaceAssistantTrackedRun | null = streamedRun
     && isWorkspaceAssistantOperationPendingStatus(streamedRun.status)
@@ -922,29 +970,45 @@ export function useWorkspaceAssistantRuntime({
     ],
   }), [
     pendingOperationId,
-    pendingRun?.runId,
-    sessionState?.currentActivity?.activityId,
-    sessionState?.currentActivity?.operationId,
-    sessionState?.currentActivity?.runId,
-    sessionState?.currentActivity?.sourceOperationId,
-    streamedActivity?.activityId,
-    streamedActivity?.operationId,
-    streamedActivity?.runId,
-    streamedActivity?.sourceOperationId,
+    pendingRun,
+    sessionState?.currentActivity,
+    streamedActivity,
   ])
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
-  const replyInFlight = chatReplyInFlight || controlPending
+  const serverRunActive = sessionState?.currentRun?.status === 'running'
+  const serverRunId = sessionState?.currentRun?.runId ?? null
+  const activeReplyRunStatus = activeReplyRun
+    && (
+      replyActivity
+      || chatReplyInFlight
+      || controlPending
+      || (serverRunId !== null && activeReplyRun.runId === serverRunId)
+    )
+    ? activeReplyRun.status
+    : null
+  const replyInFlight = resolveWorkspaceAssistantReplyInFlight({
+    requestActive: Boolean(replyActivity && !replyActivity.requestSettled),
+    chatTransportActive: chatReplyInFlight,
+    controlRunActive: controlPending,
+    serverRunActive,
+    streamedRunStatus: activeReplyRunStatus,
+  })
+
+  useEffect(() => {
+    if (!replyActivity || !replyActivity.requestSettled) return
+    if (replyInFlight) return
+    clearReplyActivity(replyActivity.sequence)
+  }, [clearReplyActivity, replyActivity, replyInFlight])
 
   return {
     runtime,
     messages: chat.messages,
     messageCount: chat.messages.length,
     status: chat.status,
-    pending: Boolean(pendingRun) || chat.status === 'submitted' || chat.status === 'streaming',
+    pending: Boolean(pendingRun) || replyInFlight,
     replyInFlight,
     controlPending,
-    replyAwaitingFirstTextOutput,
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
     approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,

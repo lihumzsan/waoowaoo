@@ -170,12 +170,12 @@ export function resolveWorkspaceAssistantExternalTaskOperationId(
 
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
   storageLoading: boolean
-  replyAwaitingFirstTextOutput: boolean
+  replyInFlight: boolean
   awaitingUserInput: boolean
   awaitingExternalTask: boolean
 }): boolean {
   return !params.storageLoading
-    && params.replyAwaitingFirstTextOutput
+    && params.replyInFlight
     && !params.awaitingUserInput
     && !params.awaitingExternalTask
 }
@@ -589,7 +589,7 @@ export default function WorkspaceAssistantPanel({
           requestKey: `${currentActivity.runId}:${currentActivity.activityId}:${activeExternalTaskOperationId}`,
         }
       : null
-  ), [activeExternalTaskOperationId, currentActivity?.activityId, currentActivity?.runId])
+  ), [activeExternalTaskOperationId, currentActivity])
   const activeAssistantFocusRequest = useMemo(
     () => assistantRuntime.activeFocusRequest ?? activeExternalTaskFocusRequest,
     [activeExternalTaskFocusRequest, assistantRuntime.activeFocusRequest],
@@ -620,13 +620,12 @@ export default function WorkspaceAssistantPanel({
     onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
   })
-  const assistantReplyActive = assistantRuntime.replyInFlight || assistantRuntime.replyAwaitingFirstTextOutput
   const awaitingUserInput = resolveWorkspaceAssistantAwaitingUserInput({
-    replyInFlight: assistantReplyActive,
+    replyInFlight: assistantRuntime.replyInFlight,
     hasPendingInteraction: Boolean(pendingInteraction),
   })
   const awaitingExternalTask = resolveWorkspaceAssistantAwaitingExternalTask({
-    replyInFlight: assistantReplyActive,
+    replyInFlight: assistantRuntime.replyInFlight,
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
     activeExternalTaskOperationId,
   })
@@ -637,7 +636,7 @@ export default function WorkspaceAssistantPanel({
   })
   const showAssistantReplyLoading = shouldShowWorkspaceAssistantReplyLoading({
     storageLoading: assistantRuntime.storageLoading,
-    replyAwaitingFirstTextOutput: assistantRuntime.replyAwaitingFirstTextOutput,
+    replyInFlight: assistantRuntime.replyInFlight,
     awaitingUserInput,
     awaitingExternalTask,
   })
