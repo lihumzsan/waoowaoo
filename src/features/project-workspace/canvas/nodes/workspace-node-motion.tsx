@@ -11,7 +11,7 @@ export function workspaceCanvasRevealClass(className = ''): string {
 }
 
 function workspaceCanvasPresenceClass(className?: string): string {
-  return className ? `workspace-canvas-motion-presence ${className}` : 'workspace-canvas-motion-presence'
+  return className ? `workspace-canvas-motion-presence-inner ${className}` : 'workspace-canvas-motion-presence-inner'
 }
 
 export function WorkspaceCanvasMotionPresence({
@@ -54,10 +54,12 @@ export function WorkspaceCanvasMotionPresence({
   return (
     <div
       key={visible ? renderedMotionKey : `exit:${renderedMotionKey}`}
-      className={workspaceCanvasPresenceClass(className)}
+      className="workspace-canvas-motion-presence"
       data-motion-state={visible ? 'entered' : 'exiting'}
     >
-      {visible ? children : cachedChildren}
+      <div className={workspaceCanvasPresenceClass(className)}>
+        {visible ? children : cachedChildren}
+      </div>
     </div>
   )
 }

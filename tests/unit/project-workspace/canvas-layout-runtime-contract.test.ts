@@ -84,6 +84,8 @@ describe('workspace canvas layout runtime contract', () => {
     const css = readRepoFile('src/styles/animations.css')
     const nodeTransitionRule = cssRule(css, '.workspace-canvas-layout-animated .react-flow__node:not(.dragging)')
     const shellRule = cssRule(css, '.workspace-canvas-node-shell')
+    const presenceRule = cssRule(css, '.workspace-canvas-motion-presence')
+    const presenceInnerRule = cssRule(css, '.workspace-canvas-motion-presence-inner')
     const presenceEnterRule = cssRule(css, '.workspace-canvas-motion-presence[data-motion-state="entered"]')
     const presenceExitRule = cssRule(css, '.workspace-canvas-motion-presence[data-motion-state="exiting"]')
 
@@ -98,9 +100,15 @@ describe('workspace canvas layout runtime contract', () => {
     expect(css).toContain('.workspace-canvas-soft-reveal')
     expect(css).toContain('transform: translateY(-8px)')
     expect(css).toContain('transform: translateY(-6px)')
+    expect(presenceRule).toContain('display: grid')
+    expect(presenceRule).toContain('grid-template-rows: 1fr')
+    expect(presenceRule).toContain('overflow: hidden')
+    expect(presenceInnerRule).toContain('min-height: 0')
+    expect(presenceInnerRule).toContain('overflow: hidden')
     expect(presenceEnterRule).toContain('workspaceCanvasGlideReveal')
     expect(presenceExitRule).toContain('workspaceCanvasGlideHide')
     expect(presenceExitRule).toContain('pointer-events: none')
+    expect(css).toContain('grid-template-rows: 0fr')
     expect(css).not.toContain('.workspace-canvas-node-shell[data-expanded="true"]')
     expect(css).not.toContain('workspaceCanvasNodeExpandIn')
     expect(css).not.toContain('workspaceCanvasNodeCollapseIn')
@@ -177,6 +185,7 @@ describe('workspace canvas layout runtime contract', () => {
     expect(motion).toContain('WORKSPACE_CANVAS_EXIT_DURATION_MS = 180')
     expect(motion).toContain('readonly motionKey?: string | number')
     expect(motion).toContain('readonly exit?: boolean')
+    expect(motion).toContain('workspace-canvas-motion-presence-inner')
   })
 
   it('removes width-changing collapse exit motion while keeping local detail motion', () => {

@@ -38,8 +38,8 @@ export const WORKSPACE_CANVAS_DEFAULT_NODE_SIZE: WorkspaceCanvasNodeSize = {
 }
 
 export const WORKSPACE_CANVAS_SHOT_NODE_SIZE: WorkspaceCanvasNodeSize = {
-  width: 440,
-  height: 640,
+  width: 380,
+  height: 560,
 }
 
 export const WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE: WorkspaceCanvasNodeSize = {
