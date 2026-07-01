@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { NextIntlClientProvider } from 'next-intl';
@@ -53,15 +52,6 @@ export default async function LocaleLayout({
 
     return (
         <html lang={locale} suppressHydrationWarning>
-            <head>
-                {process.env.NODE_ENV === "development" && (
-                    <Script
-                        src="//unpkg.com/react-grab/dist/index.global.js"
-                        crossOrigin="anonymous"
-                        strategy="beforeInteractive"
-                    />
-                )}
-            </head>
             <body
                 className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
                 suppressHydrationWarning
