@@ -369,7 +369,9 @@ describe('edit script compact canvas card', () => {
 
     expect(html).toContain('中远景 · 24mm 广角镜头')
     expect(html).toContain('data-icon="usersRound"')
+    expect(html).not.toContain('2 个镜头 · 人物 林晓、黑影人')
     expect(html).not.toContain('关联镜头')
+    expect(html).not.toContain('border-cyan-500')
   })
 
   it('renders the streamed shot execution active item as a field grid', async () => {
@@ -387,8 +389,11 @@ describe('edit script compact canvas card', () => {
     }))
 
     expect(html).toContain('中远景 · 24mm 广角镜头')
+    expect(html).toContain('镜头 1')
     expect(html).toContain('浅景深')
     expect(html).toContain('轴线与视线')
+    expect(html).toContain('border-slate-900')
+    expect(html).toContain('bg-slate-900')
     expect(html).toContain('workspace-node-stream-soft-detail')
   })
 

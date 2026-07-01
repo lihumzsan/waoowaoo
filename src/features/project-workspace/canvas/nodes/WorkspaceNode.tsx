@@ -1109,6 +1109,8 @@ interface ShotGridCard {
   readonly subtitle?: string
   readonly meta?: string
   readonly characterCount: number
+  readonly detailTitle?: string
+  readonly detailMeta?: string
   readonly detail: ReactNode
 }
 
@@ -1175,9 +1177,9 @@ function executionPlanObjectNames(item: EditPipelineStepCardSource): readonly st
 }
 
 // 图标字段卡：图标 + 标签 + 值（可读性强的三级排版）
-function shotIconField(field: ShotField) {
+function shotIconField(field: ShotField, options?: { readonly allowWideFields?: boolean }) {
   if (!hasText(field.value)) return null
-  const span = (field.value ?? '').length > 40
+  const span = options?.allowWideFields !== false && (field.value ?? '').length > 40
   return (
     <div
       key={field.label}
@@ -1193,10 +1195,10 @@ function shotIconField(field: ShotField) {
 }
 
 // 三级：图标字段网格（摄影指导）
-function shotDetailIconGrid(fields: readonly ShotField[]) {
-  const cells = fields.map(shotIconField).filter(Boolean)
+function shotDetailIconGrid(fields: readonly ShotField[], options?: { readonly fixedColumns?: boolean; readonly allowWideFields?: boolean }) {
+  const cells = fields.map((field) => shotIconField(field, { allowWideFields: options?.allowWideFields })).filter(Boolean)
   if (cells.length === 0) return null
-  return <div className="grid gap-2 sm:grid-cols-2">{cells}</div>
+  return <div className={`grid gap-2 ${options?.fixedColumns === true ? 'grid-cols-2' : 'sm:grid-cols-2'}`}>{cells}</div>
 }
 
 // 网格卡片 + 整行展开：点击任意镜头卡片，在其所在整行下方就地插入满宽详情，网格始终对齐
@@ -1264,8 +1266,8 @@ function ShotGrid({
               <div className={`space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}>
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
-                  <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.title}</span>
-                  {activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.meta}</span> : null}
+                  <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.detailTitle ?? activeCard.title}</span>
+                  {activeCard.detailMeta ?? activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.detailMeta ?? activeCard.meta}</span> : null}
                 </div>
                 {activeCard.detail}
               </div>
@@ -1416,6 +1418,8 @@ function EditShotExecutionPlanContent({
       subtitle: item.body ?? undefined,
       meta: metaParts.length > 0 ? compactList(metaParts, ' · ') : undefined,
       characterCount: characterNames.length,
+      detailTitle: labels('shotIndex', { index: index + 1 }),
+      detailMeta: titleParts.length > 0 ? compactList(titleParts, ' · ') : item.title,
       detail: (
         <div className="space-y-2.5">
           {shotDetailIconGrid([
@@ -1431,16 +1435,15 @@ function EditShotExecutionPlanContent({
             { label: labels('characters'), value: compactList(characterNames, '\n') },
             { label: labels('keyObjects'), value: compactList(objectNames, '\n') },
             { label: labels('description'), value: item.body },
-          ])}
+          ], { fixedColumns: true, allowWideFields: false })}
         </div>
       ),
     }
   })
 
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {summaryLine}
-      <ShotGrid cards={cards} accent="cyan" streamPresentation={data.streamPresentation} />
+    <div className={nodeContentInteractionClass(data, 'space-y-2.5')}>
+      <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
     </div>
   )
 }
