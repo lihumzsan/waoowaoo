@@ -273,7 +273,7 @@ export default function Navbar({
             </span>
             {showRecharge ? (
               <Link
-                href={{ pathname: '/profile', query: { section: 'billing' } }}
+                href={{ pathname: '/profile', query: { section: 'overview', recharge: 'open' } }}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setSettingsOpen(false)}

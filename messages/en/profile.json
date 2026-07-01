@@ -1,6 +1,11 @@
 {
   "user": "User",
   "personalAccount": "Personal Account",
+  "accountOverview": "Account Overview",
+  "recentTransactions": "Recent Transactions",
+  "viewAll": "View all",
+  "manageCredits": "Top up & Redeem",
+  "topUpOrRedeem": "Top up / Redeem",
   "availableBalance": "Available Credits",
   "openSourceNoBilling": "Open-source edition, no billing required",
   "frozen": "Frozen",

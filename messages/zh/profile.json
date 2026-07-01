@@ -1,6 +1,11 @@
 {
   "user": "用户",
   "personalAccount": "个人账户",
+  "accountOverview": "账户概览",
+  "recentTransactions": "最近账户流水",
+  "viewAll": "查看全部",
+  "manageCredits": "充值与兑换",
+  "topUpOrRedeem": "充值 / 兑换",
   "availableBalance": "可用额度",
   "openSourceNoBilling": "开源版本，无需计费",
   "frozen": "冻结",

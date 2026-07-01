@@ -6,11 +6,12 @@ import {
 } from '@/lib/profile/sections'
 
 describe('profile section routing', () => {
-  it('keeps billing records as the final settings center section', () => {
-    expect(PROFILE_SECTIONS).toEqual(['apiConfig', 'billing'])
+  it('exposes account overview, api config and billing as the settings center sections', () => {
+    expect(PROFILE_SECTIONS).toEqual(['overview', 'apiConfig', 'billing'])
   })
 
-  it('uses api config when the section query is absent', () => {
+  it('uses account overview when the section query is absent', () => {
+    expect(DEFAULT_PROFILE_SECTION).toBe('overview')
     expect(readProfileSectionParam(null)).toBe(DEFAULT_PROFILE_SECTION)
   })
 
