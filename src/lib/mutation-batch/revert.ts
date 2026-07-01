@@ -34,7 +34,7 @@ function readRequiredStringField(record: Record<string, unknown>, key: string, e
 
 function readRequiredIntegerField(record: Record<string, unknown>, key: string, error: string): number {
   const value = record[key]
-  if (!Number.isInteger(value)) {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new Error(error)
   }
   return value
@@ -46,7 +46,7 @@ function readRequiredNullableIntegerField(record: Record<string, unknown>, key: 
   }
   const value = record[key]
   if (value === null) return null
-  if (!Number.isInteger(value)) {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new Error(error)
   }
   return value
@@ -72,7 +72,7 @@ function readOptionalNullableIntegerField(record: Record<string, unknown>, key: 
   if (!hasOwnField(record, key)) return undefined
   const value = record[key]
   if (value === null) return null
-  if (Number.isInteger(value)) return value
+  if (typeof value === 'number' && Number.isInteger(value)) return value
   throw new Error(`MUTATION_PANEL_RESTORE_INVALID_${key}`)
 }
 
