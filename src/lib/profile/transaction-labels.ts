@@ -3,5 +3,5 @@ export type ProfileTransactionKindTranslationKey =
   | 'transactionKinds.recharge'
 
 export function getProfileTransactionKindTranslationKey(type: string): ProfileTransactionKindTranslationKey {
-  return type === 'consume' ? 'transactionKinds.consume' : 'transactionKinds.recharge'
+  return type === 'consume' || type === 'shadow_consume' ? 'transactionKinds.consume' : 'transactionKinds.recharge'
 }

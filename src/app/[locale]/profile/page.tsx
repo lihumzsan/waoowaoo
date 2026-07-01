@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
 import ApiConfigTab from './components/ApiConfigTab'
+import ProfileTransactionsTable, { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
 import GlassModalShell from '@/components/ui/primitives/GlassModalShell'
@@ -16,7 +17,6 @@ import {
   isPublicDeploymentFeatures,
   type PublicDeploymentFeatures,
 } from '@/lib/deployment/public-client'
-import { getProfileTransactionKindTranslationKey } from '@/lib/profile/transaction-labels'
 
 type DeploymentPayload = {
   features?: PublicDeploymentFeatures
@@ -31,18 +31,8 @@ type BalancePayload = {
   totalSpent?: number
 }
 
-type TransactionItem = {
-  id: string
-  type: string
-  amount: number
-  balanceAfter: number
-  description?: string | null
-  action?: string | null
-  createdAt: string
-}
-
 type TransactionsPayload = {
-  transactions?: TransactionItem[]
+  transactions?: ProfileTransactionItem[]
 }
 
 type RechargeConfig = {
@@ -126,7 +116,7 @@ export default function ProfilePage() {
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(null)
   const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
   const [balance, setBalance] = useState<BalancePayload | null>(null)
-  const [transactions, setTransactions] = useState<TransactionItem[]>([])
+  const [transactions, setTransactions] = useState<ProfileTransactionItem[]>([])
   const [inviteCode, setInviteCode] = useState('')
   const [redeemStatus, setRedeemStatus] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
@@ -283,35 +273,6 @@ export default function ProfilePage() {
     )
   }
 
-  const renderTransactionsTable = (items: TransactionItem[]) => (
-    items.length === 0 ? (
-      <div className="flex min-h-48 items-center justify-center text-sm text-[var(--glass-text-secondary)]">{t('noTransactions')}</div>
-    ) : (
-      <div className="overflow-hidden rounded-xl border border-[var(--glass-stroke-base)]">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)]">
-            <tr>
-              <th className="px-4 py-3">{t('transactionType')}</th>
-              <th className="px-4 py-3">{t('amount')}</th>
-              <th className="px-4 py-3">{t('balance')}</th>
-              <th className="px-4 py-3">{t('createdAt')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-t border-[var(--glass-stroke-base)]">
-                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{t(getProfileTransactionKindTranslationKey(item.type))}</td>
-                <td className="px-4 py-3 text-[var(--glass-text-primary)]">{item.amount.toFixed(2)}</td>
-                <td className="px-4 py-3 text-[var(--glass-text-secondary)]">{item.balanceAfter.toFixed(2)}</td>
-                <td className="px-4 py-3 text-[var(--glass-text-tertiary)]">{new Date(item.createdAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  )
-
   return (
     <div className="glass-page min-h-screen">
       <Navbar />
@@ -421,7 +382,7 @@ export default function ProfilePage() {
                         {t('viewAll')}
                       </button>
                     </div>
-                    {renderTransactionsTable(transactions.slice(0, 5))}
+                    <ProfileTransactionsTable items={transactions.slice(0, 5)} currency={balance?.currency} />
                   </section>
                 </div>
               ) : activeSection === 'billing' && showBilling ? (
@@ -440,7 +401,7 @@ export default function ProfilePage() {
                         {t('refresh')}
                       </button>
                     </div>
-                    {renderTransactionsTable(transactions)}
+                    <ProfileTransactionsTable items={transactions} currency={balance?.currency} />
                   </section>
                 </div>
               ) : (

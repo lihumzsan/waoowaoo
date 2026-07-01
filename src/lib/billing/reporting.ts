@@ -60,17 +60,33 @@ export function buildBillingMeta(params: {
 
   // 从 pricingSelections 提取 capability 字段（图片分辨率、视频时长/分辨率等）
   const selections = params.metadata?.pricingSelections
-  if (selections && typeof selections === 'object') {
-    const sel = selections as Record<string, unknown>
-    if (sel.resolution) meta.resolution = sel.resolution
-    if (sel.duration) meta.duration = sel.duration
-    if (sel.generateAudio !== undefined) meta.generateAudio = sel.generateAudio
-    if (sel.generationMode) meta.generationMode = sel.generationMode
+  const selectionRecord = selections && typeof selections === 'object' && !Array.isArray(selections)
+    ? selections as Record<string, unknown>
+    : {}
+  const detailSource = {
+    ...selectionRecord,
+    ...(params.metadata || {}),
   }
+  if (detailSource.resolution) meta.resolution = detailSource.resolution
+  if (detailSource.duration) meta.duration = detailSource.duration
+  if (detailSource.actualDurationSeconds) meta.duration = detailSource.actualDurationSeconds
+  if (detailSource.generateAudio !== undefined) meta.generateAudio = detailSource.generateAudio
+  if (detailSource.generationMode) meta.generationMode = detailSource.generationMode
+  if (detailSource.quality) meta.quality = detailSource.quality
+  if (detailSource.size) meta.size = detailSource.size
+  if (detailSource.aspectRatio) meta.aspectRatio = detailSource.aspectRatio
 
-  // 文本计费的 token 信息
-  if (params.metadata?.inputTokens) meta.inputTokens = params.metadata.inputTokens
-  if (params.metadata?.outputTokens) meta.outputTokens = params.metadata.outputTokens
+  const inputTokens = params.metadata?.actualInputTokens ?? params.metadata?.inputTokens
+  const outputTokens = params.metadata?.actualOutputTokens ?? params.metadata?.outputTokens
+  const cachedInputTokens = params.metadata?.actualCachedInputTokens ?? params.metadata?.cachedInputTokens
+  if (inputTokens) meta.inputTokens = inputTokens
+  if (outputTokens) meta.outputTokens = outputTokens
+  if (cachedInputTokens) meta.cachedInputTokens = cachedInputTokens
+
+  const chargedCost = params.metadata?.chargedCost
+  if (typeof chargedCost === 'number' && Number.isFinite(chargedCost)) {
+    meta.chargedCost = chargedCost
+  }
 
   // 实际使用的模型列表（复合模型场景）
   if (Array.isArray(params.metadata?.actualModels) && (params.metadata.actualModels as unknown[]).length > 0) {

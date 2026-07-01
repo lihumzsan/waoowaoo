@@ -715,6 +715,7 @@ export async function prepareTaskBilling(task: {
   id: string
   userId: string
   projectId: string
+  episodeId?: string | null
   billingInfo: TaskBillingInfo | { billable: false } | null
 }) {
   const info = task.billingInfo
@@ -761,6 +762,7 @@ export async function prepareTaskBilling(task: {
     metadata: {
       taskType: info.taskType,
       action: info.action,
+      episodeId: task.episodeId || null,
       apiType: info.apiType,
       model: info.model,
       quantity: info.quantity,
@@ -884,6 +886,7 @@ export async function settleTaskBilling(task: {
       info.freezeId,
       {
         projectId: task.projectId,
+        episodeId: typeof task.episodeId === 'string' ? task.episodeId : null,
         action: info.action,
         apiType: info.apiType,
         model: recordModel.model,

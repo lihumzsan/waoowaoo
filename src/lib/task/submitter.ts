@@ -195,6 +195,7 @@ export async function submitTask(params: {
         id: task.id,
         userId: params.userId,
         projectId: params.projectId,
+        episodeId: params.episodeId || null,
         billingInfo: preparedBillingInfo,
       })) as TaskBillingInfo | null
       if (preparedBillingInfo) {

@@ -263,6 +263,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       billingInfo = (await settleTaskBilling({
         id: taskId,
         projectId: data.projectId,
+        episodeId: data.episodeId || null,
         userId: data.userId,
         billingInfo,
       }, {

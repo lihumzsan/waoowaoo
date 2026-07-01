@@ -605,24 +605,29 @@ model BalanceFreeze {
 }
 
 model BalanceTransaction {
-  id           String   @id @default(uuid())
-  userId       String
-  type         String
-  amount       Decimal
-  balanceAfter Decimal
-  description  String?
-  relatedId    String?
-  freezeId     String?
-  operatorId   String?
+  id              String   @id @default(uuid())
+  userId          String
+  type            String
+  amount          Decimal
+  balanceAfter    Decimal
+  description     String?
+  relatedId       String?
+  freezeId        String?
+  operatorId      String?
   externalOrderId String?
   idempotencyKey String?
-  createdAt    DateTime @default(now())
+  projectId       String?
+  episodeId       String?
+  taskType        String?
+  billingMeta     String?
+  createdAt       DateTime @default(now())
 
   @@index([userId])
   @@index([type])
   @@index([createdAt])
   @@index([freezeId])
   @@index([externalOrderId])
+  @@index([projectId])
   @@unique([userId, type, idempotencyKey])
   @@map("balance_transactions")
 }

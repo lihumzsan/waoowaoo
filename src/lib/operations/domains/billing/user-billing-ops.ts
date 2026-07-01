@@ -6,6 +6,7 @@ import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { toMoneyNumber } from '@/lib/billing/money'
 import { getUserCostSummary } from '@/lib/billing'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { resolveBillingTransactionTargets } from './transaction-targets'
 
 const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_]*$/
 
@@ -98,8 +99,48 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
           prisma.balanceTransaction.count({ where }),
         ])
 
-        const projectIds = [...new Set(transactionsRaw.map((t) => t.projectId).filter(Boolean) as string[])]
-        const episodeIds = [...new Set(transactionsRaw.map((t) => t.episodeId).filter(Boolean) as string[])]
+        const freezeIds = [...new Set(transactionsRaw.map((t) => t.freezeId).filter(Boolean) as string[])]
+        const freezes = freezeIds.length > 0
+          ? await prisma.balanceFreeze.findMany({
+            where: { id: { in: freezeIds }, userId: ctx.userId },
+            select: { id: true, taskId: true },
+          })
+          : []
+        const taskIds = [...new Set(freezes.map((freeze) => freeze.taskId).filter(Boolean) as string[])]
+        const tasks = taskIds.length > 0
+          ? await prisma.task.findMany({
+            where: { id: { in: taskIds }, userId: ctx.userId },
+            select: {
+              id: true,
+              projectId: true,
+              episodeId: true,
+              type: true,
+              targetType: true,
+              targetId: true,
+            },
+          })
+          : []
+        const taskById = new Map(tasks.map((task) => [task.id, task]))
+        const taskByFreezeId = new Map(
+          freezes
+            .map((freeze) => {
+              const task = freeze.taskId ? taskById.get(freeze.taskId) : null
+              return task ? [freeze.id, task] as const : null
+            })
+            .filter((item): item is readonly [string, NonNullable<(typeof tasks)[number]>] => item !== null),
+        )
+
+        const targetByTaskId = await resolveBillingTransactionTargets(tasks)
+        const projectIds = [
+          ...new Set(transactionsRaw
+            .map((t) => t.projectId ?? (t.freezeId ? taskByFreezeId.get(t.freezeId)?.projectId ?? null : null))
+            .filter(Boolean) as string[]),
+        ]
+        const episodeIds = [
+          ...new Set(transactionsRaw
+            .map((t) => t.episodeId ?? (t.freezeId ? taskByFreezeId.get(t.freezeId)?.episodeId ?? null : null))
+            .filter(Boolean) as string[]),
+        ]
 
         const [projects, episodes] = await Promise.all([
           projectIds.length > 0
@@ -129,15 +170,23 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             }
           }
 
+          const task = item.freezeId ? taskByFreezeId.get(item.freezeId) ?? null : null
+          const projectId = item.projectId ?? task?.projectId ?? null
+          const episodeId = item.episodeId ?? task?.episodeId ?? null
+          const action = item.taskType ?? task?.type ?? extractActionFromDescription(item.description)
+
           return {
             ...item,
             amount: toMoneyNumber(item.amount),
             balanceAfter: toMoneyNumber(item.balanceAfter),
-            action: item.taskType ?? extractActionFromDescription(item.description),
-            projectName: item.projectId ? (projectMap.get(item.projectId) ?? null) : null,
-            episodeNumber: item.episodeId ? (episodeMap.get(item.episodeId)?.episodeNumber ?? null) : null,
-            episodeName: item.episodeId ? (episodeMap.get(item.episodeId)?.name ?? null) : null,
+            action,
+            projectId,
+            episodeId,
+            projectName: projectId ? (projectMap.get(projectId) ?? null) : null,
+            episodeNumber: episodeId ? (episodeMap.get(episodeId)?.episodeNumber ?? null) : null,
+            episodeName: episodeId ? (episodeMap.get(episodeId)?.name ?? null) : null,
             billingMeta,
+            target: task ? (targetByTaskId.get(task.id) ?? null) : null,
           }
         })
 

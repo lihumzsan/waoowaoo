@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { getProfileTransactionKindTranslationKey } from '@/lib/profile/transaction-labels'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const ROOT = process.cwd()
 
@@ -21,6 +22,7 @@ function readRecord(value: unknown): Record<string, unknown> {
 describe('profile transaction labels', () => {
   it('keeps recharge transaction labels outside the profile.recharge object namespace', () => {
     expect(getProfileTransactionKindTranslationKey('consume')).toBe('transactionKinds.consume')
+    expect(getProfileTransactionKindTranslationKey('shadow_consume')).toBe('transactionKinds.consume')
     expect(getProfileTransactionKindTranslationKey('recharge')).toBe('transactionKinds.recharge')
     expect(getProfileTransactionKindTranslationKey('grant')).toBe('transactionKinds.recharge')
 
@@ -32,6 +34,18 @@ describe('profile transaction labels', () => {
       expect(typeof parsed.recharge).toBe('object')
       expect(typeof transactionKinds.recharge).toBe('string')
       expect(typeof transactionKinds.consume).toBe('string')
+    }
+  })
+
+  it('covers every task type with localized account transaction action labels', () => {
+    const taskTypes = Object.values(TASK_TYPE)
+
+    for (const locale of ['zh', 'en'] as const) {
+      const { parsed } = readProfileMessages(locale)
+      const actionTypes = readRecord(parsed.actionTypes)
+      for (const taskType of taskTypes) {
+        expect(actionTypes[taskType], `${locale} profile.actionTypes.${taskType}`).toEqual(expect.any(String))
+      }
     }
   })
 })
