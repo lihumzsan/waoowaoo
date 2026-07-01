@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { buildProfileBillingDetailParts, getProfileTransactionActionTranslationKey } from '@/lib/profile/billing-transaction-display'
+import {
+  buildProfileBillingDetailParts,
+  getProfileTransactionActionTranslationKey,
+} from '@/lib/profile/billing-transaction-display'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('profile billing transaction display', () => {
   it('uses task action labels for consumption rows instead of the generic consume label', () => {
     expect(getProfileTransactionActionTranslationKey('consume', TASK_TYPE.IMAGE_PANEL)).toBe('actionTypes.image_panel')
     expect(getProfileTransactionActionTranslationKey('recharge', TASK_TYPE.IMAGE_PANEL)).toBe('transactionKinds.recharge')
+  })
+
+  it('uses sync billing action labels that include hyphenated prompt ids', () => {
+    expect(getProfileTransactionActionTranslationKey('consume', 'shot-execution-plan')).toBe('actionTypes.shot-execution-plan')
+    expect(getProfileTransactionActionTranslationKey('consume', 'asset-extract')).toBe('actionTypes.asset-extract')
+    expect(getProfileTransactionActionTranslationKey('consume', 'unknown_action')).toBe('transactionKinds.consume')
   })
 
   it('builds image billing detail parts with model and image specification', () => {
@@ -47,6 +56,38 @@ describe('profile billing transaction display', () => {
       params: {
         input: 1200,
         output: 300,
+      },
+    })
+  })
+
+  it('does not show a zero output-token breakdown for input-only token billing', () => {
+    const parts = buildProfileBillingDetailParts({
+      quantity: 12000,
+      unit: 'token',
+      model: 'google/gemini-3.5-flash',
+      inputTokens: 12000,
+      outputTokens: 0,
+    })
+
+    expect(parts[0]).toEqual({
+      kind: 'translation',
+      key: 'billingDetail.tokens',
+      params: {
+        count: 12000,
+      },
+    })
+
+    const missingOutputParts = buildProfileBillingDetailParts({
+      quantity: 27003,
+      unit: 'token',
+      model: 'google/gemini-3.5-flash',
+    })
+
+    expect(missingOutputParts[0]).toEqual({
+      kind: 'translation',
+      key: 'billingDetail.tokens',
+      params: {
+        count: 27003,
       },
     })
   })

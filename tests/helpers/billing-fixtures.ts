@@ -49,6 +49,10 @@ export async function createQueuedTask(params: {
   type: TaskType
   targetType: string
   targetId: string
+  operationId?: string | null
+  operationRequestId?: string | null
+  operationSource?: string | null
+  operationConfirmed?: boolean | null
   billingInfo?: TaskBillingInfo | null
   payload?: Record<string, unknown> | null
 }) {
@@ -61,6 +65,10 @@ export async function createQueuedTask(params: {
       type: params.type,
       targetType: params.targetType,
       targetId: params.targetId,
+      operationId: params.operationId ?? null,
+      operationRequestId: params.operationRequestId ?? null,
+      operationSource: params.operationSource ?? null,
+      operationConfirmed: params.operationConfirmed ?? null,
       status: TASK_STATUS.QUEUED,
       billingInfo: (params.billingInfo ?? Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
       payload: (params.payload ?? Prisma.JsonNull) as unknown as Prisma.InputJsonValue,

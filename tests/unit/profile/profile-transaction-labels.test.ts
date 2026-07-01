@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PROFILE_ACTION_KEY_LIST } from '@/lib/profile/billing-transaction-display'
 import { getProfileTransactionKindTranslationKey } from '@/lib/profile/transaction-labels'
-import { TASK_TYPE } from '@/lib/task/types'
 
 const ROOT = process.cwd()
 
@@ -37,14 +37,12 @@ describe('profile transaction labels', () => {
     }
   })
 
-  it('covers every task type with localized account transaction action labels', () => {
-    const taskTypes = Object.values(TASK_TYPE)
-
+  it('covers every supported account transaction action with localized labels', () => {
     for (const locale of ['zh', 'en'] as const) {
       const { parsed } = readProfileMessages(locale)
       const actionTypes = readRecord(parsed.actionTypes)
-      for (const taskType of taskTypes) {
-        expect(actionTypes[taskType], `${locale} profile.actionTypes.${taskType}`).toEqual(expect.any(String))
+      for (const actionKey of PROFILE_ACTION_KEY_LIST) {
+        expect(actionTypes[actionKey], `${locale} profile.actionTypes.${actionKey}`).toEqual(expect.any(String))
       }
     }
   })

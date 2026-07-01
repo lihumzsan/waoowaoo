@@ -7,8 +7,12 @@ import { toMoneyNumber } from '@/lib/billing/money'
 import { getUserCostSummary } from '@/lib/billing'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { resolveBillingTransactionTargets } from './transaction-targets'
+import {
+  aggregateBillingTransactionRows,
+  type BillingTransactionDisplayRow,
+} from './transaction-aggregation'
 
-const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_]*$/
+const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_-]*$/
 
 function readNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -117,6 +121,8 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
               type: true,
               targetType: true,
               targetId: true,
+              operationId: true,
+              operationRequestId: true,
             },
           })
           : []
@@ -160,7 +166,7 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
         const projectMap = new Map(projects.map((p) => [p.id, p.name]))
         const episodeMap = new Map(episodes.map((e) => [e.id, { episodeNumber: e.episodeNumber, name: e.name }]))
 
-        const transactions = transactionsRaw.map((item) => {
+        const transactions = transactionsRaw.map((item): BillingTransactionDisplayRow => {
           let billingMeta: Record<string, unknown> | null = null
           if (item.billingMeta && typeof item.billingMeta === 'string') {
             try {
@@ -187,12 +193,14 @@ export function createUserBillingOperations(): ProjectAgentOperationRegistryDraf
             episodeName: episodeId ? (episodeMap.get(episodeId)?.name ?? null) : null,
             billingMeta,
             target: task ? (targetByTaskId.get(task.id) ?? null) : null,
+            operationId: task?.operationId ?? null,
+            operationRequestId: task?.operationRequestId ?? null,
           }
         })
 
         return {
           currency: BILLING_CURRENCY,
-          transactions,
+          transactions: aggregateBillingTransactionRows(transactions),
           pagination: {
             page,
             pageSize,

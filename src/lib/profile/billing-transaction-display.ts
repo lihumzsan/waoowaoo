@@ -1,3 +1,4 @@
+import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getProfileTransactionKindTranslationKey, type ProfileTransactionKindTranslationKey } from './transaction-labels'
 
@@ -47,9 +48,35 @@ const LEGACY_PROFILE_ACTION_KEYS = [
   'regenerate',
 ] as const
 
-const PROFILE_ACTION_KEYS = new Set<string>([
+const SYNC_PROFILE_ACTION_KEYS = [
+  AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
+  AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+  AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+  AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
+  AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT,
+  AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
+  'ai_design_character',
+  'ai_design_location',
+] as const
+
+const WORKER_USAGE_ACTION_KEYS = [
+  'panel_image_generate',
+  'panel_grid_image_generate',
+  'character_candidate_prompts',
+  'location_candidate_prompt',
+  'global_character_candidate_prompts',
+  'global_location_candidate_prompt',
+] as const
+
+export const PROFILE_ACTION_KEY_LIST: readonly string[] = [
   ...Object.values(TASK_TYPE),
   ...LEGACY_PROFILE_ACTION_KEYS,
+  ...SYNC_PROFILE_ACTION_KEYS,
+  ...WORKER_USAGE_ACTION_KEYS,
+]
+
+const PROFILE_ACTION_KEYS = new Set<string>([
+  ...PROFILE_ACTION_KEY_LIST,
 ])
 
 function readString(value: unknown): string | null {
@@ -134,8 +161,8 @@ export function buildProfileBillingDetailParts(meta: Record<string, unknown> | n
   if (unit === 'token') {
     const inputTokens = readNumber(meta.inputTokens)
     const outputTokens = readNumber(meta.outputTokens)
-    const tokenCount = quantity ?? readNumber(meta.quantity)
-    if (inputTokens !== null || outputTokens !== null) {
+    const tokenCount = quantity ?? readNumber(meta.quantity) ?? inputTokens
+    if (inputTokens !== null && inputTokens > 0 && outputTokens !== null && outputTokens > 0) {
       parts.push({
         kind: 'translation',
         key: 'billingDetail.tokensWithBreakdown',

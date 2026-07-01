@@ -24,6 +24,7 @@ export type ProfileTransactionItem = {
     labelKey: string
     labelParams: ProfileTranslationParams
   } | null
+  transactionCount?: number
   createdAt: string
 }
 
@@ -109,9 +110,6 @@ export default function ProfileTransactionsTable({
               <td className="px-4 py-3">
                 <div className="font-medium text-[var(--glass-text-primary)]">
                   {t(getProfileTransactionActionTranslationKey(item.type, item.action))}
-                </div>
-                <div className="mt-1 text-xs text-[var(--glass-text-tertiary)]">
-                  {t(item.amount < 0 ? 'transactionKinds.consume' : 'transactionKinds.recharge')}
                 </div>
               </td>
               <td className="px-4 py-3">{renderTransactionScope(item)}</td>
