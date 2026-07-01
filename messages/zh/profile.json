@@ -71,6 +71,8 @@
     "range": "范围 {min} - {max} 额度",
     "unitValue": "1 额度 = ¥1",
     "estimatedCharge": "预计支付 {amount}",
+    "customAmount": "自定义额度",
+    "estimatedLabel": "预计支付",
     "submit": "前往支付",
     "processing": "创建支付中",
     "unavailable": "当前未启用在线充值。",

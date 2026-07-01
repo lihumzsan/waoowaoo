@@ -71,6 +71,8 @@
     "range": "Range {min} - {max} credits",
     "unitValue": "1 credit = ¥1",
     "estimatedCharge": "Estimated charge {amount}",
+    "customAmount": "Custom amount",
+    "estimatedLabel": "Estimated",
     "submit": "Continue to payment",
     "processing": "Creating payment",
     "unavailable": "Online top-up is not enabled.",

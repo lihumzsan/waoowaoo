@@ -97,6 +97,8 @@ function isCheckoutPayload(value: unknown): value is CheckoutPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+const RECHARGE_PRESETS = [50, 100, 200, 500] as const
+
 function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
   if (features.showBilling) return 'overview'
   if (features.showApiConfig) return 'apiConfig'
@@ -322,9 +324,14 @@ export default function ProfilePage() {
             <div className="glass-surface-elevated h-full flex flex-col p-5">
 
               {/* 用户信息 */}
-              <div className="mb-6">
-                <h2 className="font-semibold text-[var(--glass-text-primary)]">{session.user?.name || t('user')}</h2>
-                <p className="text-xs text-[var(--glass-text-tertiary)]">{t('personalAccount')}</p>
+              <div className="mb-6 flex min-w-0 items-center gap-3">
+                <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-900 text-base font-semibold text-white">
+                  {(session.user?.name || t('user')).slice(0, 1)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[var(--glass-text-primary)]">{session.user?.name || t('user')}</p>
+                  <p className="truncate text-xs text-[var(--glass-text-tertiary)]">{t('personalAccount')}</p>
+                </div>
               </div>
 
               {/* 导航菜单 */}
@@ -344,10 +351,11 @@ export default function ProfilePage() {
               </nav>
               {/* 退出登录 */}
               <button
+                type="button"
                 onClick={() => signOut({ callbackUrl: '/' })}
-                className="glass-btn-base glass-btn-tone-danger mt-auto flex items-center gap-2 px-4 py-3 text-sm rounded-xl transition-all cursor-pointer"
+                className="mt-auto flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--glass-tone-danger-fg)] transition hover:bg-[var(--glass-tone-danger-bg)]"
               >
-                <AppIcon name="logout" className="w-4 h-4" />
+                <AppIcon name="logout" className="h-4 w-4" />
                 {t('logout')}
               </button>
             </div>
@@ -451,18 +459,19 @@ export default function ProfilePage() {
         open={creditsModalOpen}
         onClose={() => setCreditsModalOpen(false)}
         title={t('manageCredits')}
-        size="lg"
+        size="md"
       >
-        <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
           {showRecharge ? (
-            <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('recharge.title')}</h2>
-                <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('recharge.description')}</p>
+            <section className="space-y-4 rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-5 shadow-[var(--glass-shadow-sm)]">
+              <div className="flex items-center gap-2">
+                <AppIcon name="coins" className="h-4 w-4 text-[var(--glass-text-secondary)]" />
+                <h3 className="text-base font-semibold text-[var(--glass-text-primary)]">{t('recharge.title')}</h3>
               </div>
+              <p className="text-sm text-[var(--glass-text-tertiary)]">{t('recharge.description')}</p>
               {rechargeConfig?.enabled === true ? (
                 <form
-                  className="space-y-3"
+                  className="space-y-4"
                   onSubmit={(event: FormEvent<HTMLFormElement>) => {
                     event.preventDefault()
                     if (!Number.isFinite(parsedRechargeAmount)) {
@@ -498,39 +507,52 @@ export default function ProfilePage() {
                       .finally(() => setRecharging(false))
                   }}
                 >
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <label className="flex-1">
-                      <span className="mb-2 block text-sm font-medium text-[var(--glass-text-primary)]">
-                        {t('recharge.amountLabel')}
-                      </span>
-                      <input
-                        className="glass-input w-full rounded-xl px-4 py-3 text-sm"
-                        type="number"
-                        min={rechargeConfig.minCredits}
-                        max={rechargeConfig.maxCredits}
-                        step="0.01"
-                        value={rechargeAmount}
-                        onChange={(event) => setRechargeAmount(event.target.value)}
-                        placeholder={t('recharge.placeholder')}
-                      />
-                    </label>
-                    <button
-                      type="submit"
-                      disabled={recharging || !rechargeAmount.trim()}
-                      className="glass-btn-primary self-end rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {recharging ? t('recharge.processing') : t('recharge.submit')}
-                    </button>
+                  <div className="flex flex-wrap gap-2">
+                    {RECHARGE_PRESETS.filter((preset) => preset >= rechargeConfig.minCredits && preset <= rechargeConfig.maxCredits).map((preset) => {
+                      const on = rechargeAmount === String(preset)
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setRechargeAmount(String(preset))}
+                          className={`rounded-xl border px-3.5 py-2 text-sm font-semibold transition ${on ? 'border-[var(--glass-accent-from)] bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)]' : 'border-[var(--glass-stroke-base)] bg-white text-[var(--glass-text-secondary)] hover:border-slate-300'}`}
+                        >
+                          {preset}
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div className="grid gap-2 text-xs text-[var(--glass-text-tertiary)] sm:grid-cols-3">
-                    <div>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</div>
-                    <div>{t('recharge.unitValue')}</div>
-                    <div>
-                      {t('recharge.estimatedCharge', {
-                        amount: formatCurrencyAmount(estimatedPaymentAmount, rechargeConfig.paymentCurrency),
-                      })}
-                    </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('recharge.customAmount')}</span>
+                    <input
+                      className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-4 py-3 text-sm text-[var(--glass-text-primary)] outline-none transition focus:border-slate-400"
+                      type="number"
+                      min={rechargeConfig.minCredits}
+                      max={rechargeConfig.maxCredits}
+                      step="0.01"
+                      value={rechargeAmount}
+                      onChange={(event) => setRechargeAmount(event.target.value)}
+                      placeholder={t('recharge.placeholder')}
+                    />
+                  </label>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                    <span className="text-xs text-[var(--glass-text-tertiary)]">{t('recharge.estimatedLabel')}</span>
+                    <span className="text-lg font-semibold text-[var(--glass-text-primary)]">
+                      {formatCurrencyAmount(estimatedPaymentAmount, rechargeConfig.paymentCurrency)}
+                    </span>
                   </div>
+                  <div className="flex items-center justify-between text-[11px] text-[var(--glass-text-tertiary)]">
+                    <span>{t('recharge.range', { min: rechargeConfig.minCredits, max: rechargeConfig.maxCredits })}</span>
+                    <span>{t('recharge.unitValue')}</span>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={recharging || !rechargeAmount.trim()}
+                    className="glass-btn-base glass-btn-primary flex w-full items-center justify-center gap-1.5 rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <AppIcon name="arrowRight" className="h-4 w-4" />
+                    {recharging ? t('recharge.processing') : t('recharge.submit')}
+                  </button>
                 </form>
               ) : rechargeConfigError ? (
                 <p className="text-sm text-[var(--glass-tone-danger-fg)]">{rechargeConfigError}</p>
@@ -538,19 +560,20 @@ export default function ProfilePage() {
                 <p className="text-sm text-[var(--glass-text-secondary)]">{t('recharge.unavailable')}</p>
               )}
               {rechargeStatus ? (
-                <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{rechargeStatus}</p>
+                <p className="text-sm text-[var(--glass-text-secondary)]">{rechargeStatus}</p>
               ) : null}
             </section>
           ) : null}
 
           {showInviteCode ? (
-            <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-5">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-[var(--glass-text-primary)]">{t('inviteCode.title')}</h2>
-                <p className="mt-1 text-sm text-[var(--glass-text-secondary)]">{t('inviteCode.description')}</p>
+            <section className="space-y-4 rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)] p-5 shadow-[var(--glass-shadow-sm)]">
+              <div className="flex items-center gap-2">
+                <AppIcon name="badgeCheck" className="h-4 w-4 text-[var(--glass-text-secondary)]" />
+                <h3 className="text-base font-semibold text-[var(--glass-text-primary)]">{t('inviteCode.title')}</h3>
               </div>
+              <p className="text-sm text-[var(--glass-text-tertiary)]">{t('inviteCode.description')}</p>
               <form
-                className="flex flex-col gap-3 sm:flex-row"
+                className="flex flex-col gap-2 sm:flex-row"
                 onSubmit={(event: FormEvent<HTMLFormElement>) => {
                   event.preventDefault()
                   if (!inviteCode.trim()) return
@@ -577,21 +600,21 @@ export default function ProfilePage() {
                 }}
               >
                 <input
-                  className="glass-input flex-1 rounded-xl px-4 py-3 text-sm"
+                  className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white px-4 py-3 text-sm text-[var(--glass-text-primary)] outline-none transition focus:border-slate-400"
                   value={inviteCode}
-                  onChange={(event) => setInviteCode(event.target.value)}
+                  onChange={(event) => { setInviteCode(event.target.value); setRedeemStatus(null) }}
                   placeholder={t('inviteCode.placeholder')}
                 />
                 <button
                   type="submit"
                   disabled={redeeming || !inviteCode.trim()}
-                  className="glass-btn-primary rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  className="glass-btn-base glass-btn-primary rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {redeeming ? t('inviteCode.redeeming') : t('inviteCode.redeem')}
                 </button>
               </form>
               {redeemStatus ? (
-                <p className="mt-3 text-sm text-[var(--glass-text-secondary)]">{redeemStatus}</p>
+                <p className="text-sm text-[var(--glass-text-secondary)]">{redeemStatus}</p>
               ) : null}
             </section>
           ) : null}
