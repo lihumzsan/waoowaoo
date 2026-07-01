@@ -41,6 +41,19 @@ describe('ai prompt registry', () => {
     expect(executionTemplate).toContain('camera.lighting')
     expect(executionTemplate).toContain('blocking.axis')
     expect(executionTemplate).toContain('continuousVideoPrompt')
+    expect(executionTemplate).toContain('blocking.characters[] 中的每一个人物对象都必须输出且只输出')
+    expect(executionTemplate).toContain('即使 visibility 是 `hidden`、`occluded` 或 `offscreen`')
+    expect(executionTemplate).toContain('blocking.objects[] 中的每一个物体对象都必须输出且只输出')
+    expect(executionTemplate).toContain('禁止给物体输出 facing、eyeline、visibility、role 或任何其他字段')
     expect(executionTemplate).toContain('只返回 JSON')
+  })
+
+  it('keeps English shot execution prompt strict about character and object fields', () => {
+    const executionTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN, 'en')
+
+    expect(executionTemplate).toContain('Every item in `blocking.characters[]` must output exactly these six fields')
+    expect(executionTemplate).toContain('Even when visibility is `hidden`, `occluded`, or `offscreen`')
+    expect(executionTemplate).toContain('Every item in `blocking.objects[]` must output exactly these three fields')
+    expect(executionTemplate).toContain('Do not output `facing`, `eyeline`, `visibility`, `role`, or any other field for objects')
   })
 })

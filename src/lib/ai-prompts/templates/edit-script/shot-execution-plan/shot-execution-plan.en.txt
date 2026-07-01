@@ -27,7 +27,9 @@ In one JSON output, produce camera execution, character positions, key object po
 - `blocking.characters` must cover every character in the matching core shot, including hidden, occluded, listener, and non-focus characters.
 - `blocking.characters` must not add characters that do not exist in the matching core shot.
 - `visibility` must inherit or refine the core shot visibility, and use only `visible`, `partial`, `hidden`, `occluded`, or `offscreen`.
+- Every item in `blocking.characters[]` must output exactly these six fields: `name`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`. Even when visibility is `hidden`, `occluded`, or `offscreen`, `facing` and `eyeline` are required; if they cannot be seen, describe why facing or eyeline is invisible or indeterminate. Never omit them.
 - Every core shot `keyObjects` entry must appear in `blocking.objects`.
+- Every item in `blocking.objects[]` must output exactly these three fields: `name`, `position`, `screenPosition`. Do not output `facing`, `eyeline`, `visibility`, `role`, or any other field for objects. If object orientation matters, describe it inside `position` or `screenPosition` as natural language.
 - Every shot must include `camera.lighting` and `blocking.axis`.
 - Lighting must be written as shot-level execution fact, for example who is lit, who is in shadow, and where the light comes from.
 - `blocking.characters[].position` and `blocking.objects[].position` are real-space positions. `screenPosition` is the position inside the image frame.
@@ -77,6 +79,11 @@ Spatial Profiles:
 # Output Schema
 
 Return only JSON. Do not use markdown or explanations.
+
+Field strictness:
+- `characters[]` may contain only these six fields: `name`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`; all six fields are required and must be non-empty strings.
+- `objects[]` may contain only these three fields: `name`, `position`, `screenPosition`; all three fields are required and must be non-empty strings.
+- Do not output extra fields. Do not omit fields. Do not use null, empty strings, or omission as a substitute for invisible information.
 
 {
   "shots": [
@@ -132,7 +139,10 @@ Return only JSON. Do not use markdown or explanations.
 
 - Does the output cover every core shot?
 - Does every `blocking.characters` list fully cover the core characters without adding unknown characters?
+- Does every `blocking.characters[]` item contain exactly `name`, `visibility`, `position`, `screenPosition`, `facing`, and `eyeline` as non-empty string fields?
+- Do hidden / occluded / offscreen characters still include `facing` and `eyeline`, with an explanation when they cannot be seen?
 - Does every core `keyObjects` entry appear in `blocking.objects`?
+- Does every `blocking.objects[]` item contain only `name`, `position`, and `screenPosition`, with no `facing`, `eyeline`, or other extra fields?
 - Does every shot include `camera.lighting` and `blocking.axis`?
 - Does every shot include `videoPrompt`, and does it describe only the current single-shot video?
 - Do `generationSegmentExecutions` cover every generation segment, and do `shotNumbers` match exactly?

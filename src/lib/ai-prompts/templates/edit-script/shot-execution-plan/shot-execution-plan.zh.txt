@@ -27,7 +27,9 @@
 - blocking.characters 必须覆盖对应 core shot 的所有 characters，不允许丢失隐藏、遮挡、听者或非焦点人物。
 - blocking.characters 不得新增 core shot 中不存在的人物。
 - visibility 必须继承或细化 core shot 的 visibility，只能使用 `visible`、`partial`、`hidden`、`occluded`、`offscreen`。
+- blocking.characters[] 中的每一个人物对象都必须输出且只输出 `name`、`visibility`、`position`、`screenPosition`、`facing`、`eyeline` 六个字段；即使 visibility 是 `hidden`、`occluded` 或 `offscreen`，也必须输出 facing 和 eyeline，无法看清时写明“朝向不可辨/视线被遮挡/不可见原因”，禁止省略。
 - core shot 的每个 keyObjects 都必须进入 blocking.objects。
+- blocking.objects[] 中的每一个物体对象都必须输出且只输出 `name`、`position`、`screenPosition` 三个字段；禁止给物体输出 facing、eyeline、visibility、role 或任何其他字段。物体朝向如确实重要，只能写进 position 或 screenPosition 的自然语言中。
 - 每个 shot 必须有 camera.lighting 和 blocking.axis。
 - 灯光必须写成镜头级执行事实，例如谁被照亮、谁在阴影中、光从哪里来。
 - blocking.characters[].position 和 blocking.objects[].position 写真实空间位置；screenPosition 写画面位置。
@@ -77,6 +79,11 @@ Spatial Profiles：
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
+
+字段严格性：
+- characters[] 只能有六个字段：name、visibility、position、screenPosition、facing、eyeline，且六个字段全必填、全为非空字符串。
+- objects[] 只能有三个字段：name、position、screenPosition，且三个字段全必填、全为非空字符串。
+- 不允许额外字段；不允许缺字段；不要用 null、空字符串或省略代替不可见信息。
 
 {
   "shots": [
@@ -132,7 +139,10 @@ Spatial Profiles：
 
 - 是否覆盖所有 core shots。
 - 每个 blocking.characters 是否完整覆盖 core characters，且没有新增人物。
+- 每个 blocking.characters[] 项是否都包含 name、visibility、position、screenPosition、facing、eyeline 六个非空字符串字段。
+- 每个 hidden / occluded / offscreen 角色是否仍然写了 facing 和 eyeline，并在不可见时说明原因。
 - 每个 core keyObjects 是否进入 blocking.objects。
+- 每个 blocking.objects[] 项是否只包含 name、position、screenPosition 三个字段，没有 facing、eyeline 或其他额外字段。
 - 每个 shot 是否有 camera.lighting 和 blocking.axis。
 - 每个 shot 是否有 videoPrompt，且只写当前单镜头视频。
 - generationSegmentExecutions 是否覆盖所有 generationSegments，且 shotNumbers 完全一致。
