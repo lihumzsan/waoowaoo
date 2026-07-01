@@ -151,10 +151,32 @@ describe('workspace canvas layout runtime contract', () => {
     expect(motion).toContain('readonly motionKey?: string | number')
   })
 
+  it('keeps expanded layout dimensions during collapse exit motion', () => {
+    const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const types = readRepoFile('src/features/project-workspace/canvas/node-canvas-types.ts')
+
+    expect(types).toContain('readonly layoutExpanded?: boolean')
+    expect(canvas).toContain('layoutCollapseNodeIds')
+    expect(canvas).toContain('startLayoutCollapseHold(nodeId)')
+    expect(canvas).toContain('clearLayoutCollapseHold(nodeId)')
+    expect(canvas).toContain('WORKSPACE_CANVAS_EXIT_DURATION_MS')
+    expect(canvas).toContain('const layoutExpanded = expanded || layoutCollapseNodeIds.has(node.id)')
+    expect(canvas).toContain('expanded: layoutExpanded,')
+    expect(canvas).toContain('layoutExpanded,')
+    expect(canvas).toContain('expandedLayout: layoutExpanded ? profile.expandedLayout : undefined')
+    expect(canvas).toContain('if (layoutExpanded && profile.expanded) return node')
+    expect(node).toContain('function nodeIsCollapseMotionActive')
+    expect(node).toContain('const layoutExpanded = data.layoutExpanded ?? expanded')
+    expect(node).toContain("data-expanded={layoutExpanded ? 'true' : 'false'}")
+    expect(node).toContain('!expanded && !collapseMotionActive')
+    expect(node).toContain('deferCollapsedContent={collapseMotionActive}')
+  })
+
   it('keeps measurement local and removes collision failure flow from the canvas', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
 
-    expect(canvas).toContain('if (expanded && profile.expanded) return node')
+    expect(canvas).toContain('if (layoutExpanded && profile.expanded) return node')
     expect(canvas).toContain('return changed ? measuredNodes : currentNodes')
     expect(canvas).not.toContain('WorkspaceCanvasLayoutFailure')
     expect(canvas).not.toContain('layoutFailureVisible')

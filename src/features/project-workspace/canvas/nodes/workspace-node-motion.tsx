@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 
 export const WORKSPACE_CANVAS_REVEAL_CLASS = 'workspace-canvas-soft-reveal'
 
-const WORKSPACE_CANVAS_EXIT_DURATION_MS = 180
+export const WORKSPACE_CANVAS_EXIT_DURATION_MS = 180
 
 export function workspaceCanvasRevealClass(className = ''): string {
   return className ? `${WORKSPACE_CANVAS_REVEAL_CLASS} ${className}` : WORKSPACE_CANVAS_REVEAL_CLASS

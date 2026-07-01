@@ -405,6 +405,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly actionDisabled?: boolean
   readonly onAction?: WorkspaceCanvasNodeActionHandler
   readonly expanded?: boolean
+  readonly layoutExpanded?: boolean
   readonly expandedLayout?: 'stack' | 'wide'
   readonly defaultExpanded?: boolean
   readonly onToggleExpanded?: (nodeId: string) => void

@@ -61,6 +61,7 @@ import {
   WORKSPACE_CANVAS_MAX_ZOOM,
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
+import { WORKSPACE_CANVAS_EXIT_DURATION_MS } from './nodes/workspace-node-motion'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowEdge,
@@ -254,11 +255,13 @@ function ProjectWorkspaceCanvasContent({
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const [layoutCollapseNodeIds, setLayoutCollapseNodeIds] = useState<ReadonlySet<string>>(() => new Set())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
+  const layoutCollapseClearTimersRef = useRef<Map<string, number>>(new Map())
   const workspaceTaskStateByQueryKeyRef = useRef<ReadonlyMap<string, TaskRuntimeStateLike>>(new Map())
   const projectedNodeByIdRef = useRef<ReadonlyMap<string, WorkspaceCanvasFlowNode>>(new Map())
   const appliedProjectionNodeSignatureRef = useRef<string | null>(null)
@@ -434,17 +437,57 @@ function ProjectWorkspaceCanvasContent({
       throw error
     }
   }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
+  const clearLayoutCollapseHold = useCallback((nodeId: string) => {
+    const timer = layoutCollapseClearTimersRef.current.get(nodeId)
+    if (timer !== undefined) {
+      window.clearTimeout(timer)
+      layoutCollapseClearTimersRef.current.delete(nodeId)
+    }
+    setLayoutCollapseNodeIds((current) => {
+      if (!current.has(nodeId)) return current
+      const next = new Set(current)
+      next.delete(nodeId)
+      return next
+    })
+  }, [])
+  const startLayoutCollapseHold = useCallback((nodeId: string) => {
+    const existingTimer = layoutCollapseClearTimersRef.current.get(nodeId)
+    if (existingTimer !== undefined) window.clearTimeout(existingTimer)
+
+    setLayoutCollapseNodeIds((current) => {
+      if (current.has(nodeId)) return current
+      const next = new Set(current)
+      next.add(nodeId)
+      return next
+    })
+
+    const timer = window.setTimeout(() => {
+      layoutCollapseClearTimersRef.current.delete(nodeId)
+      setLayoutCollapseNodeIds((current) => {
+        if (!current.has(nodeId)) return current
+        const next = new Set(current)
+        next.delete(nodeId)
+        return next
+      })
+    }, WORKSPACE_CANVAS_EXIT_DURATION_MS)
+    layoutCollapseClearTimersRef.current.set(nodeId, timer)
+  }, [])
   const toggleNodeExpanded = useCallback((nodeId: string) => {
     const anchorNode = reactFlow.getNode(nodeId)
     if (anchorNode?.data.disclosure && !anchorNode.data.disclosure.canToggle) return
     setSelectedNodeId(nodeId)
     setNodeExpansionOverrides((current) => {
       const currentExpanded = anchorNode?.data.disclosure?.effectiveExpanded ?? current.get(nodeId) ?? false
+      if (currentExpanded) {
+        startLayoutCollapseHold(nodeId)
+      } else {
+        clearLayoutCollapseHold(nodeId)
+      }
       const next = new Map(current)
       next.set(nodeId, !currentExpanded)
       return next
     })
-  }, [reactFlow])
+  }, [clearLayoutCollapseHold, reactFlow, startLayoutCollapseHold])
   const handleMeasuredNodeSize = useCallback((
     nodeId: string,
     size: { readonly width: number; readonly height: number },
@@ -456,7 +499,8 @@ function ProjectWorkspaceCanvasContent({
 
         const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
         const expanded = node.data.disclosure?.effectiveExpanded ?? (node.data.expanded === true)
-        if (expanded && profile.expanded) return node
+        const layoutExpanded = node.data.layoutExpanded ?? expanded
+        if (layoutExpanded && profile.expanded) return node
 
         const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
           kind: node.data.kind,
@@ -515,15 +559,16 @@ function ProjectWorkspaceCanvasContent({
         isStreaming,
       })
       const expanded = disclosure.effectiveExpanded
+      const layoutExpanded = expanded || layoutCollapseNodeIds.has(node.id)
       const size = resolveWorkspaceCanvasNodeSize({
         kind: patchedData.kind,
-        expanded,
+        expanded: layoutExpanded,
         collapsedSize: {
           width: patchedData.width,
           height: patchedData.height,
         },
       })
-      const zIndex = node.id === selectedNodeId ? 30 : expanded ? 20 : undefined
+      const zIndex = node.id === selectedNodeId ? 30 : layoutExpanded ? 20 : undefined
       return {
         ...node,
         zIndex,
@@ -537,13 +582,14 @@ function ProjectWorkspaceCanvasContent({
           focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
           disclosure,
           expanded,
-          expandedLayout: expanded ? profile.expandedLayout : undefined,
+          layoutExpanded,
+          expandedLayout: layoutExpanded ? profile.expandedLayout : undefined,
           onToggleExpanded: toggleNodeExpanded,
           onMeasureNodeSize: handleMeasuredNodeSize,
         },
       }
     })
-  }, [handleMeasuredNodeSize, nodeExpansionOverrides, nodeRunningStatusLabel, selectedNodeId, t, toggleNodeExpanded])
+  }, [handleMeasuredNodeSize, layoutCollapseNodeIds, nodeExpansionOverrides, nodeRunningStatusLabel, selectedNodeId, t, toggleNodeExpanded])
 
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
@@ -716,6 +762,8 @@ function ProjectWorkspaceCanvasContent({
     optimisticRunningClearTimersRef.current.clear()
     focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     focusHighlightClearTimersRef.current.clear()
+    layoutCollapseClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    layoutCollapseClearTimersRef.current.clear()
   }, [])
 
   useEffect(() => {

@@ -70,6 +70,10 @@ function nodeContentInteractionClass(data: WorkspaceCanvasFlowNode['data'], clas
   return data.readOnly === true ? className : `nodrag nowheel ${className}`
 }
 
+function nodeIsCollapseMotionActive(data: WorkspaceCanvasFlowNode['data'], expanded: boolean): boolean {
+  return data.layoutExpanded === true && !expanded
+}
+
 function nodeUsesInlineTaskProgress(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
   return kind === 'videoPlan' || kind === 'bgmScore' || kind === 'finalTimeline'
 }
@@ -204,6 +208,7 @@ function EditablePromptSection({
   value,
   summaryValue,
   expanded,
+  deferCollapsedContent = false,
   labels,
   onSave,
 }: {
@@ -211,6 +216,7 @@ function EditablePromptSection({
   readonly value: string | null | undefined
   readonly summaryValue?: string | null
   readonly expanded: boolean
+  readonly deferCollapsedContent?: boolean
   readonly labels: ReturnType<typeof useTranslations>
   readonly onSave?: (nextValue: string) => Promise<void>
 }) {
@@ -240,7 +246,7 @@ function EditablePromptSection({
   const displayed = value ?? summaryValue ?? null
   const expandedContent = renderTextBlock(value)
   const collapsedContent = renderSummaryText(displayed, 3)
-  const content = expanded ? expandedContent : collapsedContent
+  const content = expanded ? expandedContent : deferCollapsedContent ? expandedContent : collapsedContent
   if (!content && !onSave) return null
 
   const normalizedDraft = draft.trim()
@@ -335,7 +341,7 @@ function EditablePromptSection({
         </div>
       ) : (
         <>
-          {!expanded ? collapsedContent : null}
+          {!expanded && !deferCollapsedContent ? collapsedContent : null}
           <WorkspaceCanvasMotionPresence visible={expanded}>
             {expandedContent}
           </WorkspaceCanvasMotionPresence>
@@ -880,6 +886,7 @@ function ImageContent({
 }) {
   if (data.__running === true) return <MediaPreview data={data} />
   const details = data.imageDetails
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   return (
     <div className="space-y-2">
       <MediaPreview data={data} />
@@ -890,6 +897,7 @@ function ImageContent({
             value={details.imagePrompt}
             summaryValue={details.description}
             expanded={expanded}
+            deferCollapsedContent={collapseMotionActive}
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'imagePrompt')}
           />
@@ -929,6 +937,7 @@ function VideoContent({
 }) {
   if (data.__running === true) return <MediaPreview data={data} />
   const details = data.videoDetails
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   return (
     <div className="space-y-2">
       <MediaPreview data={data} />
@@ -939,6 +948,7 @@ function VideoContent({
             value={details.videoPrompt}
             summaryValue={data.body}
             expanded={expanded}
+            deferCollapsedContent={collapseMotionActive}
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'videoPrompt')}
           />
@@ -1014,6 +1024,7 @@ function BgmScoreContent({
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const displayMixUrl = toDisplayImageUrl(details.mixUrl) ?? details.mixUrl ?? null
   const wideExpanded = expanded && data.expandedLayout === 'wide'
+  const wideLayoutActive = data.layoutExpanded === true && data.expandedLayout === 'wide'
   const renderTimedSectionList = (
     sections: typeof details.designSections,
     sectionTitle: string,
@@ -1123,7 +1134,7 @@ function BgmScoreContent({
   )
   return (
     <>
-      {!wideExpanded ? standardContent : null}
+      {!wideLayoutActive ? standardContent : null}
       <WorkspaceCanvasMotionPresence visible={wideExpanded}>
         {wideContent}
       </WorkspaceCanvasMotionPresence>
@@ -1146,9 +1157,10 @@ function EditPipelineStepContent({
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
   const collapsedSummary = <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   return (
     <>
-      {!expanded ? collapsedSummary : null}
+      {!expanded && !collapseMotionActive ? collapsedSummary : null}
       <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
         {details.items.map((item, index) => (
           <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
@@ -1205,9 +1217,10 @@ function ProcessGroupContent({
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
   const collapsedSummary = <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   return (
     <>
-      {!expanded ? collapsedSummary : null}
+      {!expanded && !collapseMotionActive ? collapsedSummary : null}
       <WorkspaceCanvasMotionPresence visible={expanded}>
         <ProcessStepGrid steps={details.steps} labels={labels} />
       </WorkspaceCanvasMotionPresence>
@@ -1489,6 +1502,7 @@ function EditScriptContent({
     </div>
   )
   const showShotGrid = expanded
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
 
   const cards: ShotGridCard[] = details.shots.map((shot) => {
     const characterNames = editScriptShotCharacterNames(shot)
@@ -1517,7 +1531,7 @@ function EditScriptContent({
 
   return (
     <>
-      {!showShotGrid ? summaryLine : null}
+      {!showShotGrid && !collapseMotionActive ? summaryLine : null}
       <WorkspaceCanvasMotionPresence visible={showShotGrid} className={nodeContentInteractionClass(data, 'space-y-3')}>
         {summaryLine}
         <button
@@ -1571,6 +1585,7 @@ function EditShotExecutionPlanContent({
       <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
     </div>
   )
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
 
   const cards: ShotGridCard[] = details.items.map((item, index) => {
     const fields = item.fields
@@ -1619,7 +1634,7 @@ function EditShotExecutionPlanContent({
 
   return (
     <>
-      {!expanded ? summaryLine : null}
+      {!expanded && !collapseMotionActive ? summaryLine : null}
       <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-2.5')}>
         <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
       </WorkspaceCanvasMotionPresence>
@@ -1881,6 +1896,7 @@ function StyleBibleContent({
       {details.styleSummary ? renderSection(labels('styleSummary'), renderTextBlock(details.styleSummary)) : null}
     </div>
   )
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
 
   // 二级（展开）：预览图 + 总结 + 分组属性网格
   const groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] = [
@@ -1908,7 +1924,7 @@ function StyleBibleContent({
   ]
   return (
     <>
-      {!expanded ? collapsedContent : null}
+      {!expanded && !collapseMotionActive ? collapsedContent : null}
       <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
         {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
         {renderTextSection(labels('styleSummary'), details.styleSummary)}
@@ -1967,10 +1983,11 @@ function EditScreenplayContent({
         : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
     </div>
   )
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
 
   return (
     <>
-      {!expanded ? collapsedContent : null}
+      {!expanded && !collapseMotionActive ? collapsedContent : null}
       <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
         {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
         {parsed.characters.length > 0 ? (
@@ -2054,6 +2071,7 @@ function EditAssetContent({
   if (data.__running === true) return <MediaPreview data={data} />
   const details = data.editAssetDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-2')}>
       <MediaPreview data={data} />
@@ -2061,6 +2079,7 @@ function EditAssetContent({
         title={labels('imagePrompt')}
         value={details.description}
         expanded={expanded}
+        deferCollapsedContent={collapseMotionActive}
         labels={labels}
         onSave={editAssetDescriptionSaveHandler(data)}
       />
@@ -2234,11 +2253,13 @@ function VideoPlanContent({
       })
     }
   }
+  const collapseMotionActive = nodeIsCollapseMotionActive(data, expanded)
   const renderPromptSection = (promptExpanded: boolean) => details.prompt ? (
     <EditablePromptSection
       title={labels('videoPlanPrompt')}
       value={details.prompt}
       expanded={promptExpanded}
+      deferCollapsedContent={collapseMotionActive}
       labels={labels}
       onSave={videoPlanPromptSaveHandler(data)}
     />
@@ -2350,7 +2371,7 @@ function VideoPlanContent({
           {renderValue(labels('duration'), `${details.durationSec}s`)}
         </div>
       ))}
-      {!expanded ? renderPromptSection(false) : null}
+      {!expanded && !collapseMotionActive ? renderPromptSection(false) : null}
       <WorkspaceCanvasMotionPresence visible={expanded}>
         {renderPromptSection(true)}
       </WorkspaceCanvasMotionPresence>
@@ -2417,6 +2438,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const measuredContentRef = useRef<HTMLDivElement | null>(null)
   const expanded = data.disclosure?.effectiveExpanded ?? (data.expanded === true)
+  const layoutExpanded = data.layoutExpanded ?? expanded
   const hasSource = data.kind !== 'finalTimeline'
   const action = data.action
   const isRunning = nodeIsRunning(data)
@@ -2467,7 +2489,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.layoutExpanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
@@ -2477,7 +2499,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
         <article
           className={`workspace-canvas-node-shell relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isVisuallyEmphasized ? 'workspace-node-running-breathing border-sky-300' : 'border-slate-200'}`}
-          data-expanded={expanded ? 'true' : 'false'}
+          data-expanded={layoutExpanded ? 'true' : 'false'}
         >
         <div ref={measuredContentRef}>
           <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
@@ -2524,7 +2546,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
           <div
             className={`workspace-canvas-node-content space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}
-            data-expanded={expanded ? 'true' : 'false'}
+            data-expanded={layoutExpanded ? 'true' : 'false'}
           >
             <NodeContent data={runningData} labels={labels} expanded={expanded} />
             {nodeUsesInlineTaskProgress(data.kind) ? (
