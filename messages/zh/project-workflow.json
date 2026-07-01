@@ -216,7 +216,6 @@
         "noCharacters": "无角色",
         "editScriptCompactSummary": "{count} 个镜头",
         "editScriptCompactSummaryWithCharacters": "{count} 个镜头 · 人物 {characters}",
-        "editAssetGroupCompactSummary": "{characters} 个人物 · {locations} 个场景",
         "screenplay": "剧本",
         "originalRequest": "原始需求",
         "styleSummary": "风格总结",

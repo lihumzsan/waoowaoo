@@ -63,8 +63,8 @@ const messages = {
           action: '动作',
           characters: '出场角色',
           collapseDetails: '收起',
+          description: '描述',
           duration: '时长',
-          editAssetGroupCompactSummary: '{characters} 个人物 · {locations} 个场景',
           editScriptCompactSummary: '{count} 个镜头',
           editScriptCompactSummaryWithCharacters: '{count} 个镜头 · 人物 {characters}',
           expandDetails: '展开',
@@ -329,11 +329,12 @@ describe('edit script compact canvas card', () => {
     expect(html).not.toContain('镜头 1 · 低角度推进')
   })
 
-  it('renders the completed asset group as a collapsible top-level summary', async () => {
-    const html = await renderWorkspaceNode(editAssetGroupNodeData({ expanded: false }))
+  it('renders the completed asset group expanded by default without a disclosure toggle', async () => {
+    const html = await renderWorkspaceNode(editAssetGroupNodeData())
 
-    expect(html).toContain('1 个人物 · 1 个场景')
-    expect(html).toContain('展开')
-    expect(html).not.toContain('年轻女性。')
+    expect(html).toContain('人物与场景')
+    expect(html).toContain('林晓')
+    expect(html).toContain('客厅')
+    expect(html).not.toContain('展开')
   })
 })

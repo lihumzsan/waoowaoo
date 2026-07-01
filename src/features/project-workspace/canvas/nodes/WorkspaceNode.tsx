@@ -1426,11 +1426,9 @@ function EditAssetGroupThumbnailCard({
 function EditAssetGroupContent({
   data,
   labels,
-  expanded,
 }: {
   readonly data: WorkspaceCanvasFlowNode['data']
   readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const onPreviewImage = useContext(WorkspaceNodeImagePreviewContext)
@@ -1458,22 +1456,8 @@ function EditAssetGroupContent({
     readonly assets: readonly WorkspaceCanvasEditAssetGroupItem[]
   }>
   const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
-  const characterCount = assetGroups.find((group) => group.key === 'character')?.assets.length ?? 0
-  const locationCount = assetGroups.find((group) => group.key === 'location')?.assets.length ?? 0
-  const summaryText = labels('editAssetGroupCompactSummary', {
-    characters: characterCount,
-    locations: locationCount,
-  })
-  const summaryLine = (
-    <div className="flex items-center gap-2.5 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-      <AppIcon name="usersRound" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
-      <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
-    </div>
-  )
-  if (!expanded) return summaryLine
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      {summaryLine}
       {renderSection(labels('description'), renderTextBlock(data.body))}
       <div className="space-y-4">
         {groupedAssets.map((group) => (
@@ -2124,7 +2108,7 @@ function NodeContent({
     case 'editRequiredAsset':
       return <EditAssetContent data={data} labels={labels} expanded={expanded} />
     case 'editAssetGroup':
-      return <EditAssetGroupContent data={data} labels={labels} expanded={expanded} />
+      return <EditAssetGroupContent data={data} labels={labels} />
   }
 }
 
