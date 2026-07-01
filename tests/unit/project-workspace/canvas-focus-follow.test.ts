@@ -67,15 +67,14 @@ describe('workspace canvas focus follow', () => {
     expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script_storyboard_images')).toEqual(['shot:panel-2'])
   })
 
-  it('focuses storyboard panel generation before falling back to generated shot nodes', () => {
+  it('focuses generated shot nodes for storyboard structure generation', () => {
     const nodes = [
       workspaceNode('edit-shot-execution-plan:edit-script:script-1', 'editShotExecutionPlan', false),
-      workspaceNode('storyboard-panel-generation:storyboard-1', 'storyboardPanelGeneration', false),
       workspaceNode('shot:panel-1', 'shot', false),
     ]
 
     expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'generate_edit_script_storyboard'))
-      .toEqual(['storyboard-panel-generation:storyboard-1'])
+      .toEqual(['shot:panel-1'])
   })
 
   it('resolves confirmed style bible focus requests to the style bible card', () => {

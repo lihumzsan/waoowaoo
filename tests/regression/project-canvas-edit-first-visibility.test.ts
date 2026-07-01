@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { ProjectEditAssetRequirement, ProjectEditScreenplay, ProjectEditScript, ProjectFinalVideo, ProjectVideoGroup } from '@/types/project'
+import type {
+  ProjectEditAssetRequirement,
+  ProjectEditScreenplay,
+  ProjectEditScript,
+  ProjectEditShotExecutionPlan,
+  ProjectFinalVideo,
+  ProjectPanel,
+  ProjectStoryboard,
+  ProjectVideoGroup,
+} from '@/types/project'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
-import { WORKSPACE_CANVAS_DEFAULT_NODE_SIZE } from '@/features/project-workspace/canvas/node-presentation-profiles'
+import {
+  WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
+} from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 function t(key: string, values?: Record<string, string | number>): string {
   if (!values) return key
@@ -75,6 +88,85 @@ function editScript(input: {
     shots: [],
     generationSegments: [...(input.generationSegments ?? [])],
     requirements: [...(input.requirements ?? [])],
+  }
+}
+
+function shotExecutionPlan(): ProjectEditShotExecutionPlan {
+  return {
+    id: 'shot-execution-plan-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    editScriptId: 'edit-script-1',
+    status: 'ready',
+    shots: [{
+      shotNumber: 1,
+      camera: {
+        shotScale: '中景',
+        lens: '35mm',
+        focus: '林晓',
+        height: 'eye level',
+        angle: 'front',
+        movement: 'static',
+        composition: 'centered',
+        lighting: 'low key',
+      },
+      blocking: {
+        axis: {
+          type: 'dialogue',
+          subjects: ['林晓'],
+          screenDirection: 'left to right',
+        },
+        characters: [{
+          name: '林晓',
+          visibility: 'visible',
+          position: '沙发前',
+          screenPosition: 'center',
+          facing: 'camera',
+          eyeline: 'phone',
+        }],
+        objects: [],
+        spatialNote: '林晓坐在客厅沙发前。',
+      },
+    }],
+  }
+}
+
+function panel(): ProjectPanel {
+  return {
+    id: 'panel-1',
+    storyboardId: 'storyboard-1',
+    panelIndex: 0,
+    panelNumber: 1,
+    shotType: '中景',
+    cameraMove: 'static',
+    description: '林晓坐在客厅里。',
+    location: '客厅',
+    characters: '林晓',
+    props: null,
+    srtSegment: null,
+    srtStart: null,
+    srtEnd: null,
+    duration: 4,
+    imagePrompt: 'panel image prompt',
+    imageUrl: null,
+    videoPrompt: 'panel video prompt',
+    videoUrl: null,
+    actingNotes: null,
+    sourceShotNumber: 1,
+  }
+}
+
+function storyboard(): ProjectStoryboard {
+  return {
+    id: 'storyboard-1',
+    episodeId: 'episode-1',
+    editScriptId: 'edit-script-1',
+    storyboardTextJson: null,
+    panelCount: 1,
+    storyboardImageUrl: null,
+    lastError: null,
+    storyboardTaskRunning: false,
+    panels: [panel()],
   }
 }
 
@@ -243,6 +335,54 @@ describe('project canvas edit-first visibility', () => {
     expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
     expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(false)
+  })
+
+  it('renders shot cards directly after execution plan without a storyboard structure node', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [storyboard()],
+      editFirstWorkflow: workflow('ready_to_generate_storyboard_images'),
+      editScript: editScript({
+        status: 'ready',
+      }),
+      editShotExecutionPlan: shotExecutionPlan(),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.some((node) => node.id.startsWith('storyboard-panel-generation:'))).toBe(false)
+    expect(projection.nodes.some((node) => node.data.kind === 'shot')).toBe(true)
+    expect(projection.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source: 'edit-shot-execution-plan:edit-script:edit-script-1',
+        target: 'shot:panel-1',
+      }),
+    ]))
+  })
+
+  it('projects edit-first collapsed nodes with compact widths before disclosure expands them', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [],
+      editFirstWorkflow: workflow('ready_to_generate_storyboard_images'),
+      editScript: editScript({
+        status: 'ready',
+      }),
+      editShotExecutionPlan: shotExecutionPlan(),
+      savedLayouts: [],
+      translate: t,
+    })
+    const editScriptNode = projection.nodes.find((node) => node.data.kind === 'editScript')
+    const executionNode = projection.nodes.find((node) => node.data.kind === 'editShotExecutionPlan')
+
+    expect(editScriptNode?.data.width).toBe(WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width)
+    expect(editScriptNode?.style?.width).toBe(WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width)
+    expect(executionNode?.data.width).toBe(WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width)
+    expect(executionNode?.style?.width).toBe(WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width)
   })
 
   it('keeps the final timeline hidden while BGM is ready but video output is not complete', () => {

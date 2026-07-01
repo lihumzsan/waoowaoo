@@ -8,7 +8,6 @@ const EXECUTION_PLAN_STACK_GAP = 56
 const EXECUTION_PLAN_TO_CONTENT_LANE_GAP = 88
 const POSITION_EPSILON = 0.5
 const EXECUTION_PLAN_CONTENT_LANE_NODE_KINDS = new Set<WorkspaceCanvasFlowNode['data']['kind']>([
-  'storyboardPanelGeneration',
   'shot',
   'videoPlan',
   'bgmScore',

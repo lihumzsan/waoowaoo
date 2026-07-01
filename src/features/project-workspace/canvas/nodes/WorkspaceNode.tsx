@@ -14,10 +14,10 @@ import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
 import type {
-  WorkspaceCanvasAssetRef,
   WorkspaceCanvasEditAssetGroupItem,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
+  WorkspaceCanvasShotDetails,
   WorkspaceCanvasStreamPresentation,
   WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
@@ -47,8 +47,6 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'clipboardCheck'
     case 'editShotExecutionPlan':
       return 'image'
-    case 'storyboardPanelGeneration':
-      return 'clapperboard'
     case 'videoPlan':
       return 'clapperboard'
     case 'bgmScore':
@@ -473,22 +471,6 @@ function renderChips(label: string, values: readonly string[]) {
   ))
 }
 
-function renderAssetChips(label: string, values: readonly WorkspaceCanvasAssetRef[]) {
-  if (values.length === 0) return null
-  return renderSection(label, (
-    <div className="flex flex-wrap gap-1.5">
-      {values.map((value) => {
-        const key = `${value.name}:${value.appearance ?? ''}`
-        return (
-          <span key={key} className={`${SELECTABLE_TEXT_CLASS} rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-[var(--glass-text-secondary)]`}>
-            {value.appearance ? `${value.name} / ${value.appearance}` : value.name}
-          </span>
-        )
-      })}
-    </div>
-  ))
-}
-
 function renderLines(lines: readonly WorkspaceCanvasTextLine[], labels: ReturnType<typeof useTranslations>) {
   if (lines.length === 0) return null
   return (
@@ -506,67 +488,224 @@ function renderLines(lines: readonly WorkspaceCanvasTextLine[], labels: ReturnTy
   )
 }
 
-function ShotContent({
+function shotPreviewAspectRatio(data: WorkspaceCanvasFlowNode['data']): number {
+  const aspectRatio = data.previewAspectRatio
+  if (typeof aspectRatio === 'number' && Number.isFinite(aspectRatio) && aspectRatio > 0) return aspectRatio
+  return 16 / 9
+}
+
+function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
+  const displayImageUrl = toDisplayImageUrl(data.previewImageUrl)
+  const displayStyleImageUrl = toDisplayImageUrl(data.loadingStyleImageUrl)
+  const running = data.__running === true
+  const frameStyle: React.CSSProperties = { aspectRatio: String(shotPreviewAspectRatio(data)) }
+
+  return (
+    <div className="relative overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100" style={frameStyle}>
+      {displayImageUrl ? (
+        <PreviewableImage
+          sourceImageUrl={data.previewImageUrl ?? displayImageUrl}
+          displayImageUrl={displayImageUrl}
+          alt={data.title}
+          buttonClassName="block h-full w-full cursor-zoom-in overflow-hidden"
+          imageClassName="block h-full w-full object-cover"
+        />
+      ) : (
+        <>
+          {displayStyleImageUrl ? (
+            <>
+              <div
+                className="absolute inset-0 scale-110"
+                style={{
+                  backgroundImage: `url("${displayStyleImageUrl}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  filter: 'blur(18px)',
+                }}
+              />
+              <div className="absolute inset-0 bg-white/45 backdrop-blur-xl" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,#f8fafc_0%,#e2e8f0_48%,#cbd5e1_100%)]" />
+          )}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="inline-flex h-16 w-16 items-center justify-center rounded-[18px] bg-white/72 shadow-sm ring-1 ring-slate-200 backdrop-blur">
+              <AppIcon name="image" className="h-8 w-8 text-slate-400" />
+            </span>
+          </div>
+        </>
+      )}
+      <MediaGenerationLoading taskState={data.taskProgress} styleImageUrl={data.loadingStyleImageUrl} size={72} showBackground={false} />
+      {running && displayImageUrl ? <div className="pointer-events-none absolute inset-0 bg-white/10" /> : null}
+    </div>
+  )
+}
+
+function ShotMetaAttrChip({
+  icon,
+  label,
+  value,
+}: {
+  readonly icon: AppIconName
+  readonly label: string
+  readonly value: string | null | undefined
+}) {
+  if (!hasText(value)) return null
+  return (
+    <span className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-[var(--glass-text-secondary)]`}>
+      <AppIcon name={icon} className="h-3.5 w-3.5 text-[var(--glass-text-tertiary)]" />
+      <span className="text-[var(--glass-text-tertiary)]">{label}</span>
+      <span>{value}</span>
+    </span>
+  )
+}
+
+function ShotMetaTagChip({
+  icon,
+  text,
+}: {
+  readonly icon: AppIconName
+  readonly text: string
+}) {
+  if (!hasText(text)) return null
+  return (
+    <span className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-[var(--glass-text-secondary)]`}>
+      <AppIcon name={icon} className="h-3.5 w-3.5 text-[var(--glass-text-tertiary)]" />
+      {text}
+    </span>
+  )
+}
+
+function ShotMetaChips({
+  details,
+  labels,
+}: {
+  readonly details: WorkspaceCanvasShotDetails
+  readonly labels: ReturnType<typeof useTranslations>
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <ShotMetaAttrChip icon="crosshair" label={labels('shotType')} value={details.shotType} />
+      <ShotMetaAttrChip icon="mapPin" label={labels('location')} value={details.location} />
+      {details.characters.map((character) => (
+        <ShotMetaTagChip
+          key={`character:${character.name}:${character.appearance ?? ''}`}
+          icon="user"
+          text={character.appearance ? `${character.name} / ${character.appearance}` : character.name}
+        />
+      ))}
+      {details.props.map((prop) => (
+        <ShotMetaTagChip key={`prop:${prop}`} icon="cube" text={prop} />
+      ))}
+    </div>
+  )
+}
+
+function ShotImagePromptEditor({
   data,
   labels,
-  expanded,
+  value,
 }: {
   readonly data: WorkspaceCanvasFlowNode['data']
   readonly labels: ReturnType<typeof useTranslations>
-  readonly expanded: boolean
+  readonly value: string | null | undefined
+}) {
+  const onSave = panelPromptSaveHandler(data, 'imagePrompt')
+  const [draft, setDraft] = useState(value ?? '')
+  const [status, setStatus] = useState<PromptSaveStatus>('idle')
+
+  useEffect(() => {
+    setDraft(value ?? '')
+    setStatus('idle')
+  }, [value])
+
+  const normalizedDraft = draft.trim()
+  const normalizedValue = (value ?? '').trim()
+  const canSave = Boolean(onSave) && normalizedDraft.length > 0 && normalizedDraft !== normalizedValue
+
+  const handleSave = async () => {
+    if (!onSave || !canSave) return
+    setStatus('saving')
+    try {
+      await onSave(normalizedDraft)
+      setStatus('saved')
+    } catch {
+      setStatus('failed')
+    }
+  }
+
+  return (
+    <section
+      className="nodrag nowheel flex flex-col rounded-[18px] border border-slate-200 bg-slate-50"
+      onPointerDownCapture={(event) => event.stopPropagation()}
+      onWheelCapture={(event) => event.stopPropagation()}
+      onKeyDownCapture={(event) => event.stopPropagation()}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <AppIcon name="sparkles" className="h-4 w-4 shrink-0 text-[var(--glass-text-secondary)]" />
+          <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm font-semibold text-[var(--glass-text-primary)]`}>
+            {labels('fullFinalPrompt')}
+          </p>
+        </div>
+        {canSave || status !== 'idle' ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              className="nodrag rounded-[10px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
+              disabled={status === 'saving'}
+              onClick={() => {
+                setDraft(value ?? '')
+                setStatus('idle')
+              }}
+            >
+              {labels('cancelEdit')}
+            </button>
+            <button
+              type="button"
+              className="nodrag rounded-[10px] bg-slate-950 px-2.5 py-1.5 text-[10px] font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400"
+              disabled={!canSave || status === 'saving'}
+              onClick={() => void handleSave()}
+            >
+              {status === 'saving' ? labels('promptSaving') : labels('savePrompt')}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <textarea
+        className="nodrag nowheel w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)] outline-none"
+        aria-label={labels('fullFinalPrompt')}
+        rows={5}
+        readOnly={!onSave}
+        value={draft}
+        onChange={(event) => {
+          setStatus('idle')
+          setDraft(event.target.value)
+        }}
+      />
+      {status === 'saved' ? (
+        <p className={`${SELECTABLE_TEXT_CLASS} px-3 pb-2 text-[10px] font-medium text-emerald-600`}>{labels('promptSaved')}</p>
+      ) : status === 'failed' ? (
+        <p className={`${SELECTABLE_TEXT_CLASS} px-3 pb-2 text-[10px] font-medium text-red-600`}>{labels('promptSaveFailed')}</p>
+      ) : null}
+    </section>
+  )
+}
+
+function ShotContent({
+  data,
+  labels,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
 }) {
   const details = data.shotDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const shouldShowPreview = hasText(data.previewImageUrl)
-  if (!expanded) {
-    return (
-      <div className="space-y-2">
-        {shouldShowPreview ? <MediaPreview data={data} /> : null}
-        {renderSection(labels('shotCore'), (
-          <div className="space-y-1">
-            {renderValue(labels('location'), details.location)}
-            {renderValue(labels('duration'), details.duration)}
-          </div>
-        ))}
-        {renderAssetChips(labels('characters'), details.characters)}
-        {renderSection(labels('description'), renderSummaryText(data.body, 4))}
-      </div>
-    )
-  }
   return (
-    <div className="space-y-2">
-      {shouldShowPreview ? <MediaPreview data={data} /> : null}
-      {renderSection(labels('shotCore'), (
-        <div className="space-y-1">
-          {renderValue(labels('shotType'), details.shotType)}
-          {renderValue(labels('cameraMove'), details.cameraMove)}
-          {renderValue(labels('location'), details.location)}
-          {renderValue(labels('timeRange'), details.timeRange)}
-          {renderValue(labels('duration'), details.duration)}
-        </div>
-      ))}
-      {renderAssetChips(labels('characters'), details.characters)}
-      {renderChips(labels('props'), details.props)}
-      {renderTextSection(labels('description'), data.body)}
-      {renderTextSection(labels('srtSegment'), details.srtSegment)}
-      {details.executionSnapshot ? renderSection(labels('executionSnapshot'), renderJsonBlock(details.executionSnapshot)) : null}
-      {details.renderFacts ? renderSection(labels('renderFacts'), renderJsonBlock(details.renderFacts)) : null}
-      {renderTextSection(labels('fullFinalPrompt'), details.imagePrompt)}
-      <EditablePromptSection
-        title={labels('imagePrompt')}
-        value={details.imagePrompt}
-        expanded={expanded}
-        labels={labels}
-        onSave={panelPromptSaveHandler(data, 'imagePrompt')}
-      />
-      <EditablePromptSection
-        title={labels('videoPrompt')}
-        value={details.videoPrompt}
-        expanded={expanded}
-        labels={labels}
-        onSave={panelPromptSaveHandler(data, 'videoPrompt')}
-      />
-      {renderTextSection(labels('actingNotes'), details.actingNotes)}
+    <div className="space-y-3">
+      <ShotImagePreview data={data} />
+      <ShotMetaChips details={details} labels={labels} />
+      <ShotImagePromptEditor data={data} labels={labels} value={details.imagePrompt} />
       {renderTextSection(labels('error'), details.errorMessage)}
     </div>
   )
@@ -1451,23 +1590,6 @@ function EditShotExecutionPlanContent({
   )
 }
 
-function editAssetKindLabel(
-  kind: WorkspaceCanvasEditAssetGroupItem['kind'],
-  labels: ReturnType<typeof useTranslations>,
-): string {
-  return kind === 'character' ? labels('characterAsset') : labels('locationAsset')
-}
-
-function editAssetEyebrow(
-  asset: WorkspaceCanvasEditAssetGroupItem,
-  labels: ReturnType<typeof useTranslations>,
-): string {
-  const kindLabel = editAssetKindLabel(asset.kind, labels)
-  const rawEyebrow = asset.eyebrow.trim()
-  if (!rawEyebrow || rawEyebrow === asset.kind || rawEyebrow === kindLabel) return kindLabel
-  return `${kindLabel} · ${rawEyebrow}`
-}
-
 function shouldShowEditAssetStatus(
   asset: WorkspaceCanvasEditAssetGroupItem,
   previewSourceImageUrl: string | null,
@@ -1588,7 +1710,6 @@ function EditAssetGroupHeroCard({
             </div>
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3 pr-12">
               <p className={`${SELECTABLE_TEXT_CLASS} truncate text-lg font-semibold text-white drop-shadow-sm`}>{asset.name}</p>
-              <p className={`${SELECTABLE_TEXT_CLASS} truncate text-[11px] text-white/75`}>{editAssetEyebrow(asset, labels)}</p>
             </div>
             <span className="pointer-events-none absolute bottom-2.5 right-2.5 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
               <AppIcon name="chevronDown" className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -2200,7 +2321,6 @@ function NodeContent({
 }) {
   if (data.__running === true) {
     if (
-      data.kind === 'shot' ||
       data.kind === 'imageAsset' ||
       data.kind === 'videoClip' ||
       data.kind === 'editRequiredAsset'
@@ -2211,7 +2331,7 @@ function NodeContent({
 
   switch (data.kind) {
     case 'shot':
-      return <ShotContent data={data} labels={labels} expanded={expanded} />
+      return <ShotContent data={data} labels={labels} />
     case 'imageAsset':
       return <ImageContent data={data} labels={labels} expanded={expanded} />
     case 'videoClip':
@@ -2234,8 +2354,6 @@ function NodeContent({
       return <EditScriptContent data={data} labels={labels} expanded={expanded} />
     case 'editShotExecutionPlan':
       return <EditShotExecutionPlanContent data={data} labels={labels} expanded={expanded} />
-    case 'storyboardPanelGeneration':
-      return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'videoPlan':
       return <VideoPlanContent data={data} labels={labels} expanded={expanded} />
     case 'editRequiredAsset':

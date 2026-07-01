@@ -4,7 +4,6 @@ export type WorkspaceCanvasStreamKind =
   | 'editScreenplay'
   | 'editScript'
   | 'editShotExecutionPlan'
-  | 'storyboardPanelGeneration'
   | 'bgmScore'
 
 export type WorkspaceCanvasStreamPatchData = Partial<Pick<

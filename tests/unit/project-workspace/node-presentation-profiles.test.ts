@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   getWorkspaceCanvasNodePresentationProfile,
   resolveWorkspaceCanvasMeasuredNodeHeight,
   resolveWorkspaceCanvasNodeSize,
@@ -32,11 +34,25 @@ describe('workspace canvas node presentation profiles', () => {
     })).toEqual({ width: 320, height: 560 })
   })
 
-  it('gives shot execution plan nodes an expanded profile', () => {
+  it('keeps edit-first summary nodes compact and expands only when requested', () => {
+    const editScriptProfile = getWorkspaceCanvasNodePresentationProfile('editScript')
     const executionProfile = getWorkspaceCanvasNodePresentationProfile('editShotExecutionPlan')
 
-    expect(executionProfile.collapsed).toEqual({ width: 760, height: 360 })
-    expect(executionProfile.expanded).toBeUndefined()
+    expect(editScriptProfile.collapsed).toEqual(WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE)
+    expect(editScriptProfile.expanded).toEqual({ width: 760, height: 420 })
+    expect(resolveWorkspaceCanvasNodeSize({
+      kind: 'editScript',
+      expanded: false,
+      collapsedSize: editScriptProfile.collapsed,
+    })).toEqual(WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE)
+    expect(resolveWorkspaceCanvasNodeSize({
+      kind: 'editScript',
+      expanded: true,
+      collapsedSize: editScriptProfile.collapsed,
+    })).toEqual({ width: 760, height: 420 })
+
+    expect(executionProfile.collapsed).toEqual(WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE)
+    expect(executionProfile.expanded).toEqual({ width: 760, height: 420 })
     expect(executionProfile.expandedLayout).toBe('stack')
   })
 

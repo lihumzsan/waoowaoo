@@ -30,6 +30,7 @@ interface MediaGenerationLoadingProps {
   /** 环直径(px),按容器大小传入 */
   readonly size?: number
   readonly className?: string
+  readonly showBackground?: boolean
 }
 
 interface MediaGenerationLoadingViewProps {
@@ -39,6 +40,7 @@ interface MediaGenerationLoadingViewProps {
   readonly styleImageUrl?: string | null
   readonly size: number
   readonly className?: string
+  readonly showBackground?: boolean
 }
 
 function clampPercent(value: number): number {
@@ -52,6 +54,7 @@ export function MediaGenerationLoadingView({
   styleImageUrl,
   size,
   className,
+  showBackground = true,
 }: MediaGenerationLoadingViewProps) {
   const t = useTranslations('common')
   const displayStyleUrl = toDisplayImageUrl(styleImageUrl)
@@ -70,22 +73,24 @@ export function MediaGenerationLoadingView({
       ].join(' ').trim()}
     >
       {/* 背景:模糊风格图 + 暗化压底,或退回模糊磨砂底 */}
-      {displayStyleUrl ? (
-        <>
-          <div
-            className="absolute inset-0 scale-110"
-            style={{
-              backgroundImage: `url("${displayStyleUrl}")`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              filter: 'blur(14px)',
-            }}
-          />
-          <div className="absolute inset-0 bg-[rgba(10,16,30,0.32)]" />
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-[var(--glass-bg-muted)]" />
-      )}
+      {showBackground ? (
+        displayStyleUrl ? (
+          <>
+            <div
+              className="absolute inset-0 scale-110"
+              style={{
+                backgroundImage: `url("${displayStyleUrl}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                filter: 'blur(14px)',
+              }}
+            />
+            <div className="absolute inset-0 bg-[rgba(10,16,30,0.32)]" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-[var(--glass-bg-muted)]" />
+        )
+      ) : null}
 
       {mode === 'failed' ? (
         <div className="relative z-[1] flex flex-col items-center gap-2 px-4 text-center">
@@ -155,6 +160,7 @@ export default function MediaGenerationLoading({
   styleImageUrl,
   size = 72,
   className,
+  showBackground = true,
 }: MediaGenerationLoadingProps) {
   const progress = useEstimatedTaskProgress(taskState)
   if (!progress) return null
@@ -167,6 +173,7 @@ export default function MediaGenerationLoading({
       styleImageUrl={styleImageUrl}
       size={size}
       className={className}
+      showBackground={showBackground}
     />
   )
 }

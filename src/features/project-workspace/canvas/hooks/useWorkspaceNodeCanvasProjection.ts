@@ -36,12 +36,13 @@ import type {
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
+  WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+  WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
   WORKSPACE_CANVAS_FINAL_NODE_SIZE,
+  WORKSPACE_CANVAS_SHOT_NODE_SIZE,
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
@@ -89,7 +90,7 @@ const COLUMN_GAP_X = 900
 const ROW_GAP_Y = 170
 const SHOT_GRID_COLUMNS = 5
 const SHOT_GRID_GAP_X = 44
-const SHOT_GRID_GAP_Y = 620
+const SHOT_GRID_GAP_Y = 820
 const ASSET_GROUP_Y_OFFSET = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -183,6 +184,33 @@ function primaryPanelImageUrl(panel: ProjectPanel | null): string | null {
     ?? panel.imageUrl
     ?? parseStringList(panel.candidateImages).find((url) => !url.startsWith('PENDING:'))
     ?? null
+}
+
+function mediaAspectRatio(media: ProjectPanel['media']): number | null {
+  if (!media) return null
+  if (typeof media.width !== 'number' || typeof media.height !== 'number') return null
+  if (!Number.isFinite(media.width) || !Number.isFinite(media.height)) return null
+  if (media.width <= 0 || media.height <= 0) return null
+  return media.width / media.height
+}
+
+function stylePreviewAspectRatioValue(value: '9:16' | '16:9' | '21:9' | null | undefined): number | null {
+  switch (value) {
+    case '9:16':
+      return 9 / 16
+    case '16:9':
+      return 16 / 9
+    case '21:9':
+      return 21 / 9
+    default:
+      return null
+  }
+}
+
+function confirmedStylePreviewAspectRatio(screenplay: ProjectEditScreenplay | null | undefined): number | null {
+  const confirmed = screenplay?.stylePreviews?.find((preview) => preview.status === 'confirmed') ?? null
+  const fallback = screenplay?.stylePreviews?.[0] ?? null
+  return stylePreviewAspectRatioValue(confirmed?.aspectRatio ?? fallback?.aspectRatio)
 }
 
 function resolvePanelShotNumber(panel: ProjectPanel): number {
@@ -529,6 +557,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
   const styleBibleDetails = buildStyleBibleDetails(editScreenplay?.styleBible)
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editScreenplay)
+  const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editScreenplay)
   const screenplayRunning = activeAssistantOperationId === 'generate_edit_screenplay'
     || (editScreenplay ? hasStreamTarget(streamTargets, 'editScreenplay', editScreenplay.id) : false)
   const phaseLabels = artifactPhaseLabels(translate)
@@ -636,8 +665,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     nodes.push(createNode({
       id: editScriptNodeId,
       position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 }),
-      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-      height: 420,
+      width: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height,
       data: {
         projectId,
         episodeName,
@@ -752,8 +781,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     nodes.push(createNode({
       id: executionNodeId,
       position: layoutPosition(savedLayouts, executionNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 2, y: 120 }),
-      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-      height: 420,
+      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
       data: {
         projectId,
         episodeName,
@@ -784,69 +813,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     }
   }
 
-  const storyboardGenerationNodeIds = new Map<string, string>()
-  if (editScript && executionNodeId && editFirstCanvasVisibility.storyboardPanelGeneration) {
-    storyboards.forEach((storyboard, index) => {
-      const nodeId = workspaceNodeId.storyboardPanelGeneration(storyboard.id)
-      const storyboardPresentation = storyboard.storyboardTaskRunning
-        ? workspaceCanvasRunningPresentation(phaseLabels)
-        : storyboard.lastError
-          ? workspaceCanvasFailedPresentation(phaseLabels)
-          : workspaceCanvasSucceededPresentation(phaseLabels)
-      storyboardGenerationNodeIds.set(storyboard.id, nodeId)
-      nodes.push(createNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 3, y: 120 + index * 260 }),
-        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-        height: 260,
-        data: {
-          projectId,
-          episodeName,
-          kind: 'storyboardPanelGeneration',
-          layoutNodeType: 'storyboardPanelGeneration',
-          targetType: 'storyboardPanelGeneration',
-          targetId: storyboard.id,
-          title: translate('nodes.storyboardPanelGeneration.title'),
-          eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
-          body: storyboard.lastError ?? translate('nodes.storyboardPanelGeneration.body'),
-          meta: translate('nodes.storyboardPanelGeneration.meta', { panels: storyboard.panels?.length ?? storyboard.panelCount }),
-          ...storyboardPresentation,
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectStoryboardPanelGeneration(storyboard.id)),
-          onAction,
-        },
-      }))
-      edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
-    })
-
-    if (storyboards.length === 0) {
-      const nodeId = workspaceNodeId.storyboardPanelGeneration(editScript.id)
-      nodes.push(createNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 3, y: 120 }),
-        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-        height: 260,
-        data: {
-          projectId,
-          episodeName,
-          kind: 'storyboardPanelGeneration',
-          layoutNodeType: 'storyboardPanelGeneration',
-          targetType: 'storyboardPanelGeneration',
-          targetId: editScript.id,
-          title: translate('nodes.storyboardPanelGeneration.title'),
-          eyebrow: translate('nodes.storyboardPanelGeneration.eyebrow'),
-          body: translate('nodes.storyboardPanelGeneration.body'),
-          meta: '',
-          statusLabel: '',
-          isRunning: false,
-          actionLabel: translate('actions.generateStoryboard'),
-          action: { type: 'generate_edit_storyboard', editScriptId: editScript.id },
-          onAction,
-        },
-      }))
-      edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
-    }
-  }
-
   const panelList = collectPanels(storyboards)
   const panelImageActions = panelImageGenerationActions({
     episodeId,
@@ -854,7 +820,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     panels: panelList,
   })
   const shotNodeIdsByShotNumber = new Map<number, string>()
-  if (editFirstCanvasVisibility.storyboardPanels) {
+  let storyboardSourceNodeId: string | null = null
+  if (executionNodeId) {
+    storyboardSourceNodeId = executionNodeId
+  } else if (editScriptNodeId) {
+    storyboardSourceNodeId = editScriptNodeId
+  }
+  if (editFirstCanvasVisibility.storyboardPanels && storyboardSourceNodeId) {
     panelList.forEach((panel, index) => {
       const shotNumber = resolvePanelShotNumber(panel)
       const nodeId = workspaceNodeId.shot(panel.id)
@@ -862,7 +834,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       const column = index % SHOT_GRID_COLUMNS
       const row = Math.floor(index / SHOT_GRID_COLUMNS)
       const previewImageUrl = primaryPanelImageUrl(panel)
-      const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId
+      const previewAspectRatio = mediaAspectRatio(panel.media) ?? stylePreviewAspectRatio
       const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
       const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
       const shotPresentation = shotRunning
@@ -873,11 +845,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       nodes.push(createNode({
         id: nodeId,
         position: layoutPosition(savedLayouts, nodeId, {
-          x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width + SHOT_GRID_GAP_X),
+          x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_SHOT_NODE_SIZE.width + SHOT_GRID_GAP_X),
           y: 460 + row * SHOT_GRID_GAP_Y,
         }),
-        width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+        width: WORKSPACE_CANVAS_SHOT_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
         data: {
           projectId,
           episodeName,
@@ -893,6 +865,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           meta: panel.location ?? translate('empty.location'),
           ...shotPresentation,
           previewImageUrl,
+          previewAspectRatio,
           loadingStyleImageUrl: stylePreviewImageUrl,
           runtimeTargets: runtimeTargets(
             TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
@@ -912,7 +885,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           onAction,
         },
       }))
-      if (storyboardSourceNodeId) edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
+      edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
     })
   }
 

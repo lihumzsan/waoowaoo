@@ -56,27 +56,4 @@ describe('workspace canvas layout input', () => {
       collapsed: false,
     }])
   })
-
-  it('persists storyboard panel generation node layout with its dedicated target type', () => {
-    const input = buildWorkspaceCanvasLayoutInput({
-      episodeId: 'episode-1',
-      nodes: [
-        canvasNode({
-          id: 'storyboard-panel-generation:storyboard-1',
-          kind: 'storyboardPanelGeneration',
-          targetType: 'storyboardPanelGeneration',
-          targetId: 'storyboard-1',
-          x: 420,
-          y: 180,
-        }),
-      ],
-    })
-
-    expect(input.nodeLayouts[0]).toEqual(expect.objectContaining({
-      nodeKey: 'storyboard-panel-generation:storyboard-1',
-      nodeType: 'storyboardPanelGeneration',
-      targetType: 'storyboardPanelGeneration',
-      targetId: 'storyboard-1',
-    }))
-  })
 })

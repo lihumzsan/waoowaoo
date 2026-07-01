@@ -137,9 +137,4 @@ export const TASK_RUNTIME_TARGETS = {
   projectVideoGroup(groupId: string | null | undefined) {
     return target('ProjectVideoGroup', groupId, [TASK_TYPE.VIDEO_GROUP])
   },
-  projectStoryboardPanelGeneration(storyboardId: string | null | undefined) {
-    return target('ProjectStoryboard', storyboardId, [
-      TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-    ])
-  },
 } as const

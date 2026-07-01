@@ -684,12 +684,6 @@
           "locationReferenceRequired": "Generate scene asset images first. A final scene image is required before analyzing the real spatial profile.",
           "meta": "{profiles} spatial profile(s) · {cameraPlans} camera plan(s)"
         },
-        "storyboardPanelGeneration": {
-          "title": "Storyboard Panel Generation",
-          "eyebrow": "Storyboard Structure",
-          "body": "The system is converting the shot execution plan, spatial profiles, and core edit table into per-shot storyboard facts.",
-          "meta": "{panels} storyboard panel(s)"
-        },
         "editAsset": {
           "meta": "Linked shots: {shots}"
         },

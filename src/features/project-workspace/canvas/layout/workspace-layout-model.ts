@@ -91,7 +91,6 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
       return 'assets'
     case 'editShotExecutionPlan':
       return 'execution'
-    case 'storyboardPanelGeneration':
     case 'shot':
       return 'shots'
     case 'videoPlan':

@@ -37,6 +37,11 @@ export const WORKSPACE_CANVAS_DEFAULT_NODE_SIZE: WorkspaceCanvasNodeSize = {
   height: 214,
 }
 
+export const WORKSPACE_CANVAS_SHOT_NODE_SIZE: WorkspaceCanvasNodeSize = {
+  width: 440,
+  height: 640,
+}
+
 export const WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE: WorkspaceCanvasNodeSize = {
   width: 420,
   height: 560,
@@ -69,7 +74,17 @@ export const WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE: WorkspaceCanvasNodeS
   height: 360,
 }
 
-// 核心剪辑表 / 摄影指导改为「网格卡片 · 整行展开」后，宽度从早期的全表 1480 收窄到常规卡片宽度
+export const WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE: WorkspaceCanvasNodeSize = {
+  width: 420,
+  height: 360,
+}
+
+export const WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE: WorkspaceCanvasNodeSize = {
+  width: 420,
+  height: 360,
+}
+
+// 核心剪辑表 / 摄影指导展开态使用「网格卡片 · 整行展开」宽度，折叠态使用上方紧凑尺寸。
 export const WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH = 760
 export const WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH = 760
 export const WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y = 80
@@ -82,10 +97,10 @@ export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
   shot: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
+    collapsed: WORKSPACE_CANVAS_SHOT_NODE_SIZE,
     expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
+    defaultExpanded: true,
+    disclosure: ALWAYS_EXPANDED_NODE_DISCLOSURE,
   },
   imageAsset: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
@@ -151,25 +166,21 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     disclosure: ALWAYS_EXPANDED_NODE_DISCLOSURE,
   },
   editScript: {
-    collapsed: {
+    collapsed: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
+    expanded: {
       width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
-      height: 360,
+      height: 420,
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editShotExecutionPlan: {
-    collapsed: {
+    collapsed: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
+    expanded: {
       width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
-      height: 360,
+      height: 420,
     },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
-  },
-  storyboardPanelGeneration: {
-    collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,

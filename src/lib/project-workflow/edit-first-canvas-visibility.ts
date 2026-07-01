@@ -8,7 +8,6 @@ export interface EditFirstCanvasVisibility {
   readonly editScript: boolean
   readonly editAssetGroup: boolean
   readonly editShotExecutionPlan: boolean
-  readonly storyboardPanelGeneration: boolean
   readonly storyboardPanels: boolean
   readonly videoPlan: boolean
   readonly bgmScore: boolean
@@ -104,15 +103,6 @@ export function resolveEditFirstCanvasVisibility(
       'render_final_video',
     ])
 
-  const storyboardPanelGeneration = stageAtLeast(workflow.stage, 'ready_to_generate_storyboard')
-    || canRunAnyOperation(operations, [
-      'generate_edit_script_storyboard',
-      'generate_edit_script_storyboard_images',
-      'generate_episode_videos',
-      'generate_episode_bgm_score',
-      'render_final_video',
-    ])
-
   const storyboardPanels = stageAtLeast(workflow.stage, 'ready_to_generate_storyboard_images')
     || canRunAnyOperation(operations, [
       'generate_edit_script_storyboard_images',
@@ -143,7 +133,6 @@ export function resolveEditFirstCanvasVisibility(
     editScript,
     editAssetGroup,
     editShotExecutionPlan,
-    storyboardPanelGeneration,
     storyboardPanels,
     videoPlan,
     bgmScore,

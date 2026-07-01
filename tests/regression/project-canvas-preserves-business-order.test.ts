@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { ProjectPanel, ProjectStoryboard } from '@/types/project'
+import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
-import { WORKSPACE_CANVAS_DEFAULT_NODE_SIZE } from '@/features/project-workspace/canvas/node-presentation-profiles'
+import { WORKSPACE_CANVAS_SHOT_NODE_SIZE } from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 function t(key: string): string {
   return key
@@ -74,12 +74,32 @@ function storyboard(panels: ProjectPanel[]): ProjectStoryboard {
   }
 }
 
+function editScript(): ProjectEditScript {
+  return {
+    id: 'edit-script-1',
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    screenplayId: 'screenplay-1',
+    userPrompt: 'story prompt',
+    styleBible: null,
+    screenplayText: 'screenplay text',
+    durationSec: 30,
+    shotCount: 2,
+    status: 'ready',
+    assetReviewStatus: 'pending',
+    shots: [],
+    generationSegments: [],
+    requirements: [],
+  }
+}
+
 describe('project canvas preserves business order', () => {
   it('does not derive shot order from saved canvas positions', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
       storyboards: [storyboard([panel('panel-2', 1), panel('panel-1', 0)])],
       editFirstWorkflow: workflow('ready_to_generate_storyboard_images'),
+      editScript: editScript(),
       savedLayouts: [
         {
           nodeKey: 'shot:panel-2',
@@ -113,8 +133,8 @@ describe('project canvas preserves business order', () => {
     expect(projection.nodes
       .filter((node) => node.data.kind === 'shot')
       .map((node) => node.data.height)).toEqual([
-        WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
-        WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+        WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
+        WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
       ])
   })
 })

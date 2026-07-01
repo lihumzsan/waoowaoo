@@ -648,11 +648,6 @@ function buildStreamRuntimeEntries(
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 
-function storyboardIdFromPanelGenerationNodeId(nodeId: string): string | null {
-  const prefix = 'storyboard-panel-generation:'
-  return nodeId.startsWith(prefix) ? nodeId.slice(prefix.length) : null
-}
-
 function hasPersistedStreamContentForPatch(
   baseNodes: readonly WorkspaceCanvasFlowNode[],
   patch: WorkspaceCanvasStreamPatch,
@@ -694,14 +689,7 @@ function hasPersistedStreamContentForPatch(
     }
   }
 
-  if (patch.streamKind !== 'storyboardPanelGeneration') return false
-  const storyboardId = storyboardIdFromPanelGenerationNodeId(patch.nodeId)
-  if (!storyboardId) return false
-  return baseNodes.some((node) => (
-    node.data.kind === 'shot'
-    && node.data.storyboardId === storyboardId
-    && node.data.isRunning !== true
-  ))
+  return false
 }
 
 export function applyWorkspaceStructuredStreamPatches(
