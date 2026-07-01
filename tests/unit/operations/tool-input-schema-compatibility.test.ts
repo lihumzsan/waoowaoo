@@ -139,6 +139,90 @@ describe('tool input schema compatibility', () => {
     expect(parsedWithoutPrompt.success).toBe(true)
   })
 
+  it('exposes only user-intent fields for edit-first workflow tools', () => {
+    const registry = createProjectAgentOperationRegistry()
+
+    expect(Object.keys(registry.generate_edit_screenplay.toolInputSchema.properties)).toEqual([
+      'prompt',
+      'durationTier',
+      'aspectRatio',
+    ])
+    expect(Object.keys(registry.revise_edit_screenplay.toolInputSchema.properties)).toEqual([
+      'revisionInstruction',
+      'durationTier',
+      'aspectRatio',
+    ])
+    expect(Object.keys(registry.generate_edit_style_previews.toolInputSchema.properties)).toEqual([
+      'styleDirection',
+    ])
+    expect(Object.keys(registry.revise_edit_script_assets.toolInputSchema.properties)).toEqual([
+      'revisionNotes',
+    ])
+
+    for (const operationId of [
+      'generate_edit_screenplay',
+      'revise_edit_screenplay',
+      'generate_edit_style_previews',
+      'revise_edit_script_assets',
+    ]) {
+      const properties = Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})
+      expect(properties).not.toContain('episodeId')
+      expect(properties).not.toContain('screenplayId')
+      expect(properties).not.toContain('editScriptId')
+      expect(properties).not.toContain('storyboardId')
+      expect(properties).not.toContain('panelId')
+      expect(properties).not.toContain('requirementId')
+      expect(properties).not.toContain('count')
+      expect(properties).not.toContain('limit')
+      expect(properties).not.toContain('generationOptions')
+    }
+  })
+
+  it('uses empty model-facing schemas for context-derived edit-first task submissions', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const emptyOperationIds = [
+      'request_edit_duration_aspect_ratio_choice',
+      'request_edit_screenplay_review_choice',
+      'request_edit_style_choice',
+      'request_edit_asset_review_choice',
+      'generate_edit_script',
+      'generate_edit_script_assets',
+      'generate_edit_shot_execution_plan',
+      'generate_edit_script_storyboard',
+      'generate_edit_script_storyboard_images',
+      'generate_episode_videos',
+      'generate_episode_bgm_score',
+      'render_final_video',
+    ]
+
+    for (const operationId of emptyOperationIds) {
+      const operation = registry[operationId]
+      expect(operation).toBeDefined()
+      expect(operation?.toolInputSchema).toEqual({
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      })
+    }
+  })
+
+  it('accepts empty execution input for context-derived BGM generation', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.generate_episode_bgm_score
+
+    expect(operation.inputSchema.safeParse({}).success).toBe(true)
+  })
+
+  it('accepts screenplay revision execution input without backfilled duration or aspect ratio', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.revise_edit_screenplay
+
+    expect(operation.inputSchema.safeParse({
+      revisionInstruction: 'Make the ending quieter and more ambiguous.',
+    }).success).toBe(true)
+  })
+
   it('does not expose system-managed video model fields in model-facing video tool schemas', () => {
     const registry = createProjectAgentOperationRegistry()
     const operationIds = [

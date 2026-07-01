@@ -82,10 +82,10 @@ describe('project agent operation registry', () => {
     expect(contextOperation).toBeDefined()
     expect(contextOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
     expect(contextOperation.summary).toContain('full screenplay text, historical operation results, failure details, active task details, or asset/storyboard/panel fields')
-    expect(contextOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, or approval state')
+    expect(contextOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters')
     expect(snapshotOperation).toBeDefined()
     expect(snapshotOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
-    expect(snapshotOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or general status')
+    expect(snapshotOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters')
     expect(snapshotOperation.summary).toContain('Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed')
   })
 

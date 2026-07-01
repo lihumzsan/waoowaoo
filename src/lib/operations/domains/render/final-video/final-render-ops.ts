@@ -6,6 +6,7 @@ import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import {
   refineTaskSubmitOperationOutputSchema,
@@ -70,6 +71,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         required: true,
         summary: '将使用已生成的连续 BGM 与视频原声导出最终成片。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: finalRenderInputSchema,
       outputSchema: taskSubmitOutput,
       execute: async (ctx, input) => {

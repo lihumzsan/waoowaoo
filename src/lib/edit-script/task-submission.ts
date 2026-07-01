@@ -6,8 +6,12 @@ import { ApiError } from '@/lib/api-errors'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { getProjectModelConfig } from '@/lib/config-service'
-import { buildEditFirstStructuredUserPrompt, type EditFirstDurationTier } from './duration-tier'
-import { EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from './types'
+import {
+  buildEditFirstStructuredUserPrompt,
+  requireEditFirstDurationSpecFromPrompt,
+  type EditFirstDurationTier,
+} from './duration-tier'
+import { EDIT_SCRIPT_VIDEO_RATIOS, EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from './types'
 import { buildEditFirstTextTaskPayload, buildEditFirstTextTaskPayloadFromAnalysisModel } from './task-billing'
 import {
   resolveEditShotExecutionPlanTaskTarget,
@@ -207,6 +211,7 @@ async function resolveEditScreenplayRevisionTarget(input: {
     select: {
       id: true,
       status: true,
+      userPrompt: true,
     },
   })
   if (!screenplay) throw new ApiError('NOT_FOUND')
@@ -216,7 +221,32 @@ async function resolveEditScreenplayRevisionTarget(input: {
       message: `Edit screenplay can only be revised during screenplay review; current status is ${screenplay.status}`,
     })
   }
-  return { episodeId: input.episodeId, screenplayId: screenplay.id }
+  return { episodeId: input.episodeId, screenplayId: screenplay.id, userPrompt: screenplay.userPrompt }
+}
+
+function readEditScriptVideoRatioFromText(text: string): EditScriptVideoRatio | null {
+  const matches = Array.from(text.matchAll(/\b(9:16|16:9|21:9)\b/g))
+  const latest = matches[matches.length - 1]?.[1]
+  return EDIT_SCRIPT_VIDEO_RATIOS.includes(latest as EditScriptVideoRatio)
+    ? latest as EditScriptVideoRatio
+    : null
+}
+
+function resolveEditScreenplayRevisionStructuredParams(input: {
+  readonly userPrompt: string
+  readonly durationTier?: EditFirstDurationTier
+  readonly aspectRatio?: EditScriptVideoRatio
+}): {
+  readonly durationTier: EditFirstDurationTier
+  readonly aspectRatio: EditScriptVideoRatio
+} {
+  const durationTier = input.durationTier ?? requireEditFirstDurationSpecFromPrompt(input.userPrompt).tier
+  const aspectRatio = input.aspectRatio ?? readEditScriptVideoRatioFromText(input.userPrompt)
+  if (!aspectRatio) throw new Error('EDIT_SCREENPLAY_ASPECT_RATIO_REQUIRED')
+  return {
+    durationTier,
+    aspectRatio,
+  }
 }
 
 function resolveStylePreviewCount(value: number | undefined): number {
@@ -352,8 +382,8 @@ export async function submitProjectEditScreenplayRevisionTask(input: {
   readonly episodeId: string
   readonly screenplayId?: string
   readonly revisionInstruction: string
-  readonly durationTier: EditFirstDurationTier
-  readonly aspectRatio: EditScriptVideoRatio
+  readonly durationTier?: EditFirstDurationTier
+  readonly aspectRatio?: EditScriptVideoRatio
   readonly source: string
   readonly confirmed: boolean
   readonly locale: Locale
@@ -363,6 +393,11 @@ export async function submitProjectEditScreenplayRevisionTask(input: {
     userId: input.userId,
     episodeId: input.episodeId,
     ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+  })
+  const structuredParams = resolveEditScreenplayRevisionStructuredParams({
+    userPrompt: target.userPrompt,
+    ...(input.durationTier ? { durationTier: input.durationTier } : {}),
+    ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
   })
   const result = await submitOperationTask({
     request: input.request,
@@ -382,8 +417,8 @@ export async function submitProjectEditScreenplayRevisionTask(input: {
         episodeId: target.episodeId,
         screenplayId: target.screenplayId,
         revisionInstruction: input.revisionInstruction,
-        durationTier: input.durationTier,
-        aspectRatio: input.aspectRatio,
+        durationTier: structuredParams.durationTier,
+        aspectRatio: structuredParams.aspectRatio,
         displayMode: 'detail',
       },
     }),

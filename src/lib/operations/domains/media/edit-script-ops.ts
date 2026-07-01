@@ -36,6 +36,13 @@ import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   EDIT_FIRST_DURATION_TIERS,
 } from '@/lib/edit-script/duration-tier'
+import {
+  EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_GENERATE_SCREENPLAY_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_REVISE_SCREENPLAY_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
+} from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
@@ -60,8 +67,8 @@ const reviseEditScreenplayInputSchema = z.object({
   ...confirmedInputFields,
   screenplayId: z.string().trim().min(1).optional(),
   revisionInstruction: z.string().trim().min(1).describe('Concrete user-requested screenplay changes to apply to the current generated screenplay.'),
-  durationTier: editFirstDurationTierSchema.describe('Required short-film duration tier. Use the original duration tier selected by the user unless the user explicitly changes it.'),
-  aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the original aspect ratio selected by the user unless the user explicitly changes it.'),
+  durationTier: editFirstDurationTierSchema.optional().describe('Optional short-film duration tier. Pass only when the user explicitly changes it.'),
+  aspectRatio: editScriptVideoRatioSchema.optional().describe('Optional final film aspect ratio. Pass only when the user explicitly changes it.'),
 }).passthrough()
 
 const generateEditStylePreviewsInputSchema = z.object({
@@ -305,11 +312,12 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
     summary: REQUEST_EDIT_CHOICE_SUMMARIES[choiceType],
     intent: 'query',
     prerequisites: { episodeId: 'required' },
-    effects: EFFECTS_NONE,
-    agentFlow: {
-      interruptsFor: 'choice',
-    },
-    inputSchema: requestEditChoiceInputSchema,
+      effects: EFFECTS_NONE,
+      agentFlow: {
+        interruptsFor: 'choice',
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: requestEditChoiceInputSchema,
     outputSchema: requestEditFirstChoiceOutputSchema,
     execute: async (ctx, input: RequestEditChoiceInput) => {
       const toolCallId = ctx.toolCallId?.trim() || ''
@@ -396,6 +404,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将调用文本模型生成并覆盖本集短片剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_GENERATE_SCREENPLAY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScreenplayInputSchema,
       outputSchema: editScreenplayTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScreenplayInput) => {
@@ -431,7 +440,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     revise_edit_screenplay: defineOperation({
       id: 'revise_edit_screenplay',
-      summary: 'Revise the current generated screenplay during screenplay review only. Required input fields: revisionInstruction, durationTier, and aspectRatio. Use when the user asks to change the story, tone, structure, theme, ending, or atmosphere before approving the screenplay. Stops at screenplay review; do not generate style previews or later edit artifacts.',
+      summary: 'Revise the current generated screenplay during screenplay review only. Pass revisionInstruction from the user. Pass durationTier or aspectRatio only when the user explicitly changes them in this revision; otherwise the current screenplay metadata is reused. Stops at screenplay review; do not generate style previews or later edit artifacts.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -439,6 +448,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据用户修改要求重新生成并覆盖当前短片剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_REVISE_SCREENPLAY_TOOL_INPUT_SCHEMA,
       inputSchema: reviseEditScreenplayInputSchema,
       outputSchema: editScreenplayTaskSubmitOutputSchema,
       execute: async (ctx, input: ReviseEditScreenplayInput) => {
@@ -451,8 +461,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
           revisionInstruction: input.revisionInstruction,
-          durationTier: input.durationTier,
-          aspectRatio: input.aspectRatio,
+          ...(input.durationTier ? { durationTier: input.durationTier } : {}),
+          ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
           source: ctx.source,
           confirmed: input.confirmed === true,
         })
@@ -475,7 +485,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
-      summary: 'Generate or regenerate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. Use it again during visual style choice when the user asks to regenerate or adjust the candidates. Optional styleDirection carries the user feedback, count is 1-3 and defaults to 3, and regeneration appends a new candidate set.',
+      summary: 'Generate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present. Do not pass system ids or candidate counts.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
@@ -485,6 +495,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       agentFlow: {
         onTaskComplete: 'await_user_choice',
       },
+      toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
       outputSchema: editStylePreviewsTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
@@ -530,6 +541,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将基于已存在剧本生成并覆盖本集核心剪辑计划（可能消耗额度/产生计费）。没有 ready 剧本时会失败。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptInputSchema,
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScriptInput) => {
@@ -588,6 +600,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetGenerationOutputSchema,
       execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
@@ -630,6 +643,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据用户审核意见返工所需资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA,
       inputSchema: reviseEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetRevisionOutputSchema,
       execute: async (ctx, input: ReviseEditScriptAssetsInput) => {
@@ -674,6 +688,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将基于核心剪辑计划、资产和空间档案生成并覆盖本集镜头执行计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditShotExecutionPlanInputSchema,
       outputSchema: editShotExecutionPlanTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditShotExecutionPlanInput) => {
@@ -715,6 +730,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据已完成的空间档案、核心剪辑计划、镜头执行计划和资产生成正式分镜面板提示词（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptStoryboardInputSchema,
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScriptStoryboardInput) => {

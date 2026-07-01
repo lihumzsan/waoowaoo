@@ -8,12 +8,12 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
-    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐下一步工具入参时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId 或审批状态调用。',
-    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or required next tool input, such as full screenplay text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, or approval state.',
+    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或系统可推导的工具参数调用。',
+    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input, such as full screenplay text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or system-derived tool parameters.',
   },
   get_project_snapshot: {
-    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐下一步工具入参时，读取详细项目投影。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或普通状态而调用。只有明确需要面板字段、提示词、描述或媒体 URL 时才使用 detail=full。',
-    en: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or required next tool input. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or general status. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
+    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取详细项目投影。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态、普通状态或系统可推导的工具参数而调用。只有明确需要面板字段、提示词、描述或媒体 URL 时才使用 detail=full。',
+    en: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, general status, or system-derived tool parameters. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
   },
   asset_hub_list_folders: {
     zh: '列出当前用户的全局资产文件夹。',
@@ -60,20 +60,20 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Generate the short-film screenplay. You must pass prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection confirmed through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo it to the user in chat; do not merely say it was generated or tell the user to view the canvas.',
   },
   revise_edit_screenplay: {
-    zh: '修改当前短片剧本。仅在剧本已生成、用户尚未确认进入风格候选/核心剪辑计划前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；必须传入 revisionInstruction、durationTier、aspectRatio，修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
-    en: 'Revise the current short-film screenplay. Use only after the screenplay exists and before the user approves progression to style previews or the core edit plan. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass revisionInstruction, durationTier, and aspectRatio. The result remains in screenplay review. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo the revised screenplay to the user in chat; do not merely say it was revised or tell the user to view the canvas.',
+    zh: '修改当前短片剧本。仅在剧本已生成、用户尚未确认进入风格候选/核心剪辑计划前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；把用户修改意见传入 revisionInstruction。只有用户明确修改时长或画幅时才传 durationTier/aspectRatio，不要回填系统已有值。修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
+    en: 'Revise the current short-film screenplay. Use only after the screenplay exists and before the user approves progression to style previews or the core edit plan. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass the user revision notes in revisionInstruction. Pass durationTier/aspectRatio only when the user explicitly changes duration or aspect ratio; do not backfill existing system values. The result remains in screenplay review. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo the revised screenplay to the user in chat; do not merely say it was revised or tell the user to view the canvas.',
   },
   generate_edit_style_previews: {
-    zh: '用户审核确认剧本后，基于剧本生成或重新生成 1-3 个视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；用 styleDirection 传入用户方向，count 上限为 3，重新生成会追加候选。',
-    en: 'Generate or regenerate 1-3 screenplay-based visual style preview images after screenplay review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D; pass user feedback in styleDirection, count is capped at 3, and regeneration appends new candidates.',
+    zh: '用户审核确认剧本后，基于剧本生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
+    en: 'Generate screenplay-based visual style preview images after screenplay review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
   },
   generate_edit_script_assets: {
-    zh: '根据当前核心剪辑计划创建/复用所需角色与场景资产，并为缺失图片提交生成任务。要处理全部需求时不要传 requirementId；只有处理单个需求时才传真实 editScript.requirements[].id，禁止传 "*" 或任何通配值。',
-    en: 'Create or reuse required character/location assets from the current core edit plan and submit missing image tasks. To process every requirement, omit requirementId; pass requirementId only for one exact editScript.requirements[].id. Never pass "*" or any wildcard value.',
+    zh: '根据当前核心剪辑计划创建/复用所需角色与场景资产，并为缺失图片提交生成任务。系统会从当前剪辑计划解析需要处理的需求；不要为了查找或提交 requirementId 调用只读工具。',
+    en: 'Create or reuse required character/location assets from the current core edit plan and submit missing image tasks. The system resolves the required items from the current edit plan; do not call read-only tools to look up or submit requirementId.',
   },
   revise_edit_script_assets: {
-    zh: '在资产审核未通过时，按用户提交的 revisionNotes 返工所需资产图片。必须传入 revisionNotes；只有要处理单个需求时才传真实 editScript.requirements[].id。工具成功返回前，不要声称已经重新提交任务。',
-    en: 'Revise required asset images after asset review is not approved. Pass revisionNotes. Pass requirementId only for one exact editScript.requirements[].id. Do not claim tasks were resubmitted until this tool succeeds.',
+    zh: '在资产审核未通过时，按用户提交的 revisionNotes 返工当前所需资产图片。只传用户修改意见；资产范围由系统根据当前审核阶段确定。工具成功返回前，不要声称已经重新提交任务。',
+    en: 'Revise the current required asset images after asset review is not approved. Pass only the user revision notes; the system resolves the asset scope from the current review stage. Do not claim tasks were resubmitted until this tool succeeds.',
   },
   generate_edit_shot_execution_plan: {
     zh: '在核心剪辑计划、资产和场景空间档案 ready 后，生成镜头执行计划；它统一包含镜头语言、空间 blocking、轴线、光线、人物和物体位置。只有当前 workflow 暴露该工具时才调用。',

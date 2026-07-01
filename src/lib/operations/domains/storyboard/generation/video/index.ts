@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -242,6 +243,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         required: true,
         summary: '将为整集待生成分镜批量生成视频（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateEpisodeVideosInputSchema,
       outputSchema: generateEpisodeVideosOutputSchema,
       plan: async (ctx, input) => planGenerateEpisodeVideosOperation({

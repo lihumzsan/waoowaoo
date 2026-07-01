@@ -7,6 +7,7 @@ import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { ApiError } from '@/lib/api-errors'
 import { isCloudDeployment, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getProjectModelConfig } from '@/lib/config-service'
@@ -47,7 +48,7 @@ type MusicGenerationInput = z.infer<typeof musicGenerationInputSchema>
 const bgmScoreGenerationInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1),
+  episodeId: z.string().min(1).optional(),
   musicModel: z.string().min(1).optional(),
   outputFormat: outputFormatSchema.optional(),
 }).passthrough()
@@ -257,13 +258,15 @@ async function planGenerateEpisodeBgmScoreOperation(
   ctx: ProjectAgentOperationContext,
   input: BgmScoreGenerationInput,
 ): Promise<OperationPlan> {
+  const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
-  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(input.episodeId, ctx.projectId)
+  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
   const outputFormat = isCloudDeployment()
     ? resolveCloudMusicOption('outputFormat', input.outputFormat)
     : input.outputFormat
   const payload: Record<string, unknown> = {
-    episodeId: input.episodeId,
+    episodeId,
     durationSeconds,
     musicModel,
     ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
@@ -276,14 +279,14 @@ async function planGenerateEpisodeBgmScoreOperation(
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_episode_bgm_score:${input.episodeId}`,
+        id: `generate_episode_bgm_score:${episodeId}`,
         taskType: TASK_TYPE.BGM_SCORE_GENERATE,
         targetType: 'ProjectEpisode',
-        targetId: input.episodeId,
+        targetId: episodeId,
         payload,
         locale: resolveRequiredTaskLocale(ctx.request, payload),
-        episodeId: input.episodeId,
-        dedupeKey: `bgm_score_generate:${ctx.projectId}:${input.episodeId}:${hashPayload(payload)}`,
+        episodeId,
+        dedupeKey: `bgm_score_generate:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
           taskType: TASK_TYPE.BGM_SCORE_GENERATE,
           payload,
@@ -292,7 +295,7 @@ async function planGenerateEpisodeBgmScoreOperation(
       }),
     ],
     metadata: {
-      episodeId: input.episodeId,
+      episodeId,
       musicModel,
     },
   }
@@ -308,9 +311,10 @@ async function commitGenerateEpisodeBgmScoreOperation(
   const musicModel = typeof plan.metadata?.musicModel === 'string'
     ? plan.metadata.musicModel
     : ''
-  const episodeId = typeof plan.metadata?.episodeId === 'string'
-    ? plan.metadata.episodeId
-    : input.episodeId
+  const episodeId = (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
+    || normalizeString(input.episodeId)
+    || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const result = await submitPlannedOperationTask({
     ctx,
     task,
@@ -395,6 +399,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         required: false,
       },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: bgmScoreGenerationInputSchema,
       outputSchema: taskSubmitOutput,
       plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
