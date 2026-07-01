@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY } from '@/lib/ai-providers/openrouter/models'
 import { callRoute } from '../integration/api/helpers/call-route'
 import { installAuthMocks, mockAuthenticated, resetAuthMockState } from '../helpers/auth'
 import { resetSystemState } from '../helpers/db-reset'
@@ -88,7 +87,10 @@ describe('system - generate video', () => {
     const seeded = await seedMinimalDomainState()
     await prisma.projectPanel.update({
       where: { id: seeded.panel.id },
-      data: { duration: 5 },
+      data: {
+        duration: 5,
+        videoPrompt: '单镜头视频提示词：镜头保持中景，Narrator 在办公室里轻微转身，灯光稳定。',
+      },
     })
     mockAuthenticated(seeded.user.id)
     workers = await startSystemWorkers(['video'])
@@ -101,7 +103,6 @@ describe('system - generate video', () => {
         locale: 'zh',
         storyboardId: seeded.storyboard.id,
         panelIndex: 0,
-        videoModel: OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
         generationOptions: {
           resolution: '720p',
           generateAudio: false,
