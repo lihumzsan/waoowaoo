@@ -52,7 +52,6 @@ interface WorkspaceAssistantTrackedRun {
 
 interface WorkspaceAssistantReplyActivity {
   sequence: number
-  messageIndex: number
   requestSettled: boolean
 }
 
@@ -209,20 +208,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function readNonEmptyString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function isWorkspaceAssistantRunStatus(value: unknown): value is WorkspaceAssistantRunStatus {
-  return value === 'running'
-    || value === 'awaiting_approval'
-    || value === 'awaiting_choice'
-    || value === 'awaiting_task'
-    || value === 'completed'
-    || value === 'failed'
-    || value === 'cancelled'
-}
-
 export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunStatus): boolean {
   return status === 'running'
 }
@@ -232,34 +217,11 @@ export function resolveWorkspaceAssistantReplyInFlight(input: {
   chatTransportActive: boolean
   controlRunActive: boolean
   serverRunActive: boolean
-  streamedRunStatus: WorkspaceAssistantRunStatus | null
 }): boolean {
-  const streamedRunActive = input.streamedRunStatus === 'running'
-  const streamedRunSettledOrYielded = input.streamedRunStatus !== null && !streamedRunActive
-  if (streamedRunSettledOrYielded) return false
   return input.requestActive
     || input.controlRunActive
     || input.serverRunActive
-    || streamedRunActive
     || input.chatTransportActive
-}
-
-export function resolveWorkspaceAssistantActiveReplyRunStatus(input: {
-  activeReplyRun: Pick<WorkspaceAssistantTrackedRun, 'runId' | 'status'> | null
-  serverRun: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'runId' | 'status'> | null
-  replyActivityActive: boolean
-  chatTransportActive: boolean
-  controlRunActive: boolean
-}): WorkspaceAssistantRunStatus | null {
-  const activeReplyRun = input.activeReplyRun
-  if (!activeReplyRun) return null
-  if (input.serverRun?.runId === activeReplyRun.runId) return input.serverRun.status
-  if (
-    input.replyActivityActive
-    || input.chatTransportActive
-    || input.controlRunActive
-  ) return activeReplyRun.status
-  return null
 }
 
 export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
@@ -325,90 +287,6 @@ export function shouldPollWorkspaceAssistantSessionState(input: {
 
 export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
   return !isWorkspaceAssistantOperationPendingStatus(status)
-}
-
-function readWorkspaceAssistantRunPart(part: unknown): WorkspaceAssistantTrackedRun | null {
-  if (!isRecord(part) || part.type !== 'data-agent-run') return null
-  const data = isRecord(part.data) ? part.data : null
-  const runId = readNonEmptyString(data?.runId)
-  if (!runId || !isWorkspaceAssistantRunStatus(data?.status)) return null
-  return {
-    runId,
-    status: data.status,
-    operationId: null,
-    intent: null,
-  }
-}
-
-export function findLatestWorkspaceAssistantRun(messages: readonly UIMessage[]): WorkspaceAssistantTrackedRun | null {
-  return findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(messages, 0)
-}
-
-export function findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(
-  messages: readonly UIMessage[],
-  messageIndex: number,
-): WorkspaceAssistantTrackedRun | null {
-  for (let currentIndex = messages.length - 1; currentIndex >= Math.max(0, messageIndex); currentIndex -= 1) {
-    const message = messages[currentIndex]
-    if (!message || message.role !== 'assistant') continue
-    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
-      const run = readWorkspaceAssistantRunPart(message.parts[partIndex])
-      if (run) return run
-    }
-  }
-  return null
-}
-
-function readWorkspaceAssistantActivityPart(part: unknown): ProjectAgentSessionActivity | null {
-  if (!isRecord(part) || part.type !== 'data-agent-activity') return null
-  const data = isRecord(part.data) ? part.data : null
-  if (!data) return null
-  const activityId = readNonEmptyString(data.activityId)
-  const runId = readNonEmptyString(data.runId)
-  if (!activityId || !runId) return null
-  const type = data.type
-  const status = data.status
-  if (
-    type !== 'operation'
-    && type !== 'waiting_task'
-    && type !== 'task_follow_up'
-    && type !== 'awaiting_choice'
-    && type !== 'awaiting_approval'
-  ) return null
-  if (
-    status !== 'running'
-    && status !== 'waiting'
-    && status !== 'completed'
-    && status !== 'failed'
-    && status !== 'cancelled'
-  ) return null
-  const choiceType = data.choiceType
-  if (
-    choiceType !== null
-    && choiceType !== undefined
-    && choiceType !== 'duration_and_aspect_ratio'
-    && choiceType !== 'screenplay_review'
-    && choiceType !== 'style'
-    && choiceType !== 'asset_review'
-  ) return null
-  return {
-    activityId,
-    runId,
-    type,
-    status,
-    operationId: readNonEmptyString(data.operationId),
-    sourceOperationId: readNonEmptyString(data.sourceOperationId),
-    toolCallId: readNonEmptyString(data.toolCallId),
-    choiceType: choiceType ?? null,
-  }
-}
-
-function findLatestWorkspaceAssistantActivityInMessage(message: UIMessage): ProjectAgentSessionActivity | null {
-  for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
-    const activity = readWorkspaceAssistantActivityPart(message.parts[partIndex])
-    if (activity) return activity
-  }
-  return null
 }
 
 async function fetchWorkspaceAssistantSessionState(params: {
@@ -482,7 +360,6 @@ export function useWorkspaceAssistantRuntime({
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
   const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
-  const [streamedActivity, setStreamedActivity] = useState<ProjectAgentSessionActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
 
   useEffect(() => {
@@ -498,7 +375,6 @@ export function useWorkspaceAssistantRuntime({
     const sequence = replyActivitySequenceRef.current
     setReplyActivity({
       sequence,
-      messageIndex: latestMessagesRef.current.length,
       requestSettled: false,
     })
     return sequence
@@ -563,7 +439,6 @@ export function useWorkspaceAssistantRuntime({
   // stream answers with an interruption-resolved part so the card closes.
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
-    setStreamedActivity(null)
     const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({ text })
@@ -576,7 +451,6 @@ export function useWorkspaceAssistantRuntime({
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
-    setStreamedActivity(null)
     const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({
@@ -604,8 +478,6 @@ export function useWorkspaceAssistantRuntime({
   }, [chat])
 
   const mergeStreamedAssistantMessage = useCallback((message: UIMessage): UIMessage[] => {
-    const activity = findLatestWorkspaceAssistantActivityInMessage(message)
-    if (activity) setStreamedActivity(activity)
     const nextMessages = mergeWorkspaceAssistantStreamedMessage(latestMessagesRef.current, message)
     latestMessagesRef.current = nextMessages
     chat.setMessages(nextMessages)
@@ -683,7 +555,6 @@ export function useWorkspaceAssistantRuntime({
     visibleUserText?: string
   }) => {
     chat.clearError()
-    setStreamedActivity(null)
     const activitySequence = beginReplyActivity()
     const controlMessageId = createWorkspaceAssistantControlMessageId({
       runId: params.runId,
@@ -935,37 +806,6 @@ export function useWorkspaceAssistantRuntime({
   const emptyApprovalRespondedIds = useMemo<ReadonlySet<string>>(() => new Set<string>(), [])
   const pendingInteraction = sessionState?.pendingInteraction ?? null
   const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
-  const streamedRun = useMemo(
-    () => findLatestWorkspaceAssistantRun(chat.messages),
-    [chat.messages],
-  )
-  const activeReplyRun = useMemo(
-    () => replyActivity
-      ? findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(chat.messages, replyActivity.messageIndex)
-      : streamedRun,
-    [chat.messages, replyActivity, streamedRun],
-  )
-  const streamedActivityOperationId = resolveOperationIdFromActivity(streamedActivity)
-  const streamedActivityOperationRun: WorkspaceAssistantTrackedRun | null = streamedRun
-    && isWorkspaceAssistantOperationPendingStatus(streamedRun.status)
-    && streamedActivityOperationId
-    && (
-      chat.status === 'submitted'
-      || chat.status === 'streaming'
-      || activeControlRun?.runId === streamedRun.runId
-    )
-    ? {
-      ...streamedRun,
-      operationId: streamedActivityOperationId,
-    }
-    : null
-  const activeControlOperationRun: WorkspaceAssistantTrackedRun | null = activeControlRun
-    ? {
-      ...activeControlRun,
-      operationId: activeControlRun.operationId
-        ?? (streamedActivityOperationRun?.runId === activeControlRun.runId ? streamedActivityOperationRun.operationId : null),
-    }
-    : null
   const serverOperationId = resolveOperationIdFromActivity(sessionState?.currentActivity ?? null)
   const serverOperationRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun
     && isWorkspaceAssistantOperationPendingStatus(sessionState.currentRun.status)
@@ -977,37 +817,27 @@ export function useWorkspaceAssistantRuntime({
       intent: null,
     }
     : null
-  const pendingRun = activeControlOperationRun ?? streamedActivityOperationRun ?? serverOperationRun
+  const pendingRun = activeControlRun ?? serverOperationRun
   const pendingOperationId = resolveWorkspaceAssistantPendingOperationId(pendingRun)
   const activeFocusRequest = useMemo(() => resolveWorkspaceAssistantActiveFocusRequest({
     pendingRun,
     operationId: pendingOperationId,
     activities: [
-      streamedActivity,
       sessionState?.currentActivity ?? null,
     ],
   }), [
     pendingOperationId,
     pendingRun,
     sessionState?.currentActivity,
-    streamedActivity,
   ])
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
   const serverRunActive = sessionState?.currentRun?.status === 'running'
-  const activeReplyRunStatus = resolveWorkspaceAssistantActiveReplyRunStatus({
-    activeReplyRun,
-    serverRun: sessionState?.currentRun ?? null,
-    replyActivityActive: Boolean(replyActivity),
-    chatTransportActive: chatReplyInFlight,
-    controlRunActive: controlPending,
-  })
   const replyInFlight = resolveWorkspaceAssistantReplyInFlight({
     requestActive: Boolean(replyActivity && !replyActivity.requestSettled),
     chatTransportActive: chatReplyInFlight,
     controlRunActive: controlPending,
     serverRunActive,
-    streamedRunStatus: activeReplyRunStatus,
   })
 
   useEffect(() => {

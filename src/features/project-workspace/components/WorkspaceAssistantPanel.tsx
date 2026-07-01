@@ -180,6 +180,16 @@ export function shouldShowWorkspaceAssistantReplyLoading(params: {
     && !params.awaitingExternalTask
 }
 
+export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
+  storageLoading: boolean
+  replyInFlight: boolean
+  currentRunStatus?: ProjectAgentRunPartData['status'] | null
+}): boolean {
+  return !params.storageLoading
+    && !params.replyInFlight
+    && params.currentRunStatus === 'failed'
+}
+
 export function resolveWorkspaceAssistantAwaitingUserInput(params: {
   replyInFlight: boolean
   hasPendingInteraction: boolean
@@ -209,6 +219,22 @@ function readResponseErrorMessage(payload: unknown, fallback: string): string {
   const details = isRecord(error?.details) ? error.details : null
   if (typeof details?.message === 'string' && details.message.trim()) return details.message.trim()
   return fallback
+}
+
+function WorkspaceAssistantRunFailureNotice() {
+  const t = useTranslations('assistantAgent')
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-[12px] leading-5 text-[var(--glass-tone-warn-fg)]"
+    >
+      <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div className="min-w-0">
+        <div className="font-semibold">{t('panel.runFailedTitle')}</div>
+        <div className="text-[11px] leading-4 opacity-80">{t('panel.runFailedDetail')}</div>
+      </div>
+    </div>
+  )
 }
 
 function readAssistantToolOutput(part: unknown): unknown | null {
@@ -640,6 +666,11 @@ export default function WorkspaceAssistantPanel({
     awaitingUserInput,
     awaitingExternalTask,
   })
+  const showRunFailureNotice = shouldShowWorkspaceAssistantRunFailureNotice({
+    storageLoading: assistantRuntime.storageLoading,
+    replyInFlight: assistantRuntime.replyInFlight,
+    currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
+  })
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
     resizeStateRef.current = {
@@ -728,6 +759,9 @@ export default function WorkspaceAssistantPanel({
                     </ThreadPrimitive.Messages>
                     {showAssistantReplyLoading ? (
                       <WorkspaceAssistantPendingTurnPlaceholder />
+                    ) : null}
+                    {showRunFailureNotice ? (
+                      <WorkspaceAssistantRunFailureNotice />
                     ) : null}
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
                       <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />

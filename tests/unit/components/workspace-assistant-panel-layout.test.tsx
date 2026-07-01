@@ -10,6 +10,7 @@ import {
   resolveWorkspaceAssistantExternalTaskOperationId,
   shouldSuppressWorkspaceAssistantOperationRunCard,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
+  shouldShowWorkspaceAssistantRunFailureNotice,
   shouldDockWorkspaceStylePreviewGenerationCard,
   shouldDeferWorkspaceAssistantTaskFollowUp,
   shouldPollWorkspaceAssistantWaitFollowUps,
@@ -530,6 +531,32 @@ describe('workspace assistant panel layout', () => {
       storageLoading: false,
       pendingApprovalId: null,
       currentRunStatus: null,
+    })).toBe(false)
+  })
+
+  it('shows failed run feedback only from session-state terminal failure', () => {
+    expect(shouldShowWorkspaceAssistantRunFailureNotice({
+      storageLoading: false,
+      replyInFlight: false,
+      currentRunStatus: 'failed',
+    })).toBe(true)
+
+    expect(shouldShowWorkspaceAssistantRunFailureNotice({
+      storageLoading: false,
+      replyInFlight: false,
+      currentRunStatus: 'running',
+    })).toBe(false)
+
+    expect(shouldShowWorkspaceAssistantRunFailureNotice({
+      storageLoading: false,
+      replyInFlight: false,
+      currentRunStatus: null,
+    })).toBe(false)
+
+    expect(shouldShowWorkspaceAssistantRunFailureNotice({
+      storageLoading: false,
+      replyInFlight: true,
+      currentRunStatus: 'failed',
     })).toBe(false)
   })
 

@@ -1,6 +1,5 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { UIMessage } from 'ai'
 import { describe, expect, it } from 'vitest'
 import {
   resolveWorkspaceAssistantAwaitingExternalTask,
@@ -9,8 +8,6 @@ import {
 } from '@/features/project-workspace/components/WorkspaceAssistantPanel'
 import { WorkspaceAssistantPendingTurnPlaceholder } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import {
-  resolveWorkspaceAssistantActiveReplyRunStatus,
-  findLatestWorkspaceAssistantRunAtOrAfterMessageIndex,
   resolveWorkspaceAssistantReplyInFlight,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
 
@@ -21,7 +18,6 @@ describe('workspace assistant reply loading indicator', () => {
       chatTransportActive: false,
       controlRunActive: false,
       serverRunActive: false,
-      streamedRunStatus: null,
     })
 
     expect(replyInFlight).toBe(true)
@@ -43,7 +39,6 @@ describe('workspace assistant reply loading indicator', () => {
       chatTransportActive: true,
       controlRunActive: false,
       serverRunActive: false,
-      streamedRunStatus: 'running',
     })
 
     expect(replyInFlight).toBe(true)
@@ -61,7 +56,6 @@ describe('workspace assistant reply loading indicator', () => {
       chatTransportActive: false,
       controlRunActive: false,
       serverRunActive: true,
-      streamedRunStatus: 'running',
     })
 
     expect(replyInFlight).toBe(true)
@@ -133,70 +127,21 @@ describe('workspace assistant reply loading indicator', () => {
     })).toBe(false)
   })
 
-  it('stops the three dots when the streamed run yields control or completes', () => {
-    expect(resolveWorkspaceAssistantReplyInFlight({
-      requestActive: false,
-      chatTransportActive: true,
-      controlRunActive: false,
-      serverRunActive: false,
-      streamedRunStatus: 'awaiting_choice',
-    })).toBe(false)
-    expect(resolveWorkspaceAssistantReplyInFlight({
-      requestActive: false,
-      chatTransportActive: true,
-      controlRunActive: false,
-      serverRunActive: false,
-      streamedRunStatus: 'awaiting_task',
-    })).toBe(false)
-    expect(resolveWorkspaceAssistantReplyInFlight({
-      requestActive: false,
-      chatTransportActive: true,
-      controlRunActive: false,
-      serverRunActive: false,
-      streamedRunStatus: 'completed',
-    })).toBe(false)
-  })
-
-  it('treats the current streamed run stop status as authoritative over stale active signals', () => {
-    expect(resolveWorkspaceAssistantReplyInFlight({
-      requestActive: true,
-      chatTransportActive: true,
-      controlRunActive: true,
-      serverRunActive: true,
-      streamedRunStatus: 'awaiting_task',
-    })).toBe(false)
-
-    expect(resolveWorkspaceAssistantReplyInFlight({
-      requestActive: true,
-      chatTransportActive: true,
-      controlRunActive: true,
-      serverRunActive: true,
-      streamedRunStatus: 'completed',
-    })).toBe(false)
-  })
-
-  it('stops the three dots when session state reports failure despite a persisted running marker', () => {
-    const replyRunStatus = resolveWorkspaceAssistantActiveReplyRunStatus({
-      activeReplyRun: {
-        runId: 'run-failed',
-        status: 'running',
-      },
-      serverRun: {
-        runId: 'run-failed',
-        status: 'failed',
-      },
-      replyActivityActive: true,
-      chatTransportActive: false,
-      controlRunActive: false,
-    })
-
-    expect(replyRunStatus).toBe('failed')
+  it('does not fall back to persisted run markers when session-state is unavailable', () => {
     expect(resolveWorkspaceAssistantReplyInFlight({
       requestActive: false,
       chatTransportActive: false,
       controlRunActive: false,
       serverRunActive: false,
-      streamedRunStatus: replyRunStatus,
+    })).toBe(false)
+  })
+
+  it('stops the three dots when session-state reports a terminal run', () => {
+    expect(resolveWorkspaceAssistantReplyInFlight({
+      requestActive: false,
+      chatTransportActive: false,
+      controlRunActive: false,
+      serverRunActive: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantReplyLoading({
       storageLoading: false,
@@ -204,49 +149,5 @@ describe('workspace assistant reply loading indicator', () => {
       awaitingUserInput: false,
       awaitingExternalTask: false,
     })).toBe(false)
-  })
-
-  it('ignores run states that belong to messages before the active turn boundary', () => {
-    const previousTurnMessages: UIMessage[] = [
-      {
-        id: 'assistant-old',
-        role: 'assistant',
-        parts: [
-          {
-            type: 'data-agent-run',
-            data: {
-              runId: 'run-old',
-              status: 'completed',
-            },
-          } as never,
-        ],
-      },
-      {
-        id: 'user-new',
-        role: 'user',
-        parts: [{ type: 'text', text: '继续' }],
-      },
-    ]
-
-    expect(findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(previousTurnMessages, 1)).toBeNull()
-
-    const activeTurnMessages: UIMessage[] = [
-      ...previousTurnMessages,
-      {
-        id: 'assistant-new',
-        role: 'assistant',
-        parts: [
-          {
-            type: 'data-agent-run',
-            data: {
-              runId: 'run-new',
-              status: 'running',
-            },
-          } as never,
-        ],
-      },
-    ]
-
-    expect(findLatestWorkspaceAssistantRunAtOrAfterMessageIndex(activeTurnMessages, 1)?.status).toBe('running')
   })
 })
