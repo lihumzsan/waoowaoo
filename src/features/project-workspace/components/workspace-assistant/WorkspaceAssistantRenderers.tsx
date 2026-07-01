@@ -206,7 +206,7 @@ export function ConfirmationActionCard(props: {
         />
         <button
           type="button"
-          className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"
+          className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"
           onClick={() => { void props.onCancel() }}
           disabled={props.cancelPending}
         >

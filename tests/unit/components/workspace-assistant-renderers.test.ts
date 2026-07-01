@@ -1,12 +1,85 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import * as React from 'react'
+import { createElement, type ComponentProps } from 'react'
 import { describe, expect, it } from 'vitest'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { NextIntlClientProvider } from 'next-intl'
+import type { AbstractIntlMessages } from 'next-intl'
 import {
+  ConfirmationActionCard,
   isWorkspaceAssistantToolDetailsOpen,
   setWorkspaceAssistantToolDetailsOpen,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
+import type { OperationPlanView } from '@/lib/operations/planning'
+
+const assistantMessages = {
+  assistantAgent: {
+    cards: {
+      billingTaskCount: '{count} 个媒体生成任务',
+      billingQuoteWithCredits: '{count} 个媒体生成任务 · 预计消耗 {cost} credits',
+      billingQuoteWithoutCredits: '将提交 {count} 个媒体生成任务',
+      confirmContinue: '继续执行',
+      cancelAction: '取消操作',
+      confirmRunning: '继续中...',
+      cancelRunning: '取消中...',
+    },
+  },
+} as const
+
+function renderWithIntl(node: React.ReactElement): string {
+  const providerProps: ComponentProps<typeof NextIntlClientProvider> = {
+    locale: 'zh',
+    messages: assistantMessages as unknown as AbstractIntlMessages,
+    timeZone: 'Asia/Shanghai',
+    children: node,
+  }
+  return renderToStaticMarkup(createElement(NextIntlClientProvider, providerProps))
+}
+
+function buildOperationPlanView(): OperationPlanView {
+  return {
+    operationId: 'generate_edit_script_assets',
+    kind: 'task_submission',
+    taskCount: 3,
+    tasks: [],
+    quote: {
+      showCredits: true,
+      billingMode: 'ENFORCE',
+      billable: true,
+      taskCount: 3,
+      mediaTaskCount: 3,
+      totalMaxFrozenCost: 3.4128,
+      currency: 'credits',
+      items: [],
+    },
+  }
+}
 
 describe('workspace assistant renderers', () => {
+  it('keeps confirmation continue wider than cancel like the credit test treatment', () => {
+    Reflect.set(globalThis, 'React', React)
+
+    const html = renderWithIntl(
+      createElement(ConfirmationActionCard, {
+        operationId: 'generate_edit_script_assets',
+        title: '生成分镜图片',
+        subtitle: '提交前确认这次生成',
+        operationPlan: buildOperationPlanView(),
+        onConfirm: async () => undefined,
+        onCancel: async () => undefined,
+        confirmPending: false,
+        cancelPending: false,
+      }),
+    )
+
+    expect(html).toContain('继续执行')
+    expect(html).toContain('取消操作')
+    expect(html).toContain('flex-1 rounded-xl py-2 text-sm')
+    expect(html).toContain('shrink-0 whitespace-nowrap rounded-xl')
+    expect(html).not.toContain('flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white')
+  })
+
   it('keeps tool call detail expansion keyed by tool call id', () => {
     const toolCallId = 'tool-call-regression-expand'
 
