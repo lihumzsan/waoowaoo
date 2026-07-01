@@ -885,7 +885,7 @@ function ImageContent({
             onSave={panelPromptSaveHandler(data, 'imagePrompt')}
           />
           {expanded ? (
-            <>
+            <div className="workspace-canvas-soft-reveal space-y-2">
               {renderTextSection(labels('description'), details.description)}
               {details.candidateImages.length > 0 ? renderSection(labels('candidateImages'), (
                 <div className="grid grid-cols-3 gap-1.5">
@@ -903,7 +903,7 @@ function ImageContent({
                 </div>
               )) : null}
               {renderTextSection(labels('error'), details.errorMessage)}
-            </>
+            </div>
           ) : null}
         </>
       ) : null}
@@ -936,7 +936,7 @@ function VideoContent({
             onSave={panelPromptSaveHandler(data, 'videoPrompt')}
           />
           {expanded ? (
-            <>
+            <div className="workspace-canvas-soft-reveal space-y-2">
               {renderSection(labels('videoMeta'), (
                 <div className="space-y-1">
                   {renderValue(labels('videoModel'), details.videoModel)}
@@ -947,7 +947,7 @@ function VideoContent({
                 ? renderSection(labels('lastOptions'), renderLines(details.lastVideoGenerationOptions, labels))
                 : null}
               {renderTextSection(labels('error'), details.errorMessage)}
-            </>
+            </div>
           ) : null}
         </>
       ) : null}
@@ -1221,7 +1221,7 @@ function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<Worksp
         })}
       </div>
       {current ? (
-        <section className="space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
+        <section className="workspace-canvas-soft-reveal space-y-2 rounded-[14px] bg-slate-50 p-3 ring-1 ring-slate-100">
           <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
             <FieldGlyph name={PROCESS_STEP_GLYPHS[current.key] ?? 'dot'} className="h-3 w-3" />{current.title}
           </p>
@@ -1405,7 +1405,7 @@ function ShotGrid({
               })}
             </div>
             {activeCard ? (
-              <div className={`space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}>
+              <div className={`workspace-canvas-soft-reveal space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}>
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
                   <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.detailTitle ?? activeCard.title}</span>
@@ -1718,7 +1718,7 @@ function EditAssetGroupHeroCard({
         )}
       </AdaptiveImageAspectFrame>
       {isOpen && hasText(asset.description) ? (
-        <p className={`${SELECTABLE_TEXT_CLASS} px-3.5 py-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>
+        <p className={`${SELECTABLE_TEXT_CLASS} workspace-canvas-soft-reveal px-3.5 py-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>
           {asset.description}
         </p>
       ) : null}
@@ -1902,7 +1902,11 @@ function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly nam
           )
         })}
       </div>
-      {current ? shotDetailIconGrid(current.fields) : null}
+      {current ? (
+        <div className="workspace-canvas-soft-reveal">
+          {shotDetailIconGrid(current.fields)}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1992,7 +1996,7 @@ function ScreenplayAccordion({ items }: { readonly items: readonly { readonly ke
               <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{it.title}</span>
               <AppIcon name={on ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
             </button>
-            {on ? <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{it.body}</p> : null}
+            {on ? <p className={`${SELECTABLE_TEXT_CLASS} workspace-canvas-soft-reveal whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{it.body}</p> : null}
           </div>
         )
       })}
