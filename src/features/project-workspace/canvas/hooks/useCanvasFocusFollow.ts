@@ -201,7 +201,6 @@ export function useCanvasFocusFollow({
     if (!activeFocusKey) return
     const pauseUntil = Date.now() + FOCUS_FOLLOW_MANUAL_PAUSE_MS
     manualPauseUntilRef.current = pauseUntil
-    lastFocusedKeyRef.current = null
     clearManualPauseTimer()
     manualPauseTimerRef.current = window.setTimeout(() => {
       if (manualPauseUntilRef.current !== pauseUntil) return

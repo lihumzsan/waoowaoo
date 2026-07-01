@@ -131,13 +131,13 @@ describe('workspace canvas focus follow', () => {
     })).toBe('pending')
   })
 
-  it('allows the same running group to refocus after user interaction pause expires', () => {
+  it('does not refocus the same request after user interaction pause expires', () => {
     expect(resolveCanvasFocusFollowDecision({
       focusKey: 'shot:panel-1',
       enabled: true,
       manualPauseActive: false,
-      lastFocusedKey: null,
-    })).toBe('focus')
+      lastFocusedKey: 'shot:panel-1',
+    })).toBe('skip_already_focused')
   })
 
   it('keeps focus pending while auto follow is disabled', () => {
