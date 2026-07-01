@@ -12,9 +12,12 @@ import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
+import { getWorkspaceCanvasNodePresentationProfile } from '../node-presentation-profiles'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
 import {
+  WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS,
+  WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR,
   WorkspaceCanvasMotionPresence,
   workspaceCanvasRevealClass,
 } from './workspace-node-motion'
@@ -337,7 +340,7 @@ function EditablePromptSection({
       ) : (
         <>
           {!expanded ? collapsedContent : null}
-          <WorkspaceCanvasMotionPresence visible={expanded} exit={false}>
+          <WorkspaceCanvasMotionPresence visible={expanded}>
             {expandedContent}
           </WorkspaceCanvasMotionPresence>
           {status === 'saved' ? (
@@ -841,7 +844,7 @@ function ImageContent({
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'imagePrompt')}
           />
-          <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className="space-y-2">
+          <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
               {renderTextSection(labels('description'), details.description)}
               {details.candidateImages.length > 0 ? renderSection(labels('candidateImages'), (
                 <div className="grid grid-cols-3 gap-1.5">
@@ -890,7 +893,7 @@ function VideoContent({
             labels={labels}
             onSave={panelPromptSaveHandler(data, 'videoPrompt')}
           />
-          <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className="space-y-2">
+          <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
               {renderSection(labels('videoMeta'), (
                 <div className="space-y-1">
                   {renderValue(labels('videoModel'), details.videoModel)}
@@ -942,7 +945,7 @@ function FinalContent({
         { label: labels('totalVideos'), value: details.totalVideos != null ? String(details.totalVideos) : '' },
         { label: labels('totalDuration'), value: details.totalDuration != null ? String(details.totalDuration) : '' },
       ]))}
-      <WorkspaceCanvasMotionPresence visible={expanded} exit={false}>
+      <WorkspaceCanvasMotionPresence visible={expanded}>
         {renderChips(labels('videoOrder'), details.orderedVideoLabels)}
       </WorkspaceCanvasMotionPresence>
     </div>
@@ -1060,7 +1063,7 @@ function BgmScoreContent({
       {mixSection}
       {statsSection}
       {missingPromptSection}
-      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className="space-y-2">
+      <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
         {overviewSection}
         {designSections}
         {virtualLayerSections}
@@ -1098,7 +1101,7 @@ function EditPipelineStepContent({
   return (
     <>
       {!expanded ? collapsedSummary : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className="space-y-2">
+      <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
         {details.items.map((item, index) => (
           <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
             <div className="flex items-center justify-between gap-2">
@@ -1920,7 +1923,7 @@ function EditScreenplayContent({
   return (
     <>
       {!expanded ? collapsedContent : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
         {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
         {parsed.characters.length > 0 ? (
           <div className="space-y-1.5">
@@ -2020,12 +2023,12 @@ function EditAssetContent({
           {renderValue(labels('spatialProfileAnalyzedAt'), typeof details.spatialProfileAnalyzedAt === 'string' ? details.spatialProfileAnalyzedAt : null)}
           {renderValue(labels('spatialProfileModel'), details.spatialProfileModel)}
           {details.spatialProfileError ? renderSubsection(labels('spatialProfileError'), renderTextBlock(details.spatialProfileError)) : null}
-          <WorkspaceCanvasMotionPresence visible={expanded && Boolean(details.spatialProfileJson)} exit={false}>
+          <WorkspaceCanvasMotionPresence visible={expanded && Boolean(details.spatialProfileJson)}>
             {renderSubsection(labels('spatialProfileJson'), renderJsonBlock(details.spatialProfileJson))}
           </WorkspaceCanvasMotionPresence>
         </div>
       )) : null}
-      <WorkspaceCanvasMotionPresence visible={expanded && hasText(details.errorMessage)} exit={false}>
+      <WorkspaceCanvasMotionPresence visible={expanded && hasText(details.errorMessage)}>
         {renderSection(labels('error'), renderTextBlock(details.errorMessage))}
       </WorkspaceCanvasMotionPresence>
     </div>
@@ -2300,7 +2303,7 @@ function VideoPlanContent({
         </div>
       ))}
       {!expanded ? renderPromptSection(false) : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} exit={false}>
+      <WorkspaceCanvasMotionPresence visible={expanded}>
         {renderPromptSection(true)}
       </WorkspaceCanvasMotionPresence>
       {details.errorMessage ? renderSection(labels('error'), renderTextBlock(details.errorMessage)) : null}
@@ -2365,6 +2368,7 @@ function NodeContent({
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const measuredContentRef = useRef<HTMLDivElement | null>(null)
+  const deferredMeasureTimeoutRef = useRef<number | null>(null)
   const expanded = data.disclosure?.effectiveExpanded ?? (data.expanded === true)
   const hasSource = data.kind !== 'finalTimeline'
   const action = data.action
@@ -2386,6 +2390,12 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)
   const showHeaderAction = Boolean(action && data.actionLabel && data.kind === 'editRequiredAsset')
   const showLargeTitle = data.kind !== 'shot'
+  const fixedExpandedShell = expanded && Boolean(getWorkspaceCanvasNodePresentationProfile(data.kind).expanded)
+  const shellLayoutClass = data.kind === 'editScript'
+    ? 'overflow-hidden'
+    : fixedExpandedShell
+      ? 'min-h-full overflow-visible'
+      : 'overflow-visible'
   const isFocusHighlighted = data.focusHighlighted === true
   const isVisuallyEmphasized = isRunning || isFocusHighlighted
   const showStatusBadge = typeof data.statusLabel === 'string' && data.statusLabel.trim().length > 0
@@ -2400,22 +2410,58 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!nodeId || !onMeasureNodeSize) return undefined
-    const element = measuredContentRef.current
-    if (!element) return undefined
+    const measuredNodeId = nodeId
+    if (typeof measuredNodeId !== 'string') return undefined
 
-    const measure = () => {
-      const rect = element.getBoundingClientRect()
-      onMeasureNodeSize(nodeId, {
+    const measureNodeSize = onMeasureNodeSize
+    if (!measureNodeSize) return undefined
+
+    const measuredElement = measuredContentRef.current
+    if (!measuredElement) return undefined
+    const measurementTarget: {
+      readonly nodeId: string
+      readonly measureNodeSize: (nodeId: string, size: { readonly width: number; readonly height: number }) => void
+      readonly element: HTMLDivElement
+    } = {
+      nodeId: measuredNodeId,
+      measureNodeSize,
+      element: measuredElement,
+    }
+
+    function clearDeferredMeasure() {
+      if (deferredMeasureTimeoutRef.current === null) return
+      window.clearTimeout(deferredMeasureTimeoutRef.current)
+      deferredMeasureTimeoutRef.current = null
+    }
+
+    function scheduleDeferredMeasure() {
+      if (deferredMeasureTimeoutRef.current !== null) return
+      deferredMeasureTimeoutRef.current = window.setTimeout(() => {
+        deferredMeasureTimeoutRef.current = null
+        measure()
+      }, WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS)
+    }
+
+    function measure() {
+      if (measurementTarget.element.querySelector(WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR)) {
+        scheduleDeferredMeasure()
+        return
+      }
+
+      const rect = measurementTarget.element.getBoundingClientRect()
+      measurementTarget.measureNodeSize(measurementTarget.nodeId, {
         width: Math.ceil(rect.width),
-        height: Math.ceil(element.scrollHeight + 2),
+        height: Math.ceil(measurementTarget.element.scrollHeight + 2),
       })
     }
 
     measure()
     const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
+    observer.observe(measurementTarget.element)
+    return () => {
+      observer.disconnect()
+      clearDeferredMeasure()
+    }
   }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
@@ -2425,7 +2471,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
         {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 
         <article
-          className={`workspace-canvas-node-shell relative ${data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isVisuallyEmphasized ? 'workspace-node-running-breathing border-sky-300' : 'border-slate-200'}`}
+          className={`workspace-canvas-node-shell relative ${shellLayoutClass} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isVisuallyEmphasized ? 'workspace-node-running-breathing border-sky-300' : 'border-slate-200'}`}
           data-expanded={expanded ? 'true' : 'false'}
         >
         <div ref={measuredContentRef}>

@@ -98,15 +98,18 @@ describe('workspace canvas layout runtime contract', () => {
     expect(css).toContain('@keyframes workspaceCanvasGlideReveal')
     expect(css).toContain('@keyframes workspaceCanvasGlideHide')
     expect(css).toContain('.workspace-canvas-soft-reveal')
-    expect(css).toContain('transform: translateY(-8px)')
-    expect(css).toContain('transform: translateY(-6px)')
+    expect(css).toContain('transform: translateY(-4px)')
+    expect(css).toContain('transform: translateY(-3px)')
     expect(presenceRule).toContain('display: grid')
     expect(presenceRule).toContain('grid-template-rows: 1fr')
     expect(presenceRule).toContain('overflow: hidden')
+    expect(presenceRule).toContain('will-change: grid-template-rows, opacity, transform')
     expect(presenceInnerRule).toContain('min-height: 0')
     expect(presenceInnerRule).toContain('overflow: hidden')
     expect(presenceEnterRule).toContain('workspaceCanvasGlideReveal')
+    expect(presenceEnterRule).toContain('180ms')
     expect(presenceExitRule).toContain('workspaceCanvasGlideHide')
+    expect(presenceExitRule).toContain('130ms')
     expect(presenceExitRule).toContain('pointer-events: none')
     expect(css).toContain('grid-template-rows: 0fr')
     expect(css).not.toContain('.workspace-canvas-node-shell[data-expanded="true"]')
@@ -182,10 +185,66 @@ describe('workspace canvas layout runtime contract', () => {
     expect(node).not.toContain("'workspace-canvas-soft-reveal")
     expect(node).not.toContain('"workspace-canvas-soft-reveal')
     expect(motion).toContain("export const WORKSPACE_CANVAS_REVEAL_CLASS = 'workspace-canvas-soft-reveal'")
-    expect(motion).toContain('WORKSPACE_CANVAS_EXIT_DURATION_MS = 180')
+    expect(motion).toContain('WORKSPACE_CANVAS_ENTER_DURATION_MS = 180')
+    expect(motion).toContain('WORKSPACE_CANVAS_EXIT_DURATION_MS = 130')
     expect(motion).toContain('readonly motionKey?: string | number')
     expect(motion).toContain('readonly exit?: boolean')
     expect(motion).toContain('workspace-canvas-motion-presence-inner')
+  })
+
+  it('defers node measurement during local canvas motion', () => {
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
+
+    expect(motion).toContain("WORKSPACE_CANVAS_MOTION_ACTIVE_ATTRIBUTE = 'data-workspace-canvas-motion-active'")
+    expect(motion).toContain('WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR')
+    expect(motion).toContain('WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS = WORKSPACE_CANVAS_ENTER_DURATION_MS + 40')
+    expect(motion).toContain('data-workspace-canvas-motion-active={motionActive ?')
+    expect(motion).not.toContain('WORKSPACE_CANVAS_MEASURE_DEFER_SELECTOR')
+    expect(node).toContain('WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR')
+    expect(node).toContain('WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS')
+    expect(node).toContain('measurementTarget.element.querySelector(WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR)')
+    expect(node).toContain('measurementTarget.measureNodeSize(measurementTarget.nodeId')
+    expect(node).toContain('scheduleDeferredMeasure()')
+    expect(node).toContain('clearDeferredMeasure()')
+    expect(node).toContain('observer.disconnect()')
+  })
+
+  it('lets width-stable card shells follow local collapse without filling stale node height', () => {
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+
+    expect(node).toContain('fixedExpandedShell = expanded && Boolean(getWorkspaceCanvasNodePresentationProfile(data.kind).expanded)')
+    expect(node).toContain("fixedExpandedShell\n      ? 'min-h-full overflow-visible'\n      : 'overflow-visible'")
+    expect(node).toContain('${shellLayoutClass}')
+    expect(node).not.toContain("data.kind === 'editScript' ? 'overflow-hidden' : 'min-h-full overflow-visible'")
+  })
+
+  it('keeps collapse motion for width-stable expanded content only', () => {
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const widthStableFunctions = [
+      'EditablePromptSection',
+      'ImageContent',
+      'VideoContent',
+      'FinalContent',
+      'EditPipelineStepContent',
+      'EditScreenplayContent',
+      'EditAssetContent',
+      'VideoPlanContent',
+    ]
+    const widthChangingFunctions = [
+      'BgmScoreContent',
+      'ProcessGroupContent',
+      'EditScriptContent',
+      'EditShotExecutionPlanContent',
+      'StyleBibleContent',
+    ]
+
+    widthStableFunctions.forEach((name) => {
+      expect(readFunctionSource(node, name).body, `${name} should animate collapse because card width is stable`).not.toContain('exit={false}')
+    })
+    widthChangingFunctions.forEach((name) => {
+      expect(readFunctionSource(node, name).body, `${name} should skip collapse exit motion because card width changes`).toContain('exit={false}')
+    })
   })
 
   it('removes width-changing collapse exit motion while keeping local detail motion', () => {

@@ -380,6 +380,7 @@
   display: grid;
   grid-template-rows: 1fr;
   overflow: hidden;
+  will-change: grid-template-rows, opacity, transform;
 }
 
 .workspace-canvas-motion-presence-inner {
@@ -388,12 +389,12 @@
 }
 
 .workspace-canvas-motion-presence[data-motion-state="entered"] {
-  animation: workspaceCanvasGlideReveal 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: workspaceCanvasGlideReveal 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .workspace-canvas-motion-presence[data-motion-state="exiting"] {
   pointer-events: none;
-  animation: workspaceCanvasGlideHide 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  animation: workspaceCanvasGlideHide 130ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -416,7 +417,7 @@
   from {
     grid-template-rows: 0fr;
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-4px);
   }
 
   to {
@@ -436,7 +437,7 @@
   to {
     grid-template-rows: 0fr;
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateY(-3px);
   }
 }
 
