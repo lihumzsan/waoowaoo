@@ -5,21 +5,6 @@ import {
 } from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 describe('workspace canvas node disclosure', () => {
-  it('keeps static nodes outside the manual disclosure lifecycle', () => {
-    const disclosure = resolveWorkspaceCanvasNodeDisclosure({
-      kind: 'analysis',
-      isStreaming: false,
-    })
-
-    expect(disclosure).toEqual({
-      canToggle: false,
-      effectiveExpanded: false,
-      mode: 'static',
-      isStreamingExpanded: false,
-      collapseWhenStreamCompletes: false,
-    })
-  })
-
   it('defaults collapsible generated nodes to their collapsed top-level summary', () => {
     const disclosure = resolveWorkspaceCanvasNodeDisclosure({
       kind: 'editScript',

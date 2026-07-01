@@ -586,12 +586,6 @@
           "eyebrow": "入口节点",
           "meta": "{chars} 个字符"
         },
-        "analysis": {
-          "title": "故事结构分析",
-          "eyebrow": "业务状态",
-          "body": "已识别 {storyboards} 组分镜、{panels} 个镜头。",
-          "meta": "人物 / 场景 / 节奏 / 视觉方向"
-        },
         "shot": {
           "title": "镜头 {shot}",
           "eyebrow": "单个镜头",

@@ -1,5 +1,4 @@
 export const workspaceNodeId = {
-  analysis: (episodeId: string): string => `analysis:${episodeId}`,
   editScreenplay: (screenplayId: string): string => `edit-screenplay:${screenplayId}`,
   editStyleBible: (sourceId: string): string => `edit-style-bible:${sourceId}`,
   editProcessGroup: (episodeId: string): string => `edit-process:${episodeId}`,

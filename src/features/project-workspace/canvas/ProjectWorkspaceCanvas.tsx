@@ -254,7 +254,7 @@ function ProjectWorkspaceCanvasContent({
   const billingT = useTranslations('assistantAgent')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, novelText, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const { episodeName, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
   const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
@@ -621,7 +621,6 @@ function ProjectWorkspaceCanvasContent({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
-    storyText: novelText,
     storyboards,
     editFirstWorkflow,
     editScreenplay,
@@ -896,7 +895,6 @@ function ProjectWorkspaceCanvasContent({
   }, [attachNodeUiState, notifyCanvasUserInteraction, persistCurrentLayoutSafely, reactFlow])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
-    if (node.data.kind === 'analysis') return
     setSelectedNodeId(node.id)
   }, [])
 
@@ -930,7 +928,6 @@ function ProjectWorkspaceCanvasContent({
       projectId,
       episodeId,
       episodeName,
-      storyText: novelText,
       storyboards,
       editFirstWorkflow,
       editScreenplay,
@@ -950,7 +947,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, novelText, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()

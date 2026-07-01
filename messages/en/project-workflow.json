@@ -586,12 +586,6 @@
           "eyebrow": "Entry Node",
           "meta": "{chars} characters"
         },
-        "analysis": {
-          "title": "Story Structure Analysis",
-          "eyebrow": "Business State",
-          "body": "{storyboards} storyboards and {panels} shots detected.",
-          "meta": "Characters / locations / pacing / visual direction"
-        },
         "shot": {
           "title": "Shot {shot}",
           "eyebrow": "Single Shot",

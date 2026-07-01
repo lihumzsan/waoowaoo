@@ -4,7 +4,6 @@ import type { CanvasNodeLayout, CanvasViewportLayout } from '@/lib/project-canva
 export const CANVAS_LAYOUT_SCHEMA_VERSION = 1
 
 export const projectCanvasNodeTypeSchema = z.enum([
-  'analysis',
   'shot',
   'imageAsset',
   'videoClip',

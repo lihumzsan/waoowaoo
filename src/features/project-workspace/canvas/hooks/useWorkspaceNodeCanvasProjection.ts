@@ -63,7 +63,6 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
   readonly episodeId: string
   readonly episodeName?: string
-  readonly storyText: string
   readonly storyboards: readonly ProjectStoryboard[]
   readonly editFirstWorkflow: EditFirstWorkflowState
   readonly editScreenplay?: ProjectEditScreenplay | null
@@ -468,7 +467,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     projectId,
     episodeId,
     episodeName,
-    storyText,
     storyboards,
     editFirstWorkflow,
     editScreenplay = null,
@@ -496,33 +494,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     || (editScreenplay ? hasStreamTarget(streamTargets, 'editScreenplay', editScreenplay.id) : false)
   const phaseLabels = artifactPhaseLabels(translate)
 
-  const analysisNodeId = workspaceNodeId.analysis(episodeId)
-  nodes.push(createNode({
-    id: analysisNodeId,
-    position: layoutPosition(savedLayouts, analysisNodeId, { x: STORY_COLUMN_X, y: 120 }),
-    width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-    height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
-    data: {
-      projectId,
-      episodeName,
-      kind: 'analysis',
-      layoutNodeType: 'analysis',
-      targetType: 'episode',
-      targetId: episodeId,
-      title: translate('nodes.analysis.title'),
-      eyebrow: translate('nodes.analysis.eyebrow'),
-      body: storyText?.trim() || translate('empty.screenplay'),
-      meta: episodeName ?? translate('nodes.analysis.meta'),
-      ...(storyText?.trim()
-        ? workspaceCanvasSucceededPresentation(phaseLabels)
-        : {
-            statusLabel: '',
-            isRunning: false,
-          }),
-      onAction,
-    },
-  }))
-
   let screenplayNodeId: string | null = null
   if (editScreenplay || editScriptPending || screenplayRunning) {
     const screenplayPresentation = screenplayRunning || !editScreenplay
@@ -534,7 +505,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       : workspaceNodeId.editScreenplay(`pending:${episodeId}`)
     nodes.push(createNode({
       id: screenplayNodeId,
-      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: 120 + ROW_GAP_Y + 80 }),
+      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: 120 }),
       width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
       data: {
@@ -559,7 +530,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    edges.push(createEdge(`edge:${analysisNodeId}:${screenplayNodeId}`, analysisNodeId, screenplayNodeId))
   }
 
   let styleBibleNodeId: string | null = null
@@ -588,7 +558,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    edges.push(createEdge(`edge:${screenplayNodeId ?? analysisNodeId}:${styleBibleNodeId}`, screenplayNodeId ?? analysisNodeId, styleBibleNodeId))
+    if (screenplayNodeId) edges.push(createEdge(`edge:${screenplayNodeId}:${styleBibleNodeId}`, screenplayNodeId, styleBibleNodeId))
   }
 
   let editScriptNodeId: string | null = null
@@ -657,7 +627,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    edges.push(createEdge(`edge:${styleBibleNodeId ?? screenplayNodeId ?? analysisNodeId}:${editScriptNodeId}`, styleBibleNodeId ?? screenplayNodeId ?? analysisNodeId, editScriptNodeId))
+    if (styleBibleNodeId) {
+      edges.push(createEdge(`edge:${styleBibleNodeId}:${editScriptNodeId}`, styleBibleNodeId, editScriptNodeId))
+    } else if (screenplayNodeId) {
+      edges.push(createEdge(`edge:${screenplayNodeId}:${editScriptNodeId}`, screenplayNodeId, editScriptNodeId))
+    }
   }
 
   let assetGroupNodeId: string | null = null
@@ -764,7 +738,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    edges.push(createEdge(`edge:${assetGroupNodeId ?? editScriptNodeId}:${executionNodeId}`, assetGroupNodeId ?? editScriptNodeId ?? analysisNodeId, executionNodeId))
+    if (assetGroupNodeId) {
+      edges.push(createEdge(`edge:${assetGroupNodeId}:${executionNodeId}`, assetGroupNodeId, executionNodeId))
+    } else if (editScriptNodeId) {
+      edges.push(createEdge(`edge:${editScriptNodeId}:${executionNodeId}`, editScriptNodeId, executionNodeId))
+    }
   }
 
   const storyboardGenerationNodeIds = new Map<string, string>()
@@ -840,7 +818,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       const column = index % SHOT_GRID_COLUMNS
       const row = Math.floor(index / SHOT_GRID_COLUMNS)
       const previewImageUrl = primaryPanelImageUrl(panel)
-      const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId ?? analysisNodeId
+      const storyboardSourceNodeId = storyboardGenerationNodeIds.get(panel.storyboardId) ?? executionNodeId ?? editScriptNodeId
       const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
       const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
       const shotPresentation = shotRunning
@@ -890,7 +868,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           onAction,
         },
       }))
-      edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
+      if (storyboardSourceNodeId) edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
     })
   }
 
@@ -1066,7 +1044,6 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     projectId,
     episodeId,
     episodeName,
-    storyText,
     storyboards,
     editFirstWorkflow,
     editScreenplay,
@@ -1088,7 +1065,6 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     projectId,
     episodeId,
     episodeName,
-    storyText,
     storyboards,
     editFirstWorkflow,
     editScreenplay,
@@ -1108,7 +1084,6 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     projectId,
     episodeId,
     episodeName,
-    storyText,
     storyboards,
     editFirstWorkflow,
     editScreenplay,

@@ -133,7 +133,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('screenplay_ready_for_review'),
       editScreenplay: editScreenplay(),
@@ -146,12 +145,30 @@ describe('project canvas edit-first visibility', () => {
     expect(screenplay?.data.meta).toBe('')
   })
 
+  it('uses the screenplay node as the edit-first root without an analysis fallback node', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [],
+      editFirstWorkflow: workflow('screenplay_ready_for_review'),
+      editScreenplay: editScreenplay(),
+      savedLayouts: [],
+      translate: t,
+    })
+    const screenplay = projection.nodes.find((node) => node.data.kind === 'editScreenplay')
+
+    expect(projection.nodes.some((node) => node.id.startsWith('analysis:'))).toBe(false)
+    expect(projection.edges.some((edge) => edge.source.startsWith('analysis:') || edge.target.startsWith('analysis:'))).toBe(false)
+    expect(screenplay).toBeDefined()
+    expect(projection.edges.some((edge) => edge.target === screenplay?.id)).toBe(false)
+  })
+
   it('does not render asset or execution nodes while the edit script is still generating', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('edit_script_generating'),
       editScript: editScript({ status: 'generating' }),
@@ -171,7 +188,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('assets_ready_for_review'),
       editScript: editScript({
@@ -191,7 +207,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_generate_assets'),
       editScript: editScript({
@@ -214,7 +229,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_generate_videos'),
       editScript: editScript({
@@ -236,7 +250,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_generate_videos'),
       editScript: editScript({
@@ -257,7 +270,6 @@ describe('project canvas edit-first visibility', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: 'story',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_render_final'),
       editScript: editScript({

@@ -10,7 +10,6 @@ export interface WorkspaceCanvasNodeSize {
 
 export type WorkspaceCanvasNodeExpandedLayout = 'stack' | 'wide'
 export type WorkspaceCanvasNodeDisclosureProfile =
-  | { readonly kind: 'none' }
   | { readonly kind: 'alwaysExpanded' }
   | {
       readonly kind: 'collapsible'
@@ -26,7 +25,6 @@ export interface WorkspaceCanvasNodePresentationProfile {
   readonly disclosure: WorkspaceCanvasNodeDisclosureProfile
 }
 
-const STATIC_NODE_DISCLOSURE: WorkspaceCanvasNodeDisclosureProfile = { kind: 'none' }
 const ALWAYS_EXPANDED_NODE_DISCLOSURE: WorkspaceCanvasNodeDisclosureProfile = { kind: 'alwaysExpanded' }
 const STREAM_AWARE_COLLAPSIBLE_DISCLOSURE: WorkspaceCanvasNodeDisclosureProfile = {
   kind: 'collapsible',
@@ -83,12 +81,6 @@ export const WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE: WorkspaceCanvasNodeSize = {
 }
 
 const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
-  analysis: {
-    collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STATIC_NODE_DISCLOSURE,
-  },
   shot: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',
@@ -230,15 +222,6 @@ export function resolveWorkspaceCanvasNodeDisclosure(input: {
 }): WorkspaceCanvasNodeDisclosureState {
   const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
   const disclosure = profile.disclosure
-  if (disclosure.kind === 'none') {
-    return {
-      canToggle: false,
-      effectiveExpanded: false,
-      mode: 'static',
-      isStreamingExpanded: false,
-      collapseWhenStreamCompletes: false,
-    }
-  }
   if (disclosure.kind === 'alwaysExpanded') {
     return {
       canToggle: false,

@@ -40,7 +40,6 @@ function editScreenplayNode(status: string, activeAssistantOperationId?: string)
     projectId: 'project-1',
     episodeId: 'episode-1',
     episodeName: 'Episode 1',
-    storyText: 'story',
     storyboards: [],
     editFirstWorkflow: workflow('screenplay_ready_for_review'),
     editScreenplay: screenplay(status),
@@ -54,23 +53,19 @@ function editScreenplayNode(status: string, activeAssistantOperationId?: string)
 }
 
 describe('project canvas artifact phase', () => {
-  it('does not render an empty badge when the input artifact does not exist', () => {
+  it('does not render a placeholder node when the screenplay artifact does not exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
-      storyText: '',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_generate_screenplay'),
       savedLayouts: [],
       translate: t,
     })
-    const node = projection.nodes.find((candidate) => candidate.data.kind === 'analysis')
-    if (!node) throw new Error('ANALYSIS_NODE_MISSING')
 
-    expect(node.data.artifactPhase).toBeUndefined()
-    expect(node.data.statusLabel).toBe('')
-    expect(node.data.isRunning).toBe(false)
+    expect(projection.nodes).toEqual([])
+    expect(projection.edges).toEqual([])
   })
 
   it('treats screenplay review as a succeeded artifact instead of a running node', () => {

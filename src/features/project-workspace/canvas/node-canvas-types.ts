@@ -9,7 +9,6 @@ import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-previ
 import type { WorkspaceCanvasArtifactPhase } from './artifact-phase'
 
 export type WorkspaceCanvasNodeKind =
-  | 'analysis'
   | 'shot'
   | 'imageAsset'
   | 'videoClip'
@@ -357,7 +356,7 @@ export interface WorkspaceCanvasStreamPresentation {
   readonly revealedFieldCountByKey: Readonly<Record<string, number>>
 }
 
-export type WorkspaceCanvasNodeDisclosureMode = 'static' | 'collapsed' | 'expanded' | 'streaming'
+export type WorkspaceCanvasNodeDisclosureMode = 'collapsed' | 'expanded' | 'streaming'
 
 export interface WorkspaceCanvasNodeDisclosureState {
   readonly canToggle: boolean

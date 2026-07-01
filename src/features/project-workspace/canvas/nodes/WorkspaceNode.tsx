@@ -25,8 +25,6 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 
 function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconName {
   switch (kind) {
-    case 'analysis':
-      return 'chart'
     case 'shot':
       return 'clapperboard'
     case 'imageAsset':
@@ -506,10 +504,6 @@ function renderLines(lines: readonly WorkspaceCanvasTextLine[], labels: ReturnTy
       ))}
     </div>
   )
-}
-
-function AnalysisContent({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
-  return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
 }
 
 function ShotContent({
@@ -2216,8 +2210,6 @@ function NodeContent({
   }
 
   switch (data.kind) {
-    case 'analysis':
-      return <AnalysisContent data={data} />
     case 'shot':
       return <ShotContent data={data} labels={labels} expanded={expanded} />
     case 'imageAsset':

@@ -78,7 +78,6 @@ describe('project canvas preserves business order', () => {
   it('does not derive shot order from saved canvas positions', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       episodeId: 'episode-1',
-      storyText: 'story',
       storyboards: [storyboard([panel('panel-2', 1), panel('panel-1', 0)])],
       editFirstWorkflow: workflow('ready_to_generate_storyboard_images'),
       savedLayouts: [
