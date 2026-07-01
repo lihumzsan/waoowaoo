@@ -6,6 +6,7 @@ import { logError } from '@/lib/logging/core'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
+import { readProjectEditScript } from '@/lib/edit-script/service'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { deleteObject } from '@/lib/storage'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
@@ -837,16 +838,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             videoGroups: {
               orderBy: { createdAt: 'asc' },
             },
-            editScript: {
-              include: {
-                requirements: {
-                  orderBy: [
-                    { kind: 'asc' },
-                    { name: 'asc' },
-                  ],
-                },
-              },
-            },
             finalOutput: {
               select: {
                 id: true,
@@ -867,10 +858,17 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           data: { lastEpisodeId: input.episodeId },
         }).catch((error: unknown) => logError('update lastEpisodeId failed', error))
 
-        const episodeWithSignedUrls = await attachMediaFieldsToProject(episode)
+        const [episodeWithSignedUrls, editScript] = await Promise.all([
+          attachMediaFieldsToProject(episode),
+          readProjectEditScript({
+            projectId: ctx.projectId,
+            episodeId: input.episodeId,
+          }),
+        ])
         return {
           episode: {
             ...episodeWithSignedUrls,
+            editScript,
             finalVideo: normalizeFinalVideoSummary(episode.finalOutput),
           },
         }
