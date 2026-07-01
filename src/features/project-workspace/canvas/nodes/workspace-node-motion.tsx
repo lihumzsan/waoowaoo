@@ -18,11 +18,13 @@ export function WorkspaceCanvasMotionPresence({
   visible,
   motionKey,
   className,
+  exit = true,
   children,
 }: {
   readonly visible: boolean
   readonly motionKey?: string | number
   readonly className?: string
+  readonly exit?: boolean
   readonly children: ReactNode
 }) {
   const [rendered, setRendered] = useState(visible)
@@ -37,11 +39,16 @@ export function WorkspaceCanvasMotionPresence({
     }
 
     if (!rendered) return undefined
+    if (!exit) {
+      setRendered(false)
+      return undefined
+    }
 
     const timeoutId = window.setTimeout(() => setRendered(false), WORKSPACE_CANVAS_EXIT_DURATION_MS)
     return () => window.clearTimeout(timeoutId)
-  }, [children, rendered, visible])
+  }, [children, exit, rendered, visible])
 
+  if (!visible && !exit) return null
   if (!rendered) return null
 
   return (

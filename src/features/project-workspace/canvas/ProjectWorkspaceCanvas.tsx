@@ -61,7 +61,6 @@ import {
   WORKSPACE_CANVAS_MAX_ZOOM,
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
-import { WORKSPACE_CANVAS_EXIT_DURATION_MS } from './nodes/workspace-node-motion'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowEdge,
@@ -121,7 +120,6 @@ interface CanvasViewportControlsProps {
 
 interface WorkspaceCanvasNodeDisclosureOverride {
   readonly expanded: boolean
-  readonly layoutExpanded: boolean
 }
 
 function numericStyleDimension(value: unknown): number | null {
@@ -266,7 +264,6 @@ function ProjectWorkspaceCanvasContent({
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
-  const layoutCollapseClearTimersRef = useRef<Map<string, number>>(new Map())
   const workspaceTaskStateByQueryKeyRef = useRef<ReadonlyMap<string, TaskRuntimeStateLike>>(new Map())
   const projectedNodeByIdRef = useRef<ReadonlyMap<string, WorkspaceCanvasFlowNode>>(new Map())
   const appliedProjectionNodeSignatureRef = useRef<string | null>(null)
@@ -457,43 +454,10 @@ function ProjectWorkspaceCanvasContent({
     setSelectedNodeId(nodeId)
     const currentOverride = nodeDisclosureOverridesRef.current.get(nodeId)
     const currentExpanded = currentOverride?.expanded ?? anchorNode?.data.disclosure?.effectiveExpanded ?? false
-    const existingTimer = layoutCollapseClearTimersRef.current.get(nodeId)
-    if (existingTimer !== undefined) {
-      window.clearTimeout(existingTimer)
-      layoutCollapseClearTimersRef.current.delete(nodeId)
-    }
-
-    if (currentExpanded) {
-      updateNodeDisclosureOverrides((current) => {
-        const next = new Map(current)
-        next.set(nodeId, {
-          expanded: false,
-          layoutExpanded: true,
-        })
-        return next
-      })
-      const timer = window.setTimeout(() => {
-        layoutCollapseClearTimersRef.current.delete(nodeId)
-        updateNodeDisclosureOverrides((current) => {
-          const override = current.get(nodeId)
-          if (!override || override.expanded || !override.layoutExpanded) return current
-          const next = new Map(current)
-          next.set(nodeId, {
-            expanded: false,
-            layoutExpanded: false,
-          })
-          return next
-        })
-      }, WORKSPACE_CANVAS_EXIT_DURATION_MS)
-      layoutCollapseClearTimersRef.current.set(nodeId, timer)
-      return
-    }
-
     updateNodeDisclosureOverrides((current) => {
       const next = new Map(current)
       next.set(nodeId, {
-        expanded: true,
-        layoutExpanded: true,
+        expanded: !currentExpanded,
       })
       return next
     })
@@ -509,8 +473,7 @@ function ProjectWorkspaceCanvasContent({
 
         const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
         const expanded = node.data.disclosure?.effectiveExpanded ?? (node.data.expanded === true)
-        const layoutExpanded = node.data.layoutExpanded ?? expanded
-        if (layoutExpanded && profile.expanded) return node
+        if (expanded && profile.expanded) return node
 
         const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
           kind: node.data.kind,
@@ -570,16 +533,15 @@ function ProjectWorkspaceCanvasContent({
         isStreaming,
       })
       const expanded = disclosure.effectiveExpanded
-      const layoutExpanded = expanded || disclosureOverride?.layoutExpanded === true
       const size = resolveWorkspaceCanvasNodeSize({
         kind: patchedData.kind,
-        expanded: layoutExpanded,
+        expanded,
         collapsedSize: {
           width: patchedData.width,
           height: patchedData.height,
         },
       })
-      const zIndex = node.id === selectedNodeId ? 30 : layoutExpanded ? 20 : undefined
+      const zIndex = node.id === selectedNodeId ? 30 : expanded ? 20 : undefined
       return {
         ...node,
         zIndex,
@@ -593,8 +555,7 @@ function ProjectWorkspaceCanvasContent({
           focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
           disclosure,
           expanded,
-          layoutExpanded,
-          expandedLayout: layoutExpanded ? profile.expandedLayout : undefined,
+          expandedLayout: expanded ? profile.expandedLayout : undefined,
           onToggleExpanded: toggleNodeExpanded,
           onMeasureNodeSize: handleMeasuredNodeSize,
         },
@@ -773,8 +734,6 @@ function ProjectWorkspaceCanvasContent({
     optimisticRunningClearTimersRef.current.clear()
     focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     focusHighlightClearTimersRef.current.clear()
-    layoutCollapseClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    layoutCollapseClearTimersRef.current.clear()
   }, [])
 
   useEffect(() => {
@@ -800,11 +759,6 @@ function ProjectWorkspaceCanvasContent({
       let changed = false
       const next = new Map(current)
       completedStreamingNodeIds.forEach((nodeId) => {
-        const timer = layoutCollapseClearTimersRef.current.get(nodeId)
-        if (timer !== undefined) {
-          window.clearTimeout(timer)
-          layoutCollapseClearTimersRef.current.delete(nodeId)
-        }
         changed = next.delete(nodeId) || changed
       })
       return changed ? next : current
@@ -820,11 +774,6 @@ function ProjectWorkspaceCanvasContent({
         if (projectedNodeIds.has(nodeId)) {
           next.set(nodeId, override)
         } else {
-          const timer = layoutCollapseClearTimersRef.current.get(nodeId)
-          if (timer !== undefined) {
-            window.clearTimeout(timer)
-            layoutCollapseClearTimersRef.current.delete(nodeId)
-          }
           changed = true
         }
       })
