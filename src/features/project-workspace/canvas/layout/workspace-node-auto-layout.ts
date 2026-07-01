@@ -1,12 +1,13 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { WORKSPACE_CANVAS_BGM_SCORE_TO_FINAL_GAP_X } from '../node-presentation-profiles'
 
-const DEFAULT_NODE_GAP = 72
-const DRAG_NODE_GAP = 24
+export const WORKSPACE_CANVAS_DEFAULT_NODE_GAP = 72
+export const WORKSPACE_CANVAS_DRAG_NODE_GAP = 24
 const EXECUTION_PLAN_TO_EDIT_SCRIPT_GAP = 72
 const EXECUTION_PLAN_STACK_GAP = 56
 const EXECUTION_PLAN_TO_CONTENT_LANE_GAP = 88
 const POSITION_EPSILON = 0.5
+const COLLISION_REPAIR_ITERATION_FACTOR = 8
 const EXECUTION_PLAN_CONTENT_LANE_NODE_KINDS = new Set<WorkspaceCanvasFlowNode['data']['kind']>([
   'shot',
   'videoPlan',
@@ -23,13 +24,33 @@ interface NodeRect {
   readonly order: number
 }
 
-interface NodePosition {
+export interface NodePosition {
   readonly x: number
   readonly y: number
 }
 
 export interface WorkspaceNodeDynamicLayoutOptions {
   readonly preservedNodePositions?: ReadonlyMap<string, NodePosition>
+  readonly collisionAnchorNodeIds?: ReadonlySet<string>
+}
+
+export class WorkspaceCanvasLayoutFailure extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'WorkspaceCanvasLayoutFailure'
+  }
+}
+
+export interface WorkspaceCanvasCollisionRepairOptions {
+  readonly gap?: number
+  readonly fixedNodeIds?: ReadonlySet<string>
+  readonly collisionAnchorNodeIds?: ReadonlySet<string>
+  readonly maxIterations?: number
+}
+
+export interface WorkspaceCanvasCollisionRepairResult {
+  readonly nodes: WorkspaceCanvasFlowNode[]
+  readonly movedNodeIds: ReadonlySet<string>
 }
 
 function preservedNodeIds(
@@ -128,24 +149,63 @@ function moveRectAwayFromAnchor(rect: NodeRect, anchor: NodeRect, gap: number): 
     : { ...rect, y: rect.y + move.delta }
 }
 
-function nextAvailableY(candidate: NodeRect, placed: readonly NodeRect[], gap: number): number {
-  let y = candidate.y
-  let moved = true
+function rectPositionChanged(left: NodeRect, right: NodeRect): boolean {
+  return (
+    Math.abs(left.x - right.x) > POSITION_EPSILON ||
+    Math.abs(left.y - right.y) > POSITION_EPSILON
+  )
+}
 
-  while (moved) {
-    moved = false
-    const nextCandidate = { ...candidate, y }
-    for (const rect of placed) {
-      if (!rectsOverlap(nextCandidate, rect)) continue
-      const pushedY = rect.y + rect.height + gap
-      if (pushedY > y + POSITION_EPSILON) {
-        y = pushedY
-        moved = true
+function createDefaultCollisionAnchorNodeIds(nodes: readonly WorkspaceCanvasFlowNode[]): ReadonlySet<string> {
+  return new Set(nodes.map((node) => node.id))
+}
+
+function defaultMaxCollisionRepairIterations(nodeCount: number): number {
+  return Math.max(64, nodeCount * nodeCount * COLLISION_REPAIR_ITERATION_FACTOR)
+}
+
+function assertNoWorkspaceNodeOverlaps(rects: readonly NodeRect[]): void {
+  for (let leftIndex = 0; leftIndex < rects.length; leftIndex += 1) {
+    const left = rects[leftIndex]
+    if (!left) continue
+    for (let rightIndex = leftIndex + 1; rightIndex < rects.length; rightIndex += 1) {
+      const right = rects[rightIndex]
+      if (!right) continue
+      if (rectsOverlap(left, right)) {
+        throw new WorkspaceCanvasLayoutFailure(`Workspace canvas layout collision unresolved between ${left.id} and ${right.id}.`)
       }
     }
   }
+}
 
-  return y
+function applyRepairedRectsToNodes(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  rectById: ReadonlyMap<string, NodeRect>,
+): WorkspaceCanvasCollisionRepairResult {
+  const movedNodeIds = new Set<string>()
+  const repairedNodes = nodes.map((node) => {
+    const repaired = rectById.get(node.id)
+    if (!repaired) return node
+    if (
+      Math.abs(repaired.x - node.position.x) <= POSITION_EPSILON &&
+      Math.abs(repaired.y - node.position.y) <= POSITION_EPSILON
+    ) {
+      return node
+    }
+    movedNodeIds.add(node.id)
+    return {
+      ...node,
+      position: {
+        x: repaired.x,
+        y: repaired.y,
+      },
+    }
+  })
+
+  return {
+    nodes: repairedNodes,
+    movedNodeIds,
+  }
 }
 
 export function workspaceCanvasNodesOverlap(
@@ -162,41 +222,10 @@ export function repairWorkspaceNodeOverlaps(
     readonly preservedNodeIds?: ReadonlySet<string>
   },
 ): WorkspaceCanvasFlowNode[] {
-  const gap = options?.gap ?? DEFAULT_NODE_GAP
-  const preservedNodeIds = options?.preservedNodeIds ?? new Set<string>()
-  const sortedRects = nodes
-    .map(nodeRect)
-    .sort((left, right) => {
-      if (left.y !== right.y) return left.y - right.y
-      if (left.x !== right.x) return left.x - right.x
-      return left.order - right.order
-    })
-
-  const fixedRects = sortedRects.filter((rect) => preservedNodeIds.has(rect.id))
-  const movableRects = sortedRects.filter((rect) => !preservedNodeIds.has(rect.id))
-  const placed: NodeRect[] = [...fixedRects]
-  const repairedYById = new Map<string, number>()
-
-  fixedRects.forEach((rect) => repairedYById.set(rect.id, rect.y))
-
-  for (const rect of movableRects) {
-    const y = nextAvailableY(rect, placed, gap)
-    const repaired = { ...rect, y }
-    placed.push(repaired)
-    repairedYById.set(rect.id, y)
-  }
-
-  return nodes.map((node) => {
-    const y = repairedYById.get(node.id)
-    if (y === undefined || Math.abs(y - node.position.y) <= POSITION_EPSILON) return node
-    return {
-      ...node,
-      position: {
-        ...node.position,
-        y,
-      },
-    }
-  })
+  return repairWorkspaceNodeCollisions(nodes, {
+    gap: options?.gap ?? WORKSPACE_CANVAS_DEFAULT_NODE_GAP,
+    fixedNodeIds: options?.preservedNodeIds,
+  }).nodes
 }
 
 export function alignExecutionPlanNodesToMeasuredEditScript(
@@ -252,6 +281,7 @@ export function avoidExpandedExecutionPlanLaneOverlaps(
   nodes: readonly WorkspaceCanvasFlowNode[],
   options?: {
     readonly gap?: number
+    readonly fixedNodeIds?: ReadonlySet<string>
   },
 ): WorkspaceCanvasFlowNode[] {
   const expandedExecutionRects = nodes
@@ -282,6 +312,7 @@ export function avoidExpandedExecutionPlanLaneOverlaps(
 
   const contentLaneNodeIds = new Set(contentLaneRects.map((rect) => rect.id))
   return nodes.map((node) => {
+    if (options?.fixedNodeIds?.has(node.id)) return node
     if (!contentLaneNodeIds.has(node.id)) return node
     return {
       ...node,
@@ -344,25 +375,40 @@ export function alignFinalTimelineNodesToBgmScore(
   })
 }
 
-export function repairWorkspaceNodeOverlapsNearMovedNodes(
+export function repairWorkspaceNodeCollisions(
   nodes: readonly WorkspaceCanvasFlowNode[],
-  movedNodeIds: ReadonlySet<string>,
-  options?: {
-    readonly gap?: number
-  },
-): WorkspaceCanvasFlowNode[] {
-  if (movedNodeIds.size === 0) return [...nodes]
+  options?: WorkspaceCanvasCollisionRepairOptions,
+): WorkspaceCanvasCollisionRepairResult {
+  if (nodes.length <= 1) {
+    return {
+      nodes: [...nodes],
+      movedNodeIds: new Set<string>(),
+    }
+  }
 
-  const gap = options?.gap ?? DRAG_NODE_GAP
+  const gap = options?.gap ?? WORKSPACE_CANVAS_DEFAULT_NODE_GAP
+  const fixedNodeIds = options?.fixedNodeIds ?? new Set<string>()
+  const collisionAnchorNodeIds = options?.collisionAnchorNodeIds && options.collisionAnchorNodeIds.size > 0
+    ? options.collisionAnchorNodeIds
+    : createDefaultCollisionAnchorNodeIds(nodes)
+  const maxIterations = options?.maxIterations ?? defaultMaxCollisionRepairIterations(nodes.length)
   const rectById = new Map(nodes.map((node, index) => {
     const rect = nodeRect(node, index)
     return [node.id, rect]
   }))
-  const movableIds = new Set(nodes.map((node) => node.id).filter((id) => !movedNodeIds.has(id)))
-  const queue = [...movedNodeIds]
+  const movableIds = new Set(nodes.map((node) => node.id).filter((id) => !fixedNodeIds.has(id)))
+  const queue = nodes
+    .map((node) => node.id)
+    .filter((nodeId) => collisionAnchorNodeIds.has(nodeId) && rectById.has(nodeId))
   const queuedIds = new Set(queue)
+  let iterationCount = 0
 
   while (queue.length > 0) {
+    iterationCount += 1
+    if (iterationCount > maxIterations) {
+      throw new WorkspaceCanvasLayoutFailure('Workspace canvas layout collision repair exceeded its iteration limit.')
+    }
+
     const anchorId = queue.shift()
     if (!anchorId) continue
     queuedIds.delete(anchorId)
@@ -374,6 +420,7 @@ export function repairWorkspaceNodeOverlapsNearMovedNodes(
       const rect = rectById.get(id)
       if (!rect || !rectsOverlapWithGap(anchor, rect, gap)) continue
       const repaired = moveRectAwayFromAnchor(rect, anchor, gap)
+      if (!rectPositionChanged(rect, repaired)) continue
       rectById.set(id, repaired)
       if (!queuedIds.has(id)) {
         queue.push(id)
@@ -382,23 +429,23 @@ export function repairWorkspaceNodeOverlapsNearMovedNodes(
     }
   }
 
-  return nodes.map((node) => {
-    const repaired = rectById.get(node.id)
-    if (!repaired) return node
-    if (
-      Math.abs(repaired.x - node.position.x) <= POSITION_EPSILON &&
-      Math.abs(repaired.y - node.position.y) <= POSITION_EPSILON
-    ) {
-      return node
-    }
-    return {
-      ...node,
-      position: {
-        x: repaired.x,
-        y: repaired.y,
-      },
-    }
-  })
+  assertNoWorkspaceNodeOverlaps([...rectById.values()])
+  return applyRepairedRectsToNodes(nodes, rectById)
+}
+
+export function repairWorkspaceNodeOverlapsNearMovedNodes(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  movedNodeIds: ReadonlySet<string>,
+  options?: {
+    readonly gap?: number
+  },
+): WorkspaceCanvasFlowNode[] {
+  if (movedNodeIds.size === 0) return [...nodes]
+  return repairWorkspaceNodeCollisions(nodes, {
+    gap: options?.gap ?? WORKSPACE_CANVAS_DRAG_NODE_GAP,
+    fixedNodeIds: movedNodeIds,
+    collisionAnchorNodeIds: movedNodeIds,
+  }).nodes
 }
 
 export function applyWorkspaceNodeDynamicLayout(
@@ -406,11 +453,14 @@ export function applyWorkspaceNodeDynamicLayout(
   options?: WorkspaceNodeDynamicLayoutOptions,
 ): WorkspaceCanvasFlowNode[] {
   const fixedNodeIds = preservedNodeIds(options?.preservedNodePositions)
-  const laneAdjustedNodes = avoidExpandedExecutionPlanLaneOverlaps(nodes)
+  const laneAdjustedNodes = avoidExpandedExecutionPlanLaneOverlaps(nodes, {
+    fixedNodeIds,
+  })
   const finalTimelineAdjustedNodes = alignFinalTimelineNodesToBgmScore(laneAdjustedNodes, {
     preservedNodeIds: fixedNodeIds,
   })
-  return repairWorkspaceNodeOverlaps(finalTimelineAdjustedNodes, {
-    preservedNodeIds: fixedNodeIds,
-  })
+  return repairWorkspaceNodeCollisions(finalTimelineAdjustedNodes, {
+    fixedNodeIds,
+    collisionAnchorNodeIds: options?.collisionAnchorNodeIds ?? fixedNodeIds,
+  }).nodes
 }

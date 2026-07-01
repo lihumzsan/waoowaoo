@@ -78,11 +78,11 @@ import {
 import {
   alignExecutionPlanNodesToMeasuredEditScript,
   preserveWorkspaceNodePositions,
+  WorkspaceCanvasLayoutFailure,
   type WorkspaceNodeDynamicLayoutOptions,
 } from './layout/workspace-node-auto-layout'
 import {
   buildWorkspaceCanvasLegacyLayoutModel,
-  captureLayoutBasePositions,
   composeWorkspaceCanvasLegacyLayout,
   mergePreservedNodePositions,
   normalizeNodesToLayoutBasePositions,
@@ -264,6 +264,7 @@ function ProjectWorkspaceCanvasContent({
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [layoutFailureVisible, setLayoutFailureVisible] = useState(false)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
@@ -293,16 +294,6 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
-  const savedNodeLayoutPositions = useMemo(() => {
-    const positions = new Map<string, { readonly x: number; readonly y: number }>()
-    savedNodeLayouts.forEach((nodeLayout) => {
-      positions.set(nodeLayout.nodeKey, {
-        x: nodeLayout.x,
-        y: nodeLayout.y,
-      })
-    })
-    return positions
-  }, [savedNodeLayouts])
   const editScriptGenerationTargets = useMemo(
     () => {
       const target = TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)
@@ -459,16 +450,38 @@ function ProjectWorkspaceCanvasContent({
       throw error
     }
   }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
+  const handleCanvasLayoutFailure = useCallback((error: WorkspaceCanvasLayoutFailure) => {
+    setLayoutFailureVisible(true)
+    _ulogWarn('[ProjectWorkspaceCanvas] canvas layout failed', error.message)
+  }, [])
+  const resolveCanvasLayoutOrCurrent = useCallback((
+    currentNodes: readonly WorkspaceCanvasFlowNode[],
+    buildLayout: () => WorkspaceCanvasFlowNode[],
+  ): WorkspaceCanvasFlowNode[] => {
+    try {
+      const nextNodes = buildLayout()
+      setLayoutFailureVisible(false)
+      return nextNodes
+    } catch (error: unknown) {
+      if (!(error instanceof WorkspaceCanvasLayoutFailure)) throw error
+      handleCanvasLayoutFailure(error)
+      return [...currentNodes]
+    }
+  }, [handleCanvasLayoutFailure])
   const toggleNodeExpanded = useCallback((nodeId: string) => {
     const anchorNode = reactFlow.getNode(nodeId)
     if (anchorNode?.data.disclosure && !anchorNode.data.disclosure.canToggle) return
-    if (anchorNode) {
-      const nextAnchors = new Map(expansionAnchorNodePositionsRef.current)
-      nextAnchors.set(nodeId, anchorNode.position)
-      expansionAnchorNodePositionsRef.current = nextAnchors
-    }
     setNodeExpansionOverrides((current) => {
       const currentExpanded = anchorNode?.data.disclosure?.effectiveExpanded ?? current.get(nodeId) ?? false
+      if (anchorNode) {
+        const nextAnchors = new Map(expansionAnchorNodePositionsRef.current)
+        if (currentExpanded) {
+          nextAnchors.delete(nodeId)
+        } else {
+          nextAnchors.set(nodeId, anchorNode.position)
+        }
+        expansionAnchorNodePositionsRef.current = nextAnchors
+      }
       const next = new Map(current)
       next.set(nodeId, !currentExpanded)
       return next
@@ -479,63 +492,68 @@ function ProjectWorkspaceCanvasContent({
     size: { readonly width: number; readonly height: number },
   ) => {
     setSourceNodes((currentNodes) => {
-      let changed = false
-      let measuredKind: WorkspaceCanvasFlowNode['data']['kind'] | null = null
-      let measuredPosition: { readonly x: number; readonly y: number } | null = null
-      const measuredNodes = currentNodes.map((node) => {
-        if (node.id !== nodeId) return node
-        measuredKind = node.data.kind
-        measuredPosition = node.position
+      return resolveCanvasLayoutOrCurrent(currentNodes, () => {
+        let changed = false
+        let measuredPosition: { readonly x: number; readonly y: number } | null = null
+        const measuredNodes = currentNodes.map((node) => {
+          if (node.id !== nodeId) return node
+          measuredPosition = node.position
 
-        const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
-          kind: node.data.kind,
-          measuredHeight: size.height,
+          const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
+          const expanded = node.data.disclosure?.effectiveExpanded ?? (node.data.expanded === true)
+          if (expanded && profile.expanded) return node
+
+          const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
+            kind: node.data.kind,
+            measuredHeight: size.height,
+          })
+          const currentStyleHeight = numericStyleDimension(node.style?.height) ?? node.data.height
+          if (
+            Math.abs(nextHeight - node.data.height) <= MEASURED_NODE_SIZE_EPSILON &&
+            Math.abs(nextHeight - currentStyleHeight) <= MEASURED_NODE_SIZE_EPSILON
+          ) {
+            return node
+          }
+
+          changed = true
+          return {
+            ...node,
+            style: {
+              ...node.style,
+              height: nextHeight,
+            },
+            data: {
+              ...node.data,
+              height: nextHeight,
+            },
+          }
         })
-        const currentStyleHeight = numericStyleDimension(node.style?.height) ?? node.data.height
-        if (
-          Math.abs(nextHeight - node.data.height) <= MEASURED_NODE_SIZE_EPSILON &&
-          Math.abs(nextHeight - currentStyleHeight) <= MEASURED_NODE_SIZE_EPSILON
-        ) {
-          return node
-        }
+        if (!changed) return currentNodes
 
-        changed = true
-        return {
-          ...node,
-          style: {
-            ...node.style,
-            height: nextHeight,
-          },
-          data: {
-            ...node.data,
-            height: nextHeight,
-          },
-        }
-      })
-      if (!changed) return currentNodes
-
-      const normalizedNodes = normalizeNodesToLayoutBasePositions(measuredNodes)
-      const relayoutedNodes = relayoutEditAssetsBelowScript(normalizedNodes)
-      const measuredNodePosition = measuredPosition
-        ? new Map([[nodeId, measuredPosition]])
-        : undefined
-      const preservedNodePositions = mergePreservedNodePositions(
-        savedNodeLayoutPositions,
-        expansionAnchorNodePositionsRef.current,
-        measuredNodePosition,
-      )
-      const alignOptions = { preservedNodeIds: preservedNodeIdSet(preservedNodePositions) }
-      const alignedNodes = alignExecutionPlanNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
-      const baseAlignedNodes = measuredKind === 'editScript'
-        ? captureLayoutBasePositions(alignedNodes)
-        : alignedNodes
-      return composeWorkspaceCanvasLegacyLayout({
-        nodes: baseAlignedNodes,
-        model: buildWorkspaceCanvasLegacyLayoutModel(baseAlignedNodes, { preservedNodePositions }),
-        preservedNodePositions,
+        const normalizedNodes = normalizeNodesToLayoutBasePositions(measuredNodes)
+        const relayoutedNodes = relayoutEditAssetsBelowScript(normalizedNodes)
+        const measuredNodePosition = measuredPosition
+          ? new Map([[nodeId, measuredPosition]])
+          : undefined
+        const preservedNodePositions = mergePreservedNodePositions(
+          expansionAnchorNodePositionsRef.current,
+          measuredNodePosition,
+        )
+        const alignOptions = { preservedNodeIds: preservedNodeIdSet(preservedNodePositions) }
+        const alignedNodes = alignExecutionPlanNodesToMeasuredEditScript(relayoutedNodes, alignOptions)
+        const collisionAnchorNodeIds = new Set([
+          ...expansionAnchorNodePositionsRef.current.keys(),
+          nodeId,
+        ])
+        return composeWorkspaceCanvasLegacyLayout({
+          nodes: alignedNodes,
+          model: buildWorkspaceCanvasLegacyLayoutModel(alignedNodes, { preservedNodePositions }),
+          preservedNodePositions,
+          collisionAnchorNodeIds,
+        })
       })
     })
-  }, [savedNodeLayoutPositions])
+  }, [resolveCanvasLayoutOrCurrent])
   const attachNodeUiState = useCallback((
     inputNodes: readonly WorkspaceCanvasFlowNode[],
     options?: WorkspaceNodeDynamicLayoutOptions,
@@ -602,15 +620,15 @@ function ProjectWorkspaceCanvasContent({
       nodes: nextNodes,
       model: buildWorkspaceCanvasLegacyLayoutModel(nextNodes, options),
       preservedNodePositions: options?.preservedNodePositions,
+      collisionAnchorNodeIds: options?.collisionAnchorNodeIds,
     })
   }, [handleMeasuredNodeSize, nodeExpansionOverrides, nodeRunningStatusLabel, t, toggleNodeExpanded])
   const readCanvasManualNodePositions = useCallback((
     additionalNodePositions?: ReadonlyMap<string, { readonly x: number; readonly y: number }>,
   ) => mergePreservedNodePositions(
-    savedNodeLayoutPositions,
     expansionAnchorNodePositionsRef.current,
     additionalNodePositions,
-  ), [savedNodeLayoutPositions])
+  ), [])
 
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
@@ -751,19 +769,20 @@ function ProjectWorkspaceCanvasContent({
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
     appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(attachNodeUiState(projectedNodesWithBilling, {
+    setSourceNodes((currentNodes) => resolveCanvasLayoutOrCurrent(currentNodes, () => attachNodeUiState(projectedNodesWithBilling, {
       preservedNodePositions: readCanvasManualNodePositions(),
-    }))
-  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature, readCanvasManualNodePositions])
+    })))
+  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature, readCanvasManualNodePositions, resolveCanvasLayoutOrCurrent])
 
   useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
+    setSourceNodes((currentNodes) => resolveCanvasLayoutOrCurrent(currentNodes, () => attachNodeUiState(currentNodes, {
       preservedNodePositions: readCanvasManualNodePositions(),
-    }))
+    })))
   }, [
     attachNodeUiState,
     workspaceTaskStateSignature,
     readCanvasManualNodePositions,
+    resolveCanvasLayoutOrCurrent,
   ])
 
   useEffect(() => {
@@ -794,10 +813,10 @@ function ProjectWorkspaceCanvasContent({
   }, [])
 
   useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes, {
+    setSourceNodes((currentNodes) => resolveCanvasLayoutOrCurrent(currentNodes, () => attachNodeUiState(currentNodes, {
       preservedNodePositions: readCanvasManualNodePositions(),
-    }))
-  }, [attachNodeUiState, readCanvasManualNodePositions])
+    })))
+  }, [attachNodeUiState, readCanvasManualNodePositions, resolveCanvasLayoutOrCurrent])
 
   useEffect(() => {
     const currentStreamingNodeIds = new Set<string>()
@@ -883,15 +902,24 @@ function ProjectWorkspaceCanvasContent({
       movedNodeIds.forEach((nodeId) => nextAnchors.delete(nodeId))
       expansionAnchorNodePositionsRef.current = nextAnchors
     }
-    const currentNodes = reactFlow.getNodes().map((currentNode) => movedNodesById.get(currentNode.id) ?? currentNode)
-    const repairedLayoutNodes = repairWorkspaceCanvasDraggedLayout({
-      nodes: currentNodes,
-      movedNodeIds,
-    })
-    const repairedNodes = attachNodeUiState(repairedLayoutNodes)
-    setSourceNodes(repairedNodes)
-    persistCurrentLayoutSafely(repairedNodes)
-  }, [attachNodeUiState, notifyCanvasUserInteraction, persistCurrentLayoutSafely, reactFlow])
+    try {
+      const currentNodes = reactFlow.getNodes().map((currentNode) => movedNodesById.get(currentNode.id) ?? currentNode)
+      const repairedLayoutNodes = repairWorkspaceCanvasDraggedLayout({
+        nodes: currentNodes,
+        movedNodeIds,
+      })
+      const repairedNodes = attachNodeUiState(repairedLayoutNodes, {
+        preservedNodePositions: readCanvasManualNodePositions(),
+        collisionAnchorNodeIds: movedNodeIds,
+      })
+      setLayoutFailureVisible(false)
+      setSourceNodes(repairedNodes)
+      persistCurrentLayoutSafely(repairedNodes)
+    } catch (error: unknown) {
+      if (!(error instanceof WorkspaceCanvasLayoutFailure)) throw error
+      handleCanvasLayoutFailure(error)
+    }
+  }, [attachNodeUiState, handleCanvasLayoutFailure, notifyCanvasUserInteraction, persistCurrentLayoutSafely, reactFlow, readCanvasManualNodePositions])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     setSelectedNodeId(node.id)
@@ -942,11 +970,11 @@ function ProjectWorkspaceCanvasContent({
       translate: t,
       onAction: onNodeAction,
     })
-    setSourceNodes(attachNodeUiState(defaultProjection.nodes))
+    setSourceNodes((currentNodes) => resolveCanvasLayoutOrCurrent(currentNodes, () => attachNodeUiState(defaultProjection.nodes)))
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, resolveCanvasLayoutOrCurrent, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -991,7 +1019,7 @@ function ProjectWorkspaceCanvasContent({
   if (!episodeId) return null
 
   return (
-    <div className="h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
+    <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
           nodes={sourceNodes}
@@ -1018,6 +1046,17 @@ function ProjectWorkspaceCanvasContent({
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
+          {layoutFailureVisible ? (
+            <Panel position="top-center" className="!z-[80] !m-0" style={{ top: 16 }}>
+              <div
+                role="alert"
+                className="flex max-w-[min(560px,calc(100vw-32px))] items-center gap-2 rounded-xl border border-[var(--glass-tone-warning-fg)]/30 bg-[var(--glass-bg-surface)]/95 px-4 py-3 text-sm font-medium text-[var(--glass-text-primary)] shadow-lg backdrop-blur-md"
+              >
+                <AppIcon name="alert" className="h-4 w-4 shrink-0 text-[var(--glass-tone-warning-fg)]" />
+                <span>{t('layoutError')}</span>
+              </div>
+            </Panel>
+          ) : null}
           <MiniMap
             pannable
             zoomable

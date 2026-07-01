@@ -360,6 +360,28 @@
   animation-delay: 120ms;
 }
 
+.workspace-canvas-layout-animated .react-flow__node:not(.dragging) {
+  transition: transform 220ms cubic-bezier(0.2, 0, 0.16, 1);
+}
+
+.workspace-canvas-node-content {
+  transform: translateY(0);
+  transition:
+    opacity 180ms cubic-bezier(0.2, 0, 0.16, 1),
+    transform 180ms cubic-bezier(0.2, 0, 0.16, 1);
+}
+
+.workspace-canvas-node-content[data-expanded="false"] {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-canvas-layout-animated .react-flow__node:not(.dragging),
+  .workspace-canvas-node-content {
+    transition: none;
+  }
+}
+
 /* —— 系统加载 Logo:液态浮动(主体轻浮摆动 + 圆点独立弹跳) —— */
 .brand-loading-mark .logo-shape__art,
 .brand-loading-mark .logo-shape__dot {

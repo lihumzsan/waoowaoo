@@ -2469,7 +2469,10 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
             </div>
           </header>
 
-          <div className={`space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}>
+          <div
+            className={`workspace-canvas-node-content space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}
+            data-expanded={expanded ? 'true' : 'false'}
+          >
             <NodeContent data={runningData} labels={labels} expanded={expanded} />
             {nodeUsesInlineTaskProgress(data.kind) ? (
               <EstimatedTaskProgressInline taskState={data.taskProgress} />

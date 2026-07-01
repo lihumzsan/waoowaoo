@@ -7,7 +7,8 @@ import {
 import {
   applyWorkspaceNodeDynamicLayout,
   preserveWorkspaceNodePositions,
-  repairWorkspaceNodeOverlapsNearMovedNodes,
+  repairWorkspaceNodeCollisions,
+  WORKSPACE_CANVAS_DRAG_NODE_GAP,
   type WorkspaceNodeDynamicLayoutOptions,
 } from './workspace-node-auto-layout'
 import {
@@ -25,6 +26,17 @@ export interface ComposeWorkspaceCanvasLegacyLayoutInput extends WorkspaceNodeDy
 export interface RepairWorkspaceCanvasDraggedLayoutInput {
   readonly nodes: readonly WorkspaceCanvasFlowNode[]
   readonly movedNodeIds: ReadonlySet<string>
+}
+
+export interface CaptureLayoutBasePositionsInput {
+  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+  readonly nodeIds?: ReadonlySet<string>
+}
+
+function isWorkspaceCanvasNodeArray(
+  input: readonly WorkspaceCanvasFlowNode[] | CaptureLayoutBasePositionsInput,
+): input is readonly WorkspaceCanvasFlowNode[] {
+  return Array.isArray(input)
 }
 
 function assertModelMatchesNodes(
@@ -62,13 +74,17 @@ export function normalizeNodesToLayoutBasePositions(
 }
 
 export function captureLayoutBasePositions(
-  nodes: readonly WorkspaceCanvasFlowNode[],
+  inputNodes: readonly WorkspaceCanvasFlowNode[] | CaptureLayoutBasePositionsInput,
 ): WorkspaceCanvasFlowNode[] {
+  const nodes = isWorkspaceCanvasNodeArray(inputNodes) ? inputNodes : inputNodes.nodes
+  const nodeIds = isWorkspaceCanvasNodeArray(inputNodes) ? undefined : inputNodes.nodeIds
   return nodes.map((node) => ({
     ...node,
     data: {
       ...node.data,
-      layoutBasePosition: node.position,
+      layoutBasePosition: nodeIds && !nodeIds.has(node.id)
+        ? node.data.layoutBasePosition
+        : node.position,
     },
   }))
 }
@@ -142,6 +158,7 @@ export function composeWorkspaceCanvasLegacyLayout(
   const anchoredNodes = preserveWorkspaceNodePositions(normalizedNodes, input.preservedNodePositions)
   return applyWorkspaceNodeDynamicLayout(anchoredNodes, {
     preservedNodePositions: input.preservedNodePositions,
+    collisionAnchorNodeIds: input.collisionAnchorNodeIds,
   })
 }
 
@@ -158,7 +175,14 @@ export function buildWorkspaceCanvasLegacyLayoutModel(
 export function repairWorkspaceCanvasDraggedLayout(
   input: RepairWorkspaceCanvasDraggedLayoutInput,
 ): WorkspaceCanvasFlowNode[] {
-  return captureLayoutBasePositions(
-    repairWorkspaceNodeOverlapsNearMovedNodes(input.nodes, input.movedNodeIds),
-  )
+  const repaired = repairWorkspaceNodeCollisions(input.nodes, {
+    gap: WORKSPACE_CANVAS_DRAG_NODE_GAP,
+    fixedNodeIds: input.movedNodeIds,
+    collisionAnchorNodeIds: input.movedNodeIds,
+  })
+  const baseNodeIds = new Set([...input.movedNodeIds, ...repaired.movedNodeIds])
+  return captureLayoutBasePositions({
+    nodes: repaired.nodes,
+    nodeIds: baseNodeIds,
+  })
 }

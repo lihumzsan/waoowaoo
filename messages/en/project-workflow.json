@@ -101,6 +101,7 @@
       "layoutLoading": "Loading layout",
       "layoutSaving": "Saving layout",
       "layoutWarning": "Canvas layout could not sync. The default node layout remains available.",
+      "layoutError": "Canvas layout could not resolve without overlap. The last stable layout is still shown.",
       "toolbar": {
         "resetLayout": "Reset Layout",
         "fitView": "Fit View",
