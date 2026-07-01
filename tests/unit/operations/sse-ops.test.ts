@@ -74,7 +74,7 @@ describe('sse bootstrap operations', () => {
     listRecentTerminalLifecycleEventsMock.mockResolvedValue([])
   })
 
-  it('combines numeric event replay with recent terminal events for the active episode', async () => {
+  it('replays only missed numeric events after the cursor', async () => {
     const missedEvent = {
       id: '15',
       type: 'task.lifecycle',
@@ -91,23 +91,7 @@ describe('sse bootstrap operations', () => {
         progress: 20,
       },
     }
-    const terminalEventBeforeCursor = {
-      id: '11',
-      type: 'task.lifecycle',
-      taskId: 'task-image-1',
-      taskType: 'image_panel',
-      targetType: 'ProjectPanel',
-      targetId: 'panel-1',
-      projectId: 'project-1',
-      userId: 'user-1',
-      ts: '2026-04-24T00:02:00.000Z',
-      episodeId: 'episode-1',
-      payload: {
-        lifecycleType: 'task.completed',
-      },
-    }
     listEventsAfterMock.mockResolvedValueOnce([missedEvent])
-    listRecentTerminalLifecycleEventsMock.mockResolvedValueOnce([terminalEventBeforeCursor])
 
     const ops = createSseOperations()
     const result = await ops.get_sse_bootstrap.execute(buildCtx() as never, {
@@ -117,20 +101,28 @@ describe('sse bootstrap operations', () => {
     } as never)
 
     expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 14, 5000)
-    expect(listRecentTerminalLifecycleEventsMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      limit: 100,
-    })
+    expect(listRecentTerminalLifecycleEventsMock).not.toHaveBeenCalled()
     expect(result).toEqual({
       channel: 'project:project-1',
-      mode: 'replay_with_terminal_snapshot',
+      mode: 'missed_event_replay',
       fromEventId: 14,
-      events: [
-        missedEvent,
-        terminalEventBeforeCursor,
-      ],
+      events: [missedEvent],
+    })
+  })
+
+  it('returns no recoverable terminal snapshot for replay polling without a cursor', async () => {
+    const ops = createSseOperations()
+    const result = await ops.get_sse_bootstrap.execute(buildCtx() as never, {
+      episodeId: 'episode-1',
+      includeRecoverableSnapshot: false,
+    } as never)
+
+    expect(listRecentTerminalLifecycleEventsMock).not.toHaveBeenCalled()
+    expect(taskFindManyMock).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      channel: 'project:project-1',
+      mode: 'missed_event_replay_without_cursor',
+      events: [],
     })
   })
 

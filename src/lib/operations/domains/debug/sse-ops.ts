@@ -149,6 +149,7 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
       inputSchema: z.object({
         episodeId: z.string().optional().nullable(),
         lastEventId: z.string().optional().nullable(),
+        includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
         snapshotLimit: z.number().int().positive().max(2000).optional(),
       }).passthrough(),
@@ -157,6 +158,7 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const channel = getProjectChannel(ctx.projectId)
         const lastEventId = parseReplayCursorId(input.lastEventId || null)
         const lastMutationEventAt = parseMutationReplayCursor(input.lastEventId || null)
+        const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
 
         if (lastMutationEventAt) {
           const replayLimit = input.replayLimit ?? 5000
@@ -168,15 +170,17 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
             episodeId,
             limit: replayLimit,
           })
-          const activeTaskEvents = await listActiveLifecycleSnapshot({
-            projectId: ctx.projectId,
-            episodeId,
-            userId: ctx.userId,
-            limit: input.snapshotLimit ?? 500,
-          })
+          const activeTaskEvents = includeRecoverableSnapshot
+            ? await listActiveLifecycleSnapshot({
+                projectId: ctx.projectId,
+                episodeId,
+                userId: ctx.userId,
+                limit: input.snapshotLimit ?? 500,
+              })
+            : []
           return {
             channel,
-            mode: 'mutation_replay_with_active_snapshot',
+            mode: includeRecoverableSnapshot ? 'mutation_replay_with_active_snapshot' : 'mutation_replay',
             fromEventId: input.lastEventId,
             events: [...mutationEvents, ...activeTaskEvents],
           }
@@ -184,23 +188,21 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
 
         if (lastEventId > 0) {
           const replayLimit = input.replayLimit ?? 5000
-          const episodeId = input.episodeId ? input.episodeId.trim() : null
           const missed = await listEventsAfter(ctx.projectId, lastEventId, replayLimit)
-          const terminalEvents = await listRecentTerminalLifecycleEvents({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-            episodeId,
-            limit: Math.min(input.snapshotLimit ?? 200, 200),
-          })
-          const events = uniqueTaskEvents([
-            ...missed.filter((event) => event.userId === ctx.userId),
-            ...terminalEvents,
-          ])
+          const events = missed.filter((event) => event.userId === ctx.userId)
           return {
             channel,
-            mode: 'replay_with_terminal_snapshot',
+            mode: 'missed_event_replay',
             fromEventId: lastEventId,
             events,
+          }
+        }
+
+        if (!includeRecoverableSnapshot) {
+          return {
+            channel,
+            mode: 'missed_event_replay_without_cursor',
+            events: [],
           }
         }
 

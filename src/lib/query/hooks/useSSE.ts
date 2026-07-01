@@ -30,6 +30,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   const sourceRef = useRef<EventSource | null>(null)
   const targetStatesInvalidateTimerRef = useRef<number | null>(null)
   const lastEventIdRef = useRef(0)
+  const processedEventIdsRef = useRef<Set<string>>(new Set())
   const replayInFlightRef = useRef(false)
   const isGlobalAssetProject = projectId === 'global-asset-hub'
 
@@ -63,7 +64,9 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
 
   const handleParsedEvent = useCallback((payload: unknown) => {
     if (!isWorkspaceSSEEvent(payload)) return
+    if (processedEventIdsRef.current.has(payload.id)) return
     applyEvent(payload)
+    processedEventIdsRef.current.add(payload.id)
     const numericEventId = readNumericWorkspaceSSEEventId(payload.id)
     if (numericEventId !== null && numericEventId > lastEventIdRef.current) {
       lastEventIdRef.current = numericEventId

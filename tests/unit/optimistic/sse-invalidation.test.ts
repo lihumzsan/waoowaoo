@@ -242,6 +242,54 @@ describe('sse invalidation behavior', () => {
     })
   })
 
+  it('does not apply duplicate SSE event ids twice', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    expect(source).toBeTruthy()
+
+    const event = {
+      id: 'dedupe-1',
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-dedupe-1',
+      taskType: 'edit_shot_execution_plan_generate',
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:01.000Z',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+        affectedResources: [
+          { kind: 'editShotExecutionPlan', projectId: 'project-1', episodeId: 'episode-1' },
+        ],
+      },
+    }
+
+    source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, event)
+    source.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, event)
+
+    const shotExecutionPlanRefetches = runtime.queryClient.refetchQueries.mock.calls.filter((call) => {
+      const arg = (call[0] || {}) as InvalidateArg
+      const key = arg.queryKey || []
+      return Array.isArray(key)
+        && key[0] === queryKeys.project.editShotExecutionPlan('project-1', 'episode-1')[0]
+        && key[1] === 'project-1'
+        && key[2] === 'edit-shot-execution-plan'
+        && key[3] === 'episode-1'
+        && arg.type === 'active'
+    })
+
+    expect(shotExecutionPlanRefetches).toHaveLength(1)
+  })
+
   it('mutation.batch ProjectPanel 事件触发 episode scoped query invalidation', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
 

@@ -109,6 +109,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         input: {
           episodeId: episodeId || null,
           lastEventId: request.headers.get('last-event-id'),
+          includeRecoverableSnapshot: true,
         },
         source: 'project-ui',
       })

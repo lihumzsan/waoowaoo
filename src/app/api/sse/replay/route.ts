@@ -49,6 +49,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     input: {
       episodeId,
       lastEventId,
+      includeRecoverableSnapshot: false,
       replayLimit,
       snapshotLimit,
     },
