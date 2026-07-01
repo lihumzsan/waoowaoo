@@ -47,10 +47,14 @@ describe('workspace canvas node presentation profiles', () => {
     })).toBe(473)
   })
 
-  it('keeps measured non-video-plan nodes at least their collapsed height', () => {
+  it('uses measured content height without keeping collapsed-height whitespace', () => {
     expect(resolveWorkspaceCanvasMeasuredNodeHeight({
       kind: 'editScreenplay',
       measuredHeight: 260,
-    })).toBe(380)
+    })).toBe(260)
+    expect(resolveWorkspaceCanvasMeasuredNodeHeight({
+      kind: 'shot',
+      measuredHeight: 312.2,
+    })).toBe(313)
   })
 })

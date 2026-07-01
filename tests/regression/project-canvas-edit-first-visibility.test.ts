@@ -4,6 +4,7 @@ import type { ProjectEditAssetRequirement, ProjectEditScreenplay, ProjectEditScr
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
+import { WORKSPACE_CANVAS_DEFAULT_NODE_SIZE } from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 function t(key: string, values?: Record<string, string | number>): string {
   if (!values) return key
@@ -203,6 +204,7 @@ describe('project canvas edit-first visibility', () => {
     const assetGroup = projection.nodes.find((node) => node.data.kind === 'editAssetGroup')
 
     expect(assetGroup?.data.editAssetGroupDetails?.assets.map((asset) => asset.name)).toEqual(['客厅'])
+    expect(assetGroup?.data.height).toBe(WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height)
     expect(projection.nodes.some((node) => node.id.startsWith('location-asset:'))).toBe(false)
     expect(projection.nodes.some((node) => node.data.kind === 'imageAsset')).toBe(false)
   })

@@ -34,9 +34,6 @@ import type {
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS,
-  WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y,
-  WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH,
   WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
@@ -92,7 +89,6 @@ const ROW_GAP_Y = 170
 const SHOT_GRID_COLUMNS = 5
 const SHOT_GRID_GAP_X = 44
 const SHOT_GRID_GAP_Y = 620
-const SHOT_NODE_HEIGHT = 560
 const ASSET_GROUP_Y_OFFSET = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -684,7 +680,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       id: assetGroupNodeId,
       position: layoutPosition(savedLayouts, assetGroupNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 + 420 + ASSET_GROUP_Y_OFFSET }),
       width: 720,
-      height: Math.max(300, Math.ceil(editScript.requirements.length / WORKSPACE_CANVAS_EDIT_ASSET_GRID_COLUMNS) * WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE.height + WORKSPACE_CANVAS_EDIT_ASSET_GRID_GAP_Y),
+      height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
       data: {
         projectId,
         episodeName,
@@ -859,7 +855,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           y: 460 + row * SHOT_GRID_GAP_Y,
         }),
         width: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.width,
-        height: SHOT_NODE_HEIGHT,
+        height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
         data: {
           projectId,
           episodeName,

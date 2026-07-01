@@ -4,6 +4,7 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
+import { WORKSPACE_CANVAS_DEFAULT_NODE_SIZE } from '@/features/project-workspace/canvas/node-presentation-profiles'
 
 function t(key: string): string {
   return key
@@ -110,5 +111,11 @@ describe('project canvas preserves business order', () => {
       .map((node) => node.id)
 
     expect(shotNodeIds).toEqual(['shot:panel-1', 'shot:panel-2'])
+    expect(projection.nodes
+      .filter((node) => node.data.kind === 'shot')
+      .map((node) => node.data.height)).toEqual([
+        WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+        WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+      ])
   })
 })

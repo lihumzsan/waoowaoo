@@ -362,14 +362,6 @@ function nodeBillingQuoteLabels(data: WorkspaceCanvasFlowNode['data']): readonly
     .filter((label, index, labels) => labels.indexOf(label) === index)
 }
 
-export function nodeNeedsActualHeightMeasurement(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'editScreenplay' || kind === 'editStyleBible' || kind === 'editScript' || kind === 'editShotExecutionPlan' || kind === 'editProcessGroup' || kind === 'editAssetGroup' || kind === 'videoPlan' || kind === 'bgmScore'
-}
-
-export function nodeFreezesMeasurementWhileRunning(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'videoPlan'
-}
-
 export async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
   await Promise.resolve(data.onAction?.(action, data.nodeId))
 }
@@ -2255,8 +2247,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!nodeId || !onMeasureNodeSize || !nodeNeedsActualHeightMeasurement(data.kind)) return undefined
-    if (data.isRunning === true && nodeFreezesMeasurementWhileRunning(data.kind)) return undefined
+    if (!nodeId || !onMeasureNodeSize) return undefined
     const element = measuredContentRef.current
     if (!element) return undefined
 
