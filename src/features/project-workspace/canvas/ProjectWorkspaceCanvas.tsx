@@ -69,7 +69,9 @@ import type {
 import GenerationSegmentArrangementModal from './GenerationSegmentArrangementModal'
 import {
   getWorkspaceCanvasNodePresentationProfile,
+  resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds,
   resolveWorkspaceCanvasMeasuredNodeHeight,
+  resolveWorkspaceCanvasNodeDisclosure,
   resolveWorkspaceCanvasNodeSize,
 } from './node-presentation-profiles'
 import {
@@ -266,7 +268,7 @@ function ProjectWorkspaceCanvasContent({
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
   const [nodeExpansionOverrides, setNodeExpansionOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
-  const defaultExpandedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -459,14 +461,14 @@ function ProjectWorkspaceCanvasContent({
   }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
   const toggleNodeExpanded = useCallback((nodeId: string) => {
     const anchorNode = reactFlow.getNode(nodeId)
+    if (anchorNode?.data.disclosure && !anchorNode.data.disclosure.canToggle) return
     if (anchorNode) {
       const nextAnchors = new Map(expansionAnchorNodePositionsRef.current)
       nextAnchors.set(nodeId, anchorNode.position)
       expansionAnchorNodePositionsRef.current = nextAnchors
     }
     setNodeExpansionOverrides((current) => {
-      const defaultExpanded = defaultExpandedNodeIdsRef.current.has(nodeId)
-      const currentExpanded = current.get(nodeId) ?? defaultExpanded
+      const currentExpanded = anchorNode?.data.disclosure?.effectiveExpanded ?? current.get(nodeId) ?? false
       const next = new Map(current)
       next.set(nodeId, !currentExpanded)
       return next
@@ -538,7 +540,6 @@ function ProjectWorkspaceCanvasContent({
     inputNodes: readonly WorkspaceCanvasFlowNode[],
     options?: WorkspaceNodeDynamicLayoutOptions,
   ) => {
-    const defaultExpandedNodeIds = new Set<string>()
     const baseNodes = preserveWorkspaceNodePositions(
       normalizeNodesToLayoutBasePositions(inputNodes),
       options?.preservedNodePositions,
@@ -555,15 +556,28 @@ function ProjectWorkspaceCanvasContent({
         },
       })
       const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
-      const defaultExpanded = node.data.defaultExpanded ?? profile.defaultExpanded
-      if (defaultExpanded) defaultExpandedNodeIds.add(node.id)
-      const expanded = nodeExpansionOverrides.get(node.id) ?? defaultExpanded
+      const patchedData = {
+        ...node.data,
+        ...runtimePatch,
+      }
+      const isStreaming = patchedData.streamPresentation?.isStreaming === true
+      const shouldCollapseCompletedStream = !isStreaming
+        && streamingDisclosureNodeIdsRef.current.has(node.id)
+        && profile.disclosure.kind === 'collapsible'
+        && profile.disclosure.collapseWhenStreamCompletes
+      const disclosure = resolveWorkspaceCanvasNodeDisclosure({
+        kind: patchedData.kind,
+        userExpandedOverride: shouldCollapseCompletedStream ? false : nodeExpansionOverrides.get(node.id),
+        defaultExpanded: patchedData.defaultExpanded,
+        isStreaming,
+      })
+      const expanded = disclosure.effectiveExpanded
       const size = resolveWorkspaceCanvasNodeSize({
-        kind: node.data.kind,
+        kind: patchedData.kind,
         expanded,
         collapsedSize: {
-          width: node.data.width,
-          height: node.data.height,
+          width: patchedData.width,
+          height: patchedData.height,
         },
       })
       return {
@@ -574,9 +588,9 @@ function ProjectWorkspaceCanvasContent({
           height: size.height,
         },
         data: {
-          ...node.data,
-          ...runtimePatch,
+          ...patchedData,
           focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
+          disclosure,
           expanded,
           expandedLayout: expanded ? profile.expandedLayout : undefined,
           onToggleExpanded: toggleNodeExpanded,
@@ -584,7 +598,6 @@ function ProjectWorkspaceCanvasContent({
         },
       }
     })
-    defaultExpandedNodeIdsRef.current = defaultExpandedNodeIds
     return composeWorkspaceCanvasLegacyLayout({
       nodes: nextNodes,
       model: buildWorkspaceCanvasLegacyLayoutModel(nextNodes, options),
@@ -786,6 +799,31 @@ function ProjectWorkspaceCanvasContent({
       preservedNodePositions: readCanvasManualNodePositions(),
     }))
   }, [attachNodeUiState, readCanvasManualNodePositions])
+
+  useEffect(() => {
+    const currentStreamingNodeIds = new Set<string>()
+    sourceNodes.forEach((node) => {
+      const disclosure = node.data.disclosure
+      if (disclosure?.isStreamingExpanded === true && disclosure.collapseWhenStreamCompletes) {
+        currentStreamingNodeIds.add(node.id)
+      }
+    })
+    const completedStreamingNodeIds = resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds({
+      previousStreamingNodeIds: streamingDisclosureNodeIdsRef.current,
+      currentStreamingNodeIds,
+    })
+    streamingDisclosureNodeIdsRef.current = currentStreamingNodeIds
+    if (completedStreamingNodeIds.length === 0) return
+
+    setNodeExpansionOverrides((current) => {
+      let changed = false
+      const next = new Map(current)
+      completedStreamingNodeIds.forEach((nodeId) => {
+        changed = next.delete(nodeId) || changed
+      })
+      return changed ? next : current
+    })
+  }, [sourceNodes])
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))

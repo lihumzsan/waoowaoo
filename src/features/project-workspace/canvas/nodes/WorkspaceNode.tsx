@@ -349,10 +349,6 @@ function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
   return data.isRunning === true
 }
 
-function nodeCanToggleDetails(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind !== 'analysis' && kind !== 'editShotExecutionPlan' && kind !== 'editAssetGroup'
-}
-
 function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
   return kind !== 'editRequiredAsset' && kind !== 'editScript'
 }
@@ -993,10 +989,12 @@ function EditPipelineStepContent({
   if (details.items.length === 0) {
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
-  const visibleItems = expanded ? details.items : details.items.slice(0, 3)
+  if (!expanded) {
+    return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  }
   return (
     <div className="space-y-2">
-      {visibleItems.map((item, index) => (
+      {details.items.map((item, index) => (
         <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
           <div className="flex items-center justify-between gap-2">
             <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</p>
@@ -1027,11 +1025,6 @@ function EditPipelineStepContent({
           ) : null}
         </section>
       ))}
-      {!expanded && details.items.length > visibleItems.length ? (
-        <p className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>
-          {labels('moreItems', { count: details.items.length - visibleItems.length })}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -1294,7 +1287,7 @@ function EditScriptContent({
       <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
     </div>
   )
-  const showShotGrid = expanded || data.streamPresentation?.isStreaming === true
+  const showShotGrid = expanded
   if (!showShotGrid) return summaryLine
 
   const cards: ShotGridCard[] = details.shots.map((shot) => {
@@ -1433,9 +1426,11 @@ function EditAssetGroupThumbnailCard({
 function EditAssetGroupContent({
   data,
   labels,
+  expanded,
 }: {
   readonly data: WorkspaceCanvasFlowNode['data']
   readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const onPreviewImage = useContext(WorkspaceNodeImagePreviewContext)
@@ -1463,8 +1458,22 @@ function EditAssetGroupContent({
     readonly assets: readonly WorkspaceCanvasEditAssetGroupItem[]
   }>
   const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
+  const characterCount = assetGroups.find((group) => group.key === 'character')?.assets.length ?? 0
+  const locationCount = assetGroups.find((group) => group.key === 'location')?.assets.length ?? 0
+  const summaryText = labels('editAssetGroupCompactSummary', {
+    characters: characterCount,
+    locations: locationCount,
+  })
+  const summaryLine = (
+    <div className="flex items-center gap-2.5 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+      <AppIcon name="usersRound" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+      <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
+    </div>
+  )
+  if (!expanded) return summaryLine
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+      {summaryLine}
       {renderSection(labels('description'), renderTextBlock(data.body))}
       <div className="space-y-4">
         {groupedAssets.map((group) => (
@@ -2115,17 +2124,16 @@ function NodeContent({
     case 'editRequiredAsset':
       return <EditAssetContent data={data} labels={labels} expanded={expanded} />
     case 'editAssetGroup':
-      return <EditAssetGroupContent data={data} labels={labels} />
+      return <EditAssetGroupContent data={data} labels={labels} expanded={expanded} />
   }
 }
 
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const measuredContentRef = useRef<HTMLDivElement | null>(null)
-  const expanded = data.expanded === true
+  const expanded = data.disclosure?.effectiveExpanded ?? (data.expanded === true)
   const hasSource = data.kind !== 'finalTimeline'
   const action = data.action
-  const canToggleDetails = nodeCanToggleDetails(data.kind)
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
   const tertiaryAction = data.tertiaryAction
@@ -2138,7 +2146,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
-  const showDetailsToggle = canToggleDetails && Boolean(data.onToggleExpanded)
+  const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)
   const showHeaderAction = Boolean(action && data.actionLabel && data.kind === 'editRequiredAsset')
   const showLargeTitle = data.kind !== 'shot'
   const isFocusHighlighted = data.focusHighlighted === true

@@ -356,6 +356,16 @@ export interface WorkspaceCanvasStreamPresentation {
   readonly revealedFieldCountByKey: Readonly<Record<string, number>>
 }
 
+export type WorkspaceCanvasNodeDisclosureMode = 'static' | 'collapsed' | 'expanded' | 'streaming'
+
+export interface WorkspaceCanvasNodeDisclosureState {
+  readonly canToggle: boolean
+  readonly effectiveExpanded: boolean
+  readonly mode: WorkspaceCanvasNodeDisclosureMode
+  readonly isStreamingExpanded: boolean
+  readonly collapseWhenStreamCompletes: boolean
+}
+
 export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly nodeId?: string
   readonly projectId?: string
@@ -374,6 +384,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly statusLabel: string
   readonly isRunning?: boolean
   readonly focusHighlighted?: boolean
+  readonly disclosure?: WorkspaceCanvasNodeDisclosureState
   readonly streamPresentation?: WorkspaceCanvasStreamPresentation
   readonly taskProgress?: TaskRuntimeStateLike | null
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]

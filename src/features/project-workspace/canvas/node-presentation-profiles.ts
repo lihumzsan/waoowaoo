@@ -1,4 +1,7 @@
-import type { WorkspaceCanvasNodeKind } from './node-canvas-types'
+import type {
+  WorkspaceCanvasNodeDisclosureState,
+  WorkspaceCanvasNodeKind,
+} from './node-canvas-types'
 
 export interface WorkspaceCanvasNodeSize {
   readonly width: number
@@ -6,12 +9,27 @@ export interface WorkspaceCanvasNodeSize {
 }
 
 export type WorkspaceCanvasNodeExpandedLayout = 'stack' | 'wide'
+export type WorkspaceCanvasNodeDisclosureProfile =
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'collapsible'
+      readonly forceExpandedWhileStreaming: boolean
+      readonly collapseWhenStreamCompletes: boolean
+    }
 
 export interface WorkspaceCanvasNodePresentationProfile {
   readonly collapsed: WorkspaceCanvasNodeSize
   readonly expanded?: WorkspaceCanvasNodeSize
   readonly expandedLayout: WorkspaceCanvasNodeExpandedLayout
   readonly defaultExpanded: boolean
+  readonly disclosure: WorkspaceCanvasNodeDisclosureProfile
+}
+
+const STATIC_NODE_DISCLOSURE: WorkspaceCanvasNodeDisclosureProfile = { kind: 'none' }
+const STREAM_AWARE_COLLAPSIBLE_DISCLOSURE: WorkspaceCanvasNodeDisclosureProfile = {
+  kind: 'collapsible',
+  forceExpandedWhileStreaming: true,
+  collapseWhenStreamCompletes: true,
 }
 
 export const WORKSPACE_CANVAS_DEFAULT_NODE_SIZE: WorkspaceCanvasNodeSize = {
@@ -67,31 +85,37 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STATIC_NODE_DISCLOSURE,
   },
   shot: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   imageAsset: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   videoClip: {
     collapsed: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   finalTimeline: {
     collapsed: WORKSPACE_CANVAS_FINAL_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editScreenplay: {
     collapsed: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editStylePreview: {
     collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
@@ -101,6 +125,7 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editStyleBible: {
     collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
@@ -110,22 +135,26 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editPipelineStep: {
     collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editProcessGroup: {
     collapsed: { width: 420, height: 200 },
     expanded: { width: 720, height: 560 },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editAssetGroup: {
     collapsed: { width: 720, height: 360 },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editScript: {
     collapsed: {
@@ -134,6 +163,7 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editShotExecutionPlan: {
     collapsed: {
@@ -142,16 +172,19 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   storyboardPanelGeneration: {
     collapsed: WORKSPACE_CANVAS_EDIT_PIPELINE_STEP_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   videoPlan: {
     collapsed: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   bgmScore: {
     collapsed: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
@@ -161,11 +194,13 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     },
     expandedLayout: 'wide',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
   editRequiredAsset: {
     collapsed: WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
     expandedLayout: 'stack',
     defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
 } satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodePresentationProfile>
 
@@ -183,6 +218,50 @@ export function resolveWorkspaceCanvasNodeSize(input: {
   const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
   if (input.expanded && profile.expanded) return profile.expanded
   return input.collapsedSize
+}
+
+export function resolveWorkspaceCanvasNodeDisclosure(input: {
+  readonly kind: WorkspaceCanvasNodeKind
+  readonly userExpandedOverride?: boolean
+  readonly defaultExpanded?: boolean
+  readonly isStreaming: boolean
+}): WorkspaceCanvasNodeDisclosureState {
+  const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
+  const disclosure = profile.disclosure
+  if (disclosure.kind === 'none') {
+    return {
+      canToggle: false,
+      effectiveExpanded: false,
+      mode: 'static',
+      isStreamingExpanded: false,
+      collapseWhenStreamCompletes: false,
+    }
+  }
+
+  const isStreamingExpanded = input.isStreaming && disclosure.forceExpandedWhileStreaming
+  const userExpanded = input.userExpandedOverride ?? input.defaultExpanded ?? profile.defaultExpanded
+  const effectiveExpanded = isStreamingExpanded || userExpanded
+  const mode = isStreamingExpanded
+    ? 'streaming'
+    : effectiveExpanded
+      ? 'expanded'
+      : 'collapsed'
+
+  return {
+    canToggle: !isStreamingExpanded,
+    effectiveExpanded,
+    mode,
+    isStreamingExpanded,
+    collapseWhenStreamCompletes: disclosure.collapseWhenStreamCompletes,
+  }
+}
+
+export function resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds(input: {
+  readonly previousStreamingNodeIds: ReadonlySet<string>
+  readonly currentStreamingNodeIds: ReadonlySet<string>
+}): readonly string[] {
+  return Array.from(input.previousStreamingNodeIds)
+    .filter((nodeId) => !input.currentStreamingNodeIds.has(nodeId))
 }
 
 export function resolveWorkspaceCanvasMeasuredNodeHeight(input: {
