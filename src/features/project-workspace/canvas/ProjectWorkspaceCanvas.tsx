@@ -61,6 +61,7 @@ import {
   WORKSPACE_CANVAS_MAX_ZOOM,
   WORKSPACE_CANVAS_MIN_ZOOM,
 } from './canvasViewport'
+import { isWorkspaceCanvasWheelLockedTarget } from './canvas-scroll-lock'
 import { workspaceNodeTypes } from './nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowEdge,
@@ -827,6 +828,8 @@ function ProjectWorkspaceCanvasContent({
   }, [])
 
   const applyWheelZoom = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (isWorkspaceCanvasWheelLockedTarget(event.target)) return
+
     const bounds = canvasRef.current?.getBoundingClientRect()
     if (!bounds) return
 

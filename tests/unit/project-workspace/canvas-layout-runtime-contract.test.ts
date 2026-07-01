@@ -123,13 +123,19 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('locks scrollable node regions and wraps read-only prompts vertically', () => {
+    const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
     const scrollLock = readRepoFile('src/features/project-workspace/canvas/canvas-scroll-lock.ts')
     const previewDetail = readRepoFile('src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx')
     const arrangementModal = readRepoFile('src/features/project-workspace/canvas/GenerationSegmentArrangementModal.tsx')
 
     expect(scrollLock).toContain('function workspaceCanvasScrollableRegionProps')
+    expect(scrollLock).toContain('function isWorkspaceCanvasWheelLockedTarget')
+    expect(scrollLock).toContain('WORKSPACE_CANVAS_SCROLL_LOCK_SELECTOR')
+    expect(scrollLock).toContain("'data-workspace-canvas-scroll-lock': 'true'")
     expect(scrollLock).toContain('onWheelCapture: (event) => event.stopPropagation()')
+    expect(canvas).toContain('isWorkspaceCanvasWheelLockedTarget(event.target)')
+    expect(canvas.indexOf('isWorkspaceCanvasWheelLockedTarget(event.target)')).toBeLessThan(canvas.indexOf('event.preventDefault()'))
     expect(node).toContain('<WorkspaceCanvasMotionPresence visible={open} motionKey="shot-prompt">')
     expect(node).toContain('{...workspaceCanvasScrollableRegionProps<HTMLPreElement>()}')
     expect(node).toContain('aria-expanded={open}')
