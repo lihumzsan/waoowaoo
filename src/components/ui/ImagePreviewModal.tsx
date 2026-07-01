@@ -80,8 +80,8 @@ export default function ImagePreviewModal({ imageUrl, onClose }: ImagePreviewMod
         <MediaImageWithLoading
           src={displayImageUrl}
           alt={t('preview')}
-          containerClassName="max-w-full max-h-[90vh]"
-          className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          containerClassName="max-w-full max-h-[90vh] !bg-transparent"
+          className="block max-w-full max-h-[90vh] object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         />
       </div>

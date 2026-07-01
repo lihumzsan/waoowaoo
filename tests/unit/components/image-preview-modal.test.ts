@@ -15,6 +15,17 @@ describe('image preview modal', () => {
     expect(source).not.toContain('onClick={onClose}\n      style={{ margin: 0, padding: 0 }}')
   })
 
+  it('renders the enlarged image without a rounded mask or background edge', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/components/ui/ImagePreviewModal.tsx'),
+      'utf8',
+    )
+
+    expect(source).toContain('containerClassName="max-w-full max-h-[90vh] !bg-transparent"')
+    expect(source).toContain('className="block max-w-full max-h-[90vh] object-contain shadow-2xl"')
+    expect(source).not.toContain('object-contain rounded-lg shadow-2xl')
+  })
+
   it('is reused by canvas detail images instead of local preview surfaces', () => {
     const editScriptPreviewSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx'),
