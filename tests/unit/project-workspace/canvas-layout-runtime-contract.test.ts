@@ -45,6 +45,14 @@ describe('workspace canvas layout runtime contract', () => {
     expect(node).toContain('workspace-canvas-soft-reveal whitespace-pre-wrap')
   })
 
+  it('applies reveal motion to expanded screenplay and edit table content roots', () => {
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+
+    expect(node).toContain("nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')")
+    expect(node).toContain("nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-2.5')")
+    expect(node).toContain('nodeContentInteractionClass(data, `workspace-canvas-soft-reveal space-y-3 ${streamClassName}`)')
+  })
+
   it('keeps measurement local and removes collision failure flow from the canvas', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
 

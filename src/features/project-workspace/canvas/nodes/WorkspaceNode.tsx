@@ -1135,7 +1135,7 @@ function EditPipelineStepContent({
     return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   }
   return (
-    <div className="space-y-2">
+    <div className="workspace-canvas-soft-reveal space-y-2">
       {details.items.map((item, index) => (
         <section key={`${item.title}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
           <div className="flex items-center justify-between gap-2">
@@ -1484,7 +1484,7 @@ function EditScriptContent({
   })
 
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
       {summaryLine}
       <button
         type="button"
@@ -1584,7 +1584,7 @@ function EditShotExecutionPlanContent({
   })
 
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-2.5')}>
+    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-2.5')}>
       <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
     </div>
   )
@@ -1758,7 +1758,7 @@ function EditAssetGroupContent({
   }>
   const groupedAssets = assetGroups.filter((group) => group.assets.length > 0)
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
       <div className="space-y-4">
         {groupedAssets.map((group) => (
           <section key={group.key} className="space-y-2.5">
@@ -1873,7 +1873,7 @@ function StyleBibleContent({
     },
   ]
   return (
-    <div className={nodeContentInteractionClass(data, 'space-y-3')}>
+    <div className={nodeContentInteractionClass(data, 'workspace-canvas-soft-reveal space-y-3')}>
       {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
       {renderTextSection(labels('styleSummary'), details.styleSummary)}
       {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
@@ -1936,7 +1936,7 @@ function EditScreenplayContent({
   }
 
   return (
-    <div className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
+    <div className={nodeContentInteractionClass(data, `workspace-canvas-soft-reveal space-y-3 ${streamClassName}`)}>
       {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
       {parsed.characters.length > 0 ? (
         <div className="space-y-1.5">
