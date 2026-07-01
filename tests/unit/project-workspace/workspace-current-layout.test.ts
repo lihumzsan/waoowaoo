@@ -74,6 +74,13 @@ describe('workspace current layout', () => {
     expect(canvas).not.toContain('bottom-full')
   })
 
+  it('uses the episode canvas payload as the edit script display source', () => {
+    const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
+
+    expect(canvas).toContain('storyboards, editScript, finalVideo, videoGroups')
+    expect(canvas).not.toContain('useProjectEditScript')
+  })
+
   it('keeps project config modal messages complete for the workspace settings modal', () => {
     const zhConfigModal = readRepoFile('messages/zh/configModal.json')
     const enConfigModal = readRepoFile('messages/en/configModal.json')

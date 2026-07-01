@@ -29,7 +29,7 @@ import {
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectContext, useProjectEditScreenplay, useProjectEditScript, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
+import { useProjectContext, useProjectEditScreenplay, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -254,10 +254,9 @@ function ProjectWorkspaceCanvasContent({
   const billingT = useTranslations('assistantAgent')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, storyboards, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const { episodeName, storyboards, editScript, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
-  const { data: editScript } = useProjectEditScript(projectId, episodeId ?? null)
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()

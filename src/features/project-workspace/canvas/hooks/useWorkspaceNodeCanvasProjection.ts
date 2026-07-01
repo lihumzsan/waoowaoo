@@ -636,10 +636,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
       || (editScript ? hasStreamTarget(streamTargets, 'editScript', editScript.id) : false)
       || editScriptPending
-    const editScriptPresentation = editScriptRunning || !editScript
+    const editScriptPresentation = editScriptRunning
       ? workspaceCanvasRunningPresentation(phaseLabels)
-      : artifactPresentationFromTaskBackedStatus(editScript.status, phaseLabels)
-        ?? workspaceCanvasFailedPresentation(phaseLabels)
+      : editScript
+        ? artifactPresentationFromTaskBackedStatus(editScript.status, phaseLabels)
+          ?? workspaceCanvasFailedPresentation(phaseLabels)
+        : {
+            statusLabel: translate('status.pending'),
+            isRunning: false,
+          }
     const editScriptDetails = editScript
       ? {
           screenplayText: editScript.screenplayText,

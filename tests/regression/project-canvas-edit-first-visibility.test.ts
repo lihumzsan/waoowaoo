@@ -275,6 +275,26 @@ describe('project canvas edit-first visibility', () => {
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
   })
 
+  it('does not treat an unloaded edit script as a running generation on completed workflows', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [],
+      editFirstWorkflow: workflow('completed'),
+      editScreenplay: editScreenplay(),
+      savedLayouts: [],
+      translate: t,
+    })
+    const editScriptNode = projection.nodes.find((node) => node.data.kind === 'editScript')
+
+    expect(editScriptNode).toBeDefined()
+    expect(editScriptNode?.data.isRunning).toBe(false)
+    expect(editScriptNode?.data.artifactPhase).toBeUndefined()
+    expect(editScriptNode?.data.statusLabel).toBe('status.pending')
+    expect(editScriptNode?.data.body).toBe('nodes.editScript.pendingBody')
+  })
+
   it('renders required assets without rendering the shot execution plan before asset review advances', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
