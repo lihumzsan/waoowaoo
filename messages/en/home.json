@@ -3,6 +3,7 @@
   "subtitle": "Describe your story and let AI generate cinematic short dramas",
   "inputPlaceholder": "Enter your story idea, novel excerpt, or script outline...",
   "defaultProjectName": "New Project {timestamp}",
+  "createFailed": "Failed to create project. Please try again.",
   "startCreation": "Start Creating",
   "recentProjects": "Recent Projects",
   "viewAll": "View All Projects",

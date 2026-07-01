@@ -3,6 +3,7 @@
   "subtitle": "描述你想要创作的故事，AI 为你智能生成影视短剧",
   "inputPlaceholder": "输入你的故事创意、小说片段或剧本大纲...",
   "defaultProjectName": "新项目 {timestamp}",
+  "createFailed": "项目创建失败，请稍后重试",
   "startCreation": "开始创作",
   "recentProjects": "最近项目",
   "viewAll": "查看全部项目",
