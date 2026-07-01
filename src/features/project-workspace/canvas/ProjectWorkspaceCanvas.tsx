@@ -19,6 +19,7 @@ import {
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
+import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
 import {
   isTaskRuntimeRunningPhase,
   taskRuntimeStateMapSignature,
@@ -209,7 +210,7 @@ function attachWorkspaceCanvasBillingPreviewLabels(params: {
   readonly projectId?: string | null
   readonly episodeId?: string | null
   readonly nodes: readonly WorkspaceCanvasFlowNode[]
-  readonly previews: ReadonlyMap<string, string>
+  readonly previews: ReadonlyMap<string, BillingActionQuotePreview>
 }): WorkspaceCanvasFlowNode[] {
   return params.nodes.map((node) => {
     const actionKey = workspaceCanvasActionBillingPreviewKey({
@@ -227,17 +228,17 @@ function attachWorkspaceCanvasBillingPreviewLabels(params: {
       episodeId: params.episodeId,
       action: node.data.tertiaryAction,
     })
-    const actionBillingQuoteLabel = actionKey ? params.previews.get(actionKey) : undefined
-    const secondaryActionBillingQuoteLabel = secondaryActionKey ? params.previews.get(secondaryActionKey) : undefined
-    const tertiaryActionBillingQuoteLabel = tertiaryActionKey ? params.previews.get(tertiaryActionKey) : undefined
-    if (!actionBillingQuoteLabel && !secondaryActionBillingQuoteLabel && !tertiaryActionBillingQuoteLabel) return node
+    const actionBillingQuote = actionKey ? params.previews.get(actionKey) : undefined
+    const secondaryActionBillingQuote = secondaryActionKey ? params.previews.get(secondaryActionKey) : undefined
+    const tertiaryActionBillingQuote = tertiaryActionKey ? params.previews.get(tertiaryActionKey) : undefined
+    if (!actionBillingQuote && !secondaryActionBillingQuote && !tertiaryActionBillingQuote) return node
     return {
       ...node,
       data: {
         ...node.data,
-        ...(actionBillingQuoteLabel ? { actionBillingQuoteLabel } : {}),
-        ...(secondaryActionBillingQuoteLabel ? { secondaryActionBillingQuoteLabel } : {}),
-        ...(tertiaryActionBillingQuoteLabel ? { tertiaryActionBillingQuoteLabel } : {}),
+        ...(actionBillingQuote ? { actionBillingQuote } : {}),
+        ...(secondaryActionBillingQuote ? { secondaryActionBillingQuote } : {}),
+        ...(tertiaryActionBillingQuote ? { tertiaryActionBillingQuote } : {}),
       },
     }
   })

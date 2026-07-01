@@ -132,6 +132,7 @@
     "reject": "拒绝",
     "confirmationRequired": "需要确认",
     "billingQuotePreview": "即将提交的生成任务计费预览",
+    "billingTaskCount": "{count} 个媒体生成任务",
     "billingQuoteWithCredits": "{count} 个媒体生成任务 · 预计消耗 {cost} credits",
     "billingQuoteWithoutCredits": "将提交 {count} 个媒体生成任务",
     "billingReceiptWithCredits": "已冻结 credits：{cost}",

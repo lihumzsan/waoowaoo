@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
+import BillingActionButton from '@/components/billing/BillingActionButton'
 import { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
 import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
@@ -353,15 +354,6 @@ function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boo
   return kind !== 'editRequiredAsset' && kind !== 'editScript'
 }
 
-function nodeBillingQuoteLabels(data: WorkspaceCanvasFlowNode['data']): readonly string[] {
-  return [
-    data.actionBillingQuoteLabel,
-    data.secondaryActionBillingQuoteLabel,
-    data.tertiaryActionBillingQuoteLabel,
-  ].filter((label): label is string => typeof label === 'string' && label.trim().length > 0)
-    .filter((label, index, labels) => labels.indexOf(label) === index)
-}
-
 export async function dispatchNodeAction(data: WorkspaceCanvasFlowNode['data'], action: WorkspaceCanvasNodeAction) {
   await Promise.resolve(data.onAction?.(action, data.nodeId))
 }
@@ -434,6 +426,31 @@ function videoPlanModel(data: WorkspaceCanvasFlowNode['data']): string {
 
 function LoadingSpinner() {
   return <AppIcon name="loader" className="h-4 w-4 animate-spin" />
+}
+
+function nodeActionIconName(action: WorkspaceCanvasNodeAction): AppIconName {
+  switch (action.type) {
+    case 'generate_image':
+      return 'image'
+    case 'generate_storyboard_grid_images':
+      return 'grid'
+    case 'generate_video':
+    case 'generate_video_group':
+    case 'generate_all_videos':
+    case 'generate_asset_reference_video':
+      return 'video'
+    case 'generate_bgm_score':
+      return 'audioWave'
+    case 'render_final_video':
+      return 'film'
+    case 'generate_edit_assets':
+    case 'generate_edit_asset':
+      return 'package'
+    case 'regenerate_edit_asset_image':
+      return 'refresh'
+    default:
+      return 'arrowRight'
+  }
 }
 
 function editAssetPlaceholderIconName(kind: WorkspaceCanvasEditAssetGroupItem['kind']): AppIconName {
@@ -1616,18 +1633,17 @@ function EditAssetGroupContent({
               </button>
             ) : null}
             {current.action && current.actionLabel ? (
-              <button
+              <BillingActionButton
                 type="button"
-                className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                tone="secondary"
+                icon={nodeActionIconName(current.action)}
+                label={current.actionLabel}
                 disabled={current.isRunning}
                 onClick={(event) => {
                   event.stopPropagation()
                   if (current.action && !current.isRunning) data.onAction?.(current.action, data.nodeId)
                 }}
-              >
-                <AppIcon name="refresh" className="h-3.5 w-3.5" />
-                {current.actionLabel}
-              </button>
+              />
             ) : null}
           </div>
         </section>
@@ -2221,13 +2237,16 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
   const tertiaryAction = data.tertiaryAction
-  const billingQuoteLabels = nodeBillingQuoteLabels(data)
   const secondaryActionIcon: AppIconName = secondaryAction?.type === 'open_video_block_arrangement'
     ? 'link'
-    : 'externalLink'
+    : secondaryAction
+      ? nodeActionIconName(secondaryAction)
+      : 'externalLink'
   const tertiaryActionIcon: AppIconName = tertiaryAction?.type === 'generate_storyboard_grid_images'
     ? 'grid'
-    : 'externalLink'
+    : tertiaryAction
+      ? nodeActionIconName(tertiaryAction)
+      : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
   const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)
@@ -2294,17 +2313,17 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {showHeaderAction && action && data.actionLabel ? (
-                <button
+                <BillingActionButton
                   type="button"
-                  className="nodrag inline-flex items-center gap-1.5 rounded-[14px] bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  icon={nodeActionIconName(action)}
+                  label={data.actionLabel}
+                  quote={data.actionBillingQuote}
+                  className="py-2"
                   disabled={data.actionDisabled === true || isRunning}
                   onClick={() => {
                     if (!isRunning) data.onAction?.(action, data.nodeId)
                   }}
-                >
-                  <AppIcon name="refresh" className="h-3.5 w-3.5" />
-                  {data.actionLabel}
-                </button>
+                />
               ) : null}
               {showStatusBadge ? (
                 <span className={`${SELECTABLE_TEXT_CLASS} inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${isRunning ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-white text-[var(--glass-text-secondary)]'}`}>
@@ -2327,11 +2346,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                   <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs text-[var(--glass-text-tertiary)]`}>
                     {data.kind === 'editRequiredAsset' ? '' : data.meta}
                   </p>
-                  {billingQuoteLabels.length > 0 ? (
-                    <p className={`${SELECTABLE_TEXT_CLASS} mt-1 truncate text-[11px] font-medium text-[var(--glass-tone-info-fg)]`}>
-                      {billingQuoteLabels.join(' · ')}
-                    </p>
-                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {showDetailsToggle ? (
@@ -2348,43 +2362,43 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                     </button>
                   ) : null}
                   {action && data.actionLabel && !showHeaderAction ? (
-                    <button
+                    <BillingActionButton
                       type="button"
-                      className="nodrag inline-flex items-center gap-1.5 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      icon={nodeActionIconName(action)}
+                      label={data.actionLabel}
+                      quote={data.actionBillingQuote}
+                      loading={isRunning}
                       disabled={data.actionDisabled === true || isRunning}
                       onClick={() => {
                         if (!isRunning) data.onAction?.(action, data.nodeId)
                       }}
-                    >
-                      {isRunning ? <LoadingSpinner /> : <AppIcon name="arrowRight" className="h-3.5 w-3.5" />}
-                      {data.actionLabel}
-                    </button>
+                    />
                   ) : null}
                   {secondaryAction && data.secondaryActionLabel ? (
-                    <button
+                    <BillingActionButton
                       type="button"
-                      className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      tone="secondary"
+                      icon={secondaryActionIcon}
+                      label={data.secondaryActionLabel}
+                      quote={data.secondaryActionBillingQuote}
                       disabled={data.actionDisabled === true || isRunning}
                       onClick={() => {
                         if (!isRunning) data.onAction?.(secondaryAction, data.nodeId)
                       }}
-                    >
-                      <AppIcon name={secondaryActionIcon} className="h-3.5 w-3.5" />
-                      {data.secondaryActionLabel}
-                    </button>
+                    />
                   ) : null}
                   {tertiaryAction && data.tertiaryActionLabel ? (
-                    <button
+                    <BillingActionButton
                       type="button"
-                      className="nodrag inline-flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      tone="secondary"
+                      icon={tertiaryActionIcon}
+                      label={data.tertiaryActionLabel}
+                      quote={data.tertiaryActionBillingQuote}
                       disabled={data.actionDisabled === true || isRunning}
                       onClick={() => {
                         if (!isRunning) data.onAction?.(tertiaryAction, data.nodeId)
                       }}
-                    >
-                      <AppIcon name={tertiaryActionIcon} className="h-3.5 w-3.5" />
-                      {data.tertiaryActionLabel}
-                    </button>
+                    />
                   ) : null}
                 </div>
               </div>

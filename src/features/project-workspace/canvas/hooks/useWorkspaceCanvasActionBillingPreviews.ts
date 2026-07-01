@@ -4,9 +4,10 @@ import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { buildBatchVideoGenerationPlanRequest } from '@/lib/query/media-operation-plan-input'
 import {
-  buildOperationPlanBillingText,
+  buildOperationPlanBillingPreview,
   fetchOperationPlanView,
 } from '@/lib/query/operation-plan-client'
+import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
 import { queryKeys } from '@/lib/query/keys'
 import type {
   WorkspaceCanvasFlowNode,
@@ -231,7 +232,7 @@ export function useWorkspaceCanvasActionBillingPreviews({
   nodes,
   withCredits,
   withoutCredits,
-}: WorkspaceCanvasActionBillingPreviewParams): ReadonlyMap<string, string> {
+}: WorkspaceCanvasActionBillingPreviewParams): ReadonlyMap<string, BillingActionQuotePreview> {
   const requests = useMemo(
     () => projectId
       ? collectActionPlanRequests({ projectId, episodeId, nodes })
@@ -256,16 +257,16 @@ export function useWorkspaceCanvasActionBillingPreviews({
   })
 
   return useMemo(() => {
-    const previews = new Map<string, string>()
+    const previews = new Map<string, BillingActionQuotePreview>()
     requests.forEach((request, index) => {
       const plan = results[index]?.data
       if (!plan) return
-      const label = buildOperationPlanBillingText({
+      const preview = buildOperationPlanBillingPreview({
         plan,
         withCredits,
         withoutCredits,
       })
-      if (label) previews.set(request.cacheKey, label)
+      if (preview) previews.set(request.cacheKey, preview)
     })
     return previews
   }, [requests, results, withCredits, withoutCredits])

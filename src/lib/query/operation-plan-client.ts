@@ -1,4 +1,8 @@
 import { apiFetch } from '@/lib/api-fetch'
+import {
+  buildBillingActionQuotePreview,
+  type BillingActionQuotePreview,
+} from '@/lib/billing/action-quote-preview'
 import type { OperationPlanView } from '@/lib/operations/planning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,15 +63,13 @@ export function buildOperationPlanBillingText(params: {
   withCredits: (values: { count: number; cost: number }) => string
   withoutCredits: (values: { count: number }) => string
 }): string | null {
-  const quote = params.plan.quote
-  if (!quote.billable || quote.mediaTaskCount <= 0) return null
-  if (quote.showCredits && typeof quote.totalMaxFrozenCost === 'number') {
-    return params.withCredits({
-      count: quote.mediaTaskCount,
-      cost: quote.totalMaxFrozenCost,
-    })
-  }
-  return params.withoutCredits({
-    count: quote.mediaTaskCount,
-  })
+  return buildOperationPlanBillingPreview(params)?.fullLabel ?? null
+}
+
+export function buildOperationPlanBillingPreview(params: {
+  plan: OperationPlanView
+  withCredits: (values: { count: number; cost: number }) => string
+  withoutCredits: (values: { count: number }) => string
+}): BillingActionQuotePreview | null {
+  return buildBillingActionQuotePreview(params)
 }

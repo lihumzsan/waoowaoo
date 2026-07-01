@@ -17,6 +17,8 @@ import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProg
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
+import BillingActionButton from '@/components/billing/BillingActionButton'
+import { buildBillingActionQuotePreviewFromQuote } from '@/lib/billing/action-quote-preview'
 import type {
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
@@ -152,21 +154,26 @@ function BillingQuoteBlock(props: {
   quote: OperationPlanView['quote'] | null
 }) {
   const t = useTranslations('assistantAgent')
-  const quote = props.quote
-  const quoteText = quote?.billable === true && quote.mediaTaskCount > 0
-    ? quote.showCredits && typeof quote.totalMaxFrozenCost === 'number'
-      ? t('cards.billingQuoteWithCredits', {
-        count: quote.mediaTaskCount,
-        cost: quote.totalMaxFrozenCost,
-      })
-      : t('cards.billingQuoteWithoutCredits', {
-        count: quote.mediaTaskCount,
-      })
-    : null
-  if (!quoteText) return null
+  if (!props.quote) return null
+  const preview = buildBillingActionQuotePreviewFromQuote({
+    quote: props.quote,
+    withCredits: (values) => t('cards.billingQuoteWithCredits', values),
+    withoutCredits: (values) => t('cards.billingQuoteWithoutCredits', values),
+  })
+  if (!preview) return null
   return (
-    <div className="mt-2 rounded-lg border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-muted)] px-2.5 py-2 leading-5 text-[var(--glass-text-primary)]">
-      {quoteText}
+    <div className="mt-4 flex items-center gap-3 text-xs">
+      <span className="shrink-0 tabular-nums text-[var(--glass-text-tertiary)]">
+        {t('cards.billingTaskCount', { count: preview.mediaTaskCount })}
+      </span>
+      <span className="h-px flex-1 bg-slate-200" />
+      <span
+        className="inline-flex shrink-0 items-center gap-1 font-semibold tabular-nums text-[var(--glass-text-primary)]"
+        title={preview.fullLabel}
+      >
+        {preview.costLabel ?? preview.fullLabel}
+        {preview.costLabel ? <AppIcon name="coins" className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> : null}
+      </span>
     </div>
   )
 }
@@ -188,14 +195,15 @@ export function ConfirmationActionCard(props: {
       <div className="mt-1 leading-5">{props.subtitle}</div>
       <BillingQuoteBlock quote={props.operationPlan?.quote ?? null} />
       <div className="mt-3 flex gap-2">
-        <button
+        <BillingActionButton
           type="button"
-          className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700"
+          icon="arrowRight"
+          label={props.confirmPending ? t('cards.confirmRunning') : t('cards.confirmContinue')}
+          loading={props.confirmPending}
+          className="flex-1 rounded-xl py-2 text-sm"
           onClick={() => { void props.onConfirm() }}
           disabled={props.confirmPending}
-        >
-          {props.confirmPending ? t('cards.confirmRunning') : t('cards.confirmContinue')}
-        </button>
+        />
         <button
           type="button"
           className="flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"

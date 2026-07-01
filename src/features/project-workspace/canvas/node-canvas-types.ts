@@ -5,6 +5,7 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
 import type { WorkspaceCanvasArtifactPhase } from './artifact-phase'
 
 export type WorkspaceCanvasNodeKind =
@@ -396,13 +397,13 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   }
   readonly actionLabel?: string
   readonly action?: WorkspaceCanvasNodeAction
-  readonly actionBillingQuoteLabel?: string
+  readonly actionBillingQuote?: BillingActionQuotePreview
   readonly secondaryActionLabel?: string
   readonly secondaryAction?: WorkspaceCanvasNodeAction
-  readonly secondaryActionBillingQuoteLabel?: string
+  readonly secondaryActionBillingQuote?: BillingActionQuotePreview
   readonly tertiaryActionLabel?: string
   readonly tertiaryAction?: WorkspaceCanvasNodeAction
-  readonly tertiaryActionBillingQuoteLabel?: string
+  readonly tertiaryActionBillingQuote?: BillingActionQuotePreview
   readonly actionDisabled?: boolean
   readonly onAction?: WorkspaceCanvasNodeActionHandler
   readonly expanded?: boolean
