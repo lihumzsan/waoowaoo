@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
+import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import type { WorkspaceCanvasEditScriptDetails } from '../node-canvas-types'
 
 interface EditScriptPreviewDetailProps {
@@ -281,7 +282,10 @@ export default function EditScriptPreviewDetail({
                       {detailsExpanded ? t('actions.collapsePreviewDetails') : t('actions.expandPreviewDetails')}
                     </button>
                     {detailsExpanded ? (
-                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
+                      <div
+                        className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2"
+                        {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
+                      >
                         <div className="grid gap-3 md:grid-cols-2">
                           <PromptBlock title={t('fields.imagePrompt')} value={activeShot.imagePrompt} emptyText={t('empty.noImagePrompt')} />
                           <PromptBlock title={t('fields.scene')} value={activeShot.sceneName} emptyText={t('empty.noPreviewShot')} />
@@ -303,7 +307,10 @@ export default function EditScriptPreviewDetail({
 
           <div className="shrink-0">
             <DetailSection title={t('sections.editScriptTimeline')}>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div
+                className="flex gap-2 overflow-x-auto pb-1"
+                {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
+              >
                 {shots.map((shot) => {
                   const active = activeShot?.shotNumber === shot.shotNumber
                   return (

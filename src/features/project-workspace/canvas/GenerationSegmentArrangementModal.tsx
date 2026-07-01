@@ -8,6 +8,7 @@ import { AppIcon } from '@/components/ui/icons'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import { readProjectEditScriptRequestErrorCode } from '@/lib/query/project-edit-script-error'
 import type { ProjectEditScript, ProjectPanel, ProjectStoryboard } from '@/types/project'
+import { workspaceCanvasScrollableRegionProps } from './canvas-scroll-lock'
 
 const MAX_SEGMENT_DURATION_SEC = 15
 const MAX_SEGMENT_SHOT_COUNT = 9
@@ -296,7 +297,10 @@ export default function GenerationSegmentArrangementModal({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-5 app-scrollbar">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-5 app-scrollbar"
+          {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
+        >
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             {visibleSegmentIndexes.map((segmentIndex) => {
               const segment = draftSegments[segmentIndex]
@@ -326,7 +330,10 @@ export default function GenerationSegmentArrangementModal({
                     </span>
                   </div>
 
-                  <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 app-scrollbar">
+                  <div
+                    className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 app-scrollbar"
+                    {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
+                  >
                     {segment.shotNumbers.map((shotNumber, shotIndex) => {
                       const shot = shotViewByNumber.get(shotNumber)
                       const isFirstShot = shotIndex === 0

@@ -116,9 +116,30 @@ describe('workspace canvas layout runtime contract', () => {
     expect(node).toContain('visible={Boolean(current)}')
     expect(node).toContain('visible={isOpen && hasText(asset.description)}')
     expect(node).toContain('visible={on}')
+    expect(node).toContain('visible={open}')
     expect(node).toContain("motionKey={activeCard?.key ?? 'none'}")
     expect(node).toContain("motionKey={current?.key ?? 'none'}")
     expect(node).toContain("motionKey={current?.name ?? 'none'}")
+  })
+
+  it('locks scrollable node regions and wraps read-only prompts vertically', () => {
+    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const scrollLock = readRepoFile('src/features/project-workspace/canvas/canvas-scroll-lock.ts')
+    const previewDetail = readRepoFile('src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx')
+    const arrangementModal = readRepoFile('src/features/project-workspace/canvas/GenerationSegmentArrangementModal.tsx')
+
+    expect(scrollLock).toContain('function workspaceCanvasScrollableRegionProps')
+    expect(scrollLock).toContain('onWheelCapture: (event) => event.stopPropagation()')
+    expect(node).toContain('<WorkspaceCanvasMotionPresence visible={open} motionKey="shot-prompt">')
+    expect(node).toContain('{...workspaceCanvasScrollableRegionProps<HTMLPreElement>()}')
+    expect(node).toContain('aria-expanded={open}')
+    expect(node).toContain('overflow-y-auto')
+    expect(node).toContain('overflow-x-hidden')
+    expect(node).toContain('whitespace-pre-wrap')
+    expect(node).toContain('[overflow-wrap:anywhere]')
+    expect(node).not.toContain('max-h-56 overflow-auto')
+    expect(previewDetail).toContain('{...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}')
+    expect(arrangementModal).toContain('{...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}')
   })
 
   it('requires every expanded content function to use canvas motion presence', () => {

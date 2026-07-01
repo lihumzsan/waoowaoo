@@ -11,6 +11,7 @@ import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
+import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
 import {
@@ -595,7 +596,6 @@ function ShotMetaChips({
   return (
     <div className="flex flex-wrap gap-1.5">
       <ShotMetaAttrChip icon="crosshair" label={labels('shotType')} value={details.shotType} />
-      <ShotMetaAttrChip icon="mapPin" label={labels('location')} value={details.location} />
       {details.characters.map((character) => (
         <ShotMetaTagChip
           key={`character:${character.name}:${character.appearance ?? ''}`}
@@ -603,101 +603,46 @@ function ShotMetaChips({
           text={character.appearance ? `${character.name} / ${character.appearance}` : character.name}
         />
       ))}
-      {details.props.map((prop) => (
-        <ShotMetaTagChip key={`prop:${prop}`} icon="cube" text={prop} />
-      ))}
+      <ShotMetaAttrChip icon="mapPin" label={labels('location')} value={details.location} />
     </div>
   )
 }
 
-function ShotImagePromptEditor({
-  data,
+// 最终提示词降级为只读折叠：默认收起，展开也不可编辑（imagePrompt 是 AI 依据镜头参数合成的机器产物）。
+function ShotPromptDisclosure({
+  details,
   labels,
-  value,
 }: {
-  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly details: WorkspaceCanvasShotDetails
   readonly labels: ReturnType<typeof useTranslations>
-  readonly value: string | null | undefined
 }) {
-  const onSave = panelPromptSaveHandler(data, 'imagePrompt')
-  const [draft, setDraft] = useState(value ?? '')
-  const [status, setStatus] = useState<PromptSaveStatus>('idle')
-
-  useEffect(() => {
-    setDraft(value ?? '')
-    setStatus('idle')
-  }, [value])
-
-  const normalizedDraft = draft.trim()
-  const normalizedValue = (value ?? '').trim()
-  const canSave = Boolean(onSave) && normalizedDraft.length > 0 && normalizedDraft !== normalizedValue
-
-  const handleSave = async () => {
-    if (!onSave || !canSave) return
-    setStatus('saving')
-    try {
-      await onSave(normalizedDraft)
-      setStatus('saved')
-    } catch {
-      setStatus('failed')
-    }
-  }
+  const [open, setOpen] = useState(false)
+  if (!hasText(details.imagePrompt)) return null
 
   return (
-    <section
-      className="nodrag nowheel flex flex-col rounded-[18px] border border-slate-200 bg-slate-50"
-      onPointerDownCapture={(event) => event.stopPropagation()}
-      onWheelCapture={(event) => event.stopPropagation()}
-      onKeyDownCapture={(event) => event.stopPropagation()}
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-3 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <AppIcon name="sparkles" className="h-4 w-4 shrink-0 text-[var(--glass-text-secondary)]" />
-          <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm font-semibold text-[var(--glass-text-primary)]`}>
-            {labels('fullFinalPrompt')}
-          </p>
-        </div>
-        {canSave || status !== 'idle' ? (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              className="nodrag rounded-[10px] border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[var(--glass-text-secondary)] transition hover:bg-slate-50"
-              disabled={status === 'saving'}
-              onClick={() => {
-                setDraft(value ?? '')
-                setStatus('idle')
-              }}
-            >
-              {labels('cancelEdit')}
-            </button>
-            <button
-              type="button"
-              className="nodrag rounded-[10px] bg-slate-950 px-2.5 py-1.5 text-[10px] font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-400"
-              disabled={!canSave || status === 'saving'}
-              onClick={() => void handleSave()}
-            >
-              {status === 'saving' ? labels('promptSaving') : labels('savePrompt')}
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <textarea
-        className="nodrag nowheel w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)] outline-none"
-        aria-label={labels('fullFinalPrompt')}
-        rows={5}
-        readOnly={!onSave}
-        value={draft}
-        onChange={(event) => {
-          setStatus('idle')
-          setDraft(event.target.value)
-        }}
-      />
-      {status === 'saved' ? (
-        <p className={`${SELECTABLE_TEXT_CLASS} px-3 pb-2 text-[10px] font-medium text-emerald-600`}>{labels('promptSaved')}</p>
-      ) : status === 'failed' ? (
-        <p className={`${SELECTABLE_TEXT_CLASS} px-3 pb-2 text-[10px] font-medium text-red-600`}>{labels('promptSaveFailed')}</p>
-      ) : null}
-    </section>
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onPointerDownCapture={(event) => event.stopPropagation()}
+        onClick={() => setOpen((prev) => !prev)}
+        className="nodrag nowheel flex w-full items-center justify-between rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] font-medium text-[var(--glass-text-secondary)] transition hover:bg-slate-100"
+      >
+        <span className="flex items-center gap-2">
+          <AppIcon name="lock" className="h-4 w-4 text-[var(--glass-text-tertiary)]" />
+          {labels('promptReadOnlyAdvanced')}
+        </span>
+        <AppIcon name="chevronDown" className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <WorkspaceCanvasMotionPresence visible={open} motionKey="shot-prompt">
+        <pre
+          className={`${SELECTABLE_TEXT_CLASS} nodrag nowheel max-h-56 w-full max-w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-[14px] border border-slate-200 bg-white px-3 py-2.5 font-mono text-[10px] leading-4 text-[var(--glass-text-tertiary)] [overflow-wrap:anywhere]`}
+          {...workspaceCanvasScrollableRegionProps<HTMLPreElement>()}
+        >
+          {details.imagePrompt}
+        </pre>
+      </WorkspaceCanvasMotionPresence>
+    </div>
   )
 }
 
@@ -714,7 +659,10 @@ function ShotContent({
     <div className="space-y-3">
       <ShotImagePreview data={data} />
       <ShotMetaChips details={details} labels={labels} />
-      <ShotImagePromptEditor data={data} labels={labels} value={details.imagePrompt} />
+      {hasText(data.body) ? (
+        <p className={`${SELECTABLE_TEXT_CLASS} text-[13px] leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+      ) : null}
+      <ShotPromptDisclosure details={details} labels={labels} />
       {renderTextSection(labels('error'), details.errorMessage)}
     </div>
   )

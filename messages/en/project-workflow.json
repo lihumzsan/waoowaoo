@@ -266,6 +266,7 @@
         "srtSegment": "Dialogue / SRT",
         "imagePrompt": "Image Prompt",
         "fullFinalPrompt": "Full Final Prompt",
+        "promptReadOnlyAdvanced": "Final prompt",
         "videoPrompt": "Video Prompt",
         "executionSnapshot": "Shot Execution Snapshot",
         "renderFacts": "Render Facts",

@@ -266,6 +266,7 @@
         "srtSegment": "台词 / SRT",
         "imagePrompt": "图片提示词",
         "fullFinalPrompt": "完整最终提示词",
+        "promptReadOnlyAdvanced": "最终提示词",
         "videoPrompt": "视频提示词",
         "executionSnapshot": "镜头执行快照",
         "renderFacts": "渲染事实",
