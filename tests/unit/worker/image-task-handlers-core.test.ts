@@ -176,15 +176,7 @@ describe('worker image-task-handlers-core', () => {
     )
   })
 
-  it('updates storyboard panel image and keeps candidateImages reset', async () => {
-    prismaMock.projectPanel.findUnique.mockResolvedValue({
-      id: 'panel-1',
-      storyboardId: 'storyboard-1',
-      panelIndex: 0,
-      imageUrl: 'cos/panel-old.png',
-      previousImageUrl: null,
-    })
-
+  it('rejects legacy storyboard modify tasks explicitly', async () => {
     const job = buildJob({
       type: 'storyboard',
       panelId: 'panel-1',
@@ -194,32 +186,8 @@ describe('worker image-task-handlers-core', () => {
       generationOptions: { aspectRatio: '16:9', resolution: '2048x1152' },
     })
 
-    const result = await handleModifyAssetImageTask(job)
-    expect(result).toEqual({
-      type: 'storyboard',
-      panelId: 'panel-1',
-      imageUrl: 'cos/new-image.png',
-    })
-
-    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        options: expect.objectContaining({
-          aspectRatio: '16:9',
-          resolution: '2048x1152',
-          referenceImages: [
-            'base64-required-reference',
-            'normalized-reference-image',
-          ],
-        }),
-      }),
-    )
-
-    const panelUpdateCall = prismaMock.projectPanel.update.mock.calls.at(-1) as [unknown] | undefined
-    const updateArg = panelUpdateCall?.[0]
-    const updateData = readUpdateData(updateArg)
-    expect(updateData.previousImageUrl).toBe('cos/panel-old.png')
-    expect(updateData.imageUrl).toBe('cos/new-image.png')
-    expect(updateData.candidateImages).toBeNull()
+    await expect(handleModifyAssetImageTask(job)).rejects.toThrow('Unsupported modify type: storyboard')
+    expect(utilsMock.resolveImageSourceFromGeneration).not.toHaveBeenCalled()
+    expect(prismaMock.projectPanel.update).not.toHaveBeenCalled()
   })
 })

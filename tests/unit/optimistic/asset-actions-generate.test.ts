@@ -43,11 +43,27 @@ function createOkResponse() {
   } as Response
 }
 
+function createPlanResponse(totalMaxFrozenCost: number | null = 3) {
+  return {
+    ok: true,
+    json: async () => ({
+      quote: {
+        totalMaxFrozenCost,
+      },
+    }),
+  } as Response
+}
+
 describe('useAssetActions.generate optimistic overlay', () => {
   beforeEach(() => {
     useQueryClientMock.mockReset()
     apiFetchMock.mockReset()
-    apiFetchMock.mockResolvedValue(createOkResponse())
+    apiFetchMock.mockImplementation(async (url: unknown) => {
+      if (typeof url === 'string' && url.endsWith('/generate/plan')) {
+        return createPlanResponse()
+      }
+      return createOkResponse()
+    })
   })
 
   it('keeps global prop in generating state immediately after submit', async () => {
@@ -57,7 +73,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
     const actions = useAssetActions({ scope: 'global', kind: 'prop' })
     await actions.generate({ id: 'prop-1' })
 
-    expect(apiFetchMock).toHaveBeenCalledWith('/api/assets/prop-1/generate', {
+    expect(apiFetchMock).toHaveBeenNthCalledWith(1, '/api/assets/prop-1/generate/plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -65,6 +81,17 @@ describe('useAssetActions.generate optimistic overlay', () => {
         kind: 'prop',
         projectId: undefined,
         id: 'prop-1',
+      }),
+    })
+    expect(apiFetchMock).toHaveBeenNthCalledWith(2, '/api/assets/prop-1/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'global',
+        kind: 'prop',
+        projectId: undefined,
+        id: 'prop-1',
+        confirmedMaxCost: 3,
       }),
     })
 
@@ -84,7 +111,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
     })
     await actions.generate({ id: 'prop-2', episodeId: 'episode-1' })
 
-    expect(apiFetchMock).toHaveBeenCalledWith('/api/assets/prop-2/generate', {
+    expect(apiFetchMock).toHaveBeenNthCalledWith(1, '/api/assets/prop-2/generate/plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -93,6 +120,18 @@ describe('useAssetActions.generate optimistic overlay', () => {
         projectId: 'project-1',
         id: 'prop-2',
         episodeId: 'episode-1',
+      }),
+    })
+    expect(apiFetchMock).toHaveBeenNthCalledWith(2, '/api/assets/prop-2/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project',
+        kind: 'prop',
+        projectId: 'project-1',
+        id: 'prop-2',
+        episodeId: 'episode-1',
+        confirmedMaxCost: 3,
       }),
     })
 
@@ -104,10 +143,12 @@ describe('useAssetActions.generate optimistic overlay', () => {
   it('clears the overlay when prop generation submission fails', async () => {
     const queryClient = new QueryClient()
     useQueryClientMock.mockReturnValue(queryClient)
-    apiFetchMock.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({}),
-    } as Response)
+    apiFetchMock
+      .mockResolvedValueOnce(createPlanResponse())
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({}),
+      } as Response)
 
     const actions = useAssetActions({ scope: 'global', kind: 'prop' })
 

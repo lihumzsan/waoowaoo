@@ -228,7 +228,7 @@ describe('worker location-image-task-handler behavior', () => {
   })
 
   it('appends Style Bible block to final location asset image prompt', async () => {
-    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
     })
 

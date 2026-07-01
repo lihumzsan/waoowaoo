@@ -210,7 +210,7 @@ describe('worker character-image-task-handler behavior', () => {
   })
 
   it('appends Style Bible block to final character asset image prompt', async () => {
-    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
+    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
     })
 

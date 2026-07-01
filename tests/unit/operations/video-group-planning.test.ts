@@ -38,6 +38,7 @@ vi.mock('@/lib/model-access/system-model-resolver', () => ({
 }))
 vi.mock('@/lib/deployment/config', () => ({
   getDeploymentConfig: vi.fn(() => ({ edition: 'self-hosted' })),
+  isCloudDeployment: vi.fn(() => false),
 }))
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
