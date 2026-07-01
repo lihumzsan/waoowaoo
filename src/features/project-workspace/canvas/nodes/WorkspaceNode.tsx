@@ -350,7 +350,7 @@ function nodeIsRunning(data: WorkspaceCanvasFlowNode['data']): boolean {
 }
 
 function nodeCanToggleDetails(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind !== 'analysis' && kind !== 'editScript' && kind !== 'editShotExecutionPlan' && kind !== 'editAssetGroup'
+  return kind !== 'analysis' && kind !== 'editShotExecutionPlan' && kind !== 'editAssetGroup'
 }
 
 function nodeShowsMetaFooter(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
@@ -1112,10 +1112,10 @@ function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<Worksp
 interface ShotGridCard {
   readonly key: string
   readonly badge: ReactNode
-  readonly duration?: string
   readonly title: string
   readonly subtitle?: string
-  readonly subtitle2?: string
+  readonly meta?: string
+  readonly characterCount: number
   readonly detail: ReactNode
 }
 
@@ -1130,6 +1130,32 @@ function chunkShotCards(cards: readonly ShotGridCard[], size: number): ShotGridC
 }
 
 type ShotField = { readonly label: string; readonly value: string | null | undefined }
+type EditScriptShotCardSource = NonNullable<WorkspaceCanvasFlowNode['data']['editScriptDetails']>['shots'][number]
+
+function compactEntityName(value: string): string {
+  const name = value.split('/')[0]?.trim()
+  return name && name.length > 0 ? name : value.trim()
+}
+
+function uniqueCompactEntityNames(values: readonly string[]): readonly string[] {
+  const seen = new Set<string>()
+  const names: string[] = []
+  values.forEach((value) => {
+    const name = compactEntityName(value)
+    if (!name || seen.has(name)) return
+    seen.add(name)
+    names.push(name)
+  })
+  return names
+}
+
+function editScriptShotCharacterNames(shot: EditScriptShotCardSource): readonly string[] {
+  return uniqueCompactEntityNames(shot.characters)
+}
+
+function compactList(values: readonly string[], separator: string): string {
+  return values.join(separator)
+}
 
 // 图标字段卡：图标 + 标签 + 值（可读性强的三级排版）
 function shotIconField(field: ShotField) {
@@ -1154,24 +1180,6 @@ function shotDetailIconGrid(fields: readonly ShotField[]) {
   const cells = fields.map(shotIconField).filter(Boolean)
   if (cells.length === 0) return null
   return <div className="grid gap-2 sm:grid-cols-2">{cells}</div>
-}
-
-// 三级：分区面板（核心剪辑表）
-function shotDetailSections(groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[]) {
-  return (
-    <div className="space-y-2">
-      {groups.map((g) => {
-        const cells = g.fields.map(shotIconField).filter(Boolean)
-        if (cells.length === 0) return null
-        return (
-          <section key={g.name} className="space-y-1.5 rounded-[14px] bg-white p-3 ring-1 ring-slate-100">
-            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name={g.glyph} className="h-3 w-3" />{g.name}</p>
-            <div className="grid gap-2 sm:grid-cols-2">{cells}</div>
-          </section>
-        )
-      })}
-    </div>
-  )
 }
 
 // 网格卡片 + 整行展开：点击任意镜头卡片，在其所在整行下方就地插入满宽详情，网格始终对齐
@@ -1223,13 +1231,14 @@ function ShotGrid({
                     <div className="flex items-center justify-between">
                       <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{card.badge}</span>
                       <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
-                        {card.duration}
+                        <AppIcon name="usersRound" className="h-3 w-3" />
+                        {card.characterCount}
                         <AppIcon name={isActive ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5" />
                       </span>
                     </div>
-                    <p className={`${SELECTABLE_TEXT_CLASS} mt-2 line-clamp-2 text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{card.title}</p>
-                    {card.subtitle ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 line-clamp-3 text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{card.subtitle}</p> : null}
-                    {card.subtitle2 ? <p className={`${SELECTABLE_TEXT_CLASS} mt-0.5 line-clamp-1 text-[11px] leading-4 text-[var(--glass-text-tertiary)]`}>{card.subtitle2}</p> : null}
+                    <p className={`${SELECTABLE_TEXT_CLASS} mt-2 truncate text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{card.title}</p>
+                    {card.subtitle ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 line-clamp-2 text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{card.subtitle}</p> : null}
+                    {card.meta ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1 truncate text-[10px] leading-4 text-[var(--glass-text-tertiary)]`}>{card.meta}</p> : null}
                   </button>
                 )
               })}
@@ -1239,7 +1248,7 @@ function ShotGrid({
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
                   <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.title}</span>
-                  {activeCard.duration ? <span className={`${SELECTABLE_TEXT_CLASS} text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.duration}</span> : null}
+                  {activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.meta}</span> : null}
                 </div>
                 {activeCard.detail}
               </div>
@@ -1254,9 +1263,11 @@ function ShotGrid({
 function EditScriptContent({
   data,
   labels,
+  expanded,
 }: {
   readonly data: WorkspaceCanvasFlowNode['data']
   readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
 }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const details = data.editScriptDetails
@@ -1269,44 +1280,51 @@ function EditScriptContent({
     )
   }
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const cards: ShotGridCard[] = details.shots.map((shot) => ({
-    key: String(shot.shotNumber),
-    badge: shot.shotNumber,
-    duration: `${shot.durationSec}s`,
-    title: shot.sceneName,
-    subtitle: shot.action,
-    detail: shotDetailSections([
-      {
-        name: labels('shotCore'),
-        glyph: 'target',
-        fields: [
-          { label: labels('scene'), value: shot.sceneName },
-          { label: labels('action'), value: shot.action },
-          { label: labels('characters'), value: shot.characters.join('\n') },
-          { label: labels('keyObjects'), value: shot.keyObjects.join('\n') },
-        ],
-      },
-      {
-        name: labels('sound'),
-        glyph: 'sound',
-        fields: [
-          { label: labels('duration'), value: `${shot.durationSec}s` },
-          { label: labels('sound'), value: shot.sound },
-        ],
-      },
-    ]),
-  }))
+  const listSeparator = labels('listSeparator')
+  const allCharacterNames = uniqueCompactEntityNames(details.shots.flatMap((shot) => shot.characters))
+  const summaryText = allCharacterNames.length > 0
+    ? labels('editScriptCompactSummaryWithCharacters', {
+        count: details.shotCount,
+        characters: compactList(allCharacterNames.slice(0, 4), listSeparator),
+      })
+    : labels('editScriptCompactSummary', { count: details.shotCount })
+  const summaryLine = (
+    <div className="flex items-center gap-2.5 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+      <AppIcon name="clapperboard" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+      <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm text-[var(--glass-text-secondary)]`}>{summaryText}</p>
+    </div>
+  )
+  const showShotGrid = expanded || data.streamPresentation?.isStreaming === true
+  if (!showShotGrid) return summaryLine
+
+  const cards: ShotGridCard[] = details.shots.map((shot) => {
+    const characterNames = editScriptShotCharacterNames(shot)
+    const keyObjectNames = uniqueCompactEntityNames(shot.keyObjects)
+    return {
+      key: String(shot.shotNumber),
+      badge: shot.shotNumber,
+      title: shot.sceneName || labels('shotIndex', { index: shot.shotNumber }),
+      subtitle: shot.action,
+      meta: characterNames.length > 0 ? compactList(characterNames, listSeparator) : labels('noCharacters'),
+      characterCount: characterNames.length,
+      detail: (
+        <div className="space-y-2.5">
+          {shotDetailIconGrid([
+            { label: labels('scene'), value: shot.sceneName },
+            { label: labels('action'), value: shot.action },
+            { label: labels('characters'), value: compactList(characterNames, '\n') },
+            { label: labels('keyObjects'), value: compactList(keyObjectNames, '\n') },
+            { label: labels('duration'), value: `${shot.durationSec}s` },
+            { label: labels('sound'), value: shot.sound },
+          ])}
+        </div>
+      ),
+    }
+  })
+
   return (
     <div className={nodeContentInteractionClass(data, 'space-y-3')}>
-      <div className="grid grid-cols-2 gap-2">
-        {renderSection(labels('editScriptMeta'), (
-          <div className="space-y-1">
-            {renderValue(labels('totalDuration'), details.durationSec)}
-            {renderValue(labels('shotCount'), details.shotCount)}
-          </div>
-        ))}
-        {renderSection(labels('description'), renderTextBlock(data.body))}
-      </div>
+      {summaryLine}
       <button
         type="button"
         className="nodrag inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-slate-900"
@@ -1324,9 +1342,6 @@ function EditScriptContent({
           onClose={() => setPreviewOpen(false)}
         />
       ) : null}
-      {details.screenplayText
-        ? renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 8))
-        : null}
       <ShotGrid cards={cards} accent="slate" streamPresentation={data.streamPresentation} />
     </div>
   )
@@ -2090,7 +2105,7 @@ function NodeContent({
     case 'editProcessGroup':
       return <ProcessGroupContent data={data} labels={labels} expanded={expanded} />
     case 'editScript':
-      return <EditScriptContent data={data} labels={labels} />
+      return <EditScriptContent data={data} labels={labels} expanded={expanded} />
     case 'editShotExecutionPlan':
       return <EditPipelineStepContent data={data} labels={labels} expanded={expanded} />
     case 'storyboardPanelGeneration':
