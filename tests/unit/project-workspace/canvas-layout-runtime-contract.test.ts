@@ -28,17 +28,20 @@ describe('workspace canvas layout runtime contract', () => {
     expect(css).toContain('.workspace-canvas-node-content[data-expanded="false"]')
   })
 
-  it('keeps measured expanded profile sizes authoritative and avoids whole-canvas base recapture', () => {
+  it('keeps measurement local and removes collision failure flow from the canvas', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
 
     expect(canvas).toContain('if (expanded && profile.expanded) return node')
-    expect(canvas).toContain('collisionAnchorNodeIds: options?.collisionAnchorNodeIds')
+    expect(canvas).toContain('return changed ? measuredNodes : currentNodes')
+    expect(canvas).not.toContain('WorkspaceCanvasLayoutFailure')
+    expect(canvas).not.toContain('layoutFailureVisible')
+    expect(canvas).not.toContain('collisionAnchorNodeIds')
     expect(canvas).not.toContain('measuredNodePosition')
     expect(canvas).not.toContain('savedNodeLayoutPositions')
-    expect(canvas).not.toContain('captureLayoutBasePositions(alignedNodes')
+    expect(canvas).not.toContain('resolveCanvasLayoutOrCurrent')
   })
 
-  it('uses localized copy for visible layout failures', () => {
+  it('removes localized layout failure copy because overlap is allowed', () => {
     const en = JSON.parse(readRepoFile('messages/en/project-workflow.json')) as {
       readonly canvas?: { readonly workspace?: { readonly layoutError?: string } }
     }
@@ -46,7 +49,7 @@ describe('workspace canvas layout runtime contract', () => {
       readonly canvas?: { readonly workspace?: { readonly layoutError?: string } }
     }
 
-    expect(en.canvas?.workspace?.layoutError).toBe('Canvas layout could not resolve without overlap. The last stable layout is still shown.')
-    expect(zh.canvas?.workspace?.layoutError).toBe('画布布局无法在无覆盖状态下完成，当前保留上一个稳定布局。')
+    expect(en.canvas?.workspace?.layoutError).toBeUndefined()
+    expect(zh.canvas?.workspace?.layoutError).toBeUndefined()
   })
 })

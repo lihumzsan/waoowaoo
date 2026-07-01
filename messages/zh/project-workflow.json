@@ -101,7 +101,6 @@
       "layoutLoading": "正在读取布局",
       "layoutSaving": "正在保存布局",
       "layoutWarning": "画布布局暂时无法同步，当前仍使用默认节点布局。",
-      "layoutError": "画布布局无法在无覆盖状态下完成，当前保留上一个稳定布局。",
       "toolbar": {
         "resetLayout": "重置布局",
         "fitView": "适配视图",
