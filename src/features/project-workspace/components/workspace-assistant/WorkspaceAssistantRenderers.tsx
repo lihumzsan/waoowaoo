@@ -18,7 +18,10 @@ import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
 import BillingActionButton from '@/components/billing/BillingActionButton'
-import { buildBillingActionQuotePreviewFromQuote } from '@/lib/billing/action-quote-preview'
+import {
+  buildBillingActionQuotePreviewFromQuote,
+  type BillingActionQuotePreview,
+} from '@/lib/billing/action-quote-preview'
 import type {
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
@@ -60,6 +63,19 @@ function isWorkspaceAssistantHiddenMetadata(metadata: unknown): boolean {
 }
 
 type MessagePartComponents = NonNullable<ComponentProps<typeof MessagePrimitive.Parts>['components']>
+type AssistantAgentTranslator = ReturnType<typeof useTranslations<'assistantAgent'>>
+type BillingQuoteItemView = OperationPlanView['quote']['items'][number]
+type BillingActionItemKey =
+  | 'image'
+  | 'video'
+  | 'music'
+  | 'musicSeconds'
+  | 'videoSeconds'
+
+interface BillingActionItemSummary {
+  readonly key: BillingActionItemKey
+  readonly quantity: number
+}
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]'
@@ -150,30 +166,95 @@ export function WorkspaceAssistantReasoningPart(props: ReasoningMessagePartProps
   )
 }
 
+function toPositiveBillingQuantity(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return value
+}
+
+function resolveBillingActionItemKey(item: BillingQuoteItemView): BillingActionItemKey | null {
+  if (item.unit === 'image') return 'image'
+  if (item.unit === 'video') return 'video'
+  if (item.unit === 'music') return 'music'
+  if (item.unit === 'second' && item.apiType === 'music') return 'musicSeconds'
+  if (item.unit === 'second' && item.apiType === 'video') return 'videoSeconds'
+  if (item.unit === 'call' && item.apiType === 'music') return 'music'
+  return null
+}
+
+function summarizeBillingActionItems(items: readonly BillingQuoteItemView[]): BillingActionItemSummary[] {
+  const totals = new Map<BillingActionItemKey, number>()
+  for (const item of items) {
+    const key = resolveBillingActionItemKey(item)
+    if (!key) continue
+    const quantity = toPositiveBillingQuantity(item.quantity)
+    if (quantity <= 0) continue
+    totals.set(key, (totals.get(key) ?? 0) + quantity)
+  }
+  return Array.from(totals.entries()).map(([key, quantity]) => ({ key, quantity }))
+}
+
+function translateBillingActionItemSummary(
+  item: BillingActionItemSummary,
+  t: AssistantAgentTranslator,
+): string {
+  switch (item.key) {
+    case 'image':
+      return t('cards.billingActionImageItems', { count: item.quantity })
+    case 'video':
+      return t('cards.billingActionVideoItems', { count: item.quantity })
+    case 'music':
+      return t('cards.billingActionMusicItems', { count: item.quantity })
+    case 'musicSeconds':
+      return t('cards.billingActionMusicSecondItems', { count: item.quantity })
+    case 'videoSeconds':
+      return t('cards.billingActionVideoSecondItems', { count: item.quantity })
+  }
+}
+
+function buildBillingActionSummaryLabel(
+  quote: OperationPlanView['quote'],
+  t: AssistantAgentTranslator,
+): string | null {
+  const items = summarizeBillingActionItems(quote.items)
+  if (items.length === 0) return null
+  const separator = t('cards.billingActionListSeparator')
+  const label = items
+    .map((item) => translateBillingActionItemSummary(item, t))
+    .join(separator)
+  return t('cards.billingActionSummary', { items: label })
+}
+
+function buildAssistantBillingQuotePreview(params: {
+  readonly quote: OperationPlanView['quote']
+  readonly actionLabel: string | null
+  readonly t: AssistantAgentTranslator
+}): BillingActionQuotePreview | null {
+  const { quote, actionLabel, t } = params
+  return buildBillingActionQuotePreviewFromQuote({
+    quote,
+    withCredits: (values) => actionLabel
+      ? t('cards.billingActionQuoteWithCredits', { action: actionLabel, cost: values.cost })
+      : t('cards.billingQuoteWithCredits', values),
+    withoutCredits: (values) => actionLabel
+      ? t('cards.billingActionQuoteWithoutCredits', { action: actionLabel })
+      : t('cards.billingQuoteWithoutCredits', values),
+  })
+}
+
 function BillingQuoteBlock(props: {
-  quote: OperationPlanView['quote'] | null
+  preview: BillingActionQuotePreview | null
+  summaryLabel: string | null
 }) {
   const t = useTranslations('assistantAgent')
-  if (!props.quote) return null
-  const preview = buildBillingActionQuotePreviewFromQuote({
-    quote: props.quote,
-    withCredits: (values) => t('cards.billingQuoteWithCredits', values),
-    withoutCredits: (values) => t('cards.billingQuoteWithoutCredits', values),
-  })
+  const preview = props.preview
   if (!preview) return null
+  const summaryLabel = props.summaryLabel ?? t('cards.billingTaskCount', { count: preview.mediaTaskCount })
   return (
     <div className="mt-4 flex items-center gap-3 text-xs">
-      <span className="shrink-0 tabular-nums text-[var(--glass-text-tertiary)]">
-        {t('cards.billingTaskCount', { count: preview.mediaTaskCount })}
+      <span className="shrink-0 whitespace-nowrap tabular-nums text-[var(--glass-text-tertiary)]">
+        {summaryLabel}
       </span>
       <span className="h-px flex-1 bg-slate-200" />
-      <span
-        className="inline-flex shrink-0 items-center gap-1 font-semibold tabular-nums text-[var(--glass-text-primary)]"
-        title={preview.fullLabel}
-      >
-        {preview.costLabel ?? preview.fullLabel}
-        {preview.costLabel ? <AppIcon name="coins" className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" /> : null}
-      </span>
     </div>
   )
 }
@@ -189,16 +270,22 @@ export function ConfirmationActionCard(props: {
   cancelPending: boolean
 }) {
   const t = useTranslations('assistantAgent')
+  const quote = props.operationPlan?.quote ?? null
+  const quoteActionLabel = quote ? buildBillingActionSummaryLabel(quote, t) : null
+  const quotePreview = quote
+    ? buildAssistantBillingQuotePreview({ quote, actionLabel: quoteActionLabel, t })
+    : null
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
-      <BillingQuoteBlock quote={props.operationPlan?.quote ?? null} />
+      <BillingQuoteBlock preview={quotePreview} summaryLabel={quoteActionLabel} />
       <div className="mt-3 flex gap-2">
         <BillingActionButton
           type="button"
           icon="arrowRight"
           label={props.confirmPending ? t('cards.confirmRunning') : t('cards.confirmContinue')}
+          quote={quotePreview}
           loading={props.confirmPending}
           className="flex-1 rounded-xl py-2 text-sm"
           onClick={() => { void props.onConfirm() }}
@@ -221,11 +308,17 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
   const title = localizeProjectAgentOperationTitle(props.data.operationId, locale)
+  const quoteActionLabel = buildBillingActionSummaryLabel(props.data.operationPlan.quote, t)
+  const quotePreview = buildAssistantBillingQuotePreview({
+    quote: props.data.operationPlan.quote,
+    actionLabel: quoteActionLabel,
+    t,
+  })
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</div>
       <div className="mt-1 leading-5">{t('cards.billingQuotePreview')}</div>
-      <BillingQuoteBlock quote={props.data.operationPlan.quote} />
+      <BillingQuoteBlock preview={quotePreview} summaryLabel={quoteActionLabel} />
     </div>
   )
 }

@@ -12,11 +12,21 @@ import {
   setWorkspaceAssistantToolDetailsOpen,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import type { OperationPlanView } from '@/lib/operations/planning'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const assistantMessages = {
   assistantAgent: {
     cards: {
       billingTaskCount: '{count} 个媒体生成任务',
+      billingActionSummary: '生成 {items}',
+      billingActionImageItems: '{count} 张图片',
+      billingActionVideoItems: '{count} 个视频',
+      billingActionMusicItems: '{count} 段音乐',
+      billingActionMusicSecondItems: '{count} 秒音乐',
+      billingActionVideoSecondItems: '{count} 秒视频',
+      billingActionListSeparator: '、',
+      billingActionQuoteWithCredits: '{action} · 预计消耗 {cost} credits',
+      billingActionQuoteWithoutCredits: '将提交：{action}',
       billingQuoteWithCredits: '{count} 个媒体生成任务 · 预计消耗 {cost} credits',
       billingQuoteWithoutCredits: '将提交 {count} 个媒体生成任务',
       confirmContinue: '继续执行',
@@ -51,13 +61,47 @@ function buildOperationPlanView(): OperationPlanView {
       mediaTaskCount: 3,
       totalMaxFrozenCost: 3.4128,
       currency: 'credits',
-      items: [],
+      items: [
+        {
+          id: 'task-1',
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'storyboard_panel',
+          targetId: 'panel-1',
+          apiType: 'image',
+          model: 'image-model',
+          quantity: 3,
+          unit: 'image',
+          maxFrozenCost: 1.1376,
+        },
+        {
+          id: 'task-2',
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'storyboard_panel',
+          targetId: 'panel-2',
+          apiType: 'image',
+          model: 'image-model',
+          quantity: 3,
+          unit: 'image',
+          maxFrozenCost: 1.1376,
+        },
+        {
+          id: 'task-3',
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          targetType: 'storyboard_panel',
+          targetId: 'panel-3',
+          apiType: 'image',
+          model: 'image-model',
+          quantity: 3,
+          unit: 'image',
+          maxFrozenCost: 1.1376,
+        },
+      ],
     },
   }
 }
 
 describe('workspace assistant renderers', () => {
-  it('keeps confirmation continue wider than cancel like the credit test treatment', () => {
+  it('keeps confirmation continue wider than cancel and carries the price suffix', () => {
     Reflect.set(globalThis, 'React', React)
 
     const html = renderWithIntl(
@@ -75,6 +119,10 @@ describe('workspace assistant renderers', () => {
 
     expect(html).toContain('继续执行')
     expect(html).toContain('取消操作')
+    expect(html).toContain('生成 9 张图片')
+    expect(html).not.toContain('3 个媒体生成任务')
+    expect(html).toContain('3.41')
+    expect(html).toContain('text-white/70')
     expect(html).toContain('flex-1 rounded-xl py-2 text-sm')
     expect(html).toContain('shrink-0 whitespace-nowrap rounded-xl')
     expect(html).not.toContain('flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white')
