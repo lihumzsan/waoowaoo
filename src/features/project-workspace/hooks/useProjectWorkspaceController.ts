@@ -23,16 +23,11 @@ import {
   useCreateProjectEditScreenplay,
   useCreateProjectEditScript,
   useCreateProjectEditShotExecutionPlan,
-  useArrangeProjectEditScriptGenerationSegments,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
-  useUpdateProjectEditScriptGenerationSegmentContinuity,
   useUpdateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/query/hooks'
-import type {
-  WorkspaceEditScreenplayGenerationInput,
-  WorkspaceGenerationSegmentArrangementItem,
-} from '../WorkspaceRuntimeContext'
+import type { WorkspaceEditScreenplayGenerationInput } from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
   project,
@@ -128,8 +123,6 @@ export function useProjectWorkspaceController({
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
-  const updateGenerationSegmentContinuity = useUpdateProjectEditScriptGenerationSegmentContinuity(projectId)
-  const arrangeGenerationSegments = useArrangeProjectEditScriptGenerationSegments(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
   const handleGenerateEditScreenplay = async (input: WorkspaceEditScreenplayGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
@@ -173,16 +166,6 @@ export function useProjectWorkspaceController({
     await generateEditStoryboard.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
-  const handleUpdateGenerationSegmentContinuity = async (editScriptId: string, segmentIndex: number, continuity: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await updateGenerationSegmentContinuity.mutateAsync({ episodeId, editScriptId, segmentIndex, continuity })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleArrangeGenerationSegments = async (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await arrangeGenerationSegments.mutateAsync({ episodeId, editScriptId, segments })
-    await onRefresh({ mode: 'full' })
-  }
   const handleUpdateEditAssetRequirementDescription = async (editScriptId: string, requirementId: string, description: string) => {
     if (!episodeId) throw new Error('Episode ID is required')
     await updateEditAssetRequirementDescription.mutateAsync({ episodeId, editScriptId, requirementId, description })
@@ -219,8 +202,6 @@ export function useProjectWorkspaceController({
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
-    handleUpdateGenerationSegmentContinuity,
-    handleArrangeGenerationSegments,
     handleUpdateEditAssetRequirementDescription,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
   })

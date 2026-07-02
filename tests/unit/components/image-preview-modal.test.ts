@@ -31,14 +31,8 @@ describe('image preview modal', () => {
       join(process.cwd(), 'src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx'),
       'utf8',
     )
-    const arrangementSource = readFileSync(
-      join(process.cwd(), 'src/features/project-workspace/canvas/GenerationSegmentArrangementModal.tsx'),
-      'utf8',
-    )
 
     expect(editScriptPreviewSource).toContain("import ImagePreviewModal from '@/components/ui/ImagePreviewModal'")
     expect(editScriptPreviewSource).toContain('setPreviewImageUrl(activeShot.imageUrl)')
-    expect(arrangementSource).toContain("import ImagePreviewModal from '@/components/ui/ImagePreviewModal'")
-    expect(arrangementSource).toContain('setPreviewImageUrl(shot.imageUrl)')
   })
 })

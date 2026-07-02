@@ -138,7 +138,6 @@ describe('workspace canvas layout runtime contract', () => {
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
     const scrollLock = readRepoFile('src/features/project-workspace/canvas/canvas-scroll-lock.ts')
     const previewDetail = readRepoFile('src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx')
-    const arrangementModal = readRepoFile('src/features/project-workspace/canvas/GenerationSegmentArrangementModal.tsx')
 
     expect(scrollLock).toContain('function workspaceCanvasScrollableRegionProps')
     expect(scrollLock).toContain('function isWorkspaceCanvasWheelLockedTarget')
@@ -156,7 +155,6 @@ describe('workspace canvas layout runtime contract', () => {
     expect(node).toContain('[overflow-wrap:anywhere]')
     expect(node).not.toContain('max-h-56 overflow-auto')
     expect(previewDetail).toContain('{...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}')
-    expect(arrangementModal).toContain('{...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}')
   })
 
   it('requires every expanded content function to use canvas motion presence', () => {

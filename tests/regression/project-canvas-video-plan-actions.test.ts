@@ -126,11 +126,8 @@ describe('project canvas video plan actions', () => {
       gridMode: '2x2',
       shotNumbers: [1, 2],
     })
-    expect(videoPlan?.data.secondaryAction).toEqual({
-      type: 'open_video_block_arrangement',
-      editScriptId: 'edit-script-1',
-      segmentIndex: 0,
-    })
+    expect(videoPlan?.data.secondaryAction).toBeUndefined()
+    expect(videoPlan?.data.secondaryActionLabel).toBeUndefined()
     expect(videoPlan?.data.tertiaryAction).toBeUndefined()
     expect(videoPlan?.data.tertiaryActionLabel).toBeUndefined()
   })

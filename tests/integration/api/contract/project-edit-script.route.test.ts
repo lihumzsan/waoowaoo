@@ -79,12 +79,6 @@ const editScriptServiceMock = vi.hoisted(() => ({
   updateProjectEditScriptAssetRequirementDescription: vi.fn(),
 }))
 
-const generationSegmentsMock = vi.hoisted(() => ({
-  arrangeProjectEditScriptGenerationSegments: vi.fn(),
-  mergeProjectEditScriptGenerationSegments: vi.fn(),
-  updateProjectEditScriptGenerationSegmentContinuity: vi.fn(),
-}))
-
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
@@ -94,7 +88,6 @@ vi.mock('@/lib/operations/submit-operation-task', () => ({
 }))
 vi.mock('@/lib/edit-script/task-submission', () => taskSubmissionMock)
 vi.mock('@/lib/edit-script/service', () => editScriptServiceMock)
-vi.mock('@/lib/edit-script/generation-segments', () => generationSegmentsMock)
 
 type ProjectRouteContext = {
   params: Promise<{ projectId: string }>
@@ -102,6 +95,10 @@ type ProjectRouteContext = {
 
 type ProjectPostRoute = {
   POST: (request: ReturnType<typeof buildMockRequest>, context: ProjectRouteContext) => Promise<Response>
+}
+
+type ProjectPatchRoute = {
+  PATCH: (request: ReturnType<typeof buildMockRequest>, context: ProjectRouteContext) => Promise<Response>
 }
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
@@ -225,6 +222,28 @@ describe('api contract - project edit script routes', () => {
       locale: 'zh',
       editScriptId: 'edit-script-1',
     })
+  })
+
+  it('PATCH /api/projects/[projectId]/edit-script rejects removed generation segment arrangement requests', async () => {
+    const mod = await import('@/app/api/projects/[projectId]/edit-script/route') as ProjectPatchRoute
+    const request = buildMockRequest({
+      path: '/api/projects/project-1/edit-script',
+      method: 'PATCH',
+      body: {
+        operation: 'arrangeGenerationSegments',
+        episodeId: 'episode-1',
+        editScriptId: 'edit-script-1',
+        segments: [
+          { shotNumbers: [1, 2, 3, 4], continuity: 'new segment' },
+          { shotNumbers: [5, 6], continuity: 'next segment' },
+        ],
+      },
+    })
+
+    const response = await mod.PATCH(request, { params: Promise.resolve({ projectId: 'project-1' }) })
+
+    expect(response.status).toBe(400)
+    expect(editScriptServiceMock.updateProjectEditScriptAssetRequirementDescription).not.toHaveBeenCalled()
   })
 
   it('POST /api/projects/[projectId]/edit-script/screenplay rejects unauthenticated submissions without creating a task', async () => {

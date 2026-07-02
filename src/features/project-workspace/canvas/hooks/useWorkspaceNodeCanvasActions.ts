@@ -85,15 +85,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'update_video_plan_prompt') {
-      await runtime.onUpdateGenerationSegmentContinuity(action.editScriptId, action.segmentIndex, action.continuity)
-      return
-    }
-
-    if (action.type === 'open_video_block_arrangement') {
-      throw new Error('open_video_block_arrangement must be handled by the canvas arrangement bridge')
-    }
-
     if (action.type === 'update_edit_asset_requirement_description') {
       await runtime.onUpdateEditAssetRequirementDescription(action.editScriptId, action.requirementId, action.description)
       return

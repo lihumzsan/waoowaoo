@@ -68,7 +68,6 @@ import type {
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
 } from './node-canvas-types'
-import GenerationSegmentArrangementModal from './GenerationSegmentArrangementModal'
 import {
   getWorkspaceCanvasNodePresentationProfile,
   resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds,
@@ -257,7 +256,6 @@ function ProjectWorkspaceCanvasContent({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
-  const [generationSegmentArrangementInitialIndex, setGenerationSegmentArrangementInitialIndex] = useState<number | null>(null)
   const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -423,11 +421,6 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [clearFocusHighlightedNode])
   const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
-    if (action.type === 'open_video_block_arrangement') {
-      setGenerationSegmentArrangementInitialIndex(action.segmentIndex)
-      return
-    }
-
     if (nodeId) markNodeOptimisticallyRunning(nodeId)
     try {
       await runNodeAction(action)
@@ -913,12 +906,6 @@ function ProjectWorkspaceCanvasContent({
     onAssistantSelectionChange?.(assistantSelection)
   }, [assistantSelection, onAssistantSelectionChange])
 
-  const handleArrangeGenerationSegments = useCallback(async (segments: readonly { readonly shotNumbers: readonly number[]; readonly continuity: string }[]) => {
-    if (!projectedEditScript) throw new Error('EDIT_SCRIPT_REQUIRED')
-    await runtime.onArrangeGenerationSegments(projectedEditScript.id, segments)
-    setGenerationSegmentArrangementInitialIndex(null)
-  }, [projectedEditScript, runtime])
-
   if (!episodeId) return null
 
   return (
@@ -1008,15 +995,6 @@ function ProjectWorkspaceCanvasContent({
           ) : null}
         </ReactFlow>
       </div>
-      {projectedEditScript && generationSegmentArrangementInitialIndex !== null ? (
-        <GenerationSegmentArrangementModal
-          editScript={projectedEditScript}
-          storyboards={storyboards}
-          initialSegmentIndex={generationSegmentArrangementInitialIndex}
-          onClose={() => setGenerationSegmentArrangementInitialIndex(null)}
-          onSubmit={handleArrangeGenerationSegments}
-        />
-      ) : null}
     </div>
   )
 }

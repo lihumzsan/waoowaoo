@@ -9,10 +9,10 @@ describe('project edit script request error', () => {
   it('prefers route detail code over generic api code', () => {
     const error = new ProjectEditScriptRequestError('Invalid parameters', {
       apiCode: 'INVALID_PARAMS',
-      detailCode: 'EDIT_SCRIPT_GENERATION_SEGMENT_LOCKED_BY_RUNNING_VIDEO',
+      detailCode: 'EDIT_SCRIPT_ASSET_REQUIREMENT_NOT_FOUND',
     })
 
-    expect(readProjectEditScriptRequestErrorCode(error)).toBe('EDIT_SCRIPT_GENERATION_SEGMENT_LOCKED_BY_RUNNING_VIDEO')
+    expect(readProjectEditScriptRequestErrorCode(error)).toBe('EDIT_SCRIPT_ASSET_REQUIREMENT_NOT_FOUND')
   })
 
   it('preserves nested route detail code from api response payload', async () => {
@@ -21,7 +21,7 @@ describe('project edit script request error', () => {
         code: 'INVALID_PARAMS',
         message: 'Invalid parameters',
         details: {
-          code: 'EDIT_SCRIPT_GENERATION_SEGMENT_LOCKED_BY_RUNNING_VIDEO',
+          code: 'EDIT_SCRIPT_ASSET_REQUIREMENT_NOT_FOUND',
         },
       },
     }))
@@ -29,6 +29,6 @@ describe('project edit script request error', () => {
     const error = await readProjectEditScriptJsonError(response, 'fallback')
 
     expect(error.message).toBe('Invalid parameters')
-    expect(readProjectEditScriptRequestErrorCode(error)).toBe('EDIT_SCRIPT_GENERATION_SEGMENT_LOCKED_BY_RUNNING_VIDEO')
+    expect(readProjectEditScriptRequestErrorCode(error)).toBe('EDIT_SCRIPT_ASSET_REQUIREMENT_NOT_FOUND')
   })
 })

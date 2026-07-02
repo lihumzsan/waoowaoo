@@ -428,22 +428,6 @@ export const confirmEditStylePreviewRequestSchema = z.object({
   aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
 })
 
-export const editScriptGenerationSegmentMergeSchema = z.object({
-  shotNumbers: z.array(z.number().int().positive()).min(2).max(9),
-  continuity: z.string().trim().min(1),
-})
-
-export const editScriptGenerationSegmentArrangementSchema = z.object({
-  generationSegments: z.array(z.object({
-    segmentIndex: z.number().int().min(0).max(59),
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    continuity: z.string().trim().min(1),
-  })).min(1).max(60),
-})
-
-export type EditScriptGenerationSegmentMergeOutput = z.infer<typeof editScriptGenerationSegmentMergeSchema>
-export type EditScriptGenerationSegmentArrangementOutput = z.infer<typeof editScriptGenerationSegmentArrangementSchema>
-
 export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
   name: z.string().trim().min(1),
@@ -484,31 +468,6 @@ export const getEditScreenplayRequestSchema = z.object({
 
 export const getEditScriptRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
-})
-
-export const updateEditScriptGenerationSegmentContinuityRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  editScriptId: z.string().trim().min(1),
-  segmentIndex: z.number().int().min(0).max(59),
-  continuity: z.string().trim().min(1),
-})
-
-export const mergeEditScriptGenerationSegmentsRequestSchema = z.object({
-  operation: z.literal('mergeGenerationSegments'),
-  episodeId: z.string().trim().min(1),
-  editScriptId: z.string().trim().min(1),
-  leftSegmentIndex: z.number().int().min(0).max(58),
-  rightSegmentIndex: z.number().int().min(1).max(59),
-})
-
-export const arrangeEditScriptGenerationSegmentsRequestSchema = z.object({
-  operation: z.literal('arrangeGenerationSegments'),
-  episodeId: z.string().trim().min(1),
-  editScriptId: z.string().trim().min(1),
-  segments: z.array(z.object({
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
-    continuity: z.string().trim().min(1),
-  })).min(1).max(60),
 })
 
 export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object({

@@ -9,17 +9,9 @@ import {
   updateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/edit-script/service'
 import {
-  arrangeProjectEditScriptGenerationSegments,
-  mergeProjectEditScriptGenerationSegments,
-  updateProjectEditScriptGenerationSegmentContinuity,
-} from '@/lib/edit-script/generation-segments'
-import {
-  arrangeEditScriptGenerationSegmentsRequestSchema,
   createEditScriptRequestSchema,
   getEditScriptRequestSchema,
-  mergeEditScriptGenerationSegmentsRequestSchema,
   updateEditScriptAssetRequirementDescriptionRequestSchema,
-  updateEditScriptGenerationSegmentContinuityRequestSchema,
 } from '@/lib/edit-script/types'
 
 export const GET = apiHandler(async (
@@ -100,56 +92,17 @@ export const PATCH = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   const body = await request.json().catch(() => ({})) as unknown
-  const parsed = updateEditScriptGenerationSegmentContinuityRequestSchema
-    .or(updateEditScriptAssetRequirementDescriptionRequestSchema)
-    .or(arrangeEditScriptGenerationSegmentsRequestSchema)
-    .or(mergeEditScriptGenerationSegmentsRequestSchema)
-    .safeParse(body)
+  const parsed = updateEditScriptAssetRequirementDescriptionRequestSchema.safeParse(body)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
   }
 
-  if ('operation' in parsed.data && parsed.data.operation === 'arrangeGenerationSegments') {
-    const editScript = await arrangeProjectEditScriptGenerationSegments({
-      projectId,
-      episodeId: parsed.data.episodeId,
-      editScriptId: parsed.data.editScriptId,
-      segments: parsed.data.segments,
-    })
-
-    return NextResponse.json({ editScript })
-  }
-
-  if ('operation' in parsed.data && parsed.data.operation === 'mergeGenerationSegments') {
-    const editScript = await mergeProjectEditScriptGenerationSegments({
-      projectId,
-      episodeId: parsed.data.episodeId,
-      editScriptId: parsed.data.editScriptId,
-      leftSegmentIndex: parsed.data.leftSegmentIndex,
-      rightSegmentIndex: parsed.data.rightSegmentIndex,
-    })
-
-    return NextResponse.json({ editScript })
-  }
-
-  if ('requirementId' in parsed.data) {
-    const editScript = await updateProjectEditScriptAssetRequirementDescription({
-      projectId,
-      episodeId: parsed.data.episodeId,
-      editScriptId: parsed.data.editScriptId,
-      requirementId: parsed.data.requirementId,
-      description: parsed.data.description,
-    })
-
-    return NextResponse.json({ editScript })
-  }
-
-  const editScript = await updateProjectEditScriptGenerationSegmentContinuity({
+  const editScript = await updateProjectEditScriptAssetRequirementDescription({
     projectId,
     episodeId: parsed.data.episodeId,
     editScriptId: parsed.data.editScriptId,
-    segmentIndex: parsed.data.segmentIndex,
-    continuity: parsed.data.continuity,
+    requirementId: parsed.data.requirementId,
+    description: parsed.data.description,
   })
 
   return NextResponse.json({ editScript })

@@ -3,7 +3,6 @@
 import { useMemo } from 'react'
 import type {
   WorkspaceEditScreenplayGenerationInput,
-  WorkspaceGenerationSegmentArrangementItem,
   WorkspaceRuntimeValue,
 } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
@@ -67,8 +66,6 @@ interface UseWorkspaceRuntimeParams {
     value: string,
     field?: 'imagePrompt' | 'videoPrompt',
   ) => Promise<void>
-  handleUpdateGenerationSegmentContinuity: (editScriptId: string, segmentIndex: number, continuity: string) => Promise<void>
-  handleArrangeGenerationSegments: (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => Promise<void>
   handleUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   handleUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
 }
@@ -103,8 +100,6 @@ export function useWorkspaceRuntime({
   handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
   handleUpdateVideoPrompt,
-  handleUpdateGenerationSegmentContinuity,
-  handleArrangeGenerationSegments,
   handleUpdateEditAssetRequirementDescription,
   handleUpdatePanelVideoModel,
 }: UseWorkspaceRuntimeParams) {
@@ -143,8 +138,6 @@ export function useWorkspaceRuntime({
     onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
-    onUpdateGenerationSegmentContinuity: handleUpdateGenerationSegmentContinuity,
-    onArrangeGenerationSegments: handleArrangeGenerationSegments,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
@@ -166,10 +159,8 @@ export function useWorkspaceRuntime({
     handleUpdateEpisode,
     handleGenerateEditScreenplay,
     handleGenerateEditScript,
-    handleArrangeGenerationSegments,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,
-    handleUpdateGenerationSegmentContinuity,
     handleUpdateVideoPrompt,
     isConfirmingAssets,
     isAssistantWorkflowStarting,

@@ -20,11 +20,6 @@ export interface WorkspaceVideoModelOption {
   videoPricingTiers?: VideoPricingTier[]
 }
 
-export interface WorkspaceGenerationSegmentArrangementItem {
-  readonly shotNumbers: readonly number[]
-  readonly continuity: string
-}
-
 export interface WorkspaceEditScreenplayGenerationInput {
   readonly prompt: string
   readonly durationTier: EditFirstDurationTier
@@ -77,8 +72,6 @@ export interface WorkspaceRuntimeValue {
     value: string,
     field?: 'imagePrompt' | 'videoPrompt',
   ) => Promise<void>
-  onUpdateGenerationSegmentContinuity: (editScriptId: string, segmentIndex: number, continuity: string) => Promise<void>
-  onArrangeGenerationSegments: (editScriptId: string, segments: readonly WorkspaceGenerationSegmentArrangementItem[]) => Promise<void>
   onUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
   onOpenAssetLibraryForCharacter: (characterId?: string | null, refreshAssets?: boolean) => void

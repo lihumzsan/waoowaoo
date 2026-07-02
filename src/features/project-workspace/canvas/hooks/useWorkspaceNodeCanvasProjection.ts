@@ -495,7 +495,7 @@ function createNode(input: {
 
 function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate): WorkspaceCanvasEditPipelineStepItem[] {
   return plan.shots.map((shot) => ({
-    title: translate('generationSegmentArrangement.shotTitle', { shot: shot.shotNumber }),
+    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
     fields: [
       { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
       { label: translate('nodeFields.lens'), value: shot.camera.lens },
@@ -1029,8 +1029,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
                 shotNumbers: segment.shotNumbers,
               }
             : undefined,
-          secondaryActionLabel: translate('actions.arrangeGenerationSegments'),
-          secondaryAction: { type: 'open_video_block_arrangement', editScriptId: editScript.id, segmentIndex: index },
           videoPlanDetails: details,
           onAction,
         },

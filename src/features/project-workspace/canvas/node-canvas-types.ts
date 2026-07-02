@@ -72,17 +72,6 @@ export type WorkspaceCanvasNodeAction =
       readonly field?: 'imagePrompt' | 'videoPrompt'
     }
   | {
-      readonly type: 'update_video_plan_prompt'
-      readonly editScriptId: string
-      readonly segmentIndex: number
-      readonly continuity: string
-    }
-  | {
-      readonly type: 'open_video_block_arrangement'
-      readonly editScriptId: string
-      readonly segmentIndex: number
-    }
-  | {
       readonly type: 'update_edit_asset_requirement_description'
       readonly editScriptId: string
       readonly requirementId: string

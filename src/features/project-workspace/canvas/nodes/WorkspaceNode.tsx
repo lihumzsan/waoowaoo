@@ -386,20 +386,6 @@ function panelPromptSaveHandler(
   }
 }
 
-function videoPlanPromptSaveHandler(data: WorkspaceCanvasFlowNode['data']): ((nextValue: string) => Promise<void>) | undefined {
-  if (!data.onAction) return undefined
-  const details = data.videoPlanDetails
-  if (!details) return undefined
-  return async (nextValue) => {
-    await dispatchNodeAction(data, {
-      type: 'update_video_plan_prompt',
-      editScriptId: details.editScriptId,
-      segmentIndex: details.segmentIndex,
-      continuity: nextValue,
-    })
-  }
-}
-
 function editAssetDescriptionSaveHandler(data: WorkspaceCanvasFlowNode['data']): ((nextValue: string) => Promise<void>) | undefined {
   if (!data.onAction) return undefined
   const details = data.editAssetDetails
@@ -2192,7 +2178,6 @@ function VideoPlanContent({
       value={details.prompt}
       expanded={promptExpanded}
       labels={labels}
-      onSave={videoPlanPromptSaveHandler(data)}
     />
   ) : null
   return (
@@ -2375,11 +2360,9 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const isRunning = nodeIsRunning(data)
   const secondaryAction = data.secondaryAction
   const tertiaryAction = data.tertiaryAction
-  const secondaryActionIcon: AppIconName = secondaryAction?.type === 'open_video_block_arrangement'
-    ? 'link'
-    : secondaryAction
-      ? nodeActionIconName(secondaryAction)
-      : 'externalLink'
+  const secondaryActionIcon: AppIconName = secondaryAction
+    ? nodeActionIconName(secondaryAction)
+    : 'externalLink'
   const tertiaryActionIcon: AppIconName = tertiaryAction?.type === 'generate_storyboard_grid_images'
     ? 'grid'
     : tertiaryAction
