@@ -60,7 +60,6 @@ const LLM_ALLOWED_KEYS = [
   'temperature',
   'reasoning',
   'reasoningEffort',
-  'maxRetries',
   'projectId',
   'action',
   'streamStepId',
@@ -80,7 +79,6 @@ export function buildLlmOptionSchema(): AiOptionSchema {
   validators.temperature = numberRangeValidator({ min: 0, max: 2 })
   validators.reasoning = booleanValidator()
   validators.reasoningEffort = enumValidator(['minimal', 'low', 'medium', 'high'])
-  validators.maxRetries = integerRangeValidator({ min: 0, max: 10 })
 
   validators.projectId = nonEmptyStringValidator()
   validators.action = nonEmptyStringValidator()

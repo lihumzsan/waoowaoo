@@ -71,7 +71,6 @@ describe('OpenRouter prompt cache provider contract', () => {
       temperature: 0.2,
       reasoning: false,
       reasoningEffort: 'high',
-      maxRetries: 0,
     })
 
     const [body] = completionCreateMock.mock.calls[0] as [
@@ -97,7 +96,6 @@ describe('OpenRouter prompt cache provider contract', () => {
       temperature: 0.2,
       reasoning: false,
       reasoningEffort: 'high',
-      maxRetries: 0,
     })
 
     const [body] = completionCreateMock.mock.calls[0] as [
@@ -133,7 +131,6 @@ describe('OpenRouter prompt cache provider contract', () => {
       temperature: 0.2,
       reasoning: false,
       reasoningEffort: 'high',
-      maxRetries: 0,
     })
 
     const [body] = completionCreateMock.mock.calls[0] as [
@@ -161,7 +158,6 @@ describe('OpenRouter prompt cache provider contract', () => {
       temperature: 0.2,
       reasoning: false,
       reasoningEffort: 'minimal',
-      maxRetries: 0,
     })
 
     const [body] = completionCreateMock.mock.calls[0] as [

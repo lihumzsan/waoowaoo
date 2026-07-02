@@ -45,7 +45,6 @@ describe('provider contract - ark seedance', () => {
       tools: [{ type: 'web_search' }],
     }, {
       apiKey: 'ark-key',
-      maxRetries: 1,
       timeoutMs: 1000,
       logPrefix: '[Ark Test]',
     })

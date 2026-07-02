@@ -1,11 +1,11 @@
 import { type Job } from 'bullmq'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { addCharacterPromptSuffix, PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { safeParseJsonObject } from '@/lib/json-repair'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import type { EditScriptStyleBible } from '@/lib/edit-script/types'
 import {
   buildCharacterCandidatePromptInstruction,
@@ -76,21 +76,25 @@ async function generateCharacterCandidatePrompts(input: {
     locale: input.locale,
     styleBible: input.styleBible,
   })
-  const completion = await executeAiTextStep({
+  const completion = await executeAiStructuredTextStep({
     userId: input.userId,
     model: input.analysisModel,
     messages: [{ role: 'user', content: instruction }],
     temperature: 0.75,
     projectId: input.projectId,
     action: 'character_candidate_prompts',
+    locale: input.locale,
     meta: {
       stepId: 'character_candidate_prompts',
       stepTitle: '角色候选提示词',
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: (raw) => parseCharacterCandidatePrompts(raw as Record<string, unknown>),
   })
-  return parseCharacterCandidatePrompts(safeParseJsonObject(completion.text))
+  return completion.data
 }
 
 interface CharacterImageDb {

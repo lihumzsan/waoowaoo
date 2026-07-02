@@ -11,8 +11,6 @@ const getServerSessionMock = vi.hoisted(() => vi.fn(async () => ({
   user: { id: 'user-1', name: 'Tester' },
 })))
 
-const withPrismaRetryMock = vi.hoisted(() => vi.fn(async <T>(fn: () => Promise<T>) => await fn()))
-
 vi.mock('next-auth/next', () => ({
   getServerSession: getServerSessionMock,
 }))
@@ -27,10 +25,6 @@ vi.mock('@/lib/auth', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
-}))
-
-vi.mock('@/lib/prisma-retry', () => ({
-  withPrismaRetry: withPrismaRetryMock,
 }))
 
 vi.mock('@/lib/config-service', () => ({

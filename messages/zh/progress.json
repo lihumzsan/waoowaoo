@@ -133,6 +133,7 @@
     "insertPanelGenerateText": "生成插入镜头文本",
     "insertPanelPersist": "保存插入镜头",
     "pollingExternal": "等待外部服务返回",
+    "retrying": "正在重试任务",
     "enqueueFailed": "任务入队失败",
     "llmProxySubmit": "提交 LLM 任务",
     "llmProxyExecute": "执行 LLM 任务",

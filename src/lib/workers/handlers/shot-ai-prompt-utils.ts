@@ -1,5 +1,3 @@
-import { safeParseJsonObject } from '@/lib/json-repair'
-
 export type AnyObj = Record<string, unknown>
 
 export function readText(value: unknown): string {
@@ -14,16 +12,11 @@ export function readRequiredString(value: unknown, field: string): string {
   return text
 }
 
-export function parseJsonObject(responseText: string): AnyObj {
-  return safeParseJsonObject(responseText) as AnyObj
-}
-
-export function parseShotPromptResponse(responseText: string): {
+export function parseShotPromptResponse(direct: AnyObj): {
   imagePrompt: string
   videoPrompt: string
 } {
   try {
-    const direct = parseJsonObject(responseText)
     if (typeof direct.image_prompt === 'string' && direct.image_prompt.trim()) {
       return {
         imagePrompt: direct.image_prompt.trim(),
@@ -36,8 +29,6 @@ export function parseShotPromptResponse(responseText: string): {
         videoPrompt: '',
       }
     }
-  } catch {
-    // fall through
-  }
+  } catch { }
   throw new Error('Invalid shot prompt response')
 }

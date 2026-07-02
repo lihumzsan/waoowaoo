@@ -90,7 +90,6 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries: number
   isOpenRouter?: boolean
   openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
@@ -117,7 +116,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
       system: getSystemPrompt(input.messages),
       messages: getConversationMessages(input.messages) as ModelMessage[],
       ...(input.reasoning ? {} : { temperature: input.temperature }),
-      maxRetries: input.maxRetries,
+      maxRetries: 0,
       ...(aiSdkProviderOptions ? { providerOptions: aiSdkProviderOptions } : {}),
     })
     const usage = aiSdkResult.usage || aiSdkResult.totalUsage
@@ -208,7 +207,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
       system: getSystemPrompt(input.messages),
       messages: getConversationMessages(input.messages),
       ...(useReasoning ? {} : { temperature: input.options.temperature ?? 0.7 }),
-      maxRetries: input.options.maxRetries ?? 2,
+      maxRetries: 0,
       ...(aiSdkProviderOptions ? { providerOptions: aiSdkProviderOptions } : {}),
     })
 

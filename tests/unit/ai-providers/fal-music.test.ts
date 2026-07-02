@@ -141,7 +141,7 @@ describe('fal music generation', () => {
       },
       prompt: 'quiet tension cue',
       options: {},
-    })).rejects.toThrow('FAL_MUSIC_STATUS_FAILED (405): method not allowed')
+    })).rejects.toThrow('Fetch request failed with status 405: method not allowed')
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

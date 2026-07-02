@@ -1,6 +1,6 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
-import { fetchWithTimeoutAndRetry } from './image'
+import { fetchWithRetry } from '@/lib/retry'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
@@ -274,16 +274,16 @@ function validateArkVideoTaskRequest(request: ArkVideoTaskRequest) {
 
 export async function arkCreateVideoTask(
   request: ArkVideoTaskRequest,
-  options: { apiKey: string; timeoutMs?: number; maxRetries?: number; logPrefix?: string },
+  options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<{ id: string; [key: string]: unknown }> {
   if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
   validateArkVideoTaskRequest(request)
 
-  const { apiKey, timeoutMs, maxRetries, logPrefix = '[Ark Video]' } = options
+  const { apiKey, timeoutMs, logPrefix = '[Ark Video]' } = options
   const url = `${ARK_BASE_URL}/contents/generations/tasks`
 
   _ulogInfo(`${logPrefix} 创建视频任务, 模型: ${request.model}`)
-  const response = await fetchWithTimeoutAndRetry(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -291,14 +291,8 @@ export async function arkCreateVideoTask(
     },
     body: JSON.stringify(request),
     timeoutMs,
-    maxRetries,
-    logPrefix,
+    scope: 'ark:video:create',
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`${logPrefix} 创建视频任务失败: ${response.status} - ${errorText}`)
-  }
 
   const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
   const taskId = typeof data.id === 'string' ? data.id : ''
@@ -308,25 +302,19 @@ export async function arkCreateVideoTask(
 
 export async function arkQueryVideoTask(
   taskId: string,
-  options: { apiKey: string; timeoutMs?: number; maxRetries?: number; logPrefix?: string },
+  options: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkVideoTaskResponse> {
   if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
 
-  const { apiKey, timeoutMs, maxRetries, logPrefix = '[Ark Video]' } = options
+  const { apiKey, timeoutMs } = options
   const url = `${ARK_BASE_URL}/contents/generations/tasks/${taskId}`
 
-  const response = await fetchWithTimeoutAndRetry(url, {
+  const response = await fetchWithRetry(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${apiKey}` },
     timeoutMs,
-    maxRetries,
-    logPrefix,
+    scope: 'ark:video:query',
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`${logPrefix} 查询视频任务失败: ${response.status} - ${errorText}`)
-  }
 
   return (await response.json()) as ArkVideoTaskResponse
 }

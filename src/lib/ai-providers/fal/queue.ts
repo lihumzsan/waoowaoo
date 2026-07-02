@@ -1,4 +1,5 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
+import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import { buildFalQueueUrl } from './base-url'
 
 export interface FalQueueStatus {
@@ -18,19 +19,15 @@ export async function submitFalTask(endpoint: string, input: FalQueueInput, apiK
     throw new Error('请配置 FAL API Key')
   }
 
-  const response = await fetch(buildFalQueueUrl(endpoint), {
+  const response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify(input),
+    scope: `fal:submit:${endpoint}`,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`FAL提交失败 (${response.status}): ${errorText}`)
-  }
 
   const data = await response.json() as { request_id?: unknown }
   const requestId = typeof data.request_id === 'string' ? data.request_id : ''
@@ -129,11 +126,8 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
   })
 
   if (!response.ok) {
-    return {
-      status: 'IN_PROGRESS',
-      completed: false,
-      failed: false,
-    }
+    const errorText = await response.text()
+    throw new FetchStatusError(response.status, errorText)
   }
 
   const data = await response.json() as {
@@ -144,11 +138,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
   const status = data.status
 
   if (status !== 'IN_QUEUE' && status !== 'IN_PROGRESS' && status !== 'COMPLETED' && status !== 'FAILED') {
-    return {
-      status: 'IN_PROGRESS',
-      completed: false,
-      failed: false,
-    }
+    throw new Error(`FAL_STATUS_UNKNOWN:${String(status)}`)
   }
 
   _ulogInfo(`[FAL Status] requestId=${requestId.slice(0, 16)}... 状态=${status}`)
@@ -197,11 +187,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       return terminalError
     }
 
-    return {
-      status: 'IN_PROGRESS',
-      completed: false,
-      failed: false,
-    }
+    throw new FetchStatusError(resultResponse.status, errorText)
   }
 
   if (status === 'FAILED') {

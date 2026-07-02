@@ -2,6 +2,7 @@ import { Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { createScopedLogger } from '@/lib/logging/core'
 import { QueueType, TaskType, TASK_TYPE, type TaskJobData } from './types'
+import { getTaskMaxAttempts, TASK_RETRY_BACKOFF_BASE_MS } from './retry-policy'
 
 export const QUEUE_NAME = {
   IMAGE: 'waoowaoo-image',
@@ -150,6 +151,11 @@ export async function addTaskJob(data: TaskJobData, opts?: TaskJobOptions) {
   return await queue.add(data.type, data, {
     jobId: data.taskId,
     priority,
+    attempts: getTaskMaxAttempts(data.type),
+    backoff: {
+      type: 'exponential',
+      delay: TASK_RETRY_BACKOFF_BASE_MS,
+    },
   })
 }
 

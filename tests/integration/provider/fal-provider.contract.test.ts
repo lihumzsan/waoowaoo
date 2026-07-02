@@ -46,7 +46,34 @@ describe('provider contract - fal queue', () => {
     })
   })
 
-  it('treats transient status failure as pending and completes after retry', async () => {
+  it('retries transient submit failures before an external request id exists', async () => {
+    server!.defineScenario({
+      method: 'POST',
+      path: '/fal/fal-ai/nano-banana-pro',
+      mode: 'retryable_error_then_success',
+      submitResponse: {
+        status: 503,
+        body: { error: 'upstream unavailable' },
+      },
+      pollSequence: [
+        { status: 200, body: { request_id: 'req_image_retry_1' } },
+      ],
+    })
+
+    const requestId = await submitFalTask(
+      'fal-ai/nano-banana-pro',
+      { prompt: 'retry submit' },
+      'fal-key-retry',
+    )
+
+    expect(requestId).toBe('req_image_retry_1')
+    const requests = server!.getRequests('POST', '/fal/fal-ai/nano-banana-pro')
+    expect(requests).toHaveLength(2)
+    expect(requests[0]?.headers.authorization).toBe('Key fal-key-retry')
+    expect(requests[1]?.headers.authorization).toBe('Key fal-key-retry')
+  })
+
+  it('throws transient status failure so the worker poll loop can retry explicitly', async () => {
     server!.defineScenario({
       method: 'GET',
       path: '/fal/fal-ai/veo3.1/requests/req_video_1/status',
@@ -68,14 +95,13 @@ describe('provider contract - fal queue', () => {
       },
     })
 
-    const first = await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2')
-    const second = await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2')
-
-    expect(first).toEqual({
-      status: 'IN_PROGRESS',
-      completed: false,
-      failed: false,
+    await expect(
+      queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2'),
+    ).rejects.toMatchObject({
+      status: 503,
     })
+
+    const second = await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_video_1', 'fal-key-2')
     expect(second).toEqual({
       status: 'COMPLETED',
       completed: true,

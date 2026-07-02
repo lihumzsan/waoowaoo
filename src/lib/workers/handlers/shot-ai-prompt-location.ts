@@ -9,7 +9,7 @@ import {
   resolveAnalysisModel,
 } from './shot-ai-persist'
 import { runShotPromptCompletion } from './shot-ai-prompt-runtime'
-import { parseJsonObject, readRequiredString, type AnyObj } from './shot-ai-prompt-utils'
+import { readRequiredString, type AnyObj } from './shot-ai-prompt-utils'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 
 export async function handleModifyLocationTask(job: Job<TaskJobData>, payload: AnyObj) {
@@ -38,7 +38,7 @@ export async function handleModifyLocationTask(job: Job<TaskJobData>, payload: A
   })
   await assertTaskActive(job, 'ai_modify_location_prepare')
 
-  const responseText = await runShotPromptCompletion({
+  const response = await runShotPromptCompletion({
     job,
     model: projectWorkflow.analysisModel,
     prompt: finalPrompt,
@@ -49,8 +49,7 @@ export async function handleModifyLocationTask(job: Job<TaskJobData>, payload: A
   })
   await assertTaskActive(job, 'ai_modify_location_parse')
 
-  const parsed = parseJsonObject(responseText)
-  const prompt = readRequiredString(parsed.prompt, 'prompt')
+  const prompt = readRequiredString(response.data.prompt, 'prompt')
   const modifiedDescription = removeLocationPromptSuffix(prompt)
 
   await assertTaskActive(job, 'ai_modify_location_persist')

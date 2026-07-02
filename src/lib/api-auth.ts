@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
 import { headers as readHeaders } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { withPrismaRetry } from '@/lib/prisma-retry'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { extractModelKey } from '@/lib/config-service'
 import { getErrorSpec, type UnifiedErrorCode } from '@/lib/errors/codes'
 import { getLogContext, setLogContext } from '@/lib/logging/context'
@@ -235,12 +235,14 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
     }
     // 3. 获取项目基础信息
     const hasIncludes = Object.keys(projectIncludes).length > 0
-    const project = await withPrismaRetry(() =>
-        prisma.project.findUnique({
+    const project = await withRetry({
+        scope: 'prisma:requireProjectAuth',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.project.findUnique({
             where: { id: projectId },
             ...(hasIncludes ? { include: projectIncludes } : {}),
-        })
-    )
+        }),
+    })
 
     // 4. 项目存在检查
     if (!project) {
@@ -326,11 +328,13 @@ export async function requireProjectAuthLight(
     }
     bindAuthLogContext(session, projectId)
 
-    const project = await withPrismaRetry(() =>
-        prisma.project.findUnique({
+    const project = await withRetry({
+        scope: 'prisma:requireProjectAuthLight',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.project.findUnique({
             where: { id: projectId }
-        })
-    )
+        }),
+    })
 
     if (!project) {
         return notFound('Project')

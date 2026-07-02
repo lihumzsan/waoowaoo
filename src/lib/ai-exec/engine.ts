@@ -21,7 +21,7 @@ import {
   runChatCompletionWithVisionStream,
 } from '@/lib/ai-exec/llm/vision-runner'
 import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
-import { toAiRuntimeError } from '@/lib/ai-exec/governance'
+import { toAppError } from '@/lib/errors/app-error'
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music'>
 
@@ -340,7 +340,7 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
       completion,
     }
   } catch (error) {
-    throw toAiRuntimeError(error)
+    throw toAppError(error, { context: 'worker' })
   }
 }
 
@@ -367,6 +367,6 @@ export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Pr
       completion,
     }
   } catch (error) {
-    throw toAiRuntimeError(error)
+    throw toAppError(error, { context: 'worker' })
   }
 }

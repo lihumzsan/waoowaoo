@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
+import { z } from 'zod'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { getUserModelConfig } from '@/lib/config-service'
 import { removeCharacterPromptSuffix, removeLocationPromptSuffix, removePropPromptSuffix } from '@/lib/constants'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
@@ -17,13 +18,13 @@ function readRequiredString(value: unknown, field: string): string {
   return value.trim()
 }
 
-import { safeParseJsonObject } from '@/lib/json-repair'
-
-function parseJsonPrompt(responseText: string): {
+function parseJsonPrompt(parsed: unknown): {
   prompt: string
 } {
-  const parsed = safeParseJsonObject(responseText)
-  const prompt = typeof parsed.prompt === 'string' ? parsed.prompt.trim() : ''
+  const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {}
+  const prompt = typeof record.prompt === 'string' ? record.prompt.trim() : ''
   if (!prompt) {
     throw new Error('No prompt field in response')
   }
@@ -99,25 +100,27 @@ export async function handleAssetHubAIModifyTask(job: Job<TaskJobData>) {
   const completion = await withInternalLLMStreamCallbacks(
     streamCallbacks,
     async () =>
-      await executeAiTextStep({
+      await executeAiStructuredTextStep({
         userId: job.data.userId,
         model: userConfig.analysisModel!,
         messages: [{ role: 'user', content: finalPrompt }],
         temperature: 0.7,
         projectId: 'asset-hub',
         action: isCharacter ? 'ai_modify_character' : isProp ? 'ai_modify_prop' : 'ai_modify_location',
+        locale: job.data.locale,
         meta: {
           stepId: streamContextKey,
           stepTitle: isCharacter ? '角色描述修改' : isProp ? '道具描述修改' : '场景描述修改',
           stepIndex: 1,
           stepTotal: 1,
         },
+        schema: z.unknown(),
+        parse: { kind: 'object' },
+        validate: parseJsonPrompt,
       }),
   )
   await streamCallbacks.flush()
   await assertTaskActive(job, 'asset_hub_ai_modify_parse')
-
-  const parsed = parseJsonPrompt(completion.text)
 
   await reportTaskProgress(job, 96, {
     stage: 'asset_hub_ai_modify_done',
@@ -131,6 +134,6 @@ export async function handleAssetHubAIModifyTask(job: Job<TaskJobData>) {
 
   return {
     success: true,
-    modifiedDescription: parsed.prompt,
+    modifiedDescription: completion.data.prompt,
   }
 }

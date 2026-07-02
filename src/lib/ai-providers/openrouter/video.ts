@@ -1,5 +1,6 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
@@ -283,7 +284,7 @@ export async function submitOpenRouterVideoTask(input: {
     throw new Error('请配置 OpenRouter API Key')
   }
 
-  const response = await fetch(buildOpenRouterUrl(input.baseUrl, OPENROUTER_VIDEO_ENDPOINT_PATH), {
+  const response = await fetchWithRetry(buildOpenRouterUrl(input.baseUrl, OPENROUTER_VIDEO_ENDPOINT_PATH), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -291,12 +292,8 @@ export async function submitOpenRouterVideoTask(input: {
     },
     body: JSON.stringify(input.payload),
     cache: 'no-store',
+    scope: `openrouter:video:submit:${input.payload.model}`,
   })
-
-  if (!response.ok) {
-    const errorText = await readErrorText(response)
-    throw new Error(`OPENROUTER_VIDEO_SUBMIT_FAILED (${response.status}): ${errorText}`)
-  }
 
   return readSubmitId(await readJson(response))
 }
@@ -323,10 +320,7 @@ export async function queryOpenRouterVideoStatus(input: {
   const data = response.ok ? await readJson(response) : null
   if (!response.ok) {
     const errorText = await readErrorText(response)
-    return {
-      status: 'failed',
-      error: `OPENROUTER_VIDEO_STATUS_FAILED (${response.status}): ${errorText}`,
-    }
+    throw new FetchStatusError(response.status, errorText)
   }
 
   const statusResponse = data as OpenRouterStatusResponse | null

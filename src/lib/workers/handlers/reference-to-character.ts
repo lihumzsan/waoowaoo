@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import { generateImage } from '@/lib/ai-exec/engine'
-import { fetchGeneratedMediaWithRetry } from '@/lib/ai-exec/media-result'
+import { fetchWithRetry } from '@/lib/retry'
 import { executeAiVisionStep } from '@/lib/ai-exec/engine'
 import { getUserModelConfig } from '@/lib/config-service'
 import {
@@ -82,8 +82,8 @@ async function generateReferenceImage(params: {
       return null
     }
 
-    const imgRes = await fetchGeneratedMediaWithRetry(finalImageUrl, {
-      logPrefix: `[reference-to-character:${imageIndex + 1}]`,
+    const imgRes = await fetchWithRetry(finalImageUrl, {
+      scope: `reference-to-character:${imageIndex + 1}`,
     })
     const buffer = Buffer.from(await imgRes.arrayBuffer())
     const processed = await sharp(buffer)

@@ -18,11 +18,7 @@ vi.mock('@/lib/billing', () => ({
   rollbackTaskBilling: vi.fn(),
 }))
 
-vi.mock('@/lib/prisma-retry', () => ({
-  withPrismaRetry: vi.fn(async (fn: () => Promise<unknown>) => await fn()),
-}))
-
-import { createTask, tryUpdateTaskProgress } from '@/lib/task/service'
+import { createTask, tryMarkTaskProcessing, tryUpdateTaskProgress } from '@/lib/task/service'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('task service operation metadata', () => {
@@ -120,5 +116,40 @@ describe('task service operation metadata', () => {
         },
       },
     })
+  })
+
+  it('does not clear externalId when marking a retried task processing without a new external id', async () => {
+    taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    const marked = await tryMarkTaskProcessing('task-1')
+
+    expect(marked).toBe(true)
+    const call = taskModelMock.updateMany.mock.calls[0]?.[0] as {
+      data?: Record<string, unknown>
+      where?: Record<string, unknown>
+    } | undefined
+    expect(call?.where).toEqual({
+      id: 'task-1',
+      status: { in: ['queued', 'processing'] },
+    })
+    expect(call?.data).toEqual(expect.objectContaining({
+      status: 'processing',
+      attempt: { increment: 1 },
+    }))
+    expect(Object.prototype.hasOwnProperty.call(call?.data || {}, 'externalId')).toBe(false)
+  })
+
+  it('updates externalId only when a new external id is explicitly provided', async () => {
+    taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
+
+    const marked = await tryMarkTaskProcessing('task-1', 'FAL:VIDEO:endpoint:req-1')
+
+    expect(marked).toBe(true)
+    const call = taskModelMock.updateMany.mock.calls[0]?.[0] as {
+      data?: Record<string, unknown>
+    } | undefined
+    expect(call?.data).toEqual(expect.objectContaining({
+      externalId: 'FAL:VIDEO:endpoint:req-1',
+    }))
   })
 })

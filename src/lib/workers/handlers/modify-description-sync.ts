@@ -1,6 +1,6 @@
-import { executeAiTextStep, executeAiVisionStep } from '@/lib/ai-exec/engine'
+import { z } from 'zod'
+import { executeAiStructuredTextStep, executeAiStructuredVisionStep } from '@/lib/ai-exec/structured-step'
 import { removeCharacterPromptSuffix, removeLocationPromptSuffix, removePropPromptSuffix } from '@/lib/constants'
-import { safeParseJsonObject } from '@/lib/json-repair'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS, type AiPromptLocale as PromptLocale } from '@/lib/ai-prompts'
 import {
   buildCharacterDescriptionFields,
@@ -24,11 +24,13 @@ function buildImageContext(type: SyncedAssetType, hasReferenceImages: boolean): 
   return '【参考图片】\n请仔细分析参考图片中的建筑风格、装饰元素、光线氛围、色调等关键视觉特征，并将这些特征融入更新后的描述中。'
 }
 
-function parseModifiedDescription(responseText: string): {
+function parseModifiedDescription(parsed: unknown): {
   prompt: string
 } {
-  const parsed = safeParseJsonObject(responseText)
-  const prompt = trimText(typeof parsed.prompt === 'string' ? parsed.prompt : '')
+  const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : {}
+  const prompt = trimText(typeof record.prompt === 'string' ? record.prompt : '')
   if (!prompt) {
     throw new Error('No prompt field in response')
   }
@@ -87,18 +89,22 @@ export async function generateModifiedAssetDescription(params: {
     })
 
   if (hasReferenceImages) {
-    const completion = await executeAiVisionStep({
+    const completion = await executeAiStructuredVisionStep({
       userId: params.userId,
       model: params.model,
       prompt: finalPrompt,
       imageUrls: params.referenceImages ?? [],
       temperature: 0.7,
       ...(params.projectId ? { projectId: params.projectId } : {}),
+      locale: params.locale,
+      schema: z.unknown(),
+      parse: { kind: 'object' },
+      validate: parseModifiedDescription,
     })
-    return parseModifiedDescription(completion.text)
+    return completion.data
   }
 
-  const completion = await executeAiTextStep({
+  const completion = await executeAiStructuredTextStep({
     userId: params.userId,
     model: params.model,
     messages: [{ role: 'user', content: finalPrompt }],
@@ -109,6 +115,7 @@ export async function generateModifiedAssetDescription(params: {
       : params.type === 'prop'
         ? 'sync_prop_description_after_image_modify'
         : 'sync_location_description_after_image_modify',
+    locale: params.locale,
     meta: {
       stepId: params.type === 'character'
         ? 'sync_character_description_after_image_modify'
@@ -119,6 +126,9 @@ export async function generateModifiedAssetDescription(params: {
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: parseModifiedDescription,
   })
-  return parseModifiedDescription(completion.text)
+  return completion.data
 }

@@ -154,19 +154,6 @@ export function logLlmRawOutput(params: {
   }
 }
 
-export function isRetryableError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const errorRecord = error as { code?: unknown; status?: unknown }
-  if (errorRecord.code === 'ECONNRESET' || errorRecord.code === 'ETIMEDOUT') return true
-  if (
-    typeof errorRecord.status === 'number'
-    && (errorRecord.status === 429 || (errorRecord.status >= 500 && errorRecord.status < 600))
-  ) {
-    return true
-  }
-  return false
-}
-
 export function recordCompletionUsage(model: string, completion: OpenAI.Chat.Completions.ChatCompletion) {
   const summary = completionUsageSummary(completion)
   if (!summary) return

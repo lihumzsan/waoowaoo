@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { queryTaskTargetStates } from '@/lib/task/state-service'
-import { withPrismaRetry } from '@/lib/prisma-retry'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { assembleProjectContext } from '@/lib/project-context/assembler'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
@@ -112,13 +112,15 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => ({
-        states: await withPrismaRetry(() =>
-          queryTaskTargetStates({
+        states: await withRetry({
+          scope: 'prisma:get_task_status',
+          policy: RETRY_POLICY.prisma,
+          run: async () => await queryTaskTargetStates({
             projectId: ctx.projectId,
             userId: ctx.userId,
             targets: input.targets,
-          })
-        ),
+          }),
+        }),
       }),
     }),
   }

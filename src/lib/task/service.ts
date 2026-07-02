@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { withPrismaRetry } from '@/lib/prisma-retry'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
@@ -436,26 +436,32 @@ function activeTaskWhere(taskId: string) {
 }
 
 export async function isTaskActive(taskId: string) {
-  const task = await withPrismaRetry(() =>
-    taskModel.findUnique({
+  const task = await withRetry({
+    scope: 'prisma:task.isActive',
+    policy: RETRY_POLICY.prisma,
+    run: async () => await taskModel.findUnique({
       where: { id: taskId },
       select: { status: true },
-    })
-  )
+    }),
+  })
   if (!task) return false
   return isActiveStatus(task.status)
 }
 
 export async function tryMarkTaskProcessing(taskId: string, externalId?: string | null) {
+  const data: Prisma.TaskUpdateManyMutationInput = {
+    status: TASK_STATUS.PROCESSING,
+    startedAt: new Date(),
+    heartbeatAt: new Date(),
+    attempt: { increment: 1 },
+  }
+  if (externalId !== undefined) {
+    data.externalId = externalId || null
+  }
+
   const result = await taskModel.updateMany({
     where: activeTaskWhere(taskId),
-    data: {
-      status: TASK_STATUS.PROCESSING,
-      startedAt: new Date(),
-      heartbeatAt: new Date(),
-      externalId: externalId || null,
-      attempt: { increment: 1 },
-    },
+    data,
   })
   return result.count > 0
 }
@@ -488,12 +494,14 @@ export async function touchTaskHeartbeat(taskId: string) {
 
 export async function tryUpdateTaskProgress(taskId: string, progress: number, payload?: Record<string, unknown> | null) {
   if (payload) {
-    const current = await withPrismaRetry(() =>
-      taskModel.findFirst({
+    const current = await withRetry({
+      scope: 'prisma:task.progress.current',
+      policy: RETRY_POLICY.prisma,
+      run: async () => await taskModel.findFirst({
         where: activeTaskWhere(taskId),
         select: { payload: true },
-      })
-    )
+      }),
+    })
     if (!current) return false
     const mergedPayload = mergeTaskProgressPayload(current.payload, payload)
     const result = await taskModel.updateMany({
@@ -537,6 +545,21 @@ export async function tryMarkTaskFailed(taskId: string, errorCode: string, error
       errorCode: errorCode.slice(0, 80),
       errorMessage: errorMessage.slice(0, 2000),
       finishedAt: new Date(),
+      heartbeatAt: null,
+    },
+  })
+  return result.count > 0
+}
+
+export async function tryMarkTaskQueuedForRetry(taskId: string) {
+  const result = await taskModel.updateMany({
+    where: {
+      id: taskId,
+      status: TASK_STATUS.PROCESSING,
+    },
+    data: {
+      status: TASK_STATUS.QUEUED,
+      startedAt: null,
       heartbeatAt: null,
     },
   })

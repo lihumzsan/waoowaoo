@@ -1,7 +1,7 @@
 import { type Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
-import { executeAiVisionStep } from '@/lib/ai-exec/engine'
-import { safeParseJsonObject } from '@/lib/json-repair'
+import { executeAiStructuredVisionStep } from '@/lib/ai-exec/structured-step'
 import { normalizeReferenceImagesForGeneration } from '@/lib/media/outbound-image'
 import { prisma } from '@/lib/prisma'
 import type { Locale } from '@/i18n/routing'
@@ -68,7 +68,7 @@ export async function analyzeLocationSpatialProfile(
     },
   })
 
-  const completion = await executeAiVisionStep({
+  const completion = await executeAiStructuredVisionStep({
     userId: input.userId,
     model: input.model,
     prompt,
@@ -76,17 +76,19 @@ export async function analyzeLocationSpatialProfile(
     temperature: 0.1,
     projectId: input.projectId ?? undefined,
     action: AI_PROMPT_IDS.LOCATION_SPATIAL_PROFILE,
+    locale: input.locale,
     meta: {
       stepId: AI_PROMPT_IDS.LOCATION_SPATIAL_PROFILE,
       stepTitle: 'Analyze location spatial profile',
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: parseLocationSpatialProfile,
   })
   if (!completion.text.trim()) throw new Error('LOCATION_SPATIAL_PROFILE_EMPTY')
-
-  const parsed = safeParseJsonObject(completion.text)
-  return parseLocationSpatialProfile(parsed)
+  return completion.data
 }
 
 export async function analyzeAndPersistProjectLocationImageSpatialProfile(

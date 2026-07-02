@@ -1,12 +1,12 @@
 import { type Job } from 'bullmq'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { addCharacterPromptSuffix, addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
 import { type TaskJobData } from '@/lib/task/types'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { safeParseJsonObject } from '@/lib/json-repair'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import {
   buildCharacterCandidatePromptInstruction,
   CHARACTER_CANDIDATE_PROMPT_COUNT,
@@ -78,7 +78,7 @@ async function generateGlobalCharacterCandidatePrompts(input: {
   readonly description: string
   readonly locale: 'zh' | 'en'
 }): Promise<string[]> {
-  const completion = await executeAiTextStep({
+  const completion = await executeAiStructuredTextStep({
     userId: input.userId,
     model: input.analysisModel,
     messages: [{
@@ -92,36 +92,45 @@ async function generateGlobalCharacterCandidatePrompts(input: {
     temperature: 0.75,
     projectId: 'global-asset-hub',
     action: 'global_character_candidate_prompts',
+    locale: input.locale,
     meta: {
       stepId: 'global_character_candidate_prompts',
       stepTitle: '全局角色候选提示词',
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: (raw) => parseCharacterCandidatePrompts(raw as Record<string, unknown>),
   })
-  return parseCharacterCandidatePrompts(safeParseJsonObject(completion.text))
+  return completion.data
 }
 
 async function generateGlobalLocationCandidatePrompt(input: {
   readonly userId: string
   readonly analysisModel: string
+  readonly locale: 'zh' | 'en'
   readonly strategy: LocationCandidateStrategy
 }): Promise<string> {
-  const completion = await executeAiTextStep({
+  const completion = await executeAiStructuredTextStep({
     userId: input.userId,
     model: input.analysisModel,
     messages: [{ role: 'user', content: input.strategy.draftInstruction }],
     temperature: 0.72,
     projectId: 'global-asset-hub',
     action: 'global_location_candidate_prompt',
+    locale: input.locale,
     meta: {
       stepId: `global_location_candidate_prompt:${input.strategy.id}`,
       stepTitle: input.strategy.label,
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: (raw) => parseLocationCandidatePrompt(raw as Record<string, unknown>),
   })
-  return parseLocationCandidatePrompt(safeParseJsonObject(completion.text))
+  return completion.data
 }
 
 export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
@@ -241,6 +250,7 @@ export async function handleAssetHubImageTask(job: Job<TaskJobData>) {
         const candidatePrompt = await generateGlobalLocationCandidatePrompt({
           userId,
           analysisModel: profileModel,
+          locale,
           strategy,
         })
         return buildLocationImagePromptCore({

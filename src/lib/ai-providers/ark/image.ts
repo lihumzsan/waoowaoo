@@ -1,102 +1,13 @@
-import { getInternalBaseUrl } from '@/lib/env'
-import { logError as _ulogError, logInfo as _ulogInfo } from '@/lib/logging/core'
+import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderImageExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
+import { fetchWithRetry } from '@/lib/retry'
 
 const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
 const DEFAULT_TIMEOUT_MS = 60 * 1000
-const MAX_RETRIES = 3
-const RETRY_DELAY_BASE_MS = 2000
-
-function normalizeError(error: unknown): { name?: string; message: string; cause?: string; status?: number } {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      cause: error.cause ? String(error.cause) : undefined,
-    }
-  }
-  if (typeof error === 'object' && error !== null) {
-    const e = error as { name?: unknown; message?: unknown; cause?: unknown; status?: unknown }
-    return {
-      name: typeof e.name === 'string' ? e.name : undefined,
-      message: typeof e.message === 'string' ? e.message : 'Unknown error',
-      cause: e.cause ? String(e.cause) : undefined,
-      status: typeof e.status === 'number' ? e.status : undefined,
-    }
-  }
-  return { message: 'Unknown error' }
-}
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number,
-  timeoutMs: number,
-  logPrefix: string,
-): Promise<Response> {
-  let lastError: Error | null = null
-
-  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-
-    try {
-      const fullUrl = url.startsWith('/') ? `${getInternalBaseUrl()}${url}` : url
-      const response = await fetch(fullUrl, {
-        ...options,
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-
-      if (response.ok) return response
-
-      try {
-        const errorText = await response.text()
-        lastError = new Error(`HTTP ${response.status}: ${errorText}`)
-      } catch {
-        lastError = new Error(`HTTP ${response.status}`)
-      }
-    } catch (error: unknown) {
-      clearTimeout(timeoutId)
-      const normalized = normalizeError(error)
-      lastError = error instanceof Error ? error : new Error(normalized.message)
-
-      const errorDetails = {
-        attempt,
-        maxRetries,
-        errorName: normalized.name,
-        errorMessage: normalized.message,
-        errorCause: normalized.cause,
-        isAbortError: normalized.name === 'AbortError',
-        isTimeoutError: normalized.name === 'AbortError' || normalized.message.includes('timeout'),
-        isNetworkError: normalized.message.includes('fetch failed') || normalized.name === 'TypeError',
-      }
-
-      _ulogError(`${logPrefix} 第 ${attempt}/${maxRetries} 次尝试失败:`, JSON.stringify(errorDetails, null, 2))
-    }
-
-    if (attempt < maxRetries) {
-      const delayMs = RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1)
-      _ulogInfo(`${logPrefix} 等待 ${delayMs / 1000} 秒后重试...`)
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
-  }
-
-  throw lastError || new Error(`${logPrefix} 所有 ${maxRetries} 次重试都失败`)
-}
-
-export async function fetchWithTimeoutAndRetry(
-  url: string,
-  options?: RequestInit & { timeoutMs?: number; maxRetries?: number; logPrefix?: string },
-): Promise<Response> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = MAX_RETRIES, logPrefix = '[Fetch]', ...fetchOptions } = options || {}
-  return fetchWithRetry(url, fetchOptions, maxRetries, timeoutMs, logPrefix)
-}
 
 export interface ArkImageGenerationRequest {
   model: string
@@ -116,11 +27,11 @@ export interface ArkImageGenerationResponse {
 
 export async function arkImageGeneration(
   request: ArkImageGenerationRequest,
-  options?: { apiKey: string; timeoutMs?: number; maxRetries?: number; logPrefix?: string },
+  options?: { apiKey: string; timeoutMs?: number; logPrefix?: string },
 ): Promise<ArkImageGenerationResponse> {
   if (!options?.apiKey) throw new Error('请配置火山引擎 API Key')
 
-  const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = MAX_RETRIES, logPrefix = '[Ark Image]' } = options
+  const { apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, logPrefix = '[Ark Image]' } = options
   const url = `${ARK_BASE_URL}/images/generations`
 
   _ulogInfo(`${logPrefix} 开始图片生成请求, 模型: ${request.model}`)
@@ -140,25 +51,16 @@ export async function arkImageGeneration(
     ),
   )
 
-  const response = await fetchWithRetry(
-    url,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(request),
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
     },
-    maxRetries,
+    body: JSON.stringify(request),
     timeoutMs,
-    logPrefix,
-  )
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`${logPrefix} 图片生成失败: ${response.status} - ${errorText}`)
-  }
+    scope: 'ark:image',
+  })
 
   const data = (await response.json()) as ArkImageGenerationResponse
   _ulogInfo(`${logPrefix} 图片生成成功`)
@@ -166,7 +68,6 @@ export async function arkImageGeneration(
 }
 
 export const ARK_API_TIMEOUT_MS = DEFAULT_TIMEOUT_MS
-export const ARK_API_MAX_RETRIES = MAX_RETRIES
 
 type ArkImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 

@@ -84,7 +84,7 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
     if (status === 404 || message.includes('404') || message.includes('not found') || message.includes('NOT_FOUND')) {
       return { status: 'failed', error: 'Batch task not found' }
     }
-    return { status: 'pending' }
+    throw error
   }
 }
 
@@ -182,6 +182,6 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
   } catch (error: unknown) {
     const message = getErrorMessage(error)
     logInternal('Veo', 'ERROR', `${logPrefix} 查询异常`, { operationName, error: message })
-    return { status: 'failed', error: message }
+    throw error
   }
 }

@@ -13,7 +13,6 @@ import {
   queryTasksMock,
   removeTaskJobMock,
   resetTaskInfraMocks,
-  withPrismaRetryMock,
   type RouteContext,
   type TaskRecord,
 } from '../helpers/task-infra-contract'
@@ -61,10 +60,6 @@ vi.mock('@/lib/task/publisher', () => ({
 
 vi.mock('@/lib/task/state-service', () => ({
   queryTaskTargetStates: queryTaskTargetStatesMock,
-}))
-
-vi.mock('@/lib/prisma-retry', () => ({
-  withPrismaRetry: withPrismaRetryMock,
 }))
 
 vi.mock('@/lib/sse/shared-subscriber', () => ({
@@ -172,7 +167,6 @@ describe('api contract - task queue routes (behavior)', () => {
 
     const payload = await res.json() as { states: Array<Record<string, unknown>> }
     expect(payload.states).toHaveLength(1)
-    expect(withPrismaRetryMock).toHaveBeenCalledTimes(1)
     expect(queryTaskTargetStatesMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',

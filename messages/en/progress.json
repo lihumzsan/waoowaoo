@@ -133,6 +133,7 @@
     "insertPanelGenerateText": "Generate inserted panel text",
     "insertPanelPersist": "Persist inserted panel",
     "pollingExternal": "Waiting for external service",
+    "retrying": "Retrying task",
     "enqueueFailed": "Task enqueue failed",
     "llmProxySubmit": "Submit LLM task",
     "llmProxyExecute": "Execute LLM task",

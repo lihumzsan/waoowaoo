@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { toAiRuntimeError } from '@/lib/ai-exec/governance'
+import { toAppError } from '@/lib/errors/app-error'
 
-describe('toAiRuntimeError empty response mapping', () => {
+describe('toAppError empty response mapping', () => {
   it('maps nested Gemini empty response signal to EMPTY_RESPONSE even when status is 429', () => {
     const upstreamError = new Error('Too Many Requests') as Error & {
       status?: number
@@ -18,13 +18,13 @@ describe('toAiRuntimeError empty response mapping', () => {
       status: 'Too Many Requests',
     }
 
-    const runtimeError = toAiRuntimeError(upstreamError)
+    const runtimeError = toAppError(upstreamError)
     expect(runtimeError.code).toBe('EMPTY_RESPONSE')
     expect(runtimeError.retryable).toBe(true)
   })
 
   it('keeps RATE_LIMIT when there is no empty response signal', () => {
-    const runtimeError = toAiRuntimeError({
+    const runtimeError = toAppError({
       status: 429,
       message: 'Too Many Requests',
     })

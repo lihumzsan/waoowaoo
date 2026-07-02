@@ -3,6 +3,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
 import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
 import { pollAsyncTask } from '@/lib/ai-exec/async-poll'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { getSignedUrl } from '@/lib/storage'
 import { processMediaResult } from '@/lib/media-process'
 import {
@@ -140,7 +141,11 @@ export async function waitExternalResult(
 
   while (Date.now() - startAt <= timeoutMs) {
     await assertTaskActive(job, 'polling_external')
-    const status = await pollAsyncTask(externalId, userId)
+    const status = await withRetry({
+      scope: `media:poll:${externalId}`,
+      policy: RETRY_POLICY.mediaPoll,
+      run: async () => await pollAsyncTask(externalId, userId),
+    })
 
     if (status.status === 'completed') {
       const url = status.resultUrl || status.imageUrl || status.videoUrl

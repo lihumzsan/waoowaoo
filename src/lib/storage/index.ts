@@ -1,15 +1,14 @@
 import { createScopedLogger } from '@/lib/logging/core'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { createStorageProvider } from '@/lib/storage/factory'
 import type { DeleteObjectsResult, GetObjectStreamParams, ObjectStreamResult, StorageProvider } from '@/lib/storage/types'
-import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS, withRetry } from '@/lib/storage/utils'
+import { DEFAULT_SIGNED_URL_EXPIRES_SECONDS } from '@/lib/storage/utils'
 
 const storageLogger = createScopedLogger({
   module: 'storage.provider',
 })
 
 const UPLOAD_MAX_RETRIES = 3
-const RETRY_DELAY_BASE_MS = 2000
-
 let providerSingleton: StorageProvider | null = null
 
 export function getStorageProvider(): StorageProvider {
@@ -35,18 +34,21 @@ export function generateUniqueKey(prefix: string, ext: string = 'png'): string {
 export async function uploadObject(
   body: Buffer,
   key: string,
-  maxRetries: number = UPLOAD_MAX_RETRIES,
+  retryAttempts: number = UPLOAD_MAX_RETRIES,
   contentType?: string,
 ): Promise<string> {
   const provider = getStorageProvider()
 
-  const result = await withRetry(
-    async () => {
+  const result = await withRetry({
+    scope: 'storage:upload',
+    policy: {
+      ...RETRY_POLICY.storage,
+      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
+    },
+    run: async () => {
       return await provider.uploadObject({ key, body, contentType })
     },
-    maxRetries,
-    RETRY_DELAY_BASE_MS,
-  )
+  })
 
   return result.key
 }
@@ -94,52 +96,66 @@ export function getSignedUrls(keys: string[], expiresInSeconds: number = DEFAULT
 export async function downloadAndUploadImage(
   imageUrl: string,
   key: string,
-  maxRetries: number = UPLOAD_MAX_RETRIES,
+  retryAttempts: number = UPLOAD_MAX_RETRIES,
 ): Promise<string> {
   const sharp = (await import('sharp')).default
 
-  return await withRetry(async () => {
-    const response = await fetch(toFetchableUrl(imageUrl))
-    if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`)
-    }
+  return await withRetry({
+    scope: 'storage:download-image',
+    policy: {
+      ...RETRY_POLICY.storage,
+      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
+    },
+    run: async () => {
+      const response = await fetch(toFetchableUrl(imageUrl))
+      if (!response.ok) {
+        throw new Error(`Failed to download image: ${response.status} ${response.statusText}`)
+      }
 
-    const buffer = Buffer.from(await response.arrayBuffer())
-    let processed = await sharp(buffer).jpeg({ quality: 95, mozjpeg: true }).toBuffer()
-    let quality = 95
-    const maxSizeBytes = 10 * 1024 * 1024
+      const buffer = Buffer.from(await response.arrayBuffer())
+      let processed = await sharp(buffer).jpeg({ quality: 95, mozjpeg: true }).toBuffer()
+      let quality = 95
+      const maxSizeBytes = 10 * 1024 * 1024
 
-    while (processed.length > maxSizeBytes && quality > 60) {
-      quality -= 5
-      processed = await sharp(buffer).jpeg({ quality, mozjpeg: true }).toBuffer()
-    }
+      while (processed.length > maxSizeBytes && quality > 60) {
+        quality -= 5
+        processed = await sharp(buffer).jpeg({ quality, mozjpeg: true }).toBuffer()
+      }
 
-    const jpgKey = key.replace(/\.(png|webp)$/i, '.jpg')
-    return await uploadObject(processed, jpgKey, 1, 'image/jpeg')
-  }, maxRetries, RETRY_DELAY_BASE_MS)
+      const jpgKey = key.replace(/\.(png|webp)$/i, '.jpg')
+      return await uploadObject(processed, jpgKey, 1, 'image/jpeg')
+    },
+  })
 }
 
 export async function downloadAndUploadVideo(
   videoUrl: string,
   key: string,
-  maxRetries: number = UPLOAD_MAX_RETRIES,
+  retryAttempts: number = UPLOAD_MAX_RETRIES,
   requestHeaders?: Record<string, string>,
 ): Promise<string> {
-  return await withRetry(async () => {
-    const response = await fetch(toFetchableUrl(videoUrl), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; VideoDownloader/1.0)',
-        ...(requestHeaders || {}),
-      },
-    })
+  return await withRetry({
+    scope: 'storage:download-video',
+    policy: {
+      ...RETRY_POLICY.storage,
+      maxAttempts: Math.max(1, Math.floor(retryAttempts)),
+    },
+    run: async () => {
+      const response = await fetch(toFetchableUrl(videoUrl), {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VideoDownloader/1.0)',
+          ...(requestHeaders || {}),
+        },
+      })
 
-    if (!response.ok) {
-      throw new Error(`Failed to download video: ${response.status} ${response.statusText}`)
-    }
+      if (!response.ok) {
+        throw new Error(`Failed to download video: ${response.status} ${response.statusText}`)
+      }
 
-    const buffer = Buffer.from(await response.arrayBuffer())
-    return await uploadObject(buffer, key, 1)
-  }, maxRetries, RETRY_DELAY_BASE_MS)
+      const buffer = Buffer.from(await response.arrayBuffer())
+      return await uploadObject(buffer, key, 1)
+    },
+  })
 }
 
 export * from './signed-urls'

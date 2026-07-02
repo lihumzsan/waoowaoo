@@ -8,13 +8,11 @@ import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { getCompletionParts } from '@/lib/ai-exec/llm-helpers'
 import {
   _ulogError,
-  _ulogWarn,
-  isRetryableError,
   llmLogger,
   recordCompletionUsage,
   resolveLlmRuntimeModel,
 } from '@/lib/ai-exec/llm-runtime'
-import { waitForRetryDelay } from '@/lib/ai-exec/governance'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
@@ -26,24 +24,6 @@ import {
 import type { AiProviderLlmResult, AiProviderVisionExecutionContext } from '@/lib/ai-providers/runtime-types'
 
 ensureAiCatalogsRegistered()
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && typeof error.message === 'string') return error.message
-  if (typeof error === 'object' && error !== null) {
-    const candidate = (error as { message?: unknown }).message
-    if (typeof candidate === 'string') return candidate
-  }
-  return 'unknown error'
-}
-
-function getErrorBody(error: unknown): { message?: unknown; code?: unknown } {
-  if (typeof error !== 'object' || error === null) return {}
-  const root = error as { error?: unknown; message?: unknown; code?: unknown }
-  if (typeof root.error === 'object' && root.error !== null) {
-    return root.error as { message?: unknown; code?: unknown }
-  }
-  return root
-}
 
 function resolveOpenRouterSessionForVision(input: {
   providerKey: string
@@ -121,7 +101,7 @@ export async function runChatCompletionWithVision(
     context: `vision:${selection.modelKey}`,
   })
 
-  const { temperature = 0.7, maxRetries = 2, reasoning = true } = options
+  const { temperature = 0.7, reasoning = true } = options
   const normalizedImageUrls = await normalizeVisionImageUrls(imageUrls)
   const projectId =
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
@@ -136,11 +116,11 @@ export async function runChatCompletionWithVision(
     explicitSessionId: options.openRouterSessionId,
   })
 
-  let lastError: Error | null = null
-
-  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-    const attemptStartedAt = Date.now()
-    try {
+  return await withRetry({
+    scope: `vision:${selection.modelKey}`,
+    policy: RETRY_POLICY.llm,
+    run: async ({ attempt, maxAttempts }) => {
+      const attemptStartedAt = Date.now()
       const providerConfig = await getProviderConfig(userId, provider)
       const result = await executeVisionCompletionViaAdapter({
         userId,
@@ -162,39 +142,28 @@ export async function runChatCompletionWithVision(
         details: {
           model: resolvedModelId,
           attempt,
-          maxRetries,
+          maxAttempts,
           imageCount: normalizedImageUrls.length,
           ...(result.successDetails || {}),
         },
       })
       return result.completion
-    } catch (error: unknown) {
-      lastError = error instanceof Error ? error : new Error(getErrorMessage(error))
-      const message = getErrorMessage(error)
+    },
+    onAttemptFailed: ({ error, attempt, maxAttempts, raw }) => {
       llmLogger.warn({
         action: 'llm.vision.attempt_failed',
-        message: message || 'llm vision attempt failed',
+        message: error.message || 'llm vision attempt failed',
         provider,
-        durationMs: Date.now() - attemptStartedAt,
         details: {
           model: resolvedModelId,
           attempt,
-          maxRetries,
+          maxAttempts,
           imageCount: normalizedImageUrls.length,
         },
+        error: raw,
       })
-      const errorBody = getErrorBody(error)
-      if (errorBody?.message === 'PROHIBITED_CONTENT' || errorBody?.code === 502) {
-        _ulogError('[LLM Vision] ❌ 内容安全检测失败 - Google AI Studio 拒绝处理此内容')
-        throw new Error('SENSITIVE_CONTENT: 图片或提示词包含敏感信息,无法处理')
-      }
-
-      _ulogWarn(`[LLM Vision] 调用失败 (${attempt}/${maxRetries + 1}): ${message}`)
-      if (!isRetryableError(error) || attempt > maxRetries) break
-      await waitForRetryDelay({ attempt, kind: 'vision' })
-    }
-  }
-  throw lastError || new Error('LLM Vision 调用失败')
+    },
+  })
 }
 
 export async function runChatCompletionWithVisionStream(

@@ -3,7 +3,7 @@ import { getPrismaErrorCode, isLikelyPrismaDisconnectError, isPrismaRetryableCod
 import { DEFAULT_ERROR_CODE, getErrorSpec, isKnownErrorCode, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
 import type { ErrorContext, NormalizedError, NormalizedErrorDetails } from './types'
 
-type NormalizeOptions = {
+export type NormalizeOptions = {
   context?: ErrorContext
   fallbackCode?: UnifiedErrorCode
   details?: Record<string, unknown> | null
@@ -117,6 +117,36 @@ function isEmptyResponseMessage(message: string): boolean {
   ])
 }
 
+function hasNestedEmptyResponseSignal(input: unknown, seen: Set<unknown> = new Set(), depth: number = 0): boolean {
+  if (!input || depth > 6 || seen.has(input)) return false
+  if (typeof input === 'string') return isEmptyResponseMessage(input.toLowerCase())
+  if (typeof input !== 'object') return false
+
+  seen.add(input)
+  if (input instanceof Error) {
+    if (isEmptyResponseMessage(input.message.toLowerCase())) return true
+    const cause = (input as Error & { cause?: unknown }).cause
+    return hasNestedEmptyResponseSignal(cause, seen, depth + 1)
+  }
+
+  const record = input as Record<string, unknown>
+  const fields = [
+    record.message,
+    record.code,
+    record.type,
+    record.status,
+    record.error,
+    record.cause,
+    record.details,
+    record.response,
+    record.body,
+  ]
+  for (const field of fields) {
+    if (hasNestedEmptyResponseSignal(field, seen, depth + 1)) return true
+  }
+  return false
+}
+
 function isVideoApiFormatUnsupportedMessage(message: string): boolean {
   if (containsAny(message, [
     'video_api_format_unsupported',
@@ -180,6 +210,10 @@ function inferCodeFromMessage(message: string): UnifiedErrorCode | null {
   if (isModelNotRegisteredMessage(message)) return 'MODEL_NOT_REGISTERED'
   if (isModelNotConfiguredMessage(message)) return 'MODEL_NOT_CONFIGURED'
   if (isEmptyResponseMessage(message)) return 'EMPTY_RESPONSE'
+  if (containsAny(message, ['parse_error', 'parsing_error', 'json parse', 'could not be parsed'])) return 'PARSE_ERROR'
+  if (containsAny(message, ['model_output_schema_invalid', 'zod', 'schema invalid', 'schema validation'])) return 'MODEL_OUTPUT_SCHEMA_INVALID'
+  if (containsAny(message, ['provider_poll_failed'])) return 'PROVIDER_POLL_FAILED'
+  if (containsAny(message, ['provider_submit_failed'])) return 'PROVIDER_SUBMIT_FAILED'
   if (isVideoApiFormatUnsupportedMessage(message)) return 'VIDEO_API_FORMAT_UNSUPPORTED'
   if (containsAny(message, ['task cancelled', 'canceled by user', 'cancelled by user', '任务已取消'])) return 'CONFLICT'
   if (containsAny(message, ['unauthorized', 'not authenticated', 'need login', '401'])) return 'UNAUTHORIZED'
@@ -251,6 +285,10 @@ export function normalizeAnyError(input: unknown, options: NormalizeOptions = {}
       available: input.available,
       ...(options.details || {}),
     })
+  }
+
+  if (hasNestedEmptyResponseSignal(input)) {
+    return buildNormalizedError('EMPTY_RESPONSE', message, options.details, provider)
   }
 
   const resolvedCode = resolveUnifiedErrorCode(errorLike.code)

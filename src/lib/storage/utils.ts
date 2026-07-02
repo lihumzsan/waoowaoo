@@ -33,27 +33,6 @@ export function normalizeKey(raw: string): string {
   return raw.replace(/^\/+/, '')
 }
 
-export async function withRetry<T>(
-  action: () => Promise<T>,
-  maxRetries: number,
-  delayBaseMs: number,
-): Promise<T> {
-  let lastError: unknown = null
-
-  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-    try {
-      return await action()
-    } catch (error: unknown) {
-      lastError = error
-      if (attempt === maxRetries) break
-      const delayMs = delayBaseMs * Math.pow(2, attempt - 1)
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
-  }
-
-  throw lastError ?? new Error('Unknown retry failure')
-}
-
 export async function streamToBuffer(body: unknown): Promise<Buffer> {
   if (!body) {
     throw new Error('Empty response body from storage provider')

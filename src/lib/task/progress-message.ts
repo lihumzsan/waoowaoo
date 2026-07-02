@@ -71,6 +71,7 @@ const STAGE_LABELS: Record<string, string> = {
   regenerate_storyboard_prepare: 'progress.stage.regenerateStoryboardPrepare',
   regenerate_storyboard_persist: 'progress.stage.regenerateStoryboardPersist',
   polling_external: 'progress.stage.pollingExternal',
+  retrying: 'progress.stage.retrying',
   enqueue_failed: 'progress.stage.enqueueFailed',
   llm_proxy_submit: 'progress.stage.llmProxySubmit',
   llm_proxy_execute: 'progress.stage.llmProxyExecute',

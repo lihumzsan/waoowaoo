@@ -1,5 +1,6 @@
 import { GoogleGenAI, HarmBlockThreshold, HarmCategory } from '@google/genai'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import type { AiProviderImageExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import {
   assertAllowedGoogleImageOptions,
@@ -33,10 +34,14 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   if (modelId === 'gemini-3-pro-image-preview-batch') {
     const { submitGeminiBatch } = await import('@/lib/ai-providers/google/llm')
-    const result = await submitGeminiBatch(apiKey, input.prompt, {
-      referenceImages,
-      ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-      ...(options.resolution ? { resolution: options.resolution } : {}),
+    const result = await withRetry({
+      scope: `google:image:batch:${modelId}`,
+      policy: RETRY_POLICY.mediaFetch,
+      run: async () => await submitGeminiBatch(apiKey, input.prompt, {
+        referenceImages,
+        ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+        ...(options.resolution ? { resolution: options.resolution } : {}),
+      }),
     })
 
     if (!result.success || !result.batchName) {
@@ -52,13 +57,17 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   }
 
   if (modelId.startsWith('imagen-')) {
-    const response = await ai.models.generateImages({
-      model: modelId,
-      prompt: input.prompt,
-      config: {
-        numberOfImages: 1,
-        ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-      },
+    const response = await withRetry({
+      scope: `google:image:imagen:${modelId}`,
+      policy: RETRY_POLICY.mediaFetch,
+      run: async () => await ai.models.generateImages({
+        model: modelId,
+        prompt: input.prompt,
+        config: {
+          numberOfImages: 1,
+          ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+        },
+      }),
     })
 
     const generatedImages = (response as ImagenResponse).generatedImages
@@ -88,21 +97,25 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   ]
 
-  const response = await ai.models.generateContent({
-    model: modelId,
-    contents: [{ parts: contentParts }],
-    config: {
-      responseModalities: ['TEXT', 'IMAGE'],
-      safetySettings,
-      ...(options.aspectRatio || options.resolution
-        ? {
-          imageConfig: {
-            ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-            ...(imageSize ? { imageSize } : {}),
-          },
-        }
-        : {}),
-    },
+  const response = await withRetry({
+    scope: `google:image:gemini:${modelId}`,
+    policy: RETRY_POLICY.mediaFetch,
+    run: async () => await ai.models.generateContent({
+      model: modelId,
+      contents: [{ parts: contentParts }],
+      config: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        safetySettings,
+        ...(options.aspectRatio || options.resolution
+          ? {
+            imageConfig: {
+              ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+              ...(imageSize ? { imageSize } : {}),
+            },
+          }
+          : {}),
+      },
+    }),
   })
 
   const candidate = response.candidates?.[0]

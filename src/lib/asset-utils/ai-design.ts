@@ -1,12 +1,12 @@
 import { logError as _ulogError } from '@/lib/logging/core'
+import { z } from 'zod'
 /**
  * AI 设计共享工具函数
  * 统一处理 Asset Hub 和 Novel Promotion 的 AI 设计逻辑
  */
 
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { withTextBilling } from '@/lib/billing'
-import { safeParseJsonObject } from '@/lib/json-repair'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 import type { Locale } from '@/i18n/routing'
 
@@ -79,18 +79,31 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
     const action = assetType === 'character' ? 'ai_design_character' : 'ai_design_location'
     const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
     const runCompletion = async () =>
-        await executeAiTextStep({
+        await executeAiStructuredTextStep({
             userId,
             model: analysisModel,
             messages: [{ role: 'user', content: finalPrompt }],
             temperature: 0.7,
             projectId,
             action,
+            locale,
             meta: {
                 stepId: action,
                 stepTitle: assetType === 'character' ? '角色设计' : '场景设计',
                 stepIndex: 1,
                 stepTotal: 1,
+            },
+            schema: z.unknown(),
+            parse: { kind: 'object' },
+            validate: (raw) => {
+                const record = raw && typeof raw === 'object' && !Array.isArray(raw)
+                    ? raw as Record<string, unknown>
+                    : {}
+                const prompt = typeof record.prompt === 'string' ? record.prompt.trim() : ''
+                if (!prompt) {
+                    throw new Error('AI返回缺少prompt字段')
+                }
+                return { prompt }
             },
         })
     const completion = skipBilling
@@ -103,27 +116,12 @@ export async function aiDesign(options: AIDesignOptions): Promise<AIDesignResult
             runCompletion,
         )
 
-    const aiResponse = completion.text
-
-    if (!aiResponse) {
+    if (!completion.text) {
         return { success: false, error: 'AI返回内容为空' }
-    }
-
-    // 解析 JSON 响应
-    let parsedResponse: Record<string, unknown>
-    try {
-        parsedResponse = safeParseJsonObject(aiResponse)
-    } catch {
-        _ulogError('[AI Design] AI 响应解析失败:', aiResponse)
-        return { success: false, error: 'AI返回格式错误' }
-    }
-
-    if (!parsedResponse.prompt) {
-        return { success: false, error: 'AI返回缺少prompt字段' }
     }
 
     return {
         success: true,
-        prompt: typeof parsedResponse.prompt === 'string' ? parsedResponse.prompt : '',
+        prompt: completion.data.prompt,
     }
 }

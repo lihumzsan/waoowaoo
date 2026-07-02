@@ -3,6 +3,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 
 type GoogleVeoOptions = NonNullable<AiProviderVideoExecutionContext['options']>
 
@@ -114,7 +115,11 @@ export async function executeGoogleVideoGeneration(input: AiProviderVideoExecuti
     request.config = config
   }
 
-  const response = await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0])
+  const response = await withRetry({
+    scope: `google:video:submit:${modelId}`,
+    policy: RETRY_POLICY.mediaFetch,
+    run: async () => await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0]),
+  })
   const operationName = extractOperationName(response)
   if (!operationName) {
     throw new Error('Veo 未返回 operation name')

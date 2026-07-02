@@ -49,7 +49,10 @@ describe('worker shot-ai-prompt-appearance behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     persistMock.resolveAnalysisModel.mockResolvedValue({ id: 'np-1', analysisModel: 'llm::analysis' })
-    runtimeMock.runShotPromptCompletion.mockResolvedValue('{"prompt":"updated appearance description"}')
+    runtimeMock.runShotPromptCompletion.mockResolvedValue({
+      text: '{"prompt":"updated appearance description"}',
+      data: { prompt: 'updated appearance description' },
+    })
   })
 
   it('missing characterId -> explicit error', async () => {

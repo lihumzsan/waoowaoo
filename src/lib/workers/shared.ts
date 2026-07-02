@@ -8,12 +8,14 @@ import {
   touchTaskHeartbeat,
   tryMarkTaskCompleted,
   tryMarkTaskFailed,
+  tryMarkTaskQueuedForRetry,
   tryMarkTaskProcessing,
   tryUpdateTaskProgress,
   updateTaskBillingInfo,
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
 import { TASK_EVENT_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
+import { TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
@@ -331,8 +333,15 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
 
     const normalizedError = normalizeAnyError(error, { context: 'worker' })
     const errorCauseChain = buildErrorCauseChain(error)
+    const rawMaxAttempts = job.opts?.attempts
+    const attemptsMade = Number.isFinite(job.attemptsMade) ? Math.max(0, Math.floor(job.attemptsMade)) : 0
+    const maxAttempts = typeof rawMaxAttempts === 'number' && Number.isFinite(rawMaxAttempts)
+      ? Math.max(1, Math.floor(rawMaxAttempts))
+      : 1
+    const currentAttempt = attemptsMade + 1
+    const bullmqWillRetry = normalizedError.retryable && currentAttempt < maxAttempts
     const workerFailureLog = {
-      action: 'worker.failed',
+      action: bullmqWillRetry ? 'worker.retryable_failed' : 'worker.failed',
       message: normalizedError.message,
       errorCode: normalizedError.code,
       retryable: normalizedError.retryable,
@@ -361,7 +370,65 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
             causeChain: errorCauseChain,
           },
     }
-    logger.error(workerFailureLog)
+    logger[bullmqWillRetry ? 'warn' : 'error'](workerFailureLog)
+
+    if (bullmqWillRetry) {
+      const requeued = await tryMarkTaskQueuedForRetry(taskId)
+      if (requeued) {
+        const nextRetryDelayMs = TASK_RETRY_BACKOFF_BASE_MS * Math.pow(2, attemptsMade)
+        logger.warn({
+          action: 'worker.retry_scheduled',
+          message: normalizedError.message,
+          errorCode: normalizedError.code,
+          retryable: true,
+          durationMs: Date.now() - startedAt,
+          details: {
+            taskType: data.type,
+            attempt: currentAttempt,
+            maxAttempts,
+            nextRetryDelayMs,
+          },
+        })
+        const retryPayload = withFlowFields(data, {
+          stage: 'retrying',
+          stageLabel: getTaskStageLabel('retrying'),
+          displayMode: 'loading',
+          attempt: currentAttempt,
+          maxAttempts,
+          nextRetryDelayMs,
+          error: normalizedError,
+          trace: {
+            requestId: data.trace?.requestId || null,
+          },
+        })
+        await publishLifecycleEvent({
+          taskId,
+          projectId: data.projectId,
+          userId: data.userId,
+          type: TASK_EVENT_TYPE.PROGRESS,
+          taskType: data.type,
+          targetType: data.targetType,
+          targetId: data.targetId,
+          episodeId: data.episodeId || null,
+          payload: {
+            ...retryPayload,
+            message: buildTaskProgressMessage({
+              eventType: TASK_EVENT_TYPE.PROGRESS,
+              taskType: data.type,
+              payload: retryPayload,
+            }),
+          },
+          persist: false,
+        })
+        throw error instanceof Error ? error : new Error(normalizedError.message || 'Task retry scheduled')
+      }
+      logger.info({
+        action: 'worker.retry_skipped_not_processing',
+        message: 'task was no longer processing when retry was scheduled',
+        taskId,
+        durationMs: Date.now() - startedAt,
+      })
+    }
 
     if (billingInfo?.billable) {
       billingInfo = (await rollbackTaskBilling({

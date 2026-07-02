@@ -1,5 +1,6 @@
 import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-task-status'
 import { logInternal } from '@/lib/logging/semantic'
+import { FetchStatusError } from '@/lib/retry'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -52,8 +53,9 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
     )
 
     if (!queryResponse.ok) {
+      const errorText = await queryResponse.text()
       logInternal('Seedance', 'ERROR', `Status query failed: ${queryResponse.status}`)
-      return { status: 'pending' }
+      throw new FetchStatusError(queryResponse.status, errorText)
     }
 
     const queryData = await queryResponse.json() as {
@@ -89,6 +91,6 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
     return { status: 'pending' }
   } catch (error: unknown) {
     logInternal('Seedance', 'ERROR', 'Query error', { error: getErrorMessage(error) })
-    return { status: 'pending' }
+    throw error
   }
 }

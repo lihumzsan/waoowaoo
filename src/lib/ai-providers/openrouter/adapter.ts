@@ -26,7 +26,6 @@ export const openRouterAdapter: AiProviderAdapter = {
     temperature: input.temperature,
     reasoning: input.reasoning,
     reasoningEffort: input.reasoningEffort,
-    maxRetries: input.maxRetries,
     openRouterSessionId: input.openRouterSessionId,
   }),
   languageModel: {

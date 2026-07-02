@@ -1,7 +1,8 @@
-import { createScopedLogger, logError as _ulogError } from '@/lib/logging/core'
+import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
+import { fetchWithRetry } from '@/lib/retry'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
   FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
@@ -492,38 +493,28 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
   const logger = createScopedLogger({ module: 'worker.fal-video', action: 'fal_video_generate' })
   logger.info({ message: 'FAL video generation request', details: { modelId, endpoint } })
 
-  try {
-    const submitResponse = await fetch(buildFalQueueUrl(endpoint), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Key ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    })
+  const submitResponse = await fetchWithRetry(buildFalQueueUrl(endpoint), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Key ${apiKey}`,
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+    scope: `fal:video:submit:${endpoint}`,
+  })
 
-    if (!submitResponse.ok) {
-      const errorText = await submitResponse.text()
-      throw new Error(`FAL 提交失败 (${submitResponse.status}): ${errorText}`)
-    }
-
-    const submitData = (await submitResponse.json()) as { request_id?: unknown }
-    const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
-    if (!requestId) {
-      throw new Error('FAL 未返回 request_id')
-    }
-    logger.info({ message: 'FAL video task submitted', details: { requestId } })
-    return {
-      success: true,
-      async: true,
-      requestId,
-      endpoint,
-      externalId: `FAL:VIDEO:${endpoint}:${requestId}`,
-    }
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : '未知错误'
-    _ulogError('[FAL Video] 提交失败:', message)
-    throw new Error(`FAL 视频任务提交失败: ${message}`)
+  const submitData = (await submitResponse.json()) as { request_id?: unknown }
+  const requestId = typeof submitData.request_id === 'string' ? submitData.request_id : ''
+  if (!requestId) {
+    throw new Error('FAL 未返回 request_id')
+  }
+  logger.info({ message: 'FAL video task submitted', details: { requestId } })
+  return {
+    success: true,
+    async: true,
+    requestId,
+    endpoint,
+    externalId: `FAL:VIDEO:${endpoint}:${requestId}`,
   }
 }

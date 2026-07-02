@@ -43,7 +43,7 @@ vi.mock('@/lib/config-service', () => ({
   resolveProjectModelCapabilityGenerationOptions: configMock.resolveProjectModelCapabilityGenerationOptions,
 }))
 
-import { resolveImageSourceFromGeneration, resolveVideoSourceFromGeneration } from '@/lib/workers/utils'
+import { resolveImageSourceFromGeneration, resolveVideoSourceFromGeneration, waitExternalResult } from '@/lib/workers/utils'
 
 function buildJob(): Job<TaskJobData> {
   return {
@@ -88,6 +88,27 @@ describe('worker utils video generation resume', () => {
       url: 'https://fal.test/videos/req_123.mp4',
     })
     expect(asyncPollMock.pollAsyncTask).toHaveBeenCalledWith(externalId, 'user-1')
+    expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
+  })
+
+  it('retries transient poll errors against the same externalId', async () => {
+    const externalId = 'FAL:VIDEO:fal-ai/kling-video/v2.1/master/image-to-video:req_retry'
+    asyncPollMock.pollAsyncTask
+      .mockRejectedValueOnce(new TypeError('terminated'))
+      .mockResolvedValueOnce({
+        status: 'completed',
+        resultUrl: 'https://fal.test/videos/req_retry.mp4',
+      })
+
+    const result = await waitExternalResult(buildJob(), externalId, 'user-1', {
+      timeoutMs: 5_000,
+      intervalMs: 1,
+    })
+
+    expect(result.url).toBe('https://fal.test/videos/req_retry.mp4')
+    expect(taskServiceMock.trySetTaskExternalId).toHaveBeenCalledWith('task-1', externalId)
+    expect(asyncPollMock.pollAsyncTask).toHaveBeenNthCalledWith(1, externalId, 'user-1')
+    expect(asyncPollMock.pollAsyncTask).toHaveBeenNthCalledWith(2, externalId, 'user-1')
     expect(generatorApiMock.generateVideo).not.toHaveBeenCalled()
   })
 

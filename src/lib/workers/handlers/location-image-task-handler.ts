@@ -1,10 +1,10 @@
 import { type Job } from 'bullmq'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { addLocationPromptSuffix, addPropPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { type TaskJobData } from '@/lib/task/types'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { safeParseJsonObject } from '@/lib/json-repair'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import {
   appendLocationCompleteSceneRule,
   buildLocationCandidateStrategies,
@@ -66,23 +66,28 @@ async function generateLocationCandidatePrompt(input: {
   readonly userId: string
   readonly projectId: string
   readonly analysisModel: string
+  readonly locale: 'zh' | 'en'
   readonly strategy: LocationCandidateStrategy
 }): Promise<string> {
-  const completion = await executeAiTextStep({
+  const completion = await executeAiStructuredTextStep({
     userId: input.userId,
     model: input.analysisModel,
     messages: [{ role: 'user', content: input.strategy.draftInstruction }],
     temperature: 0.72,
     projectId: input.projectId,
     action: 'location_candidate_prompt',
+    locale: input.locale,
     meta: {
       stepId: `location_candidate_prompt:${input.strategy.id}`,
       stepTitle: input.strategy.label,
       stepIndex: 1,
       stepTotal: 1,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: (raw) => parseLocationCandidatePrompt(raw as Record<string, unknown>),
   })
-  return parseLocationCandidatePrompt(safeParseJsonObject(completion.text))
+  return completion.data
 }
 
 export async function handleLocationImageTask(job: Job<TaskJobData>) {
@@ -185,6 +190,7 @@ export async function handleLocationImageTask(job: Job<TaskJobData>) {
         userId,
         projectId,
         analysisModel: profileModel,
+        locale,
         strategy,
       })
       return buildLocationImagePromptCore({

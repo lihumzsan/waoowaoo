@@ -40,12 +40,15 @@ const asyncSubmitMock = vi.hoisted(() => ({
 }))
 
 const arkApiMock = vi.hoisted(() => ({
-  fetchWithTimeoutAndRetry: vi.fn(async () => ({
-    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-  })),
   executeArkImageGeneration: vi.fn(async () => ({
     url: 'https://example.com/generated.jpg',
     async: false,
+  })),
+}))
+
+const retryMock = vi.hoisted(() => ({
+  fetchWithRetry: vi.fn(async () => ({
+    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
   })),
 }))
 
@@ -117,6 +120,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/ai-exec/engine', () => generatorApiMock)
 vi.mock('@/lib/ai-providers/fal/queue', () => asyncSubmitMock)
 vi.mock('@/lib/ai-providers/ark/image', () => arkApiMock)
+vi.mock('@/lib/retry', () => retryMock)
 vi.mock('@/lib/user-api/runtime-config', () => apiConfigMock)
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/ai-exec/llm-helpers', () => llmClientMock)

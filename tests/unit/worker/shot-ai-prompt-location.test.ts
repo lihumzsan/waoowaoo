@@ -52,7 +52,10 @@ describe('worker shot-ai-prompt-location behavior', () => {
     vi.clearAllMocks()
     persistMock.resolveAnalysisModel.mockResolvedValue({ id: 'np-1', analysisModel: 'llm::analysis' })
     persistMock.requireProjectLocation.mockResolvedValue({ id: 'location-1', name: 'Old Town' })
-    runtimeMock.runShotPromptCompletion.mockResolvedValue('{"prompt":"updated location description"}')
+    runtimeMock.runShotPromptCompletion.mockResolvedValue({
+      text: '{"prompt":"updated location description"}',
+      data: { prompt: 'updated location description' },
+    })
     persistMock.persistLocationDescription.mockResolvedValue({ id: 'location-1', images: [] })
   })
 

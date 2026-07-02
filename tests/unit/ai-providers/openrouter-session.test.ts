@@ -89,7 +89,6 @@ describe('OpenRouter session and cache accounting', () => {
       temperature: 0.2,
       reasoning: false,
       reasoningEffort: 'high',
-      maxRetries: 0,
       openRouterSessionId: 'project:assistant session',
     })
 

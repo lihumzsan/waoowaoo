@@ -60,10 +60,6 @@ vi.mock('@/lib/task/state-service', () => ({
   queryTaskTargetStates: vi.fn(),
 }))
 
-vi.mock('@/lib/prisma-retry', () => ({
-  withPrismaRetry: vi.fn(async <T>(fn: () => Promise<T>) => await fn()),
-}))
-
 vi.mock('@/lib/sse/shared-subscriber', () => ({
   getSharedSubscriber: vi.fn(() => ({
     addChannelListener: addChannelListenerMock,

@@ -5,7 +5,7 @@ import { assertTaskActive } from '@/lib/workers/utils'
 import type { TaskJobData } from '@/lib/task/types'
 import { resolveAnalysisModel } from './shot-ai-persist'
 import { runShotPromptCompletion } from './shot-ai-prompt-runtime'
-import { parseJsonObject, readRequiredString, type AnyObj } from './shot-ai-prompt-utils'
+import { readRequiredString, type AnyObj } from './shot-ai-prompt-utils'
 import { buildAiPrompt as buildPrompt, AI_PROMPT_IDS as PROMPT_IDS } from '@/lib/ai-prompts'
 
 export async function handleModifyPropTask(job: Job<TaskJobData>, payload: AnyObj) {
@@ -34,7 +34,7 @@ export async function handleModifyPropTask(job: Job<TaskJobData>, payload: AnyOb
   })
   await assertTaskActive(job, 'ai_modify_prop_prepare')
 
-  const responseText = await runShotPromptCompletion({
+  const response = await runShotPromptCompletion({
     job,
     model: projectWorkflow.analysisModel,
     prompt: finalPrompt,
@@ -45,8 +45,7 @@ export async function handleModifyPropTask(job: Job<TaskJobData>, payload: AnyOb
   })
   await assertTaskActive(job, 'ai_modify_prop_parse')
 
-  const parsed = parseJsonObject(responseText)
-  const prompt = readRequiredString(parsed.prompt, 'prompt')
+  const prompt = readRequiredString(response.data.prompt, 'prompt')
   const modifiedDescription = removePropPromptSuffix(prompt)
 
   await reportTaskProgress(job, 96, {
@@ -60,6 +59,6 @@ export async function handleModifyPropTask(job: Job<TaskJobData>, payload: AnyOb
     success: true,
     modifiedDescription,
     originalPrompt: finalPrompt,
-    rawResponse: responseText,
+    rawResponse: response.text,
   }
 }

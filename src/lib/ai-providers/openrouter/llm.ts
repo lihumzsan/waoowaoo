@@ -28,7 +28,6 @@ export async function runOpenRouterLlmCompletion(input: {
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries: number
   openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
   if (!input.providerConfig.baseUrl) {
@@ -44,7 +43,6 @@ export async function runOpenRouterLlmCompletion(input: {
     temperature: input.temperature,
     reasoning: input.reasoning,
     reasoningEffort: input.reasoningEffort,
-    maxRetries: input.maxRetries,
     isOpenRouter: true,
     openRouterSessionId: input.openRouterSessionId,
   })

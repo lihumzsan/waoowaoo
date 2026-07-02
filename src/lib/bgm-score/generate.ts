@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
 import type { Job } from 'bullmq'
 import { Prisma } from '@prisma/client'
-import { executeAiTextStep, generateMusic } from '@/lib/ai-exec/engine'
+import { z } from 'zod'
+import { generateMusic } from '@/lib/ai-exec/engine'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
-import { safeParseJsonObject } from '@/lib/json-repair'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
@@ -148,8 +149,7 @@ function normalizePlanDuration(plan: BgmScorePlan, durationSeconds: number): Bgm
   }
 }
 
-function parseBgmScorePlan(text: string, durationSeconds: number): BgmScorePlan {
-  const parsed = safeParseJsonObject(text)
+function parseBgmScorePlanValue(parsed: unknown, durationSeconds: number): BgmScorePlan {
   const result = bgmScorePlanSchema.safeParse(parsed)
   if (!result.success) {
     throw new Error(`BGM_SCORE_PLAN_INVALID:${result.error.issues.map((issue) => issue.message).join(',')}`)
@@ -283,7 +283,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
       streamCallbacks,
       async () => {
         try {
-          return await executeAiTextStep({
+          return await executeAiStructuredTextStep({
             userId: job.data.userId,
             model: analysisModel,
             messages: [{
@@ -301,19 +301,23 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
             temperature: 0.35,
             projectId: job.data.projectId,
             action: 'bgm_score_plan',
+            locale: job.data.locale,
             meta: {
               stepId: 'bgm_score_plan',
               stepTitle: 'bgm_score_plan',
               stepIndex: 1,
               stepTotal: 1,
             },
+            schema: z.unknown(),
+            parse: { kind: 'object' },
+            validate: (raw) => parseBgmScorePlanValue(raw, durationSeconds),
           })
         } finally {
           await streamCallbacks.flush()
         }
       },
     )
-    const plan = parseBgmScorePlan(completion.text, durationSeconds)
+    const plan = completion.data
 
     const outputFormat = readOutputFormat(payload.outputFormat)
     await reportTaskProgress(job, 45, {

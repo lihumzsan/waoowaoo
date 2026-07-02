@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { setProxy } from '../../../../lib/prompts/proxy'
 
 type GoogleMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
@@ -101,9 +102,13 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
-  const response = await ai.models.generateContent({
-    model: modelId,
-    contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
+  const response = await withRetry({
+    scope: `google:music:generate:${modelId}`,
+    policy: RETRY_POLICY.mediaFetch,
+    run: async () => await ai.models.generateContent({
+      model: modelId,
+      contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
+    }),
   })
 
   const result = extractGoogleMusicResult(response)

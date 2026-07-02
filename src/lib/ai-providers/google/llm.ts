@@ -73,6 +73,8 @@ function isThoughtPart(part: GoogleTextPart): boolean {
 }
 
 export class GoogleEmptyResponseError extends Error {
+  readonly code = 'EMPTY_RESPONSE'
+
   public constructor(finishReason?: unknown) {
     const reason = finishReason ? ` (finishReason: ${String(finishReason)})` : ''
     super(`Google Gemini returned an empty text response${reason}, please retry`)

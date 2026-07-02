@@ -3,6 +3,7 @@ import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-p
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { FAL_LYRIA_3_PRO_MODEL_ID } from '@/lib/ai-providers/fal/models'
+import { RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
 
 type FalMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
 
@@ -106,7 +107,7 @@ function readFalMusicResultAudio(response: FalMusicResultResponse): {
 }
 
 async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<string, unknown>): Promise<FalMusicRequest> {
-  const response = await fetch(buildFalQueueUrl(endpoint), {
+  const response = await fetchWithRetry(buildFalQueueUrl(endpoint), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -114,12 +115,8 @@ async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<
     },
     body: JSON.stringify(payload),
     cache: 'no-store',
+    scope: `fal:music:submit:${endpoint}`,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`FAL_MUSIC_SUBMIT_FAILED (${response.status}): ${errorText}`)
-  }
 
   const data = await response.json() as FalMusicSubmitResponse
   const requestId = readTrimmedString(data.request_id)
@@ -136,19 +133,15 @@ async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<
 }
 
 async function fetchFalMusicResult(endpoint: string, requestId: string, apiKey: string, resultUrl: string): Promise<GenerateResult> {
-  const response = await fetch(resultUrl, {
+  const response = await fetchWithRetry(resultUrl, {
     method: 'GET',
     headers: {
       Authorization: `Key ${apiKey}`,
       Accept: 'application/json',
     },
     cache: 'no-store',
+    scope: `fal:music:result:${endpoint}:${requestId}`,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`FAL_MUSIC_RESULT_FAILED (${response.status}): ${errorText}`)
-  }
 
   const data = await response.json() as FalMusicResultResponse
   const audio = readFalMusicResultAudio(data)
@@ -173,19 +166,16 @@ async function waitForFalMusicResult(endpoint: string, request: FalMusicRequest,
   const statusUrl = withStatusLogsDisabled(request.statusUrl)
 
   while (Date.now() - startAt <= timeoutMs) {
-    const statusResponse = await fetch(statusUrl, {
+    const statusResponse = await fetchWithRetry(statusUrl, {
       method: 'GET',
       headers: {
         Authorization: `Key ${apiKey}`,
         Accept: 'application/json',
       },
       cache: 'no-store',
+      policy: RETRY_POLICY.mediaPoll,
+      scope: `fal:music:status:${endpoint}:${request.requestId}`,
     })
-
-    if (!statusResponse.ok) {
-      const errorText = await statusResponse.text()
-      throw new Error(`FAL_MUSIC_STATUS_FAILED (${statusResponse.status}): ${errorText}`)
-    }
 
     const data = await statusResponse.json() as FalMusicStatusResponse
     const status = data.status

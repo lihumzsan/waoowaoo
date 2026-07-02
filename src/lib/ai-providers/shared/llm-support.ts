@@ -15,7 +15,6 @@ export interface ProviderChatCompletionOptions {
   temperature?: number
   reasoning?: boolean
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries?: number
   projectId?: string
   action?: string
   openRouterSessionId?: string

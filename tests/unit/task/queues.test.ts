@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import type { TaskJobData } from '@/lib/task/types'
 
 const queueInstances: Array<{
@@ -120,8 +121,79 @@ describe('task queues', () => {
       expect.objectContaining({
         jobId: 'task-1',
         priority: 0,
+        attempts: 1,
+        backoff: {
+          type: 'exponential',
+          delay: TASK_RETRY_BACKOFF_BASE_MS,
+        },
       }),
     )
     expect(remove.mock.invocationCallOrder[0]).toBeLessThan(queueMock.add.mock.invocationCallOrder[0])
+  })
+
+  it('uses the task retry registry when enqueueing opt-in text tasks', async () => {
+    const queuesModule = await import('@/lib/task/queues')
+    const taskTypes = await import('@/lib/task/types')
+    const queue = queuesModule.getQueueByType('text')
+    const queueMock = queue as unknown as typeof queueInstances[number]
+
+    const jobData = {
+      taskId: 'task-text-1',
+      type: taskTypes.TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectEpisode',
+      targetId: 'episode-1',
+      payload: { meta: { locale: 'zh' } },
+      billingInfo: null,
+      userId: 'user-1',
+      trace: null,
+    } satisfies TaskJobData
+
+    await queuesModule.addTaskJob(jobData)
+
+    expect(queueMock.add).toHaveBeenCalledWith(
+      taskTypes.TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      jobData,
+      expect.objectContaining({
+        attempts: 2,
+        backoff: {
+          type: 'exponential',
+          delay: TASK_RETRY_BACKOFF_BASE_MS,
+        },
+      }),
+    )
+  })
+
+  it('does not enable task-level retry for final video render', async () => {
+    const queuesModule = await import('@/lib/task/queues')
+    const taskTypes = await import('@/lib/task/types')
+    const queue = queuesModule.getQueueByType('video')
+    const queueMock = queue as unknown as typeof queueInstances[number]
+
+    const jobData = {
+      taskId: 'task-video-final-1',
+      type: taskTypes.TASK_TYPE.FINAL_VIDEO_RENDER,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectEpisode',
+      targetId: 'episode-1',
+      payload: { meta: { locale: 'zh' } },
+      billingInfo: null,
+      userId: 'user-1',
+      trace: null,
+    } satisfies TaskJobData
+
+    await queuesModule.addTaskJob(jobData)
+
+    expect(queueMock.add).toHaveBeenCalledWith(
+      taskTypes.TASK_TYPE.FINAL_VIDEO_RENDER,
+      jobData,
+      expect.objectContaining({
+        attempts: 1,
+      }),
+    )
   })
 })

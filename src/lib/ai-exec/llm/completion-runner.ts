@@ -3,11 +3,8 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { getProviderKey } from '@/lib/ai-registry/selection'
 import type { ChatCompletionOptions, ChatCompletionStreamCallbacks } from '@/lib/ai-registry/types'
 import { getInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
-import { GoogleEmptyResponseError } from '@/lib/ai-providers/google/llm'
 import {
   _ulogError,
-  _ulogWarn,
-  isRetryableError,
   llmLogger,
   logLlmRawInput,
   logLlmRawOutput,
@@ -15,7 +12,7 @@ import {
   completionUsageSummary,
   resolveLlmRuntimeModel,
 } from '@/lib/ai-exec/llm-runtime'
-import { waitForRetryDelay } from '@/lib/ai-exec/governance'
+import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
@@ -28,21 +25,6 @@ import {
 import type { AiLlmExecutionInput, AiLlmExecutionResult, ChatMessage } from '@/lib/ai-registry/types'
 
 ensureAiCatalogsRegistered()
-
-interface CompletionJsonObject {
-  [key: string]: unknown
-}
-
-function toRecord(value: unknown): CompletionJsonObject | null {
-  return value && typeof value === 'object' ? (value as CompletionJsonObject) : null
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  const record = toRecord(error)
-  if (record && typeof record.message === 'string') return record.message
-  return 'unknown error'
-}
 
 function resolveOpenRouterSessionForCompletion(input: {
   providerKey: string
@@ -140,16 +122,33 @@ export async function chatCompletionStream(
     callbacks?.onError?.(error, streamStep)
     throw error
   }
+  const streamLlm = providerRuntime.streamLlm
+
+  let firstChunkEmitted = false
+  const wrappedCallbacks: ChatCompletionStreamCallbacks | undefined = callbacks
+    ? {
+      ...callbacks,
+      onChunk: (chunk) => {
+        firstChunkEmitted = true
+        callbacks.onChunk?.(chunk)
+      },
+    }
+    : undefined
 
   try {
     const streamOptions = openRouterSessionId ? { ...options, openRouterSessionId } : options
-    const result = await providerRuntime.streamLlm({
-      userId,
-      selection,
-      providerConfig,
-      messages,
-      options: streamOptions,
-      callbacks,
+    const result = await withRetry({
+      scope: `llm_stream:${selection.modelKey}`,
+      policy: RETRY_POLICY.llmStream,
+      shouldRetry: () => !firstChunkEmitted,
+      run: async () => await streamLlm({
+        userId,
+        selection,
+        providerConfig,
+        messages,
+        options: streamOptions,
+        callbacks: wrappedCallbacks,
+      }),
     })
     logLlmRawOutput({
       userId,
@@ -167,12 +166,6 @@ export async function chatCompletionStream(
     recordCompletionUsage(resolvedModelId, result.completion)
     return result.completion
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error)
-    if (errMsg.includes('PROHIBITED_CONTENT') || errMsg.includes('request_body_blocked')) {
-      const sensitiveError = new Error('SENSITIVE_CONTENT: 内容包含敏感信息,无法处理。请修改内容后重试')
-      callbacks?.onError?.(sensitiveError, streamStep)
-      throw sensitiveError
-    }
     if (typeof llmLogger.error === 'function') {
       llmLogger.error({
         audit: false,
@@ -231,7 +224,6 @@ export async function runChatCompletion(
     temperature = 0.7,
     reasoning = true,
     reasoningEffort = 'high',
-    maxRetries = 2,
   } = options
   const projectId =
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
@@ -260,11 +252,11 @@ export async function runChatCompletion(
     messages,
   })
 
-  let lastError: Error | null = null
-
-  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-    const attemptStartedAt = Date.now()
-    try {
+  return await withRetry({
+    scope: `llm:${selection.modelKey}`,
+    policy: RETRY_POLICY.llm,
+    run: async ({ attempt, maxAttempts }) => {
+      const attemptStartedAt = Date.now()
       const result = await executeLlmCompletionViaAdapter({
         userId,
         providerKey,
@@ -274,7 +266,6 @@ export async function runChatCompletion(
         temperature,
         reasoning,
         reasoningEffort,
-        maxRetries,
         openRouterSessionId,
       })
       logLlmRawOutput({
@@ -299,45 +290,24 @@ export async function runChatCompletion(
         details: {
           model: resolvedModelId,
           attempt,
-          maxRetries,
+          maxAttempts,
           ...(result.successDetails || {}),
         },
       })
       return result.completion
-    } catch (error: unknown) {
-      const normalizedError = error instanceof Error ? error : new Error(errorMessage(error))
-      lastError = normalizedError
+    },
+    onAttemptFailed: ({ error, attempt, maxAttempts, raw }) => {
       llmLogger.warn({
         action: 'llm.call.attempt_failed',
-        message: errorMessage(error) || 'llm call attempt failed',
+        message: error.message || 'llm call attempt failed',
         provider,
-        durationMs: Date.now() - attemptStartedAt,
         details: {
           model: resolvedModelId,
           attempt,
-          maxRetries,
+          maxAttempts,
         },
+        error: raw,
       })
-      const errorBody = toRecord(toRecord(error)?.error) || toRecord(error)
-      if (errorBody?.message === 'PROHIBITED_CONTENT' || errorBody?.code === 502) {
-        _ulogError('[LLM] ❌ 内容安全检测失败 - Google AI Studio 拒绝处理此内容')
-        throw new Error('SENSITIVE_CONTENT: 内容包含敏感信息,无法处理。请修改内容后重试')
-      }
-
-      // Google Gemini 返回空响应时，视为可重试错误（不抛出，继续重试循环）
-      if (error instanceof GoogleEmptyResponseError) {
-        _ulogWarn(`[LLM] Google 返回空响应，将重试 (${attempt}/${maxRetries + 1}): ${errorMessage(error)}`)
-        if (attempt > maxRetries) break
-        await waitForRetryDelay({ attempt, kind: 'llm' })
-        continue
-      }
-
-      _ulogWarn(`[LLM] 调用失败 (${attempt}/${maxRetries + 1}): ${errorMessage(error)}`)
-
-      if (!isRetryableError(error) || attempt > maxRetries) break
-      await waitForRetryDelay({ attempt, kind: 'llm' })
-    }
-  }
-
-  throw lastError || new Error('LLM 调用失败')
+    },
+  })
 }

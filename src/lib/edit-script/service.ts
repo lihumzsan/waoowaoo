@@ -1,13 +1,14 @@
 import type { NextRequest } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { executeAiTextStep } from '@/lib/ai-exec/engine'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { buildDefaultTaskBillingInfo, withTextBilling } from '@/lib/billing'
 import { buildImageBillingPayloadFromUserConfig, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
-import { safeParseJsonObject } from '@/lib/json-repair'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { submitAssetGenerateTask } from '@/lib/assets/services/asset-actions'
@@ -394,7 +395,7 @@ function resolveTextModel(config: Awaited<ReturnType<typeof getProjectModelConfi
   return config.analysisModel
 }
 
-async function runPromptStep(input: {
+async function runStructuredPromptStep<TData>(input: {
   readonly userId: string
   readonly projectId: string
   readonly model: string
@@ -404,7 +405,8 @@ async function runPromptStep(input: {
   readonly stepTitle: string
   readonly stepIndex: number
   readonly stepTotal: number
-}): Promise<Record<string, unknown>> {
+  readonly validate: (raw: unknown) => TData
+}): Promise<TData> {
   const finalPromptContent = buildAiPromptContent({
     promptId: input.promptId,
     locale: input.locale,
@@ -415,32 +417,36 @@ async function runPromptStep(input: {
   const finalPrompt = flattenChatMessageContent(finalPromptContent)
   const maxInputTokens = Math.max(1200, Math.ceil(finalPrompt.length * 1.2))
   const action = input.promptId
-  const runCompletion = async () => executeAiTextStep({
+  const runCompletion = async () => executeAiStructuredTextStep({
     userId: input.userId,
     model: input.model,
     messages: [{ role: 'user', content: finalPromptContent }],
     temperature: 0.4,
     projectId: input.projectId,
     action,
+    locale: input.locale,
     meta: {
       stepId: action,
       stepTitle: input.stepTitle,
       stepIndex: input.stepIndex,
       stepTotal: input.stepTotal,
     },
+    schema: z.unknown(),
+    parse: { kind: 'object' },
+    validate: input.validate,
   })
 
-  const completion = await withTextBilling(
+  const result = await withTextBilling(
     input.userId,
     input.model,
     maxInputTokens,
     { projectId: input.projectId, action, metadata: { promptId: input.promptId } },
     runCompletion,
   )
-  if (!completion.text.trim()) {
+  if (!result.text.trim()) {
     throw new Error(`EDIT_SCRIPT_PROMPT_EMPTY:${input.promptId}`)
   }
-  return safeParseJsonObject(completion.text)
+  return result.data
 }
 
 async function runPromptTextStep(input: {
@@ -504,7 +510,7 @@ async function generateEditStylePreviewOptions(input: {
   readonly styleDirection: string
   readonly count: number
 }): Promise<readonly EditStylePreviewOption[]> {
-  const raw = await runPromptStep({
+  return await runStructuredPromptStep({
     userId: input.userId,
     projectId: input.projectId,
     model: input.model,
@@ -520,16 +526,18 @@ async function generateEditStylePreviewOptions(input: {
     stepTitle: 'Edit style preview options',
     stepIndex: 2,
     stepTotal: 2,
-  })
-  const parsed = editStylePreviewOptionsSchema.parse(raw).stylePreviews
-  if (parsed.length !== input.count) {
-    throw new Error(`EDIT_STYLE_PREVIEW_COUNT_MISMATCH:expected=${String(input.count)}:actual=${String(parsed.length)}`)
-  }
-  const byKey = new Map(parsed.map((preview) => [preview.styleKey, preview]))
-  return EDIT_STYLE_PREVIEW_KEYS.slice(0, input.count).map((key) => {
-    const preview = byKey.get(key)
-    if (!preview) throw new Error(`EDIT_STYLE_PREVIEW_OPTION_MISSING:${key}`)
-    return preview
+    validate: (raw) => {
+      const parsed = editStylePreviewOptionsSchema.parse(raw).stylePreviews
+      if (parsed.length !== input.count) {
+        throw new Error(`EDIT_STYLE_PREVIEW_COUNT_MISMATCH:expected=${String(input.count)}:actual=${String(parsed.length)}`)
+      }
+      const byKey = new Map(parsed.map((preview) => [preview.styleKey, preview]))
+      return EDIT_STYLE_PREVIEW_KEYS.slice(0, input.count).map((key) => {
+        const preview = byKey.get(key)
+        if (!preview) throw new Error(`EDIT_STYLE_PREVIEW_OPTION_MISSING:${key}`)
+        return preview
+      })
+    },
   })
 }
 
@@ -1566,25 +1574,25 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
   })
 
   try {
-    const structureRaw = await runPromptStep({
+    const structure = await runStructuredPromptStep({
       userId: input.userId,
       projectId: input.projectId,
       model,
       locale,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
-        variables: {
-          user_request: userPrompt,
-          screenplay_text: screenplayText,
-          duration_guidance: buildEditFirstDurationGuidance(durationSpec, locale),
-          generation_segment_max_duration_seconds: String(EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC),
-          aspect_ratio: effectiveVideoRatio,
-          style_bible_json: stringifyForPrompt(styleBible),
+      variables: {
+        user_request: userPrompt,
+        screenplay_text: screenplayText,
+        duration_guidance: buildEditFirstDurationGuidance(durationSpec, locale),
+        generation_segment_max_duration_seconds: String(EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC),
+        aspect_ratio: effectiveVideoRatio,
+        style_bible_json: stringifyForPrompt(styleBible),
       },
       stepTitle: 'Edit core table',
       stepIndex: 1,
       stepTotal: 2,
+      validate: normalizeEditScriptStructure,
     })
-    const structure = normalizeEditScriptStructure(structureRaw)
     await persistEditScriptGenerationStep({
       projectId: input.projectId,
       episodeId: input.episodeId,
@@ -1598,7 +1606,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       stageLabel: 'progress.stage.editScriptPrimary',
       progress: 82,
     })
-    const assetRaw = await runPromptStep({
+    const normalizedRequirements = await runStructuredPromptStep({
       userId: input.userId,
       projectId: input.projectId,
       model,
@@ -1610,6 +1618,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       stepTitle: 'Edit required assets',
       stepIndex: 2,
       stepTotal: 2,
+      validate: (raw) => normalizeEditAssetRequirements(raw, structure.shots),
     })
     const requirements = await designEditAssetRequirements({
       userId: input.userId,
@@ -1619,7 +1628,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       userPrompt,
       styleBible,
       shots: structure.shots,
-      requirements: normalizeEditAssetRequirements(assetRaw, structure.shots),
+      requirements: normalizedRequirements,
     })
 
     await notifyGenerationStep(input.onGenerationStepPersisted, {
@@ -1757,7 +1766,7 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
   }
   const assets = await buildAssetSnapshots(mappedEditScript.requirements)
   const model = resolveTextModel(config)
-  const raw = await runPromptStep({
+  const parsed = await runStructuredPromptStep({
     userId: input.userId,
     projectId: input.projectId,
     model,
@@ -1787,8 +1796,8 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     stepTitle: 'Edit shot execution plan',
     stepIndex: 1,
     stepTotal: 1,
+    validate: (raw) => normalizeEditShotExecutionPlan(raw, mappedEditScript.shots, mappedEditScript.generationSegments),
   })
-  const parsed = normalizeEditShotExecutionPlan(raw, mappedEditScript.shots, mappedEditScript.generationSegments)
   const executionPlanJson = {
     shots: parsed.shots,
     generationSegmentExecutions: parsed.generationSegmentExecutions,

@@ -75,7 +75,6 @@ export interface ChatCompletionOptions {
   temperature?: number
   reasoning?: boolean
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries?: number
   projectId?: string
   action?: string
   openRouterSessionId?: string
@@ -105,22 +104,6 @@ export interface ChatCompletionStreamCallbacks {
 }
 
 export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: ChatMessageContent }
-
-export type AiRuntimeErrorCode =
-  | 'NETWORK_ERROR'
-  | 'RATE_LIMIT'
-  | 'EMPTY_RESPONSE'
-  | 'PARSE_ERROR'
-  | 'TIMEOUT'
-  | 'SENSITIVE_CONTENT'
-  | 'INTERNAL_ERROR'
-
-export type AiRuntimeError = Error & {
-  code: AiRuntimeErrorCode
-  retryable: boolean
-  provider?: string | null
-  cause?: unknown
-}
 
 export type AiStepMeta = {
   stepId: string
@@ -198,7 +181,6 @@ export type AiLlmExecutionInput = {
   temperature: number
   reasoning: boolean
   reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
-  maxRetries: number
   openRouterSessionId?: string
 }
 
