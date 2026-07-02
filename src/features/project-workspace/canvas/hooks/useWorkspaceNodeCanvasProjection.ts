@@ -89,9 +89,26 @@ const STORY_COLUMN_X = 260
 const COLUMN_GAP_X = 900
 const ROW_GAP_Y = 170
 const SHOT_GRID_COLUMNS = 5
+const VIDEO_PLAN_GRID_COLUMNS = SHOT_GRID_COLUMNS
 const SHOT_GRID_GAP_X = 44
 const SHOT_GRID_GAP_Y = 820
+const STAGE_START_Y = 120
+const SHOT_GRID_START_Y = 460
+const DOWNSTREAM_STAGE_GAP_Y = 160
+const VIDEO_PLAN_GRID_GAP_Y = 96
+const FINAL_TIMELINE_GAP_Y = 120
 const ASSET_GROUP_Y_OFFSET = WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y
+const SHOT_GRID_START_X = STORY_COLUMN_X + COLUMN_GAP_X * 3
+
+interface CanvasGridPositionInput {
+  readonly index: number
+  readonly columns: number
+  readonly startX: number
+  readonly startY: number
+  readonly itemWidth: number
+  readonly columnGapX: number
+  readonly rowStepY: number
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -225,6 +242,60 @@ function collectPanels(storyboards: readonly ProjectStoryboard[]): ProjectPanel[
       || left.panelIndex - right.panelIndex
       || left.id.localeCompare(right.id)
     ))
+}
+
+function gridRowCount(itemCount: number, columns: number): number {
+  if (itemCount <= 0) return 0
+  return Math.ceil(itemCount / columns)
+}
+
+function gridPosition(input: CanvasGridPositionInput): { readonly x: number; readonly y: number } {
+  const column = input.index % input.columns
+  const row = Math.floor(input.index / input.columns)
+  return {
+    x: input.startX + column * (input.itemWidth + input.columnGapX),
+    y: input.startY + row * input.rowStepY,
+  }
+}
+
+function gridBottomY(input: {
+  readonly itemCount: number
+  readonly columns: number
+  readonly startY: number
+  readonly itemHeight: number
+  readonly rowStepY: number
+}): number | null {
+  const rows = gridRowCount(input.itemCount, input.columns)
+  if (rows === 0) return null
+  return input.startY + (rows - 1) * input.rowStepY + input.itemHeight
+}
+
+function defaultStoryboardBottomY(visibleStoryboardPanelCount: number): number {
+  return gridBottomY({
+    itemCount: visibleStoryboardPanelCount,
+    columns: SHOT_GRID_COLUMNS,
+    startY: SHOT_GRID_START_Y,
+    itemHeight: WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
+    rowStepY: SHOT_GRID_GAP_Y,
+  }) ?? (STAGE_START_Y + WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height)
+}
+
+function nextDefaultStageY(previousStageBottomY: number): number {
+  return previousStageBottomY + DOWNSTREAM_STAGE_GAP_Y
+}
+
+function nodeBottomY(node: WorkspaceCanvasFlowNode): number {
+  return node.position.y + node.data.height
+}
+
+function maxNodeBottomY(
+  nodes: readonly WorkspaceCanvasFlowNode[],
+  kind: WorkspaceCanvasFlowNode['data']['kind'],
+): number | null {
+  const matchingBottoms = nodes
+    .filter((node) => node.data.kind === kind)
+    .map((node) => nodeBottomY(node))
+  return matchingBottoms.length > 0 ? Math.max(...matchingBottoms) : null
 }
 
 function panelByShotNumber(storyboards: readonly ProjectStoryboard[]): ReadonlyMap<number, ProjectPanel> {
@@ -573,7 +644,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       : workspaceNodeId.editScreenplay(`pending:${episodeId}`)
     nodes.push(createNode({
       id: screenplayNodeId,
-      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: 120 }),
+      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
       width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
       data: {
@@ -605,7 +676,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     styleBibleNodeId = workspaceNodeId.editStyleBible(editScreenplay.id)
     nodes.push(createNode({
       id: styleBibleNodeId,
-      position: layoutPosition(savedLayouts, styleBibleNodeId, { x: STORY_COLUMN_X, y: 120 + (ROW_GAP_Y + 80) * 2 }),
+      position: layoutPosition(savedLayouts, styleBibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y + (ROW_GAP_Y + 80) * 2 }),
       width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
       data: {
@@ -669,7 +740,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       : undefined
     nodes.push(createNode({
       id: editScriptNodeId,
-      position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 }),
+      position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: STAGE_START_Y }),
       width: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height,
       data: {
@@ -725,7 +796,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : null
     nodes.push(createNode({
       id: assetGroupNodeId,
-      position: layoutPosition(savedLayouts, assetGroupNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: 120 + 420 + ASSET_GROUP_Y_OFFSET }),
+      position: layoutPosition(savedLayouts, assetGroupNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: STAGE_START_Y + 420 + ASSET_GROUP_Y_OFFSET }),
       width: 720,
       height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
       data: {
@@ -785,7 +856,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     executionNodeId = workspaceNodeId.editShotExecutionPlan(editScript.id)
     nodes.push(createNode({
       id: executionNodeId,
-      position: layoutPosition(savedLayouts, executionNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 2, y: 120 }),
+      position: layoutPosition(savedLayouts, executionNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 2, y: STAGE_START_Y }),
       width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
       data: {
@@ -831,13 +902,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   } else if (editScriptNodeId) {
     storyboardSourceNodeId = editScriptNodeId
   }
+  const visibleStoryboardPanelCount = editFirstCanvasVisibility.storyboardPanels && storyboardSourceNodeId
+    ? panelList.length
+    : 0
   if (editFirstCanvasVisibility.storyboardPanels && storyboardSourceNodeId) {
     panelList.forEach((panel, index) => {
       const shotNumber = resolvePanelShotNumber(panel)
       const nodeId = workspaceNodeId.shot(panel.id)
       shotNodeIdsByShotNumber.set(shotNumber, nodeId)
-      const column = index % SHOT_GRID_COLUMNS
-      const row = Math.floor(index / SHOT_GRID_COLUMNS)
       const previewImageUrl = primaryPanelImageUrl(panel)
       const previewAspectRatio = mediaAspectRatio(panel.media) ?? stylePreviewAspectRatio
       const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
@@ -849,10 +921,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : workspaceCanvasSucceededPresentation(phaseLabels)
       nodes.push(createNode({
         id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, {
-          x: STORY_COLUMN_X + COLUMN_GAP_X * 3 + column * (WORKSPACE_CANVAS_SHOT_NODE_SIZE.width + SHOT_GRID_GAP_X),
-          y: 460 + row * SHOT_GRID_GAP_Y,
-        }),
+        position: layoutPosition(savedLayouts, nodeId, gridPosition({
+          index,
+          columns: SHOT_GRID_COLUMNS,
+          startX: SHOT_GRID_START_X,
+          startY: SHOT_GRID_START_Y,
+          itemWidth: WORKSPACE_CANVAS_SHOT_NODE_SIZE.width,
+          columnGapX: SHOT_GRID_GAP_X,
+          rowStepY: SHOT_GRID_GAP_Y,
+        })),
         width: WORKSPACE_CANVAS_SHOT_NODE_SIZE.width,
         height: WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
         data: {
@@ -893,6 +970,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
     })
   }
+  const storyboardStageBottomY = maxNodeBottomY(nodes, 'shot') ?? defaultStoryboardBottomY(visibleStoryboardPanelCount)
+  const videoPlanStartY = nextDefaultStageY(storyboardStageBottomY)
 
   if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
     editScript.generationSegments.forEach((segment, index) => {
@@ -914,7 +993,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         : null
       nodes.push(createNode({
         id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 5, y: 120 + index * (WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + 80) }),
+        position: layoutPosition(savedLayouts, nodeId, gridPosition({
+          index,
+          columns: VIDEO_PLAN_GRID_COLUMNS,
+          startX: SHOT_GRID_START_X,
+          startY: videoPlanStartY,
+          itemWidth: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
+          columnGapX: SHOT_GRID_GAP_X,
+          rowStepY: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + VIDEO_PLAN_GRID_GAP_Y,
+        })),
         width: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
         height: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height,
         data: {
@@ -957,6 +1044,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       }
     })
   }
+  const videoPlanStageBottomY = maxNodeBottomY(nodes, 'videoPlan')
+  const bgmScoreDefaultY = nextDefaultStageY(Math.max(
+    storyboardStageBottomY,
+    videoPlanStageBottomY ?? storyboardStageBottomY,
+  ))
 
   let bgmNodeId: string | null = null
   if (editFirstCanvasVisibility.bgmScore) {
@@ -968,7 +1060,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       : null
     nodes.push(createNode({
       id: bgmNodeId,
-      position: layoutPosition(savedLayouts, bgmNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 }),
+      position: layoutPosition(savedLayouts, bgmNodeId, { x: SHOT_GRID_START_X, y: bgmScoreDefaultY }),
       width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
       data: {
@@ -991,6 +1083,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       },
     }))
   }
+  const bgmStageBottomY = maxNodeBottomY(nodes, 'bgmScore')
+    ?? (bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height)
 
   let finalNodeId: string | null = null
   if (editFirstCanvasVisibility.finalTimeline) {
@@ -1003,7 +1097,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         : null
     nodes.push(createNode({
       id: finalNodeId,
-      position: layoutPosition(savedLayouts, finalNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 6, y: 120 + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height + 120 }),
+      position: layoutPosition(savedLayouts, finalNodeId, { x: SHOT_GRID_START_X, y: bgmStageBottomY + FINAL_TIMELINE_GAP_Y }),
       width: WORKSPACE_CANVAS_FINAL_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_FINAL_NODE_SIZE.height,
       data: {
