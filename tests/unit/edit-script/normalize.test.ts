@@ -210,6 +210,38 @@ describe('edit-first core plan normalization', () => {
     }
     expect(() => normalizeEditScriptCore(reordered)).toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID')
   })
+
+  it('rejects generation segments whose summed shot duration exceeds the video generation cap', () => {
+    const plan = corePlan()
+    const oversized = {
+      ...plan,
+      shots: [
+        { ...plan.shots[0], durationSec: 5 },
+        { ...plan.shots[1], durationSec: 5 },
+        {
+          ...plan.shots[1],
+          shotNumber: 3,
+          durationSec: 4,
+          action: 'Anna turns the chair.',
+        },
+        {
+          ...plan.shots[1],
+          shotNumber: 4,
+          durationSec: 3,
+          action: 'The hidden subject starts to move.',
+        },
+      ],
+      generationSegments: [
+        {
+          shotNumbers: [1, 2, 3, 4],
+          continuity: 'One continuous reveal movement that is too long for a single video segment.',
+        },
+      ],
+    }
+
+    expect(() => normalizeEditScriptCore(oversized))
+      .toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_DURATION_EXCEEDED:shots=1,2,3,4:duration=17:max=15')
+  })
 })
 
 describe('shot execution plan normalization', () => {

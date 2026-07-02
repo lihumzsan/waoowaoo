@@ -12,6 +12,7 @@ import {
   editScriptCoreSchema,
   editShotExecutionPlanSchema,
 } from './types'
+import { assertEditGenerationSegmentDurationsSupported } from './generation-segment-constraints'
 
 function uniquePositiveNumbers(values: readonly number[]): number[] {
   const seen = new Set<number>()
@@ -71,7 +72,7 @@ function assertGenerationSegments(
       throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID:${shotNumber}:${shotNumbers[index]}`)
     }
   })
-  return segments.map((segment) => {
+  const normalized = segments.map((segment) => {
     segment.shotNumbers.forEach((shotNumber, index) => {
       if (index > 0 && shotNumber !== segment.shotNumbers[index - 1] + 1) {
         throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_NOT_CONTINUOUS:${segment.shotNumbers.join(',')}`)
@@ -82,6 +83,11 @@ function assertGenerationSegments(
       continuity: segment.continuity.trim(),
     }
   })
+  assertEditGenerationSegmentDurationsSupported({
+    shots,
+    segments: normalized,
+  })
+  return normalized
 }
 
 export function normalizeEditScriptCore(

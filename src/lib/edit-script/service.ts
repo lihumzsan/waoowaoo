@@ -59,6 +59,7 @@ import {
   stripEditFirstStructuredParameters,
   type EditFirstDurationTier,
 } from './duration-tier'
+import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -1575,6 +1576,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
           user_request: userPrompt,
           screenplay_text: screenplayText,
           duration_guidance: buildEditFirstDurationGuidance(durationSpec, locale),
+          generation_segment_max_duration_seconds: String(EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC),
           aspect_ratio: effectiveVideoRatio,
           style_bible_json: stringifyForPrompt(styleBible),
       },

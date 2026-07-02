@@ -157,6 +157,9 @@ function arrangementSubmitErrorMessage(
   if (code === 'EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID') {
     return translate('durationExceeded')
   }
+  if (code === 'EDIT_SCRIPT_GENERATION_SEGMENT_DURATION_EXCEEDED') {
+    return translate('durationExceeded')
+  }
   return error instanceof Error ? error.message : translate('submitFailed')
 }
 

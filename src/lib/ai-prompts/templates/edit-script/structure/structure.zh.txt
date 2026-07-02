@@ -30,6 +30,7 @@
 - `hidden_subject` 用于高背椅后、门后、阴影中等“在场但被隐藏以等待揭示”的人物。
 - keyObjects 必须包含影响遮挡/揭示/位置关系的物体，例如高背椅、桌子、门、武器、篮子。
 - generationSegments 必须按 shotNumber 顺序覆盖所有 shots，每个 segment 只能包含连续 shot。
+- 每个 generationSegment 的总时长必须按其 shotNumbers 对应的 shots[].durationSec 累加计算，且不得超过 {{generation_segment_max_duration_seconds}} 秒；如果连续动作超过上限，必须拆成相邻多个 generationSegments。
 - generationSegments[].continuity 只写“这些镜头作为同一生成片段的连续性事实”，不写最终生成文本、不写转场模板、不写画面成片描述。
 - 本任务只输出 Schema 中列出的字段，不输出标题、摄影执行字段、prompt、分段元数据或相邻镜头衔接字段。
 
@@ -95,4 +96,5 @@ Style Bible：
 - `visibility` 和 `role` 是否只使用允许枚举。
 - 高背椅、门、桌子、武器等影响遮挡/揭示的物体是否进入 keyObjects。
 - generationSegments 是否顺序覆盖所有 shots，且只包含 shotNumbers 和 continuity。
+- 是否逐段累加 durationSec，并确认每个 generationSegment 总时长不超过 {{generation_segment_max_duration_seconds}} 秒。
 - 是否严格只输出 Schema 中列出的字段。

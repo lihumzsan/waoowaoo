@@ -34,6 +34,24 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('16:9')
   })
 
+  it('renders edit structure generation segment duration constraints', () => {
+    const prompt = buildAiPrompt({
+      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
+      locale: 'zh',
+      variables: {
+        user_request: '做一个恐怖短片',
+        screenplay_text: '林小雨听到门外异响。',
+        duration_guidance: '短时长档位，约 30 秒。',
+        generation_segment_max_duration_seconds: '15',
+        aspect_ratio: '16:9',
+        style_bible_json: '{}',
+      },
+    })
+
+    expect(prompt).toContain('不得超过 15 秒')
+    expect(prompt).toContain('逐段累加 durationSec')
+  })
+
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const executionTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN, 'zh')
 

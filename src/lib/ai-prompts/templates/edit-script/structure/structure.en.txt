@@ -30,6 +30,7 @@ You decide only the story shot order, each shot's narrative action, present char
 - Use `hidden_subject` for characters physically present but hidden for a reveal, such as behind a high-backed chair, behind a door, or inside shadow.
 - `keyObjects` must include objects that affect occlusion, reveal, or spatial relation, such as a high-backed chair, table, door, weapon, or basket.
 - `generationSegments` must cover all shots in shot-number order. Each segment may contain only continuous shot numbers.
+- Each `generationSegment` duration must be calculated as the sum of `shots[].durationSec` for its `shotNumbers`, and must not exceed {{generation_segment_max_duration_seconds}} seconds; if one continuous action exceeds this cap, split it into adjacent `generationSegments`.
 - `generationSegments[].continuity` describes only why these shots belong to the same generation segment. Do not write final generation text, transition templates, or finished-screen descriptions.
 - Output only fields listed in the schema. Do not add titles, camera execution fields, prompts, segment metadata, or neighboring-shot continuity fields.
 
@@ -95,4 +96,5 @@ Return only JSON. Do not use markdown or explanations.
 - Do `visibility` and `role` use only the allowed enum values?
 - Are high-backed chairs, doors, tables, weapons, and other occlusion/reveal objects included in `keyObjects` when relevant?
 - Do `generationSegments` cover every shot in order, and contain only `shotNumbers` and `continuity`?
+- Did you sum `durationSec` for every `generationSegment` and confirm each total is at most {{generation_segment_max_duration_seconds}} seconds?
 - Is the output strictly limited to fields listed in the schema?

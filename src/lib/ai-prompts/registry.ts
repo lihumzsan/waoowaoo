@@ -80,6 +80,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'user_request',
       'screenplay_text',
       'duration_guidance',
+      'generation_segment_max_duration_seconds',
       'aspect_ratio',
       'style_bible_json',
     ],

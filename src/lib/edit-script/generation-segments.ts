@@ -5,6 +5,10 @@ import { normalizeEditScriptStructure } from './normalize'
 import type { EditGenerationSegment, EditScriptPayload, EditScriptShot } from './types'
 import { readProjectEditScript } from './service'
 import { assertNoRunningVideoGroupOverlap } from './video-group-running-guard'
+import {
+  findEditGenerationSegmentDurationIssues,
+  formatEditGenerationSegmentDurationIssue,
+} from './generation-segment-constraints'
 
 interface PersistedEditScript {
   readonly id: string
@@ -75,6 +79,19 @@ function assertSegmentsCoverShots(
       }
     })
   })
+  const durationIssue = findEditGenerationSegmentDurationIssues({
+    shots,
+    segments,
+  })[0]
+  if (durationIssue) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: durationIssue.code,
+      message: formatEditGenerationSegmentDurationIssue(durationIssue),
+      shotNumbers: durationIssue.shotNumbers,
+      durationSec: durationIssue.durationSec,
+      maxDurationSec: durationIssue.maxDurationSec,
+    })
+  }
 }
 
 async function persistSegments(input: {
