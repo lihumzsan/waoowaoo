@@ -27,10 +27,14 @@ describe('fal music generation', () => {
 
   it('submits Lyria 3 Pro music prompts and returns the completed audio URL', async () => {
     fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request_id: 'req-music-1' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        request_id: 'req-music-1',
+        status_url: 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-1/status',
+        response_url: 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-1',
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         status: 'COMPLETED',
-        response_url: 'https://queue.fal.run/fal-ai/lyria3/pro/requests/req-music-1',
+        response_url: 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-1',
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         audio: {
@@ -77,10 +81,10 @@ describe('fal music generation', () => {
         'Output format: mp3',
       ].join('\n'),
     })
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://queue.fal.run/fal-ai/lyria3/pro/requests/req-music-1/status?logs=0', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-1/status?logs=0', expect.objectContaining({
       method: 'GET',
     }))
-    expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://queue.fal.run/fal-ai/lyria3/pro/requests/req-music-1', expect.objectContaining({
+    expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-1', expect.objectContaining({
       method: 'GET',
     }))
     expect(result).toEqual({
@@ -97,7 +101,11 @@ describe('fal music generation', () => {
 
   it('fails explicitly when Lyria returns a completed response without audio', async () => {
     fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ request_id: 'req-music-2' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        request_id: 'req-music-2',
+        status_url: 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-2/status',
+        response_url: 'https://queue.fal.run/fal-ai/lyria3/requests/req-music-2',
+      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'COMPLETED' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ lyrics: 'missing audio' }), { status: 200 }))
 
@@ -112,5 +120,28 @@ describe('fal music generation', () => {
       prompt: 'quiet tension cue',
       options: {},
     })).rejects.toThrow('FAL_MUSIC_RESULT_AUDIO_MISSING')
+  })
+
+  it('fails explicitly instead of timing out when the provider status URL returns an HTTP error', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        request_id: 'req-music-3',
+        status_url: 'https://queue.fal.run/fal-ai/lyria3/pro/requests/req-music-3/status',
+        response_url: 'https://queue.fal.run/fal-ai/lyria3/pro/requests/req-music-3',
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('method not allowed', { status: 405 }))
+
+    await expect(executeFalMusicGeneration({
+      userId: 'user-1',
+      selection: {
+        provider: 'fal',
+        modelId: 'fal-ai/lyria3/pro',
+        modelKey: 'fal::fal-ai/lyria3/pro',
+        variantSubKind: 'official',
+      },
+      prompt: 'quiet tension cue',
+      options: {},
+    })).rejects.toThrow('FAL_MUSIC_STATUS_FAILED (405): method not allowed')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
