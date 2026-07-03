@@ -14,9 +14,11 @@ interface ProjectAssistantThreadIdentity extends ProjectAssistantThreadScopeInpu
   assistantId: ProjectAssistantId
 }
 
-interface SaveProjectAssistantThreadInput extends ProjectAssistantThreadIdentity {
+interface AppendProjectAssistantThreadMessagesInput extends ProjectAssistantThreadIdentity {
   messages: unknown
 }
+
+type ProjectAssistantThreadTransactionClient = Prisma.TransactionClient
 
 function buildProjectAssistantScopeRef(input: ProjectAssistantThreadScopeInput): string {
   return input.episodeId ? `episode:${input.episodeId}` : `project:${input.projectId}`
@@ -47,6 +49,22 @@ function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[])
   }
 }
 
+function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMessage[] {
+  const seenIds = new Set(existing.map((message) => message.id))
+  const nextMessages = [...existing]
+  for (const message of appended) {
+    if (seenIds.has(message.id)) continue
+    seenIds.add(message.id)
+    nextMessages.push(message)
+  }
+  return ensureUniqueUIMessages(nextMessages)
+}
+
+async function readThreadMessages(record: ProjectAssistantThread | null): Promise<UIMessage[]> {
+  if (!record) return []
+  return await validateMessages(record.messagesJson)
+}
+
 export async function loadProjectAssistantThread(
   input: ProjectAssistantThreadIdentity,
 ): Promise<ProjectAssistantThreadSnapshot | null> {
@@ -66,34 +84,57 @@ export async function loadProjectAssistantThread(
   return toThreadSnapshot(record, messages)
 }
 
-export async function saveProjectAssistantThread(
-  input: SaveProjectAssistantThreadInput,
+export async function appendProjectAssistantThreadMessages(
+  input: AppendProjectAssistantThreadMessagesInput,
 ): Promise<ProjectAssistantThreadSnapshot> {
-  const messages = await validateMessages(input.messages)
-  const record = await prisma.projectAssistantThread.upsert({
+  return await prisma.$transaction(async (tx) => appendProjectAssistantThreadMessagesInTransaction(tx, input))
+}
+
+export async function appendProjectAssistantThreadMessagesInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: AppendProjectAssistantThreadMessagesInput,
+): Promise<ProjectAssistantThreadSnapshot> {
+  const appendedMessages = await validateMessages(input.messages)
+  const scopeRef = buildProjectAssistantScopeRef(input)
+  const existingRecord = await tx.projectAssistantThread.findUnique({
     where: {
       projectId_userId_assistantId_scopeRef: {
         projectId: input.projectId,
         userId: input.userId,
         assistantId: input.assistantId,
-        scopeRef: buildProjectAssistantScopeRef(input),
+        scopeRef,
+      },
+    },
+  })
+  const existingMessages = await readThreadMessages(existingRecord)
+  const nextMessages = mergeAppendMessages(existingMessages, appendedMessages)
+  if (existingRecord && nextMessages.length === existingMessages.length) {
+    return toThreadSnapshot(existingRecord, existingMessages)
+  }
+
+  const record = await tx.projectAssistantThread.upsert({
+    where: {
+      projectId_userId_assistantId_scopeRef: {
+        projectId: input.projectId,
+        userId: input.userId,
+        assistantId: input.assistantId,
+        scopeRef,
       },
     },
     update: {
       episodeId: input.episodeId || null,
-      messagesJson: serializeMessages(messages),
+      messagesJson: serializeMessages(nextMessages),
     },
     create: {
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId || null,
       assistantId: input.assistantId,
-      scopeRef: buildProjectAssistantScopeRef(input),
-      messagesJson: serializeMessages(messages),
+      scopeRef,
+      messagesJson: serializeMessages(nextMessages),
     },
   })
-
-  return toThreadSnapshot(record, messages)
+  return toThreadSnapshot(record, nextMessages)
 }
 
 export async function clearProjectAssistantThread(input: ProjectAssistantThreadIdentity): Promise<void> {

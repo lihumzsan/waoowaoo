@@ -77,6 +77,7 @@ export function createProjectAgentUiMessageStream(params: {
   toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
+  onChunk?: (chunk: ProjectAgentUiChunk) => void
   onError?: (error: unknown) => Promise<void>
   onCancel?: () => Promise<void>
   onSettled: () => Promise<void>
@@ -98,6 +99,10 @@ export function createProjectAgentUiMessageStream(params: {
       convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
+      const emitChunk = (chunk: ProjectAgentUiChunk) => {
+        params.onChunk?.(chunk)
+        controller.enqueue(chunk)
+      }
       const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
         const toolCallId = readChunkString(chunk, 'toolCallId')
         if (toolCallId && isToolInputChunk(chunk)) {
@@ -107,10 +112,10 @@ export function createProjectAgentUiMessageStream(params: {
           const toolName = inferToolNameFromCallId(toolCallId, params.toolNames ?? [])
           for (const syntheticChunk of createSyntheticToolInputChunks({ toolCallId, toolName })) {
             startedToolCallIds.add(toolCallId)
-            controller.enqueue(syntheticChunk)
+            emitChunk(syntheticChunk)
           }
         }
-        controller.enqueue(chunk)
+        emitChunk(chunk)
       }
       try {
         for (const chunk of params.initialChunks) {
@@ -167,8 +172,11 @@ export function createProjectAgentUiMessageStream(params: {
           await converted.cancel()
         }
       } finally {
-        await params.onCancel?.()
-        await settleOnce()
+        try {
+          await params.onCancel?.()
+        } finally {
+          await settleOnce()
+        }
       }
     },
   })

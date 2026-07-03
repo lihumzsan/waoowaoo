@@ -462,6 +462,7 @@ model ProjectAgentRun {
   errorCode      String?   @db.VarChar(128)
   errorMessage   String?   @db.Text
   startedAt      DateTime  @default(now())
+  heartbeatAt    DateTime?
   completedAt    DateTime?
   failedAt       DateTime?
   cancelledAt    DateTime?
@@ -475,6 +476,7 @@ model ProjectAgentRun {
 
   @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
   @@index([projectId, status, createdAt])
+  @@index([projectId, userId, assistantId, scopeRef, status, heartbeatAt], map: "project_agent_runs_scope_status_heartbeat_idx")
   @@index([requestId])
   @@map("project_agent_runs")
 }

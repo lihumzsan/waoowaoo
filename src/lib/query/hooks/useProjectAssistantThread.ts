@@ -1,6 +1,5 @@
 'use client'
 
-import type { UIMessage } from 'ai'
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
@@ -33,30 +32,8 @@ export function useProjectAssistantThread(projectId: string | null, episodeId?: 
 export function useProjectAssistantThreadSync(
   projectId: string | null,
   episodeId?: string | null,
-  locale?: string,
 ) {
   const queryClient = useQueryClient()
-
-  const save = useCallback(async (messages: UIMessage[]): Promise<ProjectAssistantThreadSnapshot | null> => {
-    if (!projectId) throw new Error('projectId is required')
-    const response = await apiFetch(`/api/projects/${projectId}/assistant/chat`, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        episodeId: episodeId || undefined,
-        locale,
-        messages,
-      }),
-    })
-    if (!response.ok) {
-      throw new Error('Failed to save assistant thread')
-    }
-    const data = await response.json() as ProjectAssistantThreadResponse
-    queryClient.setQueryData(queryKeys.project.assistantThread(projectId, episodeId || ''), data.thread)
-    return data.thread
-  }, [episodeId, locale, projectId, queryClient])
 
   const clear = useCallback(async (): Promise<void> => {
     if (!projectId) throw new Error('projectId is required')
@@ -72,7 +49,6 @@ export function useProjectAssistantThreadSync(
   }, [episodeId, projectId, queryClient])
 
   return {
-    save,
     clear,
   }
 }

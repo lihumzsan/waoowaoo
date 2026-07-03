@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   projectAssistantThread: {
     findUnique: vi.fn(),
     upsert: vi.fn(),
@@ -11,15 +12,18 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 import {
+  appendProjectAssistantThreadMessages,
   buildProjectAssistantScopeRef,
   clearProjectAssistantThread,
   loadProjectAssistantThread,
-  saveProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
 
 describe('project assistant persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) => (
+      await callback(prismaMock)
+    ))
   })
 
   it('buildProjectAssistantScopeRef -> uses episode scope when episode is present', () => {
@@ -118,7 +122,24 @@ describe('project assistant persistence', () => {
     ])
   })
 
-  it('saveProjectAssistantThread -> upserts the latest timeline with concrete unique scope', async () => {
+  it('appendProjectAssistantThreadMessages -> appends new message ids while preserving order', async () => {
+    prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
+      id: 'thread-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      messagesJson: [
+        {
+          id: 'user-1',
+          role: 'user',
+          parts: [{ type: 'text', text: '第一条' }],
+        },
+      ],
+      createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
+    })
     prismaMock.projectAssistantThread.upsert.mockResolvedValueOnce({
       id: 'thread-1',
       projectId: 'project-1',
@@ -131,7 +152,7 @@ describe('project assistant persistence', () => {
       updatedAt: new Date('2026-04-13T00:00:00.000Z'),
     })
 
-    await saveProjectAssistantThread({
+    await appendProjectAssistantThreadMessages({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -140,75 +161,12 @@ describe('project assistant persistence', () => {
         {
           id: 'user-1',
           role: 'user',
-          parts: [{ type: 'text', text: '检查当前进度' }],
-        },
-      ],
-    })
-
-    expect(prismaMock.projectAssistantThread.upsert).toHaveBeenCalledWith({
-      where: {
-        projectId_userId_assistantId_scopeRef: {
-          projectId: 'project-1',
-          userId: 'user-1',
-          assistantId: 'workspace-command',
-          scopeRef: 'episode:episode-1',
-        },
-      },
-      update: {
-        episodeId: 'episode-1',
-        messagesJson: [
-          {
-            id: 'user-1',
-            role: 'user',
-            parts: [{ type: 'text', text: '检查当前进度' }],
-          },
-        ],
-      },
-      create: {
-        projectId: 'project-1',
-        userId: 'user-1',
-        episodeId: 'episode-1',
-        assistantId: 'workspace-command',
-        scopeRef: 'episode:episode-1',
-        messagesJson: [
-          {
-            id: 'user-1',
-            role: 'user',
-            parts: [{ type: 'text', text: '检查当前进度' }],
-          },
-        ],
-      },
-    })
-  })
-
-  it('saveProjectAssistantThread -> persists repaired duplicate message ids', async () => {
-    prismaMock.projectAssistantThread.upsert.mockResolvedValueOnce({
-      id: 'thread-1',
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-      scopeRef: 'episode:episode-1',
-      messagesJson: [],
-      createdAt: new Date('2026-04-13T00:00:00.000Z'),
-      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
-    })
-
-    await saveProjectAssistantThread({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-      messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          parts: [{ type: 'text', text: 'first' }],
+          parts: [{ type: 'text', text: '重复请求不应追加' }],
         },
         {
           id: 'assistant-1',
           role: 'assistant',
-          parts: [{ type: 'text', text: 'second' }],
+          parts: [{ type: 'text', text: '第二条' }],
         },
       ],
     })
@@ -217,18 +175,61 @@ describe('project assistant persistence', () => {
       update: expect.objectContaining({
         messagesJson: [
           {
-            id: 'assistant-1',
-            role: 'assistant',
-            parts: [{ type: 'text', text: 'first' }],
+            id: 'user-1',
+            role: 'user',
+            parts: [{ type: 'text', text: '第一条' }],
           },
           {
-            id: 'assistant-1--dedup-1',
+            id: 'assistant-1',
             role: 'assistant',
-            parts: [{ type: 'text', text: 'second' }],
+            parts: [{ type: 'text', text: '第二条' }],
           },
         ],
       }),
     }))
+  })
+
+  it('appendProjectAssistantThreadMessages -> skips storage write when all appended ids already exist', async () => {
+    prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
+      id: 'thread-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      messagesJson: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '已保存' }],
+        },
+      ],
+      createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
+    })
+
+    const thread = await appendProjectAssistantThreadMessages({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '重复响应' }],
+        },
+      ],
+    })
+
+    expect(thread.messages).toEqual([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已保存' }],
+      },
+    ])
+    expect(prismaMock.projectAssistantThread.upsert).not.toHaveBeenCalled()
   })
 
   it('loadProjectAssistantThread -> fails explicitly on corrupted stored messages', async () => {

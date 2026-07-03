@@ -147,6 +147,7 @@ async function markRunStatus(
       ...(params.status === 'completed' ? { completedAt: timestamp } : {}),
       ...(params.status === 'failed' ? { failedAt: timestamp } : {}),
       ...(params.status === 'cancelled' ? { cancelledAt: timestamp } : {}),
+      ...(params.status === 'running' ? { heartbeatAt: timestamp } : {}),
     },
   })
 }
@@ -156,6 +157,7 @@ async function applyRunStarted(
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'run.started' }>,
 ): Promise<void> {
+  const timestamp = now()
   await tx.projectAgentRun.upsert({
     where: { id: event.runId },
     create: {
@@ -168,11 +170,13 @@ async function applyRunStarted(
       requestId: event.requestId,
       status: 'running',
       controlKind: event.controlKind,
+      heartbeatAt: timestamp,
     },
     update: {
       requestId: event.requestId,
       status: 'running',
       controlKind: event.controlKind,
+      heartbeatAt: timestamp,
       stopReason: null,
       errorCode: null,
       errorMessage: null,

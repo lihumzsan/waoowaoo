@@ -1,5 +1,6 @@
 import {
   createUIMessageStreamResponse,
+  readUIMessageStream,
   safeValidateUIMessages,
   type UIMessage,
 } from 'ai'
@@ -52,6 +53,7 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
+import { startProjectAgentRunHeartbeat } from './run-heartbeat'
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
@@ -85,6 +87,7 @@ import {
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
+import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import {
@@ -212,6 +215,69 @@ function createAgentRunStatusChunk(params: {
     controlKind: params.controlKind,
     stopReason: params.stopReason ?? null,
   } satisfies ProjectAgentRunPartData)
+}
+
+function createPersistedAssistantMessageId(params: {
+  runId: string
+  controlKind: ProjectAgentRunRecord['controlKind']
+  requestId: string
+}): string {
+  return `workspace-assistant-run:${params.controlKind}:${params.runId}:${params.requestId}`
+}
+
+function createChunkReplayStream(chunks: readonly ProjectAgentUiChunk[]): ReadableStream<ProjectAgentUiChunk> {
+  return new ReadableStream<ProjectAgentUiChunk>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(chunk)
+      }
+      controller.close()
+    },
+  })
+}
+
+function buildAssistantMessageFromDataChunks(params: {
+  messageId: string
+  chunks: readonly ProjectAgentUiChunk[]
+}): UIMessage | null {
+  const parts = params.chunks.flatMap((chunk) => {
+    const record = chunk as { type?: unknown; data?: unknown }
+    if (typeof record.type !== 'string' || !record.type.startsWith('data-')) return []
+    return [{
+      type: record.type,
+      data: record.data,
+    } as UIMessage['parts'][number]]
+  })
+  if (parts.length === 0) return null
+  return {
+    id: params.messageId,
+    role: 'assistant',
+    parts,
+  }
+}
+
+async function buildAssistantMessageFromChunks(params: {
+  messageId: string
+  chunks: readonly ProjectAgentUiChunk[]
+}): Promise<UIMessage> {
+  let latestMessage: UIMessage | null = null
+  for await (const message of readUIMessageStream({
+    stream: createChunkReplayStream(params.chunks),
+    terminateOnError: true,
+    message: {
+      id: params.messageId,
+      role: 'assistant',
+      parts: [],
+    },
+  })) {
+    latestMessage = message
+  }
+  if (!latestMessage || latestMessage.parts.length === 0) {
+    const dataMessage = buildAssistantMessageFromDataChunks(params)
+    if (dataMessage) return dataMessage
+    throw new Error('PROJECT_AGENT_ASSISTANT_MESSAGE_EMPTY')
+  }
+  return latestMessage
 }
 
 /**
@@ -621,6 +687,13 @@ export async function createProjectAgentChatResponse(input: {
     runLockReleased = true
     await safelyReleaseProjectAgentRunLock(input.runLock)
   }
+  let heartbeatStopped = false
+  let heartbeatController: ReturnType<typeof startProjectAgentRunHeartbeat> | null = null
+  const stopHeartbeatOnce = async () => {
+    if (!heartbeatController || heartbeatStopped) return
+    heartbeatStopped = true
+    await heartbeatController.stop()
+  }
 
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
@@ -923,12 +996,86 @@ export async function createProjectAgentChatResponse(input: {
       context: runContext,
       toolNotFoundBehavior: 'raise_error',
     })
+    heartbeatController = startProjectAgentRunHeartbeat({
+      runId: input.run.id,
+      runLock: input.runLock,
+    })
     let runStatusFinalized = false
+    let assistantMessagePersisted = false
+    let latestRunStatusForPersistence: Pick<ProjectAgentRunPartData, 'status' | 'stopReason'> | null = null
+    const persistedAssistantChunks: ProjectAgentUiChunk[] = []
+    const recordAssistantChunk = (chunk: ProjectAgentUiChunk): void => {
+      if ((chunk as { type?: unknown }).type === 'finish') return
+      persistedAssistantChunks.push(chunk)
+    }
+    const createRuntimeStatusChunk = (
+      status: ProjectAgentRunPartData['status'],
+      stopReason?: string | null,
+    ): ProjectAgentUiChunk => {
+      latestRunStatusForPersistence = {
+        status,
+        stopReason: stopReason ?? null,
+      }
+      return createAgentRunStatusChunk({
+        runId: input.run.id,
+        requestId,
+        status,
+        controlKind: input.run.controlKind,
+        stopReason,
+      })
+    }
+    const persistAssistantMessageOnce = async (): Promise<void> => {
+      if (assistantMessagePersisted) return
+      recordLatestRunStatusForPersistence()
+      const message = await buildAssistantMessageFromChunks({
+        messageId: createPersistedAssistantMessageId({
+          runId: input.run.id,
+          controlKind: input.run.controlKind,
+          requestId,
+        }),
+        chunks: persistedAssistantChunks,
+      })
+      await appendProjectAssistantThreadMessages({
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId || null,
+        assistantId: 'workspace-command',
+        messages: [message],
+      })
+      assistantMessagePersisted = true
+    }
+    const recordLatestRunStatusForPersistence = (): void => {
+      if (!latestRunStatusForPersistence) return
+      const lastChunk = persistedAssistantChunks[persistedAssistantChunks.length - 1] as {
+        type?: unknown
+        data?: unknown
+      } | undefined
+      if (
+        lastChunk?.type === 'data-agent-run'
+        && lastChunk.data
+        && typeof lastChunk.data === 'object'
+        && !Array.isArray(lastChunk.data)
+      ) {
+        const data = lastChunk.data as Record<string, unknown>
+        if (
+          data.status === latestRunStatusForPersistence.status
+          && data.stopReason === latestRunStatusForPersistence.stopReason
+        ) return
+      }
+      recordAssistantChunk(createAgentRunStatusChunk({
+        runId: input.run.id,
+        requestId,
+        status: latestRunStatusForPersistence.status,
+        controlKind: input.run.controlKind,
+        stopReason: latestRunStatusForPersistence.stopReason,
+      }))
+    }
     const stream = createProjectAgentUiMessageStream({
       source: result,
       initialChunks,
       toolNames: operationIds,
       drainChunks: drainSideChannelChunks,
+      onChunk: recordAssistantChunk,
       beforeFinish: async () => {
         const chunks: ProjectAgentUiChunk[] = []
         let completionError: unknown = null
@@ -983,13 +1130,7 @@ export async function createProjectAgentChatResponse(input: {
             status: 'awaiting_approval',
             stopReason: 'awaiting_approval',
           })
-          chunks.push(createAgentRunStatusChunk({
-            runId: input.run.id,
-            requestId,
-            status: 'awaiting_approval',
-            controlKind: input.run.controlKind,
-            stopReason: 'awaiting_approval',
-          }))
+          chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
           runStatusFinalized = true
         }
 
@@ -1017,13 +1158,7 @@ export async function createProjectAgentChatResponse(input: {
             errorCode: 'PROJECT_AGENT_WAIT_BINDING_FAILED',
             errorMessage,
           })
-          chunks.push(createAgentRunStatusChunk({
-            runId: input.run.id,
-            requestId,
-            status: 'failed',
-            controlKind: input.run.controlKind,
-            stopReason: 'wait_binding_failed',
-          }))
+          chunks.push(createRuntimeStatusChunk('failed', 'wait_binding_failed'))
           runStatusFinalized = true
           return chunks
         }
@@ -1040,13 +1175,7 @@ export async function createProjectAgentChatResponse(input: {
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
             errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
           })
-          chunks.push(createAgentRunStatusChunk({
-            runId: input.run.id,
-            requestId,
-            status: 'failed',
-            controlKind: input.run.controlKind,
-            stopReason: 'completion_error',
-          }))
+          chunks.push(createRuntimeStatusChunk('failed', 'completion_error'))
           runStatusFinalized = true
           throw completionError
         }
@@ -1058,13 +1187,7 @@ export async function createProjectAgentChatResponse(input: {
               status: 'awaiting_task',
               stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
             })
-            chunks.push(createAgentRunStatusChunk({
-              runId: input.run.id,
-              requestId,
-              status: 'awaiting_task',
-              controlKind: input.run.controlKind,
-              stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
-            }))
+            chunks.push(createRuntimeStatusChunk('awaiting_task', waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task'))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             await updateProjectAgentRunStatus({
@@ -1072,13 +1195,7 @@ export async function createProjectAgentChatResponse(input: {
               status: 'awaiting_choice',
               stopReason: 'awaiting_user_choice',
             })
-            chunks.push(createAgentRunStatusChunk({
-              runId: input.run.id,
-              requestId,
-              status: 'awaiting_choice',
-              controlKind: input.run.controlKind,
-              stopReason: 'awaiting_user_choice',
-            }))
+            chunks.push(createRuntimeStatusChunk('awaiting_choice', 'awaiting_user_choice'))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             await updateProjectAgentRunStatus({
@@ -1088,13 +1205,7 @@ export async function createProjectAgentChatResponse(input: {
               errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
               errorMessage: latestStopPart.operationIds.join(','),
             })
-            chunks.push(createAgentRunStatusChunk({
-              runId: input.run.id,
-              requestId,
-              status: 'failed',
-              controlKind: input.run.controlKind,
-              stopReason: 'tool_error',
-            }))
+            chunks.push(createRuntimeStatusChunk('failed', 'tool_error'))
             runStatusFinalized = true
           } else {
             await updateProjectAgentRunStatus({
@@ -1102,13 +1213,7 @@ export async function createProjectAgentChatResponse(input: {
               status: 'completed',
               stopReason: 'completed',
             })
-            chunks.push(createAgentRunStatusChunk({
-              runId: input.run.id,
-              requestId,
-              status: 'completed',
-              controlKind: input.run.controlKind,
-              stopReason: 'completed',
-            }))
+            chunks.push(createRuntimeStatusChunk('completed', 'completed'))
             runStatusFinalized = true
           }
         }
@@ -1131,7 +1236,11 @@ export async function createProjectAgentChatResponse(input: {
             runStatusFinalized,
           },
         })
-        if (runStatusFinalized) return
+        if (runStatusFinalized) {
+          recordLatestRunStatusForPersistence()
+          await persistAssistantMessageOnce()
+          return
+        }
         await settleTaskFollowUpActivity('failed', error)
         await updateProjectAgentRunStatus({
           runId: input.run.id,
@@ -1140,6 +1249,8 @@ export async function createProjectAgentChatResponse(input: {
           errorCode: 'PROJECT_AGENT_STREAM_FAILED',
           errorMessage,
         })
+        recordAssistantChunk(createRuntimeStatusChunk('failed', 'stream_error'))
+        await persistAssistantMessageOnce()
         runStatusFinalized = true
       },
       onCancel: async () => {
@@ -1147,13 +1258,23 @@ export async function createProjectAgentChatResponse(input: {
           runId: input.run.id,
           stopReason: 'stream_cancelled',
         })
+        recordAssistantChunk(createRuntimeStatusChunk('cancelled', 'stream_cancelled'))
+        await persistAssistantMessageOnce()
       },
-      onSettled: releaseRunLockOnce,
+      onSettled: async () => {
+        try {
+          await persistAssistantMessageOnce()
+        } finally {
+          await stopHeartbeatOnce()
+          await releaseRunLockOnce()
+        }
+      },
     })
     const response = createUIMessageStreamResponse({ stream })
     response.headers.set('x-request-id', stableRequestId)
     return response
   } catch (error) {
+    await stopHeartbeatOnce()
     await releaseRunLockOnce()
     await updateProjectAgentRunStatus({
       runId: input.run.id,

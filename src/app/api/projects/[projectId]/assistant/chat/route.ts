@@ -3,18 +3,13 @@ import { safeValidateUIMessages, type UIMessage } from 'ai'
 import type { Prisma } from '@prisma/client'
 import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
-import { getProjectModelConfig } from '@/lib/config-service'
 import { createProjectAgentChatResponse } from '@/lib/project-agent'
 import type { ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
-import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import { compressMessages, shouldCompressMessages } from '@/lib/project-agent/message-compression'
-import { resolveProjectAgentLanguageModel } from '@/lib/project-agent/model'
 import {
+  appendProjectAssistantThreadMessages,
   clearProjectAssistantThread,
   loadProjectAssistantThread,
-  saveProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
-import { writeWorkspaceAssistantThreadLog } from '@/lib/project-agent/thread-log'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   acquireProjectAgentRunLock,
@@ -41,19 +36,22 @@ import {
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import {
   createProjectAgentRun,
+  ensureProjectAgentRunSlotAvailable,
   getProjectAgentRun,
+  listBlockingProjectAgentRunsForThreadClear,
   updateProjectAgentRunStatus,
   supersedePendingRunsInScope,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
 
 type RequestBody = {
-  messages?: unknown
+  message?: unknown
   context?: unknown
   episodeId?: string | null
   locale?: string | null
   assistantPermissionMode?: unknown
   control?: unknown
+  visibleUserText?: unknown
 }
 
 function mapProjectAgentError(error: unknown): ApiError {
@@ -78,10 +76,17 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_AGENT_CONTROL_INVALID'
       || error.message === 'PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED'
       || error.message === 'PROJECT_AGENT_CHOICE_RESPONSE_INVALID'
+      || error.message === 'PROJECT_AGENT_MESSAGES_NOT_ACCEPTED'
     ) {
       return new ApiError('INVALID_PARAMS', {
         code: error.message,
         message: error.message,
+      })
+    }
+    if (error.message === 'PROJECT_AGENT_RUN_ACTIVE') {
+      return new ApiError('CONFLICT', {
+        code: error.message,
+        message: 'another assistant run is already active for this thread',
       })
     }
   }
@@ -118,52 +123,16 @@ function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function readLocaleFromBody(body: RequestBody): 'zh' | 'en' {
-  if (body.context && typeof body.context === 'object') {
-    return normalizeProjectAgentLocale((body.context as Record<string, unknown>).locale)
-  }
-  return normalizeProjectAgentLocale(body.locale)
-}
-
-async function compressThreadMessagesIfNeeded(params: {
-  userId: string
-  projectId: string
-  locale: 'zh' | 'en'
-  messages: unknown
-}) {
-  const validation = await safeValidateUIMessages({ messages: params.messages })
+async function validateUserMessage(message: unknown): Promise<UIMessage> {
+  const validation = await safeValidateUIMessages({ messages: [message] })
   if (!validation.success) {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
-  const messages = ensureUniqueUIMessages(validation.data)
-  if (!shouldCompressMessages(messages)) {
-    return messages
-  }
-
-  const projectConfig = await getProjectModelConfig(params.projectId, params.userId)
-  const analysisModelKey = projectConfig.analysisModel?.trim() || ''
-  if (!analysisModelKey) {
-    throw new Error('PROJECT_AGENT_MODEL_NOT_CONFIGURED')
-  }
-
-  const resolved = await resolveProjectAgentLanguageModel({
-    userId: params.userId,
-    analysisModelKey,
-  })
-
-  return await compressMessages({
-    messages,
-    locale: params.locale,
-    model: resolved.languageModel,
-  })
-}
-
-async function validateThreadMessages(messages: unknown) {
-  const validation = await safeValidateUIMessages({ messages })
-  if (!validation.success) {
+  const [validatedMessage] = ensureUniqueUIMessages(validation.data)
+  if (!validatedMessage || validatedMessage.role !== 'user') {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
-  return ensureUniqueUIMessages(validation.data)
+  return validatedMessage
 }
 
 function isWorkspaceAssistantHiddenMessage(message: UIMessage): boolean {
@@ -191,6 +160,65 @@ function readLatestVisibleUserText(messages: readonly UIMessage[]): string {
     if (text) return text
   }
   return ''
+}
+
+function readVisibleUserText(body: RequestBody): string | null {
+  return readNonEmptyString(body.visibleUserText)
+}
+
+function assertNoLegacyMessagesField(body: RequestBody): void {
+  if (Object.prototype.hasOwnProperty.call(body, 'messages')) {
+    throw new Error('PROJECT_AGENT_MESSAGES_NOT_ACCEPTED')
+  }
+}
+
+function buildControlVisibleUserMessage(params: {
+  controlAction: ProjectAgentControlAction
+  text: string
+}): UIMessage {
+  const idSuffix = params.controlAction.type === 'approval_response'
+    ? params.controlAction.interruptionId
+    : params.controlAction.type === 'choice_response'
+      ? params.controlAction.interruptionId
+        ?? readNonEmptyString(params.controlAction.output.cardId)
+        ?? params.controlAction.toolCallId
+        ?? params.controlAction.choiceType
+      : params.controlAction.waitId
+  return {
+    id: `workspace-control-user:${params.controlAction.type}:${params.controlAction.runId}:${idSuffix}`,
+    role: 'user',
+    parts: [{
+      type: 'text',
+      text: params.text,
+    }],
+  }
+}
+
+async function loadAuthoritativeThreadMessages(params: ProjectAgentControlScope): Promise<UIMessage[]> {
+  const thread = await loadProjectAssistantThread(params)
+  return thread?.messages ?? []
+}
+
+function appendUniqueMessages(existing: readonly UIMessage[], appended: readonly UIMessage[]): UIMessage[] {
+  const existingIds = new Set(existing.map((message) => message.id))
+  return ensureUniqueUIMessages([
+    ...existing,
+    ...appended.filter((message) => !existingIds.has(message.id)),
+  ])
+}
+
+async function assertProjectAgentRunSlotAvailable(scope: ProjectAgentControlScope): Promise<void> {
+  try {
+    await ensureProjectAgentRunSlotAvailable(scope)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PROJECT_AGENT_RUN_ACTIVE') {
+      throw new ApiError('CONFLICT', {
+        code: 'PROJECT_AGENT_RUN_ACTIVE',
+        message: 'another assistant run is already active for this thread',
+      })
+    }
+    throw error
+  }
 }
 
 interface ProjectAgentControlScope {
@@ -356,17 +384,9 @@ export const GET = apiHandler(async (
 })
 
 async function resolveProjectAgentRunForRequest(params: {
-  request: NextRequest
-  controlAction: ProjectAgentControlAction | null
+  controlAction: ProjectAgentControlAction
   scope: ProjectAgentControlScope
 }): Promise<ProjectAgentRunRecord> {
-  if (!params.controlAction) {
-    return await createProjectAgentRun({
-      ...params.scope,
-      requestId: getRequestId(params.request) ?? crypto.randomUUID(),
-      controlKind: 'user_turn',
-    })
-  }
   const run = await getProjectAgentRun({
     ...params.scope,
     runId: params.controlAction.runId,
@@ -385,47 +405,6 @@ async function resolveProjectAgentRunForRequest(params: {
   return run
 }
 
-export const PUT = apiHandler(async (
-  request: NextRequest,
-  context: { params: Promise<{ projectId: string }> },
-) => {
-  const { projectId } = await context.params
-  const authResult = await requireProjectAuth(projectId)
-  if (isErrorResponse(authResult)) return authResult
-
-  let body: RequestBody
-  try {
-    body = (await request.json()) as RequestBody
-  } catch {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'BODY_PARSE_FAILED',
-      field: 'body',
-      message: 'request body must be valid JSON',
-    })
-  }
-
-  try {
-    const locale = readLocaleFromBody(body)
-    const messages = await compressThreadMessagesIfNeeded({
-      userId: authResult.session.user.id,
-      projectId,
-      locale,
-      messages: body.messages ?? [],
-    })
-    const thread = await saveProjectAssistantThread({
-      projectId,
-      userId: authResult.session.user.id,
-      episodeId: readEpisodeIdFromBody(body),
-      assistantId: 'workspace-command',
-      messages,
-    })
-    await writeWorkspaceAssistantThreadLog(thread)
-    return NextResponse.json({ thread })
-  } catch (error) {
-    throw mapProjectAgentError(error)
-  }
-})
-
 export const DELETE = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> },
@@ -435,11 +414,21 @@ export const DELETE = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   try {
-    await clearProjectAssistantThread({
+    const scope = {
       projectId,
       userId: authResult.session.user.id,
       episodeId: readEpisodeIdFromQuery(request),
-      assistantId: 'workspace-command',
+      assistantId: 'workspace-command' as const,
+    }
+    const blockingRuns = await listBlockingProjectAgentRunsForThreadClear(scope)
+    if (blockingRuns.length > 0) {
+      throw new ApiError('CONFLICT', {
+        code: 'PROJECT_AGENT_THREAD_ACTIVE',
+        message: 'assistant thread cannot be cleared while an assistant run is active or waiting',
+      })
+    }
+    await clearProjectAssistantThread({
+      ...scope,
     })
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -467,13 +456,13 @@ export const POST = apiHandler(async (
   }
 
   try {
-    const locale = readLocaleFromBody(body)
+    assertNoLegacyMessagesField(body)
     const assistantPermissionMode = parseAssistantPermissionMode(body.assistantPermissionMode)
     const controlAction = parseProjectAgentControlAction(body.control)
     if (controlAction && request.headers.get('x-project-agent-run-control') !== '1') {
       throw new Error('PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED')
     }
-    const requestMessages = await validateThreadMessages(body.messages)
+    const userMessage = controlAction ? null : await validateUserMessage(body.message)
     const userId = authResult.session.user.id
     const episodeId = readEpisodeIdFromRequestBody(body)
     const scope = {
@@ -482,15 +471,19 @@ export const POST = apiHandler(async (
       episodeId,
       assistantId: 'workspace-command' as const,
     }
-    const messages = controlAction?.type === 'approval_response'
-      ? requestMessages
-      : await compressThreadMessagesIfNeeded({
-          userId,
-          projectId,
-          locale,
-          messages: requestMessages,
-        })
-    const runLock = await acquireProjectAgentRunLock(scope)
+    await assertProjectAgentRunSlotAvailable(scope)
+    const existingMessages = await loadAuthoritativeThreadMessages(scope)
+    const visibleUserText = controlAction ? readVisibleUserText(body) : null
+    const visibleUserMessages = controlAction && visibleUserText
+      ? [buildControlVisibleUserMessage({ controlAction, text: visibleUserText })]
+      : []
+    const newMessages = userMessage ? [userMessage] : visibleUserMessages
+    const messages = appendUniqueMessages(existingMessages, newMessages)
+    const runId = controlAction?.runId ?? crypto.randomUUID()
+    const runLock = await acquireProjectAgentRunLock({
+      ...scope,
+      runId,
+    })
     if (!runLock) {
       throw new ApiError('CONFLICT', {
         code: 'PROJECT_AGENT_RUN_ACTIVE',
@@ -499,11 +492,27 @@ export const POST = apiHandler(async (
     }
     let run: ProjectAgentRunRecord | null = null
     try {
-      run = await resolveProjectAgentRunForRequest({
-        request,
-        controlAction,
-        scope,
-      })
+      if (controlAction) {
+        run = await resolveProjectAgentRunForRequest({
+          controlAction,
+          scope,
+        })
+      } else {
+        if (!userMessage) throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
+        run = await createProjectAgentRun({
+          ...scope,
+          runId,
+          requestId: getRequestId(request) ?? crypto.randomUUID(),
+          controlKind: 'user_turn',
+          appendMessages: [userMessage],
+        })
+      }
+      if (visibleUserMessages.length > 0) {
+        await appendProjectAssistantThreadMessages({
+          ...scope,
+          messages: visibleUserMessages,
+        })
+      }
       const control = await resolveProjectAgentControl({
         controlAction,
         scope,

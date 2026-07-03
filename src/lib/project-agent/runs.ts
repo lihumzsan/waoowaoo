@@ -1,10 +1,19 @@
 import { randomUUID } from 'node:crypto'
+import { Prisma } from '@prisma/client'
+import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
-import { buildProjectAssistantScopeRef } from './persistence'
-import { isProjectAgentRunLockActive } from './run-lock'
-import { appendProjectAgentEvents } from './event'
+import {
+  appendProjectAssistantThreadMessagesInTransaction,
+  buildProjectAssistantScopeRef,
+} from './persistence'
+import { releaseProjectAgentRunLockForRun } from './run-lock'
+import {
+  appendProjectAgentEvents,
+  appendProjectAgentEventsInTransaction,
+  type ProjectAgentEventTransactionClient,
+} from './event'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -39,7 +48,11 @@ export interface ProjectAgentRunRecord {
   status: ProjectAgentRunStatus
   controlKind: ProjectAgentRunControlKind
   stopReason?: string | null
+  heartbeatAt: Date | null
 }
+
+export const PROJECT_AGENT_RUN_HEARTBEAT_INTERVAL_MS = 30 * 1000
+export const PROJECT_AGENT_RUN_STALE_MS = 90 * 1000
 
 const projectAgentRunLogger = createScopedLogger({
   module: 'project-agent.runs',
@@ -82,11 +95,110 @@ function normalizeControlKind(value: string): ProjectAgentRunControlKind {
   throw new Error(`PROJECT_AGENT_RUN_CONTROL_KIND_INVALID:${value}`)
 }
 
+function toProjectAgentRunRecord(run: {
+  id: string
+  projectId: string
+  userId: string
+  assistantId: string
+  scopeRef: string
+  episodeId: string | null
+  requestId: string
+  status: string
+  controlKind: string
+  stopReason?: string | null
+  heartbeatAt: Date | null
+}): ProjectAgentRunRecord {
+  return {
+    ...run,
+    status: normalizeRunStatus(run.status),
+    controlKind: normalizeControlKind(run.controlKind),
+  }
+}
+
+function staleHeartbeatCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - PROJECT_AGENT_RUN_STALE_MS)
+}
+
+async function getProjectAgentRunInTransaction(
+  tx: ProjectAgentEventTransactionClient,
+  params: ProjectAgentRunScope & {
+    runId: string
+  },
+): Promise<ProjectAgentRunRecord | null> {
+  const { assistantId, scopeRef } = buildRunScope(params)
+  const run = await tx.projectAgentRun.findFirst({
+    where: {
+      id: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId,
+      scopeRef,
+    },
+    select: projectAgentRunRecordSelect,
+  })
+  return run ? toProjectAgentRunRecord(run) : null
+}
+
+const projectAgentRunRecordSelect = {
+  id: true,
+  projectId: true,
+  userId: true,
+  assistantId: true,
+  scopeRef: true,
+  episodeId: true,
+  requestId: true,
+  status: true,
+  controlKind: true,
+  stopReason: true,
+  heartbeatAt: true,
+} satisfies Prisma.ProjectAgentRunSelect
+
 export async function createProjectAgentRun(params: ProjectAgentRunScope & {
   requestId: string
   controlKind: ProjectAgentRunControlKind
+  runId?: string
+  appendMessages?: UIMessage[]
 }): Promise<ProjectAgentRunRecord> {
-  const runId = randomUUID()
+  const runId = params.runId?.trim() || randomUUID()
+  const appendMessages = params.appendMessages ?? []
+  if (appendMessages.length > 0) {
+    const run = await prisma.$transaction(async (tx) => {
+      await appendProjectAssistantThreadMessagesInTransaction(tx, {
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId ?? null,
+        assistantId: params.assistantId ?? 'workspace-command',
+        messages: appendMessages,
+      })
+      await appendProjectAgentEventsInTransaction(tx, {
+        scope: {
+          projectId: params.projectId,
+          userId: params.userId,
+          episodeId: params.episodeId ?? null,
+          assistantId: params.assistantId ?? 'workspace-command',
+          scopeRef: buildProjectAssistantScopeRef({
+            projectId: params.projectId,
+            episodeId: params.episodeId ?? null,
+          }),
+        },
+        events: [{
+          idempotencyKey: `run-started:${runId}`,
+          event: {
+            kind: 'run.started',
+            runId,
+            requestId: params.requestId,
+            controlKind: params.controlKind,
+          },
+        }],
+      })
+      return await getProjectAgentRunInTransaction(tx, {
+        ...params,
+        runId,
+      })
+    })
+    if (!run) throw new Error(`PROJECT_AGENT_RUN_CREATE_FAILED:${runId}`)
+    return run
+  }
   await appendProjectAgentEvents({
     scope: params,
     events: [{
@@ -119,25 +231,10 @@ export async function getProjectAgentRun(params: ProjectAgentRunScope & {
       assistantId,
       scopeRef,
     },
-    select: {
-      id: true,
-      projectId: true,
-      userId: true,
-      assistantId: true,
-      scopeRef: true,
-      episodeId: true,
-      requestId: true,
-      status: true,
-      controlKind: true,
-      stopReason: true,
-    },
+    select: projectAgentRunRecordSelect,
   })
   if (!run) return null
-  return {
-    ...run,
-    status: normalizeRunStatus(run.status),
-    controlKind: normalizeControlKind(run.controlKind),
-  }
+  return toProjectAgentRunRecord(run)
 }
 
 export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRunScope & {
@@ -154,24 +251,9 @@ export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRun
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
-    select: {
-      id: true,
-      projectId: true,
-      userId: true,
-      assistantId: true,
-      scopeRef: true,
-      episodeId: true,
-      requestId: true,
-      status: true,
-      controlKind: true,
-      stopReason: true,
-    },
+    select: projectAgentRunRecordSelect,
   })
-  return runs.map((run) => ({
-    ...run,
-    status: normalizeRunStatus(run.status),
-    controlKind: normalizeControlKind(run.controlKind),
-  }))
+  return runs.map((run) => toProjectAgentRunRecord(run))
 }
 
 export async function updateProjectAgentRunStatus(params: {
@@ -306,28 +388,122 @@ export async function safelyCancelRunningProjectAgentRun(params: {
   }
 }
 
-export async function cancelUnlockedRunningProjectAgentRunsForScope(scope: ProjectAgentRunScope): Promise<string[]> {
+export async function touchProjectAgentRunHeartbeat(params: {
+  runId: string
+  now?: Date
+}): Promise<boolean> {
+  const updated = await prisma.projectAgentRun.updateMany({
+    where: {
+      id: params.runId,
+      status: 'running',
+    },
+    data: {
+      heartbeatAt: params.now ?? new Date(),
+    },
+  })
+  return updated.count > 0
+}
+
+export async function findFreshRunningProjectAgentRunForScope(
+  scope: ProjectAgentRunScope,
+  now: Date = new Date(),
+): Promise<ProjectAgentRunRecord | null> {
   const { assistantId, scopeRef } = buildRunScope(scope)
-  const runningRuns = await prisma.projectAgentRun.findMany({
+  const run = await prisma.projectAgentRun.findFirst({
     where: {
       projectId: scope.projectId,
       userId: scope.userId,
       assistantId,
       scopeRef,
       status: 'running',
+      heartbeatAt: {
+        gte: staleHeartbeatCutoff(now),
+      },
+    },
+    orderBy: { heartbeatAt: 'desc' },
+    select: projectAgentRunRecordSelect,
+  })
+  return run ? toProjectAgentRunRecord(run) : null
+}
+
+export async function cancelStaleRunningProjectAgentRunsForScope(
+  scope: ProjectAgentRunScope,
+  now: Date = new Date(),
+): Promise<string[]> {
+  const { assistantId, scopeRef } = buildRunScope(scope)
+  const staleRuns = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId,
+      scopeRef,
+      status: 'running',
+      OR: [
+        { heartbeatAt: null },
+        {
+          heartbeatAt: {
+            lt: staleHeartbeatCutoff(now),
+          },
+        },
+      ],
     },
     select: { id: true },
   })
-  if (runningRuns.length === 0) return []
-  if (await isProjectAgentRunLockActive(scope)) return []
-
-  const runIds = runningRuns.map((run) => run.id)
-  await Promise.all(runIds.map((runId) => updateProjectAgentRunStatus({
-    runId,
-    status: 'cancelled',
-    stopReason: 'orphaned_running_run',
-  })))
+  const runIds = staleRuns.map((run) => run.id)
+  await Promise.all(runIds.map(async (runId) => {
+    await updateProjectAgentRunStatus({
+      runId,
+      status: 'cancelled',
+      stopReason: 'stale_running_run',
+    })
+    await releaseProjectAgentRunLockForRun({
+      ...scope,
+      runId,
+    }).catch((error: unknown) => {
+      projectAgentRunLogger.warn({
+        action: 'assistant.run-lock.stale-release.failed',
+        message: 'Failed to release stale project agent run lock',
+        details: {
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+    })
+  }))
   return runIds
+}
+
+export async function ensureProjectAgentRunSlotAvailable(scope: ProjectAgentRunScope): Promise<void> {
+  await cancelStaleRunningProjectAgentRunsForScope(scope)
+  const freshRun = await findFreshRunningProjectAgentRunForScope(scope)
+  if (freshRun) {
+    throw new Error('PROJECT_AGENT_RUN_ACTIVE')
+  }
+}
+
+export async function listBlockingProjectAgentRunsForThreadClear(
+  scope: ProjectAgentRunScope,
+): Promise<ProjectAgentRunRecord[]> {
+  await cancelStaleRunningProjectAgentRunsForScope(scope)
+  const { assistantId, scopeRef } = buildRunScope(scope)
+  const runs = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId,
+      scopeRef,
+      status: {
+        in: ['running', 'awaiting_approval', 'awaiting_choice', 'awaiting_task'],
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: projectAgentRunRecordSelect,
+  })
+  return runs.map((run) => toProjectAgentRunRecord(run))
+}
+
+export async function cancelUnlockedRunningProjectAgentRunsForScope(scope: ProjectAgentRunScope): Promise<string[]> {
+  return await cancelStaleRunningProjectAgentRunsForScope(scope)
 }
 
 export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): Promise<string[]> {

@@ -1,4 +1,8 @@
-export { appendProjectAgentEvents } from './append'
+export {
+  appendProjectAgentEvents,
+  appendProjectAgentEventsInTransaction,
+  type ProjectAgentEventTransactionClient,
+} from './append'
 export { getCurrentProjectAgentActivity } from './activity'
 export type {
   ProjectAgentActivitySnapshot,

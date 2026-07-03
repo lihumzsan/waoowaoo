@@ -71,12 +71,21 @@ function buildDelegatedChatBody(params: {
   body: UnknownRecord
 }): UnknownRecord {
   return {
-    messages: params.body.messages,
     context: params.body.context,
     episodeId: params.body.episodeId,
     locale: params.body.locale,
     assistantPermissionMode: params.body.assistantPermissionMode,
+    visibleUserText: params.body.visibleUserText,
     control: buildControlPayload(params),
+  }
+}
+
+function assertNoLegacyMessagesField(body: UnknownRecord): void {
+  if (Object.prototype.hasOwnProperty.call(body, 'messages')) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'PROJECT_AGENT_MESSAGES_NOT_ACCEPTED',
+      message: 'messages is not accepted by assistant run control endpoints',
+    })
   }
 }
 
@@ -95,6 +104,7 @@ export async function handleProjectAgentRunControlRequest(params: {
   kind: ProjectAgentRunControlKind
 }): Promise<Response> {
   const body = await readJsonBody(params.request)
+  assertNoLegacyMessagesField(body)
   const url = new URL(`/api/projects/${params.projectId}/assistant/chat`, params.request.url)
   const delegatedRequest = new NextRequest(url, {
     method: 'POST',

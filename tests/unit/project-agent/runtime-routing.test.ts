@@ -24,6 +24,7 @@ const streamState = vi.hoisted(() => ({
   capturedRunInput: null as unknown,
   capturedResponseStream: null as ReadableStream<unknown> | null,
   streamError: null as Error | null,
+  keepOpen: false,
   simulateSecondTurnAfterFirstWorkflowTool: false,
   executedToolNames: [] as string[],
 }))
@@ -39,6 +40,22 @@ const loggerState = vi.hoisted(() => ({
 
 const runState = vi.hoisted(() => ({
   safelyUpdateProjectAgentRunStatus: vi.fn(async () => undefined),
+  cancelRunningProjectAgentRun: vi.fn(async () => true),
+}))
+
+const runHeartbeatState = vi.hoisted(() => ({
+  stop: vi.fn(async () => undefined),
+  startProjectAgentRunHeartbeat: vi.fn(() => ({
+    stop: runHeartbeatState.stop,
+  })),
+}))
+
+const persistenceState = vi.hoisted(() => ({
+  appendProjectAssistantThreadMessages: vi.fn(async () => undefined),
+}))
+
+const runLockState = vi.hoisted(() => ({
+  safelyReleaseProjectAgentRunLock: vi.fn(async () => undefined),
 }))
 
 const eventState = vi.hoisted(() => ({
@@ -102,7 +119,9 @@ vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
         return
       }
       controller.enqueue({ type: 'finish' })
-      controller.close()
+      if (!streamState.keepOpen) {
+        controller.close()
+      }
     },
   })),
 }))
@@ -334,7 +353,19 @@ vi.mock('@/lib/project-agent/waits', () => ({
 vi.mock('@/lib/project-agent/runs', () => ({
   safelyUpdateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
   updateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
-  cancelRunningProjectAgentRun: vi.fn(async () => true),
+  cancelRunningProjectAgentRun: runState.cancelRunningProjectAgentRun,
+}))
+
+vi.mock('@/lib/project-agent/run-heartbeat', () => ({
+  startProjectAgentRunHeartbeat: runHeartbeatState.startProjectAgentRunHeartbeat,
+}))
+
+vi.mock('@/lib/project-agent/run-lock', () => ({
+  safelyReleaseProjectAgentRunLock: runLockState.safelyReleaseProjectAgentRunLock,
+}))
+
+vi.mock('@/lib/project-agent/persistence', () => ({
+  appendProjectAssistantThreadMessages: persistenceState.appendProjectAssistantThreadMessages,
 }))
 
 vi.mock('@/lib/project-agent/event', () => ({
@@ -361,6 +392,7 @@ function buildRun(controlKind: ProjectAgentRunRecord['controlKind'] = 'user_turn
     requestId: 'request-1',
     status: 'running',
     controlKind,
+    heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   }
 }
 
@@ -436,6 +468,36 @@ async function drainCapturedResponseStream(): Promise<void> {
   }
 }
 
+type PersistedAssistantMessage = {
+  id: string
+  role: string
+  parts: Array<{
+    type?: unknown
+    data?: unknown
+  }>
+}
+
+function readLastPersistedAssistantMessage(): PersistedAssistantMessage {
+  const calls = persistenceState.appendProjectAssistantThreadMessages.mock.calls as unknown as Array<[{
+    messages: PersistedAssistantMessage[]
+  }]>
+  const message = calls.at(-1)?.[0].messages[0]
+  if (!message) throw new Error('TEST_PERSISTED_ASSISTANT_MESSAGE_MISSING')
+  return message
+}
+
+function expectLastPersistedRunStatus(status: string, stopReason: string): void {
+  const message = readLastPersistedAssistantMessage()
+  const runPart = [...message.parts].reverse().find((part) => part.type === 'data-agent-run')
+  if (!runPart || !runPart.data || typeof runPart.data !== 'object' || Array.isArray(runPart.data)) {
+    throw new Error('TEST_PERSISTED_RUN_PART_MISSING')
+  }
+  expect(runPart.data).toMatchObject({
+    status,
+    stopReason,
+  })
+}
+
 async function runAssistant(params: {
   context?: Record<string, unknown>
   text?: string
@@ -469,11 +531,17 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedRunInput = null
     streamState.capturedResponseStream = null
     streamState.streamError = null
+    streamState.keepOpen = false
     streamState.simulateSecondTurnAfterFirstWorkflowTool = false
     streamState.executedToolNames = []
     loggerState.info.mockReset()
     loggerState.error.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
+    runState.cancelRunningProjectAgentRun.mockClear()
+    runHeartbeatState.stop.mockClear()
+    runHeartbeatState.startProjectAgentRunHeartbeat.mockClear()
+    persistenceState.appendProjectAssistantThreadMessages.mockClear()
+    runLockState.safelyReleaseProjectAgentRunLock.mockClear()
     registryState.registry = createRegistry()
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
     workflowRefreshState.resolveEditFirstWorkflowState.mockReset()
@@ -482,6 +550,10 @@ describe('project agent runtime deterministic tool injection', () => {
 
   it('injects edit-first choice and screenplay tools without an LLM router', async () => {
     const response = await runAssistant({})
+    await drainCapturedResponseStream()
+    await vi.waitFor(() => {
+      expect(persistenceState.appendProjectAssistantThreadMessages.mock.calls.length).toBeGreaterThan(0)
+    })
 
     expect(response.status).toBe(200)
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([
@@ -504,6 +576,11 @@ describe('project agent runtime deterministic tool injection', () => {
       runId: 'run-user_turn',
       status: 'completed',
     }))
+    expect(readLastPersistedAssistantMessage()).toEqual(expect.objectContaining({
+      id: 'workspace-assistant-run:user_turn:run-user_turn:req-1',
+      role: 'assistant',
+    }))
+    expectLastPersistedRunStatus('completed', 'completed')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.toolset.resolved',
       details: expect.objectContaining({
@@ -1012,6 +1089,27 @@ describe('project agent runtime deterministic tool injection', () => {
       errorCode: 'PROJECT_AGENT_STREAM_FAILED',
       errorMessage: 'BROKEN_STREAM',
     }))
+    expectLastPersistedRunStatus('failed', 'stream_error')
+    expect(runHeartbeatState.stop).toHaveBeenCalled()
+  })
+
+  it('persists cancellation and stops heartbeat when the response reader disconnects', async () => {
+    streamState.keepOpen = true
+
+    const response = await runAssistant({ text: '生成剧本' })
+    expect(response.status).toBe(200)
+
+    const stream = streamState.capturedResponseStream
+    if (!stream) throw new Error('TEST_RESPONSE_STREAM_MISSING')
+    const reader = stream.getReader()
+    await reader.cancel()
+
+    expect(runState.cancelRunningProjectAgentRun).toHaveBeenCalledWith({
+      runId: 'run-user_turn',
+      stopReason: 'stream_cancelled',
+    })
+    expectLastPersistedRunStatus('cancelled', 'stream_cancelled')
+    expect(runHeartbeatState.stop).toHaveBeenCalled()
   })
 
   it('fails loudly when live workflow refresh fails after a tool mutates state', async () => {

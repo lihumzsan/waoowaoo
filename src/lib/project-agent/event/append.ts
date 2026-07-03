@@ -10,6 +10,8 @@ import {
 } from './types'
 import { reduceProjectAgentEvent } from './reducer'
 
+export type ProjectAgentEventTransactionClient = Prisma.TransactionClient
+
 function resolveEventScope(input: ProjectAgentEventScope): ProjectAgentEventScopeRef {
   const assistantId = input.assistantId ?? 'workspace-command'
   const episodeId = input.episodeId ?? null
@@ -44,38 +46,49 @@ export async function appendProjectAgentEvents(params: {
   if (params.events.length === 0) return null
   const scope = resolveEventScope(params.scope)
 
-  return await prisma.$transaction(async (tx) => {
-    let lastActivity: ProjectAgentActivitySnapshot | null = null
-    for (const item of params.events) {
-      const idempotencyKey = item.idempotencyKey?.trim() || null
-      if (idempotencyKey) {
-        const existing = await tx.projectAgentEvent.findUnique({
-          where: { idempotencyKey },
-          select: { id: true },
-        })
-        if (existing) continue
-      }
+  return await prisma.$transaction(async (tx) => appendProjectAgentEventsInTransaction(tx, {
+    scope,
+    events: params.events,
+  }))
+}
 
-      await tx.projectAgentEvent.create({
-        data: {
-          projectId: scope.projectId,
-          userId: scope.userId,
-          assistantId: scope.assistantId,
-          scopeRef: scope.scopeRef,
-          episodeId: scope.episodeId,
-          runId: eventRunId(item.event),
-          activityId: eventActivityId(item.event),
-          kind: item.event.kind,
-          idempotencyKey,
-          payload: toInputJsonValue(item.event),
-        },
+export async function appendProjectAgentEventsInTransaction(
+  tx: ProjectAgentEventTransactionClient,
+  params: {
+    scope: ProjectAgentEventScopeRef
+    events: ProjectAgentEventInput[]
+  },
+): Promise<ProjectAgentActivitySnapshot | null> {
+  let lastActivity: ProjectAgentActivitySnapshot | null = null
+  for (const item of params.events) {
+    const idempotencyKey = item.idempotencyKey?.trim() || null
+    if (idempotencyKey) {
+      const existing = await tx.projectAgentEvent.findUnique({
+        where: { idempotencyKey },
+        select: { id: true },
       })
-      lastActivity = await reduceProjectAgentEvent({
-        tx,
-        scope,
-        event: item.event,
-      }) ?? lastActivity
+      if (existing) continue
     }
-    return lastActivity
-  })
+
+    await tx.projectAgentEvent.create({
+      data: {
+        projectId: params.scope.projectId,
+        userId: params.scope.userId,
+        assistantId: params.scope.assistantId,
+        scopeRef: params.scope.scopeRef,
+        episodeId: params.scope.episodeId,
+        runId: eventRunId(item.event),
+        activityId: eventActivityId(item.event),
+        kind: item.event.kind,
+        idempotencyKey,
+        payload: toInputJsonValue(item.event),
+      },
+    })
+    lastActivity = await reduceProjectAgentEvent({
+      tx,
+      scope: params.scope,
+      event: item.event,
+    }) ?? lastActivity
+  }
+  return lastActivity
 }

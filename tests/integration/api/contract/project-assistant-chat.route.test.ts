@@ -50,6 +50,7 @@ const runMock = vi.hoisted(() => ({
     requestId: 'request-1',
     status: 'running',
     controlKind: 'user_turn',
+    heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
   getProjectAgentRun: vi.fn(async (): Promise<unknown> => ({
     id: 'run-1',
@@ -61,14 +62,17 @@ const runMock = vi.hoisted(() => ({
     requestId: 'request-1',
     status: 'running',
     controlKind: 'approval_response',
+    heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
+  ensureProjectAgentRunSlotAvailable: vi.fn(async (): Promise<void> => undefined),
+  listBlockingProjectAgentRunsForThreadClear: vi.fn(async (): Promise<unknown[]> => []),
   safelyUpdateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
   updateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
   supersedePendingRunsInScope: vi.fn(async (): Promise<string[]> => []),
 }))
 
 const runLockMock = vi.hoisted(() => ({
-  acquireProjectAgentRunLock: vi.fn(async (): Promise<unknown> => ({ key: 'lock-key', token: 'lock-token' })),
+  acquireProjectAgentRunLock: vi.fn(async (input: { runId: string }): Promise<unknown> => ({ key: 'lock-key', token: 'lock-token', runId: input.runId })),
   safelyReleaseProjectAgentRunLock: vi.fn(async (): Promise<void> => undefined),
 }))
 
@@ -89,13 +93,13 @@ const persistenceMock = vi.hoisted(() => ({
     input.episodeId ? `episode:${input.episodeId}` : `project:${input.projectId}`
   )),
   loadProjectAssistantThread: vi.fn(async (): Promise<unknown> => null),
-  saveProjectAssistantThread: vi.fn(async (): Promise<unknown> => ({
+  appendProjectAssistantThreadMessages: vi.fn(async (input: { messages: unknown[] }): Promise<unknown> => ({
     id: 'thread-1',
     assistantId: 'workspace-command',
     projectId: 'project-1',
     episodeId: 'episode-1',
     scopeRef: 'episode:episode-1',
-    messages: [],
+    messages: input.messages,
     createdAt: '2026-04-13T00:00:00.000Z',
     updatedAt: '2026-04-13T00:00:00.000Z',
   })),
@@ -175,7 +179,6 @@ import {
   DELETE as chatDelete,
   GET as chatGet,
   POST as chatPost,
-  PUT as chatPut,
 } from '@/app/api/projects/[projectId]/assistant/chat/route'
 import { GET as chatLogGet } from '@/app/api/projects/[projectId]/assistant/chat/log/route'
 import {
@@ -195,18 +198,31 @@ describe('project assistant chat route', () => {
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> forwards request to project agent runtime', async () => {
+    persistenceMock.loadProjectAssistantThread.mockResolvedValueOnce({
+      id: 'thread-1',
+      assistantId: 'workspace-command',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      scopeRef: 'episode:episode-1',
+      messages: [{
+        id: 'assistant-existing',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已有上下文' }],
+      }],
+      createdAt: '2026-04-13T00:00:00.000Z',
+      updatedAt: '2026-04-13T00:00:00.000Z',
+    })
+
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [
-            {
-              id: 'u1',
-              role: 'user',
-              parts: [{ type: 'text', text: '运行故事到剧本' }],
-            },
-          ],
+          message: {
+            id: 'u1',
+            role: 'user',
+            parts: [{ type: 'text', text: '运行故事到剧本' }],
+          },
           context: {
             episodeId: 'episode-1',
             selectedScopeRef: 'panel:panel-1',
@@ -237,10 +253,30 @@ describe('project assistant chat route', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
+      runId: expect.any(String),
     })
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
-      runLock: { key: 'lock-key', token: 'lock-token' },
+      runLock: { key: 'lock-key', token: 'lock-token', runId: expect.any(String) },
       control: { kind: 'user_turn', declinedInterruptions: [] },
+      messages: [
+        {
+          id: 'assistant-existing',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '已有上下文' }],
+        },
+        {
+          id: 'u1',
+          role: 'user',
+          parts: [{ type: 'text', text: '运行故事到剧本' }],
+        },
+      ],
+    }))
+    expect(runMock.createProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({
+      appendMessages: [{
+        id: 'u1',
+        role: 'user',
+        parts: [{ type: 'text', text: '运行故事到剧本' }],
+      }],
     }))
     expect(interruptionMock.declinePendingProjectAgentInterruptionsForUserTurn).toHaveBeenCalledTimes(1)
   })
@@ -263,9 +299,9 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '民俗恐怖片',
           control: {
             type: 'approval_response',
             runId: 'run-1',
@@ -313,7 +349,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/runs/run-1/approval',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'approve' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           interruptionId: 'interruption-1',
@@ -403,9 +438,9 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'approve' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '资产满意',
           control: {
             type: 'approval_response',
             runId: 'run-1',
@@ -435,9 +470,9 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Tool approval accepted.' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '场景太现代',
           control: {
             type: 'approval_response',
             runId: 'run-1',
@@ -465,9 +500,9 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '民俗恐怖片' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '民俗恐怖片',
           control: {
             type: 'choice_response',
             runId: 'run-1',
@@ -486,6 +521,13 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(persistenceMock.appendProjectAssistantThreadMessages).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({
+        id: 'workspace-control-user:choice_response:run-1:style',
+        role: 'user',
+        parts: [{ type: 'text', text: '民俗恐怖片' }],
+      })],
+    }))
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       control: expect.objectContaining({
         kind: 'choice',
@@ -504,9 +546,9 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '资产满意' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '资产满意',
           control: {
             type: 'choice_response',
             runId: 'run-1',
@@ -547,9 +589,9 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '场景太现代' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '场景太现代',
           control: {
             type: 'choice_response',
             runId: 'run-1',
@@ -606,9 +648,9 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/runs/run-1/choice',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '鬼故事' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
+          visibleUserText: '鬼故事',
           interruptionId: 'choice-interruption-1',
           choiceType: 'duration_and_aspect_ratio',
           toolCallId: 'tool-choice-1',
@@ -657,7 +699,6 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
@@ -708,7 +749,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/runs/run-1/task-follow-up',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           waitId: 'wait-1',
@@ -740,7 +780,6 @@ describe('project assistant chat route', () => {
         method: 'POST',
         headers: { 'x-project-agent-run-control': '1' },
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: {
@@ -764,7 +803,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
           context: { episodeId: 'episode-1' },
           assistantPermissionMode: 'ask',
           control: { type: 'unknown_action' },
@@ -782,6 +820,52 @@ describe('project assistant chat route', () => {
     }))
   })
 
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects legacy full message payloads', async () => {
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'legacy' }] }],
+          assistantPermissionMode: 'ask',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_MESSAGES_NOT_ACCEPTED' }),
+      }),
+    }))
+  })
+
+  it('POST /api/projects/[projectId]/assistant/runs/[runId]/approval -> rejects legacy full message payloads', async () => {
+    const response = await approvalPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1/approval',
+        method: 'POST',
+        body: {
+          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'legacy' }] }],
+          assistantPermissionMode: 'ask',
+          interruptionId: 'interruption-1',
+          approved: true,
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_MESSAGES_NOT_ACCEPTED' }),
+      }),
+    }))
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> rejects concurrent runs in the same assistant scope', async () => {
     runLockMock.acquireProjectAgentRunLock.mockResolvedValueOnce(null)
 
@@ -790,13 +874,11 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [
-            {
-              id: 'u1',
-              role: 'user',
-              parts: [{ type: 'text', text: '继续' }],
-            },
-          ],
+          message: {
+            id: 'u1',
+            role: 'user',
+            parts: [{ type: 'text', text: '继续' }],
+          },
           context: {
             episodeId: 'episode-1',
           },
@@ -818,54 +900,6 @@ describe('project assistant chat route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/assistant/chat -> forwards compressed messages when long conversation threshold is hit', async () => {
-    compressionState.shouldCompress = true
-    compressionState.compressedMessages = [
-      {
-        id: 'summary-1',
-        role: 'system',
-        parts: [{ type: 'text', text: 'summary' }],
-        metadata: { custom: { projectAgentConversationSummary: true } },
-      },
-      {
-        id: 'u1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'latest' }],
-      },
-    ]
-
-    const response = await chatPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/chat',
-        method: 'POST',
-        body: {
-          messages: Array.from({ length: 60 }, (_value, index) => ({
-            id: `m${index}`,
-            role: index % 2 === 0 ? 'user' : 'assistant',
-            parts: [{ type: 'text', text: `message-${index}` }],
-          })),
-          context: {
-            locale: 'en',
-          },
-          assistantPermissionMode: 'auto',
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(modelConfigMock.getProjectModelConfig).toHaveBeenCalledWith('project-1', 'user-1')
-    expect(modelResolverMock.resolveProjectAgentLanguageModel).toHaveBeenCalledWith({
-      userId: 'user-1',
-      analysisModelKey: 'llm::project-analysis',
-    })
-    expect(messageCompressionMock.compressMessages).toHaveBeenCalledTimes(1)
-    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
-      messages: compressionState.compressedMessages,
-      assistantPermissionMode: 'auto',
-    }))
-  })
-
   it('POST /api/projects/[projectId]/assistant/chat -> rejects unauthenticated requests', async () => {
     authState.authenticated = false
     const response = await chatPost(
@@ -873,7 +907,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -909,7 +942,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -931,7 +963,6 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
           assistantPermissionMode: 'fast',
         },
       }),
@@ -956,7 +987,7 @@ describe('project assistant chat route', () => {
         path: '/api/projects/project-1/assistant/chat',
         method: 'POST',
         body: {
-          messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }],
+          message: { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
           assistantPermissionMode: 'ask',
         },
       }),
@@ -1165,80 +1196,6 @@ describe('project assistant chat route', () => {
     expect(response.status).toBe(401)
   })
 
-  it('PUT /api/projects/[projectId]/assistant/chat -> saves workspace thread to database service', async () => {
-    const response = await chatPut(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/chat',
-        method: 'PUT',
-        body: {
-          episodeId: 'episode-1',
-          messages: [
-            {
-              id: 'user-1',
-              role: 'user',
-              parts: [{ type: 'text', text: '现在到什么进度了' }],
-            },
-          ],
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(persistenceMock.saveProjectAssistantThread).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-      messages: [
-        {
-          id: 'user-1',
-          role: 'user',
-          parts: [{ type: 'text', text: '现在到什么进度了' }],
-        },
-      ],
-    })
-    expect(threadLogMock.writeWorkspaceAssistantThreadLog).toHaveBeenCalledTimes(1)
-  })
-
-  it('PUT /api/projects/[projectId]/assistant/chat -> persists compressed thread when long conversation threshold is hit', async () => {
-    compressionState.shouldCompress = true
-    compressionState.compressedMessages = [
-      {
-        id: 'summary-1',
-        role: 'system',
-        parts: [{ type: 'text', text: 'summary' }],
-        metadata: { custom: { projectAgentConversationSummary: true } },
-      },
-      {
-        id: 'user-1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'latest' }],
-      },
-    ]
-
-    const response = await chatPut(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/chat',
-        method: 'PUT',
-        body: {
-          locale: 'en',
-          messages: Array.from({ length: 60 }, (_value, index) => ({
-            id: `m${index}`,
-            role: index % 2 === 0 ? 'user' : 'assistant',
-            parts: [{ type: 'text', text: `message-${index}` }],
-          })),
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(persistenceMock.saveProjectAssistantThread).toHaveBeenCalledWith(expect.objectContaining({
-      messages: compressionState.compressedMessages,
-    }))
-  })
-
   it('DELETE /api/projects/[projectId]/assistant/chat -> clears workspace thread from database service', async () => {
     const response = await chatDelete(
       buildMockRequest({
@@ -1258,6 +1215,40 @@ describe('project assistant chat route', () => {
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
     })
+  })
+
+  it('DELETE /api/projects/[projectId]/assistant/chat -> rejects clearing while an assistant run is active', async () => {
+    runMock.listBlockingProjectAgentRunsForThreadClear.mockResolvedValueOnce([{
+      id: 'run-active',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-1',
+      status: 'running',
+      controlKind: 'user_turn',
+      heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
+    }])
+
+    const response = await chatDelete(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'DELETE',
+        query: {
+          episodeId: 'episode-1',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(409)
+    expect(persistenceMock.clearProjectAssistantThread).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({
+      error: expect.objectContaining({
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_THREAD_ACTIVE' }),
+      }),
+    }))
   })
 
   it('GET /api/projects/[projectId]/assistant/chat/log -> downloads current workspace thread log', async () => {

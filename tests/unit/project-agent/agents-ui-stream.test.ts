@@ -152,6 +152,36 @@ describe('createProjectAgentUiMessageStream', () => {
     ])
   })
 
+  it('records every emitted chunk through the onChunk hook', async () => {
+    streamState.chunks = [
+      { type: 'text-start', id: 'text-1' } as UIMessageChunk,
+      { type: 'text-delta', id: 'text-1', delta: 'hello' } as UIMessageChunk,
+      { type: 'finish' } as UIMessageChunk,
+    ]
+    const recordedChunks: UIMessageChunk[] = []
+
+    const chunks = await readChunks(createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [{ type: 'data-agent-run', data: { status: 'running' } } as unknown as UIMessageChunk],
+      beforeFinish: async () => [
+        { type: 'data-agent-run', data: { status: 'completed' } } as unknown as UIMessageChunk,
+      ],
+      onChunk: (chunk) => {
+        recordedChunks.push(chunk)
+      },
+      onSettled: async () => undefined,
+    }))
+
+    expect(recordedChunks).toEqual(chunks)
+    expect(recordedChunks).toEqual([
+      { type: 'data-agent-run', data: { status: 'running' } },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'hello' },
+      { type: 'data-agent-run', data: { status: 'completed' } },
+      { type: 'finish' },
+    ])
+  })
+
   it('marks the stream cancelled and settles once when the reader disconnects before finish', async () => {
     streamState.keepOpen = true
     const beforeFinish = vi.fn(async () => [])

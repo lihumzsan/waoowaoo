@@ -14,7 +14,7 @@ const eventMock = vi.hoisted(() => ({
 }))
 
 const runLockMock = vi.hoisted(() => ({
-  isProjectAgentRunLockActive: vi.fn(),
+  releaseProjectAgentRunLockForRun: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -24,6 +24,7 @@ vi.mock('@/lib/project-agent/event', () => eventMock)
 import {
   cancelRunningProjectAgentRun,
   cancelUnlockedRunningProjectAgentRunsForScope,
+  ensureProjectAgentRunSlotAvailable,
 } from '@/lib/project-agent/runs'
 
 describe('project agent runs', () => {
@@ -39,7 +40,7 @@ describe('project agent runs', () => {
     prismaMock.projectAgentRun.findMany.mockResolvedValue([])
     prismaMock.projectAgentRun.updateMany.mockResolvedValue({ count: 0 })
     eventMock.appendProjectAgentEvents.mockResolvedValue(null)
-    runLockMock.isProjectAgentRunLockActive.mockResolvedValue(false)
+    runLockMock.releaseProjectAgentRunLockForRun.mockResolvedValue(false)
   })
 
   it('cancels only a currently running run when a response stream is cancelled', async () => {
@@ -74,9 +75,8 @@ describe('project agent runs', () => {
     }))
   })
 
-  it('does not cancel running runs while the scope still owns a runtime lock', async () => {
-    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{ id: 'run-1' }])
-    runLockMock.isProjectAgentRunLockActive.mockResolvedValueOnce(true)
+  it('does not cancel running runs while heartbeat is fresh even if no runtime lock exists', async () => {
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
 
     const cancelledIds = await cancelUnlockedRunningProjectAgentRunsForScope({
       projectId: 'project-1',
@@ -87,11 +87,16 @@ describe('project agent runs', () => {
 
     expect(cancelledIds).toEqual([])
     expect(eventMock.appendProjectAgentEvents).not.toHaveBeenCalled()
+    expect(prismaMock.projectAgentRun.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: 'running',
+        OR: expect.any(Array) as unknown[],
+      }),
+    }))
   })
 
-  it('cancels orphan running runs when the scope has no runtime lock', async () => {
+  it('cancels stale running runs when heartbeat is expired', async () => {
     prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{ id: 'run-1' }, { id: 'run-2' }])
-    runLockMock.isProjectAgentRunLockActive.mockResolvedValueOnce(false)
 
     const cancelledIds = await cancelUnlockedRunningProjectAgentRunsForScope({
       projectId: 'project-1',
@@ -108,9 +113,36 @@ describe('project agent runs', () => {
           kind: 'run.status_changed',
           runId: 'run-1',
           status: 'cancelled',
-          stopReason: 'orphaned_running_run',
+          stopReason: 'stale_running_run',
         }),
       })],
     }))
+    expect(runLockMock.releaseProjectAgentRunLockForRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+    }))
+  })
+
+  it('rejects a new run slot while a fresh running run exists', async () => {
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
+    prismaMock.projectAgentRun.findFirst.mockResolvedValueOnce({
+      id: 'run-fresh',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-1',
+      status: 'running',
+      controlKind: 'user_turn',
+      stopReason: null,
+      heartbeatAt: new Date(),
+    })
+
+    await expect(ensureProjectAgentRunSlotAvailable({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })).rejects.toThrow('PROJECT_AGENT_RUN_ACTIVE')
   })
 })
