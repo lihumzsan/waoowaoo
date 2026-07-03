@@ -472,13 +472,6 @@ export const POST = apiHandler(async (
       assistantId: 'workspace-command' as const,
     }
     await assertProjectAgentRunSlotAvailable(scope)
-    const existingMessages = await loadAuthoritativeThreadMessages(scope)
-    const visibleUserText = controlAction ? readVisibleUserText(body) : null
-    const visibleUserMessages = controlAction && visibleUserText
-      ? [buildControlVisibleUserMessage({ controlAction, text: visibleUserText })]
-      : []
-    const newMessages = userMessage ? [userMessage] : visibleUserMessages
-    const messages = appendUniqueMessages(existingMessages, newMessages)
     const runId = controlAction?.runId ?? crypto.randomUUID()
     const runLock = await acquireProjectAgentRunLock({
       ...scope,
@@ -492,6 +485,13 @@ export const POST = apiHandler(async (
     }
     let run: ProjectAgentRunRecord | null = null
     try {
+      const existingMessages = await loadAuthoritativeThreadMessages(scope)
+      const visibleUserText = controlAction ? readVisibleUserText(body) : null
+      const visibleUserMessages = controlAction && visibleUserText
+        ? [buildControlVisibleUserMessage({ controlAction, text: visibleUserText })]
+        : []
+      const newMessages = userMessage ? [userMessage] : visibleUserMessages
+      const messages = appendUniqueMessages(existingMessages, newMessages)
       if (controlAction) {
         run = await resolveProjectAgentRunForRequest({
           controlAction,

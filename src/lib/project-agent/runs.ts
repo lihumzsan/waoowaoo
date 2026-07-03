@@ -502,10 +502,6 @@ export async function listBlockingProjectAgentRunsForThreadClear(
   return runs.map((run) => toProjectAgentRunRecord(run))
 }
 
-export async function cancelUnlockedRunningProjectAgentRunsForScope(scope: ProjectAgentRunScope): Promise<string[]> {
-  return await cancelStaleRunningProjectAgentRunsForScope(scope)
-}
-
 export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): Promise<string[]> {
   const { assistantId, scopeRef } = buildRunScope(scope)
   const pending = await prisma.projectAgentRun.findMany({

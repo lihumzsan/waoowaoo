@@ -82,7 +82,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   sessionState: ProjectAgentSessionState | null
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   error: Error | undefined
-  syncError: string | null
   sessionStateError: string | null
   storageError: string | null
   storageLoading: boolean
@@ -363,7 +362,6 @@ export function useWorkspaceAssistantRuntime({
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
   const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
-  const syncError: string | null = null
 
   useEffect(() => {
     latestMessagesRef.current = chat.messages
@@ -794,7 +792,6 @@ export function useWorkspaceAssistantRuntime({
     sessionState,
     pendingInteraction,
     error: chat.error,
-    syncError,
     sessionStateError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,

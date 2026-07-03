@@ -25,6 +25,7 @@ const streamState = vi.hoisted(() => ({
   capturedResponseStream: null as ReadableStream<unknown> | null,
   streamError: null as Error | null,
   keepOpen: false,
+  startMessageId: null as string | null,
   simulateSecondTurnAfterFirstWorkflowTool: false,
   executedToolNames: [] as string[],
 }))
@@ -117,6 +118,9 @@ vi.mock('@openai/agents-extensions/ai-sdk-ui', () => ({
       if (streamState.streamError) {
         controller.error(streamState.streamError)
         return
+      }
+      if (streamState.startMessageId) {
+        controller.enqueue({ type: 'start', messageId: streamState.startMessageId })
       }
       controller.enqueue({ type: 'finish' })
       if (!streamState.keepOpen) {
@@ -532,6 +536,7 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.capturedResponseStream = null
     streamState.streamError = null
     streamState.keepOpen = false
+    streamState.startMessageId = null
     streamState.simulateSecondTurnAfterFirstWorkflowTool = false
     streamState.executedToolNames = []
     loggerState.info.mockReset()
@@ -592,6 +597,19 @@ describe('project agent runtime deterministic tool injection', () => {
         }),
       }),
     }))
+  })
+
+  it('persists the assistant message id emitted by the stream start chunk', async () => {
+    streamState.startMessageId = 'stream-message-1'
+
+    const response = await runAssistant({ text: '继续' })
+    await drainCapturedResponseStream()
+    await vi.waitFor(() => {
+      expect(persistenceState.appendProjectAssistantThreadMessages.mock.calls.length).toBeGreaterThan(0)
+    })
+
+    expect(response.status).toBe(200)
+    expect(readLastPersistedAssistantMessage().id).toBe('stream-message-1')
   })
 
   it('injects compact runtime project state facts into the model input', async () => {
@@ -1090,6 +1108,30 @@ describe('project agent runtime deterministic tool injection', () => {
       errorMessage: 'BROKEN_STREAM',
     }))
     expectLastPersistedRunStatus('failed', 'stream_error')
+    expect(runHeartbeatState.stop).toHaveBeenCalled()
+  })
+
+  it('logs assistant message persistence failures during stream settlement', async () => {
+    persistenceState.appendProjectAssistantThreadMessages.mockRejectedValueOnce(new Error('DB_DOWN'))
+
+    const response = await runAssistant({ text: '生成剧本' })
+
+    expect(response.status).toBe(200)
+    await drainCapturedResponseStream()
+    await vi.waitFor(() => {
+      expect(loggerState.error).toHaveBeenCalledWith(expect.objectContaining({
+        action: 'assistant.agents.stream.persist.failed',
+        requestId: 'req-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        details: expect.objectContaining({
+          runId: 'run-user_turn',
+          episodeId: 'episode-1',
+          edge: 'settle',
+          error: 'DB_DOWN',
+        }),
+      }))
+    })
     expect(runHeartbeatState.stop).toHaveBeenCalled()
   })
 

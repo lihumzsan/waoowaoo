@@ -1002,6 +1002,7 @@ export async function createProjectAgentChatResponse(input: {
     })
     let runStatusFinalized = false
     let assistantMessagePersisted = false
+    let assistantMessagePersistenceFailureLogged = false
     let latestRunStatusForPersistence: Pick<ProjectAgentRunPartData, 'status' | 'stopReason'> | null = null
     const persistedAssistantChunks: ProjectAgentUiChunk[] = []
     const recordAssistantChunk = (chunk: ProjectAgentUiChunk): void => {
@@ -1043,6 +1044,27 @@ export async function createProjectAgentChatResponse(input: {
         messages: [message],
       })
       assistantMessagePersisted = true
+    }
+    const persistAssistantMessageOrLog = async (edge: 'error' | 'cancel' | 'settle'): Promise<void> => {
+      try {
+        await persistAssistantMessageOnce()
+      } catch (error) {
+        if (assistantMessagePersistenceFailureLogged) return
+        assistantMessagePersistenceFailureLogged = true
+        projectAgentLogger.error({
+          action: 'assistant.agents.stream.persist.failed',
+          message: 'Failed to persist project agent assistant message',
+          requestId,
+          projectId: input.projectId,
+          userId: input.userId,
+          details: {
+            runId: input.run.id,
+            episodeId: context.episodeId || null,
+            edge,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
     }
     const recordLatestRunStatusForPersistence = (): void => {
       if (!latestRunStatusForPersistence) return
@@ -1238,7 +1260,7 @@ export async function createProjectAgentChatResponse(input: {
         })
         if (runStatusFinalized) {
           recordLatestRunStatusForPersistence()
-          await persistAssistantMessageOnce()
+          await persistAssistantMessageOrLog('error')
           return
         }
         await settleTaskFollowUpActivity('failed', error)
@@ -1250,7 +1272,7 @@ export async function createProjectAgentChatResponse(input: {
           errorMessage,
         })
         recordAssistantChunk(createRuntimeStatusChunk('failed', 'stream_error'))
-        await persistAssistantMessageOnce()
+        await persistAssistantMessageOrLog('error')
         runStatusFinalized = true
       },
       onCancel: async () => {
@@ -1259,11 +1281,11 @@ export async function createProjectAgentChatResponse(input: {
           stopReason: 'stream_cancelled',
         })
         recordAssistantChunk(createRuntimeStatusChunk('cancelled', 'stream_cancelled'))
-        await persistAssistantMessageOnce()
+        await persistAssistantMessageOrLog('cancel')
       },
       onSettled: async () => {
         try {
-          await persistAssistantMessageOnce()
+          await persistAssistantMessageOrLog('settle')
         } finally {
           await stopHeartbeatOnce()
           await releaseRunLockOnce()

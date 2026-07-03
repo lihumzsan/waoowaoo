@@ -47,7 +47,7 @@ const workflowMock = vi.hoisted(() => ({
 }))
 
 const runsMock = vi.hoisted(() => ({
-  cancelUnlockedRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
+  cancelStaleRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
   listRecentProjectAgentRunsForScope: vi.fn(async () => [
     {
       id: 'run-1',
@@ -178,7 +178,7 @@ describe('project agent session-state', () => {
         stopReason: 'awaiting_task',
       },
     ])
-    runsMock.cancelUnlockedRunningProjectAgentRunsForScope.mockResolvedValue([])
+    runsMock.cancelStaleRunningProjectAgentRunsForScope.mockResolvedValue([])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValue([
       {
         runId: 'run-1',
@@ -442,7 +442,7 @@ describe('project agent session-state', () => {
       locale: 'zh',
     })
 
-    expect(runsMock.cancelUnlockedRunningProjectAgentRunsForScope).toHaveBeenCalledWith({
+    expect(runsMock.cancelStaleRunningProjectAgentRunsForScope).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',

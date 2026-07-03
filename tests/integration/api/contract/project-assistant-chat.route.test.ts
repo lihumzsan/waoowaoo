@@ -255,6 +255,9 @@ describe('project assistant chat route', () => {
       assistantId: 'workspace-command',
       runId: expect.any(String),
     })
+    const acquireCallOrder = runLockMock.acquireProjectAgentRunLock.mock.invocationCallOrder[0]
+    const loadThreadCallOrder = persistenceMock.loadProjectAssistantThread.mock.invocationCallOrder[0]
+    expect(acquireCallOrder).toBeLessThan(loadThreadCallOrder)
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       runLock: { key: 'lock-key', token: 'lock-token', runId: expect.any(String) },
       control: { kind: 'user_turn', declinedInterruptions: [] },

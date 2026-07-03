@@ -13,7 +13,7 @@ import {
   type ProjectAgentInterruptionSnapshot,
 } from './interruptions'
 import {
-  cancelUnlockedRunningProjectAgentRunsForScope,
+  cancelStaleRunningProjectAgentRunsForScope,
   listRecentProjectAgentRunsForScope,
   type ProjectAgentRunRecord,
   type ProjectAgentRunStatus,
@@ -330,7 +330,7 @@ export async function getProjectAgentSessionState(
     ...input,
     assistantId,
   }
-  await cancelUnlockedRunningProjectAgentRunsForScope({
+  await cancelStaleRunningProjectAgentRunsForScope({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId ?? null,

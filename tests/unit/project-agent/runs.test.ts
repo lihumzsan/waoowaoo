@@ -23,7 +23,7 @@ vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import {
   cancelRunningProjectAgentRun,
-  cancelUnlockedRunningProjectAgentRunsForScope,
+  cancelStaleRunningProjectAgentRunsForScope,
   ensureProjectAgentRunSlotAvailable,
 } from '@/lib/project-agent/runs'
 
@@ -78,7 +78,7 @@ describe('project agent runs', () => {
   it('does not cancel running runs while heartbeat is fresh even if no runtime lock exists', async () => {
     prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
 
-    const cancelledIds = await cancelUnlockedRunningProjectAgentRunsForScope({
+    const cancelledIds = await cancelStaleRunningProjectAgentRunsForScope({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -98,7 +98,7 @@ describe('project agent runs', () => {
   it('cancels stale running runs when heartbeat is expired', async () => {
     prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{ id: 'run-1' }, { id: 'run-2' }])
 
-    const cancelledIds = await cancelUnlockedRunningProjectAgentRunsForScope({
+    const cancelledIds = await cancelStaleRunningProjectAgentRunsForScope({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
