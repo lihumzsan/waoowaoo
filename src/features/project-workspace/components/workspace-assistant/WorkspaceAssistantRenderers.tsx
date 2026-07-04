@@ -266,8 +266,6 @@ export function ConfirmationActionCard(props: {
   operationPlan?: OperationPlanView | null
   onConfirm: () => Promise<void>
   onCancel: () => Promise<void>
-  confirmPending: boolean
-  cancelPending: boolean
 }) {
   const t = useTranslations('assistantAgent')
   const quote = props.operationPlan?.quote ?? null
@@ -284,20 +282,17 @@ export function ConfirmationActionCard(props: {
         <BillingActionButton
           type="button"
           icon="arrowRight"
-          label={props.confirmPending ? t('cards.confirmRunning') : t('cards.confirmContinue')}
+          label={t('cards.confirmContinue')}
           quote={quotePreview}
-          loading={props.confirmPending}
           className="flex-1 rounded-xl py-2 text-sm"
           onClick={() => { void props.onConfirm() }}
-          disabled={props.confirmPending}
         />
         <button
           type="button"
           className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--glass-stroke-base)] bg-white px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100"
           onClick={() => { void props.onCancel() }}
-          disabled={props.cancelPending}
         >
-          {props.cancelPending ? t('cards.cancelRunning') : t('cards.cancelAction')}
+          {t('cards.cancelAction')}
         </button>
       </div>
     </div>
@@ -1168,12 +1163,6 @@ function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPar
 }
 
 
-function readToolApprovalId(payload: unknown): string | null {
-  if (!isRecord(payload)) return null
-  const id = payload.id
-  return typeof id === 'string' && id.trim() ? id.trim() : null
-}
-
 function readToolResultFailureMessage(result: unknown): string | null {
   if (!isRecord(result) || result.ok !== false) return null
   const error = isRecord(result.error) ? result.error : null
@@ -1183,12 +1172,7 @@ function readToolResultFailureMessage(result: unknown): string | null {
   return code || null
 }
 
-export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps & {
-  onRespondToolApproval?: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
-  confirmationSubmittingKey?: string | null
-  approvalRespondedIds?: ReadonlySet<string>
-  pendingApprovalId?: string | null
-}) {
+export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
@@ -1199,27 +1183,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
   useEffect(() => {
     setDetailsOpen(isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
   }, [props.toolCallId])
-  const rawApprovalId = toolStatus === 'requires-action' && props.interrupt?.type === 'human'
-    ? readToolApprovalId(props.interrupt.payload)
-    : null
-  if (rawApprovalId && props.approvalRespondedIds?.has(rawApprovalId)) return null
-  // Only render an answerable approval card when the server has a matching
-  // pending interruption row; orphaned approval requests degrade to the plain
-  // tool-call detail row instead of an unanswerable card.
-  const approvalId = rawApprovalId && props.pendingApprovalId === rawApprovalId ? rawApprovalId : null
-  if (approvalId && props.onRespondToolApproval) {
-    return (
-      <ConfirmationActionCard
-        operationId={props.toolName}
-        title={operationTitle}
-        subtitle={t('cards.confirmationRequired')}
-        onConfirm={async () => props.onRespondToolApproval?.({ approvalId, approved: true })}
-        onCancel={async () => props.onRespondToolApproval?.({ approvalId, approved: false })}
-        confirmPending={props.confirmationSubmittingKey === `approval:${approvalId}:approve`}
-        cancelPending={props.confirmationSubmittingKey === `approval:${approvalId}:deny`}
-      />
-    )
-  }
   const failureMessage = readToolResultFailureMessage(props.result)
   const summaryText = toolStatus === 'complete'
     ? failureMessage ? t('toolCall.failed') : t('toolCall.success')
@@ -1271,10 +1234,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps &
 }
 
 interface WorkspaceAssistantMessagePartComponentsOptions {
-  onRespondToolApproval: (params: { approvalId: string; approved: boolean; reason?: string }) => Promise<void>
-  confirmationSubmittingKey: string | null
-  approvalRespondedIds?: ReadonlySet<string>
-  pendingApprovalId?: string | null
   hideChoiceCards?: boolean
   hideStylePreviewGenerationCards?: boolean
   onSubmitChoiceResponse: (params: {
@@ -1304,10 +1263,6 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
 }
 
 export function useWorkspaceAssistantMessagePartComponents({
-  onRespondToolApproval,
-  confirmationSubmittingKey,
-  approvalRespondedIds,
-  pendingApprovalId,
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
   onSubmitChoiceResponse,
@@ -1320,15 +1275,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     Text: MarkdownTextPart,
     Reasoning: WorkspaceAssistantReasoningPart,
     tools: {
-      Fallback: (props) => (
-        <WorkspaceAssistantToolCallCard
-          {...props}
-          onRespondToolApproval={onRespondToolApproval}
-          confirmationSubmittingKey={confirmationSubmittingKey}
-          approvalRespondedIds={approvalRespondedIds}
-          pendingApprovalId={pendingApprovalId}
-        />
-      ),
+      Fallback: WorkspaceAssistantToolCallCard,
     },
     data: {
       by_name: {
@@ -1365,14 +1312,10 @@ export function useWorkspaceAssistantMessagePartComponents({
       },
     },
   }), [
-    confirmationSubmittingKey,
-    approvalRespondedIds,
-    pendingApprovalId,
     hideChoiceCards,
     hideStylePreviewGenerationCards,
     onConfirmEditStylePreviewChoice,
     onPreviewImage,
-    onRespondToolApproval,
     onSetProjectVideoRatioChoice,
     onStylePreviewSelected,
     onSubmitChoiceResponse,

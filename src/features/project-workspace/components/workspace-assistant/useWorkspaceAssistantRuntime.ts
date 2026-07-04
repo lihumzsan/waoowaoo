@@ -78,7 +78,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   replyInFlight: boolean
   controlPending: boolean
   pendingApprovalId: string | null
-  approvalRespondedIds: ReadonlySet<string>
   sessionState: ProjectAgentSessionState | null
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   error: Error | undefined
@@ -102,11 +101,6 @@ interface UseWorkspaceAssistantRuntimeResult {
     runId: string
     waitId: string
     claimId: string
-  }) => Promise<void>
-  addToolApprovalResponse: (params: {
-    approvalId: string
-    approved: boolean
-    reason?: string
   }) => Promise<void>
   addRunApprovalResponse: (params: {
     runId: string
@@ -260,6 +254,23 @@ export function resolveWorkspaceAssistantActiveFocusRequest(input: {
   }
 }
 
+/**
+ * The user's response is the authoritative dismissal edge for interaction
+ * cards: once a control request is dispatched for an interruption, the card
+ * must disappear immediately instead of waiting for session-state polling to
+ * observe the server-side consumption. The server stays authoritative for
+ * conflicts — a failed control request removes the id again so the card
+ * reappears together with the surfaced error.
+ */
+export function resolveWorkspaceAssistantDisplayedPendingInteraction(input: {
+  pendingInteraction: ProjectAgentSessionPendingInteraction | null
+  respondedInterruptionIds: ReadonlySet<string>
+}): ProjectAgentSessionPendingInteraction | null {
+  if (!input.pendingInteraction) return null
+  if (input.respondedInterruptionIds.has(input.pendingInteraction.interruptionId)) return null
+  return input.pendingInteraction
+}
+
 export function shouldPollWorkspaceAssistantSessionState(input: {
   chatStatus: ChatStatus
   controlPending: boolean
@@ -352,13 +363,14 @@ export function useWorkspaceAssistantRuntime({
   const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
   const hydratedSessionKeyRef = useRef<string | null>(null)
   const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
-  const latestSessionStateRef = useRef<ProjectAgentSessionState | null>(null)
   const sessionStateRequestRef = useRef<{
     key: string
     promise: Promise<ProjectAgentSessionState | null>
   } | null>(null)
   const replyActivitySequenceRef = useRef(0)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
+  const [controlError, setControlError] = useState<Error | null>(null)
+  const [respondedInterruptionIds, setRespondedInterruptionIds] = useState<ReadonlySet<string>>(() => new Set<string>())
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
   const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
@@ -367,9 +379,23 @@ export function useWorkspaceAssistantRuntime({
     latestMessagesRef.current = chat.messages
   }, [chat.messages])
 
-  useEffect(() => {
-    latestSessionStateRef.current = sessionState
-  }, [sessionState])
+  const markInterruptionResponded = useCallback((interruptionId: string): void => {
+    setRespondedInterruptionIds((current) => {
+      if (current.has(interruptionId)) return current
+      const next = new Set(current)
+      next.add(interruptionId)
+      return next
+    })
+  }, [])
+
+  const unmarkInterruptionResponded = useCallback((interruptionId: string): void => {
+    setRespondedInterruptionIds((current) => {
+      if (!current.has(interruptionId)) return current
+      const next = new Set(current)
+      next.delete(interruptionId)
+      return next
+    })
+  }, [])
 
   const beginReplyActivity = useCallback((): number => {
     replyActivitySequenceRef.current += 1
@@ -410,6 +436,7 @@ export function useWorkspaceAssistantRuntime({
   // stream answers with an interruption-resolved part so the card closes.
   const sendMessage = useCallback(async (text: string) => {
     chat.clearError()
+    setControlError(null)
     const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({ text })
@@ -422,6 +449,7 @@ export function useWorkspaceAssistantRuntime({
 
   const sendHiddenMessage = useCallback(async (text: string) => {
     chat.clearError()
+    setControlError(null)
     const activitySequence = beginReplyActivity()
     try {
       await chat.sendMessage({
@@ -456,7 +484,6 @@ export function useWorkspaceAssistantRuntime({
   }, [chat])
 
   const applySessionState = useCallback((nextState: ProjectAgentSessionState) => {
-    latestSessionStateRef.current = nextState
     setSessionState(nextState)
     const currentRun = nextState.currentRun
     if (!currentRun) {
@@ -521,16 +548,24 @@ export function useWorkspaceAssistantRuntime({
     runId: string
     endpoint: WorkspaceAssistantControlEndpoint
     intent: WorkspaceAssistantControlIntent
+    interruptionId?: string | null
     operationId?: string | null
     payload: Record<string, unknown>
     visibleUserText?: string
   }) => {
     chat.clearError()
+    setControlError(null)
     const activitySequence = beginReplyActivity()
     const controlMessageId = createWorkspaceAssistantControlMessageId({
       runId: params.runId,
       endpoint: params.endpoint,
     })
+    // Suppress the answered interaction card in the same render as the click.
+    // The mark stays until the post-run session refresh so stale polls cannot
+    // revive the card; unmarking after that refresh lets a server-side
+    // reopened interruption (failed run) render its card again.
+    const respondedInterruptionId = params.interruptionId?.trim() || null
+    if (respondedInterruptionId) markInterruptionResponded(respondedInterruptionId)
     setActiveControlRun({
       runId: params.runId,
       status: 'running',
@@ -586,12 +621,15 @@ export function useWorkspaceAssistantRuntime({
       }
       requestSucceeded = true
     } catch (error) {
+      if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
+      setControlError(error instanceof Error ? error : new Error(String(error)))
       clearReplyActivity(activitySequence)
       throw error
     } finally {
       await refreshSessionState().catch(() => undefined)
       if (requestSucceeded) {
         markReplyActivityRequestSettled(activitySequence)
+        if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
       }
     }
   }, [
@@ -601,10 +639,12 @@ export function useWorkspaceAssistantRuntime({
     clearReplyActivity,
     contextPayload,
     controlTransport,
+    markInterruptionResponded,
     markReplyActivityRequestSettled,
     mergeStreamedAssistantMessage,
     projectId,
     refreshSessionState,
+    unmarkInterruptionResponded,
   ])
 
   const submitChoiceResponse = useCallback(async (params: {
@@ -619,6 +659,7 @@ export function useWorkspaceAssistantRuntime({
       runId: params.runId,
       endpoint: 'choice',
       intent: 'choice',
+      interruptionId: params.interruptionId,
       visibleUserText: params.visibleUserText,
       payload: {
         interruptionId: params.interruptionId,
@@ -646,30 +687,6 @@ export function useWorkspaceAssistantRuntime({
     })
   }, [sendControlRequest])
 
-  const addToolApprovalResponse = useCallback(async (params: {
-    approvalId: string
-    approved: boolean
-    reason?: string
-  }) => {
-    chat.clearError()
-    const interaction = latestSessionStateRef.current?.pendingInteraction ?? null
-    if (!interaction || interaction.kind !== 'approval' || interaction.approvalId !== params.approvalId) {
-      throw new Error('PROJECT_AGENT_INTERRUPTION_NOT_FOUND')
-    }
-    await sendControlRequest({
-      runId: interaction.runId,
-      endpoint: 'approval',
-      intent: params.approved ? 'approve' : 'deny',
-      operationId: interaction.operationId,
-      visibleUserText: params.approved ? undefined : params.reason,
-      payload: {
-        interruptionId: interaction.interruptionId,
-        approved: params.approved,
-        ...(params.reason ? { reason: params.reason } : {}),
-      },
-    })
-  }, [chat, sendControlRequest])
-
   const addRunApprovalResponse = useCallback(async (params: {
     runId: string
     interruptionId: string
@@ -683,6 +700,7 @@ export function useWorkspaceAssistantRuntime({
       runId: params.runId,
       endpoint: 'approval',
       intent: params.approved ? 'approve' : 'deny',
+      interruptionId: params.interruptionId,
       operationId: params.operationId,
       visibleUserText: params.approved ? undefined : params.reason,
       payload: {
@@ -736,8 +754,10 @@ export function useWorkspaceAssistantRuntime({
     }
   }, [refreshSessionState, shouldPollSessionState])
 
-  const emptyApprovalRespondedIds = useMemo<ReadonlySet<string>>(() => new Set<string>(), [])
-  const pendingInteraction = sessionState?.pendingInteraction ?? null
+  const pendingInteraction = resolveWorkspaceAssistantDisplayedPendingInteraction({
+    pendingInteraction: sessionState?.pendingInteraction ?? null,
+    respondedInterruptionIds,
+  })
   const pendingRunApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const serverOperationId = resolveOperationIdFromActivity(sessionState?.currentActivity ?? null)
   const serverOperationRun: WorkspaceAssistantTrackedRun | null = sessionState?.currentRun
@@ -788,10 +808,9 @@ export function useWorkspaceAssistantRuntime({
     replyInFlight,
     controlPending,
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
-    approvalRespondedIds: emptyApprovalRespondedIds,
     sessionState,
     pendingInteraction,
-    error: chat.error,
+    error: chat.error ?? controlError ?? undefined,
     sessionStateError,
     storageError: assistantThread.error?.message || null,
     storageLoading: assistantThread.isLoading,
@@ -802,7 +821,6 @@ export function useWorkspaceAssistantRuntime({
     sendHiddenMessage,
     submitChoiceResponse,
     submitTaskFollowUp,
-    addToolApprovalResponse,
     addRunApprovalResponse,
     replaceMessages,
     appendMessages,

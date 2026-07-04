@@ -150,8 +150,6 @@
     "billingReceiptWithoutCredits": "媒体生成任务已提交",
     "confirmContinue": "继续执行",
     "cancelAction": "取消操作",
-    "confirmRunning": "继续中...",
-    "cancelRunning": "取消中...",
     "taskSubmitted": "任务已提交",
     "batchTaskSubmitted": "批量任务已提交",
     "planValidated": "计划已通过校验",

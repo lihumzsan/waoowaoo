@@ -150,8 +150,6 @@
     "billingReceiptWithoutCredits": "Media generation task submitted",
     "confirmContinue": "Continue",
     "cancelAction": "Cancel",
-    "confirmRunning": "Continuing...",
-    "cancelRunning": "Cancelling...",
     "taskSubmitted": "Task Submitted",
     "batchTaskSubmitted": "Batch Task Submitted",
     "planValidated": "Plan validated",

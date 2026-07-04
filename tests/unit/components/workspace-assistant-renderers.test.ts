@@ -31,8 +31,6 @@ const assistantMessages = {
       billingQuoteWithoutCredits: '将提交 {count} 个媒体生成任务',
       confirmContinue: '继续执行',
       cancelAction: '取消操作',
-      confirmRunning: '继续中...',
-      cancelRunning: '取消中...',
     },
   },
 } as const
@@ -112,8 +110,6 @@ describe('workspace assistant renderers', () => {
         operationPlan: buildOperationPlanView(),
         onConfirm: async () => undefined,
         onCancel: async () => undefined,
-        confirmPending: false,
-        cancelPending: false,
       }),
     )
 

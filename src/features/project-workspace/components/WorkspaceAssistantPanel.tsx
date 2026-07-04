@@ -490,19 +490,6 @@ export default function WorkspaceAssistantPanel({
     window.addEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
     return () => window.removeEventListener(WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT, handleSendMessage)
   }, [sendAssistantMessageOnce])
-  const [confirmationSubmittingKey, setConfirmationSubmittingKey] = useState<string | null>(null)
-  const handleRespondToolApproval = async (params: {
-    approvalId: string
-    approved: boolean
-    reason?: string
-  }) => {
-    setConfirmationSubmittingKey(`approval:${params.approvalId}:${params.approved ? 'approve' : 'deny'}`)
-    try {
-      await assistantRuntime.addToolApprovalResponse(params)
-    } finally {
-      setConfirmationSubmittingKey(null)
-    }
-  }
   const handleRespondRunApproval = async (params: {
     runId: string
     interruptionId: string
@@ -511,12 +498,7 @@ export default function WorkspaceAssistantPanel({
     approved: boolean
     reason?: string
   }) => {
-    setConfirmationSubmittingKey(`approval:${params.approvalId}:${params.approved ? 'approve' : 'deny'}`)
-    try {
-      await assistantRuntime.addRunApprovalResponse(params)
-    } finally {
-      setConfirmationSubmittingKey(null)
-    }
+    await assistantRuntime.addRunApprovalResponse(params)
   }
   const handleSubmitChoiceResponse = async (params: {
     runId: string
@@ -634,10 +616,6 @@ export default function WorkspaceAssistantPanel({
   })
   const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
   const partComponents = useWorkspaceAssistantMessagePartComponents({
-    onRespondToolApproval: handleRespondToolApproval,
-    confirmationSubmittingKey,
-    approvalRespondedIds: assistantRuntime.approvalRespondedIds,
-    pendingApprovalId: null,
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,
@@ -780,8 +758,6 @@ export default function WorkspaceAssistantPanel({
                           ...serverPendingApproval,
                           approved: false,
                         })}
-                        confirmPending={confirmationSubmittingKey === `approval:${serverPendingApproval.approvalId}:approve`}
-                        cancelPending={confirmationSubmittingKey === `approval:${serverPendingApproval.approvalId}:deny`}
                       />
                     ) : null}
                     {displayedStylePreviewGenerationCard && shouldDockStylePreviewGenerationCard ? (
