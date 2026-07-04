@@ -118,8 +118,6 @@
         "generateShotExecutionPlan": "Generate Shot Execution Plan",
         "generateStoryboard": "Generate Storyboard",
         "generateImage": "Generate Image",
-        "generateStoryboardSingleImages": "Generate Single Images",
-        "generateStoryboardGridImages": "Generate Group Images",
         "regenerateImage": "Regenerate",
         "generateVideo": "Generate Video",
         "generateAllVideos": "Batch Generate",

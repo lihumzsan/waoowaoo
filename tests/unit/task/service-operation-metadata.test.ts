@@ -59,16 +59,12 @@ describe('task service operation metadata', () => {
     })
   })
 
-  it('merges progress payload without dropping storyboard grid task input', async () => {
+  it('merges progress payload without dropping panel image task input', async () => {
     taskModelMock.findFirst.mockResolvedValueOnce({
       payload: {
         panelId: 'panel-1',
         imageModel: 'fal::image-model',
-        storyboardGrid: {
-          mode: '2x2',
-          sourceGenerationSegmentId: 'segment-1',
-          panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
-        },
+        referenceMode: 'asset',
         meta: {
           locale: 'zh',
           flowId: 'single:image_panel',
@@ -82,7 +78,7 @@ describe('task service operation metadata', () => {
     taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
 
     const updated = await tryUpdateTaskProgress('task-1', 18, {
-      stage: 'generate_panel_grid',
+      stage: 'generate_panel_image',
       meta: {
         locale: 'zh',
       },
@@ -99,12 +95,8 @@ describe('task service operation metadata', () => {
         payload: {
           panelId: 'panel-1',
           imageModel: 'fal::image-model',
-          storyboardGrid: {
-            mode: '2x2',
-            sourceGenerationSegmentId: 'segment-1',
-            panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
-          },
-          stage: 'generate_panel_grid',
+          referenceMode: 'asset',
+          stage: 'generate_panel_image',
           meta: {
             locale: 'zh',
             flowId: 'single:image_panel',

@@ -2,7 +2,6 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeStateLike, TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
-import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
@@ -47,14 +46,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'delete_panel'; readonly storyboardId: string; readonly panelId: string }
   | { readonly type: 'copy_panel'; readonly panelId: string }
   | { readonly type: 'generate_image'; readonly panelId: string }
-  | {
-      readonly type: 'generate_storyboard_grid_images'
-      readonly episodeId: string
-      readonly editScriptId: string
-      readonly sourceGenerationSegmentId: string
-      readonly panelIds: readonly string[]
-      readonly generationMode: StoryboardPanelImageGenerationMode
-    }
   | { readonly type: 'select_candidate'; readonly panelId: string; readonly imageUrl: string }
   | { readonly type: 'cancel_candidate'; readonly panelId: string }
   | {

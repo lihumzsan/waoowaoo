@@ -11,7 +11,6 @@ import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
 } from '../video-generation-types'
-import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 
 interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
@@ -38,13 +37,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditScript: (screenplayId?: string) => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
-  handleGenerateStoryboardGridImages: (payload: {
-    readonly episodeId: string
-    readonly editScriptId: string
-    readonly sourceGenerationSegmentId: string
-    readonly panelIds: readonly string[]
-    readonly generationMode?: StoryboardPanelImageGenerationMode
-  }) => Promise<void>
   handleSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
   handleCancelPanelCandidate: (panelId: string) => Promise<void>
   handleGenerateVideo: (
@@ -88,7 +80,6 @@ export function useWorkspaceRuntime({
   handleGenerateEditScript,
   openAssetLibrary,
   handleGeneratePanelImage,
-  handleGenerateStoryboardGridImages,
   handleSelectPanelCandidate,
   handleCancelPanelCandidate,
   handleGenerateVideo,
@@ -126,7 +117,6 @@ export function useWorkspaceRuntime({
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
-    onGenerateStoryboardGridImages: handleGenerateStoryboardGridImages,
     onSelectPanelCandidate: handleSelectPanelCandidate,
     onCancelPanelCandidate: handleCancelPanelCandidate,
     onGenerateVideo: handleGenerateVideo,
@@ -151,7 +141,6 @@ export function useWorkspaceRuntime({
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleGeneratePanelImage,
-    handleGenerateStoryboardGridImages,
     handleSelectPanelCandidate,
     handleCancelPanelCandidate,
     handleGenerateVideo,

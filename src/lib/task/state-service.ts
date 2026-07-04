@@ -1,12 +1,8 @@
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { coerceTaskIntent, type TaskIntent } from './intent'
-import { TASK_TYPE } from './types'
 import { buildTaskProgressGroupId, readTaskPayloadProgressGroupId } from './progress-group'
 import { resolveTaskCoveredTargets } from './covered-targets'
-
-export { extractStoryboardGridPanelIds } from './covered-targets'
 
 export type TaskTargetQuery = {
   targetType: string
@@ -226,10 +222,6 @@ export function resolveTargetState(
  */
 const QUERY_BATCH_SIZE = 50
 
-function targetAcceptsTaskType(target: TaskTargetQuery, taskType: string): boolean {
-  return !target.types?.length || target.types.includes(taskType)
-}
-
 function taskTargetKeys(row: Pick<TaskStateRow, 'targetType' | 'targetId' | 'type' | 'payload'>): string[] {
   return resolveTaskCoveredTargets({
     taskType: row.type,
@@ -237,45 +229,6 @@ function taskTargetKeys(row: Pick<TaskStateRow, 'targetType' | 'targetId' | 'typ
     targetId: row.targetId,
     payload: row.payload,
   }).map((target) => pairKey(target.targetType, target.targetId))
-}
-
-async function queryStoryboardGridImageRows(params: {
-  projectId: string
-  userId: string
-  panelIds: string[]
-}): Promise<TaskStateRow[]> {
-  const rows: TaskStateRow[] = []
-  for (let i = 0; i < params.panelIds.length; i += QUERY_BATCH_SIZE) {
-    const batch = params.panelIds.slice(i, i + QUERY_BATCH_SIZE)
-    if (!batch.length) continue
-    const panelPredicates = batch.map((panelId) =>
-      Prisma.sql`JSON_CONTAINS(JSON_EXTRACT(payload, '$.storyboardGrid.panelIds'), JSON_QUOTE(${panelId}))`
-    )
-    const batchRows = await prisma.$queryRaw<TaskStateRow[]>(Prisma.sql`
-      SELECT
-        id,
-        type,
-        status,
-        progress,
-        payload,
-        errorCode,
-        errorMessage,
-        targetType,
-        targetId,
-        operationId,
-        operationRequestId,
-        updatedAt
-      FROM tasks
-      WHERE projectId = ${params.projectId}
-        AND userId = ${params.userId}
-        AND targetType = 'ProjectPanel'
-        AND type = ${TASK_TYPE.IMAGE_PANEL}
-        AND status IN ('queued', 'processing', 'completed', 'failed', 'canceled')
-        AND (${Prisma.join(panelPredicates, ' OR ')})
-    `)
-    rows.push(...batchRows)
-  }
-  return rows
 }
 
 export async function queryTaskTargetStates(params: {
@@ -341,24 +294,6 @@ export async function queryTaskTargetStates(params: {
       },
     })
     appendRows(rows)
-  }
-
-  const storyboardGridPanelIds = Array.from(
-    new Set(
-      params.targets
-        .filter((target) => target.targetType === 'ProjectPanel' && targetAcceptsTaskType(target, TASK_TYPE.IMAGE_PANEL))
-        .map((target) => target.targetId),
-    ),
-  )
-
-  if (storyboardGridPanelIds.length > 0) {
-    appendRows(
-      await queryStoryboardGridImageRows({
-        projectId: params.projectId,
-        userId: params.userId,
-        panelIds: storyboardGridPanelIds,
-      }),
-    )
   }
 
   // 应用层按 updatedAt desc 排序（每个 target 组内排序即可）

@@ -352,11 +352,11 @@ describe('task publisher replay', () => {
     }))
   })
 
-  it('replays terminal storyboard grid image events with covered panel targets from task payload', async () => {
+  it('replays terminal image events with the direct panel target from task payload', async () => {
     taskEventFindManyMock.mockResolvedValueOnce([
       {
         id: 301,
-        taskId: 'task-grid-1',
+        taskId: 'task-panel-1',
         projectId: 'project-1',
         userId: 'user-1',
         eventType: 'task.completed',
@@ -366,17 +366,13 @@ describe('task publisher replay', () => {
     ])
     taskFindManyMock.mockResolvedValueOnce([
       {
-        id: 'task-grid-1',
+        id: 'task-panel-1',
         type: 'image_panel',
         targetType: 'ProjectPanel',
         targetId: 'panel-1',
         episodeId: 'episode-1',
         payload: {
-          storyboardGrid: {
-            mode: '2x2',
-            sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-            panelIds: ['panel-1', 'panel-2', 'panel-2', 'panel-3'],
-          },
+          panelId: 'panel-1',
         },
       },
     ])
@@ -390,8 +386,6 @@ describe('task publisher replay', () => {
 
     expect(events[0]?.payload?.coveredTargets).toEqual([
       { targetType: 'ProjectPanel', targetId: 'panel-1' },
-      { targetType: 'ProjectPanel', targetId: 'panel-2' },
-      { targetType: 'ProjectPanel', targetId: 'panel-3' },
     ])
   })
 })

@@ -50,7 +50,7 @@ function lifecycleEvent(input: {
       ui: {
         intent: 'generate',
         hasOutputAtStart: false,
-        progressGroupId: 'operation:generate_storyboard_grid_images:request-1',
+        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-1',
       },
       coveredTargets: [
         { targetType: 'ProjectPanel', targetId: 'panel-1' },
@@ -63,7 +63,7 @@ function lifecycleEvent(input: {
 }
 
 describe('workspace SSE covered targets', () => {
-  it('applies a storyboard grid image lifecycle event to every covered panel overlay', () => {
+  it('applies an image lifecycle event to every explicit covered panel overlay', () => {
     const queryClient = new QueryClient()
     const scheduleTargetStatesInvalidation = vi.fn()
 
@@ -74,7 +74,7 @@ describe('workspace SSE covered targets', () => {
         taskId: 'task-grid-1',
         payload: {
           progress: 42,
-          stage: 'generate_panel_grid',
+          stage: 'generate_panel_image',
         },
       }),
       projectId: 'project-1',
@@ -92,26 +92,26 @@ describe('workspace SSE covered targets', () => {
       runningTaskId: 'task-grid-1',
       runningTaskType: TASK_TYPE.IMAGE_PANEL,
       progress: 42,
-      stage: 'generate_panel_grid',
+      stage: 'generate_panel_image',
     }))
     expect(overlay?.['ProjectPanel:panel-2']).toEqual(expect.objectContaining({
       phase: 'processing',
       runningTaskId: 'task-grid-1',
       runningTaskType: TASK_TYPE.IMAGE_PANEL,
       progress: 42,
-      stage: 'generate_panel_grid',
+      stage: 'generate_panel_image',
     }))
     expect(overlay?.['ProjectPanel:panel-3']).toEqual(expect.objectContaining({
       phase: 'processing',
       runningTaskId: 'task-grid-1',
       runningTaskType: TASK_TYPE.IMAGE_PANEL,
       progress: 42,
-      stage: 'generate_panel_grid',
+      stage: 'generate_panel_image',
     }))
     expect(scheduleTargetStatesInvalidation).not.toHaveBeenCalled()
   })
 
-  it('applies terminal storyboard grid image state to every covered panel target cache', () => {
+  it('applies terminal image state to every explicit covered panel target cache', () => {
     const queryClient = new QueryClient()
     const targets: TaskTargetStateQuery[] = [
       { targetType: 'ProjectPanel', targetId: 'panel-1', types: [TASK_TYPE.IMAGE_PANEL] },
@@ -136,7 +136,7 @@ describe('workspace SSE covered targets', () => {
         taskId: 'task-grid-1',
         payload: {
           progress: 100,
-          stage: 'persist_panel_images',
+          stage: 'persist_panel_image',
         },
       }),
       projectId: 'project-1',
@@ -160,7 +160,7 @@ describe('workspace SSE covered targets', () => {
         runningTaskId: null,
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
         progress: 100,
-        stage: 'persist_panel_images',
+        stage: 'persist_panel_image',
       },
       {
         targetId: 'panel-2',
@@ -168,7 +168,7 @@ describe('workspace SSE covered targets', () => {
         runningTaskId: null,
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
         progress: 100,
-        stage: 'persist_panel_images',
+        stage: 'persist_panel_image',
       },
       {
         targetId: 'panel-3',
@@ -176,7 +176,7 @@ describe('workspace SSE covered targets', () => {
         runningTaskId: null,
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
         progress: 100,
-        stage: 'persist_panel_images',
+        stage: 'persist_panel_image',
       },
     ])
     expect(scheduleTargetStatesInvalidation).toHaveBeenCalledTimes(1)

@@ -427,8 +427,6 @@ function nodeActionIconName(action: WorkspaceCanvasNodeAction): AppIconName {
   switch (action.type) {
     case 'generate_image':
       return 'image'
-    case 'generate_storyboard_grid_images':
-      return 'grid'
     case 'generate_video':
     case 'generate_video_group':
     case 'generate_all_videos':
@@ -2363,11 +2361,9 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const secondaryActionIcon: AppIconName = secondaryAction
     ? nodeActionIconName(secondaryAction)
     : 'externalLink'
-  const tertiaryActionIcon: AppIconName = tertiaryAction?.type === 'generate_storyboard_grid_images'
-    ? 'grid'
-    : tertiaryAction
-      ? nodeActionIconName(tertiaryAction)
-      : 'externalLink'
+  const tertiaryActionIcon: AppIconName = tertiaryAction
+    ? nodeActionIconName(tertiaryAction)
+    : 'externalLink'
   const nodeId = data.nodeId
   const onMeasureNodeSize = data.onMeasureNodeSize
   const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)

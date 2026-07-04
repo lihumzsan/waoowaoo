@@ -5,7 +5,6 @@ const prismaMock = vi.hoisted(() => ({
   task: {
     findMany: vi.fn(),
   },
-  $queryRaw: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -15,7 +14,6 @@ import {
   asNonEmptyString,
   asObject,
   buildIdleState,
-  extractStoryboardGridPanelIds,
   pairKey,
   queryTaskTargetStates,
   resolveTargetState,
@@ -38,23 +36,6 @@ describe('task state service helpers', () => {
     expect(toProgress(101)).toBe(100)
     expect(toProgress(-5)).toBe(0)
     expect(toProgress(Number.NaN)).toBeNull()
-    expect(
-      extractStoryboardGridPanelIds({
-        storyboardGrid: {
-          mode: '2x2',
-          sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-          panelIds: ['panel-1', 'panel-2', 'panel-2', '', 123],
-        },
-      }),
-    ).toEqual(['panel-1', 'panel-2'])
-    expect(
-      extractStoryboardGridPanelIds({
-        storyboardGrid: {
-          mode: '2x2',
-          panelIds: ['panel-1', 'panel-2'],
-        },
-      }),
-    ).toEqual([])
   })
 
   it('builds idle state when no tasks found', () => {
@@ -167,20 +148,15 @@ describe('task state service helpers', () => {
     expect(state.lastError?.message).toBe('Task cancelled by user')
   })
 
-  it('projects storyboard grid image task state to every covered panel target', async () => {
-    prismaMock.task.findMany.mockResolvedValue([])
-    prismaMock.$queryRaw.mockResolvedValue([
+  it('resolves direct panel image task state for the requested target', async () => {
+    prismaMock.task.findMany.mockResolvedValue([
       {
-        id: 'task-grid-1',
+        id: 'task-panel-2',
         type: TASK_TYPE.IMAGE_PANEL,
         status: 'processing',
         progress: 35,
         payload: {
-          storyboardGrid: {
-            mode: '2x2',
-            sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-            panelIds: ['panel-1', 'panel-2', 'panel-3'],
-          },
+          panelId: 'panel-2',
           ui: {
             intent: 'create',
             hasOutputAtStart: false,
@@ -189,9 +165,9 @@ describe('task state service helpers', () => {
         errorCode: null,
         errorMessage: null,
         targetType: 'ProjectPanel',
-        targetId: 'panel-1',
+        targetId: 'panel-2',
         operationId: 'generate_edit_script_storyboard_images',
-        operationRequestId: 'request-grid-1',
+        operationRequestId: 'request-panel-2',
         updatedAt: new Date('2026-06-17T08:00:00.000Z'),
       },
     ])
@@ -201,7 +177,6 @@ describe('task state service helpers', () => {
       userId: 'user-1',
       targets: [
         { targetType: 'ProjectPanel', targetId: 'panel-2', types: [TASK_TYPE.IMAGE_PANEL] },
-        { targetType: 'ProjectPanel', targetId: 'panel-3', types: [TASK_TYPE.IMAGE_PANEL] },
       ],
     })
 
@@ -210,18 +185,9 @@ describe('task state service helpers', () => {
         targetType: 'ProjectPanel',
         targetId: 'panel-2',
         phase: 'processing',
-        runningTaskId: 'task-grid-1',
+        runningTaskId: 'task-panel-2',
         runningTaskType: TASK_TYPE.IMAGE_PANEL,
-        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-grid-1',
-        progress: 35,
-      },
-      {
-        targetType: 'ProjectPanel',
-        targetId: 'panel-3',
-        phase: 'processing',
-        runningTaskId: 'task-grid-1',
-        runningTaskType: TASK_TYPE.IMAGE_PANEL,
-        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-grid-1',
+        progressGroupId: 'operation:generate_edit_script_storyboard_images:request-panel-2',
         progress: 35,
       },
     ])

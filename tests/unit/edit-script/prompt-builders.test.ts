@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildStoryboardGridPromptFacts,
   buildStoryboardStillPromptFacts,
 } from '@/lib/edit-script/prompt-builders'
 import type {
-  EditGenerationSegment,
   EditScriptShot,
   EditScriptStyleBible,
   EditShotExecution,
@@ -38,12 +36,8 @@ const styleBible: EditScriptStyleBible = {
   },
 }
 
-const segment: EditGenerationSegment = {
-  shotNumbers: [11, 12, 13],
-  continuity: 'Anna approaches the high-backed chair and the hidden seated figure remains present.',
-}
-
 const shot11: EditScriptShot = {
+  shotId: 'shot-11',
   shotNumber: 11,
   durationSec: 3,
   scene: { name: 'Cabin living room' },
@@ -63,6 +57,7 @@ const shot11: EditScriptShot = {
 }
 
 const shot12: EditScriptShot = {
+  shotId: 'shot-12',
   shotNumber: 12,
   durationSec: 3,
   scene: { name: 'Cabin living room' },
@@ -88,6 +83,7 @@ const shot12: EditScriptShot = {
 }
 
 const execution11: EditShotExecution = {
+  shotId: 'shot-11',
   shotNumber: 11,
   camera: {
     shotScale: 'medium',
@@ -129,6 +125,7 @@ const execution11: EditShotExecution = {
 
 const execution12: EditShotExecution = {
   ...execution11,
+  shotId: 'shot-12',
   shotNumber: 12,
   camera: {
     ...execution11.camera,
@@ -203,25 +200,6 @@ describe('storyboard prompt builders', () => {
     expect(result.prompt).not.toContain('videoPrompt')
     expect(result.prompt).not.toContain('cameraMove')
 
-  })
-
-  it('keeps supporting conversation participants in grid blocking facts', () => {
-    const result = buildStoryboardGridPromptFacts({
-      segment,
-      sourceGenerationSegmentId: 'edit-1:generationSegment:1',
-      shots: [shot11, shot12],
-      executions: [execution11, execution12],
-      styleBible,
-    })
-
-    expect(result.facts.CHARACTERS.map((character) => character.name)).toEqual([
-      'Disguised Grandmother',
-      'Anna',
-      'Disguised Grandmother',
-    ])
-    expect(result.facts.BLOCKING_STATE).toHaveLength(2)
-    expect(result.prompt).toContain('BLOCKING_STATE')
-    expect(result.prompt).toContain('shotDelta')
   })
 
 })

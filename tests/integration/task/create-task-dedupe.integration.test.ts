@@ -153,7 +153,7 @@ describe('task service dedupe + orphan recovery', () => {
     })
   })
 
-  it('progress updates preserve storyboard grid payload for queue recovery', async () => {
+  it('progress updates preserve single panel image payload for queue recovery', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     const task = await prisma.task.create({
@@ -168,11 +168,7 @@ describe('task service dedupe + orphan recovery', () => {
         payload: {
           panelId: 'panel-1',
           imageModel: 'fal::image-model',
-          storyboardGrid: {
-            mode: '2x2',
-            sourceGenerationSegmentId: 'segment-1',
-            panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
-          },
+          referenceMode: 'asset',
           meta: {
             locale: 'zh',
             flowId: 'single:image_panel',
@@ -188,7 +184,7 @@ describe('task service dedupe + orphan recovery', () => {
     })
 
     const updated = await tryUpdateTaskProgress(task.id, 18, {
-      stage: 'generate_panel_grid',
+      stage: 'generate_panel_image',
       meta: {
         locale: 'zh',
       },
@@ -200,18 +196,13 @@ describe('task service dedupe + orphan recovery', () => {
       select: { payload: true, progress: true },
     })
     const payload = asRecord(stored?.payload)
-    const storyboardGrid = asRecord(payload.storyboardGrid)
     const meta = asRecord(payload.meta)
     const ui = asRecord(payload.ui)
 
     expect(stored?.progress).toBe(18)
-    expect(payload.stage).toBe('generate_panel_grid')
-    expect(storyboardGrid).toEqual({
-      mode: '2x2',
-      sourceGenerationSegmentId: 'segment-1',
-      panelIds: ['panel-1', 'panel-2', 'panel-3', 'panel-4'],
-    })
+    expect(payload.stage).toBe('generate_panel_image')
     expect(payload.imageModel).toBe('fal::image-model')
+    expect(payload.referenceMode).toBe('asset')
     expect(meta).toEqual({
       locale: 'zh',
       flowId: 'single:image_panel',

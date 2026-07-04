@@ -101,7 +101,6 @@ export {
     useGetProjectStoryboardStats,
     useUpdateProjectPanelVideoPrompt,
     useRegenerateProjectPanelImage,
-    useGenerateStoryboardGridImages,
     useConfirmProjectCharacterSelection,
     useConfirmProjectLocationSelection,
     useBatchGenerateCharacterImages,

@@ -21,7 +21,6 @@ import {
   resolveNovelData,
 } from './image-task-handler-shared'
 import type { OutboundImageNormalizationIssue } from '@/lib/media/outbound-image'
-import { parseStoryboardGridPayload, handlePanelGridImageTask } from './panel-grid-image-handler'
 import {
   applyPanelPromptFieldOmissions,
   parseStoryboardPromptFieldOmissions,
@@ -58,10 +57,6 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
   const promptFieldOmissions = payload.compareOnly === true
     ? parseStoryboardPromptFieldOmissions(payload.promptFieldOmissions)
     : []
-  const gridPayload = parseStoryboardGridPayload(payload.storyboardGrid)
-  if (gridPayload) {
-    return await handlePanelGridImageTask(job, payload, gridPayload)
-  }
 
   const panelId = pickFirstString(payload.panelId, job.data.targetId)
   if (!panelId) throw new Error('panelId missing')

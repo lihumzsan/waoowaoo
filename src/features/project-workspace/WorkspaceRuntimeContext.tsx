@@ -5,7 +5,6 @@ import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { StoryboardPanelImageGenerationMode } from '@/lib/storyboard/grid-image-groups'
 import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
@@ -44,13 +43,6 @@ export interface WorkspaceRuntimeValue {
   onGenerateEditScript: (screenplayId?: string) => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
-  onGenerateStoryboardGridImages: (payload: {
-    readonly episodeId: string
-    readonly editScriptId: string
-    readonly sourceGenerationSegmentId: string
-    readonly panelIds: readonly string[]
-    readonly generationMode?: StoryboardPanelImageGenerationMode
-  }) => Promise<void>
   onSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
   onCancelPanelCandidate: (panelId: string) => Promise<void>
   onGenerateVideo: (

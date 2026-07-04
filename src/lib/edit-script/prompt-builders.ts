@@ -1,5 +1,4 @@
 import type {
-  EditGenerationSegment,
   EditScriptKeyObject,
   EditScriptShot,
   EditScriptStyleBible,
@@ -43,20 +42,6 @@ export interface StoryboardStillPromptFacts {
 
 export interface StoryboardPromptBuildResult {
   readonly facts: StoryboardStillPromptFacts
-  readonly prompt: string
-}
-
-export interface StoryboardGridPromptFacts {
-  readonly SCENE: unknown
-  readonly BLOCKING_STATE: readonly unknown[]
-  readonly CHARACTERS: readonly StoryboardPromptCharacterFact[]
-  readonly PROPS: readonly Record<string, unknown>[]
-  readonly STYLE: Record<string, unknown>
-  readonly CELLS: readonly Record<string, unknown>[]
-}
-
-export interface StoryboardGridPromptBuildResult {
-  readonly facts: StoryboardGridPromptFacts
   readonly prompt: string
 }
 
@@ -156,62 +141,6 @@ export function buildStoryboardStillPromptFacts(input: {
       ['CAMERA', facts.CAMERA],
       ['AXIS', facts.AXIS],
       ['STYLE', facts.STYLE],
-    ]),
-  }
-}
-
-export function buildStoryboardGridPromptFacts(input: {
-  readonly segment: EditGenerationSegment
-  readonly sourceGenerationSegmentId: string
-  readonly shots: readonly EditScriptShot[]
-  readonly executions: readonly EditShotExecution[]
-  readonly styleBible: EditScriptStyleBible
-}): StoryboardGridPromptBuildResult {
-  const stills = input.shots.map((shot) => {
-    const execution = input.executions.find((candidate) => candidate.shotNumber === shot.shotNumber)
-    if (!execution) throw new Error(`GRID_EXECUTION_SHOT_MISSING:${shot.shotNumber}`)
-    return buildStoryboardStillPromptFacts({
-      shot,
-      execution,
-      styleBible: input.styleBible,
-    }).facts
-  })
-  const facts: StoryboardGridPromptFacts = {
-    SCENE: stills[0]?.SCENE ?? null,
-    BLOCKING_STATE: stills.map((still) => ({
-      scene: still.SCENE,
-      characters: still.CHARACTERS,
-      props: still.PROPS,
-      camera: still.CAMERA,
-      axis: still.AXIS,
-    })),
-    CHARACTERS: stills.flatMap((still) => still.CHARACTERS),
-    PROPS: stills.flatMap((still) => still.PROPS),
-    STYLE: styleFacts(input.styleBible),
-    CELLS: input.shots.map((shot, index) => ({
-      cell: index + 1,
-      shotNumber: shot.shotNumber,
-      shotDelta: stills[index]
-        ? {
-            scene: stills[index].SCENE,
-            characters: stills[index].CHARACTERS,
-            props: stills[index].PROPS,
-            camera: stills[index].CAMERA,
-            axis: stills[index].AXIS,
-          }
-        : null,
-    })),
-  }
-  return {
-    facts,
-    prompt: renderPrompt([
-      ['GLOBAL TASK', 'Generate a storyboard grid. Preserve one shared scene graph and only vary each cell by its shot delta.'],
-      ['SCENE', facts.SCENE],
-      ['BLOCKING_STATE', facts.BLOCKING_STATE],
-      ['CHARACTERS', facts.CHARACTERS],
-      ['PROPS', facts.PROPS],
-      ['STYLE', facts.STYLE],
-      ['CELLS', facts.CELLS],
     ]),
   }
 }

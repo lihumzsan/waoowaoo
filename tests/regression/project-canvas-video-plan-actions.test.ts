@@ -108,7 +108,7 @@ function groupedStoryboard(input: { readonly withImages: boolean }): ProjectStor
 }
 
 describe('project canvas video plan actions', () => {
-  it('does not expose storyboard grid generation on video plan segment nodes', () => {
+  it('does not expose image generation actions on video plan segment nodes', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -132,7 +132,7 @@ describe('project canvas video plan actions', () => {
     expect(videoPlan?.data.tertiaryActionLabel).toBeUndefined()
   })
 
-  it('routes grouped shot image buttons through the storyboard grid image operation', () => {
+  it('routes grouped shot image buttons through single panel image generation', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -149,20 +149,12 @@ describe('project canvas video plan actions', () => {
 
     expect(shotActions).toEqual([
       {
-        type: 'generate_storyboard_grid_images',
-        episodeId: 'episode-1',
-        editScriptId: 'edit-script-1',
-        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
-        panelIds: ['panel-1', 'panel-2'],
-        generationMode: 'grid',
+        type: 'generate_image',
+        panelId: 'panel-1',
       },
       {
-        type: 'generate_storyboard_grid_images',
-        episodeId: 'episode-1',
-        editScriptId: 'edit-script-1',
-        sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
-        panelIds: ['panel-1', 'panel-2'],
-        generationMode: 'grid',
+        type: 'generate_image',
+        panelId: 'panel-2',
       },
     ])
   })

@@ -55,7 +55,6 @@ const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceC
   generate_edit_shot_execution_plan: ['editShotExecutionPlan'],
   generate_edit_script_storyboard: ['shot', 'editShotExecutionPlan'],
   generate_edit_script_storyboard_images: ['shot'],
-  generate_storyboard_grid_images: ['shot'],
   generate_episode_videos: ['videoPlan'],
   generate_episode_videos_auto: ['videoPlan'],
   generate_panel_video: ['videoPlan'],

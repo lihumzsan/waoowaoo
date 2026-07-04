@@ -118,8 +118,6 @@
         "generateShotExecutionPlan": "生成镜头执行计划",
         "generateStoryboard": "生成分镜",
         "generateImage": "生成图片",
-        "generateStoryboardSingleImages": "单张生成分镜",
-        "generateStoryboardGridImages": "成组生成分镜",
         "regenerateImage": "重新生成",
         "generateVideo": "生成视频",
         "generateAllVideos": "批量生成",

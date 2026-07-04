@@ -188,7 +188,6 @@ describe('operation planning billing quote', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     const mediaOperationIds = [
       'generate_edit_script_storyboard_images',
-      'generate_storyboard_grid_images',
       'regenerate_panel_image',
       'generate_panel_video',
       'generate_episode_videos',

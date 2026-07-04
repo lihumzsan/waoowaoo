@@ -30,7 +30,7 @@ const eventState = vi.hoisted(() => ({
       runId: activityEvent.runId,
       type: activityEvent.kind === 'activity.started' ? 'operation' : 'operation',
       status: activityEvent.kind === 'activity.failed' ? 'failed' : activityEvent.kind === 'activity.completed' ? 'completed' : 'running',
-      operationId: activityEvent.operationId ?? 'generate_storyboard_grid_images',
+      operationId: activityEvent.operationId ?? 'generate_edit_script_storyboard_images',
       sourceOperationId: null,
       toolCallId: activityEvent.toolCallId ?? null,
       choiceType: null,
@@ -46,7 +46,7 @@ vi.mock('@/lib/project-agent/event', () => ({
 }))
 
 function buildOperation(
-  operationId: ProjectAgentOperationDefinition['id'] = 'generate_storyboard_grid_images',
+  operationId: ProjectAgentOperationDefinition['id'] = 'generate_edit_script_storyboard_images',
   intent: ProjectAgentOperationDefinition['intent'] = 'act',
 ): ProjectAgentOperationDefinition {
   const inputSchema = z.object({
@@ -124,7 +124,7 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_storyboard_grid_images',
+        name: 'generate_edit_script_storyboard_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
@@ -133,12 +133,12 @@ describe('createProjectAgentOperationTool', () => {
       type: 'data-agent-operation-start',
       data: {
         runId: 'run-1',
-        operationId: 'generate_storyboard_grid_images',
+        operationId: 'generate_edit_script_storyboard_images',
         toolCallId: 'call-1',
       },
     })
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_storyboard_grid_images',
+      operationId: 'generate_edit_script_storyboard_images',
       projectId: 'project-1',
       userId: 'user-1',
       toolCallId: 'call-1',
@@ -185,7 +185,7 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_storyboard_grid_images',
+        name: 'generate_edit_script_storyboard_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
@@ -231,13 +231,13 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_storyboard_grid_images',
+        name: 'generate_edit_script_storyboard_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
 
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
-      operationId: 'generate_storyboard_grid_images',
+      operationId: 'generate_edit_script_storyboard_images',
       projectId: 'project-1',
       userId: 'user-1',
       assistantPermissionMode: 'auto',
@@ -385,7 +385,7 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-1',
-        name: 'generate_storyboard_grid_images',
+        name: 'generate_edit_script_storyboard_images',
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })

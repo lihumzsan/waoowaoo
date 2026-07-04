@@ -74,26 +74,6 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
       context,
     }
   }
-  if (params.action.type === 'generate_storyboard_grid_images') {
-    const input = {
-      episodeId: params.action.episodeId,
-      editScriptId: params.action.editScriptId,
-      sourceGenerationSegmentId: params.action.sourceGenerationSegmentId,
-      panelIds: [...params.action.panelIds],
-    }
-    return {
-      cacheKey: buildCacheKey({
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-        operationId: 'generate_storyboard_grid_images',
-        input,
-        context,
-      }),
-      operationId: 'generate_storyboard_grid_images',
-      input,
-      context,
-    }
-  }
   if (params.action.type === 'generate_video') {
     const input = definedRecord({
       storyboardId: params.action.storyboardId,

@@ -1,7 +1,3 @@
-import { TASK_TYPE } from './types'
-
-const STORYBOARD_GRID_CELL_COUNT = 4
-
 export interface TaskCoveredTarget {
   readonly targetType: string
   readonly targetId: string
@@ -17,26 +13,6 @@ function parseObject(value: unknown): Record<string, unknown> | null {
     }
   }
   return value as Record<string, unknown>
-}
-
-function uniqueStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return Array.from(new Set(
-    value.flatMap((item) => typeof item === 'string' && item.trim() ? [item.trim()] : []),
-  ))
-}
-
-function normalizeString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-export function extractStoryboardGridPanelIds(payload: unknown): string[] {
-  const payloadObject = parseObject(payload)
-  const storyboardGrid = parseObject(payloadObject?.storyboardGrid)
-  if (normalizeString(storyboardGrid?.mode) !== '2x2') return []
-  if (!normalizeString(storyboardGrid?.sourceGenerationSegmentId)) return []
-  const panelIds = uniqueStringArray(storyboardGrid?.panelIds).slice(0, STORYBOARD_GRID_CELL_COUNT)
-  return panelIds.length >= 2 ? panelIds : []
 }
 
 export function resolveTaskCoveredTargets(input: {
@@ -55,12 +31,6 @@ export function resolveTaskCoveredTargets(input: {
 
   if (targetType && targetId) {
     targets.push({ targetType, targetId })
-  }
-
-  if (input.taskType === TASK_TYPE.IMAGE_PANEL) {
-    for (const panelId of extractStoryboardGridPanelIds(input.payload)) {
-      targets.push({ targetType: 'ProjectPanel', targetId: panelId })
-    }
   }
 
   const seen = new Set<string>()

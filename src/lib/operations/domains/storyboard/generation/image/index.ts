@@ -5,7 +5,6 @@ import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-
 import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution } from '@/lib/operations/planning'
 import { refineTaskSubmitOperationOutputSchema, refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { commitGenerateEditScriptStoryboardImagesOperation, planGenerateEditScriptStoryboardImagesOperation } from './edit-script-storyboard-images'
-import { commitGenerateStoryboardGridImagesOperation, planGenerateStoryboardGridImagesOperation } from './storyboard-grid-images'
 import { commitRegeneratePanelImageOperation, planRegeneratePanelImageOperation } from './regenerate-panel-image'
 
 export function createStoryboardPanelImageOperations(): ProjectAgentOperationRegistryDraft {
@@ -21,7 +20,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
       episodeId: z.string().min(1),
       storyboardIds: z.array(z.string().min(1)),
       panelIds: z.array(z.string().min(1)),
-      generationMode: z.enum(['single', 'grid']),
     }).passthrough(),
   )
 
@@ -49,7 +47,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         confirmedMaxCost: z.number().nonnegative().optional(),
         episodeId: z.string().trim().min(1).optional(),
         storyboardId: z.string().trim().min(1).optional(),
-        generationMode: z.enum(['single', 'grid']).optional(),
       }).passthrough(),
       outputSchema: storyboardImageBatchOutputSchema,
       plan: async (ctx, input) => planGenerateEditScriptStoryboardImagesOperation(ctx, input),
@@ -63,47 +60,6 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         return storyboardImageBatchOutputSchema.parse(
           await commitGenerateEditScriptStoryboardImagesOperation(ctx, input, plan),
         )
-      },
-    }),
-    generate_storyboard_grid_images: defineOperation({
-      id: 'generate_storyboard_grid_images',
-      summary: 'Generate storyboard panel images as one 2x2 grid for a selected storyboard group.',
-      intent: 'act',
-      effects: {
-        writes: true,
-        billable: true,
-        destructive: false,
-        overwrite: true,
-        bulk: true,
-        externalSideEffects: true,
-        longRunning: true,
-      },
-      confirmation: {
-        required: true,
-        summary: '将把本组分镜作为一张四宫格图片生成，再裁剪回单张分镜图，可能消耗额度或产生计费。',
-      },
-      inputSchema: z.object({
-        confirmed: z.boolean().optional(),
-        confirmedMaxCost: z.number().nonnegative().optional(),
-        episodeId: z.string().trim().min(1),
-        editScriptId: z.string().trim().min(1),
-        sourceGenerationSegmentId: z.string().trim().min(1),
-        panelIds: z.array(z.string().trim().min(1)).min(2).max(4),
-      }).passthrough(),
-      outputSchema: taskSubmitOutputWithMutationBatch({
-        episodeId: z.string().min(1),
-        sourceGenerationSegmentId: z.string().min(1),
-        panelIds: z.array(z.string().min(1)),
-      }),
-      plan: async (ctx, input) => planGenerateStoryboardGridImagesOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitGenerateStoryboardGridImagesOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planGenerateStoryboardGridImagesOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitGenerateStoryboardGridImagesOperation(ctx, input, plan)
       },
     }),
     regenerate_panel_image: defineOperation({

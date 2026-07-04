@@ -10,20 +10,13 @@ import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
-import { normalizeStoryboardPanelImageGenerationMode, planStoryboardPanelImageSubmissionGroups } from '@/lib/storyboard/grid-image-groups'
-import { createTaskDedupeKey, isRecord, normalizeString, normalizeStringArray, resolveLocaleFromContext } from './shared'
+import { normalizeString, normalizeStringArray, resolveLocaleFromContext } from './shared'
 
 export type GenerateEditScriptStoryboardImagesInput = {
   confirmed?: boolean
   confirmedMaxCost?: number
   episodeId?: string
   storyboardId?: string
-  generationMode?: 'single' | 'grid'
-}
-
-type StoryboardImagePlanGroupMetadata = {
-  planTaskId: string
-  panelIds: string[]
 }
 
 export async function planGenerateEditScriptStoryboardImagesOperation(
@@ -33,7 +26,6 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const storyboardId = normalizeString(input.storyboardId)
-  const generationMode = normalizeStoryboardPanelImageGenerationMode(input.generationMode)
   const panels = await prisma.projectPanel.findMany({
     where: {
       storyboard: {
@@ -55,7 +47,6 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       panelIndex: true,
       imageUrl: true,
       imageMediaId: true,
-      sourceGenerationSegmentId: true,
     },
   })
   const missingPanels = panels.filter((panel) => !normalizeString(panel.imageUrl) && !normalizeString(panel.imageMediaId))
@@ -71,8 +62,6 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
         episodeId,
         storyboardIds: [],
         panelIds: [],
-        generationMode,
-        groups: [],
       },
     }
   }
@@ -99,27 +88,14 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
     return signature
   }
 
-  const submissionGroups = planStoryboardPanelImageSubmissionGroups(missingPanels, generationMode)
   const plannedTasks: PlannedTask[] = []
-  const groups: StoryboardImagePlanGroupMetadata[] = []
-  for (const group of submissionGroups) {
-    const primaryPanel = group.panels[0]
-    if (!primaryPanel) throw new Error('STORYBOARD_IMAGE_SUBMISSION_GROUP_EMPTY')
-    const styleBibleSignature = await readStyleBibleSignature(primaryPanel.storyboardId)
+  for (const panel of missingPanels) {
+    const styleBibleSignature = await readStyleBibleSignature(panel.storyboardId)
     const body = {
-      panelId: primaryPanel.id,
+      panelId: panel.id,
       candidateCount: 1,
       count: 1,
       referenceMode: 'asset',
-      ...(group.kind === 'grid2x2'
-        ? {
-          storyboardGrid: {
-            mode: '2x2',
-            sourceGenerationSegmentId: group.sourceGenerationSegmentId,
-            panelIds: group.panels.map((panel) => panel.id),
-          },
-        }
-        : {}),
       meta: {
         locale,
       },
@@ -131,33 +107,20 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       basePayload: body,
       aspectRatio: projectModelConfig.videoRatio,
     })
-    const planTaskId = group.kind === 'grid2x2'
-      ? `generate_edit_script_storyboard_images:grid:${group.sourceGenerationSegmentId}`
-      : `generate_edit_script_storyboard_images:panel:${primaryPanel.id}`
     plannedTasks.push(createPlannedTask({
-      id: planTaskId,
+      id: `generate_edit_script_storyboard_images:panel:${panel.id}`,
       taskType: TASK_TYPE.IMAGE_PANEL,
       targetType: 'ProjectPanel',
-      targetId: primaryPanel.id,
+      targetId: panel.id,
       locale: taskLocale,
       episodeId,
       payload: withTaskUiPayload(billingPayload, {
         intent: 'generate',
         hasOutputAtStart: false,
       }),
-      dedupeKey: group.kind === 'grid2x2'
-        ? createTaskDedupeKey('edit_first_panel_grid_image', {
-          sourceGenerationSegmentId: group.sourceGenerationSegmentId,
-          panelIds: group.panels.map((panel) => panel.id),
-          styleBibleSignature,
-        })
-        : `edit_first_panel_image:${primaryPanel.id}:${styleBibleSignature}`,
+      dedupeKey: `edit_first_panel_image:${panel.id}:${styleBibleSignature}`,
       billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
     }))
-    groups.push({
-      planTaskId,
-      panelIds: group.panels.map((panel) => panel.id),
-    })
   }
 
   return {
@@ -170,8 +133,6 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       episodeId,
       storyboardIds: Array.from(new Set(missingPanels.map((panel) => panel.storyboardId))),
       panelIds: missingPanels.map((panel) => panel.id),
-      generationMode,
-      groups,
     },
   }
 }
@@ -184,20 +145,11 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
   const episodeId = typeof plan.metadata?.episodeId === 'string'
     ? plan.metadata.episodeId
     : normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
-  const generationMode: 'single' | 'grid' = plan.metadata?.generationMode === 'grid' ? 'grid' : 'single'
   const storyboardIds = Array.isArray(plan.metadata?.storyboardIds)
     ? normalizeStringArray(plan.metadata.storyboardIds)
     : []
   const panelIds = Array.isArray(plan.metadata?.panelIds)
     ? normalizeStringArray(plan.metadata.panelIds)
-    : []
-  const groupMetadata = Array.isArray(plan.metadata?.groups)
-    ? plan.metadata.groups.flatMap((item): StoryboardImagePlanGroupMetadata[] => {
-      if (!isRecord(item)) return []
-      const planTaskId = normalizeString(item.planTaskId)
-      const groupPanelIds = normalizeStringArray(item.panelIds)
-      return planTaskId && groupPanelIds.length > 0 ? [{ planTaskId, panelIds: groupPanelIds }] : []
-    })
     : []
 
   if (plan.tasks.length === 0) {
@@ -210,7 +162,6 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
       episodeId,
       storyboardIds,
       panelIds,
-      generationMode,
       noop: true,
     }
   }
@@ -248,20 +199,14 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
     })),
   })
   const taskIds = taskResults.map((item) => item.result.taskId)
-  const taskIdByPlanTaskId = new Map(taskResults.map((item) => [item.task.id, item.result.taskId]))
-  const receiptByPlanTaskId = new Map(taskResults.map((item) => [item.task.id, item.result.billingReceiptView]))
-  const resultRefs = groupMetadata.flatMap((group) => {
-    const taskId = taskIdByPlanTaskId.get(group.planTaskId) || ''
-    const billingReceipt = receiptByPlanTaskId.get(group.planTaskId) ?? null
-    return group.panelIds.map((panelId) => ({
-      refId: panelId,
-      taskId,
-      taskType: TASK_TYPE.IMAGE_PANEL,
-      targetType: 'ProjectPanel',
-      targetId: panelId,
-      billingReceipt,
-    }))
-  })
+  const resultRefs = taskResults.map(({ task, result }) => ({
+    refId: task.target.targetId,
+    taskId: result.taskId,
+    taskType: TASK_TYPE.IMAGE_PANEL,
+    targetType: task.target.targetType,
+    targetId: task.target.targetId,
+    billingReceipt: result.billingReceiptView,
+  }))
 
   writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
     operationId: 'generate_edit_script_storyboard_images',
@@ -286,6 +231,5 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
     episodeId,
     storyboardIds,
     panelIds,
-    generationMode,
   }
 }

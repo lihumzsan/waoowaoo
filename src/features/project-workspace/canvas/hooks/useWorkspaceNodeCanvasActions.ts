@@ -49,17 +49,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_storyboard_grid_images') {
-      await runtime.onGenerateStoryboardGridImages({
-        episodeId: action.episodeId,
-        editScriptId: action.editScriptId,
-        sourceGenerationSegmentId: action.sourceGenerationSegmentId,
-        panelIds: action.panelIds,
-        generationMode: action.generationMode,
-      })
-      return
-    }
-
     if (action.type === 'select_candidate') {
       await runtime.onSelectPanelCandidate(action.panelId, action.imageUrl)
       return

@@ -6,13 +6,6 @@ export const STORYBOARD_PROMPT_FIELD_DEFINITIONS = [
   { id: 'render_facts.CAMERA', en: 'Camera facts', zh: '镜头事实', scope: 'both' },
   { id: 'render_facts.AXIS', en: 'Axis facts', zh: '轴线事实', scope: 'both' },
   { id: 'render_facts.STYLE', en: 'Style facts', zh: '风格事实', scope: 'both' },
-  { id: 'grid.mode', en: 'Grid mode', zh: '网格模式', scope: 'grid' },
-  { id: 'grid.source_generation_segment_id', en: 'Source generation segment ID', zh: '生成片段 ID', scope: 'grid' },
-  { id: 'cell.cell_index', en: 'Cell index', zh: '格子序号', scope: 'grid' },
-  { id: 'cell.cell_position', en: 'Cell position', zh: '格子位置', scope: 'grid' },
-  { id: 'cell.panel_id', en: 'Panel ID', zh: '分镜 ID', scope: 'grid' },
-  { id: 'context.reference_images', en: 'Uploaded reference image map', zh: '上传参考图映射', scope: 'both' },
-  { id: 'context.additional_reference_images', en: 'Additional reference image notes', zh: '额外参考图说明', scope: 'both' },
 ] as const
 
 export type StoryboardPromptFieldDefinition = (typeof STORYBOARD_PROMPT_FIELD_DEFINITIONS)[number]
@@ -34,7 +27,6 @@ export const STORYBOARD_PROMPT_FIELD_PRESETS: readonly StoryboardPromptFieldPres
       'render_facts.SCENE',
       'render_facts.CAMERA',
       'render_facts.AXIS',
-      'context.reference_images',
     ],
   },
   {
@@ -80,11 +72,6 @@ function applyRenderFactsOmissions(renderFacts: Record<string, unknown>, omitted
   if (omitted.has('style_bible') || omitted.has('render_facts.STYLE')) delete renderFacts.STYLE
 }
 
-function applyContextFieldOmissions(context: Record<string, unknown>, omitted: ReadonlySet<string>): void {
-  if (omitted.has('context.reference_images')) delete context.reference_images
-  if (omitted.has('context.additional_reference_images')) delete context.additional_reference_images
-}
-
 export function parseStoryboardPromptFieldOmissions(value: unknown): StoryboardPromptFieldId[] {
   if (!Array.isArray(value)) return []
   return Array.from(new Set(value
@@ -100,39 +87,5 @@ export function applyPanelPromptFieldOmissions(
   if (omittedFields.length === 0 || !isRecord(promptContext)) return promptContext
   const output = cloneRecord(promptContext)
   applyRenderFactsOmissions(output, new Set<string>(omittedFields))
-  return output
-}
-
-export function applyGridPromptFieldOmissions(
-  promptContext: unknown,
-  omittedFields: readonly StoryboardPromptFieldId[],
-): unknown {
-  if (omittedFields.length === 0 || !isRecord(promptContext)) return promptContext
-  const omitted = new Set<string>(omittedFields)
-  const output = cloneRecord(promptContext)
-  const grid = cloneRecord(output.grid)
-  const context = cloneRecord(output.context)
-
-  if (omitted.has('grid.mode')) delete grid.mode
-  if (omitted.has('grid.source_generation_segment_id')) delete grid.source_generation_segment_id
-
-  const cells = Array.isArray(grid.cells) ? grid.cells : []
-  grid.cells = cells.map((cell) => {
-    const nextCell = cloneRecord(cell)
-    if (omitted.has('cell.cell_index')) delete nextCell.cell_index
-    if (omitted.has('cell.cell_position')) delete nextCell.cell_position
-
-    const panelFacts = cloneRecord(nextCell.panel_facts)
-    if (omitted.has('cell.panel_id')) delete panelFacts.panel_id
-    const renderFacts = cloneRecord(panelFacts.render_facts)
-    applyRenderFactsOmissions(renderFacts, omitted)
-    panelFacts.render_facts = renderFacts
-    nextCell.panel_facts = panelFacts
-    return nextCell
-  })
-
-  applyContextFieldOmissions(context, omitted)
-  output.grid = grid
-  output.context = context
   return output
 }
