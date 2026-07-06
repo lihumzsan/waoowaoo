@@ -1,0 +1,27 @@
+Build an event ledger from the immutable normalized source document.
+
+Return one JSON object only:
+{
+  "events": [
+    {
+      "eventId": "event_001",
+      "kind": "appearance",
+      "summary": "persistent story fact or state change",
+      "sourceStart": 0,
+      "sourceEnd": 10,
+      "entities": [{"entityType":"character","entityName":"name"}],
+      "persistentFacts": ["fact that remains true after this event"]
+    }
+  ]
+}
+
+Allowed kind values: appearance, relationship, location, prop, plot, rule, emotion.
+Allowed entityType values: character, location, prop, world.
+sourceStart/sourceEnd are UTF-16 code-unit offsets into the normalized source document.
+Only include events that affect continuity, persistent facts, entity state, relationships, location, prop, or emotional state.
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}

@@ -8,10 +8,7 @@ import { handleAssetHubAIModifyTask } from './handlers/asset-hub-ai-modify'
 import { handleReferenceToCharacterTask } from './handlers/reference-to-character'
 import { handleShotAITask } from './handlers/shot-ai-tasks'
 import { handleEditScriptGenerateTask } from './handlers/edit-script-generate'
-import {
-  handleEditScreenplayGenerateTask,
-  handleEditScreenplayReviseTask,
-} from './handlers/edit-screenplay-generate'
+import { handleEditBibleGenerateTask } from './handlers/edit-bible-generate'
 import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
@@ -26,10 +23,8 @@ async function processTextTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
-    case TASK_TYPE.EDIT_SCREENPLAY_GENERATE:
-      return await handleEditScreenplayGenerateTask(job)
-    case TASK_TYPE.EDIT_SCREENPLAY_REVISE:
-      return await handleEditScreenplayReviseTask(job)
+    case TASK_TYPE.EDIT_BIBLE_GENERATE:
+      return await handleEditBibleGenerateTask(job)
     case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
       return await handleEditStylePreviewsGenerateTask(job)
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:

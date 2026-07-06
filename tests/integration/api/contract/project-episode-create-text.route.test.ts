@@ -9,8 +9,8 @@ const authMock = vi.hoisted(() => ({
   isErrorResponse: vi.fn((value: unknown) => value instanceof Response),
 }))
 
-const prismaMock = vi.hoisted(() => ({
-  projectEpisode: {
+const prismaMock = vi.hoisted(() => {
+  const projectEpisode = {
     findFirst: vi.fn(async () => null),
     create: vi.fn(async () => ({
       id: 'episode-1',
@@ -20,8 +20,8 @@ const prismaMock = vi.hoisted(() => ({
       description: null,
       novelText: '第一章内容',
     })),
-  },
-  project: {
+  }
+  const project = {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
     })),
@@ -29,8 +29,23 @@ const prismaMock = vi.hoisted(() => ({
       id: 'project-1',
       lastEpisodeId: 'episode-1',
     })),
-  },
-}))
+  }
+  const projectEditChapter = {
+    create: vi.fn(async () => ({
+      id: 'chapter-0',
+      episodeId: 'episode-1',
+      chapterIndex: 0,
+    })),
+  }
+  return {
+    projectEpisode,
+    project,
+    projectEditChapter,
+    $transaction: vi.fn(async (
+      callback: (tx: { projectEpisode: typeof projectEpisode; project: typeof project; projectEditChapter: typeof projectEditChapter }) => Promise<unknown>,
+    ) => callback({ projectEpisode, project, projectEditChapter })),
+  }
+})
 
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -63,9 +78,24 @@ describe('api specific - novel promotion episode create text', () => {
         novelText: '第一章内容',
       },
     })
+    expect(prismaMock.projectEditChapter.create).toHaveBeenCalledWith({
+      data: {
+        episodeId: 'episode-1',
+        chapterIndex: 0,
+        title: null,
+        summary: null,
+        status: 'ready',
+      },
+      select: {
+        id: true,
+        episodeId: true,
+        chapterIndex: true,
+      },
+    })
     expect(prismaMock.project.update).toHaveBeenCalledWith({
       where: { id: 'project-1' },
       data: { lastEpisodeId: 'episode-1' },
     })
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
   })
 })

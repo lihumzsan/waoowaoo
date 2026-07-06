@@ -1,0 +1,28 @@
+Extract a beat sheet from the immutable normalized source document.
+
+Return one JSON object only:
+{
+  "beats": [
+    {
+      "beatId": "beat_001",
+      "title": "short title",
+      "summary": "what changes in this beat",
+      "sourceStart": 0,
+      "sourceEnd": 10,
+      "estimatedDurationSec": 60,
+      "persistentFactsIntroduced": ["fact that should persist after this beat"]
+    }
+  ]
+}
+
+Rules:
+- sourceStart/sourceEnd are UTF-16 code-unit offsets into the normalized source document.
+- Ranges must be half-open [sourceStart, sourceEnd), ordered by sourceStart, and sourceEnd must be greater than sourceStart.
+- Use natural story turning points, but keep each beat small enough for later chapter splitting.
+- estimatedDurationSec is the target video duration for the beat, not exact music or voice timing.
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}

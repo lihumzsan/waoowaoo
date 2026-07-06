@@ -1,0 +1,28 @@
+请从不可变的归一化源文本中提取 beat sheet。
+
+只返回一个 JSON 对象：
+{
+  "beats": [
+    {
+      "beatId": "beat_001",
+      "title": "短标题",
+      "summary": "这个 beat 发生了什么变化",
+      "sourceStart": 0,
+      "sourceEnd": 10,
+      "estimatedDurationSec": 60,
+      "persistentFactsIntroduced": ["这个 beat 后需要持续保留的事实"]
+    }
+  ]
+}
+
+规则：
+- sourceStart/sourceEnd 是归一化源文本里的 UTF-16 code-unit offset。
+- 范围必须是半开区间 [sourceStart, sourceEnd)，按 sourceStart 递增，且 sourceEnd 必须大于 sourceStart。
+- 优先使用自然剧情转折点，但每个 beat 要足够小，方便后续章节切分。
+- estimatedDurationSec 是该 beat 的目标视频时长，不是精确音乐或语音时间。
+
+源文本 checksum：
+{{source_checksum}}
+
+归一化源文本：
+{{source_document}}

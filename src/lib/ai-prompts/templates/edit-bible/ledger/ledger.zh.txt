@@ -1,0 +1,27 @@
+请从不可变的归一化源文本中建立事件台账。
+
+只返回一个 JSON 对象：
+{
+  "events": [
+    {
+      "eventId": "event_001",
+      "kind": "appearance",
+      "summary": "持续影响剧情的事实或状态变化",
+      "sourceStart": 0,
+      "sourceEnd": 10,
+      "entities": [{"entityType":"character","entityName":"名称"}],
+      "persistentFacts": ["这个事件之后仍然成立的事实"]
+    }
+  ]
+}
+
+kind 只能是：appearance, relationship, location, prop, plot, rule, emotion。
+entityType 只能是：character, location, prop, world。
+sourceStart/sourceEnd 是归一化源文本里的 UTF-16 code-unit offset。
+只记录影响连续性、长期事实、实体状态、关系、场景、道具或情绪状态的事件。
+
+源文本 checksum：
+{{source_checksum}}
+
+归一化源文本：
+{{source_document}}

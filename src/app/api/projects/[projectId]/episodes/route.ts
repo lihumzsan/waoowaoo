@@ -41,7 +41,6 @@ export const POST = apiHandler(async (
   // 🔐 统一权限验证
   const authResult = await requireProjectAuth(projectId)
   if (isErrorResponse(authResult)) return authResult
-  const { project, projectData } = authResult
 
   const body = await request.json()
   const { name, description, novelText } = body

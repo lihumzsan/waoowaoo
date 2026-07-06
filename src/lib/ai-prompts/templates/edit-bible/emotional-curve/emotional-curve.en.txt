@@ -1,0 +1,28 @@
+Extract an emotional curve for long-form video planning from the immutable normalized source document.
+
+Return one JSON object only:
+{
+  "cues": [
+    {
+      "cueId": "cue_001",
+      "mood": "short mood label",
+      "intensity": 0.6,
+      "musicPolicy": "underscore",
+      "note": "optional reason",
+      "sourceStart": 0,
+      "sourceEnd": 10
+    }
+  ]
+}
+
+Allowed musicPolicy values: none, underscore, theme, transition.
+Rules:
+- sourceStart/sourceEnd are UTF-16 code-unit offsets into the normalized source document.
+- This is a planning curve only. Do not promise exact music timing.
+- Use none where music should likely be absent.
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}

@@ -1,0 +1,33 @@
+You are building the episode-level long-form video bible from an immutable normalized source document.
+
+Return one JSON object only:
+{
+  "synopsis": "string",
+  "title": "string optional",
+  "logline": "string optional",
+  "characters": [
+    {"entityId":"character_stable_id","name":"display name","aliases":["alias"],"summary":"persistent identity and role","firstSourceStart":0}
+  ],
+  "locations": [
+    {"entityId":"location_stable_id","name":"display name","aliases":["alias"],"summary":"persistent place description","firstSourceStart":0}
+  ],
+  "worldRules": ["persistent fact or rule"],
+  "styleGuide": {
+    "visualTone":"string",
+    "cameraLanguage":"string",
+    "editingLanguage":"string",
+    "colorAndLighting":"string"
+  }
+}
+
+Rules:
+- Use only facts grounded in the source document.
+- Do not create shots, chapter plans, dialogue timing, or final prompts.
+- firstSourceStart is a UTF-16 code-unit offset into the normalized source document.
+- Do not mention the checksum except for internal consistency.
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}

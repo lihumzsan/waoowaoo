@@ -1,0 +1,33 @@
+你正在从不可变的归一化源文本中建立“本集级”的长视频 Bible。
+
+只返回一个 JSON 对象：
+{
+  "synopsis": "字符串",
+  "title": "可选字符串",
+  "logline": "可选字符串",
+  "characters": [
+    {"entityId":"稳定角色ID","name":"显示名称","aliases":["别名"],"summary":"长期身份与作用","firstSourceStart":0}
+  ],
+  "locations": [
+    {"entityId":"稳定场景ID","name":"显示名称","aliases":["别名"],"summary":"长期场景描述","firstSourceStart":0}
+  ],
+  "worldRules": ["长期事实或规则"],
+  "styleGuide": {
+    "visualTone":"字符串",
+    "cameraLanguage":"字符串",
+    "editingLanguage":"字符串",
+    "colorAndLighting":"字符串"
+  }
+}
+
+规则：
+- 只能使用源文本中有依据的信息。
+- 不要生成镜头、章节计划、对白时长或最终提示词。
+- firstSourceStart 是归一化源文本里的 UTF-16 code-unit offset。
+- checksum 只用于内部一致性，不要在结果里解释。
+
+源文本 checksum：
+{{source_checksum}}
+
+归一化源文本：
+{{source_document}}

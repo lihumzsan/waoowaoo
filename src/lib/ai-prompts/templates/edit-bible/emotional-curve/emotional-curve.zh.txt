@@ -1,0 +1,28 @@
+请从不可变的归一化源文本中提取长视频规划用的情绪曲线。
+
+只返回一个 JSON 对象：
+{
+  "cues": [
+    {
+      "cueId": "cue_001",
+      "mood": "简短情绪标签",
+      "intensity": 0.6,
+      "musicPolicy": "underscore",
+      "note": "可选原因",
+      "sourceStart": 0,
+      "sourceEnd": 10
+    }
+  ]
+}
+
+musicPolicy 只能是：none, underscore, theme, transition。
+规则：
+- sourceStart/sourceEnd 是归一化源文本里的 UTF-16 code-unit offset。
+- 这只是规划曲线，不承诺精确音乐时长。
+- 不适合配乐的位置使用 none。
+
+源文本 checksum：
+{{source_checksum}}
+
+归一化源文本：
+{{source_document}}
