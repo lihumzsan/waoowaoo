@@ -63,7 +63,6 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
         model,
         locale: job.data.locale,
         sourceDocument: sourceDocument.normalizedText,
-        sourceChecksum: sourceDocument.checksum,
       }),
     )
 

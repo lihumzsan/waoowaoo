@@ -1,43 +1,30 @@
 # Role and Goal
 
-You are a long-form video Global Bible extraction AI. Build the episode-level stable fact layer from the immutable normalized source document.
+Read the full script text below and organize the stable facts of this episode: a complete story overview, the main characters, the main locations, the persistent settings, and the overall style tendency visible in the text.
 
-Your output becomes the shared fact source for later beat extraction, chapter splitting, ledger projection, character/location references, and per-chapter shot planning. Extract only facts that are present or strongly implied by the source. Do not create shots, chapter plans, storyboards, music cues, or final generation prompts. Output JSON only.
-
-# Terminology
-
-- SourceDocument: the full normalized text saved from upload, paste, or outline generation. It is the only story source for this task.
-- Global Bible: the stable episode-level fact summary. It is not the final script and not a chapter plan.
-- character: a person, group, or explicit identity subject that may recur or affect later story understanding.
-- location: a place whose space, atmosphere, or story role must stay continuous later.
-- worldRules: persistent world rules, relationship rules, constraints, or background facts grounded in the source.
-- styleGuide: narrative tone, visual tendency, editing rhythm, and color/lighting direction inferred from the source. It is not an image prompt or shot execution plan.
+Include only facts the script states or clearly implies. Do not add your own invention. Output JSON only.
 
 # Fact Sources
 
-- The normalized source document is the only factual source.
-- The checksum identifies the source version only. It is not story content and must not appear in the output.
-- Do not add a name, identity, location, or rule unless the source supports it.
-- If one entity has multiple names, merge them into one entity and put the other names in aliases.
+- The script text below is the only fact source.
+- Do not add a name, identity, location, or rule unless the text supports it.
+- If one character or location has multiple names, merge them into one entry and put the other names in aliases.
 
 # Rules
 
-- Write synopsis as a complete episode overview covering the central conflict, relationships, emotional movement, and ending or current text endpoint.
-- Output title and logline only when the source provides them or they can be summarized with high confidence. Otherwise omit the fields.
-- characters should include only stable story-useful entities. Do not turn one-off generic mentions, background extras, or environmental descriptions into characters.
-- locations should include only places useful for spatial continuity, atmosphere, or story progression. Do not turn every ordinary object or temporary direction into a location.
-- entityId must be stable, short, readable, and use lowercase words with underscores when possible, for example `character_lin_xiaoyu` or `location_old_house`. Do not duplicate one entity.
-- firstSourceStart is the UTF-16 code-unit offset of the first evidence for that entity in the normalized source document.
-- worldRules should contain only persistent facts or rules, not one-time actions.
-- styleGuide must come from genre, mood, rhythm, and spatial descriptions in the source. Do not output generic cinematic filler.
-- Output only fields listed in the schema. Do not output chapters, beats, events, cues, shots, or prompts.
+- Write synopsis as a complete story overview covering the central conflict, relationships, emotional movement, and the ending (or the current endpoint of the text).
+- Output title and logline only when the text provides them or they can be summarized with high confidence. Otherwise omit these fields.
+- characters should include only people who recur or affect story understanding. Do not turn one-off generic mentions, background extras, or environmental descriptions into characters.
+- locations should include only places that matter for spatial continuity, atmosphere, or story progression. Do not turn ordinary objects or one-off directions into locations.
+- entityId must be stable, short, and readable, preferably lowercase words with underscores, for example `character_lin_xiaoyu` or `location_old_house`. Do not duplicate one entity.
+- firstSourceStart is the position of the first evidence for that entity in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- worldRules should contain only persistent world rules, background facts, constraints, or relationship facts, not one-time actions.
+- styleGuide must be inferred from the genre, mood, rhythm, and spatial descriptions in the text. Do not write generic cinematic filler.
+- Output only fields listed in the schema below. Do not output anything else.
 
 # Input
 
-Source checksum:
-{{source_checksum}}
-
-Normalized source document:
+Script text:
 {{source_document}}
 
 # Output Schema
@@ -45,7 +32,7 @@ Normalized source document:
 Return JSON only. Do not use markdown or explanations.
 
 {
-  "synopsis": "complete episode overview",
+  "synopsis": "complete story overview for this episode",
   "title": "optional title",
   "logline": "optional one-sentence premise",
   "characters": [
@@ -70,19 +57,18 @@ Return JSON only. Do not use markdown or explanations.
     "persistent world rule, background fact, constraint, or relationship fact"
   ],
   "styleGuide": {
-    "visualTone": "visual tone inferred from the source",
-    "cameraLanguage": "camera-language tendency inferred from the source",
-    "editingLanguage": "editing-rhythm tendency inferred from the source",
-    "colorAndLighting": "color and lighting direction inferred from the source"
+    "visualTone": "visual tone inferred from the text",
+    "cameraLanguage": "camera-language tendency inferred from the text",
+    "editingLanguage": "editing-rhythm tendency inferred from the text",
+    "colorAndLighting": "color and lighting direction inferred from the text"
   }
 }
 
 # Self-check
 
-- Did you use only facts grounded in the normalized source document?
-- Did you avoid chapters, beats, events, cues, shots, image prompts, and video prompts?
-- Did you deduplicate characters and locations and merge aliases into one entity?
+- Is every piece of information grounded in the script text?
+- Are characters and locations deduplicated, with aliases merged into one entry?
 - Are entityId values stable, short, readable, and unique?
-- Is firstSourceStart a UTF-16 code-unit offset?
-- Is styleGuide inferred from the source instead of generic cinematic filler?
-- Is the response strict JSON only?
+- Is firstSourceStart counted in UTF-16 code units?
+- Is styleGuide inferred from the text instead of generic cinematic filler?
+- Is the response strictly limited to the schema fields, and JSON only?

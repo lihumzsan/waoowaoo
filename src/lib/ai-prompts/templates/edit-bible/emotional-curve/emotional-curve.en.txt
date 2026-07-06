@@ -1,41 +1,28 @@
 # Role and Goal
 
-You are a long-form video emotional-curve extraction AI. Extract emotional spans and music-policy tendencies for this episode from the immutable normalized source document.
+Read the script text below, divide it into spans where the emotion stays relatively stable, and label each span with its dominant mood, intensity, and music tendency.
 
-The emotional curve supports later music, pacing, and per-chapter atmosphere planning. It is not the final music score, not a per-cue composition sheet, and not shot-level sound design. Output JSON only.
-
-# Terminology
-
-- emotional cue: a span of text with a dominant emotional or pacing tendency.
-- mood: a short emotional label, such as "suppressed doubt", "brief relief", or "danger approaching".
-- intensity: a number from 0 to 1. 0 means extremely weak or nearly no emotional pressure; 1 means maximum intensity.
-- musicPolicy: the music tendency for the span. Use only `none`, `underscore`, `theme`, or `transition`.
-- note: an optional reason explaining why the span fits that music policy.
-- sourceStart/sourceEnd: the UTF-16 code-unit half-open range `[sourceStart, sourceEnd)` for the cue evidence in the normalized source document.
+These labels are later used as music and pacing reference. You do not design the actual music; you only label emotion and music tendency. Output JSON only.
 
 # Fact Sources
 
-- The normalized source document is the only factual source.
-- The checksum identifies the current source version only and must not appear in the output.
-- Do not add music styles, instruments, melodies, lyrics, or specific tracks that the source does not support.
+- The script text below is the only fact source.
+- Do not add music styles, instruments, melodies, lyrics, or specific tracks the text does not support.
 
 # Rules
 
 - cues must be ordered by sourceStart.
-- A cue range should represent a span with relatively stable emotion or pacing. Do not create one cue for every sentence.
-- Use `none` when the text is mostly dialogue, information delivery, quiet observation, or a place where music should likely be absent.
-- `underscore` means low-presence atmospheric support; `theme` means a thematic or character/concept motif; `transition` means a section shift, emotional turn, or chapter bridge.
-- intensity must match risk, conflict, emotional pressure, and action intensity in the source. Do not make every cue high intensity.
-- note should briefly explain the grounding when useful and may be omitted when unnecessary.
-- Do not write exact seconds, music duration, model windows, audio filenames, or mixing instructions.
-- Do not output chapters, beats, shots, a music cue sheet, or final music prompts.
+- Each cue covers a span of text with relatively stable emotion or pacing. Do not create one cue for every sentence.
+- sourceStart/sourceEnd is the half-open range `[sourceStart, sourceEnd)` of the span in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- mood is a short emotional label, such as "suppressed doubt", "brief relief", or "danger approaching".
+- intensity is a number from 0 to 1: 0 means almost no emotional pressure, 1 means maximum intensity. It must match the risk, conflict, emotional pressure, and action intensity in the text. Do not make every cue high intensity.
+- musicPolicy must be one of four values: `none` means the span should likely have no music (for example long dialogue, information delivery, or quiet observation); `underscore` means low-presence atmospheric support; `theme` means thematic or character/concept motif music; `transition` means a bridge at a section shift or emotional turn.
+- note briefly explains the reasoning; omit it when unnecessary.
+- Do not write exact seconds, music duration, audio filenames, or mixing instructions.
 
 # Input
 
-Source checksum:
-{{source_checksum}}
-
-Normalized source document:
+Script text:
 {{source_document}}
 
 # Output Schema
@@ -61,7 +48,7 @@ Return JSON only. Do not use markdown or explanations.
 - Are cues ordered by sourceStart?
 - Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
 - Does musicPolicy use only `none`, `underscore`, `theme`, or `transition`?
-- Is intensity between 0 and 1 and grounded in the source emotion?
+- Is intensity between 0 and 1 and grounded in the text's emotion?
 - Did you use `none` where music should likely be absent?
 - Did you avoid instruments, lyrics, specific tracks, exact music duration, and mixing instructions?
 - Is the response strict JSON only?

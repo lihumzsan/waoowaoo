@@ -1,41 +1,29 @@
 # Role and Goal
 
-You are a long-form video event-ledger extraction AI. Extract persistent events and state changes from the immutable normalized source document.
+Find every event or state change in the script text below that keeps affecting the story after it happens, such as an identity reveal, a relationship change, a location move, gaining or losing a prop, a rule being established, or an emotional shift that sticks.
 
-The event ledger carries established facts across chapters so characters, locations, props, relationships, and emotional states do not disappear in later planning. Include only events that continue to matter. Do not record every momentary action or shot description. Output JSON only.
-
-# Terminology
-
-- Event Ledger: the list of story fact changes that can propagate across chapters.
-- event: a fact, state change, relationship change, location change, prop change, or emotional change that still affects later understanding or generation after it occurs.
-- kind: the event type. Use only `appearance`, `relationship`, `location`, `prop`, `plot`, `rule`, or `emotion`.
-- entity: a referenced character, location, prop, or world rule involved in the event.
-- persistentFacts: facts that remain true after the event and must be inherited by later chapters.
-- sourceStart/sourceEnd: the UTF-16 code-unit half-open range `[sourceStart, sourceEnd)` for the event evidence in the normalized source document.
+This event list is later used to keep the story consistent, so record only events with lasting impact. Do not record every momentary action. Output JSON only.
 
 # Fact Sources
 
-- The normalized source document is the only factual source.
-- The checksum identifies the current source version only and must not appear in the output.
-- Do not infer events from common sense, genre convention, or the upstream Bible when the source does not state them.
+- The script text below is the only fact source.
+- Do not infer events from common sense or genre convention when the text does not state them.
 
 # Rules
 
-- Only include events that affect continuity, persistent facts, entity state, relationships, location, props, world rules, or emotional state.
-- Do not include ordinary walking, looking, pausing, atmosphere, or other momentary actions that do not persist later.
-- One event may cover multiple sentences, but sourceStart/sourceEnd must be precise and must not span unrelated plot.
-- eventId should use stable increasing IDs, for example `event_001`, `event_002`.
-- kind must use the allowed enum. Do not create new types.
+- Record only events that affect later consistency: changes to persistent facts, character state, relationships, locations, props, world rules, or emotional state.
+- Do not record ordinary walking, glancing, brief pauses, ambience, or other momentary actions that do not persist.
+- One event may cover multiple sentences, but sourceStart/sourceEnd must fit the evidence precisely and must not span unrelated plot.
+- sourceStart/sourceEnd is the half-open range `[sourceStart, sourceEnd)` of the event evidence in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- eventId uses stable increasing IDs, for example `event_001`, `event_002`.
+- kind must be one of `appearance`, `relationship`, `location`, `prop`, `plot`, `rule`, `emotion`. Do not create new types.
 - entities should include only entities directly involved in the event. entityType must be `character`, `location`, `prop`, or `world`.
-- persistentFacts must be written as facts that remain true afterward. If an appearance or brief emotion has no durable fact, output an empty array.
-- Do not include chapter boundaries, beat boundaries, or camera language. Later code uses these events to avoid cutting chapters through persistent facts.
+- persistentFacts must be written as facts that remain true after the event. If the event is only a brief appearance or emotion with no durable fact, output an empty array.
+- Describe only the events themselves. Do not write camera language, and do not group events into chapters or sections.
 
 # Input
 
-Source checksum:
-{{source_checksum}}
-
-Normalized source document:
+Script text:
 {{source_document}}
 
 # Output Schema
@@ -65,10 +53,9 @@ Return JSON only. Do not use markdown or explanations.
 
 # Self-check
 
-- Did you include only events that affect later continuity?
-- Did you avoid momentary actions, shot descriptions, and ordinary atmosphere?
-- Do kind and entityType use only the allowed enums?
+- Did you record only events that keep affecting the story?
+- Did you avoid momentary actions, shot descriptions, and ordinary ambience?
+- Do kind and entityType use only the allowed enum values?
 - Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
 - Does persistentFacts contain only facts that remain true after the event?
-- Did you avoid chapters, beats, shots, and prompts?
 - Is the response strict JSON only?

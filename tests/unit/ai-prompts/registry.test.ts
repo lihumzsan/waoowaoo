@@ -11,7 +11,6 @@ const editBibleJsonPromptIds = [
 
 const zhJsonPromptSections = [
   '# 角色与目标',
-  '# 术语说明',
   '# 事实来源',
   '# 工作规则',
   '# 输入',
@@ -21,12 +20,19 @@ const zhJsonPromptSections = [
 
 const enJsonPromptSections = [
   '# Role and Goal',
-  '# Terminology',
   '# Fact Sources',
   '# Rules',
   '# Input',
   '# Output Schema',
   '# Self-check',
+] as const
+
+const internalPipelineTerms = [
+  'SourceDocument',
+  '归一化',
+  '术语说明',
+  '本系统',
+  'checksum',
 ] as const
 
 describe('ai prompt registry', () => {
@@ -48,14 +54,12 @@ describe('ai prompt registry', () => {
       locale: 'zh',
       variables: {
         source_document: '标题：《旧钟》',
-        source_checksum: 'checksum-1',
       },
     })
 
-    expect(prompt).toContain('长视频全局 Bible')
-    expect(prompt).toContain('全局 Bible')
+    expect(prompt).toContain('剧本原文')
     expect(prompt).toContain('标题：《旧钟》')
-    expect(prompt).toContain('checksum-1')
+    expect(prompt).toContain('firstSourceStart')
   })
 
   it('keeps edit bible extraction prompts aligned with the structured template style', () => {
@@ -75,6 +79,20 @@ describe('ai prompt registry', () => {
     }
   })
 
+  it('keeps internal pipeline terminology out of edit bible extraction prompts', () => {
+    for (const promptId of [...editBibleJsonPromptIds, AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT]) {
+      const zhTemplate = getAiPromptTemplate(promptId, 'zh')
+      const enTemplate = getAiPromptTemplate(promptId, 'en')
+
+      for (const term of internalPipelineTerms) {
+        expect(zhTemplate, `${promptId} zh should not contain ${term}`).not.toContain(term)
+        expect(enTemplate.toLowerCase(), `${promptId} en should not contain ${term}`).not.toContain(term.toLowerCase())
+      }
+      expect(zhTemplate).not.toContain('{{source_checksum}}')
+      expect(enTemplate).not.toContain('{{source_checksum}}')
+    }
+  })
+
   it('renders all edit bible prompt variables through the unified builder', () => {
     for (const promptId of editBibleJsonPromptIds) {
       const prompt = buildAiPrompt({
@@ -82,12 +100,10 @@ describe('ai prompt registry', () => {
         locale: 'en',
         variables: {
           source_document: 'Mira opens the sealed observatory.',
-          source_checksum: 'source-checksum-2',
         },
       })
 
       expect(prompt).toContain('Mira opens the sealed observatory.')
-      expect(prompt).toContain('source-checksum-2')
     }
 
     const outlinePrompt = buildAiPrompt({
@@ -101,23 +117,23 @@ describe('ai prompt registry', () => {
     expect(outlinePrompt).toContain('A clockmaker finds a second midnight inside an old tower.')
   })
 
-  it('keeps edit bible beat extraction separate from deterministic chapter splitting', () => {
+  it('keeps beat extraction constraints without exposing chapter-splitting internals', () => {
     const zhTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET, 'zh')
     const enTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET, 'en')
 
-    expect(zhTemplate).toContain('不是最终 chapter')
-    expect(zhTemplate).toContain('本任务不输出 chapter')
-    expect(zhTemplate).toContain('系统代码会根据 beat 时长')
+    expect(zhTemplate).toContain('不要把它们组织成章节')
     expect(zhTemplate).toContain('15-45 秒')
     expect(zhTemplate).toContain('120 秒')
     expect(zhTemplate).toContain('3,600')
+    expect(zhTemplate).not.toContain('切分算法')
+    expect(zhTemplate).not.toContain('系统代码')
 
-    expect(enTemplate).toContain('It is not the final chapter')
-    expect(enTemplate).toContain('Do not output chapters')
-    expect(enTemplate).toContain('System code will merge adjacent beats')
+    expect(enTemplate).toContain('Do not organize them into chapters')
     expect(enTemplate).toContain('15-45 seconds')
     expect(enTemplate).toContain('120 seconds')
     expect(enTemplate).toContain('3,600')
+    expect(enTemplate).not.toContain('algorithm')
+    expect(enTemplate).not.toContain('System code')
   })
 
   it('keeps edit bible outline generation as plain source script text', () => {
@@ -163,7 +179,6 @@ describe('ai prompt registry', () => {
   it('keeps Chinese canvas-visible prompt templates from requiring English prompt output', () => {
     const executionTemplate = getAiPromptTemplate(AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN, 'zh')
 
-    expect(executionTemplate).toContain('ShotExecutionPlan')
     expect(executionTemplate).toContain('camera.lighting')
     expect(executionTemplate).toContain('blocking.axis')
     expect(executionTemplate).toContain('continuousVideoPrompt')

@@ -145,7 +145,6 @@ describe('worker edit-bible-generate behavior', () => {
       model: 'analysis-model',
       locale: 'zh',
       sourceDocument: '0123456789',
-      sourceChecksum: 'checksum-1',
     })
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledTimes(1)
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledWith(expect.objectContaining({

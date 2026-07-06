@@ -148,7 +148,7 @@ describe('final render plan', () => {
       totalDurationSeconds: 9,
     })
 
-    expect(prompt).toContain('Complete edit-first core table JSON')
+    expect(prompt).toContain('Core edit plan JSON')
     expect(prompt).toContain('Project configuration JSON')
     expect(prompt).toContain('Actual rendered media timeline JSON')
     expect(prompt).toContain('"generationSegments"')

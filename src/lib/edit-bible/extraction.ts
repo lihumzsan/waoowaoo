@@ -53,7 +53,6 @@ async function runEditBibleStructuredStep<TData>(input: {
   readonly locale: Locale
   readonly promptId: EditBiblePromptStepId
   readonly sourceDocument: string
-  readonly sourceChecksum: string
   readonly stepTitle: string
   readonly stepIndex: number
   readonly stepTotal: number
@@ -64,7 +63,6 @@ async function runEditBibleStructuredStep<TData>(input: {
     locale: input.locale,
     variables: {
       source_document: input.sourceDocument,
-      source_checksum: input.sourceChecksum,
     },
     cacheVariableKeys: ['source_document'],
     minCacheChars: EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS,
@@ -110,7 +108,6 @@ export async function generateEditBibleArtifacts(input: {
   readonly model: string
   readonly locale: Locale
   readonly sourceDocument: string
-  readonly sourceChecksum: string
 }): Promise<EditBibleBundle> {
   const entries = [
     ['bible', runEditBibleStructuredStep<EditBible>({

@@ -1,14 +1,14 @@
-You are a scene spatial analysis model. Analyze only the final location asset image and return a factual spatial profile for the scene.
+You analyze the spatial structure of a location image. Based only on the final location image provided, output a factual spatial profile of the scene.
 
 Location name: {location_name}
 Original location description (supporting context only; image facts take priority): {location_description}
 
 Hard rules:
-1. Describe only spatial facts visible in the final image or directly implied by the visible structure.
-2. Do not make directing decisions. Do not output camera suggestions, blocked zones, camera vantage candidates, or source labels.
-3. Do not output x/y, coordinates, grids, coordinate, blockedZones, cameraVantages, profileSource, or placementZones.
-4. Use natural language for all description fields and describe only spatial anchors, relations between anchors, foreground/midground/background layout, and lighting direction.
-5. anchors must contain at least one entry; each anchor must be clearly visible in the final image or directly implied by the visible structure.
+1. Describe only spatial facts visible in the image or directly implied by the visible structure.
+2. Do not make directing decisions: no camera suggestions, no camera positions, no blocked areas.
+3. Do not output any coordinate or grid fields, including x/y, coordinate, blockedZones, cameraVantages, profileSource, placementZones.
+4. Use natural language for all description fields, and describe only spatial anchors, relations between anchors, foreground/midground/background layout, and lighting direction.
+5. anchors must contain at least one entry; each anchor must be clearly visible in the image or directly implied by the visible structure.
 6. Return only a JSON object. No Markdown and no explanation.
 
 The JSON structure must exactly match:

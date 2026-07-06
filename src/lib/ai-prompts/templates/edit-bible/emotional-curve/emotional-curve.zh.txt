@@ -1,41 +1,28 @@
 # 角色与目标
 
-你是长视频情绪曲线提取 AI，负责从不可变的归一化源文本中提取本 episode 的情绪段落与配乐倾向。
+你负责通读下方的剧本原文，把它划分成一段段情绪相对稳定的区间，并为每一段标注主导情绪、强度和配乐倾向。
 
-情绪曲线用于后续规划音乐、节奏和章内氛围参考。它不是最终音乐 score，不是逐 cue 作曲清单，也不是镜头级声音设计。只输出 JSON。
-
-# 术语说明
-
-- emotional cue：一段连续文本中的主导情绪或节奏倾向。
-- mood：简短情绪标签，例如“压抑怀疑”“短暂释然”“危险逼近”。
-- intensity：0 到 1 的强度数值，0 表示极弱或近乎无情绪压力，1 表示最高强度。
-- musicPolicy：该情绪段的配乐倾向，只能使用 `none`、`underscore`、`theme`、`transition`。
-- note：可选原因，说明为什么这个位置适合某种配乐策略。
-- sourceStart/sourceEnd：情绪段证据在归一化源文本里的 UTF-16 code-unit 半开区间 `[sourceStart, sourceEnd)`。
+这些标注之后用于配乐和节奏参考。你不需要设计具体的音乐，只做情绪和配乐倾向的标注。只输出 JSON。
 
 # 事实来源
 
-- 归一化源文本是唯一事实来源。
-- checksum 只用于确认当前源文本版本，不得写入输出。
-- 不得加入源文本没有支持的音乐风格、乐器、旋律、歌词或具体曲目。
+- 下方剧本原文是唯一事实来源。
+- 不得加入原文不支持的音乐风格、乐器、旋律、歌词或具体曲目。
 
 # 工作规则
 
 - cues 必须按 sourceStart 从小到大排列。
-- cue 范围应表示情绪或节奏相对稳定的一段，不要为每个句子都创建 cue。
-- 当文本主要是对白、信息交代、安静观察或不应铺乐的段落时，musicPolicy 使用 `none`。
-- `underscore` 表示低存在感氛围铺底；`theme` 表示主题性或人物/概念动机；`transition` 表示段落切换、情绪转折或章间衔接。
-- intensity 必须与源文本的风险、冲突、情绪压力和动作强度匹配，不要全都写成高强度。
-- note 应简短说明依据；没有必要时可以省略。
-- 不要写精确秒数、音乐长度、模型窗口、音频文件名或混音指令。
-- 不要输出 chapter、beat、shot、音乐 cue sheet 或最终配乐 prompt。
+- 每个 cue 对应一段情绪或节奏相对稳定的原文，不要为每个句子单独建 cue。
+- sourceStart/sourceEnd 是该情绪段对应原文的半开区间 `[sourceStart, sourceEnd)`，按 UTF-16 code unit 计数（即 JavaScript 字符串下标，中文一字一位）。
+- mood 写简短的情绪标签，例如“压抑怀疑”“短暂释然”“危险逼近”。
+- intensity 是 0 到 1 的强度数值：0 表示几乎没有情绪压力，1 表示最高强度。强度必须与原文的风险、冲突、情绪压力和动作强度匹配，不要全都写成高强度。
+- musicPolicy 只能使用四个值：`none` 表示这段不适合铺乐（例如大段对白、信息交代或安静观察）；`underscore` 表示低存在感的氛围铺底；`theme` 表示主题性或人物/概念动机式的音乐；`transition` 表示段落切换、情绪转折处的衔接。
+- note 简短说明判断依据；没有必要时可以省略。
+- 不要写精确秒数、音乐长度、音频文件名或混音指令。
 
 # 输入
 
-源文本 checksum：
-{{source_checksum}}
-
-归一化源文本：
+剧本原文：
 {{source_document}}
 
 # 输出 Schema
@@ -59,9 +46,9 @@
 # 自检
 
 - cues 是否按 sourceStart 递增。
-- sourceStart/sourceEnd 是否是 UTF-16 code-unit 半开区间，且 sourceEnd 大于 sourceStart。
+- sourceStart/sourceEnd 是否按 UTF-16 code unit 计数的半开区间，且 sourceEnd 大于 sourceStart。
 - musicPolicy 是否只使用 `none`、`underscore`、`theme`、`transition`。
-- intensity 是否在 0 到 1 之间，并且与源文本情绪强度相符。
+- intensity 是否在 0 到 1 之间，并且与原文情绪强度相符。
 - 是否在不适合配乐的位置使用了 `none`。
 - 是否没有写乐器、歌词、具体曲目、精确音乐时长或混音指令。
 - 是否严格只输出 JSON。
