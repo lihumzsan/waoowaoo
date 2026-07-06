@@ -1,28 +1,70 @@
-请从不可变的归一化源文本中提取 beat sheet。
+# 角色与目标
 
-只返回一个 JSON 对象：
-{
-  "beats": [
-    {
-      "beatId": "beat_001",
-      "title": "短标题",
-      "summary": "这个 beat 发生了什么变化",
-      "sourceStart": 0,
-      "sourceEnd": 10,
-      "estimatedDurationSec": 60,
-      "persistentFactsIntroduced": ["这个 beat 后需要持续保留的事实"]
-    }
-  ]
-}
+你是长视频 beat sheet 提取 AI，负责把不可变的归一化源文本拆成有叙事意义的剧情 beat。
 
-规则：
-- sourceStart/sourceEnd 是归一化源文本里的 UTF-16 code-unit offset。
-- 范围必须是半开区间 [sourceStart, sourceEnd)，按 sourceStart 递增，且 sourceEnd 必须大于 sourceStart。
-- 优先使用自然剧情转折点，但每个 beat 要足够小，方便后续章节切分。
-- estimatedDurationSec 是该 beat 的目标视频时长，不是精确音乐或语音时间。
+beat 是后续确定性 chapter 切分算法使用的剧情颗粒，不是最终 chapter。你只输出 beat 列表；不要决定 chapter 数量、chapter 标题、镜头、分镜或最终 prompt。只输出 JSON。
+
+# 术语说明
+
+- SourceDocument / 源文档：完整归一化文本，是本任务唯一剧情依据。
+- beat：一个最小但完整的剧情推进单元，通常包含一个动作、发现、选择、关系变化、情绪转折或场景推进。
+- sourceStart/sourceEnd：该 beat 在归一化源文本里的 UTF-16 code-unit 半开区间 `[sourceStart, sourceEnd)`。
+- estimatedDurationSec：这个 beat 转成视频后的合理屏幕时长估计，不是字幕、语音、音乐或模型生成的精确时长。
+- persistentFactsIntroduced：这个 beat 结束后仍然成立、会影响后续连续性的事实。
+
+# 事实来源
+
+- 归一化源文本是唯一事实来源。
+- checksum 只用于确认当前源文本版本，不得写入输出。
+- 不得补写源文本没有的剧情、人物、地点、动机或结局。
+
+# 工作规则
+
+- beats 必须按 sourceStart 从小到大排列，范围不得重叠。
+- beat 范围应覆盖所有有叙事意义的源文本；只允许忽略纯格式、空白或无剧情作用的装饰性文字。
+- 优先在自然剧情转折点切 beat：新行动开始、信息被揭示、情绪改变、关系改变、场景切换、目标改变或风险升级。
+- 不要按固定字数机械切分，也不要把整段长剧情塞进一个 beat。
+- 通常每个 beat 估计 15-45 秒；复杂动作或长对白最多尽量控制在 60 秒以内。超过 60 秒时应在自然转折处拆成多个 beat。
+- 单个 beat 不能超过后续 chapter 硬上限：120 秒或 3,600 个 UTF-16 code-unit 源文本长度。
+- 太短但没有独立剧情变化的句子可以并入相邻 beat。
+- persistentFactsIntroduced 只写后续仍需记住的事实；不要写瞬时动作、气氛形容或镜头语言。
+- 本任务不输出 chapter。系统代码会根据 beat 时长、source 范围和事件台账，把相邻 beats 合并为 120 秒以内的 chapter。
+
+# 输入
 
 源文本 checksum：
 {{source_checksum}}
 
 归一化源文本：
 {{source_document}}
+
+# 输出 Schema
+
+只返回 JSON，不要 markdown，不要解释。
+
+{
+  "beats": [
+    {
+      "beatId": "beat_001",
+      "title": "短标题",
+      "summary": "这个 beat 中发生的剧情推进或状态变化",
+      "sourceStart": 0,
+      "sourceEnd": 10,
+      "estimatedDurationSec": 30,
+      "persistentFactsIntroduced": [
+        "这个 beat 结束后仍然成立的事实；没有则输出空数组"
+      ]
+    }
+  ]
+}
+
+# 自检
+
+- beats 是否按 sourceStart 递增且不重叠。
+- 每个 sourceEnd 是否大于 sourceStart，且都是 UTF-16 code-unit offset。
+- 是否覆盖了所有有叙事意义的源文本。
+- 是否在自然剧情转折点切 beat，而不是按固定字数机械切分。
+- 是否没有输出 chapter、shot、分镜或 prompt。
+- 每个 beat 的 estimatedDurationSec 是否合理，且没有超过 120 秒硬上限。
+- persistentFactsIntroduced 是否只包含后续仍然成立的事实。
+- 是否严格只输出 JSON。

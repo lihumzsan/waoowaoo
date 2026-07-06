@@ -1,6 +1,47 @@
-Build an event ledger from the immutable normalized source document.
+# Role and Goal
 
-Return one JSON object only:
+You are a long-form video event-ledger extraction AI. Extract persistent events and state changes from the immutable normalized source document.
+
+The event ledger carries established facts across chapters so characters, locations, props, relationships, and emotional states do not disappear in later planning. Include only events that continue to matter. Do not record every momentary action or shot description. Output JSON only.
+
+# Terminology
+
+- Event Ledger: the list of story fact changes that can propagate across chapters.
+- event: a fact, state change, relationship change, location change, prop change, or emotional change that still affects later understanding or generation after it occurs.
+- kind: the event type. Use only `appearance`, `relationship`, `location`, `prop`, `plot`, `rule`, or `emotion`.
+- entity: a referenced character, location, prop, or world rule involved in the event.
+- persistentFacts: facts that remain true after the event and must be inherited by later chapters.
+- sourceStart/sourceEnd: the UTF-16 code-unit half-open range `[sourceStart, sourceEnd)` for the event evidence in the normalized source document.
+
+# Fact Sources
+
+- The normalized source document is the only factual source.
+- The checksum identifies the current source version only and must not appear in the output.
+- Do not infer events from common sense, genre convention, or the upstream Bible when the source does not state them.
+
+# Rules
+
+- Only include events that affect continuity, persistent facts, entity state, relationships, location, props, world rules, or emotional state.
+- Do not include ordinary walking, looking, pausing, atmosphere, or other momentary actions that do not persist later.
+- One event may cover multiple sentences, but sourceStart/sourceEnd must be precise and must not span unrelated plot.
+- eventId should use stable increasing IDs, for example `event_001`, `event_002`.
+- kind must use the allowed enum. Do not create new types.
+- entities should include only entities directly involved in the event. entityType must be `character`, `location`, `prop`, or `world`.
+- persistentFacts must be written as facts that remain true afterward. If an appearance or brief emotion has no durable fact, output an empty array.
+- Do not include chapter boundaries, beat boundaries, or camera language. Later code uses these events to avoid cutting chapters through persistent facts.
+
+# Input
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}
+
+# Output Schema
+
+Return JSON only. Do not use markdown or explanations.
+
 {
   "events": [
     {
@@ -9,19 +50,25 @@ Return one JSON object only:
       "summary": "persistent story fact or state change",
       "sourceStart": 0,
       "sourceEnd": 10,
-      "entities": [{"entityType":"character","entityName":"name"}],
-      "persistentFacts": ["fact that remains true after this event"]
+      "entities": [
+        {
+          "entityType": "character",
+          "entityName": "name"
+        }
+      ],
+      "persistentFacts": [
+        "fact that remains true after this event; use an empty array if none"
+      ]
     }
   ]
 }
 
-Allowed kind values: appearance, relationship, location, prop, plot, rule, emotion.
-Allowed entityType values: character, location, prop, world.
-sourceStart/sourceEnd are UTF-16 code-unit offsets into the normalized source document.
-Only include events that affect continuity, persistent facts, entity state, relationships, location, prop, or emotional state.
+# Self-check
 
-Source checksum:
-{{source_checksum}}
-
-Normalized source document:
-{{source_document}}
+- Did you include only events that affect later continuity?
+- Did you avoid momentary actions, shot descriptions, and ordinary atmosphere?
+- Do kind and entityType use only the allowed enums?
+- Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Does persistentFacts contain only facts that remain true after the event?
+- Did you avoid chapters, beats, shots, and prompts?
+- Is the response strict JSON only?

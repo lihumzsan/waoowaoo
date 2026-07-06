@@ -1,6 +1,47 @@
-Extract an emotional curve for long-form video planning from the immutable normalized source document.
+# Role and Goal
 
-Return one JSON object only:
+You are a long-form video emotional-curve extraction AI. Extract emotional spans and music-policy tendencies for this episode from the immutable normalized source document.
+
+The emotional curve supports later music, pacing, and per-chapter atmosphere planning. It is not the final music score, not a per-cue composition sheet, and not shot-level sound design. Output JSON only.
+
+# Terminology
+
+- emotional cue: a span of text with a dominant emotional or pacing tendency.
+- mood: a short emotional label, such as "suppressed doubt", "brief relief", or "danger approaching".
+- intensity: a number from 0 to 1. 0 means extremely weak or nearly no emotional pressure; 1 means maximum intensity.
+- musicPolicy: the music tendency for the span. Use only `none`, `underscore`, `theme`, or `transition`.
+- note: an optional reason explaining why the span fits that music policy.
+- sourceStart/sourceEnd: the UTF-16 code-unit half-open range `[sourceStart, sourceEnd)` for the cue evidence in the normalized source document.
+
+# Fact Sources
+
+- The normalized source document is the only factual source.
+- The checksum identifies the current source version only and must not appear in the output.
+- Do not add music styles, instruments, melodies, lyrics, or specific tracks that the source does not support.
+
+# Rules
+
+- cues must be ordered by sourceStart.
+- A cue range should represent a span with relatively stable emotion or pacing. Do not create one cue for every sentence.
+- Use `none` when the text is mostly dialogue, information delivery, quiet observation, or a place where music should likely be absent.
+- `underscore` means low-presence atmospheric support; `theme` means a thematic or character/concept motif; `transition` means a section shift, emotional turn, or chapter bridge.
+- intensity must match risk, conflict, emotional pressure, and action intensity in the source. Do not make every cue high intensity.
+- note should briefly explain the grounding when useful and may be omitted when unnecessary.
+- Do not write exact seconds, music duration, model windows, audio filenames, or mixing instructions.
+- Do not output chapters, beats, shots, a music cue sheet, or final music prompts.
+
+# Input
+
+Source checksum:
+{{source_checksum}}
+
+Normalized source document:
+{{source_document}}
+
+# Output Schema
+
+Return JSON only. Do not use markdown or explanations.
+
 {
   "cues": [
     {
@@ -15,14 +56,12 @@ Return one JSON object only:
   ]
 }
 
-Allowed musicPolicy values: none, underscore, theme, transition.
-Rules:
-- sourceStart/sourceEnd are UTF-16 code-unit offsets into the normalized source document.
-- This is a planning curve only. Do not promise exact music timing.
-- Use none where music should likely be absent.
+# Self-check
 
-Source checksum:
-{{source_checksum}}
-
-Normalized source document:
-{{source_document}}
+- Are cues ordered by sourceStart?
+- Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Does musicPolicy use only `none`, `underscore`, `theme`, or `transition`?
+- Is intensity between 0 and 1 and grounded in the source emotion?
+- Did you use `none` where music should likely be absent?
+- Did you avoid instruments, lyrics, specific tracks, exact music duration, and mixing instructions?
+- Is the response strict JSON only?
