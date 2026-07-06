@@ -12,6 +12,7 @@ const authMock = vi.hoisted(() => ({
 
 const prismaMock = vi.hoisted(() => ({
   projectLocation: {
+    findFirst: vi.fn(async () => null),
     create: vi.fn(async () => ({ id: 'location-1' })),
     findUnique: vi.fn(async () => ({ id: 'location-1', images: [] })),
   },

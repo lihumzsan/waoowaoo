@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
@@ -37,11 +38,12 @@ import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
-import { createTaskBatchKey } from '@/lib/task/batch'
+import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
 import { compensateSubmittedTasks } from '@/lib/operations/planning'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
@@ -81,7 +83,7 @@ const replanChapterInputSchema = z.object({
 
 const planChaptersInputSchema = z.object({
   ...confirmedInputFields,
-  chapterIds: z.array(z.string().trim().min(1)).min(1).optional(),
+  chapterIds: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
   videoRatio: editScriptVideoRatioSchema.optional(),
 }).passthrough()
 
@@ -309,9 +311,19 @@ async function resolvePlanChaptersTargets(input: {
   readonly episodeId: string
   readonly chapterIds?: readonly string[]
 }): Promise<readonly { readonly id: string; readonly chapterIndex: number }[]> {
-  const [editBible, chapters] = await Promise.all([
+  const [editBible, chapters, editScripts] = await Promise.all([
     readEpisodeEditBible({ projectId: input.projectId, episodeId: input.episodeId }),
     readEpisodeEditChapters({ projectId: input.projectId, episodeId: input.episodeId }),
+    prisma.projectEditScript.findMany({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+      },
+      select: {
+        chapterId: true,
+        status: true,
+      },
+    }),
   ])
   if (!editBible) throw new Error(`EDIT_BIBLE_REQUIRED:${input.episodeId}`)
   if (editBible.status !== 'confirmed') {
@@ -320,17 +332,24 @@ async function resolvePlanChaptersTargets(input: {
   if (!editBible.styleBible) {
     throw new Error(`EDIT_BIBLE_STYLE_BIBLE_REQUIRED:${editBible.id}`)
   }
+  const readyScriptChapterIds = new Set(editScripts
+    .filter((script) => script.status === 'ready' || script.status === 'completed')
+    .map((script) => script.chapterId)
+    .filter((chapterId): chapterId is string => Boolean(chapterId)))
   const selectedIds = input.chapterIds ? new Set(input.chapterIds) : null
   const targets = chapters
     .filter((chapter) => !selectedIds || selectedIds.has(chapter.id))
+    .filter((chapter) => selectedIds || !readyScriptChapterIds.has(chapter.id))
     .map((chapter) => ({ id: chapter.id, chapterIndex: chapter.chapterIndex }))
-  if (targets.length === 0) {
-    throw new Error(`EDIT_CHAPTERS_REQUIRED:${input.episodeId}`)
-  }
   if (selectedIds && targets.length !== selectedIds.size) {
-    const foundIds = new Set(targets.map((chapter) => chapter.id))
+    const foundIds = new Set(chapters.map((chapter) => chapter.id))
     const missingIds = Array.from(selectedIds).filter((chapterId) => !foundIds.has(chapterId))
-    throw new Error(`EDIT_CHAPTERS_NOT_FOUND:${missingIds.join(',')}`)
+    if (missingIds.length > 0) {
+      throw new Error(`EDIT_CHAPTERS_NOT_FOUND:${missingIds.join(',')}`)
+    }
+  }
+  if (targets.length === 0) {
+    throw new Error(`EDIT_CHAPTERS_ALREADY_PLANNED:${input.episodeId}`)
   }
   return targets
 }
@@ -557,6 +576,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           chapterId: input.chapterId,
         })
+        const batchKey = await readLatestFailedTaskBatchKeyForTarget({
+          projectId: ctx.projectId,
+          episodeId,
+          type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+          targetType: 'ProjectEditChapter',
+          targetId: input.chapterId,
+        })
         const result = await submitProjectEditScriptGenerationTask({
           request: ctx.request,
           projectId: ctx.projectId,
@@ -567,6 +593,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           source: ctx.source,
           confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
+          batchKey,
+          operationId: 'replan_chapter',
         })
 
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -596,7 +624,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将为本集所有选中章节批量提交核心剪辑计划任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
       inputSchema: planChaptersInputSchema,
       outputSchema: planChaptersOutputSchema,
       execute: async (ctx, input: PlanChaptersInput) => {

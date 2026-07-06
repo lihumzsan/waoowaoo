@@ -71,7 +71,8 @@ model LocationImage {
   previousDescription String? // 上一次的描述词（用于撤回）
   imageMediaId        String?
   imageMedia          MediaObject?             @relation("LocationImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
-  location            ProjectLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location            ProjectLocation   @relation("LocationImages", fields: [locationId], references: [id], onDelete: Cascade)
+  selectedByLocations ProjectLocation[] @relation("SelectedLocationImage")
 
   @@unique([locationId, imageIndex])
   @@index([locationId])
@@ -93,6 +94,7 @@ model ProjectCharacter {
   appearances             CharacterAppearance[]
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, name])
   @@index([projectId])
   @@map("project_characters")
 }
@@ -102,13 +104,18 @@ model ProjectLocation {
   projectId               String
   name                    String
   summary                 String? // 场景简要描述（用途/人物关联）
+  assetKind               String                @default("location")
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @default(now()) @updatedAt
   sourceGlobalLocationId  String? // 🆕 来源全局场景ID（复制时记录）
-  images                  LocationImage[]
+  selectedImageId         String?
+  selectedImage           LocationImage?        @relation("SelectedLocationImage", fields: [selectedImageId], references: [id], onDelete: SetNull)
+  images                  LocationImage[]       @relation("LocationImages")
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, assetKind, name])
   @@index([projectId])
+  @@index([selectedImageId])
   @@map("project_locations")
 }
 

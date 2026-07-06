@@ -83,6 +83,21 @@ function assertBgmMixMatchesTimeline(input: {
   }
 }
 
+function assertMusicScoreReadyForFinalRender(input: {
+  readonly musicScore: {
+    readonly status: string | null
+  } | null
+  readonly hasMix: boolean
+}): void {
+  if (!input.musicScore) return
+  if (input.musicScore.status !== 'completed') {
+    throw new Error(`FINAL_VIDEO_RENDER_BGM_NOT_READY:${input.musicScore.status ?? 'unknown'}`)
+  }
+  if (!input.hasMix) {
+    throw new Error('FINAL_VIDEO_RENDER_BGM_MIX_INVALID')
+  }
+}
+
 function extensionFromMimeType(mimeType: string): string {
   if (mimeType.includes('wav')) return 'wav'
   if (mimeType.includes('ogg')) return 'ogg'
@@ -289,9 +304,10 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       }),
     ])
     const bgmMix = readCompletedMusicScoreMix(musicScore)
-    if (musicScore?.status === 'completed' && !bgmMix) {
-      throw new Error('FINAL_VIDEO_RENDER_BGM_MIX_INVALID')
-    }
+    assertMusicScoreReadyForFinalRender({
+      musicScore,
+      hasMix: Boolean(bgmMix),
+    })
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
     assertFinalRenderClipsHaveSources({
       clips,

@@ -14,6 +14,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectEditChapter: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     findUnique: vi.fn(),
     create: vi.fn(),
   },
@@ -235,7 +236,12 @@ describe('video group planning', () => {
     vi.clearAllMocks()
     const sourceSnapshot = buildSourceSnapshot()
     prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
-    prismaMock.projectEditChapter.findFirst.mockResolvedValue({ id: 'chapter-1' })
+    prismaMock.projectEditChapter.findFirst.mockImplementation(async (query: {
+      readonly where?: {
+        readonly id?: string
+      }
+    }) => ({ id: query.where?.id ?? 'chapter-1' }))
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([{ id: 'chapter-1' }])
     prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-1' })
     prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
@@ -369,6 +375,53 @@ describe('video group planning', () => {
       }),
     }))
     expect(plan?.metadata).toEqual(expect.objectContaining({
+      chapterIds: ['chapter-1'],
+      groupVideoModel: 'google::veo-test',
+    }))
+  })
+
+  it('plans the main episode video operation for every chapter when no chapterId is provided', async () => {
+    prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([
+      { id: 'chapter-1' },
+      { id: 'chapter-2' },
+    ])
+    prismaMock.projectEditScript.findFirst.mockImplementation(async (query: {
+      readonly where?: {
+        readonly chapterId?: string
+      }
+    }) => ({
+      id: query.where?.chapterId === 'chapter-2' ? 'edit-script-2' : 'edit-script-1',
+      corePlanJson: {
+        shots: buildShots(),
+        generationSegments: [{
+          shotIds: ['shot-1', 'shot-2'],
+          continuity: 'Hero approaches the chair in one continuous room beat.',
+        }],
+      },
+    }))
+    const operation = createVideoGenerationOperations().generate_episode_videos
+    const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })
+
+    expect(plan).toBeDefined()
+    expect(plan?.tasks).toHaveLength(2)
+    expect(plan?.tasks.map((task) => task.payload)).toEqual([
+      expect.objectContaining({
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
+      }),
+      expect.objectContaining({
+        episodeId: 'episode-1',
+        chapterId: 'chapter-2',
+        shotIds: ['shot-1', 'shot-2'],
+      }),
+    ])
+    expect(plan?.metadata).toEqual(expect.objectContaining({
+      chapterIds: ['chapter-1', 'chapter-2'],
+      items: [
+        expect.objectContaining({ chapterId: 'chapter-1' }),
+        expect.objectContaining({ chapterId: 'chapter-2' }),
+      ],
       groupVideoModel: 'google::veo-test',
     }))
   })

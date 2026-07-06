@@ -204,7 +204,6 @@ describe('tool input schema compatibility', () => {
       'request_edit_style_choice',
       'request_edit_asset_review_choice',
       'request_edit_budget_confirmation_choice',
-      'plan_chapters',
       'generate_edit_script_storyboard_images',
       'generate_episode_bgm_score',
       'render_final_video',
@@ -220,6 +219,36 @@ describe('tool input schema compatibility', () => {
         additionalProperties: false,
       })
     }
+  })
+
+  it('exposes nullable chapterIds for automatic or targeted chapter planning', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.plan_chapters
+
+    expect(operation?.toolInputSchema).toEqual({
+      type: 'object',
+      properties: {
+        chapterIds: {
+          anyOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'string',
+                minLength: 1,
+              },
+              minItems: 1,
+            },
+            {
+              type: 'null',
+            },
+          ],
+          description: 'Pass exact chapterIds only when the user explicitly targets a subset. Pass null to plan every missing or failed chapter automatically.',
+        },
+      },
+      required: ['chapterIds'],
+      additionalProperties: false,
+    })
+    expect(operation?.inputSchema.safeParse({ chapterIds: null }).success).toBe(true)
   })
 
   it('accepts empty execution input for context-derived BGM generation', () => {

@@ -88,7 +88,7 @@ interface WorkspaceHeaderShellProps {
 
 function chapterStatusTone(chapter: ProjectEditChapter): string {
   if (chapter.renderStatus === 'completed') return 'bg-[var(--glass-tone-success-fg)]'
-  if (chapter.renderStatus === 'generating' || chapter.status === 'generating') return 'bg-[var(--glass-accent-from)]'
+  if (chapter.renderStatus === 'processing' || chapter.status === 'generating') return 'bg-[var(--glass-accent-from)]'
   if (chapter.renderStatus === 'failed' || chapter.status === 'failed') return 'bg-[var(--glass-tone-danger-fg)]'
   if (chapter.status === 'confirmed' || chapter.status === 'ready') return 'bg-[var(--glass-tone-info-fg)]'
   return 'bg-[var(--glass-stroke-strong)]'

@@ -34,6 +34,25 @@ function nullableStringProperty(description: string): JsonValue {
   }
 }
 
+function nullableStringArrayProperty(description: string): JsonValue {
+  return {
+    anyOf: [
+      {
+        type: 'array',
+        items: {
+          type: 'string',
+          minLength: 1,
+        },
+        minItems: 1,
+      },
+      {
+        type: 'null',
+      },
+    ],
+    description,
+  }
+}
+
 function nullableObjectProperty(description: string): JsonValue {
   return {
     anyOf: [
@@ -52,6 +71,10 @@ export const EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = c
 
 export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
+})
+
+export const EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  chapterIds: nullableStringArrayProperty('Pass exact chapterIds only when the user explicitly targets a subset. Pass null to plan every missing or failed chapter automatically.'),
 })
 
 export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({

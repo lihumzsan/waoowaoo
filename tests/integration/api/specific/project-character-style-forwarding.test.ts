@@ -12,6 +12,7 @@ const authMock = vi.hoisted(() => ({
 
 const prismaMock = vi.hoisted(() => ({
   projectCharacter: {
+    findFirst: vi.fn(async () => null),
     create: vi.fn(async () => ({ id: 'character-1' })),
     findUnique: vi.fn(async () => ({ id: 'character-1', appearances: [] })),
   },

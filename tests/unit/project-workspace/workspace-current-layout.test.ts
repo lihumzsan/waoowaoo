@@ -61,6 +61,13 @@ describe('workspace current layout', () => {
     expect(assistant).not.toContain('float-right h-14 w-14')
   })
 
+  it('uses the persisted chapter render processing status for chapter scope tones', () => {
+    const headerShell = readRepoFile('src/features/project-workspace/components/WorkspaceHeaderShell.tsx')
+
+    expect(headerShell).toContain("chapter.renderStatus === 'processing'")
+    expect(headerShell).not.toContain("chapter.renderStatus === 'generating'")
+  })
+
   it('uses native delayed browser titles for the canvas viewport controls', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
 

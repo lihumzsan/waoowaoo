@@ -11,12 +11,27 @@ function assertPositiveFiniteSeconds(value: number): void {
   }
 }
 
+function isClipPreviewModel(modelKey: string): boolean {
+  return modelKey.includes('lyria-3-clip-preview')
+}
+
+export function resolveMusicScoreMaxCueDurationSeconds(modelKey: string): number {
+  return isClipPreviewModel(modelKey)
+    ? MUSIC_SCORE_CLIP_REQUEST_SECONDS
+    : MUSIC_SCORE_MAX_CUE_DURATION_SECONDS
+}
+
 export function resolveMusicScoreRequestDurationSeconds(input: {
   readonly modelKey: string
   readonly targetDurationSeconds: number
 }): number {
   assertPositiveFiniteSeconds(input.targetDurationSeconds)
-  if (input.modelKey.includes('lyria-3-clip-preview')) return MUSIC_SCORE_CLIP_REQUEST_SECONDS
+  if (isClipPreviewModel(input.modelKey)) {
+    if (input.targetDurationSeconds > MUSIC_SCORE_CLIP_REQUEST_SECONDS) {
+      throw new Error(`MUSIC_SCORE_CUE_DURATION_EXCEEDS_LIMIT:${input.targetDurationSeconds.toFixed(3)}:${MUSIC_SCORE_CLIP_REQUEST_SECONDS.toFixed(3)}`)
+    }
+    return MUSIC_SCORE_CLIP_REQUEST_SECONDS
+  }
   if (input.targetDurationSeconds > MUSIC_SCORE_MAX_CUE_DURATION_SECONDS) {
     throw new Error(`MUSIC_SCORE_CUE_DURATION_EXCEEDS_LIMIT:${input.targetDurationSeconds.toFixed(3)}:${MUSIC_SCORE_MAX_CUE_DURATION_SECONDS.toFixed(3)}`)
   }

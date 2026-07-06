@@ -158,6 +158,9 @@ function mockReadyProject(): void {
         storageKey: 'chapter-video/chapter-1.mp4',
         durationMs: 3000,
       },
+      editScript: {
+        corePlanJson: buildCorePlan(),
+      },
     },
   ])
   prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })

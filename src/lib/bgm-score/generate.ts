@@ -14,6 +14,7 @@ import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-strea
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import {
   MUSIC_SCORE_MAX_CUE_DURATION_SECONDS,
+  resolveMusicScoreMaxCueDurationSeconds,
   resolveMusicScoreRequestDurationSeconds,
 } from '@/lib/music-score/constraints'
 import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
@@ -188,7 +189,13 @@ function pushCueWindow(
   })
 }
 
-export function buildBgmScoreCueWindows(clips: readonly FinalRenderClipPlan[]): BgmScoreCueWindow[] {
+export function buildBgmScoreCueWindows(
+  clips: readonly FinalRenderClipPlan[],
+  maxCueDurationSeconds = MUSIC_SCORE_MAX_CUE_DURATION_SECONDS,
+): BgmScoreCueWindow[] {
+  if (!Number.isFinite(maxCueDurationSeconds) || maxCueDurationSeconds <= 0) {
+    throw new Error('BGM_SCORE_MAX_CUE_DURATION_INVALID')
+  }
   const cues: BgmScoreCueWindow[] = []
   let cueStartSeconds = 0
   let cueDurationSeconds = 0
@@ -198,14 +205,14 @@ export function buildBgmScoreCueWindows(clips: readonly FinalRenderClipPlan[]): 
   for (const clip of clips) {
     let remainingClipSeconds = clip.durationSeconds
     while (remainingClipSeconds > 0) {
-      const capacitySeconds = MUSIC_SCORE_MAX_CUE_DURATION_SECONDS - cueDurationSeconds
+      const capacitySeconds = maxCueDurationSeconds - cueDurationSeconds
       const pieceSeconds = Math.min(remainingClipSeconds, capacitySeconds)
       cueClips.push(cloneClipForCue({ clip, durationSeconds: pieceSeconds }))
       cueDurationSeconds += pieceSeconds
       timelineCursorSeconds += pieceSeconds
       remainingClipSeconds -= pieceSeconds
 
-      if (cueDurationSeconds >= MUSIC_SCORE_MAX_CUE_DURATION_SECONDS - 0.001) {
+      if (cueDurationSeconds >= maxCueDurationSeconds - 0.001) {
         pushCueWindow(cues, {
           startSeconds: cueStartSeconds,
           durationSeconds: cueDurationSeconds,
@@ -455,7 +462,10 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     editScriptId = `episode:${episodeId}`
     durationSeconds = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
     signature = buildBgmTimelineSignature(clips)
-    const cueWindows = buildBgmScoreCueWindows(clips)
+    const cueWindows = buildBgmScoreCueWindows(
+      clips,
+      resolveMusicScoreMaxCueDurationSeconds(musicModel),
+    )
     if (cueWindows.length === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
 
     await writeBgmScoreProjectData({

@@ -34,4 +34,15 @@ describe('BGM score cue windows', () => {
     expect(cues[0]?.shotIds).toEqual(['shot-1', 'shot-2'])
     expect(cues[4]?.shotIds).toEqual(['shot-3'])
   })
+
+  it('uses a smaller cue window for clip music models', () => {
+    const cues = buildBgmScoreCueWindows([
+      clip({ panelId: 'chapter-1', order: 1, durationSeconds: 45, shotIds: ['shot-1'], shotNumbers: [1] }),
+      clip({ panelId: 'chapter-2', order: 2, durationSeconds: 20, shotIds: ['shot-2'], shotNumbers: [2] }),
+    ], 30)
+
+    expect(cues.map((cue) => cue.durationSeconds)).toEqual([30, 30, 5])
+    expect(cues.every((cue) => cue.durationSeconds <= 30)).toBe(true)
+    expect(cues.at(-1)?.endSeconds).toBe(65)
+  })
 })

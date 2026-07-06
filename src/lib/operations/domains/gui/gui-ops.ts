@@ -69,6 +69,50 @@ function assertNoLegacyArtStyle(input: Record<string, unknown>) {
   })
 }
 
+function isPrismaUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+}
+
+function duplicateAssetError(assetType: 'character' | 'location', name: string): ApiError {
+  return new ApiError('CONFLICT', {
+    code: assetType === 'character'
+      ? 'PROJECT_CHARACTER_NAME_CONFLICT'
+      : 'PROJECT_LOCATION_NAME_CONFLICT',
+    field: 'name',
+    message: `${assetType === 'character' ? 'Character' : 'Location'} already exists in this project: ${name}`,
+  })
+}
+
+async function assertProjectCharacterNameAvailable(input: {
+  readonly projectId: string
+  readonly name: string
+}): Promise<void> {
+  const existing = await prisma.projectCharacter.findFirst({
+    where: {
+      projectId: input.projectId,
+      name: input.name,
+    },
+    select: { id: true },
+  })
+  if (existing) throw duplicateAssetError('character', input.name)
+}
+
+async function assertProjectLocationNameAvailable(input: {
+  readonly projectId: string
+  readonly name: string
+  readonly assetKind: string
+}): Promise<void> {
+  const existing = await prisma.projectLocation.findFirst({
+    where: {
+      projectId: input.projectId,
+      assetKind: input.assetKind,
+      name: input.name,
+    },
+    select: { id: true },
+  })
+  if (existing) throw duplicateAssetError('location', input.name)
+}
+
 export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
   return {
     create_character: defineOperation({
@@ -113,6 +157,10 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         if (!name) {
           throw new ApiError('INVALID_PARAMS')
         }
+        await assertProjectCharacterNameAvailable({
+          projectId: ctx.projectId,
+          name,
+        })
 
         let allReferenceImages: string[] = []
         if (referenceImageUrls.length > 0) {
@@ -127,6 +175,9 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
             name,
             aliases: null,
           },
+        }).catch((error: unknown) => {
+          if (isPrismaUniqueConstraintError(error)) throw duplicateAssetError('character', name)
+          throw error
         })
 
         const descText = description || `${name} 的角色设定`
@@ -509,12 +560,22 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const cleanDescription = removeLocationPromptSuffix(description.trim())
+        const assetKind = 'location'
+        await assertProjectLocationNameAvailable({
+          projectId: ctx.projectId,
+          name: name.trim(),
+          assetKind,
+        })
         const location = await prisma.projectLocation.create({
           data: {
             projectId: ctx.projectId,
             name: name.trim(),
+            assetKind,
             summary: summary || null,
           },
+        }).catch((error: unknown) => {
+          if (isPrismaUniqueConstraintError(error)) throw duplicateAssetError('location', name.trim())
+          throw error
         })
 
         await prisma.locationImage.createMany({

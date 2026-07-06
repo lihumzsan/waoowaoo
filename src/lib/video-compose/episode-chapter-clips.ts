@@ -2,16 +2,16 @@ import { prisma } from '@/lib/prisma'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import type { FinalRenderClipPlan } from './final-render-plan'
 
-function readChapterShotRefs(corePlanJson: unknown): {
+function readChapterShotRefs(input: {
+  readonly chapterId: string
+  readonly corePlanJson: unknown
+}): {
   readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
 } {
-  const parsed = editScriptStructureSchema.safeParse(corePlanJson)
+  const parsed = editScriptStructureSchema.safeParse(input.corePlanJson)
   if (!parsed.success) {
-    return {
-      shotIds: [],
-      shotNumbers: [],
-    }
+    throw new Error(`EPISODE_CHAPTER_EDIT_SCRIPT_INVALID:${input.chapterId}`)
   }
   return {
     shotIds: parsed.data.shots.map((shot) => shot.shotId),
@@ -52,7 +52,10 @@ export async function loadEpisodeChapterOutputClips(input: {
     if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
       throw new Error(`EPISODE_CHAPTER_DURATION_REQUIRED:${chapter.id}`)
     }
-    const shotRefs = readChapterShotRefs(chapter.editScript?.corePlanJson ?? null)
+    const shotRefs = readChapterShotRefs({
+      chapterId: chapter.id,
+      corePlanJson: chapter.editScript?.corePlanJson ?? null,
+    })
     return {
       panelId: chapter.id,
       groupId: null,

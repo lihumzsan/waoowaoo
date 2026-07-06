@@ -1,4 +1,5 @@
 import { TASK_TYPE } from '@/lib/task/types'
+import { prisma } from '@/lib/prisma'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
@@ -10,6 +11,28 @@ import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, pa
 
 function hasExistingVideoOutput(metadata: PlannedVideoGroupTaskMetadata): boolean {
   return Boolean(normalizeString(metadata.previous?.videoUrl) || normalizeString(metadata.previous?.videoMediaId))
+}
+
+async function resolveEpisodeVideoPlanningChapterIds(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly chapterId?: string
+}): Promise<readonly string[]> {
+  if (input.chapterId) {
+    return [await resolveEditChapterId(input.episodeId, input.chapterId)]
+  }
+  const chapters = await prisma.projectEditChapter.findMany({
+    where: {
+      episodeId: input.episodeId,
+      episode: {
+        projectId: input.projectId,
+      },
+    },
+    orderBy: { chapterIndex: 'asc' },
+    select: { id: true },
+  })
+  if (chapters.length === 0) throw new Error(`PROJECT_AGENT_EDIT_CHAPTERS_REQUIRED:${input.episodeId}`)
+  return chapters.map((chapter) => chapter.id)
 }
 
 export async function executeGenerateEpisodeVideosAutoOperation(params: {
@@ -37,22 +60,21 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const chapterId = await resolveEditChapterId(episodeId, normalizeString(params.input.chapterId))
+  const chapterIds = await resolveEpisodeVideoPlanningChapterIds({
+    projectId: params.ctx.projectId,
+    episodeId,
+    chapterId: normalizeString(params.input.chapterId),
+  })
 
   const groupVideoModel = await resolveSystemModelKey({
     userId: params.ctx.userId,
     projectId: params.ctx.projectId,
     purpose: 'sequence-video',
   })
-  const planned = await buildEpisodeGenerationSegmentVideoPlan({
-    ctx: params.ctx,
-    episodeId,
-    chapterId,
-  })
-
   const tasks: PlannedTask[] = []
   const items: Array<{
     readonly planTaskId: string
+    readonly chapterId: string
     readonly kind: GenerationSegmentVideoPlanItem['kind']
     readonly refId: string
     readonly taskType: typeof TASK_TYPE.VIDEO_GROUP
@@ -61,34 +83,51 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     readonly durationSec?: number
   }> = []
   const videoGroups: PlannedVideoGroupTaskMetadata[] = []
+  const generationSegmentItems: Array<GenerationSegmentVideoPlanItem & {
+    readonly chapterId: string
+  }> = []
 
-  for (const item of planned.plan.items) {
-    if (!item.gridMode) throw new Error('PROJECT_AGENT_AUTO_VIDEO_GROUP_GRID_MODE_REQUIRED')
-    const groupPlan = await planVideoGroupTask({
+  for (const chapterId of chapterIds) {
+    const planned = await buildEpisodeGenerationSegmentVideoPlan({
       ctx: params.ctx,
-      input: {
-        confirmed: params.input.confirmed,
-        confirmedMaxCost: params.input.confirmedMaxCost,
-        generationOptions: params.input.generationOptions,
-      },
-      operationId: params.operationId,
       episodeId,
       chapterId,
-      gridMode: item.gridMode,
-      shotIds: item.shotIds,
     })
-    if (hasExistingVideoOutput(groupPlan.metadata)) continue
-    tasks.push(groupPlan.task)
-    videoGroups.push(groupPlan.metadata)
-    items.push({
-      planTaskId: groupPlan.task.id,
-      refId: groupPlan.metadata.groupId,
-      taskType: TASK_TYPE.VIDEO_GROUP,
-      targetType: 'ProjectVideoGroup',
-      kind: 'group',
-      shotIds: [...groupPlan.metadata.shotIds],
-      durationSec: groupPlan.metadata.durationSec,
-    })
+    generationSegmentItems.push(...planned.plan.items.map((item) => ({
+      ...item,
+      shotIds: [...item.shotIds],
+      chapterId,
+    })))
+
+    for (const item of planned.plan.items) {
+      if (!item.gridMode) throw new Error('PROJECT_AGENT_AUTO_VIDEO_GROUP_GRID_MODE_REQUIRED')
+      const groupPlan = await planVideoGroupTask({
+        ctx: params.ctx,
+        input: {
+          confirmed: params.input.confirmed,
+          confirmedMaxCost: params.input.confirmedMaxCost,
+          generationOptions: params.input.generationOptions,
+        },
+        operationId: params.operationId,
+        episodeId,
+        chapterId,
+        gridMode: item.gridMode,
+        shotIds: item.shotIds,
+      })
+      if (hasExistingVideoOutput(groupPlan.metadata)) continue
+      tasks.push(groupPlan.task)
+      videoGroups.push(groupPlan.metadata)
+      items.push({
+        planTaskId: groupPlan.task.id,
+        chapterId,
+        refId: groupPlan.metadata.groupId,
+        taskType: TASK_TYPE.VIDEO_GROUP,
+        targetType: 'ProjectVideoGroup',
+        kind: 'group',
+        shotIds: [...groupPlan.metadata.shotIds],
+        durationSec: groupPlan.metadata.durationSec,
+      })
+    }
   }
 
   return {
@@ -99,13 +138,10 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     tasks,
     metadata: {
       episodeId,
-      chapterId,
+      chapterIds: [...chapterIds],
       items,
       videoGroups,
-      generationSegmentItems: planned.plan.items.map((item) => ({
-        ...item,
-        shotIds: [...item.shotIds],
-      })),
+      generationSegmentItems,
       groupVideoModel,
     },
   }

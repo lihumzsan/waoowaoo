@@ -244,6 +244,8 @@ export async function submitProjectEditScriptGenerationTask(input: {
   readonly source: string
   readonly confirmed: boolean
   readonly locale: Locale
+  readonly batchKey?: string | null
+  readonly operationId?: 'generate_edit_script' | 'replan_chapter'
 }): Promise<EditScriptTaskSubmitResult> {
   const target = await resolveEditScriptTaskTarget({
     projectId: input.projectId,
@@ -267,7 +269,7 @@ export async function submitProjectEditScriptGenerationTask(input: {
     type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
     targetType: 'ProjectEditChapter',
     targetId: target.chapterId,
-    operationId: 'generate_edit_script',
+    operationId: input.operationId ?? 'generate_edit_script',
     source: input.source,
     confirmed: input.confirmed,
     payload: await buildEditFirstTextTaskPayload({
@@ -281,6 +283,7 @@ export async function submitProjectEditScriptGenerationTask(input: {
       },
     }),
     dedupeKey,
+    batchKey: input.batchKey ?? undefined,
     locale: input.locale,
   })
 

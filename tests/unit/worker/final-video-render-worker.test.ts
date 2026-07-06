@@ -156,9 +156,9 @@ function buildDefaultChapterTimelineSignature(): string {
       durationSeconds: 3,
       order: 1,
       shotNumber: null,
-      shotNumbers: [],
+      shotNumbers: [1],
       shotId: null,
-      shotIds: [],
+      shotIds: ['shot-1'],
       description: 'Chapter 1\nA rendered test chapter.',
       sound: null,
     },
@@ -234,6 +234,9 @@ describe('final video render worker', () => {
           storageKey: 'chapter-video/chapter-1.mp4',
           durationMs: 3000,
         },
+        editScript: {
+          corePlanJson: buildCorePlan(),
+        },
       },
     ])
     prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })
@@ -300,6 +303,9 @@ describe('final video render worker', () => {
         targetDurationSec: 3,
         renderStatus: 'completed',
         outputMedia: null,
+        editScript: {
+          corePlanJson: buildCorePlan(),
+        },
       },
     ])
     const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
@@ -334,6 +340,9 @@ describe('final video render worker', () => {
         outputMedia: {
           storageKey: 'chapter-video/chapter-1.mp4',
           durationMs: 3000,
+        },
+        editScript: {
+          corePlanJson: buildCorePlan(),
         },
       },
     ])
@@ -382,6 +391,52 @@ describe('final video render worker', () => {
       .map((call) => (call[1] as readonly string[]).join(' '))
     expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-16.000'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('sidechaincompress'))).toBe(false)
+  })
+
+  it('fails explicitly when chapter edit script structure is invalid', async () => {
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([
+      {
+        id: 'chapter-1',
+        chapterIndex: 0,
+        title: 'Chapter 1',
+        summary: 'A rendered test chapter.',
+        targetDurationSec: 3,
+        renderStatus: 'completed',
+        outputMedia: {
+          storageKey: 'chapter-video/chapter-1.mp4',
+          durationMs: 3000,
+        },
+        editScript: {
+          corePlanJson: { invalid: true },
+        },
+      },
+    ])
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    await expect(handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))).rejects.toThrow('EPISODE_CHAPTER_EDIT_SCRIPT_INVALID:chapter-1')
+
+    expect(storageMock.uploadObject).not.toHaveBeenCalled()
+  })
+
+  it('fails explicitly instead of rendering without BGM while BGM is generating', async () => {
+    prismaMock.projectEditMusicScore.findUnique.mockResolvedValue({
+      status: 'generating',
+      timelineSignature: buildDefaultChapterTimelineSignature(),
+      mixJson: null,
+    })
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    await expect(handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))).rejects.toThrow('FINAL_VIDEO_RENDER_BGM_NOT_READY:generating')
+
+    expect(storageMock.uploadObject).not.toHaveBeenCalled()
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { episodeId: 'episode-1' },
+      update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
+    }))
   })
 
   it('mixes preserved source audio with normalized ducked BGM for final renders', async () => {
