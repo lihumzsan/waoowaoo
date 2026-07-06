@@ -127,8 +127,9 @@ model ProjectEpisode {
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   storyboards             ProjectStoryboard[]
+  musicScore              ProjectEditMusicScore?
   finalOutput             ProjectEpisodeFinalOutput?
-  editScreenplay          ProjectEditScreenplay?
+  editBible          ProjectEditBible?
   editStylePreviews       ProjectEditStylePreview[]
   editScript              ProjectEditScript?
   editShotExecutionPlan   ProjectEditShotExecutionPlan?
@@ -141,13 +142,13 @@ model ProjectEpisode {
   @@map("project_episodes")
 }
 
-model ProjectEditScreenplay {
+model ProjectEditBible {
   id             String         @id @default(uuid())
   projectId      String
   episodeId      String         @unique
   userPrompt     String
   styleBibleJson Json?
-  screenplayText String
+  bibleText String
   status         String         @default("ready")
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @default(now()) @updatedAt
@@ -158,14 +159,14 @@ model ProjectEditScreenplay {
 
   @@index([projectId])
   @@index([episodeId])
-  @@map("project_edit_screenplays")
+  @@map("project_edit_bibles")
 }
 
 model ProjectEditStylePreview {
   id               String                @id @default(uuid())
   projectId        String
   episodeId        String
-  editScreenplayId String
+  editBibleId String
   styleKey         String
   aspectRatio      String
   title            String
@@ -180,12 +181,12 @@ model ProjectEditStylePreview {
   updatedAt        DateTime              @default(now()) @updatedAt
   project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode          ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScreenplay   ProjectEditScreenplay @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+  editBible   ProjectEditBible @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
 
-  @@unique([editScreenplayId, styleKey])
+  @@unique([editBibleId, styleKey])
   @@index([projectId])
   @@index([episodeId])
-  @@index([editScreenplayId])
+  @@index([editBibleId])
   @@index([taskId])
   @@map("project_edit_style_previews")
 }
@@ -194,7 +195,7 @@ model ProjectEditScript {
   id             String                         @id @default(uuid())
   projectId      String
   episodeId      String                         @unique
-  editScreenplayId String                       @unique
+  editBibleId String                       @unique
   corePlanJson  Json?
   durationSec    Int
   shotCount      Int
@@ -204,14 +205,14 @@ model ProjectEditScript {
   updatedAt      DateTime                       @default(now()) @updatedAt
   project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScreenplay ProjectEditScreenplay          @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+  editBible ProjectEditBible          @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
   shotExecutionPlan ProjectEditShotExecutionPlan?
   requirements   ProjectEditAssetRequirement[]
   storyboard      ProjectStoryboard?
 
   @@index([projectId])
   @@index([episodeId])
-  @@index([editScreenplayId])
+  @@index([editBibleId])
   @@map("project_edit_scripts")
 }
 
@@ -263,7 +264,6 @@ model ProjectEditAssetRequirement {
 model ProjectEpisodeFinalOutput {
   id            String         @id @default(uuid())
   episodeId     String         @unique
-  bgmScoreJson  Json?
   renderStatus  String?
   renderTaskId  String?
   outputUrl     String?
@@ -275,6 +275,26 @@ model ProjectEpisodeFinalOutput {
 
   @@index([outputMediaId])
   @@map("project_episode_final_outputs")
+}
+
+model ProjectEditMusicScore {
+  id                String         @id @default(uuid())
+  episodeId         String         @unique
+  cuesJson          Json?
+  mixJson           Json?
+  diagnosticsJson   Json?
+  version           Int            @default(1)
+  status            String         @default("pending")
+  taskId            String?
+  timelineSignature String?
+  musicModel        String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId])
+  @@index([taskId])
+  @@map("project_edit_music_scores")
 }
 
 model ProjectVideoGroup {
@@ -420,7 +440,7 @@ model Project {
   episodes           ProjectEpisode[]
   characters         ProjectCharacter[]
   locations          ProjectLocation[]
-  editScreenplays    ProjectEditScreenplay[]
+  editBibles    ProjectEditBible[]
   editStylePreviews  ProjectEditStylePreview[]
   editScripts        ProjectEditScript[]
   editShotExecutionPlans ProjectEditShotExecutionPlan[]

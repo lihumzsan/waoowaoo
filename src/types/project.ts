@@ -159,7 +159,7 @@ export interface ProjectPanel {
   videoErrorMessage?: string | null
   lastVideoGenerationOptions?: ProjectVideoGenerationOptions | null
   videoMedia?: MediaRef | null
-  sourceShotNumber?: number | null
+  sourceShotId?: string | null
   sourceGenerationSegmentId?: string | null
   executionSnapshotJson?: unknown | null
   renderFactsJson?: unknown | null
@@ -173,6 +173,7 @@ export interface ProjectPanel {
 export interface ProjectStoryboard {
   id: string
   episodeId: string
+  chapterId?: string
   editScriptId: string | null
   createdAt?: string | Date
   updatedAt?: string | Date
@@ -189,6 +190,7 @@ export type ProjectEditAssetKind = 'character' | 'location'
 export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'failed'
 
 export interface ProjectEditScriptShot {
+  shotId: string
   shotNumber: number
   durationSec: number
   scene: { name: string }
@@ -211,7 +213,7 @@ export interface ProjectEditAssetRequirement {
   kind: ProjectEditAssetKind
   name: string
   description: string
-  shotNumbers: number[]
+  shotIds: string[]
   status: ProjectEditAssetStatus
   targetId: string | null
   taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
@@ -225,22 +227,49 @@ export interface ProjectEditAssetRequirement {
   spatialProfileModel?: string | null
 }
 
-export interface ProjectEditScreenplay {
+export interface ProjectEditBible {
   id: string
   projectId: string
   episodeId: string
-  userPrompt: string
+  sourceDocumentId?: string
+  version?: number
+  status: string
+  lockedAt?: string | Date | null
+  bible?: unknown | null
+  beatSheet?: unknown | null
+  ledger?: unknown | null
+  emotionalCurve?: unknown | null
+  diagnostics?: unknown | null
   styleBible?: unknown
   stylePreviews?: ProjectEditStylePreview[]
-  screenplayText: string
+  textPreview?: string | null
+  bibleText?: string | null
+  userPrompt?: string
+  chapters?: ProjectEditChapter[]
+  createdAt?: string | Date
+  updatedAt?: string | Date
+}
+
+export interface ProjectEditChapter {
+  id: string
+  chapterIndex: number
+  title: string
+  summary: string
+  sourceStart: number
+  sourceEnd: number
+  targetDurationSec: number
+  beatIds: string[]
+  eventIds: string[]
   status: string
+  renderStatus?: string | null
+  outputMediaId?: string | null
 }
 
 export interface ProjectEditStylePreview {
   id: string
   projectId: string
   episodeId: string
-  screenplayId: string
+  bibleId?: string
   styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
   aspectRatio: '9:16' | '16:9' | '21:9'
   title: string
@@ -258,9 +287,11 @@ export interface ProjectEditShotExecutionPlan {
   id: string
   projectId: string
   episodeId: string
+  chapterId?: string
   editScriptId: string
   status: string
   shots: {
+    shotId: string
     shotNumber: number
     camera: {
       shotScale: string
@@ -293,17 +324,27 @@ export interface ProjectEditShotExecutionPlan {
       }>
       spatialNote: string
     }
+    videoPrompt: string
   }[]
+  generationSegmentExecutions?: Array<{
+    shotIds: string[]
+    continuousVideoPrompt: string
+  }>
 }
 
 export interface ProjectEditScript {
   id: string
   projectId: string
   episodeId: string
-  screenplayId?: string
+  chapterId?: string
+  bibleId?: string
+  sourceDocumentId?: string
+  sourceStart?: number
+  sourceEnd?: number
   userPrompt?: string
   styleBible?: unknown
-  screenplayText?: string | null
+  sourceText?: string | null
+  bibleText?: string | null
   durationSec: number
   shotCount: number
   status: string
@@ -314,13 +355,13 @@ export interface ProjectEditScript {
 }
 
 export interface ProjectEditScriptGenerationSegment {
-  shotNumbers: number[]
+  shotIds: string[]
   continuity: string
 }
 
-export type ProjectBgmScoreStatus = 'pending' | 'generating' | 'completed' | 'failed'
+export type ProjectMusicScoreStatus = 'pending' | 'generating' | 'completed' | 'failed'
 
-export interface ProjectBgmScoreTimedTextSection {
+export interface ProjectMusicScoreTimedTextSection {
   category?: string | null
   title: string
   purpose?: string | null
@@ -329,13 +370,13 @@ export interface ProjectBgmScoreTimedTextSection {
   content: string
 }
 
-export interface ProjectBgmScoreVirtualLayer {
+export interface ProjectMusicScoreVirtualLayer {
   name: string
   purpose: string
   content: string
 }
 
-export interface ProjectBgmScorePlan {
+export interface ProjectMusicScorePlan {
   durationSeconds: number
   creativeBrief: {
     cueType: string
@@ -345,22 +386,23 @@ export interface ProjectBgmScorePlan {
   }
   scoreDesign: {
     overview: string
-    sections: ProjectBgmScoreTimedTextSection[]
+    sections: ProjectMusicScoreTimedTextSection[]
   }
-  virtualLayers: ProjectBgmScoreVirtualLayer[]
-  promptSections: ProjectBgmScoreTimedTextSection[]
+  virtualLayers: ProjectMusicScoreVirtualLayer[]
+  promptSections: ProjectMusicScoreTimedTextSection[]
   finalPrompt: string
 }
 
-export interface ProjectBgmScore {
-  schemaVersion: number
-  status: ProjectBgmScoreStatus
-  taskId: string
-  editScriptId: string
-  timelineSignature: string
-  durationSeconds: number
-  musicModel: string
-  plan?: ProjectBgmScorePlan
+export interface ProjectMusicScore {
+  id?: string | null
+  status: ProjectMusicScoreStatus
+  version?: number | null
+  taskId?: string | null
+  timelineSignature?: string | null
+  durationSeconds?: number | null
+  musicModel?: string | null
+  plan?: ProjectMusicScorePlan | null
+  cues?: unknown
   mix?: {
     mediaId: string
     url: string
@@ -368,6 +410,7 @@ export interface ProjectBgmScore {
     mimeType: string
     durationMs: number
   } | null
+  diagnostics?: unknown
   errorMessage?: string | null
 }
 
@@ -378,15 +421,16 @@ export interface ProjectFinalVideo {
   renderTaskId: string | null
   outputUrl: string | null
   updatedAt: string | null
-  bgmScore?: ProjectBgmScore | null
+  musicScore?: ProjectMusicScore | null
 }
 
 export interface ProjectVideoGroup {
   id: string
   projectId: string
   episodeId: string
+  chapterId?: string
   gridMode: '2x2' | '3x3' | string
-  shotNumbers: number[] | unknown
+  shotIds: string[] | unknown
   durationSec: number
   prompt: string | null
   status: string

@@ -94,6 +94,7 @@ model ProjectCharacter {
   appearances             CharacterAppearance[]
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, name])
   @@index([projectId])
   @@map("project_characters")
 }
@@ -112,6 +113,7 @@ model ProjectLocation {
   images                  LocationImage[]       @relation("LocationImages")
   project                 Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, assetKind, name])
   @@index([projectId])
   @@map("project_locations")
 }
@@ -131,12 +133,15 @@ model ProjectEpisode {
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   storyboards             ProjectStoryboard[]
+  chapters                ProjectEditChapter[]
+  sourceDocuments         ProjectEpisodeSourceDocument[]
+  editBible               ProjectEditBible?
+  musicScore              ProjectEditMusicScore?
   finalOutput             ProjectEpisodeFinalOutput?
   canvasLayout            ProjectCanvasLayout?
-  editScreenplay          ProjectEditScreenplay?
   editStylePreviews       ProjectEditStylePreview[]
-  editScript              ProjectEditScript?
-  editShotExecutionPlan   ProjectEditShotExecutionPlan?
+  editScripts             ProjectEditScript[]
+  editShotExecutionPlans  ProjectEditShotExecutionPlan[]
   editAssetRequirements   ProjectEditAssetRequirement[]
   videoGroups             ProjectVideoGroup[]
 
@@ -146,31 +151,92 @@ model ProjectEpisode {
   @@map("project_episodes")
 }
 
-model ProjectEditScreenplay {
+model ProjectEditChapter {
+  id                String         @id @default(uuid())
+  episodeId         String
+  chapterIndex      Int
+  title             String?
+  summary           String?        @db.Text
+  sourceDocumentId  String?
+  sourceStart       Int?
+  sourceEnd         Int?
+  targetDurationSec Int?
+  entrySnapshotJson Json?
+  eventsJson        Json?
+  planVersion       Int            @default(1)
+  provenanceJson    Json?
+  status            String         @default("ready")
+  renderStatus      String?
+  renderTaskId      String?
+  outputMediaId     String?
+  outputMedia       MediaObject?   @relation("ProjectEditChapterOutputMedia", fields: [outputMediaId], references: [id], onDelete: SetNull)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sourceDocument    ProjectEpisodeSourceDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  editScript        ProjectEditScript?
+  shotExecutionPlan ProjectEditShotExecutionPlan?
+  storyboards       ProjectStoryboard[]
+  requirements      ProjectEditAssetRequirement[]
+  videoGroups       ProjectVideoGroup[]
+
+  @@unique([episodeId, chapterIndex])
+  @@index([episodeId])
+  @@index([sourceDocumentId])
+  @@index([outputMediaId])
+  @@map("project_edit_chapters")
+}
+
+model ProjectEpisodeSourceDocument {
   id             String         @id @default(uuid())
-  projectId      String
-  episodeId      String         @unique
-  userPrompt     String         @db.LongText
-  styleBibleJson Json?
-  screenplayText String         @db.LongText
-  status         String         @default("ready")
+  episodeId      String
+  normalizedText String         @db.LongText
+  checksum       String         @db.VarChar(64)
+  sourceKind     String         @db.VarChar(64)
+  rawFileMediaId String?
+  version        Int
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @default(now()) @updatedAt
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  stylePreviews  ProjectEditStylePreview[]
-  editScript     ProjectEditScript?
+  rawFileMedia   MediaObject?   @relation("ProjectEpisodeSourceDocumentRawFileMedia", fields: [rawFileMediaId], references: [id], onDelete: SetNull)
+  editBibles     ProjectEditBible[]
+  chapters       ProjectEditChapter[]
 
-  @@index([projectId])
+  @@unique([episodeId, version])
   @@index([episodeId])
-  @@map("project_edit_screenplays")
+  @@index([rawFileMediaId])
+  @@map("project_episode_source_documents")
+}
+
+model ProjectEditBible {
+  id                 String         @id @default(uuid())
+  episodeId          String         @unique
+  sourceDocumentId   String
+  bibleJson          Json?
+  beatSheetJson      Json?
+  ledgerJson         Json?
+  emotionalCurveJson Json?
+  styleBibleJson     Json?
+  diagnosticsJson    Json?
+  version            Int            @default(1)
+  status             String         @default("pending")
+  lockedAt           DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @default(now()) @updatedAt
+  episode            ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sourceDocument     ProjectEpisodeSourceDocument @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  stylePreviews      ProjectEditStylePreview[]
+
+  @@index([episodeId])
+  @@index([sourceDocumentId])
+  @@map("project_edit_bibles")
 }
 
 model ProjectEditStylePreview {
   id               String                @id @default(uuid())
   projectId        String
   episodeId        String
-  editScreenplayId String
+  editBibleId      String
   styleKey         String
   aspectRatio      String
   title            String
@@ -185,12 +251,12 @@ model ProjectEditStylePreview {
   updatedAt        DateTime              @default(now()) @updatedAt
   project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode          ProjectEpisode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScreenplay   ProjectEditScreenplay @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+  editBible        ProjectEditBible      @relation(fields: [editBibleId], references: [id], onDelete: Cascade)
 
-  @@unique([editScreenplayId, styleKey])
+  @@unique([editBibleId, styleKey])
   @@index([projectId])
   @@index([episodeId])
-  @@index([editScreenplayId])
+  @@index([editBibleId])
   @@index([taskId])
   @@map("project_edit_style_previews")
 }
@@ -198,8 +264,8 @@ model ProjectEditStylePreview {
 model ProjectEditScript {
   id             String                         @id @default(uuid())
   projectId      String
-  episodeId      String                         @unique
-  editScreenplayId String                       @unique
+  episodeId      String
+  chapterId      String                         @unique
   corePlanJson  Json?
   durationSec    Int
   shotCount      Int
@@ -209,21 +275,22 @@ model ProjectEditScript {
   updatedAt      DateTime                       @default(now()) @updatedAt
   project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode        ProjectEpisode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  editScreenplay ProjectEditScreenplay          @relation(fields: [editScreenplayId], references: [id], onDelete: Cascade)
+  chapter        ProjectEditChapter             @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   shotExecutionPlan ProjectEditShotExecutionPlan?
   requirements   ProjectEditAssetRequirement[]
   storyboard      ProjectStoryboard?
 
   @@index([projectId])
   @@index([episodeId])
-  @@index([editScreenplayId])
+  @@index([chapterId])
   @@map("project_edit_scripts")
 }
 
 model ProjectEditShotExecutionPlan {
   id            String            @id @default(uuid())
   projectId     String
-  episodeId     String            @unique
+  episodeId     String
+  chapterId     String            @unique
   editScriptId  String            @unique
   executionPlanJson Json
   status        String            @default("ready")
@@ -231,10 +298,12 @@ model ProjectEditShotExecutionPlan {
   updatedAt     DateTime          @default(now()) @updatedAt
   project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode       ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  chapter       ProjectEditChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   editScript    ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([episodeId])
+  @@index([chapterId])
   @@index([editScriptId])
   @@map("project_edit_shot_execution_plans")
 }
@@ -244,10 +313,11 @@ model ProjectEditAssetRequirement {
   editScriptId String
   projectId    String
   episodeId    String
+  chapterId    String
   kind         String
   name         String
   description  String            @db.LongText
-  requiredForShotNumbers Json
+  requiredForShotIds Json
   status       String            @default("pending")
   targetId     String?
   errorMessage String?           @db.LongText
@@ -256,10 +326,12 @@ model ProjectEditAssetRequirement {
   editScript   ProjectEditScript @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode      ProjectEpisode    @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  chapter      ProjectEditChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   @@unique([editScriptId, kind, name])
   @@index([projectId])
   @@index([episodeId])
+  @@index([chapterId])
   @@index([targetId])
   @@map("project_edit_asset_requirements")
 }
@@ -267,7 +339,6 @@ model ProjectEditAssetRequirement {
 model ProjectEpisodeFinalOutput {
   id            String         @id @default(uuid())
   episodeId     String         @unique
-  bgmScoreJson  Json?
   renderStatus  String?
   renderTaskId  String?
   outputUrl     String?        @db.Text
@@ -281,12 +352,33 @@ model ProjectEpisodeFinalOutput {
   @@map("project_episode_final_outputs")
 }
 
+model ProjectEditMusicScore {
+  id                String         @id @default(uuid())
+  episodeId         String         @unique
+  cuesJson          Json?
+  mixJson           Json?
+  diagnosticsJson   Json?
+  version           Int            @default(1)
+  status            String         @default("pending")
+  taskId            String?
+  timelineSignature String?
+  musicModel        String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+  episode           ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId])
+  @@index([taskId])
+  @@map("project_edit_music_scores")
+}
+
 model ProjectVideoGroup {
   id                    String          @id @default(uuid())
   projectId             String
   episodeId             String
+  chapterId             String
   gridMode              String
-  shotNumbers           Json
+  shotIds               Json
   durationSec           Int
   prompt                String?         @db.LongText
   status                String          @default("pending")
@@ -303,9 +395,11 @@ model ProjectVideoGroup {
   updatedAt             DateTime        @default(now()) @updatedAt
   project               Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   episode               ProjectEpisode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  chapter               ProjectEditChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([episodeId])
+  @@index([chapterId])
   @@index([referenceImageMediaId])
   @@index([videoMediaId])
   @@index([taskId])
@@ -340,7 +434,7 @@ model ProjectPanel {
   updatedAt            DateTime                  @default(now()) @updatedAt
   sceneType            String?
   candidateImages      String?                   @db.Text
-  sourceShotNumber     Int?
+  sourceShotId         String?
   sourceGenerationSegmentId String?              @db.Text
   executionSnapshotJson Json?
   renderFactsJson      Json?
@@ -351,7 +445,7 @@ model ProjectPanel {
   @@index([storyboardId])
   @@index([imageMediaId])
   @@index([videoMediaId])
-  @@index([sourceShotNumber])
+  @@index([sourceShotId])
   @@map("project_panels")
 }
 
@@ -592,6 +686,7 @@ model ProjectAssistantToolSelection {
 model ProjectStoryboard {
   id                  String                @id @default(uuid())
   episodeId           String
+  chapterId           String
   editScriptId        String?               @unique
   storyboardImageUrl  String?               @db.Text
   createdAt           DateTime              @default(now())
@@ -602,10 +697,12 @@ model ProjectStoryboard {
   panels              ProjectPanel[]
   editScript          ProjectEditScript? @relation(fields: [editScriptId], references: [id], onDelete: Cascade)
   episode             ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  chapter             ProjectEditChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   supplementaryPanels SupplementaryPanel[]
 
   @@index([editScriptId])
   @@index([episodeId])
+  @@index([chapterId])
   @@map("project_storyboards")
 }
 
@@ -665,7 +762,6 @@ model Project {
   assistantToolSelections ProjectAssistantToolSelection[]
   mutationBatches    MutationBatch[]
   episodes           ProjectEpisode[]
-  editScreenplays    ProjectEditScreenplay[]
   editStylePreviews  ProjectEditStylePreview[]
   editScripts        ProjectEditScript[]
   editShotExecutionPlans ProjectEditShotExecutionPlan[]
@@ -948,6 +1044,7 @@ model Task {
   attempt          Int       @default(0)
   priority         Int       @default(0)
   dedupeKey        String?   @unique
+  batchKey         String?
   externalId       String?
   operationId        String?   @db.VarChar(128)
   operationSource    String?   @db.VarChar(64)
@@ -978,6 +1075,7 @@ model Task {
   @@index([type])
   @@index([targetType, targetId])
   @@index([projectId])
+  @@index([batchKey])
   @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
@@ -1237,8 +1335,10 @@ model MediaObject {
   characterAppearanceImages             CharacterAppearance[]       @relation("CharacterAppearanceImageMedia")
   locationImages                        LocationImage[]             @relation("LocationImageMedia")
   projectEpisodeAudios           ProjectEpisode[]     @relation("ProjectEpisodeAudioMedia")
+  projectEpisodeSourceDocumentRawFiles ProjectEpisodeSourceDocument[] @relation("ProjectEpisodeSourceDocumentRawFileMedia")
   projectPanelImages             ProjectPanel[]       @relation("ProjectPanelImageMedia")
   projectPanelVideos             ProjectPanel[]       @relation("ProjectPanelVideoMedia")
+  projectEditChapterOutputVideos ProjectEditChapter[] @relation("ProjectEditChapterOutputMedia")
   projectVideoGroupReferenceImages ProjectVideoGroup[] @relation("ProjectVideoGroupReferenceImageMedia")
   projectVideoGroupVideos          ProjectVideoGroup[] @relation("ProjectVideoGroupVideoMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
