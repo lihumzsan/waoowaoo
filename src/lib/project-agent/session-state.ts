@@ -122,10 +122,10 @@ function readOperationPlanView(value: Prisma.JsonValue | undefined): OperationPl
 
 function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
   if (
-    value === 'duration_and_aspect_ratio'
-    || value === 'screenplay_review'
+    value === 'bible_review'
     || value === 'style'
     || value === 'asset_review'
+    || value === 'budget_confirmation'
   ) return value
   throw new Error('PROJECT_AGENT_PENDING_CHOICE_TYPE_INVALID')
 }
@@ -260,19 +260,25 @@ async function buildActiveStylePreviewGeneration(params: {
   activity: ProjectAgentSessionActivity | null
 }): Promise<ProjectAgentSessionStylePreviewGeneration | null> {
   if (!params.episodeId) return null
-  const screenplay = await prisma.projectEditScreenplay.findFirst({
+  const editBible = await prisma.projectEditBible.findFirst({
     where: {
-      projectId: params.projectId,
       episodeId: params.episodeId,
-      project: {
-        userId: params.userId,
+      episode: {
+        projectId: params.projectId,
+        project: {
+          userId: params.userId,
+        },
       },
     },
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
-      projectId: true,
       episodeId: true,
+      episode: {
+        select: {
+          projectId: true,
+        },
+      },
       stylePreviews: {
         orderBy: [
           { createdAt: 'asc' },
@@ -290,13 +296,13 @@ async function buildActiveStylePreviewGeneration(params: {
       },
     },
   })
-  if (!screenplay) return null
-  if (screenplay.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
+  if (!editBible) return null
+  if (editBible.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
   const agentRunId = resolveStylePreviewAgentRunId({
     run: params.run,
     activity: params.activity,
   })
-  const items = screenplay.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
+  const items = editBible.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
     // taskId 缺失（追加候选刚建行、尚未回填）也要收录，否则停靠卡会停在旧的候选数、看不到新生成的。
     if (!isStylePreviewKey(preview.styleKey)) return []
     return [{
@@ -310,13 +316,13 @@ async function buildActiveStylePreviewGeneration(params: {
   })
   if (items.length === 0) return null
   return {
-    key: `screenplay:${screenplay.id}:style-previews`,
+    key: `bible:${editBible.id}:style-previews`,
     data: {
       operationId: 'generate_edit_style_previews',
       ...(agentRunId ? { agentRunId } : {}),
-      projectId: screenplay.projectId,
-      episodeId: screenplay.episodeId,
-      screenplayId: screenplay.id,
+      projectId: editBible.episode.projectId,
+      episodeId: editBible.episodeId,
+      bibleId: editBible.id,
       items,
     },
   }

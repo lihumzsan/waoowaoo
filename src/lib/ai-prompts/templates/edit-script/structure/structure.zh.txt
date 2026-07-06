@@ -16,22 +16,28 @@
 
 # 事实来源
 
-- 编剧剧本是剧情事实。
+- 当前章节剧本切片是本章镜头事实。
+- 全局 Story Bible 是人物、世界观、风格之外的稳定剧情事实。
+- 入章台账快照是本章开始前已经成立的长期事实。
+- 章内台账事件是本章允许新增或改变的长期事实。
 - Style Bible 是风格事实，但不替代镜头内人物、动作、物体和声音事实。
 - 时长档位与节奏约束决定总时长范围。
 
 # 工作规则
 
-- shotNumber 必须从 1 连续递增，不跳号、重复或重排。
+- shotId 只是本次 JSON 内部的临时引用，用来让 generationSegments 指向 shots。使用简短唯一字符串，例如 `shot-001`、`shot-002`；服务端会在保存前替换成系统生成的 shotId。
+- shotNumber 必须从 1 连续递增，只用于展示顺序，不跳号、重复或重排。
 - 每个 shot 的 durationSec 必须为 1 到 5 秒正整数。
 - 每个 shot.characters 必须覆盖该镜头叙事上真实在场的人物，不允许只写镜头焦点人物。
 - 如果人物在场但暂时不可见，必须保留该人物，并用 `hidden`、`occluded` 或 `offscreen` 表达状态。
 - 多人对话、中景、过肩、空间交代镜头中，非焦点人物只要仍在画面空间或镜头空间内，就必须出现在 characters。
 - `hidden_subject` 用于高背椅后、门后、阴影中等“在场但被隐藏以等待揭示”的人物。
 - keyObjects 必须包含影响遮挡/揭示/位置关系的物体，例如高背椅、桌子、门、武器、篮子。
-- generationSegments 必须按 shotNumber 顺序覆盖所有 shots，每个 segment 只能包含连续 shot。
-- 每个 generationSegment 的总时长必须按其 shotNumbers 对应的 shots[].durationSec 累加计算，且不得超过 {{generation_segment_max_duration_seconds}} 秒；如果连续动作超过上限，必须拆成相邻多个 generationSegments。
+- generationSegments 必须按 shotNumber 顺序覆盖所有 shots，每个 segment 只能包含来自 `shots[].shotId` 的连续 shotId。
+- 每个 generationSegment 的总时长必须按其 shotIds 对应的 shots[].durationSec 累加计算，且不得超过 {{generation_segment_max_duration_seconds}} 秒；如果连续动作超过上限，必须拆成相邻多个 generationSegments。
 - generationSegments[].continuity 只写“这些镜头作为同一生成片段的连续性事实”，不写最终生成文本、不写转场模板、不写画面成片描述。
+- persistentFactsIntroduced 必须列出本章计划中声明为长期成立的新事实；只能来自“章内台账事件”的 persistentFacts，或复述“入章台账快照”中已经成立的 facts。
+- 如果本章没有新增长期事实，persistentFactsIntroduced 必须输出空数组。
 - 本任务只输出 Schema 中列出的字段，不输出标题、摄影执行字段、prompt、分段元数据或相邻镜头衔接字段。
 
 # 输入
@@ -40,7 +46,16 @@
 {{user_request}}
 
 编剧剧本：
-{{screenplay_text}}
+{{bible_text}}
+
+全局 Story Bible：
+{{story_bible_json}}
+
+入章台账快照：
+{{entry_snapshot_json}}
+
+章内台账事件：
+{{chapter_events_json}}
 
 时长档位与节奏约束：
 {{duration_guidance}}
@@ -58,6 +73,7 @@ Style Bible：
 {
   "shots": [
     {
+      "shotId": "shot-001",
       "shotNumber": 1,
       "durationSec": 3,
       "scene": {
@@ -83,9 +99,12 @@ Style Bible：
   ],
   "generationSegments": [
     {
-      "shotNumbers": [1, 2, 3],
+      "shotIds": ["shot-001", "shot-002", "shot-003"],
       "continuity": "这些连续镜头共享的动作、空间、情绪或声音连续性"
     }
+  ],
+  "persistentFactsIntroduced": [
+    "本章中长期成立的新事实；若没有则输出空数组"
   ]
 }
 
@@ -95,6 +114,7 @@ Style Bible：
 - 每个镜头是否保留所有在场人物，包括隐藏、遮挡、非焦点和听者。
 - `visibility` 和 `role` 是否只使用允许枚举。
 - 高背椅、门、桌子、武器等影响遮挡/揭示的物体是否进入 keyObjects。
-- generationSegments 是否顺序覆盖所有 shots，且只包含 shotNumbers 和 continuity。
+- generationSegments 是否顺序覆盖所有 shots，且只包含 shotIds 和 continuity。
 - 是否逐段累加 durationSec，并确认每个 generationSegment 总时长不超过 {{generation_segment_max_duration_seconds}} 秒。
+- persistentFactsIntroduced 是否只包含入章快照或章内台账事件允许的事实。
 - 是否严格只输出 Schema 中列出的字段。

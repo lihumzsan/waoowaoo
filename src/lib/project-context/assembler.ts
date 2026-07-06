@@ -4,6 +4,7 @@ import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
+import { readEpisodeEditChapters } from '@/lib/edit-bible'
 import { resolveProjectContextPolicy } from './policy'
 import type { ProjectContextSnapshot } from './types'
 
@@ -87,7 +88,7 @@ export async function assembleProjectContext(params: {
   selectedPanelId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editScreenplay, editScript, runs, latestArtifacts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
+  const [project, episode, editBible, editChapters, editScript, runs, latestArtifacts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
     }),
@@ -120,20 +121,25 @@ export async function assembleProjectContext(params: {
         })
       : Promise.resolve(null),
     params.episodeId
-      ? prisma.projectEditScreenplay.findFirst({
+      ? prisma.projectEditBible.findFirst({
           where: {
-            projectId: params.projectId,
             episodeId: params.episodeId,
+            episode: { projectId: params.projectId },
           },
           select: {
             id: true,
             status: true,
-            userPrompt: true,
-            screenplayText: true,
+            bibleJson: true,
             updatedAt: true,
           },
         })
       : Promise.resolve(null),
+    params.episodeId
+      ? readEpisodeEditChapters({
+          projectId: params.projectId,
+          episodeId: params.episodeId,
+        })
+      : Promise.resolve([]),
     params.episodeId
       ? prisma.projectEditScript.findFirst({
           where: {
@@ -253,15 +259,27 @@ export async function assembleProjectContext(params: {
             panelCount,
           }
         : null,
-      editScreenplay: editScreenplay
+      editBible: editBible
         ? {
-            id: editScreenplay.id,
-            status: editScreenplay.status,
-            userPrompt: editScreenplay.userPrompt,
-            textPreview: compactPreview(editScreenplay.screenplayText, 600),
-            updatedAt: editScreenplay.updatedAt.toISOString(),
-          }
+            id: editBible.id,
+            status: editBible.status,
+            userPrompt: 'episode_bible',
+            textPreview: compactPreview(JSON.stringify(editBible.bibleJson ?? {}), 600),
+            updatedAt: editBible.updatedAt.toISOString(),
+        }
         : null,
+      chapters: editChapters.map((chapter) => ({
+        id: chapter.id,
+        chapterIndex: chapter.chapterIndex,
+        title: chapter.title,
+        summary: chapter.summary,
+        sourceStart: chapter.sourceStart,
+        sourceEnd: chapter.sourceEnd,
+        targetDurationSec: chapter.targetDurationSec,
+        status: chapter.status,
+        renderStatus: chapter.renderStatus,
+        outputMediaId: chapter.outputMediaId,
+      })),
       editScript: editScript
         ? {
             id: editScript.id,

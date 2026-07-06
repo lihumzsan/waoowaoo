@@ -21,8 +21,8 @@ interface BuildEditAssetDesignInstructionInput {
 }
 
 function linkedShotContext(requirement: EditAssetRequirement, shots: readonly EditScriptShot[]): readonly EditScriptShot[] {
-  const linkedShotNumbers = new Set(requirement.shotNumbers)
-  return shots.filter((shot) => linkedShotNumbers.has(shot.shotNumber))
+  const linkedShotIds = new Set(requirement.shotIds)
+  return shots.filter((shot) => linkedShotIds.has(shot.shotId))
 }
 
 export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstructionInput): string {
@@ -34,9 +34,10 @@ export function buildEditAssetDesignInstruction(input: BuildEditAssetDesignInstr
       kind: input.requirement.kind,
       name: input.requirement.name,
       extractionNotes: input.requirement.description,
-      linkedShotNumbers: input.requirement.shotNumbers,
+      linkedShotIds: input.requirement.shotIds,
     },
     linkedShots: linkedShotContext(input.requirement, input.shots).map((shot) => ({
+      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: shot.scene,

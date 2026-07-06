@@ -9,11 +9,19 @@ type ProjectAgentOperationTitleCopy = {
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
     zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或系统可推导的工具参数调用。',
-    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input, such as full screenplay text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or system-derived tool parameters.',
+    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input, such as full bible text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or system-derived tool parameters.',
   },
   get_project_snapshot: {
     zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取详细项目投影。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态、普通状态或系统可推导的工具参数而调用。只有明确需要面板字段、提示词、描述或媒体 URL 时才使用 detail=full。',
     en: 'Read detailed project projection only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, general status, or system-derived tool parameters. Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed.',
+  },
+  get_episode_overview: {
+    zh: '读取当前集的轻量总览，包括 Bible、章节列表和章节进度统计。仅在需要回答具体章节/全局规划问题时使用；不要为了确认当前阶段、下一步或系统可推导参数而调用。',
+    en: 'Read the lightweight scoped episode overview, including Bible, chapter list, and chapter progress counts. Use only for concrete chapter/global planning questions; do not call merely to confirm current stage, next step, or system-derived parameters.',
+  },
+  get_chapter_detail: {
+    zh: '读取单个章节的轻量详情，包括核心剪辑计划状态、分镜状态、视频片段状态、资产需求和章成片输出。只有用户明确讨论某章细节或需要修复该章时调用。',
+    en: 'Read lightweight details for one chapter: core edit plan status, storyboard status, video group status, asset requirements, and chapter render output. Call only when the user explicitly discusses a chapter detail or that chapter must be repaired.',
   },
   asset_hub_list_folders: {
     zh: '列出当前用户的全局资产文件夹。',
@@ -39,13 +47,9 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '按 id 获取单个全局场景。',
     en: 'Get a global location by id.',
   },
-  request_edit_duration_aspect_ratio_choice: {
-    zh: '在短片生成流程中，生成剧本前请求用户一次性选择短片时长和画面比例。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
-    en: 'Request the user to choose duration and aspect ratio together before screenplay generation for short-film production. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
-  },
-  request_edit_screenplay_review_choice: {
-    zh: '在短片生成流程中，剧本生成后请求用户审核剧本：确认进入视觉风格，或提交修改意见。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
-    en: 'Request screenplay review after screenplay generation for short-film production: approve progression to visual style, or submit revision notes. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+  request_edit_bible_review_choice: {
+    zh: '在长视频生成流程中，Bible 生成后请求用户审核全局 Bible 和章节切分：确认锁定，或提交修改意见。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request edit Bible review after Bible generation: approve locking the global Bible and chapter split, or submit revision notes. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
   },
   request_edit_style_choice: {
     zh: '在短片生成流程中，视觉风格候选 ready 后请求用户选择一个视觉风格。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
@@ -55,17 +59,21 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '在短片生成流程中，资产和空间档案 ready 后请求用户审核资产并确认是否继续。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
     en: 'Request required asset review after assets and spatial profiles are ready for short-film production. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
   },
-  generate_edit_screenplay: {
-    zh: '生成短片剧本。必须传入 prompt、durationTier、aspectRatio 三个字段；durationTier 和 aspectRatio 必须来自 request_edit_duration_aspect_ratio_choice 返回的用户选择结果，不能只依赖 prompt 自然语言。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出给用户；不要只说已生成，也不要让用户去画布查看。',
-    en: 'Generate the short-film screenplay. You must pass prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection confirmed through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo it to the user in chat; do not merely say it was generated or tell the user to view the canvas.',
+  request_edit_budget_confirmation_choice: {
+    zh: '在当前长视频生产阶段即将启动批量或计费任务前，请求用户确认预算与继续执行意图。只在 workflow 暴露该工具时使用；不要用它替代 Bible/资产/风格审核。',
+    en: 'Request explicit user budget and continuation confirmation before starting the current batch or billable long-form production stage. Use only when the workflow exposes this tool; do not use it as a substitute for Bible, asset, or style review.',
   },
-  revise_edit_screenplay: {
-    zh: '修改当前短片剧本。仅在剧本已生成、用户尚未确认进入风格候选/核心剪辑计划前使用。用户要求调整剧情、题材、氛围、结构、角色、结尾或表达方向时调用；把用户修改意见传入 revisionInstruction。只有用户明确修改时长或画幅时才传 durationTier/aspectRatio，不要回填系统已有值。修改后仍停留在剧本审核阶段。该操作会提交异步任务；任务完成后的终态 follow-up 中，从项目上下文读取完整 screenplayText 并在对话中完整逐字输出修改后的剧本；不要只说已修改，也不要让用户去画布查看。',
-    en: 'Revise the current short-film screenplay. Use only after the screenplay exists and before the user approves progression to style previews or the core edit plan. Call it when the user asks to change story, subject, mood, structure, characters, ending, or expression direction; pass the user revision notes in revisionInstruction. Pass durationTier/aspectRatio only when the user explicitly changes duration or aspect ratio; do not backfill existing system values. The result remains in screenplay review. This operation submits an async task; in the terminal follow-up after completion, read the complete screenplayText from project context and echo the revised screenplay to the user in chat; do not merely say it was revised or tell the user to view the canvas.',
+  ingest_script: {
+    zh: '摄入用户上传或粘贴的源剧本，并提交异步任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。只传用户本轮提供的 text，不要传 projectId、episodeId、画幅、时长档位或系统可推导参数。',
+    en: 'Ingest the uploaded or pasted source script and submit the async task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. Pass only the text supplied by the user this turn; do not pass projectId, episodeId, aspect ratio, duration tier, or system-derived parameters.',
+  },
+  revise_bible: {
+    zh: '按用户审核意见修改当前结构化 Bible/节拍表/台账/情绪曲线。仅在 Bible 未锁定且确实需要覆盖全局规划时使用；不要传 projectId、episodeId 或系统可推导参数。',
+    en: 'Apply user-reviewed changes to the current structured Bible, beat sheet, ledger, or emotional curve. Use only while the Bible is unlocked and global planning truly needs to be overwritten; do not pass projectId, episodeId, or system-derived parameters.',
   },
   generate_edit_style_previews: {
     zh: '用户审核确认剧本后，基于剧本生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
-    en: 'Generate screenplay-based visual style preview images after screenplay review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
+    en: 'Generate bible-based visual style preview images after bible review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
   },
   generate_edit_script_assets: {
     zh: '根据当前核心剪辑计划创建/复用所需角色与场景资产，并为缺失图片提交生成任务。系统会从当前剪辑计划解析需要处理的需求；不要为了查找或提交 requirementId 调用只读工具。',
@@ -106,13 +114,17 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '任务状态',
     en: 'Task status',
   },
-  request_edit_duration_aspect_ratio_choice: {
-    zh: '选择时长与画幅',
-    en: 'Choose duration & aspect ratio',
+  get_episode_overview: {
+    zh: '剧集总览',
+    en: 'Episode overview',
   },
-  request_edit_screenplay_review_choice: {
-    zh: '审核剧本',
-    en: 'Review screenplay',
+  get_chapter_detail: {
+    zh: '章节详情',
+    en: 'Chapter detail',
+  },
+  request_edit_bible_review_choice: {
+    zh: '审核 Bible',
+    en: 'Review Bible',
   },
   request_edit_style_choice: {
     zh: '选择视觉风格',
@@ -122,24 +134,40 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '审核资产',
     en: 'Review assets',
   },
+  request_edit_budget_confirmation_choice: {
+    zh: '确认预算',
+    en: 'Confirm budget',
+  },
 } satisfies Record<string, ProjectAgentOperationTitleCopy>
 
 const EDIT_FIRST_OPERATION_TITLE_COPY = {
-  generate_edit_screenplay: {
-    zh: '生成剧本',
-    en: 'Generate screenplay',
+  ingest_script: {
+    zh: '摄入源剧本',
+    en: 'Ingest script',
   },
-  revise_edit_screenplay: {
-    zh: '修改剧本',
-    en: 'Revise screenplay',
+  confirm_bible: {
+    zh: '确认 Bible',
+    en: 'Confirm Bible',
+  },
+  revise_bible: {
+    zh: '修改 Bible',
+    en: 'Revise Bible',
   },
   generate_edit_style_previews: {
     zh: '生成视觉风格',
     en: 'Generate visual styles',
   },
+  plan_chapters: {
+    zh: '批量规划章节',
+    en: 'Plan chapters',
+  },
   generate_edit_script: {
     zh: '生成核心剪辑计划',
     en: 'Generate core edit plan',
+  },
+  replan_chapter: {
+    zh: '重规划章节',
+    en: 'Replan chapter',
   },
   generate_edit_script_assets: {
     zh: '生成所需资产',
@@ -162,12 +190,16 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     en: 'Generate storyboard images',
   },
   generate_episode_bgm_score: {
-    zh: '生成连续配乐',
-    en: 'Generate continuous BGM',
+    zh: '生成配乐规划',
+    en: 'Generate music plan',
   },
   generate_episode_videos: {
     zh: '生成视频片段',
     en: 'Generate video clips',
+  },
+  render_chapters: {
+    zh: '渲染章节成片',
+    en: 'Render chapter videos',
   },
   render_final_video: {
     zh: '渲染最终视频',

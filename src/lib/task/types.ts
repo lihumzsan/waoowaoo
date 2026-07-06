@@ -51,16 +51,16 @@ export const TASK_TYPE = {
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
   MUSIC_GENERATE: 'music_generate',
-  BGM_SCORE_GENERATE: 'bgm_score_generate',
+  MUSIC_SCORE_PLAN: 'music_score_plan',
   FINAL_VIDEO_RENDER: 'final_video_render',
+  CHAPTER_RENDER: 'chapter_render',
   VIDEO_PANEL: 'video_panel',
   VIDEO_GROUP: 'video_group',
   MODIFY_ASSET_IMAGE: 'modify_asset_image',
   REGENERATE_GROUP: 'regenerate_group',
   ASSET_HUB_IMAGE: 'asset_hub_image',
   ASSET_HUB_MODIFY: 'asset_hub_modify',
-  EDIT_SCREENPLAY_GENERATE: 'edit_screenplay_generate',
-  EDIT_SCREENPLAY_REVISE: 'edit_screenplay_revise',
+  EDIT_BIBLE_GENERATE: 'edit_bible_generate',
   EDIT_SCRIPT_GENERATE: 'edit_script_generate',
   EDIT_SHOT_EXECUTION_PLAN_GENERATE: 'edit_shot_execution_plan_generate',
   AI_MODIFY_APPEARANCE: 'ai_modify_appearance',
@@ -118,6 +118,7 @@ export type TaskJobData = {
   targetType: string
   targetId: string
   payload?: Record<string, unknown> | null
+  batchKey?: string | null
   billingInfo?: TaskBillingInfo | null
   userId: string
   trace?: {
@@ -156,7 +157,7 @@ export type MutationBatchSSEEvent = {
 }
 
 export type WorkspaceResourceName =
-  | 'editScreenplay'
+  | 'editBible'
   | 'editScript'
   | 'editShotExecutionPlan'
   | 'storyboards'
@@ -194,6 +195,7 @@ export type CreateTaskInput = {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
+  batchKey?: string | null
   priority?: number
   billingInfo?: TaskBillingInfo | null
   operationId?: string | null

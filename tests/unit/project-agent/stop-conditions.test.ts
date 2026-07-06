@@ -189,14 +189,14 @@ describe('project agent business stop signals', () => {
   it('[choice card emitted] -> stops so the agent waits for the user choice', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([{
-      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       output: {
         ok: true,
         data: {
           emitted: true,
-          choiceType: 'duration_and_aspect_ratio',
+          choiceType: 'bible_review',
           cardId: 'edit-first-duration-aspect-ratio',
-          workflowStage: 'ready_to_generate_screenplay',
+          workflowStage: 'ready_to_ingest_script',
         },
       },
     }])
@@ -204,7 +204,7 @@ describe('project agent business stop signals', () => {
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
       stepCount: 1,
-      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio],
+      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review],
     })
   })
 
@@ -263,13 +263,13 @@ describe('project agent business stop signals', () => {
   it('[interrupt boundary error] -> stops immediately so the model cannot mask a failed choice setup', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([
-      interruptBoundaryToolErrorOutput(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio, 'OPERATION_EXECUTION_FAILED'),
+      interruptBoundaryToolErrorOutput(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review, 'OPERATION_EXECUTION_FAILED'),
     ])
 
     expect(stopPart).toEqual({
       reason: 'tool_error',
       stepCount: 1,
-      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio],
+      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review],
       codes: ['OPERATION_EXECUTION_FAILED'],
     })
   })

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
 import type {
   EditAssetKind,
   EditAssetRequirement,
@@ -13,7 +14,7 @@ export interface PersistedEditScriptRequirementForRevision {
   readonly kind: string
   readonly name: string
   readonly description: string
-  readonly requiredForShotNumbers: Prisma.JsonValue
+  readonly requiredForShotIds: Prisma.JsonValue
   readonly status: string
   readonly targetId: string | null
   readonly errorMessage: string | null
@@ -23,24 +24,20 @@ interface PersistedEditScriptForRevision {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
-  readonly editScreenplayId: string
+  readonly chapterId: string
   readonly corePlanJson: Prisma.JsonValue | null
   readonly durationSec: number
   readonly shotCount: number
   readonly status: string
   readonly assetReviewStatus: string
-  readonly editScreenplay?: {
-    readonly userPrompt: string
-    readonly screenplayText: string
-  }
   readonly requirements: readonly PersistedEditScriptRequirementForRevision[]
 }
 
-function readShotNumbers(value: Prisma.JsonValue): readonly number[] {
+function readShotIds(value: Prisma.JsonValue): readonly string[] {
   return Array.isArray(value)
     ? value
-        .map((item) => (typeof item === 'number' && Number.isFinite(item) ? item : null))
-        .filter((item): item is number => item !== null && item > 0)
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0)
     : []
 }
 
@@ -61,10 +58,8 @@ export function mapPersistedEditScriptForRevision(script: PersistedEditScriptFor
     id: script.id,
     projectId: script.projectId,
     episodeId: script.episodeId,
-    screenplayId: script.editScreenplayId,
-    userPrompt: script.editScreenplay?.userPrompt,
+    chapterId: script.chapterId,
     styleBible: null,
-    screenplayText: script.editScreenplay?.screenplayText ?? null,
     durationSec: core.durationSec,
     shotCount: core.shotCount,
     status: script.status,
@@ -76,7 +71,7 @@ export function mapPersistedEditScriptForRevision(script: PersistedEditScriptFor
       kind: normalizeEditScriptAssetKindForRevision(requirement.kind) ?? 'character',
       name: requirement.name,
       description: requirement.description,
-      shotNumbers: readShotNumbers(requirement.requiredForShotNumbers),
+      shotIds: readShotIds(requirement.requiredForShotIds),
       status: normalizeAssetStatus(requirement.status),
       targetId: requirement.targetId,
       taskTargetType: null,
@@ -90,16 +85,18 @@ export function mapPersistedEditScriptForRevision(script: PersistedEditScriptFor
 export async function getPersistedEditScriptForRevision(
   projectId: string,
   episodeId: string,
+  chapterId?: string,
   editScriptId?: string,
 ): Promise<PersistedEditScriptForRevision | null> {
+  const resolvedChapterId = chapterId ?? (await resolveDefaultEditChapter(episodeId)).id
   return await prisma.projectEditScript.findFirst({
     where: {
       projectId,
       episodeId,
+      chapterId: resolvedChapterId,
       ...(editScriptId ? { id: editScriptId } : {}),
     },
     include: {
-      editScreenplay: true,
       requirements: {
         orderBy: [
           { kind: 'asc' },

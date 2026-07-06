@@ -14,14 +14,17 @@ function truncate(value: string, maxLength: number): string {
 }
 
 export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
-  if (input.type === TASK_TYPE.EDIT_SCREENPLAY_GENERATE && input.targetType === 'ProjectEditScreenplay') {
-    await prisma.projectEditScreenplay.updateMany({
+  if (input.type === TASK_TYPE.EDIT_BIBLE_GENERATE && input.targetType === 'ProjectEditBible') {
+    await prisma.projectEditBible.updateMany({
       where: {
         id: input.targetId,
         status: 'generating',
       },
       data: {
         status: 'failed',
+        diagnosticsJson: {
+          error: truncate(input.errorMessage, 2000),
+        },
       },
     })
     return

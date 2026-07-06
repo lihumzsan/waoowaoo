@@ -1,6 +1,4 @@
 import type { JsonValue, ProjectAgentToolInputSchema } from '@/lib/operations/types'
-import { EDIT_FIRST_DURATION_TIERS } from '@/lib/edit-script/duration-tier'
-import { EDIT_SCRIPT_VIDEO_RATIOS } from '@/lib/edit-script/types'
 
 type ToolInputProperties = ProjectAgentToolInputSchema['properties']
 
@@ -36,12 +34,11 @@ function nullableStringProperty(description: string): JsonValue {
   }
 }
 
-function nullableEnumProperty(values: readonly string[], description: string): JsonValue {
+function nullableObjectProperty(description: string): JsonValue {
   return {
     anyOf: [
       {
-        type: 'string',
-        enum: [...values],
+        type: 'object',
       },
       {
         type: 'null',
@@ -53,30 +50,19 @@ function nullableEnumProperty(values: readonly string[], description: string): J
 
 export const EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({})
 
-export const EDIT_FIRST_GENERATE_SCREENPLAY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
-  prompt: stringProperty('The user creative request/story premise. Summarize the user intent; do not include system ids.'),
-  durationTier: {
-    type: 'string',
-    enum: [...EDIT_FIRST_DURATION_TIERS],
-    description: 'Short-film duration tier selected by the user.',
-  },
-  aspectRatio: {
-    type: 'string',
-    enum: [...EDIT_SCRIPT_VIDEO_RATIOS],
-    description: 'Final film aspect ratio selected by the user.',
-  },
+export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
 })
 
-export const EDIT_FIRST_REVISE_SCREENPLAY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
-  revisionInstruction: stringProperty('Concrete user-requested screenplay changes. Do not include system ids.'),
-  durationTier: nullableEnumProperty(
-    EDIT_FIRST_DURATION_TIERS,
-    'Pass only when the user explicitly changes the duration tier in this revision; otherwise pass null.',
-  ),
-  aspectRatio: nullableEnumProperty(
-    EDIT_SCRIPT_VIDEO_RATIOS,
-    'Pass only when the user explicitly changes the final aspect ratio in this revision; otherwise pass null.',
-  ),
+export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  text: stringProperty('The source script text, pasted script, or user prompt to turn into a prompt-generated outline. Do not include projectId or episodeId.'),
+})
+
+export const EDIT_FIRST_REVISE_BIBLE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  bible: nullableObjectProperty('Structured EditBible patch. Pass null when unchanged.'),
+  beatSheet: nullableObjectProperty('Structured beat sheet patch. Pass null when unchanged.'),
+  ledger: nullableObjectProperty('Structured ledger patch. Pass null when unchanged.'),
+  emotionalCurve: nullableObjectProperty('Structured emotional curve patch. Pass null when unchanged.'),
 })
 
 export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
@@ -85,4 +71,9 @@ export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputS
 
 export const EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   revisionNotes: stringProperty('Concrete user asset review notes to apply to the current required assets. Do not include system ids.'),
+})
+
+export const EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  revisionNotes: stringProperty('Concrete user asset review notes to apply to the current required assets. Do not include system ids.'),
+  chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
 })

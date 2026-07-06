@@ -24,6 +24,7 @@ export async function submitOperationTask(params: {
   confirmed: boolean
   payload: Record<string, unknown>
   dedupeKey?: string | null
+  batchKey?: string | null
   priority?: number
   locale?: Locale
   billingInfo?: TaskBillingInfo | null
@@ -58,6 +59,7 @@ export async function submitOperationTask(params: {
     targetId: params.targetId,
     payload,
     dedupeKey: params.dedupeKey || null,
+    batchKey: params.batchKey || null,
     priority: params.priority ?? 0,
     billingInfo,
     billingInfoSource: params.billingInfoSource,

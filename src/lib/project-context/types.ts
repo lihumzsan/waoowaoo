@@ -35,7 +35,7 @@ export interface ProjectContextEpisodeSnapshot {
   panelCount: number
 }
 
-export interface ProjectContextEditScreenplaySnapshot {
+export interface ProjectContextEditBibleSnapshot {
   id: string
   status: string
   userPrompt: string
@@ -53,6 +53,19 @@ export interface ProjectContextEditScriptSnapshot {
   requirementCount: number
   pendingRequirementCount: number
   updatedAt: string
+}
+
+export interface ProjectContextEditChapterSnapshot {
+  id: string
+  chapterIndex: number
+  title: string
+  summary: string
+  sourceStart: number
+  sourceEnd: number
+  targetDurationSec: number
+  status: string
+  renderStatus: string | null
+  outputMediaId: string | null
 }
 
 export interface ProjectContextPanelSnapshot {
@@ -73,7 +86,8 @@ export interface ProjectContextPanelSnapshot {
 
 export interface ProjectContextEpisodeDetailSnapshot {
   episode: ProjectContextEpisodeSnapshot | null
-  editScreenplay: ProjectContextEditScreenplaySnapshot | null
+  editBible: ProjectContextEditBibleSnapshot | null
+  chapters: ProjectContextEditChapterSnapshot[]
   editScript: ProjectContextEditScriptSnapshot | null
   panels: ProjectContextPanelSnapshot[]
 }

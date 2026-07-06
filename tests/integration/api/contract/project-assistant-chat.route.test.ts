@@ -119,10 +119,10 @@ const eventMock = vi.hoisted(() => ({
     runId: 'run-1',
     type: 'awaiting_choice',
     status: 'waiting',
-    operationId: 'request_edit_screenplay_review_choice',
+    operationId: 'request_edit_bible_review_choice',
     sourceOperationId: null,
     toolCallId: 'tool-choice-1',
-    choiceType: 'screenplay_review',
+    choiceType: 'bible_review',
   })),
 }))
 
@@ -290,7 +290,7 @@ describe('project assistant chat route', () => {
       runId: 'run-1',
       type: 'approval',
       status: 'consumed',
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       approvalId: 'approval-1',
       toolCallId: 'call-1',
       runState: 'serialized-state',
@@ -341,7 +341,7 @@ describe('project assistant chat route', () => {
       runId: 'run-1',
       type: 'approval',
       status: 'consumed',
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       approvalId: 'approval-1',
       toolCallId: 'call-1',
       runState: 'serialized-state',
@@ -641,9 +641,9 @@ describe('project assistant chat route', () => {
       runId: 'run-1',
       type: 'choice',
       status: 'consumed',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'duration_and_aspect_ratio' },
+      payload: { choiceType: 'bible_review' },
     })
 
     const response = await choicePost(
@@ -655,12 +655,11 @@ describe('project assistant chat route', () => {
           assistantPermissionMode: 'ask',
           visibleUserText: '鬼故事',
           interruptionId: 'choice-interruption-1',
-          choiceType: 'duration_and_aspect_ratio',
+          choiceType: 'bible_review',
           toolCallId: 'tool-choice-1',
           output: {
             ok: true,
-            durationTier: 'medium',
-            aspectRatio: '16:9',
+            decision: 'approve',
           },
         },
       }),
@@ -675,7 +674,7 @@ describe('project assistant chat route', () => {
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       control: expect.objectContaining({
         kind: 'choice',
-        choiceType: 'duration_and_aspect_ratio',
+        choiceType: 'bible_review',
       }),
     }))
   })

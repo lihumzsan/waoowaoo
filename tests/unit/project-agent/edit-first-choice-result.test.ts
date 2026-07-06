@@ -3,7 +3,6 @@ import {
   applyEditFirstChoiceResultSideEffects,
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
-import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
 
 vi.mock('@/lib/edit-script/service', () => ({
@@ -36,35 +35,9 @@ describe('buildEditFirstChoiceResult', () => {
     approveProjectEditScriptAssetsMock.mockClear()
   })
 
-  it('serializes duration and aspect ratio selections without selecting the next operation', () => {
+  it('serializes bible approval without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'duration_and_aspect_ratio',
-      toolCallId: 'tool-call-1',
-      latestUserText: '民俗恐怖片',
-      output: {
-        ok: true,
-        durationTier: 'medium',
-        aspectRatio: '16:9',
-        selections: {
-          durationTier: 'medium',
-          aspectRatio: '16:9',
-        },
-      },
-    })
-
-    const { callId, name, parsed } = readSyntheticToolResult(choiceResult)
-    expect(callId).toBe('tool-call-1')
-    expect(name).toBe(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
-    expect(parsed.choiceType).toBe('duration_and_aspect_ratio')
-    expect(parsed.prompt).toBe('民俗恐怖片')
-    expect(parsed.durationTier).toBe('medium')
-    expect(parsed.aspectRatio).toBe('16:9')
-    expect(parsed.nextOperationId).toBeUndefined()
-  })
-
-  it('serializes screenplay approval without selecting the next operation', () => {
-    const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
       latestUserText: '生成一部科幻短片',
       output: {
@@ -78,9 +51,9 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
-  it('serializes screenplay revision notes without selecting the next operation', () => {
+  it('serializes bible revision notes without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
       latestUserText: '生成一部科幻短片',
       output: {
@@ -147,21 +120,37 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
-  it('rejects an incomplete duration/aspect-ratio selection', () => {
-    expect(buildEditFirstChoiceResult({
-      choiceType: 'duration_and_aspect_ratio',
-      toolCallId: 'tool-call-1',
-      latestUserText: '民俗恐怖片',
+  it('serializes budget confirmation without selecting the next operation', () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'budget_confirmation',
+      toolCallId: 'tool-call-budget',
+      latestUserText: '确认预算',
       output: {
         ok: true,
-        durationTier: 'medium',
+        decision: 'approve',
+      },
+    })
+
+    const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(parsed.decision).toBe('approve')
+    expect(parsed.nextOperationId).toBeUndefined()
+  })
+
+  it('rejects budget confirmation without approval', () => {
+    expect(buildEditFirstChoiceResult({
+      choiceType: 'budget_confirmation',
+      toolCallId: 'tool-call-budget',
+      latestUserText: '等等',
+      output: {
+        ok: true,
+        decision: 'revise',
       },
     })).toBeNull()
   })
 
-  it('rejects a screenplay review without a decision', () => {
+  it('rejects a bible review without a decision', () => {
     expect(buildEditFirstChoiceResult({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
       latestUserText: '生成一部科幻短片',
       output: {

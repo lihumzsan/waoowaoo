@@ -85,10 +85,8 @@ export const TASK_RUNTIME_TARGETS = {
   projectEpisodeEditScriptGeneration(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
   },
-  projectEditScreenplay(screenplayId: string | null | undefined) {
-    return target('ProjectEditScreenplay', screenplayId, [
-      TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
-      TASK_TYPE.EDIT_SCREENPLAY_REVISE,
+  projectEditBible(bibleId: string | null | undefined) {
+    return target('ProjectEditBible', bibleId, [
       TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     ])
   },
@@ -102,7 +100,10 @@ export const TASK_RUNTIME_TARGETS = {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.FINAL_VIDEO_RENDER])
   },
   projectEpisodeBgmScore(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.BGM_SCORE_GENERATE])
+    return target('ProjectEpisode', episodeId, [TASK_TYPE.MUSIC_SCORE_PLAN])
+  },
+  projectEditChapterRender(chapterId: string | null | undefined) {
+    return target('ProjectEditChapter', chapterId, [TASK_TYPE.CHAPTER_RENDER])
   },
   projectPanelImage(panelId: string | null | undefined) {
     return target('ProjectPanel', panelId, [TASK_TYPE.IMAGE_PANEL])

@@ -21,12 +21,19 @@ async function createProcessingVideoGroup() {
       name: 'Episode 1',
     },
   })
+  const chapter = await prisma.projectEditChapter.create({
+    data: {
+      episodeId: episode.id,
+      chapterIndex: 0,
+    },
+  })
   const group = await prisma.projectVideoGroup.create({
     data: {
       projectId: project.id,
       episodeId: episode.id,
+      chapterId: chapter.id,
       gridMode: '2x2',
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
       durationSec: 6,
       status: 'processing',
     },

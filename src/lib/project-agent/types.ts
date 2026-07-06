@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 import type {
-  ProjectContextEditScreenplaySnapshot,
+  ProjectContextEditBibleSnapshot,
   ProjectContextEditScriptSnapshot,
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
@@ -47,7 +47,7 @@ export interface ProjectAgentActivityPartData {
   operationId?: string | null
   sourceOperationId?: string | null
   toolCallId?: string | null
-  choiceType?: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review' | null
+  choiceType?: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation' | null
 }
 
 export interface ProjectContextPartData {
@@ -111,7 +111,7 @@ export interface ProjectAgentInterruptionResolvedPartData {
 export interface ProjectAgentChoiceResolvedPartData {
   runId?: string | null
   interruptionId?: string | null
-  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
+  choiceType: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
   toolCallId?: string | null
   cardId?: string | null
 }
@@ -158,10 +158,6 @@ export type ProjectAgentChoiceCardSubmit =
     kind: 'submit_tool_output'
   }
   | {
-    kind: 'set_project_video_ratio'
-    projectId: string
-  }
-  | {
     kind: 'confirm_edit_style_preview'
     projectId: string
     episodeId: string
@@ -190,7 +186,7 @@ export interface ProjectAgentChoiceCardPartData {
   runId?: string | null
   interruptionId?: string | null
   toolCallId: string
-  choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
+  choiceType: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
   variant?: ProjectAgentChoiceCardVariant
   autoSubmitOnReady?: boolean
   title: string
@@ -214,6 +210,7 @@ export interface TaskSubmittedPartData {
   mutationBatchId?: string | null
   projectId?: string
   episodeId?: string | null
+  chapterId?: string | null
   taskType?: string
   targetType?: string
   targetId?: string
@@ -242,7 +239,7 @@ export interface EditStylePreviewGenerationPartData {
   agentRunId?: string | null
   projectId: string
   episodeId: string
-  screenplayId: string
+  bibleId: string
   items: Array<{
     id: string
     styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
@@ -266,7 +263,7 @@ export interface ProjectAssistantContextSnapshot {
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']
   recentOperationResults: ProjectContextSnapshot['recentOperationResults']
   latestArtifacts: ProjectContextSnapshot['latestArtifacts']
-  editScreenplay?: ProjectContextEditScreenplaySnapshot | null
+  editBible?: ProjectContextEditBibleSnapshot | null
   editScript?: ProjectContextEditScriptSnapshot | null
   editFirstWorkflow: EditFirstWorkflowState
   config: {

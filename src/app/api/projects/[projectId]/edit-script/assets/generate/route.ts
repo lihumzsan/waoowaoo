@@ -23,6 +23,7 @@ export const POST = apiHandler(async (
     request,
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
     userId: authResult.session.user.id,
     locale: resolveRequiredTaskLocale(request, body),
     editScriptId: parsed.data.editScriptId,

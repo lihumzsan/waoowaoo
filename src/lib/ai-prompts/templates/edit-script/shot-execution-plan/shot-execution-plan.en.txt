@@ -11,7 +11,7 @@ In one JSON output, produce camera execution, character positions, key object po
 - blocking: axis, character placement, object placement, and spatial notes.
 - axis: screen-direction constraint for dialogue, reveal, motion, or subject relation. It prevents crossing the line and left/right relation jumps.
 - videoPrompt: final prompt for one single-shot video model call. It describes only the current shot.
-- generationSegmentExecutions: continuous video outputs for each core `generationSegments` entry. Each item contains only `shotNumbers` and `continuousVideoPrompt`.
+- generationSegmentExecutions: continuous video outputs for each core `generationSegments` entry. Each item contains only `shotIds` and `continuousVideoPrompt`.
 - continuousVideoPrompt: final prompt for the target generation segment. It may be sent directly to the video model, and is not a concatenation of single-shot prompts.
 
 # Sources of Truth
@@ -38,8 +38,8 @@ In one JSON output, produce camera execution, character positions, key object po
 - Every shot must include `videoPrompt`. It describes only the current single-shot video, not neighboring shots or a continuous segment.
 - `videoPrompt` must focus on current-shot character/object motion, camera movement or fixed-camera behavior, action rhythm, expression/posture change, lighting change, and sound.
 - `videoPrompt` must not add plot, characters, props, dialogue, or sound events, and must not mechanically copy an image prompt.
-- `generationSegmentExecutions` must follow the core edit plan `generationSegments` order, and each `shotNumbers` array must match exactly.
-- `generationSegmentExecutions` must output only `shotNumbers` and `continuousVideoPrompt`; do not output other continuity fields.
+- `generationSegmentExecutions` must follow the core edit plan `generationSegments` order, and each `shotIds` array must match exactly.
+- `generationSegmentExecutions` must output only `shotIds` and `continuousVideoPrompt`; do not output other continuity fields.
 - `continuousVideoPrompt` must be written as one complete continuous video segment, not a mechanical concatenation of single-shot `videoPrompt` values.
 - `continuousVideoPrompt` may use only facts from the core edit plan, ShotExecutionPlan, Asset Context, Spatial Profiles, and Style Bible. Do not add plot, characters, props, dialogue, or sound events.
 - `continuousVideoPrompt` must focus on segment-level character/object motion, camera movement or cuts, action rhythm, expression/posture changes, sound flow, and shot connections.
@@ -88,6 +88,7 @@ Field strictness:
 {
   "shots": [
     {
+      "shotId": "shot-001",
       "shotNumber": 1,
       "camera": {
         "shotScale": "specific shot scale",
@@ -129,7 +130,7 @@ Field strictness:
   ],
   "generationSegmentExecutions": [
     {
-      "shotNumbers": [1, 2, 3],
+      "shotIds": ["shot-001", "shot-002", "shot-003"],
       "continuousVideoPrompt": "final continuous-video prompt for this generationSegment, organized with timed sections and written as one complete continuous segment"
     }
   ]
@@ -145,8 +146,8 @@ Field strictness:
 - Does every `blocking.objects[]` item contain only `name`, `position`, and `screenPosition`, with no `facing`, `eyeline`, or other extra fields?
 - Does every shot include `camera.lighting` and `blocking.axis`?
 - Does every shot include `videoPrompt`, and does it describe only the current single-shot video?
-- Do `generationSegmentExecutions` cover every generation segment, and do `shotNumbers` match exactly?
-- Do `generationSegmentExecutions` output only `shotNumbers` and `continuousVideoPrompt`?
+- Do `generationSegmentExecutions` cover every generation segment, and do `shotIds` match exactly?
+- Do `generationSegmentExecutions` output only `shotIds` and `continuousVideoPrompt`?
 - Is each `continuousVideoPrompt` a complete continuous segment rather than a single-shot prompt concatenation?
 - Does each `continuousVideoPrompt` calculate timed sections from cumulative `durationSec`, and keep action, camera movement, rhythm, sound, and shot connections continuous?
 - Is the output strictly limited to fields listed in the schema?

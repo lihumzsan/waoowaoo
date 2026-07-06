@@ -36,13 +36,13 @@ function textBillingInfo(): TaskBillingInfo {
   return {
     billable: true,
     source: 'task',
-    taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+    taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
     apiType: 'text',
     model: 'text-model',
     quantity: 1000,
     unit: 'token',
     maxFrozenCost: 99,
-    action: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+    action: TASK_TYPE.EDIT_BIBLE_GENERATE,
     status: 'quoted',
   }
 }
@@ -84,7 +84,7 @@ function buildPlan(): OperationPlan {
       },
       {
         id: 'text-task',
-        taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+        taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
         target: { targetType: 'ProjectEpisode', targetId: 'episode-1' },
         payload: { model: 'expensive-text-payload' },
         billingInfo: textBillingInfo(),

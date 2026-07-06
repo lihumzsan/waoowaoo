@@ -255,7 +255,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
 
   it('[ask choice-card operation without approval] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
-    const operationId = EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio
+    const operationId = EDIT_FIRST_CHOICE_TOOL_IDS.bible_review
     registryState.registry = {
       [operationId]: makeTestOperation({
         id: operationId,

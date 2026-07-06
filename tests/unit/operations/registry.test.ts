@@ -47,7 +47,7 @@ describe('project agent operation registry', () => {
     expect(registry.generate_asset_reference_video?.channels).toEqual({ tool: false, api: true })
     expect(registry.generate_episode_asset_reference_videos?.channels).toEqual({ tool: false, api: true })
     expect(registry.render_final_video?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_screenplay?.channels).toEqual({ tool: true, api: true })
+    expect(registry.ingest_script?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_style_previews?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script?.channels).toEqual({ tool: true, api: true })
     expect(registry.generate_edit_script_assets?.channels).toEqual({ tool: true, api: true })
@@ -59,7 +59,7 @@ describe('project agent operation registry', () => {
     }
 
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])
-    expect(registry.generate_edit_screenplay?.groupPath).toEqual(['edit-script'])
+    expect(registry.ingest_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.generate_edit_style_previews?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])
@@ -82,7 +82,7 @@ describe('project agent operation registry', () => {
 
     expect(contextOperation).toBeDefined()
     expect(contextOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
-    expect(contextOperation.summary).toContain('full screenplay text, historical operation results, failure details, active task details, or asset/storyboard/panel fields')
+    expect(contextOperation.summary).toContain('full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields')
     expect(contextOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters')
     expect(snapshotOperation).toBeDefined()
     expect(snapshotOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')

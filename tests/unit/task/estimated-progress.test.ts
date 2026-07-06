@@ -26,7 +26,7 @@ describe('estimated task progress', () => {
   })
 
   it('uses 60 seconds for music and final render tasks', () => {
-    expect(getEstimatedTaskProgressTiming(TASK_TYPE.BGM_SCORE_GENERATE)).toEqual({
+    expect(getEstimatedTaskProgressTiming(TASK_TYPE.MUSIC_SCORE_PLAN)).toEqual({
       expectedSeconds: 60,
       tailSeconds: 30,
       totalSeconds: 90,

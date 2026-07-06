@@ -37,7 +37,7 @@ const prismaMock = vi.hoisted(() => ({
       },
     ]),
   },
-  projectEditScreenplay: {
+  projectEditBible: {
     findFirst: vi.fn(async (): Promise<unknown | null> => null),
   },
 }))
@@ -121,11 +121,11 @@ const eventMock = vi.hoisted(() => ({
 
 const choiceCardMock = vi.hoisted(() => ({
   buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
-    cardId: 'edit-first-screenplay-review',
+    cardId: 'edit-first-bible-review',
     runId: null,
     interruptionId: null,
     toolCallId: 'tool-choice-1',
-    choiceType: 'screenplay_review',
+    choiceType: 'bible_review',
     title: '审核剧本',
     groups: [],
     submitLabel: '确认',
@@ -162,7 +162,7 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
@@ -289,10 +289,10 @@ describe('project agent session-state', () => {
       activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'screenplay_review', cardId: 'edit-first-screenplay-review' },
+      payload: { choiceType: 'bible_review', cardId: 'edit-first-bible-review' },
     })
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'choice-interruption-1',
@@ -300,10 +300,10 @@ describe('project agent session-state', () => {
       activityId: 'activity-choice-1',
       type: 'choice',
       status: 'pending',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'screenplay_review', cardId: 'edit-first-screenplay-review' },
+      payload: { choiceType: 'bible_review', cardId: 'edit-first-bible-review' },
     })
 
     const state = await getProjectAgentSessionState({
@@ -315,14 +315,14 @@ describe('project agent session-state', () => {
     })
 
     expect(choiceCardMock.buildEditFirstAssistantChoiceCard).toHaveBeenCalledWith(expect.objectContaining({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-choice-1',
     }))
     expect(state.pendingInteraction).toEqual(expect.objectContaining({
       kind: 'choice',
       runId: 'run-choice-1',
       interruptionId: 'choice-interruption-1',
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       choiceCard: expect.objectContaining({
         runId: 'run-choice-1',
         interruptionId: 'choice-interruption-1',
@@ -358,9 +358,12 @@ describe('project agent session-state', () => {
       toolCallId: null,
       choiceType: 'style',
     })
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
-      id: 'screenplay-1',
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
       projectId: 'project-1',
+      episode: {
+        projectId: 'project-1',
+      },
       episodeId: 'episode-1',
       stylePreviews: [
         {
@@ -393,7 +396,7 @@ describe('project agent session-state', () => {
       agentRunId: 'run-style-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
       items: [
         expect.objectContaining({
           id: 'style-preview-a',

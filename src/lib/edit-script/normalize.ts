@@ -14,15 +14,16 @@ import {
 } from './types'
 import { assertEditGenerationSegmentDurationsSupported } from './generation-segment-constraints'
 
-function uniquePositiveNumbers(values: readonly number[]): number[] {
-  const seen = new Set<number>()
-  const output: number[] = []
+function uniqueNonEmptyStrings(values: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const output: string[] = []
   values.forEach((value) => {
-    if (!Number.isInteger(value) || value <= 0 || seen.has(value)) return
-    seen.add(value)
-    output.push(value)
+    const normalized = value.trim()
+    if (!normalized || seen.has(normalized)) return
+    seen.add(normalized)
+    output.push(normalized)
   })
-  return output.sort((left, right) => left - right)
+  return output
 }
 
 function assertContinuousShotNumbers(shots: readonly { readonly shotNumber: number }[]): void {
@@ -37,6 +38,7 @@ function assertContinuousShotNumbers(shots: readonly { readonly shotNumber: numb
 function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptShot[] {
   const normalized = shots
     .map((shot): EditScriptShot => ({
+      shotId: shot.shotId.trim(),
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: { name: shot.scene.name.trim() },
@@ -55,6 +57,11 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
   assertContinuousShotNumbers(normalized)
+  const shotIds = new Set<string>()
+  normalized.forEach((shot) => {
+    if (shotIds.has(shot.shotId)) throw new Error(`EDIT_SCRIPT_SHOT_ID_DUPLICATE:${shot.shotId}`)
+    shotIds.add(shot.shotId)
+  })
   return normalized
 }
 
@@ -62,24 +69,30 @@ function assertGenerationSegments(
   segments: readonly EditGenerationSegment[],
   shots: readonly EditScriptShot[],
 ): readonly EditGenerationSegment[] {
-  const shotNumbers = shots.map((shot) => shot.shotNumber)
-  const flattened = segments.flatMap((segment) => segment.shotNumbers)
-  if (flattened.length !== shotNumbers.length) {
-    throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID:${flattened.length}:${shotNumbers.length}`)
+  const shotIds = shots.map((shot) => shot.shotId)
+  const shotOrder = new Map(shotIds.map((shotId, index) => [shotId, index]))
+  const flattened = segments.flatMap((segment) => segment.shotIds)
+  if (flattened.length !== shotIds.length) {
+    throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_COVERAGE_INVALID:${flattened.length}:${shotIds.length}`)
   }
-  flattened.forEach((shotNumber, index) => {
-    if (shotNumber !== shotNumbers[index]) {
-      throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID:${shotNumber}:${shotNumbers[index]}`)
+  flattened.forEach((shotId, index) => {
+    if (shotId !== shotIds[index]) {
+      throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID:${shotId}:${shotIds[index]}`)
     }
   })
   const normalized = segments.map((segment) => {
-    segment.shotNumbers.forEach((shotNumber, index) => {
-      if (index > 0 && shotNumber !== segment.shotNumbers[index - 1] + 1) {
-        throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_NOT_CONTINUOUS:${segment.shotNumbers.join(',')}`)
+    segment.shotIds.forEach((shotId, index) => {
+      const order = shotOrder.get(shotId)
+      if (order === undefined) throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_UNKNOWN_SHOT:${shotId}`)
+      if (index > 0) {
+        const previousOrder = shotOrder.get(segment.shotIds[index - 1])
+        if (previousOrder === undefined || order !== previousOrder + 1) {
+          throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_NOT_CONTINUOUS:${segment.shotIds.join(',')}`)
+        }
       }
     })
     return {
-      shotNumbers: [...segment.shotNumbers],
+      shotIds: [...segment.shotIds],
       continuity: segment.continuity.trim(),
     }
   })
@@ -115,10 +128,11 @@ export function normalizeEditShotExecutionPlan(
   raw: unknown,
   coreShots: readonly EditScriptShot[],
   coreGenerationSegments: readonly EditGenerationSegment[],
-): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'editScriptId' | 'status'> {
+): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId' | 'status'> {
   const parsed = editShotExecutionPlanSchema.parse(raw)
   const shots = parsed.shots
     .map((shot): EditShotExecution => ({
+      shotId: shot.shotId.trim(),
       shotNumber: shot.shotNumber,
       camera: {
         shotScale: shot.camera.shotScale.trim(),
@@ -155,7 +169,7 @@ export function normalizeEditShotExecutionPlan(
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
   const generationSegmentExecutions = parsed.generationSegmentExecutions.map((segment): EditGenerationSegmentExecution => ({
-    shotNumbers: [...segment.shotNumbers],
+    shotIds: [...segment.shotIds],
     continuousVideoPrompt: segment.continuousVideoPrompt.trim(),
   }))
   assertContinuousShotNumbers(shots)
@@ -164,8 +178,8 @@ export function normalizeEditShotExecutionPlan(
   }
   shots.forEach((shot, index) => {
     const coreShot = coreShots[index]
-    if (!coreShot || shot.shotNumber !== coreShot.shotNumber) {
-      throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_MISMATCH:${shot.shotNumber}:${coreShot?.shotNumber ?? 'missing'}`)
+    if (!coreShot || shot.shotId !== coreShot.shotId || shot.shotNumber !== coreShot.shotNumber) {
+      throw new Error(`EDIT_SHOT_EXECUTION_PLAN_SHOT_MISMATCH:${shot.shotId}:${coreShot?.shotId ?? 'missing'}`)
     }
     const coreCharacters = names(coreShot.characters)
     const executionCharacters = names(shot.blocking.characters)
@@ -189,10 +203,10 @@ export function normalizeEditShotExecutionPlan(
     const coreSegment = coreGenerationSegments[index]
     if (!coreSegment) throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_MISSING:${index}`)
     if (
-      segmentExecution.shotNumbers.length !== coreSegment.shotNumbers.length ||
-      segmentExecution.shotNumbers.some((shotNumber, shotIndex) => shotNumber !== coreSegment.shotNumbers[shotIndex])
+      segmentExecution.shotIds.length !== coreSegment.shotIds.length ||
+      segmentExecution.shotIds.some((shotId, shotIndex) => shotId !== coreSegment.shotIds[shotIndex])
     ) {
-      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${segmentExecution.shotNumbers.join(',')}:${coreSegment.shotNumbers.join(',')}`)
+      throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${segmentExecution.shotIds.join(',')}:${coreSegment.shotIds.join(',')}`)
     }
   })
   return { shots, generationSegmentExecutions }
@@ -203,7 +217,7 @@ export function normalizeEditAssetRequirements(
   shots: readonly EditScriptShot[],
 ): EditAssetRequirement[] {
   const parsed = editAssetExtractionSchema.parse(raw)
-  const validShotNumbers = new Set(shots.map((shot) => shot.shotNumber))
+  const validShotIds = new Set(shots.map((shot) => shot.shotId))
   const seen = new Set<string>()
   const assets: EditAssetRequirement[] = []
 
@@ -211,9 +225,9 @@ export function normalizeEditAssetRequirements(
     const name = asset.name.trim()
     const key = `${asset.kind}:${name.toLocaleLowerCase()}`
     if (seen.has(key)) return
-    const shotNumbers = uniquePositiveNumbers(asset.shotNumbers)
-      .filter((shotNumber) => validShotNumbers.has(shotNumber))
-    if (shotNumbers.length === 0) {
+    const shotIds = uniqueNonEmptyStrings(asset.shotIds)
+      .filter((shotId) => validShotIds.has(shotId))
+    if (shotIds.length === 0) {
       throw new Error(`EDIT_SCRIPT_ASSET_HAS_NO_VALID_SHOTS:${asset.kind}:${name}`)
     }
     seen.add(key)
@@ -221,7 +235,7 @@ export function normalizeEditAssetRequirements(
       kind: asset.kind,
       name,
       description: asset.description.trim(),
-      shotNumbers,
+      shotIds,
       status: 'pending',
       targetId: null,
       errorMessage: null,

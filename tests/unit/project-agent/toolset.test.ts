@@ -53,7 +53,10 @@ function registry(): ProjectAgentOperationRegistry {
   const ids = [
     'get_project_context',
     'get_project_snapshot',
+    'get_episode_overview',
+    'get_chapter_detail',
     'get_task',
+    'get_task_batch',
     'list_tasks',
     ...EDIT_FIRST_CHOICE_OPERATION_IDS,
     ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
@@ -75,7 +78,10 @@ describe('project agent live toolset registration', () => {
     expect(result.operationIds).toEqual(expect.arrayContaining([
       'get_project_context',
       'get_project_snapshot',
+      'get_episode_overview',
+      'get_chapter_detail',
       'get_task',
+      'get_task_batch',
       'list_tasks',
       ...EDIT_FIRST_CHOICE_OPERATION_IDS,
       ...EDIT_FIRST_WORKFLOW_OPERATION_IDS,
@@ -91,7 +97,7 @@ describe('project agent live toolset registration', () => {
       context: { episodeId: 'episode-1' },
     })
 
-    expect(result.operationIds).toContain('generate_edit_screenplay')
+    expect(result.operationIds).toContain('ingest_script')
     expect(result.operationIds).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
     expect(result.includeChoiceOperation).toBe(true)
   })
@@ -113,13 +119,18 @@ describe('project agent live operation enablement', () => {
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
-    const current = workflow('ready_to_generate_edit_script', ['generate_edit_script'])
+    const current = workflow('ready_to_generate_edit_script', ['plan_chapters'])
 
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: current,
-      operationId: 'generate_edit_script',
+      operationId: 'plan_chapters',
     })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: current,
+      operationId: 'generate_edit_script',
+    })).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: current,
@@ -157,7 +168,7 @@ describe('project agent live operation enablement', () => {
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: afterContinuation,
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
     })).toBe(false)
   })
 
@@ -165,15 +176,15 @@ describe('project agent live operation enablement', () => {
     const toolset = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
-      resumeOperationId: 'generate_edit_screenplay',
+      resumeOperationId: 'ingest_script',
     })
-    const movedOn = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    const movedOn = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
 
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_screenplay')).toBe(true)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'ingest_script')).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: movedOn,
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
     })).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,
@@ -187,13 +198,13 @@ describe('project agent live operation enablement', () => {
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
-    const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    const review = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
 
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_screenplay')).toBe(false)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, 'ingest_script')).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
     })).toBe(false)
   })
 
@@ -202,36 +213,62 @@ describe('project agent live operation enablement', () => {
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
-    const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    const review = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
     const styleChoice = workflow('needs_style_choice', ['generate_edit_style_previews'])
 
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_context')).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_snapshot')).toBe(true)
-    expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)).toBe(false)
+    expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
     })).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: styleChoice,
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
     })).toBe(false)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_script')).toBe(false)
   })
 
-  it('keeps stage capability rules like screenplay revision during review', () => {
+  it('enables budget confirmation only for production stages with a next action', () => {
     const toolset = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
     })
-    const review = workflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    const production = workflow('ready_to_render_chapters', ['render_chapters'])
+    const review = workflow('assets_ready_for_review', ['revise_edit_script_assets'])
+    const missingAction = workflow('ready_to_render_chapters', [])
+
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: production,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
+    })).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: missingAction,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
+    })).toBe(false)
+  })
+
+  it('keeps stage capability rules like bible revision during review', () => {
+    const toolset = resolveProjectAgentToolset({
+      registry: registry(),
+      context: { episodeId: 'episode-1' },
+    })
+    const review = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
 
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,
-      operationId: 'revise_edit_screenplay',
+      operationId: 'revise_bible',
     })).toBe(true)
     expect(isProjectAgentOperationEnabled({
       toolset,

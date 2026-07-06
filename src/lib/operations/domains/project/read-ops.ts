@@ -5,6 +5,7 @@ import { assembleProjectContext } from '@/lib/project-context/assembler'
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { assembleProjectProjectionFull } from '@/lib/project-projection/full'
 import { buildAssistantProjectContextSnapshot } from '@/lib/project-agent/presentation'
+import { listTaskBatchFailures, readTaskBatchStatus } from '@/lib/task/batch'
 import type {
   ProjectContextPartData,
 } from '@/lib/project-agent/types'
@@ -16,6 +17,11 @@ const taskTargetSchema = z.object({
   targetType: z.string().min(1),
   targetId: z.string().min(1),
   types: z.array(z.string().min(1)).optional(),
+})
+
+const taskBatchSchema = z.object({
+  batchKey: z.string().trim().min(1),
+  includeFailures: z.boolean().optional(),
 })
 
 const EFFECTS_NONE = {
@@ -75,7 +81,7 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_project_context: defineOperation({
       id: 'get_project_context',
-      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or user-intent tool input, such as full screenplay text, historical operation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters.',
+      summary: 'Load concrete project or episode details only when the injected project_state_snapshot and conversation context are insufficient for the requested content or user-intent tool input, such as full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters.',
       intent: 'query',
       effects: EFFECTS_NONE,
       inputSchema: z.object({
@@ -122,6 +128,23 @@ export function createReadOperations(): ProjectAgentOperationRegistryDraft {
           }),
         }),
       }),
+    }),
+    get_task_batch: defineOperation({
+      id: 'get_task_batch',
+      summary: 'Read aggregate status for a submitted task batch by batchKey, optionally including failed task details.',
+      intent: 'query',
+      effects: EFFECTS_NONE,
+      inputSchema: taskBatchSchema,
+      outputSchema: z.unknown(),
+      execute: async (_ctx, input) => {
+        const status = await readTaskBatchStatus(input.batchKey)
+        return {
+          status,
+          failures: input.includeFailures === true
+            ? await listTaskBatchFailures(input.batchKey)
+            : [],
+        }
+      },
     }),
   }
 }

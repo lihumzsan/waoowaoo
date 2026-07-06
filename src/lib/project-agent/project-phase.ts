@@ -71,12 +71,12 @@ async function resolveStaleArtifactsForEpisode(params: {
   progress: ProjectPhaseSnapshot['progress']
 }): Promise<string[]> {
   const episodeId = params.episodeId
-  const [episode, editScreenplayMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
+  const [episode, editBibleMax, editScriptMax, storyboardMax, panelMax] = await Promise.all([
     prisma.projectEpisode.findUnique({
       where: { id: episodeId },
       select: { updatedAt: true },
     }),
-    prisma.projectEditScreenplay.aggregate({
+    prisma.projectEditBible.aggregate({
       where: { episodeId },
       _max: { updatedAt: true },
     }),
@@ -101,12 +101,12 @@ async function resolveStaleArtifactsForEpisode(params: {
   ])
 
   const storyUpdatedAt = maxDate([episode?.updatedAt ?? null])
-  const scriptUpdatedAt = maxDate([editScreenplayMax._max.updatedAt, editScriptMax._max.updatedAt])
+  const scriptUpdatedAt = maxDate([editBibleMax._max.updatedAt, editScriptMax._max.updatedAt])
   const storyboardUpdatedAt = maxDate([storyboardMax._max.updatedAt, panelMax._max.updatedAt])
 
   const stale: string[] = []
   if (scriptUpdatedAt && storyUpdatedAt && storyUpdatedAt > scriptUpdatedAt) {
-    stale.push('screenplay')
+    stale.push('bible')
   }
   if (
     (params.progress.storyboardCount > 0 || params.progress.panelCount > 0)
@@ -157,8 +157,8 @@ export async function resolveProjectPhase(params: {
     phase = PROJECT_PHASE.STORYBOARD_READY
   } else if (
     editFirstWorkflow.stage !== 'not_started'
-    && editFirstWorkflow.stage !== 'ready_to_generate_screenplay'
-    && editFirstWorkflow.stage !== 'screenplay_ready_for_review'
+    && editFirstWorkflow.stage !== 'ready_to_ingest_script'
+    && editFirstWorkflow.stage !== 'bible_ready_for_review'
   ) {
     phase = PROJECT_PHASE.SCRIPT_READY
   }

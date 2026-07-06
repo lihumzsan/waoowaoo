@@ -7,34 +7,34 @@ export const EDIT_GENERATION_SEGMENT_DURATION_EXCEEDED_CODE =
 
 export interface EditGenerationSegmentDurationIssue {
   readonly code: typeof EDIT_GENERATION_SEGMENT_DURATION_EXCEEDED_CODE
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly durationSec: number
   readonly maxDurationSec: number
 }
 
-function durationByShotNumber(
-  shots: readonly Pick<EditScriptShot, 'shotNumber' | 'durationSec'>[],
-): ReadonlyMap<number, number> {
-  return new Map(shots.map((shot) => [shot.shotNumber, shot.durationSec]))
+function durationByShotId(
+  shots: readonly Pick<EditScriptShot, 'shotId' | 'durationSec'>[],
+): ReadonlyMap<string, number> {
+  return new Map(shots.map((shot) => [shot.shotId, shot.durationSec]))
 }
 
 export function calculateEditGenerationSegmentDuration(input: {
-  readonly shots: readonly Pick<EditScriptShot, 'shotNumber' | 'durationSec'>[]
-  readonly segment: Pick<EditGenerationSegment, 'shotNumbers'>
+  readonly shots: readonly Pick<EditScriptShot, 'shotId' | 'durationSec'>[]
+  readonly segment: Pick<EditGenerationSegment, 'shotIds'>
 }): number {
-  const durations = durationByShotNumber(input.shots)
-  return input.segment.shotNumbers.reduce((total, shotNumber) => {
-    const durationSec = durations.get(shotNumber)
+  const durations = durationByShotId(input.shots)
+  return input.segment.shotIds.reduce((total, shotId) => {
+    const durationSec = durations.get(shotId)
     if (durationSec === undefined) {
-      throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_SHOT_DURATION_MISSING:${String(shotNumber)}`)
+      throw new Error(`EDIT_SCRIPT_GENERATION_SEGMENT_SHOT_DURATION_MISSING:${shotId}`)
     }
     return total + durationSec
   }, 0)
 }
 
 export function findEditGenerationSegmentDurationIssues(input: {
-  readonly shots: readonly Pick<EditScriptShot, 'shotNumber' | 'durationSec'>[]
-  readonly segments: readonly Pick<EditGenerationSegment, 'shotNumbers'>[]
+  readonly shots: readonly Pick<EditScriptShot, 'shotId' | 'durationSec'>[]
+  readonly segments: readonly Pick<EditGenerationSegment, 'shotIds'>[]
   readonly maxDurationSec?: number
 }): EditGenerationSegmentDurationIssue[] {
   const maxDurationSec = input.maxDurationSec ?? EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC
@@ -46,7 +46,7 @@ export function findEditGenerationSegmentDurationIssues(input: {
     if (durationSec <= maxDurationSec) return []
     return [{
       code: EDIT_GENERATION_SEGMENT_DURATION_EXCEEDED_CODE,
-      shotNumbers: [...segment.shotNumbers],
+      shotIds: [...segment.shotIds],
       durationSec,
       maxDurationSec,
     }]
@@ -56,12 +56,12 @@ export function findEditGenerationSegmentDurationIssues(input: {
 export function formatEditGenerationSegmentDurationIssue(
   issue: EditGenerationSegmentDurationIssue,
 ): string {
-  return `${issue.code}:shots=${issue.shotNumbers.join(',')}:duration=${String(issue.durationSec)}:max=${String(issue.maxDurationSec)}`
+  return `${issue.code}:shots=${issue.shotIds.join(',')}:duration=${String(issue.durationSec)}:max=${String(issue.maxDurationSec)}`
 }
 
 export function assertEditGenerationSegmentDurationsSupported(input: {
-  readonly shots: readonly Pick<EditScriptShot, 'shotNumber' | 'durationSec'>[]
-  readonly segments: readonly Pick<EditGenerationSegment, 'shotNumbers'>[]
+  readonly shots: readonly Pick<EditScriptShot, 'shotId' | 'durationSec'>[]
+  readonly segments: readonly Pick<EditGenerationSegment, 'shotIds'>[]
   readonly maxDurationSec?: number
 }): void {
   const issue = findEditGenerationSegmentDurationIssues(input)[0]

@@ -51,16 +51,16 @@ export async function resolveEditScriptStyleBibleForTask(input: {
   const episodeId = trimText(input.episodeId)
   if (!episodeId) return null
 
-  const screenplay = await prisma.projectEditScreenplay.findFirst({
+  const editBible = await prisma.projectEditBible.findFirst({
     where: {
-      projectId: input.projectId,
       episodeId,
+      episode: { projectId: input.projectId },
     },
     select: {
       styleBibleJson: true,
     },
   })
-  return styleBibleFromCarrier(screenplay)
+  return styleBibleFromCarrier(editBible)
 }
 
 export async function resolveEditScriptStyleBibleForStoryboardTask(input: {

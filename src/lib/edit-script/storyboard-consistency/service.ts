@@ -9,18 +9,32 @@ import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 interface SubmitEditScriptStoryboardInput {
   readonly projectId: string
   readonly episodeId: string
+  readonly chapterId?: string
   readonly editScriptId?: string
   readonly userId: string
   readonly locale: Locale
   readonly requestId?: string | null
 }
 
-async function resolveEditScriptId(input: Pick<SubmitEditScriptStoryboardInput, 'projectId' | 'episodeId' | 'editScriptId'>): Promise<string> {
-  if (input.editScriptId) return input.editScriptId
+async function resolveEditScriptId(input: Pick<SubmitEditScriptStoryboardInput, 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId'>): Promise<string> {
+  if (input.editScriptId) {
+    const editScript = await prisma.projectEditScript.findFirst({
+      where: {
+        id: input.editScriptId,
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        ...(input.chapterId ? { chapterId: input.chapterId } : {}),
+      },
+      select: { id: true },
+    })
+    if (!editScript?.id) throw new ApiError('NOT_FOUND')
+    return editScript.id
+  }
   const editScript = await prisma.projectEditScript.findFirst({
     where: {
       projectId: input.projectId,
       episodeId: input.episodeId,
+      ...(input.chapterId ? { chapterId: input.chapterId } : {}),
     },
     orderBy: { updatedAt: 'desc' },
     select: { id: true },
@@ -53,6 +67,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitEditScriptSt
       userId: input.userId,
       payload: {
         editScriptId,
+        ...(input.chapterId ? { chapterId: input.chapterId } : {}),
         sourceSnapshot,
         modelConfigSnapshot,
       },

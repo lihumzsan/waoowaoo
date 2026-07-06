@@ -218,6 +218,13 @@ export async function createTask(input: CreateTaskInput) {
           // 校验 BullMQ Job 是否真的还活着，防止 DB 与队列状态脱节导致永久卡死
           const jobAlive = await verifyJobAlive(existing.id)
           if (jobAlive) {
+            if (input.batchKey && existing.batchKey !== input.batchKey) {
+              const updated = await model.update({
+                where: { id: existing.id },
+                data: { batchKey: input.batchKey },
+              })
+              return { task: updated, deduped: true as const }
+            }
             return { task: existing, deduped: true as const }
           }
 
@@ -274,6 +281,7 @@ export async function createTask(input: CreateTaskInput) {
     attempt: 0,
     priority: input.priority ?? 0,
     dedupeKey: input.dedupeKey || null,
+    batchKey: input.batchKey || null,
     operationId: input.operationId || null,
     operationSource: input.operationSource || null,
     operationConfirmed: input.operationConfirmed ?? null,
@@ -301,6 +309,13 @@ export async function createTask(input: CreateTaskInput) {
             // P2002 竞态路径：同样校验 BullMQ Job 状态
             const jobAlive = await verifyJobAlive(collided.id)
             if (jobAlive) {
+              if (input.batchKey && collided.batchKey !== input.batchKey) {
+                const updated = await model.update({
+                  where: { id: collided.id },
+                  data: { batchKey: input.batchKey },
+                })
+                return { task: updated, deduped: true as const }
+              }
               return { task: collided, deduped: true as const }
             }
 

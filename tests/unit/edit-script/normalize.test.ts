@@ -9,6 +9,7 @@ function corePlan() {
   return {
     shots: [
       {
+        shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
         scene: { name: 'Cabin' },
@@ -33,6 +34,7 @@ function corePlan() {
         sound: 'Soft floor creak.',
       },
       {
+        shotId: 'shot-2',
         shotNumber: 2,
         durationSec: 3,
         scene: { name: 'Cabin' },
@@ -59,7 +61,7 @@ function corePlan() {
     ],
     generationSegments: [
       {
-        shotNumbers: [1, 2],
+        shotIds: ['shot-1', 'shot-2'],
         continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
       },
     ],
@@ -70,6 +72,7 @@ function executionPlan() {
   return {
     shots: [
       {
+        shotId: 'shot-1',
         shotNumber: 1,
         camera: {
           shotScale: 'medium',
@@ -117,6 +120,7 @@ function executionPlan() {
         videoPrompt: 'Single-shot video prompt: Anna remains near the doorway while the high-backed chair hides the seated subject in shadow.',
       },
       {
+        shotId: 'shot-2',
         shotNumber: 2,
         camera: {
           shotScale: 'medium close',
@@ -166,7 +170,7 @@ function executionPlan() {
     ],
     generationSegmentExecutions: [
       {
-        shotNumbers: [1, 2],
+        shotIds: ['shot-1', 'shot-2'],
         continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and the hidden subject stays physically present. <chair hinge begins>',
       },
     ],
@@ -181,7 +185,7 @@ describe('edit-first core plan normalization', () => {
     expect(normalized.durationSec).toBe(6)
     expect(normalized.generationSegments).toEqual([
       {
-        shotNumbers: [1, 2],
+        shotIds: ['shot-1', 'shot-2'],
         continuity: 'Anna approaches the same high-backed chair and the hidden subject stays present.',
       },
     ])
@@ -206,7 +210,7 @@ describe('edit-first core plan normalization', () => {
 
     const reordered = {
       ...plan,
-      generationSegments: [{ shotNumbers: [2, 1], continuity: 'wrong order' }],
+      generationSegments: [{ shotIds: ['shot-2', 'shot-1'], continuity: 'wrong order' }],
     }
     expect(() => normalizeEditScriptCore(reordered)).toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_ORDER_INVALID')
   })
@@ -220,12 +224,14 @@ describe('edit-first core plan normalization', () => {
         { ...plan.shots[1], durationSec: 5 },
         {
           ...plan.shots[1],
+          shotId: 'shot-3',
           shotNumber: 3,
           durationSec: 4,
           action: 'Anna turns the chair.',
         },
         {
           ...plan.shots[1],
+          shotId: 'shot-4',
           shotNumber: 4,
           durationSec: 3,
           action: 'The hidden subject starts to move.',
@@ -233,14 +239,14 @@ describe('edit-first core plan normalization', () => {
       ],
       generationSegments: [
         {
-          shotNumbers: [1, 2, 3, 4],
+          shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
           continuity: 'One continuous reveal movement that is too long for a single video segment.',
         },
       ],
     }
 
     expect(() => normalizeEditScriptCore(oversized))
-      .toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_DURATION_EXCEEDED:shots=1,2,3,4:duration=17:max=15')
+      .toThrow('EDIT_SCRIPT_GENERATION_SEGMENT_DURATION_EXCEEDED:shots=shot-1,shot-2,shot-3,shot-4:duration=17:max=15')
   })
 })
 
@@ -263,7 +269,7 @@ describe('shot execution plan normalization', () => {
     expect(normalizedExecution.shots[0]?.videoPrompt).toContain('Single-shot video prompt')
     expect(normalizedExecution.generationSegmentExecutions[0]?.continuousVideoPrompt).toContain('Cabin reveal continuous segment')
     expect(normalizedExecution.generationSegmentExecutions[0]).toEqual({
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
       continuousVideoPrompt: expect.stringContaining('hidden subject'),
     })
   })

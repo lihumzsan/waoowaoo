@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth, requireProjectAuthLight } from '@/lib/api-auth'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
-import { TASK_TYPE } from '@/lib/task/types'
 import {
   readProjectEditScript,
   updateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/edit-script/service'
+import { submitProjectEditScriptGenerationTask } from '@/lib/edit-script/task-submission'
 import {
   createEditScriptRequestSchema,
   getEditScriptRequestSchema,
@@ -25,6 +24,7 @@ export const GET = apiHandler(async (
   const { searchParams } = new URL(request.url)
   const parsed = getEditScriptRequestSchema.safeParse({
     episodeId: searchParams.get('episodeId'),
+    chapterId: searchParams.get('chapterId') ?? undefined,
   })
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS')
@@ -33,6 +33,7 @@ export const GET = apiHandler(async (
   const editScript = await readProjectEditScript({
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
   })
   return NextResponse.json({ editScript })
 })
@@ -58,25 +59,15 @@ export const POST = apiHandler(async (
     })
   }
 
-  const result = await submitOperationTask({
+  const result = await submitProjectEditScriptGenerationTask({
     request,
     projectId,
     userId: authResult.session.user.id,
     episodeId: parsed.data.episodeId,
-    type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-    targetType: 'ProjectEpisode',
-    targetId: parsed.data.episodeId,
-    operationId: 'generate_edit_script',
+    chapterId: parsed.data.chapterId,
+    videoRatio: parsed.data.videoRatio,
     source: 'project-ui',
     confirmed: true,
-    payload: {
-      episodeId: parsed.data.episodeId,
-      ...(parsed.data.screenplayId ? { screenplayId: parsed.data.screenplayId } : {}),
-      ...(parsed.data.videoRatio ? { videoRatio: parsed.data.videoRatio } : {}),
-      displayMode: 'detail',
-    },
-    dedupeKey: `edit_script_generate:${projectId}:${parsed.data.episodeId}`,
-    billingInfo: null,
     locale: resolveRequiredTaskLocale(request, body),
   })
 
@@ -100,6 +91,7 @@ export const PATCH = apiHandler(async (
   const editScript = await updateProjectEditScriptAssetRequirementDescription({
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
     editScriptId: parsed.data.editScriptId,
     requirementId: parsed.data.requirementId,
     description: parsed.data.description,

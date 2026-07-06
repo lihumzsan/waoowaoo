@@ -3,16 +3,9 @@ import { getSignedUrl } from '@/lib/storage'
 import type { ProjectAgentLocale } from './locale'
 import type {
   ProjectAgentChoiceCardPartData,
-  ProjectAgentChoiceCardGroup,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import {
-  EDIT_FIRST_DURATION_TIERS,
-  readEditFirstDurationTierFromText,
-  resolveEditFirstDurationSpec,
-  type EditFirstDurationTier,
-} from '@/lib/edit-script/duration-tier'
 export {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   EDIT_FIRST_CHOICE_TOOL_IDS,
@@ -26,87 +19,22 @@ import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
-
-export function readEditFirstDurationTier(text: string): EditFirstDurationTier | null {
-  return readEditFirstDurationTierFromText(text)
-}
-
-export function editFirstUserTextHasDuration(text: string): boolean {
-  return readEditFirstDurationTier(text) !== null
-}
+const BUDGET_CONFIRMATION_ALLOWED_STAGES = new Set<string>([
+  'ready_to_generate_edit_script',
+  'ready_to_generate_assets',
+  'ready_to_generate_shot_execution_plan',
+  'ready_to_generate_storyboard',
+  'ready_to_generate_storyboard_images',
+  'ready_to_generate_videos',
+  'ready_to_render_chapters',
+  'ready_to_generate_bgm_score',
+  'ready_to_render_final',
+])
 
 export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | null {
   const normalized = text.trim()
   const ratio = EDIT_FIRST_ASPECT_RATIOS.find((candidate) => normalized.includes(candidate))
   return ratio ?? null
-}
-
-function buildDurationAndAspectRatioChoiceCard(params: {
-  locale: ProjectAgentLocale
-  projectId: string
-  toolCallId: string
-}): ProjectAgentChoiceCardPartData {
-  const { locale, projectId, toolCallId } = params
-  const isEnglish = locale === 'en'
-  return {
-    cardId: 'edit-first-duration-aspect-ratio',
-    toolCallId,
-    choiceType: 'duration_and_aspect_ratio',
-    autoSubmitOnReady: true,
-    title: isEnglish ? 'Choose Duration and Aspect Ratio' : '选择短片时长和画面比例',
-    description: isEnglish
-      ? 'Choose both before screenplay generation. The current test launch supports edit-first videos up to 120 seconds.'
-      : '生成剧本前先同时确认这两项。当前测试上线支持生成两分钟以内的剪辑先行短片。',
-    groups: [
-      {
-        key: 'durationTier',
-        label: isEnglish ? 'Duration' : '时长',
-        required: true,
-        options: EDIT_FIRST_DURATION_TIERS.map((tier) => {
-          const spec = resolveEditFirstDurationSpec(tier)
-          return {
-            value: tier,
-            label: isEnglish
-              ? `${spec.enLabel} · around ${String(spec.targetSeconds)} seconds`
-              : `${spec.zhLabel} · 约 ${String(spec.targetSeconds)} 秒`,
-            description: isEnglish ? spec.enGuidance : spec.zhGuidance,
-          }
-        }),
-      },
-      buildAspectRatioGroup(locale),
-    ],
-    submitLabel: isEnglish ? 'Continue' : '继续生成',
-    submit: {
-      kind: 'set_project_video_ratio',
-      projectId,
-    },
-  }
-}
-
-function buildAspectRatioGroup(locale: ProjectAgentLocale): ProjectAgentChoiceCardGroup {
-  const isEnglish = locale === 'en'
-  return {
-    key: 'aspectRatio',
-    label: isEnglish ? 'Aspect Ratio' : '画面比例',
-    required: true,
-    options: [
-      {
-        value: '9:16',
-        label: '9:16',
-        description: isEnglish ? 'Vertical mobile-first format.' : '竖屏，适合移动端短视频。',
-      },
-      {
-        value: '16:9',
-        label: '16:9',
-        description: isEnglish ? 'Standard widescreen format.' : '标准横屏，适合常规视频。',
-      },
-      {
-        value: '21:9',
-        label: '21:9',
-        description: isEnglish ? 'Cinematic ultrawide format.' : '电影宽银幕，更强调氛围。',
-      },
-    ],
-  }
 }
 
 async function buildStyleAndRatioChoiceCard(params: {
@@ -116,7 +44,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   locale: ProjectAgentLocale
   toolCallId: string
 }): Promise<ProjectAgentChoiceCardPartData> {
-  const [project, screenplay] = await Promise.all([
+  const [project, editBible] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: params.projectId,
@@ -126,12 +54,14 @@ async function buildStyleAndRatioChoiceCard(params: {
         videoRatio: true,
       },
     }),
-    prisma.projectEditScreenplay.findFirst({
+    prisma.projectEditBible.findFirst({
       where: {
-        projectId: params.projectId,
         episodeId: params.episodeId,
-        project: {
-          userId: params.userId,
+        episode: {
+          projectId: params.projectId,
+          project: {
+            userId: params.userId,
+          },
         },
       },
       select: {
@@ -162,21 +92,18 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
   const selectedAspectRatio = EDIT_FIRST_ASPECT_RATIOS.find((ratio) => ratio === project.videoRatio)
   if (!selectedAspectRatio) {
-    throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: call request_edit_duration_aspect_ratio_choice before style choice')
+    throw new Error('EDIT_FIRST_ASPECT_RATIO_REQUIRED: set project videoRatio before style choice')
   }
-  if (!screenplay) {
-    throw new Error('EDIT_FIRST_CHOICE_SCREENPLAY_NOT_FOUND')
+  if (!editBible) {
+    throw new Error('EDIT_FIRST_CHOICE_BIBLE_NOT_FOUND')
   }
-  if (screenplay.status !== 'style_preview_ready') {
-    throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:screenplayStatus=${screenplay.status}`)
-  }
-  if (screenplay.stylePreviews.length < 1) {
-    throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:readyStylePreviewCount=${String(screenplay.stylePreviews.length)}`)
+  if (editBible.stylePreviews.length < 1) {
+    throw new Error(`EDIT_FIRST_STYLE_CHOICE_NOT_READY:readyStylePreviewCount=${String(editBible.stylePreviews.length)}:bibleStatus=${editBible.status}`)
   }
 
   const isEnglish = params.locale === 'en'
   return {
-    cardId: `edit-first-style:${screenplay.id}`,
+    cardId: `edit-first-style:${editBible.id}`,
     toolCallId: params.toolCallId,
     choiceType: 'style',
     title: isEnglish ? 'Choose Visual Style' : '选择视觉风格',
@@ -188,7 +115,7 @@ async function buildStyleAndRatioChoiceCard(params: {
         key: 'stylePreviewId',
         label: isEnglish ? 'Visual Style' : '视觉风格',
         required: true,
-        options: screenplay.stylePreviews.map((preview, index) => ({
+        options: editBible.stylePreviews.map((preview, index) => ({
           value: preview.id,
           label: `${isEnglish ? 'Candidate' : '候选'} ${String(index + 1)} · ${preview.title}`,
           description: preview.summary,
@@ -207,21 +134,21 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 }
 
-function buildScreenplayReviewChoiceCard(params: {
+function buildBibleReviewChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
 }): ProjectAgentChoiceCardPartData {
-  if (params.workflow.stage !== 'screenplay_ready_for_review') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=${params.workflow.stage}`)
+  if (params.workflow.stage !== 'bible_ready_for_review') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=${params.workflow.stage}`)
   }
   const isEnglish = params.locale === 'en'
   return {
-    cardId: 'edit-first-screenplay-review',
+    cardId: 'edit-first-bible-review',
     toolCallId: params.toolCallId,
-    choiceType: 'screenplay_review',
+    choiceType: 'bible_review',
     variant: 'confirm_or_reply',
-    title: isEnglish ? 'Review Screenplay' : '审核剧本',
+    title: isEnglish ? 'Review Bible' : '审核剧本',
     groups: [],
     submitLabel: isEnglish ? 'Confirm' : '确认',
     submit: {
@@ -229,7 +156,7 @@ function buildScreenplayReviewChoiceCard(params: {
     },
     replyLabel: isEnglish ? 'Other ideas' : '其他想法',
     replyPlaceholder: isEnglish
-      ? 'Describe what you want changed in the screenplay...'
+      ? 'Describe what you want changed in the bible...'
       : '输入你希望修改的剧情、氛围、角色、结尾或表达方向...',
     replySubmitLabel: isEnglish ? 'Submit notes' : '提交想法',
     replyToolOutputKey: 'revisionNotes',
@@ -268,6 +195,33 @@ function buildAssetReviewChoiceCard(params: {
   }
 }
 
+function buildBudgetConfirmationChoiceCard(params: {
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+  toolCallId: string
+}): ProjectAgentChoiceCardPartData {
+  const nextAction = params.workflow.nextAction
+  if (!nextAction || !BUDGET_CONFIRMATION_ALLOWED_STAGES.has(params.workflow.stage)) {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=budget_confirmation:stage=${params.workflow.stage}`)
+  }
+  const isEnglish = params.locale === 'en'
+  return {
+    cardId: `edit-first-budget:${params.workflow.stage}:${nextAction.operationId}`,
+    toolCallId: params.toolCallId,
+    choiceType: 'budget_confirmation',
+    variant: 'confirm',
+    title: isEnglish ? 'Confirm Production Budget' : '确认生产预算',
+    description: isEnglish
+      ? `Confirm this stage before the assistant starts ${nextAction.title}. The exact billable task submission still uses the project operation rules.`
+      : `请确认这一阶段可以开始执行：${nextAction.title}。实际计费任务仍由项目 operation 规则提交和记录。`,
+    groups: [],
+    submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
+    submit: {
+      kind: 'submit_tool_output',
+    },
+  }
+}
+
 export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
@@ -277,19 +231,8 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceCardPartData> {
-  if (params.choiceType === 'duration_and_aspect_ratio') {
-    if (params.workflow.stage !== 'ready_to_generate_screenplay') {
-      throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=${params.workflow.stage}`)
-    }
-    return buildDurationAndAspectRatioChoiceCard({
-      locale: params.locale,
-      projectId: params.projectId,
-      toolCallId: params.toolCallId,
-    })
-  }
-
-  if (params.choiceType === 'screenplay_review') {
-    return buildScreenplayReviewChoiceCard({
+  if (params.choiceType === 'bible_review') {
+    return buildBibleReviewChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,
@@ -298,6 +241,14 @@ export async function buildEditFirstAssistantChoiceCard(params: {
 
   if (params.choiceType === 'asset_review') {
     return buildAssetReviewChoiceCard({
+      locale: params.locale,
+      workflow: params.workflow,
+      toolCallId: params.toolCallId,
+    })
+  }
+
+  if (params.choiceType === 'budget_confirmation') {
+    return buildBudgetConfirmationChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

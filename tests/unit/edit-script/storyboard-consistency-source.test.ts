@@ -56,7 +56,7 @@ function requirement(overrides: Partial<EditAssetRequirement>): EditAssetRequire
     kind: 'character',
     name: 'Character',
     description: 'Character description',
-    shotNumbers: [1],
+    shotIds: ['shot-1'],
     status: 'generating',
     targetId: 'asset-1',
     errorMessage: null,

@@ -210,10 +210,10 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
             if (typeof params.payload === 'object' && params.payload && !Array.isArray(params.payload)) {
               const choiceType = (params.payload as Record<string, unknown>).choiceType
               if (
-                choiceType === 'duration_and_aspect_ratio'
-                || choiceType === 'screenplay_review'
+                choiceType === 'bible_review'
                 || choiceType === 'style'
                 || choiceType === 'asset_review'
+                || choiceType === 'budget_confirmation'
               ) return choiceType
             }
             return null

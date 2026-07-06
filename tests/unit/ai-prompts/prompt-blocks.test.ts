@@ -5,19 +5,18 @@ import { flattenProviderMessageContent } from '@/lib/ai-providers/shared/llm-sup
 describe('ai prompt cacheable content blocks', () => {
   it('keeps rendered prompt text unchanged while marking large variables as cacheable blocks', () => {
     const variables = {
-      user_request: '生成一个科幻短片',
-      duration_guidance: '约 60 秒',
-      aspect_ratio: '16:9',
+      source_document: '生成一个科幻短片',
+      source_checksum: 'checksum-1',
     }
     const content = buildAiPromptContent({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+      promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       locale: 'zh',
       variables,
-      cacheVariableKeys: ['user_request'],
+      cacheVariableKeys: ['source_document'],
       minCacheChars: 1,
     })
     const rendered = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+      promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       locale: 'zh',
       variables,
     })
@@ -35,14 +34,13 @@ describe('ai prompt cacheable content blocks', () => {
 
   it('returns a plain string when no variable crosses the cache threshold', () => {
     const content = buildAiPromptContent({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
+      promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       locale: 'zh',
       variables: {
-        user_request: '短',
-        duration_guidance: '约 60 秒',
-        aspect_ratio: '16:9',
+        source_document: '短',
+        source_checksum: 'checksum-1',
       },
-      cacheVariableKeys: ['user_request'],
+      cacheVariableKeys: ['source_document'],
       minCacheChars: 10,
     })
 

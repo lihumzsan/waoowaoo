@@ -51,7 +51,7 @@ function createTxMock(): ProjectAgentReducerTxMock {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'generate_edit_screenplay',
+        operationId: 'ingest_script',
         sourceOperationId: null,
         toolCallId: 'tool-1',
         choiceType: null,
@@ -95,7 +95,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         activityId: 'activity-1',
         type: 'operation',
-        operationId: 'generate_edit_screenplay',
+        operationId: 'ingest_script',
         toolCallId: 'tool-1',
       },
     })
@@ -112,7 +112,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         type: 'operation',
         status: 'running',
-        operationId: 'generate_edit_screenplay',
+        operationId: 'ingest_script',
       }),
     }))
     expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -127,7 +127,7 @@ describe('project agent event reducer', () => {
       runId: 'run-1',
       type: 'operation',
       status: 'running',
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
     }))
   })
 
@@ -146,7 +146,7 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         activityId: 'activity-new',
         type: 'operation',
-        operationId: 'generate_edit_screenplay',
+        operationId: 'ingest_script',
       },
     })).rejects.toThrow(/PROJECT_AGENT_ACTIVITY_OVERLAP/)
   })
@@ -161,12 +161,12 @@ describe('project agent event reducer', () => {
         activityId: 'activity-choice-1',
         interruptionId: 'interruption-1',
         interruptionKind: 'choice',
-        operationId: 'request_edit_duration_aspect_ratio_choice',
+        operationId: 'request_edit_bible_review_choice',
         approvalId: 'choice:approval-1',
         toolCallId: 'tool-choice-1',
-        choiceType: 'duration_and_aspect_ratio',
+        choiceType: 'bible_review',
         payload: {
-          choiceType: 'duration_and_aspect_ratio',
+          choiceType: 'bible_review',
           cardId: 'edit-first-duration-aspect-ratio',
         },
         runState: null,
@@ -179,8 +179,8 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
         type: 'awaiting_choice',
         status: 'waiting',
-        operationId: 'request_edit_duration_aspect_ratio_choice',
-        choiceType: 'duration_and_aspect_ratio',
+        operationId: 'request_edit_bible_review_choice',
+        choiceType: 'bible_review',
       }),
     }))
     expect(tx.projectAgentInterruption.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -190,7 +190,7 @@ describe('project agent event reducer', () => {
         activityId: 'activity-choice-1',
         type: 'choice',
         status: 'pending',
-        operationId: 'request_edit_duration_aspect_ratio_choice',
+        operationId: 'request_edit_bible_review_choice',
       }),
     }))
     const activityWriteOrder = tx.projectAgentActivity.upsert.mock.invocationCallOrder[0]

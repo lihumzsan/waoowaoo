@@ -65,7 +65,7 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 }
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
-  if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.BGM_SCORE_GENERATE) return 'music'
+  if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.MUSIC_SCORE_PLAN) return 'music'
   if (
     taskType === TASK_TYPE.VIDEO_PANEL
     || taskType === TASK_TYPE.VIDEO_GROUP

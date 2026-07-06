@@ -117,14 +117,14 @@ describe('task service dedupe + orphan recovery', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: 'episode-1',
         status: TASK_STATUS.QUEUED,
         payload: {
           episodeId: 'episode-1',
         },
-        dedupeKey: 'edit_screenplay_generate:episode-1',
+        dedupeKey: 'edit_bible_generate:episode-1',
         queuedAt: new Date(),
       },
     })
@@ -132,14 +132,14 @@ describe('task service dedupe + orphan recovery', () => {
     const result = await createTask({
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       targetType: 'ProjectEpisode',
       targetId: 'episode-1',
       payload: {
         episodeId: 'episode-1',
         meta: { locale: 'zh' },
       },
-      dedupeKey: 'edit_screenplay_generate:episode-1',
+      dedupeKey: 'edit_bible_generate:episode-1',
     })
 
     expect(result.deduped).toBe(false)

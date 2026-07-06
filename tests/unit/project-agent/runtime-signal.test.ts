@@ -120,19 +120,19 @@ describe('project agent runtime signal', () => {
 
   it('[choice card emitted] -> await_user_confirmation signal', () => {
     expect(normalizeOperationRuntimeSignal({
-      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       output: {
         ok: true,
         data: {
           emitted: true,
-          choiceType: 'duration_and_aspect_ratio',
+          choiceType: 'bible_review',
           cardId: 'edit-first-duration-aspect-ratio',
-          workflowStage: 'ready_to_generate_screenplay',
+          workflowStage: 'ready_to_ingest_script',
         },
       },
     })).toEqual({
       kind: 'await_user_confirmation',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
     })
   })
 

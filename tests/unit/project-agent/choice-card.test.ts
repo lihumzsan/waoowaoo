@@ -3,7 +3,7 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
 const prismaState = vi.hoisted(() => ({
   projectFindFirst: vi.fn(),
-  screenplayFindFirst: vi.fn(),
+  bibleFindFirst: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -11,8 +11,8 @@ vi.mock('@/lib/prisma', () => ({
     project: {
       findFirst: prismaState.projectFindFirst,
     },
-    projectEditScreenplay: {
-      findFirst: prismaState.screenplayFindFirst,
+    projectEditBible: {
+      findFirst: prismaState.bibleFindFirst,
     },
   },
 }))
@@ -23,9 +23,7 @@ vi.mock('@/lib/storage', () => ({
 
 import {
   buildEditFirstAssistantChoiceCard,
-  editFirstUserTextHasDuration,
   readEditFirstAspectRatio,
-  readEditFirstDurationTier,
 } from '@/lib/project-agent/choice-card'
 
 function workflow(
@@ -48,84 +46,29 @@ describe('edit-first assistant choice cards', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaState.projectFindFirst.mockReset()
-    prismaState.screenplayFindFirst.mockReset()
+    prismaState.bibleFindFirst.mockReset()
   })
 
-  it('detects explicit duration in user text', () => {
-    expect(editFirstUserTextHasDuration('我选择 60 秒')).toBe(true)
-    expect(editFirstUserTextHasDuration('make it 90 seconds')).toBe(true)
-    expect(editFirstUserTextHasDuration('开始生成短片')).toBe(false)
-    expect(readEditFirstDurationTier('我选择一分钟')).toBe('medium')
-    expect(readEditFirstDurationTier('make it 90 seconds')).toBe('long')
-    expect(readEditFirstDurationTier('make it 2 minutes')).toBe('long')
-    expect(readEditFirstDurationTier('make it 180 seconds')).toBeNull()
+  it('detects explicit aspect ratio in user text', () => {
     expect(readEditFirstAspectRatio('我选择 16:9')).toBe('16:9')
+    expect(readEditFirstAspectRatio('继续')).toBeNull()
   })
 
-  it('builds a duration and aspect-ratio card when the model requests it at the screenplay stage', async () => {
+  it('builds a bible review card after bible generation', async () => {
     const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_generate_screenplay'),
-      choiceType: 'duration_and_aspect_ratio',
+      workflow: workflow('bible_ready_for_review'),
+      choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
     })
 
     expect(card).toMatchObject({
-      cardId: 'edit-first-duration-aspect-ratio',
+      cardId: 'edit-first-bible-review',
       toolCallId: 'tool-call-1',
-      choiceType: 'duration_and_aspect_ratio',
-      autoSubmitOnReady: true,
-      title: '选择短片时长和画面比例',
-      groups: [
-        {
-          key: 'durationTier',
-          required: true,
-        },
-        {
-          key: 'aspectRatio',
-          required: true,
-        },
-      ],
-      submit: {
-        kind: 'set_project_video_ratio',
-        projectId: 'project-1',
-      },
-    })
-    expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['short', 'medium', 'long'])
-    expect(card.groups[1]?.options.map((option) => option.value)).toEqual(['9:16', '16:9', '21:9'])
-    expect(prismaState.screenplayFindFirst).not.toHaveBeenCalled()
-  })
-
-  it('rejects duration and aspect-ratio cards outside the screenplay generation stage', async () => {
-    await expect(buildEditFirstAssistantChoiceCard({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      locale: 'zh',
-      workflow: workflow('needs_style_choice'),
-      choiceType: 'duration_and_aspect_ratio',
-      toolCallId: 'tool-call-1',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=duration_and_aspect_ratio:stage=needs_style_choice')
-  })
-
-  it('builds a screenplay review card after screenplay generation', async () => {
-    const card = await buildEditFirstAssistantChoiceCard({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      locale: 'zh',
-      workflow: workflow('screenplay_ready_for_review'),
-      choiceType: 'screenplay_review',
-      toolCallId: 'tool-call-1',
-    })
-
-    expect(card).toMatchObject({
-      cardId: 'edit-first-screenplay-review',
-      toolCallId: 'tool-call-1',
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       variant: 'confirm_or_reply',
       title: '审核剧本',
       groups: [],
@@ -138,25 +81,25 @@ describe('edit-first assistant choice cards', () => {
     })
   })
 
-  it('rejects screenplay review cards outside the screenplay review stage', async () => {
+  it('rejects bible review cards outside the bible review stage', async () => {
     await expect(buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_generate_screenplay'),
-      choiceType: 'screenplay_review',
+      workflow: workflow('ready_to_ingest_script'),
+      choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=screenplay_review:stage=ready_to_generate_screenplay')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=ready_to_ingest_script')
   })
 
   it('builds a style card from the available completed style previews', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       videoRatio: '16:9',
     })
-    prismaState.screenplayFindFirst.mockResolvedValueOnce({
-      id: 'screenplay-1',
-      status: 'style_preview_ready',
+    prismaState.bibleFindFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      status: 'confirmed',
       stylePreviews: [
         {
           id: 'style-a',
@@ -192,17 +135,19 @@ describe('edit-first assistant choice cards', () => {
       toolCallId: 'tool-call-1',
     })
 
-    expect(prismaState.screenplayFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaState.bibleFindFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        projectId: 'project-1',
         episodeId: 'episode-1',
-        project: {
-          userId: 'user-1',
-        },
+        episode: expect.objectContaining({
+          projectId: 'project-1',
+          project: expect.objectContaining({
+            userId: 'user-1',
+          }),
+        }),
       }),
     }))
     expect(card).toMatchObject({
-      cardId: 'edit-first-style:screenplay-1',
+      cardId: 'edit-first-style:bible-1',
       toolCallId: 'tool-call-1',
       choiceType: 'style',
       groups: [
@@ -227,9 +172,9 @@ describe('edit-first assistant choice cards', () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       videoRatio: '16:9',
     })
-    prismaState.screenplayFindFirst.mockResolvedValueOnce({
-      id: 'screenplay-1',
-      status: 'style_preview_ready',
+    prismaState.bibleFindFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      status: 'confirmed',
       stylePreviews: [
         {
           id: 'style-a',
@@ -313,6 +258,48 @@ describe('edit-first assistant choice cards', () => {
       choiceType: 'asset_review',
       toolCallId: 'tool-call-1',
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=ready_to_generate_shot_execution_plan')
+  })
+
+  it('builds a budget confirmation card from the current workflow next action', async () => {
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('ready_to_render_chapters', {
+        id: 'render_chapters',
+        operationId: 'render_chapters',
+        title: 'Render chapter videos',
+        requiresUserConfirmation: true,
+      }),
+      choiceType: 'budget_confirmation',
+      toolCallId: 'tool-call-budget',
+    })
+
+    expect(card).toMatchObject({
+      cardId: 'edit-first-budget:ready_to_render_chapters:render_chapters',
+      toolCallId: 'tool-call-budget',
+      choiceType: 'budget_confirmation',
+      variant: 'confirm',
+      title: '确认生产预算',
+      groups: [],
+      submitLabel: '确认并继续',
+      submit: {
+        kind: 'submit_tool_output',
+      },
+    })
+  })
+
+  it('rejects budget confirmation without a production next action', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('assets_ready_for_review'),
+      choiceType: 'budget_confirmation',
+      toolCallId: 'tool-call-budget',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=budget_confirmation:stage=assets_ready_for_review')
   })
 
 })

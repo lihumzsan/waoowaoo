@@ -11,7 +11,7 @@
 - blocking：轴线、人物位置、物体位置和空间说明。
 - axis：对话、揭示、运动或主体关系的屏幕方向约束，防止越轴和左右关系跳变。
 - videoPrompt：单个 shot 的最终单镜头视频提示词，可直接发送给单镜头视频模型。
-- generationSegmentExecutions：每个 generationSegments 的连续视频输出，只包含 shotNumbers 和 continuousVideoPrompt。
+- generationSegmentExecutions：每个 generationSegments 的连续视频输出，只包含 shotIds 和 continuousVideoPrompt。
 - continuousVideoPrompt：目标 generationSegment 的最终连续视频提示词，可直接发送给视频模型；它不是单镜头提示词拼接。
 
 # 事实来源
@@ -38,8 +38,8 @@
 - 每个 shot 必须输出 videoPrompt；它只描述当前单镜头视频，不写相邻镜头，不写连续分段。
 - videoPrompt 必须聚焦当前 shot 的人物/物体运动、镜头运动或固定、动作节奏、表情/姿态变化、光线变化和声音。
 - videoPrompt 不得新增剧情、角色、道具、对白或声音事件；不得机械复制图片 prompt。
-- generationSegmentExecutions 必须按核心剪辑计划 generationSegments 的顺序输出，shotNumbers 必须完全一致。
-- generationSegmentExecutions 只输出 shotNumbers 和 continuousVideoPrompt；不要输出其他连续性字段。
+- generationSegmentExecutions 必须按核心剪辑计划 generationSegments 的顺序输出，shotIds 必须完全一致。
+- generationSegmentExecutions 只输出 shotIds 和 continuousVideoPrompt；不要输出其他连续性字段。
 - continuousVideoPrompt 必须写成一个完整连续视频片段，不机械拼接单镜头 videoPrompt。
 - continuousVideoPrompt 只使用核心剪辑计划、ShotExecutionPlan、Asset Context、Spatial Profiles 和 Style Bible 中已有事实，不新增剧情、角色、道具、对白或声音事件。
 - continuousVideoPrompt 必须聚焦该分段的人物/物体运动、镜头运动或切换、动作节奏、表情/姿态变化、声音延续和镜头衔接。
@@ -88,6 +88,7 @@ Spatial Profiles：
 {
   "shots": [
     {
+      "shotId": "shot-001",
       "shotNumber": 1,
       "camera": {
         "shotScale": "具体景别",
@@ -129,7 +130,7 @@ Spatial Profiles：
   ],
   "generationSegmentExecutions": [
     {
-      "shotNumbers": [1, 2, 3],
+      "shotIds": ["shot-001", "shot-002", "shot-003"],
       "continuousVideoPrompt": "该 generationSegment 的最终连续视频提示词，使用时间段组织，写成完整连续片段"
     }
   ]
@@ -145,8 +146,8 @@ Spatial Profiles：
 - 每个 blocking.objects[] 项是否只包含 name、position、screenPosition 三个字段，没有 facing、eyeline 或其他额外字段。
 - 每个 shot 是否有 camera.lighting 和 blocking.axis。
 - 每个 shot 是否有 videoPrompt，且只写当前单镜头视频。
-- generationSegmentExecutions 是否覆盖所有 generationSegments，且 shotNumbers 完全一致。
-- generationSegmentExecutions 是否只输出 shotNumbers 和 continuousVideoPrompt。
+- generationSegmentExecutions 是否覆盖所有 generationSegments，且 shotIds 完全一致。
+- generationSegmentExecutions 是否只输出 shotIds 和 continuousVideoPrompt。
 - continuousVideoPrompt 是否是完整连续片段，而不是单镜头提示词拼接。
 - continuousVideoPrompt 是否按 durationSec 累加时间段，并在正文里保持动作、运镜、节奏、声音和镜头衔接连续。
 - 是否严格只输出 Schema 中列出的字段。

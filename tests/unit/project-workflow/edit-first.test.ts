@@ -8,13 +8,14 @@ import {
 function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirstWorkflowSnapshot {
   return {
     hasEpisode: true,
-    hasScreenplay: false,
-    screenplayStatus: null,
+    hasBible: false,
+    bibleStatus: null,
     stylePreviewCount: 0,
     completedStylePreviewCount: 0,
     confirmedStylePreviewCount: 0,
     failedStylePreviewCount: 0,
     hasEditScript: false,
+    activeEditScriptTaskCount: 0,
     editScriptStatus: null,
     editScriptAssetReviewStatus: null,
     editAssetRequirementCount: 0,
@@ -38,6 +39,10 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     completedVideoSegmentCount: 0,
     failedVideoSegmentCount: 0,
     activeVideoTaskCount: 0,
+    chapterCount: 0,
+    completedChapterRenderCount: 0,
+    failedChapterRenderCount: 0,
+    activeChapterRenderTaskCount: 0,
     bgmScoreStatus: null,
     bgmScoreHasMix: false,
     activeBgmScoreTaskCount: 0,
@@ -49,32 +54,49 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
 }
 
 describe('edit-first workflow state', () => {
-  it('generates screenplay first without user confirmation', () => {
+  it('ingests source script first with explicit confirmation', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot())
 
-    expect(state.stage).toBe('ready_to_generate_screenplay')
-    expect(state.nextAction?.operationId).toBe('generate_edit_screenplay')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_screenplay'])
+    expect(state.stage).toBe('ready_to_ingest_script')
+    expect(state.nextAction?.operationId).toBe('ingest_script')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['ingest_script'])
   })
 
-  it('goes from confirmed style bible directly to the core edit plan', () => {
+  it('goes from confirmed style bible to chapter planning', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
       stylePreviewCount: 2,
       confirmedStylePreviewCount: 1,
     }))
 
     expect(state.stage).toBe('ready_to_generate_edit_script')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script')
-    expect(state.allowedOperationIds).toEqual(['generate_edit_script'])
+    expect(state.nextAction?.operationId).toBe('plan_chapters')
+    expect(state.allowedOperationIds).toEqual(['plan_chapters'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['plan_chapters'])
+  })
+
+  it('treats submitted chapter planning tasks as an active edit-script generation edge', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      activeEditScriptTaskCount: 2,
+    }))
+
+    expect(state.stage).toBe('edit_script_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
   it('waits for required assets and spatial profiles before shot execution planning', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       pendingAssetRequirementCount: 1,
@@ -90,8 +112,10 @@ describe('edit-first workflow state', () => {
 
   it('requires asset review before shot execution planning when reusable assets exist', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       editScriptAssetReviewStatus: 'pending',
@@ -108,8 +132,10 @@ describe('edit-first workflow state', () => {
 
   it('generates shot execution plan after core plan, assets, and spatial profiles are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       editScriptAssetReviewStatus: 'approved',
@@ -127,8 +153,10 @@ describe('edit-first workflow state', () => {
 
   it('generates storyboard panels after shot execution plan is ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -143,8 +171,10 @@ describe('edit-first workflow state', () => {
 
   it('fails explicitly when generated storyboard panels are missing deterministic prompts', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -163,8 +193,10 @@ describe('edit-first workflow state', () => {
 
   it('generates storyboard images after image prompts are composed', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -183,8 +215,10 @@ describe('edit-first workflow state', () => {
 
   it('fails explicitly when generated storyboard panels are missing video prompts', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -204,8 +238,10 @@ describe('edit-first workflow state', () => {
 
   it('allows video generation only after image and video prompts are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -221,16 +257,15 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('generate_episode_videos')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
-      'generate_episode_videos',
-      'generate_episode_bgm_score',
-    ])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
   })
 
-  it('keeps BGM available while video segments are generating', () => {
+  it('does not expose BGM while video segments are generating because chapter renders are not ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -246,13 +281,15 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('videos_generating')
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
   it('does not allow final render until every video segment has output even when BGM is ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -272,10 +309,12 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
   })
 
-  it('requires BGM after all video segments are ready', () => {
+  it('renders chapters after all video segments are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -286,18 +325,21 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 0,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_bgm_score')
-    expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+    expect(state.stage).toBe('ready_to_render_chapters')
+    expect(state.nextAction?.operationId).toBe('render_chapters')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_chapters'])
   })
 
-  it('waits while BGM is generating after videos are ready', () => {
+  it('allows final render after all chapter renders are ready and keeps BGM optional', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -308,19 +350,53 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 1,
+    }))
+
+    expect(state.stage).toBe('ready_to_render_final')
+    expect(state.nextAction?.operationId).toBe('render_final_video')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+      'render_final_video',
+      'generate_episode_bgm_score',
+    ])
+  })
+
+  it('does not block final render while optional BGM is generating', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 1,
       bgmScoreStatus: 'generating',
       activeBgmScoreTaskCount: 1,
     }))
 
-    expect(state.stage).toBe('bgm_score_generating')
-    expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.stage).toBe('ready_to_render_final')
+    expect(state.nextAction?.operationId).toBe('render_final_video')
+    expect(state.blocking.kind).toBe('needs_confirmation')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_final_video'])
   })
 
-  it('allows final render only after videos and BGM are ready', () => {
+  it('allows final render after videos, chapters, and optional BGM are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -331,6 +407,8 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 0,
       videoPlanSegmentCount: 2,
       completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 1,
       bgmScoreStatus: 'completed',
       bgmScoreHasMix: true,
     }))
@@ -343,8 +421,10 @@ describe('edit-first workflow state', () => {
 
   it('tracks final render processing before completion', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,
@@ -367,8 +447,10 @@ describe('edit-first workflow state', () => {
 
   it('marks the workflow completed only when final render has output', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
-      hasScreenplay: true,
-      screenplayStatus: 'ready',
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
       hasEditScript: true,
       editScriptStatus: 'ready',
       hasShotExecutionPlan: true,

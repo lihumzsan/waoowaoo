@@ -1,17 +1,12 @@
 import type { NextRequest } from 'next/server'
 import type { Locale } from '@/i18n/routing'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
+import { EDIT_BIBLE_STATUS } from '@/lib/edit-bible/constraints'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { getProjectModelConfig } from '@/lib/config-service'
-import {
-  buildEditFirstStructuredUserPrompt,
-  requireEditFirstDurationSpecFromPrompt,
-  type EditFirstDurationTier,
-} from './duration-tier'
-import { EDIT_SCRIPT_VIDEO_RATIOS, EDIT_STYLE_PREVIEW_MAX_COUNT, type EditScriptVideoRatio } from './types'
+import { EDIT_STYLE_PREVIEW_MAX_COUNT } from './types'
 import { buildEditFirstTextTaskPayload, buildEditFirstTextTaskPayloadFromAnalysisModel } from './task-billing'
 import {
   resolveEditShotExecutionPlanTaskTarget,
@@ -19,234 +14,29 @@ import {
 
 type OperationTaskSubmitResult = Awaited<ReturnType<typeof submitOperationTask>>
 
-const EDIT_SCREENPLAY_STATUS_GENERATING = 'generating'
-const EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY = 'screenplay_ready'
-const EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY = 'style_preview_ready'
-
-type EditScreenplaySnapshot = {
-  readonly id: string
-  readonly userPrompt: string
-  readonly styleBibleJson: Prisma.JsonValue | null
-  readonly screenplayText: string
-  readonly status: string
-}
-
-export type EditScreenplayTaskSubmitResult = OperationTaskSubmitResult & {
-  readonly episodeId: string
-  readonly screenplayId: string
-  readonly taskType: typeof TASK_TYPE.EDIT_SCREENPLAY_GENERATE | typeof TASK_TYPE.EDIT_SCREENPLAY_REVISE
-  readonly targetType: 'ProjectEditScreenplay'
-  readonly targetId: string
-}
-
 export type EditShotExecutionPlanTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
+  readonly chapterId: string
   readonly editScriptId: string
   readonly taskType: typeof TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
   readonly targetType: 'ProjectEditScript'
   readonly targetId: string
 }
 
-export type EditStylePreviewsTaskSubmitResult = OperationTaskSubmitResult & {
+export type EditScriptTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
-  readonly screenplayId: string
-  readonly taskType: typeof TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE
-  readonly targetType: 'ProjectEditScreenplay'
+  readonly chapterId: string
+  readonly taskType: typeof TASK_TYPE.EDIT_SCRIPT_GENERATE
+  readonly targetType: 'ProjectEditChapter'
   readonly targetId: string
 }
 
-function toNullableInputJson(value: Prisma.JsonValue | null): Prisma.InputJsonValue | typeof Prisma.JsonNull {
-  return value === null ? Prisma.JsonNull : value as Prisma.InputJsonValue
-}
-
-async function restoreEditScreenplaySnapshot(params: {
-  readonly pendingScreenplayId: string
-  readonly snapshot: EditScreenplaySnapshot | null
-}) {
-  if (!params.snapshot) {
-    await prisma.projectEditScreenplay.deleteMany({
-      where: { id: params.pendingScreenplayId },
-    })
-    return
-  }
-
-  await prisma.projectEditScreenplay.update({
-    where: { id: params.snapshot.id },
-    data: {
-      userPrompt: params.snapshot.userPrompt,
-      styleBibleJson: toNullableInputJson(params.snapshot.styleBibleJson),
-      screenplayText: params.snapshot.screenplayText,
-      status: params.snapshot.status,
-    },
-  })
-}
-
-async function findActiveEditScreenplayTaskTarget(params: {
-  readonly projectId: string
-  readonly dedupeKey: string
-  readonly taskType: typeof TASK_TYPE.EDIT_SCREENPLAY_GENERATE | typeof TASK_TYPE.EDIT_SCREENPLAY_REVISE
-}): Promise<string | null> {
-  const task = await prisma.task.findFirst({
-    where: {
-      projectId: params.projectId,
-      type: params.taskType,
-      dedupeKey: params.dedupeKey,
-      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-    },
-    select: { targetId: true },
-  })
-  return task?.targetId ?? null
-}
-
-async function assertEpisodeAccess(params: {
-  readonly projectId: string
-  readonly userId: string
+export type EditStylePreviewsTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
-}) {
-  const episode = await prisma.projectEpisode.findFirst({
-    where: {
-      id: params.episodeId,
-      projectId: params.projectId,
-      project: { userId: params.userId },
-    },
-    select: { id: true },
-  })
-  if (!episode) throw new ApiError('NOT_FOUND')
-}
-
-async function prepareEditScreenplayGenerationTarget(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly prompt: string
-  readonly durationTier: EditFirstDurationTier
-  readonly aspectRatio: EditScriptVideoRatio
-  readonly locale: Locale
-  readonly dedupeKey: string
-}): Promise<{ readonly screenplayId: string; readonly rollback: (() => Promise<void>) | null }> {
-  await assertEpisodeAccess({
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: input.episodeId,
-  })
-
-  const activeTargetId = await findActiveEditScreenplayTaskTarget({
-    projectId: input.projectId,
-    dedupeKey: input.dedupeKey,
-    taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
-  })
-  if (activeTargetId) {
-    const existingPending = await prisma.projectEditScreenplay.findFirst({
-      where: {
-        id: activeTargetId,
-        projectId: input.projectId,
-        episodeId: input.episodeId,
-      },
-      select: { id: true },
-    })
-    if (!existingPending) throw new Error(`EDIT_SCREENPLAY_ACTIVE_TARGET_MISSING:${activeTargetId}`)
-    return { screenplayId: existingPending.id, rollback: null }
-  }
-
-  const snapshot = await prisma.projectEditScreenplay.findUnique({
-    where: { episodeId: input.episodeId },
-    select: {
-      id: true,
-      userPrompt: true,
-      styleBibleJson: true,
-      screenplayText: true,
-      status: true,
-    },
-  })
-  const structuredUserPrompt = buildEditFirstStructuredUserPrompt({
-    prompt: input.prompt,
-    durationTier: input.durationTier,
-    aspectRatio: input.aspectRatio,
-    locale: input.locale,
-  })
-  const pending = snapshot
-    ? await prisma.projectEditScreenplay.update({
-        where: { id: snapshot.id },
-        data: {
-          userPrompt: structuredUserPrompt,
-          styleBibleJson: Prisma.JsonNull,
-          status: EDIT_SCREENPLAY_STATUS_GENERATING,
-        },
-        select: { id: true },
-      })
-    : await prisma.projectEditScreenplay.create({
-        data: {
-          projectId: input.projectId,
-          episodeId: input.episodeId,
-          userPrompt: structuredUserPrompt,
-          styleBibleJson: Prisma.JsonNull,
-          screenplayText: '',
-          status: EDIT_SCREENPLAY_STATUS_GENERATING,
-        },
-        select: { id: true },
-      })
-
-  return {
-    screenplayId: pending.id,
-    rollback: async () => await restoreEditScreenplaySnapshot({
-      pendingScreenplayId: pending.id,
-      snapshot,
-    }),
-  }
-}
-
-async function resolveEditScreenplayRevisionTarget(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly screenplayId?: string
-}) {
-  const screenplay = await prisma.projectEditScreenplay.findFirst({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      ...(input.screenplayId ? { id: input.screenplayId } : {}),
-      project: { userId: input.userId },
-    },
-    select: {
-      id: true,
-      status: true,
-      userPrompt: true,
-    },
-  })
-  if (!screenplay) throw new ApiError('NOT_FOUND')
-  if (screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCREENPLAY_REVISION_NOT_ALLOWED',
-      message: `Edit screenplay can only be revised during screenplay review; current status is ${screenplay.status}`,
-    })
-  }
-  return { episodeId: input.episodeId, screenplayId: screenplay.id, userPrompt: screenplay.userPrompt }
-}
-
-function readEditScriptVideoRatioFromText(text: string): EditScriptVideoRatio | null {
-  const matches = Array.from(text.matchAll(/\b(9:16|16:9|21:9)\b/g))
-  const latest = matches[matches.length - 1]?.[1]
-  return EDIT_SCRIPT_VIDEO_RATIOS.includes(latest as EditScriptVideoRatio)
-    ? latest as EditScriptVideoRatio
-    : null
-}
-
-function resolveEditScreenplayRevisionStructuredParams(input: {
-  readonly userPrompt: string
-  readonly durationTier?: EditFirstDurationTier
-  readonly aspectRatio?: EditScriptVideoRatio
-}): {
-  readonly durationTier: EditFirstDurationTier
-  readonly aspectRatio: EditScriptVideoRatio
-} {
-  const durationTier = input.durationTier ?? requireEditFirstDurationSpecFromPrompt(input.userPrompt).tier
-  const aspectRatio = input.aspectRatio ?? readEditScriptVideoRatioFromText(input.userPrompt)
-  if (!aspectRatio) throw new Error('EDIT_SCREENPLAY_ASPECT_RATIO_REQUIRED')
-  return {
-    durationTier,
-    aspectRatio,
-  }
+  readonly bibleId: string
+  readonly taskType: typeof TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE
+  readonly targetType: 'ProjectEditBible'
+  readonly targetId: string
 }
 
 function resolveStylePreviewCount(value: number | undefined): number {
@@ -276,10 +66,66 @@ async function findActiveEditStylePreviewsTaskTarget(params: {
   return task?.targetId ?? null
 }
 
+async function findActiveEditScriptTaskTarget(params: {
+  readonly projectId: string
+  readonly dedupeKey: string
+}): Promise<string | null> {
+  const task = await prisma.task.findFirst({
+    where: {
+      projectId: params.projectId,
+      type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      dedupeKey: params.dedupeKey,
+      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+    },
+    select: { targetId: true },
+  })
+  return task?.targetId ?? null
+}
+
+async function resolveEditScriptTaskTarget(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly chapterId?: string
+}): Promise<{ readonly episodeId: string; readonly chapterId: string }> {
+  const episode = await prisma.projectEpisode.findFirst({
+    where: {
+      id: input.episodeId,
+      projectId: input.projectId,
+      project: { userId: input.userId },
+    },
+    select: {
+      id: true,
+      editBible: {
+        select: { status: true },
+      },
+    },
+  })
+  if (!episode) throw new ApiError('NOT_FOUND')
+  if (episode.editBible?.status !== EDIT_BIBLE_STATUS.CONFIRMED) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_BIBLE_CONFIRMATION_REQUIRED',
+      message: `Edit Bible must be confirmed before edit script generation; current status is ${episode.editBible?.status ?? 'missing'}`,
+    })
+  }
+  const chapter = await prisma.projectEditChapter.findFirst({
+    where: {
+      episodeId: input.episodeId,
+      ...(input.chapterId ? { id: input.chapterId } : { chapterIndex: 0 }),
+    },
+    select: { id: true },
+  })
+  if (!chapter) throw new ApiError('NOT_FOUND')
+  return {
+    episodeId: episode.id,
+    chapterId: chapter.id,
+  }
+}
+
 async function resolveEditStylePreviewsTaskTarget(input: {
   readonly projectId: string
   readonly episodeId: string
-  readonly screenplay: {
+  readonly bible: {
     readonly id: string
     readonly status: string
   }
@@ -290,150 +136,20 @@ async function resolveEditStylePreviewsTaskTarget(input: {
     dedupeKey: input.dedupeKey,
   })
   if (activeTargetId) {
-    if (activeTargetId !== input.screenplay.id) {
+    if (activeTargetId !== input.bible.id) {
       throw new Error(`EDIT_STYLE_PREVIEWS_ACTIVE_TARGET_MISMATCH:${activeTargetId}`)
     }
-    return { episodeId: input.episodeId, screenplayId: input.screenplay.id }
+    return { episodeId: input.episodeId, bibleId: input.bible.id }
   }
 
-  if (
-    input.screenplay.status !== EDIT_SCREENPLAY_STATUS_SCREENPLAY_READY
-    && input.screenplay.status !== EDIT_SCREENPLAY_STATUS_STYLE_PREVIEW_READY
-  ) {
+  if (input.bible.status !== EDIT_BIBLE_STATUS.CONFIRMED) {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCREENPLAY_REVIEW_REQUIRED',
-      message: `Edit screenplay must be ready for style preview generation or regeneration; current status is ${input.screenplay.status}`,
+      code: 'EDIT_BIBLE_CONFIRMATION_REQUIRED',
+      message: `Edit Bible must be confirmed before style preview generation; current status is ${input.bible.status}`,
     })
   }
 
-  return { episodeId: input.episodeId, screenplayId: input.screenplay.id }
-}
-
-export async function submitProjectEditScreenplayGenerationTask(input: {
-  readonly request: NextRequest
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly prompt: string
-  readonly durationTier: EditFirstDurationTier
-  readonly aspectRatio: EditScriptVideoRatio
-  readonly source: string
-  readonly confirmed: boolean
-  readonly locale: Locale
-}): Promise<EditScreenplayTaskSubmitResult> {
-  const dedupeKey = `edit_screenplay_generate:${input.projectId}:${input.episodeId}`
-  const target = await prepareEditScreenplayGenerationTarget({
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: input.episodeId,
-    prompt: input.prompt,
-    durationTier: input.durationTier,
-    aspectRatio: input.aspectRatio,
-    locale: input.locale,
-    dedupeKey,
-  })
-
-  try {
-    const result = await submitOperationTask({
-      request: input.request,
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId,
-      type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
-      targetType: 'ProjectEditScreenplay',
-      targetId: target.screenplayId,
-      operationId: 'generate_edit_screenplay',
-      source: input.source,
-      confirmed: input.confirmed,
-      payload: await buildEditFirstTextTaskPayload({
-        projectId: input.projectId,
-        userId: input.userId,
-        payload: {
-          episodeId: input.episodeId,
-          screenplayId: target.screenplayId,
-          prompt: input.prompt,
-          durationTier: input.durationTier,
-          aspectRatio: input.aspectRatio,
-          displayMode: 'detail',
-        },
-      }),
-      dedupeKey,
-      locale: input.locale,
-    })
-
-    return {
-      ...result,
-      episodeId: input.episodeId,
-      screenplayId: target.screenplayId,
-      taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
-      targetType: 'ProjectEditScreenplay',
-      targetId: target.screenplayId,
-    }
-  } catch (error) {
-    if (target.rollback) await target.rollback()
-    throw error
-  }
-}
-
-export async function submitProjectEditScreenplayRevisionTask(input: {
-  readonly request: NextRequest
-  readonly projectId: string
-  readonly userId: string
-  readonly episodeId: string
-  readonly screenplayId?: string
-  readonly revisionInstruction: string
-  readonly durationTier?: EditFirstDurationTier
-  readonly aspectRatio?: EditScriptVideoRatio
-  readonly source: string
-  readonly confirmed: boolean
-  readonly locale: Locale
-}): Promise<EditScreenplayTaskSubmitResult> {
-  const target = await resolveEditScreenplayRevisionTarget({
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: input.episodeId,
-    ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-  })
-  const structuredParams = resolveEditScreenplayRevisionStructuredParams({
-    userPrompt: target.userPrompt,
-    ...(input.durationTier ? { durationTier: input.durationTier } : {}),
-    ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
-  })
-  const result = await submitOperationTask({
-    request: input.request,
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: target.episodeId,
-    type: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
-    operationId: 'revise_edit_screenplay',
-    source: input.source,
-    confirmed: input.confirmed,
-    payload: await buildEditFirstTextTaskPayload({
-      projectId: input.projectId,
-      userId: input.userId,
-      payload: {
-        episodeId: target.episodeId,
-        screenplayId: target.screenplayId,
-        revisionInstruction: input.revisionInstruction,
-        durationTier: structuredParams.durationTier,
-        aspectRatio: structuredParams.aspectRatio,
-        displayMode: 'detail',
-      },
-    }),
-    dedupeKey: `edit_screenplay_revise:${input.projectId}:${target.screenplayId}`,
-    locale: input.locale,
-  })
-
-  return {
-    ...result,
-    episodeId: target.episodeId,
-    screenplayId: target.screenplayId,
-    taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
-  }
+  return { episodeId: input.episodeId, bibleId: input.bible.id }
 }
 
 export async function submitProjectEditStylePreviewsGenerationTask(input: {
@@ -441,7 +157,7 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly screenplayId?: string
+  readonly bibleId?: string
   readonly styleDirection?: string
   readonly count?: number
   readonly source: string
@@ -449,22 +165,24 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
   readonly locale: Locale
 }): Promise<EditStylePreviewsTaskSubmitResult> {
   const count = resolveStylePreviewCount(input.count)
-  const screenplay = await prisma.projectEditScreenplay.findFirst({
+  const bible = await prisma.projectEditBible.findFirst({
     where: {
-      projectId: input.projectId,
       episodeId: input.episodeId,
-      ...(input.screenplayId ? { id: input.screenplayId } : {}),
-      project: { userId: input.userId },
+      ...(input.bibleId ? { id: input.bibleId } : {}),
+      episode: {
+        projectId: input.projectId,
+        project: { userId: input.userId },
+      },
     },
     select: { id: true, status: true },
   })
-  if (!screenplay) throw new ApiError('NOT_FOUND')
+  if (!bible) throw new ApiError('NOT_FOUND')
 
-  const dedupeKey = `edit_style_previews_generate:${input.projectId}:${screenplay.id}`
+  const dedupeKey = `edit_style_previews_generate:${input.projectId}:${bible.id}`
   const target = await resolveEditStylePreviewsTaskTarget({
     projectId: input.projectId,
     episodeId: input.episodeId,
-    screenplay,
+    bible,
     dedupeKey,
   })
   const config = await getProjectModelConfig(input.projectId, input.userId)
@@ -487,8 +205,8 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
     userId: input.userId,
     episodeId: target.episodeId,
     type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
+    targetType: 'ProjectEditBible',
+    targetId: target.bibleId,
     operationId: 'generate_edit_style_previews',
     source: input.source,
     confirmed: input.confirmed,
@@ -496,7 +214,7 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
       analysisModel: config.analysisModel,
       payload: {
         episodeId: target.episodeId,
-        screenplayId: target.screenplayId,
+        bibleId: target.bibleId,
         count,
         ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
         displayMode: 'detail',
@@ -509,10 +227,70 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
   return {
     ...result,
     episodeId: target.episodeId,
-    screenplayId: target.screenplayId,
+    bibleId: target.bibleId,
     taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-    targetType: 'ProjectEditScreenplay',
-    targetId: target.screenplayId,
+    targetType: 'ProjectEditBible',
+    targetId: target.bibleId,
+  }
+}
+
+export async function submitProjectEditScriptGenerationTask(input: {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly chapterId?: string
+  readonly videoRatio?: '9:16' | '16:9' | '21:9'
+  readonly source: string
+  readonly confirmed: boolean
+  readonly locale: Locale
+}): Promise<EditScriptTaskSubmitResult> {
+  const target = await resolveEditScriptTaskTarget({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId,
+    ...(input.chapterId ? { chapterId: input.chapterId } : {}),
+  })
+  const dedupeKey = `edit_script_generate:${input.projectId}:${target.episodeId}:${target.chapterId}`
+  const activeTargetId = await findActiveEditScriptTaskTarget({
+    projectId: input.projectId,
+    dedupeKey,
+  })
+  if (activeTargetId && activeTargetId !== target.chapterId) {
+    throw new Error(`EDIT_SCRIPT_ACTIVE_TARGET_MISMATCH:${activeTargetId}`)
+  }
+  const result = await submitOperationTask({
+    request: input.request,
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: target.episodeId,
+    type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+    targetType: 'ProjectEditChapter',
+    targetId: target.chapterId,
+    operationId: 'generate_edit_script',
+    source: input.source,
+    confirmed: input.confirmed,
+    payload: await buildEditFirstTextTaskPayload({
+      projectId: input.projectId,
+      userId: input.userId,
+      payload: {
+        episodeId: target.episodeId,
+        chapterId: target.chapterId,
+        ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
+        displayMode: 'detail',
+      },
+    }),
+    dedupeKey,
+    locale: input.locale,
+  })
+
+  return {
+    ...result,
+    episodeId: target.episodeId,
+    chapterId: target.chapterId,
+    taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+    targetType: 'ProjectEditChapter',
+    targetId: target.chapterId,
   }
 }
 
@@ -521,6 +299,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly chapterId?: string
   readonly editScriptId?: string
   readonly source: string
   readonly confirmed: boolean
@@ -529,6 +308,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
   const target = await resolveEditShotExecutionPlanTaskTarget({
     projectId: input.projectId,
     episodeId: input.episodeId,
+    ...(input.chapterId ? { chapterId: input.chapterId } : {}),
     ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
   })
   const result = await submitOperationTask({
@@ -547,6 +327,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
       userId: input.userId,
       payload: {
         episodeId: target.episodeId,
+        chapterId: target.chapterId,
         editScriptId: target.editScriptId,
         displayMode: 'detail',
       },
@@ -558,6 +339,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
   return {
     ...result,
     episodeId: target.episodeId,
+    chapterId: target.chapterId,
     editScriptId: target.editScriptId,
     taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
     targetType: 'ProjectEditScript',

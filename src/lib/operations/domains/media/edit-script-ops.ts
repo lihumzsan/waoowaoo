@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
 import {
-  submitProjectEditScreenplayGenerationTask,
-  submitProjectEditScreenplayRevisionTask,
+  submitProjectEditScriptGenerationTask,
   submitProjectEditShotExecutionPlanTask,
   submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
+import { assertChapterReplanHasNoRunningVideoGroups } from '@/lib/edit-script/replan-guard'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
@@ -34,19 +35,16 @@ import {
 } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
-  EDIT_FIRST_DURATION_TIERS,
-} from '@/lib/edit-script/duration-tier'
-import {
+  EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-  EDIT_FIRST_GENERATE_SCREENPLAY_TOOL_INPUT_SCHEMA,
-  EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA,
-  EDIT_FIRST_REVISE_SCREENPLAY_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
+import { createTaskBatchKey } from '@/lib/task/batch'
+import { compensateSubmittedTasks } from '@/lib/operations/planning'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
-const editFirstDurationTierSchema = z.enum(EDIT_FIRST_DURATION_TIERS)
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
@@ -54,26 +52,12 @@ function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
 const confirmedInputFields = {
   confirmed: z.boolean().optional(),
   episodeId: z.string().trim().min(1).optional(),
+  chapterId: z.string().trim().min(1).optional(),
 } as const
-
-const generateEditScreenplayInputSchema = z.object({
-  ...confirmedInputFields,
-  prompt: z.string().trim().min(1).describe('The user creative request/story premise. Do not use this field as the only carrier for duration or aspect ratio.'),
-  durationTier: editFirstDurationTierSchema.describe('Required short-film duration tier. Use the value selected by the user in request_edit_duration_aspect_ratio_choice: short, medium, or long.'),
-  aspectRatio: editScriptVideoRatioSchema.describe('Required final film aspect ratio. Use the value selected by the user in request_edit_duration_aspect_ratio_choice.'),
-}).passthrough()
-
-const reviseEditScreenplayInputSchema = z.object({
-  ...confirmedInputFields,
-  screenplayId: z.string().trim().min(1).optional(),
-  revisionInstruction: z.string().trim().min(1).describe('Concrete user-requested screenplay changes to apply to the current generated screenplay.'),
-  durationTier: editFirstDurationTierSchema.optional().describe('Optional short-film duration tier. Pass only when the user explicitly changes it.'),
-  aspectRatio: editScriptVideoRatioSchema.optional().describe('Optional final film aspect ratio. Pass only when the user explicitly changes it.'),
-}).passthrough()
 
 const generateEditStylePreviewsInputSchema = z.object({
   ...confirmedInputFields,
-  screenplayId: z.string().trim().min(1).optional(),
+  bibleId: z.string().trim().min(1).optional(),
   styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
   count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
 }).passthrough()
@@ -85,7 +69,19 @@ const requestEditChoiceInputSchema = z.object({
 const generateEditScriptInputSchema = z.object({
   ...confirmedInputFields,
   prompt: z.never().optional(),
-  screenplayId: z.string().trim().min(1).optional(),
+  videoRatio: editScriptVideoRatioSchema.optional(),
+}).passthrough()
+
+const replanChapterInputSchema = z.object({
+  confirmed: z.boolean().optional(),
+  episodeId: z.string().trim().min(1).optional(),
+  chapterId: z.string().trim().min(1),
+  videoRatio: editScriptVideoRatioSchema.optional(),
+}).passthrough()
+
+const planChaptersInputSchema = z.object({
+  ...confirmedInputFields,
+  chapterIds: z.array(z.string().trim().min(1)).min(1).optional(),
   videoRatio: editScriptVideoRatioSchema.optional(),
 }).passthrough()
 
@@ -116,29 +112,19 @@ const generateEditScriptStoryboardInputSchema = z.object({
   editScriptId: z.string().trim().min(1).optional(),
 }).passthrough()
 
-type GenerateEditScreenplayInput = z.infer<typeof generateEditScreenplayInputSchema>
-type ReviseEditScreenplayInput = z.infer<typeof reviseEditScreenplayInputSchema>
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
 type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
+type ReplanChapterInput = z.infer<typeof replanChapterInputSchema>
+type PlanChaptersInput = z.infer<typeof planChaptersInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
 type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSchema>
 type GenerateEditShotExecutionPlanInput = z.infer<typeof generateEditShotExecutionPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
-const editScreenplayTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-  taskSubmitOperationOutputSchemaBase.extend({
-    episodeId: z.string().min(1),
-    screenplayId: z.string().min(1),
-    taskType: z.enum([TASK_TYPE.EDIT_SCREENPLAY_GENERATE, TASK_TYPE.EDIT_SCREENPLAY_REVISE]),
-    targetType: z.literal('ProjectEditScreenplay'),
-    targetId: z.string().min(1),
-  }).passthrough(),
-)
-
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['duration_and_aspect_ratio', 'screenplay_review', 'style', 'asset_review']),
+  choiceType: z.enum(['bible_review', 'style', 'asset_review', 'budget_confirmation']),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -146,9 +132,9 @@ const requestEditFirstChoiceOutputSchema = z.object({
 const editStylePreviewsTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
     episodeId: z.string().min(1),
-    screenplayId: z.string().min(1),
+    bibleId: z.string().min(1),
     taskType: z.literal(TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE),
-    targetType: z.literal('ProjectEditScreenplay'),
+    targetType: z.literal('ProjectEditBible'),
     targetId: z.string().min(1),
   }).passthrough(),
 )
@@ -157,7 +143,9 @@ const editScriptSummaryOutputSchema = z.object({
   id: z.string().min(1).optional(),
   projectId: z.string().min(1).optional(),
   episodeId: z.string().min(1).optional(),
-  screenplayId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
+  bibleId: z.string().min(1).optional(),
+  sourceDocumentId: z.string().min(1).optional(),
   durationSec: z.number().int().positive(),
   shotCount: z.number().int().min(0),
   status: z.string().optional(),
@@ -170,7 +158,7 @@ const editScriptSummaryOutputSchema = z.object({
     targetId: z.string().nullable().optional(),
   }).passthrough()),
   generationSegments: z.array(z.object({
-    shotNumbers: z.array(z.number().int().positive()),
+    shotIds: z.array(z.string().min(1)),
     continuity: z.string().min(1),
   }).passthrough()),
 }).passthrough()
@@ -232,6 +220,22 @@ const editScriptAssetRevisionOutputSchema = z.object({
   editScript: editScriptSummaryOutputSchema,
 }).passthrough()
 
+const planChaptersOutputSchema = z.object({
+  success: z.literal(true),
+  async: z.literal(true),
+  episodeId: z.string().min(1),
+  batchKey: z.string().min(1),
+  total: z.number().int().min(1),
+  taskIds: z.array(z.string().min(1)),
+  results: z.array(z.object({
+    refId: z.string().min(1),
+    taskId: z.string().min(1),
+    taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
+    targetType: z.literal('ProjectEditChapter'),
+    targetId: z.string().min(1),
+  })),
+}).passthrough()
+
 const EFFECTS_SYNC_AI_WRITE = {
   writes: true,
   billable: true,
@@ -279,7 +283,9 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
     ...(payload.id ? { id: payload.id } : {}),
     ...(payload.projectId ? { projectId: payload.projectId } : {}),
     ...(payload.episodeId ? { episodeId: payload.episodeId } : {}),
-    ...(payload.screenplayId ? { screenplayId: payload.screenplayId } : {}),
+    ...(payload.chapterId ? { chapterId: payload.chapterId } : {}),
+    ...(payload.bibleId ? { bibleId: payload.bibleId } : {}),
+    ...(payload.sourceDocumentId ? { sourceDocumentId: payload.sourceDocumentId } : {}),
     durationSec: payload.durationSec,
     shotCount: payload.shotCount,
     ...(payload.status ? { status: payload.status } : {}),
@@ -292,17 +298,48 @@ function summarizeEditScriptPayload(payload: EditScriptPayload): EditScriptSumma
       ...(requirement.targetId !== undefined ? { targetId: requirement.targetId } : {}),
     })),
     generationSegments: payload.generationSegments.map((segment) => ({
-      shotNumbers: [...segment.shotNumbers],
+      shotIds: [...segment.shotIds],
       continuity: segment.continuity,
     })),
   }
 }
 
+async function resolvePlanChaptersTargets(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly chapterIds?: readonly string[]
+}): Promise<readonly { readonly id: string; readonly chapterIndex: number }[]> {
+  const [editBible, chapters] = await Promise.all([
+    readEpisodeEditBible({ projectId: input.projectId, episodeId: input.episodeId }),
+    readEpisodeEditChapters({ projectId: input.projectId, episodeId: input.episodeId }),
+  ])
+  if (!editBible) throw new Error(`EDIT_BIBLE_REQUIRED:${input.episodeId}`)
+  if (editBible.status !== 'confirmed') {
+    throw new Error(`EDIT_BIBLE_NOT_CONFIRMED:${editBible.status}`)
+  }
+  if (!editBible.styleBible) {
+    throw new Error(`EDIT_BIBLE_STYLE_BIBLE_REQUIRED:${editBible.id}`)
+  }
+  const selectedIds = input.chapterIds ? new Set(input.chapterIds) : null
+  const targets = chapters
+    .filter((chapter) => !selectedIds || selectedIds.has(chapter.id))
+    .map((chapter) => ({ id: chapter.id, chapterIndex: chapter.chapterIndex }))
+  if (targets.length === 0) {
+    throw new Error(`EDIT_CHAPTERS_REQUIRED:${input.episodeId}`)
+  }
+  if (selectedIds && targets.length !== selectedIds.size) {
+    const foundIds = new Set(targets.map((chapter) => chapter.id))
+    const missingIds = Array.from(selectedIds).filter((chapterId) => !foundIds.has(chapterId))
+    throw new Error(`EDIT_CHAPTERS_NOT_FOUND:${missingIds.join(',')}`)
+  }
+  return targets
+}
+
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
-  duration_and_aspect_ratio: 'Request the short-film duration and aspect ratio choice before screenplay generation. This tool has a fixed choice type; do not pass a choiceType argument.',
-  screenplay_review: 'Request screenplay review after the screenplay is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  bible_review: 'Request bible review after the bible is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  budget_confirmation: 'Request explicit user budget confirmation before the assistant starts the current billable or batch production stage. This tool has a fixed choice type; do not pass a choiceType argument.',
 }
 
 function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
@@ -381,6 +418,10 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
   const editScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
       episodeId: z.string().min(1),
+      chapterId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
+      targetType: z.literal('ProjectEditChapter'),
+      targetId: z.string().min(1),
     }).passthrough(),
   )
   const editShotExecutionPlanTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
@@ -392,100 +433,20 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       targetId: z.string().min(1),
     }).passthrough(),
   )
+  const editScriptStoryboardTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+    taskSubmitOperationOutputSchemaBase.extend({
+      episodeId: z.string().min(1),
+      editScriptId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN),
+      targetType: z.literal('ProjectEditScript'),
+      targetId: z.string().min(1),
+    }).passthrough(),
+  )
 
   return {
-    generate_edit_screenplay: defineOperation({
-      id: 'generate_edit_screenplay',
-      summary: 'Generate the editable screenplay artifact for short-film production. Required input fields: prompt, durationTier, and aspectRatio. durationTier and aspectRatio must come from the user selection made through request_edit_duration_aspect_ratio_choice; do not rely on prompt text alone. Stops at screenplay review; style preview images are generated by generate_edit_style_previews after user approval.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_SYNC_AI_WRITE,
-      confirmation: {
-        required: true,
-        summary: '将调用文本模型生成并覆盖本集短片剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      toolInputSchema: EDIT_FIRST_GENERATE_SCREENPLAY_TOOL_INPUT_SCHEMA,
-      inputSchema: generateEditScreenplayInputSchema,
-      outputSchema: editScreenplayTaskSubmitOutputSchema,
-      execute: async (ctx, input: GenerateEditScreenplayInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitProjectEditScreenplayGenerationTask({
-          request: ctx.request,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          locale: resolveLocale(ctx.context.locale),
-          prompt: input.prompt,
-          durationTier: input.durationTier,
-          aspectRatio: input.aspectRatio,
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-        })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_edit_screenplay',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId: result.episodeId,
-          taskType: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
-          targetType: 'ProjectEditScreenplay',
-          targetId: result.screenplayId,
-        })
-
-        return editScreenplayTaskSubmitOutputSchema.parse(result)
-      },
-    }),
-    revise_edit_screenplay: defineOperation({
-      id: 'revise_edit_screenplay',
-      summary: 'Revise the current generated screenplay during screenplay review only. Pass revisionInstruction from the user. Pass durationTier or aspectRatio only when the user explicitly changes them in this revision; otherwise the current screenplay metadata is reused. Stops at screenplay review; do not generate style previews or later edit artifacts.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_SYNC_AI_WRITE,
-      confirmation: {
-        required: true,
-        summary: '将根据用户修改要求重新生成并覆盖当前短片剧本（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
-      },
-      toolInputSchema: EDIT_FIRST_REVISE_SCREENPLAY_TOOL_INPUT_SCHEMA,
-      inputSchema: reviseEditScreenplayInputSchema,
-      outputSchema: editScreenplayTaskSubmitOutputSchema,
-      execute: async (ctx, input: ReviseEditScreenplayInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitProjectEditScreenplayRevisionTask({
-          request: ctx.request,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          locale: resolveLocale(ctx.context.locale),
-          ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-          revisionInstruction: input.revisionInstruction,
-          ...(input.durationTier ? { durationTier: input.durationTier } : {}),
-          ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
-          source: ctx.source,
-          confirmed: input.confirmed === true,
-        })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'revise_edit_screenplay',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId: result.episodeId,
-          taskType: TASK_TYPE.EDIT_SCREENPLAY_REVISE,
-          targetType: 'ProjectEditScreenplay',
-          targetId: result.screenplayId,
-        })
-
-        return editScreenplayTaskSubmitOutputSchema.parse(result)
-      },
-    }),
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
-      summary: 'Generate screenplay-based visual style preview image tasks after the user has reviewed and approved the screenplay. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present. Do not pass system ids or candidate counts.',
+      summary: 'Generate Bible-based visual style preview image tasks after the episode Bible has been confirmed. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
@@ -508,7 +469,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           source: ctx.source,
           confirmed: input.confirmed === true,
-          ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
+          ...(input.bibleId ? { bibleId: input.bibleId } : {}),
           ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
           ...(input.count ? { count: input.count } : {}),
         })
@@ -521,53 +482,41 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           projectId: ctx.projectId,
           episodeId: result.episodeId,
           taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-          targetType: 'ProjectEditScreenplay',
-          targetId: result.screenplayId,
+          targetType: 'ProjectEditBible',
+          targetId: result.bibleId,
         })
         return editStylePreviewsTaskSubmitOutputSchema.parse(result)
       },
     }),
-    [EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio]: buildRequestEditChoiceOperation('duration_and_aspect_ratio'),
-    [EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review]: buildRequestEditChoiceOperation('screenplay_review'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review]: buildRequestEditChoiceOperation('bible_review'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.style]: buildRequestEditChoiceOperation('style'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.asset_review]: buildRequestEditChoiceOperation('asset_review'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation]: buildRequestEditChoiceOperation('budget_confirmation'),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
-      summary: 'Build the core edit plan directly from the ready screenplay and Style Bible. Fails if no ready screenplay/style selection exists.',
+      summary: 'Build the core edit plan for one chapter from the confirmed episode Bible, selected Style Bible, and chapter source slice.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
         required: true,
-        summary: '将基于已存在剧本生成并覆盖本集核心剪辑计划（可能消耗额度/产生计费）。没有 ready 剧本时会失败。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将基于已确认 Bible、风格和当前章节源文本生成并覆盖本章核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptInputSchema,
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScriptInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const payload = await buildEditFirstTextTaskPayload({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          payload: {
-            episodeId,
-            ...(input.screenplayId ? { screenplayId: input.screenplayId } : {}),
-            ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
-          },
-        })
-        const result = await submitOperationTask({
+        const chapterId = input.chapterId?.trim()
+        const result = await submitProjectEditScriptGenerationTask({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
-          type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-          targetType: 'ProjectEpisode',
-          targetId: episodeId,
-          operationId: 'generate_edit_script',
+          ...(chapterId ? { chapterId } : {}),
+          ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
           source: ctx.source,
           confirmed: input.confirmed === true,
-          payload,
-          dedupeKey: `edit_script_generate:${ctx.projectId}:${episodeId}`,
           locale: resolveLocale(ctx.context.locale),
         })
 
@@ -578,16 +527,151 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           runId: result.runId || null,
           deduped: result.deduped,
           projectId: ctx.projectId,
-          episodeId,
+          episodeId: result.episodeId,
+          chapterId: result.chapterId,
           taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-          targetType: 'ProjectEpisode',
-          targetId: episodeId,
+          targetType: 'ProjectEditChapter',
+          targetId: result.chapterId,
         })
 
-        return {
-          ...result,
+        return result
+      },
+    }),
+    replan_chapter: defineOperation({
+      id: 'replan_chapter',
+      summary: 'Regenerate the core edit plan for one explicit chapter from the confirmed episode Bible, selected Style Bible, and chapter source slice.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_SYNC_AI_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将重新生成并覆盖指定章节的核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
+      inputSchema: replanChapterInputSchema,
+      outputSchema: editScriptTaskSubmitOutputSchema,
+      execute: async (ctx, input: ReplanChapterInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        await assertChapterReplanHasNoRunningVideoGroups({
+          projectId: ctx.projectId,
           episodeId,
+          chapterId: input.chapterId,
+        })
+        const result = await submitProjectEditScriptGenerationTask({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          chapterId: input.chapterId,
+          ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
+          source: ctx.source,
+          confirmed: input.confirmed === true,
+          locale: resolveLocale(ctx.context.locale),
+        })
+
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'replan_chapter',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          chapterId: result.chapterId,
+          taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+          targetType: 'ProjectEditChapter',
+          targetId: result.chapterId,
+        })
+
+        return result
+      },
+    }),
+    plan_chapters: defineOperation({
+      id: 'plan_chapters',
+      summary: 'Submit chapter core edit planning tasks for every selected chapter from the confirmed episode Bible and Style Bible.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BULK_WRITE,
+      confirmation: {
+        required: true,
+        summary: '将为本集所有选中章节批量提交核心剪辑计划任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: planChaptersInputSchema,
+      outputSchema: planChaptersOutputSchema,
+      execute: async (ctx, input: PlanChaptersInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const chapters = await resolvePlanChaptersTargets({
+          projectId: ctx.projectId,
+          episodeId,
+          ...(input.chapterIds ? { chapterIds: input.chapterIds } : {}),
+        })
+        const batchKey = createTaskBatchKey('plan_chapters')
+        const submitted: Array<{
+          readonly chapterId: string
+          readonly taskId: string
+        }> = []
+        try {
+          for (const chapter of chapters) {
+            const payload = await buildEditFirstTextTaskPayload({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              payload: {
+                episodeId,
+                chapterId: chapter.id,
+                ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
+              },
+            })
+            const result = await submitOperationTask({
+              request: ctx.request,
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              episodeId,
+              type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+              targetType: 'ProjectEditChapter',
+              targetId: chapter.id,
+              operationId: 'plan_chapters',
+              source: ctx.source,
+              confirmed: input.confirmed === true,
+              payload,
+              dedupeKey: `edit_script_generate:${ctx.projectId}:${episodeId}:${chapter.id}`,
+              batchKey,
+              locale: resolveLocale(ctx.context.locale),
+            })
+            submitted.push({
+              chapterId: chapter.id,
+              taskId: result.taskId,
+            })
+          }
+        } catch (error) {
+          await compensateSubmittedTasks(submitted.map((item) => item.taskId))
+          throw error
         }
+
+        const output = planChaptersOutputSchema.parse({
+          success: true,
+          async: true,
+          episodeId,
+          batchKey,
+          total: submitted.length,
+          taskIds: submitted.map((item) => item.taskId),
+          results: submitted.map((item) => ({
+            refId: item.chapterId,
+            taskId: item.taskId,
+            taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+            targetType: 'ProjectEditChapter',
+            targetId: item.chapterId,
+          })),
+        })
+        writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
+          operationId: 'plan_chapters',
+          total: output.total,
+          taskTotal: output.total,
+          targetTotal: output.total,
+          taskIds: output.taskIds,
+          results: output.results,
+        })
+        return output
       },
     }),
     generate_edit_script_assets: defineOperation({
@@ -600,15 +684,17 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetGenerationOutputSchema,
       execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const result = await generateProjectEditScriptAssets({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
+          chapterId: input.chapterId,
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           ...(input.requirementId ? { requirementId: input.requirementId } : {}),
@@ -643,15 +729,17 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据用户审核意见返工所需资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
       inputSchema: reviseEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetRevisionOutputSchema,
       execute: async (ctx, input: ReviseEditScriptAssetsInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const result = await reviseProjectEditScriptAssets({
           request: ctx.request,
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+          episodeId,
+          chapterId: input.chapterId,
           locale: resolveLocale(ctx.context.locale),
           revisionNotes: input.revisionNotes,
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
@@ -688,7 +776,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将基于核心剪辑计划、资产和空间档案生成并覆盖本集镜头执行计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditShotExecutionPlanInputSchema,
       outputSchema: editShotExecutionPlanTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditShotExecutionPlanInput) => {
@@ -698,6 +786,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
+          chapterId: input.chapterId,
           source: ctx.source,
           confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
@@ -730,15 +819,16 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将根据已完成的空间档案、核心剪辑计划、镜头执行计划和资产生成正式分镜面板提示词（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptStoryboardInputSchema,
-      outputSchema: editScriptTaskSubmitOutputSchema,
+      outputSchema: editScriptStoryboardTaskSubmitOutputSchema,
       execute: async (ctx, input: GenerateEditScriptStoryboardInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const result = await submitEditScriptStoryboardPanels({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
+          chapterId: input.chapterId,
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           requestId: ctx.request.headers.get('x-request-id'),
@@ -761,7 +851,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...result,
           episodeId,
           taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-          targetType: 'ProjectEditScript',
+          targetType: 'ProjectEditScript' as const,
           targetId: result.editScriptId,
         }
       },

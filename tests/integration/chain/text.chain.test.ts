@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getTaskMaxAttempts, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 type AddCall = {
@@ -45,7 +46,7 @@ describe('chain contract - text queue behavior', () => {
 
     await addTaskJob({
       taskId: 'task-text-1',
-      type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -58,12 +59,12 @@ describe('chain contract - text queue behavior', () => {
     const calls = queueState.addCallsByQueue.get(QUEUE_NAME.TEXT) || []
     expect(calls).toHaveLength(1)
     expect(calls[0]).toEqual(expect.objectContaining({
-      jobName: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+      jobName: TASK_TYPE.EDIT_BIBLE_GENERATE,
       options: expect.objectContaining({ jobId: 'task-text-1', priority: 0 }),
     }))
   })
 
-  it('enqueues text tasks without BullMQ retry options', async () => {
+  it('enqueues text tasks with the explicit retry policy', async () => {
     const { addTaskJob, QUEUE_NAME } = await import('@/lib/task/queues')
 
     await addTaskJob({
@@ -80,9 +81,14 @@ describe('chain contract - text queue behavior', () => {
 
     const calls = queueState.addCallsByQueue.get(QUEUE_NAME.TEXT) || []
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.options).toEqual(expect.objectContaining({ jobId: 'task-text-story-1' }))
-    expect(calls[0]?.options).not.toHaveProperty('attempts')
-    expect(calls[0]?.options).not.toHaveProperty('backoff')
+    expect(calls[0]?.options).toEqual(expect.objectContaining({
+      jobId: 'task-text-story-1',
+      attempts: getTaskMaxAttempts(TASK_TYPE.EDIT_SCRIPT_GENERATE),
+      backoff: {
+        type: 'exponential',
+        delay: TASK_RETRY_BACKOFF_BASE_MS,
+      },
+    }))
   })
 
   it('explicit priority is preserved for text queue jobs', async () => {

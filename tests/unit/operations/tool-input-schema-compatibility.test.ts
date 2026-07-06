@@ -128,13 +128,13 @@ describe('tool input schema compatibility', () => {
     const parsed = operation.inputSchema.safeParse({
       confirmed: true,
       prompt: 'should be rejected',
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
     })
     expect(parsed.success).toBe(false)
 
     const parsedWithoutPrompt = operation.inputSchema.safeParse({
       confirmed: true,
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
     })
     expect(parsedWithoutPrompt.success).toBe(true)
   })
@@ -142,32 +142,49 @@ describe('tool input schema compatibility', () => {
   it('exposes only user-intent fields for edit-first workflow tools', () => {
     const registry = createProjectAgentOperationRegistry()
 
-    expect(Object.keys(registry.generate_edit_screenplay.toolInputSchema.properties)).toEqual([
-      'prompt',
-      'durationTier',
-      'aspectRatio',
+    expect(Object.keys(registry.ingest_script.toolInputSchema.properties)).toEqual([
+      'text',
     ])
-    expect(Object.keys(registry.revise_edit_screenplay.toolInputSchema.properties)).toEqual([
-      'revisionInstruction',
-      'durationTier',
-      'aspectRatio',
+    expect(Object.keys(registry.revise_bible.toolInputSchema.properties)).toEqual([
+      'bible',
+      'beatSheet',
+      'ledger',
+      'emotionalCurve',
     ])
     expect(Object.keys(registry.generate_edit_style_previews.toolInputSchema.properties)).toEqual([
       'styleDirection',
     ])
     expect(Object.keys(registry.revise_edit_script_assets.toolInputSchema.properties)).toEqual([
       'revisionNotes',
+      'chapterId',
     ])
+    for (const operationId of [
+      'generate_edit_script',
+      'generate_edit_script_assets',
+      'revise_edit_script_assets',
+      'generate_edit_shot_execution_plan',
+      'generate_edit_script_storyboard',
+      'generate_episode_videos',
+      'render_chapters',
+    ]) {
+      expect(Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})).toContain('chapterId')
+    }
 
     for (const operationId of [
-      'generate_edit_screenplay',
-      'revise_edit_screenplay',
+      'ingest_script',
+      'revise_bible',
       'generate_edit_style_previews',
+      'generate_edit_script',
+      'generate_edit_script_assets',
       'revise_edit_script_assets',
+      'generate_edit_shot_execution_plan',
+      'generate_edit_script_storyboard',
+      'generate_episode_videos',
+      'render_chapters',
     ]) {
       const properties = Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})
       expect(properties).not.toContain('episodeId')
-      expect(properties).not.toContain('screenplayId')
+      expect(properties).not.toContain('bibleId')
       expect(properties).not.toContain('editScriptId')
       expect(properties).not.toContain('storyboardId')
       expect(properties).not.toContain('panelId')
@@ -181,16 +198,14 @@ describe('tool input schema compatibility', () => {
   it('uses empty model-facing schemas for context-derived edit-first task submissions', () => {
     const registry = createProjectAgentOperationRegistry()
     const emptyOperationIds = [
-      'request_edit_duration_aspect_ratio_choice',
-      'request_edit_screenplay_review_choice',
+      'get_episode_overview',
+      'request_edit_bible_review_choice',
+      'request_edit_bible_review_choice',
       'request_edit_style_choice',
       'request_edit_asset_review_choice',
-      'generate_edit_script',
-      'generate_edit_script_assets',
-      'generate_edit_shot_execution_plan',
-      'generate_edit_script_storyboard',
+      'request_edit_budget_confirmation_choice',
+      'plan_chapters',
       'generate_edit_script_storyboard_images',
-      'generate_episode_videos',
       'generate_episode_bgm_score',
       'render_final_video',
     ]
@@ -214,9 +229,27 @@ describe('tool input schema compatibility', () => {
     expect(operation.inputSchema.safeParse({}).success).toBe(true)
   })
 
-  it('accepts screenplay revision execution input without backfilled duration or aspect ratio', () => {
+  it('exposes only chapterId for chapter detail reads', () => {
     const registry = createProjectAgentOperationRegistry()
-    const operation = registry.revise_edit_screenplay
+    const operation = registry.get_chapter_detail
+
+    expect(operation.toolInputSchema).toEqual({
+      type: 'object',
+      properties: {
+        chapterId: {
+          type: 'string',
+          minLength: 1,
+          description: 'Exact chapterId to inspect. Do not pass projectId or episodeId.',
+        },
+      },
+      required: ['chapterId'],
+      additionalProperties: false,
+    })
+  })
+
+  it('accepts bible revision execution input without backfilled duration or aspect ratio', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.revise_bible
 
     expect(operation.inputSchema.safeParse({
       revisionInstruction: 'Make the ending quieter and more ambiguous.',

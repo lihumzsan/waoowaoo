@@ -9,19 +9,19 @@ import type {
 
 function segmentForShot(
   snapshot: StoryboardConsistencySourceSnapshot,
-  shotNumber: number,
+  shotId: string,
 ): StoryboardConsistencyGenerationSegment {
-  const segment = snapshot.generationSegments.find((item) => item.shotNumbers.includes(shotNumber))
-  if (!segment) throw new Error(`EDIT_SCRIPT_STORYBOARD_GENERATION_SEGMENT_MISSING:${shotNumber}`)
+  const segment = snapshot.generationSegments.find((item) => item.shotIds.includes(shotId))
+  if (!segment) throw new Error(`EDIT_SCRIPT_STORYBOARD_GENERATION_SEGMENT_MISSING:${shotId}`)
   return segment
 }
 
 function executionForShot(
   snapshot: StoryboardConsistencySourceSnapshot,
-  shotNumber: number,
+  shotId: string,
 ) {
-  const execution = snapshot.shotExecutionPlan.shots.find((item) => item.shotNumber === shotNumber)
-  if (!execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_EXECUTION_SHOT_MISSING:${shotNumber}`)
+  const execution = snapshot.shotExecutionPlan.shots.find((item) => item.shotId === shotId)
+  if (!execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_EXECUTION_SHOT_MISSING:${shotId}`)
   return execution
 }
 
@@ -29,8 +29,8 @@ export function generateStoryboardPanelPrompts(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
 }): readonly StoryboardPanelPromptDraft[] {
   return input.snapshot.shots.map((shot, panelIndex) => {
-    const segment = segmentForShot(input.snapshot, shot.shotNumber)
-    const execution = executionForShot(input.snapshot, shot.shotNumber)
+    const segment = segmentForShot(input.snapshot, shot.shotId)
+    const execution = executionForShot(input.snapshot, shot.shotId)
     const built = buildStoryboardStillPromptFacts({
       shot,
       execution,
@@ -38,7 +38,7 @@ export function generateStoryboardPanelPrompts(input: {
     })
     return {
       panelIndex,
-      sourceShotNumber: shot.shotNumber,
+      sourceShotId: shot.shotId,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
       prompt: built.prompt,
       videoPrompt: execution.videoPrompt,

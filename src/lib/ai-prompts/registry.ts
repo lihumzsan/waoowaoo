@@ -64,30 +64,21 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS]: {
     pathStem: 'edit-script/style-preview-options',
-    variableKeys: ['user_request', 'screenplay_text', 'duration_guidance', 'style_direction', 'style_preview_count'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY]: {
-    pathStem: 'edit-script/screenplay',
-    variableKeys: ['user_request', 'duration_guidance', 'aspect_ratio'],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION]: {
-    pathStem: 'edit-script/screenplay-revision',
-    variableKeys: ['original_user_request', 'current_screenplay_text', 'revision_instruction', 'duration_guidance', 'aspect_ratio'],
+    variableKeys: ['user_request', 'bible_text', 'duration_guidance', 'style_direction', 'style_preview_count'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE]: {
     pathStem: 'edit-script/structure',
     variableKeys: [
       'user_request',
-      'screenplay_text',
+      'bible_text',
+      'story_bible_json',
+      'entry_snapshot_json',
+      'chapter_events_json',
       'duration_guidance',
       'generation_segment_max_duration_seconds',
       'aspect_ratio',
       'style_bible_json',
     ],
-  },
-  [AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT]: {
-    pathStem: 'edit-script/asset-extract',
-    variableKeys: ['structure_json'],
   },
   [AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN]: {
     pathStem: 'edit-script/shot-execution-plan',
@@ -97,6 +88,26 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'asset_context_json',
       'spatial_profiles_json',
     ],
+  },
+  [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT]: {
+    pathStem: 'edit-bible/outline-script',
+    variableKeys: ['user_prompt'],
+  },
+  [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL]: {
+    pathStem: 'edit-bible/global-bible',
+    variableKeys: ['source_document', 'source_checksum'],
+  },
+  [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET]: {
+    pathStem: 'edit-bible/beat-sheet',
+    variableKeys: ['source_document', 'source_checksum'],
+  },
+  [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER]: {
+    pathStem: 'edit-bible/ledger',
+    variableKeys: ['source_document', 'source_checksum'],
+  },
+  [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE]: {
+    pathStem: 'edit-bible/emotional-curve',
+    variableKeys: ['source_document', 'source_checksum'],
   },
 }
 

@@ -12,10 +12,10 @@ const OPEN_ACTIVITY_STATUSES = ['running', 'waiting'] as const
 function normalizeChoiceType(value: string | null): ProjectAgentActivitySnapshot['choiceType'] {
   if (value === null) return null
   if (
-    value === 'duration_and_aspect_ratio'
-    || value === 'screenplay_review'
+    value === 'bible_review'
     || value === 'style'
     || value === 'asset_review'
+    || value === 'budget_confirmation'
   ) return value
   throw new Error(`PROJECT_AGENT_ACTIVITY_CHOICE_TYPE_INVALID:${value}`)
 }

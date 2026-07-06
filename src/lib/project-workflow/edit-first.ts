@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { parseBgmScoreJson, readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
+import { readCompletedMusicScoreMix, readMusicScoreStatus } from '@/lib/music-score/project-data'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
@@ -18,8 +18,9 @@ export {
 
 export type EditFirstWorkflowStage =
   | 'not_started'
-  | 'ready_to_generate_screenplay'
-  | 'screenplay_ready_for_review'
+  | 'ready_to_ingest_script'
+  | 'bible_generating'
+  | 'bible_ready_for_review'
   | 'style_preview_generating'
   | 'needs_style_choice'
   | 'ready_to_generate_edit_script'
@@ -34,6 +35,8 @@ export type EditFirstWorkflowStage =
   | 'storyboard_images_generating'
   | 'ready_to_generate_videos'
   | 'videos_generating'
+  | 'ready_to_render_chapters'
+  | 'chapters_rendering'
   | 'ready_to_generate_bgm_score'
   | 'bgm_score_generating'
   | 'ready_to_render_final'
@@ -68,13 +71,14 @@ export interface EditFirstWorkflowState {
 
 export interface EditFirstWorkflowSnapshot {
   hasEpisode: boolean
-  hasScreenplay: boolean
-  screenplayStatus: string | null
+  hasBible: boolean
+  bibleStatus: string | null
   stylePreviewCount: number
   completedStylePreviewCount: number
   confirmedStylePreviewCount: number
   failedStylePreviewCount: number
   hasEditScript: boolean
+  activeEditScriptTaskCount: number
   editScriptStatus: string | null
   editScriptAssetReviewStatus: string | null
   editAssetRequirementCount: number
@@ -98,6 +102,10 @@ export interface EditFirstWorkflowSnapshot {
   completedVideoSegmentCount: number
   failedVideoSegmentCount: number
   activeVideoTaskCount: number
+  chapterCount: number
+  completedChapterRenderCount: number
+  failedChapterRenderCount: number
+  activeChapterRenderTaskCount: number
   bgmScoreStatus: string | null
   bgmScoreHasMix: boolean
   activeBgmScoreTaskCount: number
@@ -156,7 +164,7 @@ type StoryboardSpatialCandidate = {
 }
 
 type WorkflowVideoGroupCandidate = {
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly status: string
   readonly videoUrl: string | null
   readonly videoMediaId: string | null
@@ -172,43 +180,58 @@ function isActiveWorkflowStatus(status: string | null | undefined): boolean {
   return status === 'queued' || status === 'processing'
 }
 
+function resolveEpisodeArtifactStatus(input: {
+  readonly statuses: readonly string[]
+  readonly expectedCount: number
+  readonly activeTaskCount?: number
+}): string | null {
+  if (input.expectedCount <= 0 && input.statuses.length === 0) return null
+  if (input.statuses.some((status) => status === 'failed')) return 'failed'
+  if ((input.activeTaskCount ?? 0) > 0) return 'generating'
+  if (input.statuses.length < input.expectedCount) return input.statuses.length > 0 ? 'pending' : null
+  if (input.statuses.every((status) => status === 'ready' || status === 'completed')) return 'ready'
+  const activeStatus = input.statuses.find((status) => status === 'pending' || status === 'generating')
+  return activeStatus ?? input.statuses[0] ?? null
+}
+
+function resolveEpisodeAssetReviewStatus(statuses: readonly string[]): string | null {
+  if (statuses.length === 0) return null
+  if (statuses.some((status) => status === 'failed')) return 'failed'
+  if (statuses.every((status) => status === 'approved')) return 'approved'
+  return statuses.find((status) => status !== 'approved') ?? statuses[0] ?? null
+}
+
 function hasOutputReference(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
+  return left.every((shotId, index) => shotId === right[index])
 }
 
-function readShotNumbers(value: unknown): number[] {
+function readShotIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((item) => (typeof item === 'number' ? item : Number(item)))
-    .filter((item) => Number.isInteger(item) && item > 0)
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
 }
 
-function readEditScriptGenerationSegments(corePlanJson: unknown): readonly { readonly shotNumbers: readonly number[] }[] {
+function readEditScriptGenerationSegments(corePlanJson: unknown): readonly { readonly shotIds: readonly string[] }[] {
   const parsed = editScriptStructureSchema.safeParse(corePlanJson)
   if (!parsed.success) return []
   return parsed.data.generationSegments
 }
 
-function findVideoGroupForShotNumbers(
+function findVideoGroupForShotIds(
   groups: readonly WorkflowVideoGroupCandidate[],
-  shotNumbers: readonly number[],
+  shotIds: readonly string[],
 ): WorkflowVideoGroupCandidate | null {
-  return groups.find((group) => sameShotNumbers(group.shotNumbers, shotNumbers)) ?? null
+  return groups.find((group) => sameShotIds(group.shotIds, shotIds)) ?? null
 }
 
 function videoGroupHasOutput(group: WorkflowVideoGroupCandidate | null): boolean {
   return Boolean(group && (hasOutputReference(group.videoUrl) || hasOutputReference(group.videoMediaId)))
-}
-
-function readBgmScoreStatus(bgmScoreJson: unknown): string | null {
-  const bgmScore = parseBgmScoreJson(bgmScoreJson)
-  const status = bgmScore?.status
-  return typeof status === 'string' && status.trim().length > 0 ? status.trim() : null
 }
 
 interface StoryboardPlanStageSummary {
@@ -217,17 +240,17 @@ interface StoryboardPlanStageSummary {
 }
 
 function resolveStoryboardPlanStageSummary(input: {
-  readonly editScriptId: string | null
+  readonly editScriptIds: ReadonlySet<string>
   readonly storyboards: readonly StoryboardSpatialCandidate[]
 }): StoryboardPlanStageSummary {
-  if (!input.editScriptId) {
+  if (input.editScriptIds.size === 0) {
     return {
       matchingStoryboardIds: [],
       storyboardPanelPromptFailed: false,
     }
   }
   const matching = input.storyboards.flatMap((storyboard) => {
-    if (storyboard.editScriptId !== input.editScriptId) return []
+    if (!storyboard.editScriptId || !input.editScriptIds.has(storyboard.editScriptId)) return []
     return [{
       id: storyboard.id,
       hasError: hasText(storyboard.lastError),
@@ -244,26 +267,50 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
 ): EditFirstWorkflowState {
   if (!snapshot.hasEpisode) return EDIT_FIRST_WORKFLOW_EMPTY_STATE
 
-  const hasAnyEditFirstArtifact = snapshot.hasScreenplay
+  const hasAnyEditFirstArtifact = snapshot.hasBible
     || snapshot.hasEditScript
     || snapshot.hasShotExecutionPlan
 
-  if (!snapshot.hasScreenplay) {
+  if (!snapshot.hasBible) {
     return state({
       active: hasAnyEditFirstArtifact,
-      stage: hasAnyEditFirstArtifact ? 'failed' : 'ready_to_generate_screenplay',
+      stage: hasAnyEditFirstArtifact ? 'failed' : 'ready_to_ingest_script',
       blocking: hasAnyEditFirstArtifact
-        ? { kind: 'failed', reason: 'edit-first artifacts exist but screenplay is missing' }
+        ? { kind: 'failed', reason: 'edit-first artifacts exist but bible is missing' }
         : { kind: 'none', reason: null },
-      nextAction: workflowAction('generate_edit_screenplay', 'Generate screenplay'),
+      nextAction: workflowAction('ingest_script', 'Generate bible'),
     })
   }
 
-  if (snapshot.screenplayStatus === 'failed') {
+  if (snapshot.bibleStatus === 'failed') {
     return state({
       stage: 'failed',
-      blocking: { kind: 'failed', reason: 'screenplay generation failed' },
-      nextAction: workflowAction('generate_edit_screenplay', 'Regenerate screenplay'),
+      blocking: { kind: 'failed', reason: 'bible generation failed' },
+      nextAction: workflowAction('ingest_script', 'Regenerate bible'),
+    })
+  }
+
+  if (snapshot.bibleStatus === 'pending' || snapshot.bibleStatus === 'generating') {
+    return state({
+      stage: 'bible_generating',
+      blocking: { kind: 'processing', reason: 'edit bible generation is still running' },
+    })
+  }
+
+  if (snapshot.bibleStatus === 'ready_for_review') {
+    const nextAction = workflowAction('confirm_bible', 'Confirm bible')
+    return state({
+      stage: 'bible_ready_for_review',
+      blocking: { kind: 'needs_user_choice', reason: 'review bible and choose approval or revision before style preview generation' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId, 'revise_bible'],
+    })
+  }
+
+  if (snapshot.bibleStatus !== 'confirmed') {
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: `edit bible status is unsupported: ${snapshot.bibleStatus ?? 'unknown'}` },
     })
   }
 
@@ -284,50 +331,44 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.screenplayStatus === 'style_preview_generating' && snapshot.completedStylePreviewCount > 0 && snapshot.failedStylePreviewCount > 0) {
+  if (snapshot.confirmedStylePreviewCount === 0) {
+    if (snapshot.stylePreviewCount > terminalStylePreviewCount) {
+      const hasCompletedAndFailedPreviews = snapshot.completedStylePreviewCount > 0 && snapshot.failedStylePreviewCount > 0
+      return state({
+        stage: hasCompletedAndFailedPreviews ? 'needs_style_choice' : 'style_preview_generating',
+        blocking: hasCompletedAndFailedPreviews
+          ? { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' }
+          : { kind: 'processing', reason: 'style preview images are still generating' },
+        allowedOperationIds: hasCompletedAndFailedPreviews ? ['generate_edit_style_previews'] : [],
+      })
+    }
+
+    if (snapshot.stylePreviewCount === 0) {
+      const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
+      return state({
+        stage: 'needs_style_choice',
+        nextAction,
+        allowedOperationIds: [nextAction.operationId],
+      })
+    }
+
     return state({
       stage: 'needs_style_choice',
       blocking: { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' },
       allowedOperationIds: ['generate_edit_style_previews'],
-    })
-  }
-
-  if (snapshot.screenplayStatus === 'style_preview_generating') {
-    return state({
-      stage: 'style_preview_generating',
-      blocking: { kind: 'processing', reason: 'style preview images are still generating' },
-    })
-  }
-
-  if (snapshot.screenplayStatus === 'screenplay_ready') {
-    const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
-    return state({
-      stage: 'screenplay_ready_for_review',
-      blocking: { kind: 'needs_user_choice', reason: 'review screenplay and choose approval or revision before style preview generation' },
-      nextAction,
-      allowedOperationIds: [nextAction.operationId, 'revise_edit_screenplay'],
-    })
-  }
-
-  if (snapshot.screenplayStatus === 'style_preview_ready') {
-    return state({
-      stage: 'needs_style_choice',
-      blocking: { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' },
-      allowedOperationIds: ['generate_edit_style_previews'],
-    })
-  }
-
-  if (snapshot.screenplayStatus !== 'ready') {
-    return state({
-      stage: 'style_preview_generating',
-      blocking: { kind: 'processing', reason: `screenplay status is ${snapshot.screenplayStatus ?? 'unknown'}` },
     })
   }
 
   if (!snapshot.hasEditScript) {
+    if (snapshot.activeEditScriptTaskCount > 0) {
+      return state({
+        stage: 'edit_script_generating',
+        blocking: { kind: 'processing', reason: 'chapter edit planning tasks are still running' },
+      })
+    }
     return state({
       stage: 'ready_to_generate_edit_script',
-      nextAction: workflowAction('generate_edit_script', 'Generate edit core table'),
+      nextAction: workflowAction('plan_chapters', 'Plan chapters'),
     })
   }
 
@@ -335,11 +376,11 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'edit core table generation failed' },
-      nextAction: workflowAction('generate_edit_script', 'Regenerate edit core table'),
+      nextAction: workflowAction('replan_chapter', 'Regenerate chapter edit core table'),
     })
   }
 
-  if (snapshot.editScriptStatus !== 'ready') {
+  if (snapshot.editScriptStatus !== 'ready' || snapshot.activeEditScriptTaskCount > 0) {
     return state({
       stage: 'edit_script_generating',
       blocking: { kind: 'processing', reason: 'edit core table is still generating' },
@@ -452,6 +493,8 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   const videoReady = snapshot.completedVideoSegmentCount >= snapshot.videoPlanSegmentCount
+  const chapterRenderReady = snapshot.chapterCount > 0 && snapshot.completedChapterRenderCount >= snapshot.chapterCount
+  const chapterRenderRunning = snapshot.activeChapterRenderTaskCount > 0
   const bgmReady = snapshot.bgmScoreHasMix
   const bgmRunning = snapshot.activeBgmScoreTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
   const finalRendering = snapshot.activeFinalRenderTaskCount > 0 || isActiveWorkflowStatus(snapshot.finalRenderStatus)
@@ -486,77 +529,78 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'one or more video segments failed' },
       nextAction,
-      allowedOperationIds: bgmReady || bgmRunning
-        ? [nextAction.operationId]
-        : [nextAction.operationId, 'generate_episode_bgm_score'],
+      allowedOperationIds: [nextAction.operationId],
     })
   }
 
-  if (snapshot.bgmScoreStatus === 'failed') {
-    const nextAction = workflowAction('generate_episode_bgm_score', 'Regenerate BGM score')
+  if (snapshot.failedChapterRenderCount > 0) {
+    const nextAction = workflowAction('render_chapters', 'Render chapter videos')
     return state({
       stage: 'failed',
-      blocking: { kind: 'failed', reason: 'BGM score generation failed' },
+      blocking: { kind: 'failed', reason: 'one or more chapter renders failed' },
       nextAction,
-      allowedOperationIds: videoReady
-        ? [nextAction.operationId]
-        : ['generate_episode_videos', nextAction.operationId],
+      allowedOperationIds: [nextAction.operationId],
     })
   }
 
   if (!videoReady) {
-    const canGenerateBgm = !bgmReady && !bgmRunning
     const videoAction = workflowAction('generate_episode_videos', 'Generate videos')
     if (snapshot.activeVideoTaskCount > 0) {
       return state({
         stage: 'videos_generating',
         blocking: { kind: 'processing', reason: 'video segments are still generating' },
-        allowedOperationIds: canGenerateBgm ? ['generate_episode_bgm_score'] : [],
+        allowedOperationIds: [],
       })
     }
     return state({
       stage: 'ready_to_generate_videos',
       nextAction: videoAction,
-      allowedOperationIds: canGenerateBgm
-        ? [videoAction.operationId, 'generate_episode_bgm_score']
-        : [videoAction.operationId],
+      allowedOperationIds: [videoAction.operationId],
     })
   }
 
-  if (!bgmReady) {
-    if (bgmRunning) {
+  if (!chapterRenderReady) {
+    if (chapterRenderRunning) {
       return state({
-        stage: 'bgm_score_generating',
-        blocking: { kind: 'processing', reason: 'BGM score is still generating' },
+        stage: 'chapters_rendering',
+        blocking: { kind: 'processing', reason: 'chapter renders are still running' },
       })
     }
     return state({
-      stage: 'ready_to_generate_bgm_score',
-      nextAction: workflowAction('generate_episode_bgm_score', 'Generate BGM score'),
+      stage: 'ready_to_render_chapters',
+      nextAction: workflowAction('render_chapters', 'Render chapter videos'),
+      allowedOperationIds: ['render_chapters'],
     })
   }
 
+  const finalRenderAction = workflowAction('render_final_video', 'Render final video')
+  const optionalBgmOperationIds: readonly EditFirstWorkflowOperationId[] = !bgmReady && !bgmRunning
+    ? ['generate_episode_bgm_score']
+    : []
   return state({
     stage: 'ready_to_render_final',
-    nextAction: workflowAction('render_final_video', 'Render final video'),
+    nextAction: finalRenderAction,
+    allowedOperationIds: [finalRenderAction.operationId, ...optionalBgmOperationIds],
   })
 }
 
 export function resolveEditFirstWorkflowCapabilityOperationIds(
   workflow: EditFirstWorkflowState,
 ): EditFirstWorkflowOperationId[] {
-  if (!workflow.active && workflow.stage === 'not_started') return ['generate_edit_screenplay']
+  if (!workflow.active && workflow.stage === 'not_started') return ['ingest_script']
   switch (workflow.stage) {
-    case 'ready_to_generate_screenplay':
-      return ['generate_edit_screenplay']
-    case 'screenplay_ready_for_review':
-      return ['revise_edit_screenplay', 'generate_edit_style_previews']
+    case 'ready_to_ingest_script':
+      return ['ingest_script']
+    case 'bible_generating':
+      return []
+    case 'bible_ready_for_review':
+      return ['confirm_bible', 'revise_bible']
     case 'style_preview_generating':
       return []
     case 'needs_style_choice':
       return ['generate_edit_style_previews']
     case 'ready_to_generate_edit_script':
-      return ['generate_edit_script']
+      return ['plan_chapters']
     case 'edit_script_generating':
       return []
     case 'ready_to_generate_assets':
@@ -579,12 +623,16 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return [...workflow.allowedOperationIds]
     case 'videos_generating':
       return [...workflow.allowedOperationIds]
+    case 'ready_to_render_chapters':
+      return ['render_chapters']
+    case 'chapters_rendering':
+      return []
     case 'ready_to_generate_bgm_score':
       return ['generate_episode_bgm_score']
     case 'bgm_score_generating':
       return [...workflow.allowedOperationIds]
     case 'ready_to_render_final':
-      return ['render_final_video']
+      return [...workflow.allowedOperationIds]
     case 'final_rendering':
       return []
     case 'completed':
@@ -592,7 +640,7 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
     case 'failed':
       return [...workflow.allowedOperationIds]
     case 'not_started':
-      return ['generate_edit_screenplay']
+      return ['ingest_script']
     default:
       return [...workflow.allowedOperationIds]
   }
@@ -615,20 +663,24 @@ export async function resolveEditFirstWorkflowState(params: {
   if (!project) return EDIT_FIRST_WORKFLOW_EMPTY_STATE
 
   const [
-    screenplay,
-    editScript,
-    shotExecutionPlan,
+    editBible,
+    editScripts,
+    shotExecutionPlans,
     storyboards,
     panels,
     videoGroups,
+    chapters,
     finalOutput,
+    musicScore,
+    activeEditScriptTaskCount,
     activeBgmScoreTaskCount,
+    activeChapterRenderTaskCount,
     activeFinalRenderTaskCount,
   ] = await Promise.all([
-    prisma.projectEditScreenplay.findFirst({
+    prisma.projectEditBible.findFirst({
       where: {
-        projectId: params.projectId,
         episodeId: params.episodeId,
+        episode: { projectId: params.projectId },
       },
       select: {
         id: true,
@@ -640,13 +692,15 @@ export async function resolveEditFirstWorkflowState(params: {
         },
       },
     }),
-    prisma.projectEditScript.findFirst({
+    prisma.projectEditScript.findMany({
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
       },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
+        chapterId: true,
         status: true,
         assetReviewStatus: true,
         corePlanJson: true,
@@ -659,13 +713,16 @@ export async function resolveEditFirstWorkflowState(params: {
         },
       },
     }),
-    prisma.projectEditShotExecutionPlan.findFirst({
+    prisma.projectEditShotExecutionPlan.findMany({
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
       },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
+        chapterId: true,
+        editScriptId: true,
         status: true,
       },
     }),
@@ -687,6 +744,9 @@ export async function resolveEditFirstWorkflowState(params: {
       where: {
         storyboard: {
           episodeId: params.episodeId,
+          episode: {
+            projectId: params.projectId,
+          },
         },
       },
       select: {
@@ -705,10 +765,22 @@ export async function resolveEditFirstWorkflowState(params: {
       },
       select: {
         id: true,
-        shotNumbers: true,
+        chapterId: true,
+        shotIds: true,
         status: true,
         videoUrl: true,
         videoMediaId: true,
+      },
+    }),
+    prisma.projectEditChapter.findMany({
+      where: {
+        episodeId: params.episodeId,
+        episode: { projectId: params.projectId },
+      },
+      select: {
+        id: true,
+        renderStatus: true,
+        outputMediaId: true,
       },
     }),
     prisma.projectEpisodeFinalOutput.findUnique({
@@ -716,10 +788,26 @@ export async function resolveEditFirstWorkflowState(params: {
         episodeId: params.episodeId,
       },
       select: {
-        bgmScoreJson: true,
         renderStatus: true,
         outputUrl: true,
         outputMediaId: true,
+      },
+    }),
+    prisma.projectEditMusicScore.findUnique({
+      where: {
+        episodeId: params.episodeId,
+      },
+      select: {
+        status: true,
+        mixJson: true,
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
     prisma.task.count({
@@ -728,7 +816,15 @@ export async function resolveEditFirstWorkflowState(params: {
         episodeId: params.episodeId,
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
-        type: TASK_TYPE.BGM_SCORE_GENERATE,
+        type: TASK_TYPE.MUSIC_SCORE_PLAN,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        type: TASK_TYPE.CHAPTER_RENDER,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -744,7 +840,22 @@ export async function resolveEditFirstWorkflowState(params: {
     }),
   ])
 
-  const locationTargetIds = Array.from(new Set((editScript?.requirements ?? [])
+  const expectedChapterCount = chapters.length
+  const editScriptIds = new Set(editScripts.map((script) => script.id))
+  const allEditScriptRequirements = editScripts.flatMap((script) => script.requirements)
+  const editScriptStatus = resolveEpisodeArtifactStatus({
+    statuses: editScripts.map((script) => script.status),
+    expectedCount: expectedChapterCount,
+    activeTaskCount: activeEditScriptTaskCount,
+  })
+  const shotExecutionPlanStatus = resolveEpisodeArtifactStatus({
+    statuses: shotExecutionPlans.map((plan) => plan.status),
+    expectedCount: expectedChapterCount,
+  })
+  const editScriptAssetReviewStatus = resolveEpisodeAssetReviewStatus(
+    editScripts.map((script) => script.assetReviewStatus),
+  )
+  const locationTargetIds = Array.from(new Set(allEditScriptRequirements
     .filter((requirement) => requirement.kind === 'location' && typeof requirement.targetId === 'string' && requirement.targetId.trim().length > 0)
     .map((requirement) => requirement.targetId!)
     .filter(Boolean)))
@@ -756,8 +867,11 @@ export async function resolveEditFirstWorkflowState(params: {
       },
       select: {
         id: true,
-        selectedImage: {
+        selectedImageId: true,
+        images: {
           select: {
+            id: true,
+            isSelected: true,
             imageUrl: true,
             imageMediaId: true,
             spatialProfileStatus: true,
@@ -769,42 +883,49 @@ export async function resolveEditFirstWorkflowState(params: {
     : []
   const locationById = new Map(locationRows.map((location) => [location.id, location]))
   const locationSpatialProfileReadiness = resolveLocationSpatialProfileReadiness(
-    (editScript?.requirements ?? [])
+    allEditScriptRequirements
       .filter((requirement) => requirement.kind === 'location')
       .map((requirement) => {
         const targetId = requirement.targetId ?? null
-        return {
-          targetId,
-          selectedImage: targetId ? locationById.get(targetId)?.selectedImage ?? null : null,
-        }
-      }),
+	        return {
+	          targetId,
+	          selectedImage: targetId
+	            ? (() => {
+	                const location = locationById.get(targetId)
+	                return location?.images.find((image) => image.id === location.selectedImageId)
+	                  ?? location?.images.find((image) => image.isSelected)
+	                  ?? location?.images.find((image) => Boolean(image.imageUrl || image.imageMediaId))
+	                  ?? null
+	              })()
+	            : null,
+	        }
+	      }),
   )
   const storyboardPlanStageSummary = resolveStoryboardPlanStageSummary({
-    editScriptId: editScript?.id ?? null,
+    editScriptIds,
     storyboards,
   })
-  const generationSegments = editScript
-    ? readEditScriptGenerationSegments(editScript.corePlanJson)
-    : []
+  const generationSegments = editScripts.flatMap((script) =>
+    readEditScriptGenerationSegments(script.corePlanJson))
   const videoGroupCandidates: WorkflowVideoGroupCandidate[] = videoGroups.map((group) => ({
-    shotNumbers: readShotNumbers(group.shotNumbers),
+    shotIds: readShotIds(group.shotIds),
     status: group.status,
     videoUrl: group.videoUrl,
     videoMediaId: group.videoMediaId,
   }))
   const plannedVideoGroups = generationSegments.map((segment) =>
-    findVideoGroupForShotNumbers(videoGroupCandidates, segment.shotNumbers))
-  const bgmScoreStatus = readBgmScoreStatus(finalOutput?.bgmScoreJson ?? null)
+    findVideoGroupForShotIds(videoGroupCandidates, segment.shotIds))
+  const bgmScoreStatus = readMusicScoreStatus(musicScore)
   const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
   const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
   const storyboardImageReadiness = resolveStoryboardImageReadiness(editScriptPanels)
-  const activeStoryboardPanelTaskCount = editScript?.id
+  const activeStoryboardPanelTaskCount = editScriptIds.size > 0
     ? await prisma.task.count({
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
         targetType: 'ProjectEditScript',
-        targetId: editScript.id,
+        targetId: { in: [...editScriptIds] },
         type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
         status: { in: ['queued', 'processing'] },
       },
@@ -837,22 +958,23 @@ export async function resolveEditFirstWorkflowState(params: {
     : 0
   return resolveEditFirstWorkflowStateFromSnapshot({
     hasEpisode: true,
-    hasScreenplay: Boolean(screenplay),
-    screenplayStatus: screenplay?.status ?? null,
-    stylePreviewCount: screenplay?.stylePreviews.length ?? 0,
-    completedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
-    confirmedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
-    failedStylePreviewCount: screenplay?.stylePreviews.filter((preview) => preview.status === 'failed').length ?? 0,
-    hasEditScript: Boolean(editScript),
-    editScriptStatus: editScript?.status ?? null,
-    editScriptAssetReviewStatus: editScript?.assetReviewStatus ?? null,
-    editAssetRequirementCount: editScript?.requirements.length ?? 0,
-    pendingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status !== 'completed').length ?? 0,
-    generatingAssetRequirementCount: editScript?.requirements.filter((requirement) => requirement.status === 'generating').length ?? 0,
+    hasBible: Boolean(editBible),
+    bibleStatus: editBible?.status ?? null,
+    stylePreviewCount: editBible?.stylePreviews.length ?? 0,
+    completedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
+    confirmedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
+    failedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'failed').length ?? 0,
+    hasEditScript: editScripts.length > 0,
+    activeEditScriptTaskCount,
+    editScriptStatus,
+    editScriptAssetReviewStatus,
+    editAssetRequirementCount: allEditScriptRequirements.length,
+    pendingAssetRequirementCount: allEditScriptRequirements.filter((requirement) => requirement.status !== 'completed').length,
+    generatingAssetRequirementCount: allEditScriptRequirements.filter((requirement) => requirement.status === 'generating').length,
     requiredLocationSpatialProfileCount: locationSpatialProfileReadiness.requiredCount,
     readyLocationSpatialProfileCount: locationSpatialProfileReadiness.readyCount,
-    hasShotExecutionPlan: Boolean(shotExecutionPlan),
-    shotExecutionPlanStatus: shotExecutionPlan?.status ?? null,
+    hasShotExecutionPlan: shotExecutionPlans.length > 0,
+    shotExecutionPlanStatus,
     storyboardCount: editScriptStoryboardIds.size,
     storyboardPanelPromptFailed: storyboardPlanStageSummary.storyboardPanelPromptFailed,
     activeStoryboardPanelTaskCount,
@@ -867,8 +989,12 @@ export async function resolveEditFirstWorkflowState(params: {
     completedVideoSegmentCount: plannedVideoGroups.filter(videoGroupHasOutput).length,
     failedVideoSegmentCount: plannedVideoGroups.filter((group) => group?.status === 'failed').length,
     activeVideoTaskCount: plannedVideoGroups.filter((group) => isActiveWorkflowStatus(group?.status)).length,
+    chapterCount: chapters.length,
+    completedChapterRenderCount: chapters.filter((item) => hasOutputReference(item.outputMediaId ?? null) && item.renderStatus === 'completed').length,
+    failedChapterRenderCount: chapters.filter((item) => item.renderStatus === 'failed').length,
+    activeChapterRenderTaskCount,
     bgmScoreStatus,
-    bgmScoreHasMix: Boolean(readCompletedBgmScoreMix(finalOutput?.bgmScoreJson ?? null)),
+    bgmScoreHasMix: Boolean(readCompletedMusicScoreMix(musicScore)),
     activeBgmScoreTaskCount,
     finalRenderStatus: finalOutput?.renderStatus ?? null,
     finalRenderHasOutput: Boolean(

@@ -14,7 +14,10 @@ import type { ProjectAgentContext } from './types'
 const CORE_OPERATION_IDS = [
   'get_project_context',
   'get_project_snapshot',
+  'get_episode_overview',
+  'get_chapter_detail',
   'get_task',
+  'get_task_batch',
   'list_tasks',
 ] as const
 
@@ -160,17 +163,27 @@ function isEditFirstChoiceOperationEnabled(params: {
   workflow: EditFirstWorkflowState
   operationId: string
 }): boolean {
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio) {
-    return params.workflow.stage === 'ready_to_generate_screenplay'
-  }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review) {
-    return params.workflow.stage === 'screenplay_ready_for_review'
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.bible_review) {
+    return params.workflow.stage === 'bible_ready_for_review'
   }
   if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.style) {
     return params.workflow.stage === 'needs_style_choice'
   }
   if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.asset_review) {
     return params.workflow.stage === 'assets_ready_for_review'
+  }
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation) {
+    return Boolean(params.workflow.nextAction) && (
+      params.workflow.stage === 'ready_to_generate_edit_script'
+      || params.workflow.stage === 'ready_to_generate_assets'
+      || params.workflow.stage === 'ready_to_generate_shot_execution_plan'
+      || params.workflow.stage === 'ready_to_generate_storyboard'
+      || params.workflow.stage === 'ready_to_generate_storyboard_images'
+      || params.workflow.stage === 'ready_to_generate_videos'
+      || params.workflow.stage === 'ready_to_render_chapters'
+      || params.workflow.stage === 'ready_to_generate_bgm_score'
+      || params.workflow.stage === 'ready_to_render_final'
+    )
   }
   return false
 }

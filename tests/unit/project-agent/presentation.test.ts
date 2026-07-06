@@ -89,13 +89,14 @@ describe('project agent presentation', () => {
           storyboardCount: 1,
           panelCount: 3,
         },
-        editScreenplay: {
-          id: 'screenplay-1',
+        editBible: {
+          id: 'bible-1',
           status: 'ready',
           userPrompt: 'make a short film',
           textPreview: 'INT. DOCK - NIGHT',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
+        chapters: [],
         editScript: {
           id: 'edit-1',
           status: 'ready',
@@ -128,7 +129,7 @@ describe('project agent presentation', () => {
     } satisfies ProjectContextSnapshot)
 
     expect(snapshot.editFirstWorkflow).toEqual(editFirstWorkflow)
-    expect(snapshot.editScreenplay?.id).toBe('screenplay-1')
+    expect(snapshot.editBible?.id).toBe('bible-1')
     expect(snapshot.editScript?.generationSegmentCount).toBe(2)
     expect(snapshot.recentOperationResults[0]?.media?.url).toBe('https://audio.example/music.mp3')
   })

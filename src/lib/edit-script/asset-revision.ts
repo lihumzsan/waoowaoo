@@ -25,6 +25,7 @@ interface ReviseEditScriptAssetsInput {
   readonly request: NextRequest
   readonly projectId: string
   readonly episodeId: string
+  readonly chapterId?: string
   readonly userId: string
   readonly locale: Locale
   readonly revisionNotes: string
@@ -233,7 +234,7 @@ export async function reviseProjectEditScriptAssets(input: ReviseEditScriptAsset
     })
   }
 
-  const script = await getPersistedEditScriptForRevision(input.projectId, input.episodeId, input.editScriptId)
+  const script = await getPersistedEditScriptForRevision(input.projectId, input.episodeId, input.chapterId, input.editScriptId)
   if (!script) throw new ApiError('NOT_FOUND')
 
   const requirements = input.requirementId

@@ -48,7 +48,7 @@
 {{user_request}}
 
 已生成剧本：
-{{screenplay_text}}
+{{bible_text}}
 
 时长档位与节奏约束：
 {{duration_guidance}}

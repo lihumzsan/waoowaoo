@@ -13,11 +13,13 @@ export const AI_PROMPT_IDS = {
   MUSIC_FINAL_RENDER_BGM: 'music-final-render-bgm',
   EDIT_SCRIPT_STYLE_BIBLE: 'style-bible',
   EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS: 'style-preview-options',
-  EDIT_SCRIPT_SCREENPLAY: 'screenplay',
-  EDIT_SCRIPT_SCREENPLAY_REVISION: 'screenplay-revision',
   EDIT_SCRIPT_STRUCTURE: 'structure',
-  EDIT_SCRIPT_ASSET_EXTRACT: 'asset-extract',
   EDIT_SCRIPT_SHOT_EXECUTION_PLAN: 'shot-execution-plan',
+  EDIT_BIBLE_OUTLINE_SCRIPT: 'outline-script',
+  EDIT_BIBLE_GLOBAL: 'global-bible',
+  EDIT_BIBLE_BEAT_SHEET: 'beat-sheet',
+  EDIT_BIBLE_LEDGER: 'ledger',
+  EDIT_BIBLE_EMOTIONAL_CURVE: 'emotional-curve',
 } as const
 
 export type AiPromptId = (typeof AI_PROMPT_IDS)[keyof typeof AI_PROMPT_IDS]

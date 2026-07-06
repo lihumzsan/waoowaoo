@@ -109,6 +109,7 @@ export async function submitTask(params: {
   targetId: string
   payload?: Record<string, unknown> | null
   dedupeKey?: string | null
+  batchKey?: string | null
   priority?: number
   billingInfo?: TaskBillingInfo | null
   billingInfoSource?: 'auto' | 'planned'
@@ -160,6 +161,7 @@ export async function submitTask(params: {
     targetId: params.targetId,
     payload: normalizedPayload,
     dedupeKey: params.dedupeKey || null,
+    batchKey: params.batchKey || null,
     priority: params.priority,
     billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
@@ -258,6 +260,7 @@ export async function submitTask(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         payload: normalizedPayload,
+        batchKey: params.batchKey || null,
         billingInfo: preparedBillingInfo || null,
         userId: params.userId,
         trace: {

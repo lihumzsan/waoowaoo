@@ -44,10 +44,10 @@ function toActivitySnapshot(record: {
   const choiceType = record.choiceType
   if (
     choiceType !== null
-    && choiceType !== 'duration_and_aspect_ratio'
-    && choiceType !== 'screenplay_review'
+    && choiceType !== 'bible_review'
     && choiceType !== 'style'
     && choiceType !== 'asset_review'
+    && choiceType !== 'budget_confirmation'
   ) {
     throw new Error(`PROJECT_AGENT_ACTIVITY_CHOICE_TYPE_INVALID:${choiceType}`)
   }

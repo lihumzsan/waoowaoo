@@ -39,7 +39,7 @@ interface PanelDraft {
   readonly imagePrompt: string | null
   readonly videoPrompt: string | null
   readonly actingNotes: string | null
-  readonly sourceShotNumber: number
+  readonly sourceShotId: string
   readonly sourceGenerationSegmentId: string
   readonly executionSnapshotJson: Prisma.InputJsonValue
   readonly renderFactsJson: Prisma.InputJsonValue
@@ -53,14 +53,14 @@ function assetKey(value: string): string {
   return value.trim().toLocaleLowerCase()
 }
 
-function segmentForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number): StoryboardConsistencyGenerationSegment {
-  const segment = snapshot.generationSegments.find((item) => item.shotNumbers.includes(shotNumber))
-  if (!segment) throw new Error(`EDIT_SCRIPT_STORYBOARD_SEGMENT_MISSING:${shotNumber}`)
+function segmentForShot(snapshot: StoryboardConsistencySourceSnapshot, shotId: string): StoryboardConsistencyGenerationSegment {
+  const segment = snapshot.generationSegments.find((item) => item.shotIds.includes(shotId))
+  if (!segment) throw new Error(`EDIT_SCRIPT_STORYBOARD_SEGMENT_MISSING:${shotId}`)
   return segment
 }
 
-function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, shotNumber: number) {
-  return snapshot.assets.find((asset) => asset.kind === 'location' && asset.shotNumbers.includes(shotNumber)) ?? null
+function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, shotId: string) {
+  return snapshot.assets.find((asset) => asset.kind === 'location' && asset.shotIds.includes(shotId)) ?? null
 }
 
 async function buildCharacterRefsByAssetName(
@@ -113,7 +113,7 @@ function buildStoryboardTextJson(snapshot: StoryboardConsistencySourceSnapshot):
     generationSegments: snapshot.generationSegments.map((segment) => ({
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
       segmentIndex: segment.segmentIndex,
-      shotNumbers: segment.shotNumbers,
+      shotIds: segment.shotIds,
       continuity: segment.continuity,
     })),
   })
@@ -135,6 +135,7 @@ export async function upsertEditScriptStoryboard(input: {
     return await prisma.projectStoryboard.update({
       where: { id: existing.id },
       data: {
+        chapter: { connect: { id: input.snapshot.chapterId } },
         panelCount: input.snapshot.shots.length,
         storyboardTextJson,
       },
@@ -147,6 +148,7 @@ export async function upsertEditScriptStoryboard(input: {
   return await prisma.projectStoryboard.create({
     data: {
       episode: { connect: { id: input.snapshot.episodeId } },
+      chapter: { connect: { id: input.snapshot.chapterId } },
       editScript: { connect: { id: editScriptId } },
       panelCount: input.snapshot.shots.length,
       storyboardTextJson,
@@ -162,14 +164,14 @@ function buildPanelDrafts(input: {
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
   readonly characterRefsByAssetName: ReadonlyMap<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>
 }): PanelDraft[] {
-  const generatedByShotNumber = new Map(input.generatedPanels.map((panel) => [panel.sourceShotNumber, panel]))
+  const generatedByShotId = new Map(input.generatedPanels.map((panel) => [panel.sourceShotId, panel]))
   let cursor = 0
   return input.snapshot.shots.map((shot, index) => {
-    const segment = segmentForShot(input.snapshot, shot.shotNumber)
-    const generated = generatedByShotNumber.get(shot.shotNumber)
-    const location = locationForShot(input.snapshot, shot.shotNumber)
-    const execution = input.snapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotNumber === shot.shotNumber)
-    if (!generated || !execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FACTS_MISSING:${shot.shotNumber}`)
+    const segment = segmentForShot(input.snapshot, shot.shotId)
+    const generated = generatedByShotId.get(shot.shotId)
+    const location = locationForShot(input.snapshot, shot.shotId)
+    const execution = input.snapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotId === shot.shotId)
+    if (!generated || !execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FACTS_MISSING:${shot.shotId}`)
     const srtStart = cursor
     const srtEnd = cursor + shot.durationSec
     cursor = srtEnd
@@ -216,7 +218,7 @@ function buildPanelDrafts(input: {
       imagePrompt: generated.prompt,
       videoPrompt: generated.videoPrompt,
       actingNotes: null,
-      sourceShotNumber: shot.shotNumber,
+      sourceShotId: shot.shotId,
       sourceGenerationSegmentId: segment.sourceGenerationSegmentId,
       executionSnapshotJson: toInputJson(generated.executionSnapshot),
       renderFactsJson: toInputJson(generated.renderFacts),
@@ -267,7 +269,7 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
       candidateImages: null,
       videoPrompt: draft.videoPrompt,
       actingNotes: draft.actingNotes,
-      sourceShotNumber: draft.sourceShotNumber,
+      sourceShotId: draft.sourceShotId,
       sourceGenerationSegmentId: draft.sourceGenerationSegmentId,
       executionSnapshotJson: draft.executionSnapshotJson,
       renderFactsJson: draft.renderFactsJson,
@@ -298,7 +300,7 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
         imagePrompt: draft.imagePrompt,
         videoPrompt: draft.videoPrompt,
         actingNotes: draft.actingNotes,
-        sourceShotNumber: draft.sourceShotNumber,
+        sourceShotId: draft.sourceShotId,
         sourceGenerationSegmentId: draft.sourceGenerationSegmentId,
         executionSnapshotJson: draft.executionSnapshotJson,
         renderFactsJson: draft.renderFactsJson,

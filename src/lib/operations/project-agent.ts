@@ -11,6 +11,7 @@ import { createVideoOperations } from './domains/media/video-ops'
 import { createVideoGenerationOperations } from './domains/storyboard/generation/video'
 import { createMusicGenerationOperations } from './domains/music/generation/music-generation-ops'
 import { createFinalRenderOperations } from './domains/render/final-video/final-render-ops'
+import { createBibleOperations } from './domains/media/bible-ops'
 import { createEditScriptOperations } from './domains/media/edit-script-ops'
 import { createDownloadOperations } from './domains/media/download-ops'
 import { createConfigOperations } from './domains/config/config-ops'
@@ -170,6 +171,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     }),
     ...withOperationPack(createEditScriptOperations(), {
       groupPath: ['edit-script'],
+      channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createBibleOperations(), {
+      groupPath: ['edit-bible'],
       channels: CHANNELS_TOOL_API,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,

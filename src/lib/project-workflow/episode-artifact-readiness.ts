@@ -13,7 +13,7 @@ type StoryboardPanelLike = {
 type EpisodeScriptLike = {
   content?: string | null
   scriptText?: string | null
-  screenplay?: string | null
+  bible?: string | null
   [key: string]: unknown
 }
 
@@ -25,7 +25,7 @@ type StoryboardLike = {
 type EpisodeLike = {
   novelText?: string | null
   editScript?: EpisodeScriptLike | null
-  editScreenplay?: EpisodeScriptLike | null
+  editBible?: EpisodeScriptLike | null
   storyboards?: unknown[] | null
 }
 
@@ -49,7 +49,7 @@ export function hasScriptArtifacts(script: unknown | null | undefined) {
   if (!isEpisodeScriptLike(script)) return false
   return hasNonEmptyText(script.content)
     || hasNonEmptyText(script.scriptText)
-    || hasNonEmptyText(script.screenplay)
+    || hasNonEmptyText(script.bible)
 }
 
 export function hasStoryboardArtifacts(storyboards: unknown[] | null | undefined) {
@@ -69,7 +69,7 @@ export function hasVideoArtifacts(storyboards: unknown[] | null | undefined) {
 export function resolveEpisodeArtifactReadiness(episode: EpisodeLike | null | undefined): EpisodeArtifactReadiness {
   return {
     hasStory: hasNonEmptyText(episode?.novelText),
-    hasScript: hasScriptArtifacts(episode?.editScript) || hasScriptArtifacts(episode?.editScreenplay),
+    hasScript: hasScriptArtifacts(episode?.editScript) || hasScriptArtifacts(episode?.editBible),
     hasStoryboard: hasStoryboardArtifacts(episode?.storyboards),
     hasVideo: hasVideoArtifacts(episode?.storyboards),
   }

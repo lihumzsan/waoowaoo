@@ -15,23 +15,19 @@ describe('ai prompt registry', () => {
     expect(prompt).toContain('创建一个阴郁的老管家')
   })
 
-  it('loads the screenplay revision template', () => {
+  it('loads the edit bible global template', () => {
     const prompt = buildAiPrompt({
-      promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
+      promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       locale: 'zh',
       variables: {
-        original_user_request: '做一个60秒恐怖短片',
-        current_screenplay_text: '标题：《旧钟》',
-        revision_instruction: '改得更克苏鲁一些',
-        duration_guidance: '中时长档位，约 60 秒。允许完整起承转合。',
-        aspect_ratio: '16:9',
+        source_document: '标题：《旧钟》',
+        source_checksum: 'checksum-1',
       },
     })
 
-    expect(prompt).toContain('短片剧本改写 AI')
+    expect(prompt).toContain('长视频 Bible')
     expect(prompt).toContain('标题：《旧钟》')
-    expect(prompt).toContain('改得更克苏鲁一些')
-    expect(prompt).toContain('16:9')
+    expect(prompt).toContain('checksum-1')
   })
 
   it('renders edit structure generation segment duration constraints', () => {
@@ -40,7 +36,10 @@ describe('ai prompt registry', () => {
       locale: 'zh',
       variables: {
         user_request: '做一个恐怖短片',
-        screenplay_text: '林小雨听到门外异响。',
+        bible_text: '林小雨听到门外异响。',
+        story_bible_json: '{"characters":[],"locations":[]}',
+        entry_snapshot_json: '{"facts":[],"entities":[]}',
+        chapter_events_json: '[]',
         duration_guidance: '短时长档位，约 30 秒。',
         generation_segment_max_duration_seconds: '15',
         aspect_ratio: '16:9',

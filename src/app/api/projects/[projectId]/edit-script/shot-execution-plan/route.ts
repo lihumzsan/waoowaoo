@@ -20,12 +20,14 @@ export const GET = apiHandler(async (
   const { searchParams } = new URL(request.url)
   const parsed = getEditShotExecutionPlanRequestSchema.safeParse({
     episodeId: searchParams.get('episodeId'),
+    chapterId: searchParams.get('chapterId') ?? undefined,
   })
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
   const shotExecutionPlan = await readProjectEditShotExecutionPlan({
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
   })
   return NextResponse.json({ shotExecutionPlan })
 })
@@ -46,6 +48,7 @@ export const POST = apiHandler(async (
     request,
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
     userId: authResult.session.user.id,
     source: 'project-ui',
     confirmed: true,

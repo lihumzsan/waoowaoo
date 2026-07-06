@@ -18,7 +18,7 @@ export function buildAssistantProjectContextSnapshot(
     activeOperationTasks: context.activeOperationTasks,
     recentOperationResults: context.recentOperationResults,
     latestArtifacts: context.latestArtifacts,
-    editScreenplay: context.episodeDetail?.editScreenplay ?? null,
+    editBible: context.episodeDetail?.editBible ?? null,
     editScript: context.episodeDetail?.editScript ?? null,
     editFirstWorkflow: context.editFirstWorkflow,
     config: {

@@ -19,17 +19,17 @@ interface PersistedRequirement {
   readonly kind: string
   readonly name: string
   readonly description: string
-  readonly requiredForShotNumbers: Prisma.JsonValue
+  readonly requiredForShotIds: Prisma.JsonValue
   readonly status: string
   readonly targetId: string | null
   readonly errorMessage: string | null
 }
 
-function readShotNumbers(value: Prisma.JsonValue): number[] {
+function readShotIds(value: Prisma.JsonValue): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((item) => (typeof item === 'number' && Number.isInteger(item) && item > 0 ? item : null))
-    .filter((item): item is number => item !== null)
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
 }
 
 function mapRequirements(requirements: readonly PersistedRequirement[]): EditAssetRequirement[] {
@@ -38,7 +38,7 @@ function mapRequirements(requirements: readonly PersistedRequirement[]): EditAss
     kind: requirement.kind === 'location' ? 'location' : 'character',
     name: requirement.name,
     description: requirement.description,
-    shotNumbers: readShotNumbers(requirement.requiredForShotNumbers),
+    shotIds: readShotIds(requirement.requiredForShotIds),
     status: requirement.status === 'completed' ? 'completed' : requirement.status === 'generating' ? 'generating' : requirement.status === 'failed' ? 'failed' : 'pending',
     targetId: requirement.targetId,
     errorMessage: requirement.errorMessage,
@@ -153,7 +153,7 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
             kind: requirement.kind,
             name: requirement.name,
             description: requirement.description,
-            shotNumbers: requirement.shotNumbers,
+            shotIds: requirement.shotIds,
             targetId: requirement.targetId,
             previewImageUrl: resolvedImage.previewImageUrl,
             spatialProfile: resolvedImage.spatialProfile,
@@ -188,32 +188,45 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
 function mapEditScriptPayload(input: {
   readonly script: {
     readonly id: string
-    readonly projectId: string
-    readonly episodeId: string
-    readonly editScreenplayId: string
-    readonly corePlanJson: Prisma.JsonValue | null
-    readonly durationSec: number
-    readonly shotCount: number
-    readonly status: string
-    readonly assetReviewStatus: string
-    readonly editScreenplay: {
-      readonly userPrompt: string
-      readonly styleBibleJson: Prisma.JsonValue | null
-      readonly screenplayText: string
-    }
-    readonly requirements: readonly PersistedRequirement[]
-  }
-}): EditScriptPayload {
-  if (!input.script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${input.script.id}`)
-  const core = normalizeEditScriptStructure(input.script.corePlanJson)
-  return {
-    id: input.script.id,
-    projectId: input.script.projectId,
-    episodeId: input.script.episodeId,
-    screenplayId: input.script.editScreenplayId,
-    userPrompt: input.script.editScreenplay.userPrompt,
-    styleBible: parseStyleBible(input.script.editScreenplay.styleBibleJson),
-    screenplayText: input.script.editScreenplay.screenplayText,
+	    readonly projectId: string
+	    readonly episodeId: string
+	    readonly chapterId: string
+	    readonly corePlanJson: Prisma.JsonValue | null
+	    readonly durationSec: number
+	    readonly shotCount: number
+	    readonly status: string
+	    readonly assetReviewStatus: string
+	    readonly chapter: {
+	      readonly sourceDocumentId: string | null
+	      readonly sourceStart: number | null
+	      readonly sourceEnd: number | null
+	      readonly sourceDocument: {
+	        readonly normalizedText: string
+	      } | null
+	    }
+	    readonly requirements: readonly PersistedRequirement[]
+	  }
+	  readonly styleBibleJson: Prisma.JsonValue | null
+	}): EditScriptPayload {
+	  if (!input.script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${input.script.id}`)
+	  const core = normalizeEditScriptStructure(input.script.corePlanJson)
+	  const sourceStart = input.script.chapter.sourceStart
+	  const sourceEnd = input.script.chapter.sourceEnd
+	  const sourceDocument = input.script.chapter.sourceDocument
+	  const sourceText =
+	    sourceDocument && sourceStart !== null && sourceEnd !== null
+	      ? sourceDocument.normalizedText.slice(sourceStart, sourceEnd)
+	      : null
+	  return {
+	    id: input.script.id,
+	    projectId: input.script.projectId,
+	    episodeId: input.script.episodeId,
+	    chapterId: input.script.chapterId,
+	    ...(input.script.chapter.sourceDocumentId ? { sourceDocumentId: input.script.chapter.sourceDocumentId } : {}),
+	    ...(sourceStart !== null ? { sourceStart } : {}),
+	    ...(sourceEnd !== null ? { sourceEnd } : {}),
+	    sourceText,
+	    styleBible: parseStyleBible(input.styleBibleJson),
     durationSec: core.durationSec,
     shotCount: core.shotCount,
     status: input.script.status,
@@ -227,13 +240,14 @@ function mapEditScriptPayload(input: {
 export async function buildStoryboardConsistencySource(input: {
   readonly projectId: string
   readonly episodeId: string
+  readonly chapterId?: string
   readonly editScriptId: string
   readonly userId: string
 }): Promise<{
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
 }> {
-  const [project, script, executionPlan, config] = await Promise.all([
+  const [project, script, editBible, executionPlan, config] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -246,9 +260,14 @@ export async function buildStoryboardConsistencySource(input: {
         id: input.editScriptId,
         projectId: input.projectId,
         episodeId: input.episodeId,
+        ...(input.chapterId ? { chapterId: input.chapterId } : {}),
       },
       include: {
-        editScreenplay: true,
+        chapter: {
+          include: {
+            sourceDocument: true,
+          },
+        },
         requirements: {
           orderBy: [
             { kind: 'asc' },
@@ -257,16 +276,21 @@ export async function buildStoryboardConsistencySource(input: {
         },
       },
     }),
+    prisma.projectEditBible.findUnique({
+      where: { episodeId: input.episodeId },
+      select: { styleBibleJson: true },
+    }),
     prisma.projectEditShotExecutionPlan.findFirst({
       where: {
         projectId: input.projectId,
         episodeId: input.episodeId,
+        ...(input.chapterId ? { chapterId: input.chapterId } : {}),
         editScriptId: input.editScriptId,
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
   ])
-  if (!project || !script) throw new ApiError('NOT_FOUND')
+  if (!project || !script || !editBible) throw new ApiError('NOT_FOUND')
   if (script.status !== 'ready') {
     throw new ApiError('CONFLICT', {
       code: 'EDIT_SCRIPT_NOT_READY',
@@ -279,7 +303,7 @@ export async function buildStoryboardConsistencySource(input: {
       message: 'Ready shot execution plan is required before storyboard generation',
     })
   }
-  const editScript = mapEditScriptPayload({ script })
+  const editScript = mapEditScriptPayload({ script, styleBibleJson: editBible.styleBibleJson })
   if (!editScript.id) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
   const styleBible = editScript.styleBible
   if (!styleBible) {
@@ -304,15 +328,19 @@ export async function buildStoryboardConsistencySource(input: {
     sourceSnapshot: {
       projectId: input.projectId,
       episodeId: input.episodeId,
+      chapterId: script.chapterId,
       project: {
         videoRatio: project.videoRatio,
       },
       editScript: {
         id: editScript.id,
+        chapterId: editScript.chapterId,
         durationSec: editScript.durationSec,
         shotCount: editScript.shotCount,
-        userPrompt: editScript.userPrompt,
-        screenplayText: editScript.screenplayText,
+        sourceDocumentId: editScript.sourceDocumentId,
+        sourceStart: editScript.sourceStart,
+        sourceEnd: editScript.sourceEnd,
+        sourceText: editScript.sourceText,
       },
       styleBible,
       shots: editScript.shots,

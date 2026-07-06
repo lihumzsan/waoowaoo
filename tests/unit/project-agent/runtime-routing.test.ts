@@ -185,10 +185,10 @@ vi.mock('@openai/agents', () => {
 
     getInterruptions() {
       return [{
-        name: 'generate_edit_screenplay',
+        name: 'ingest_script',
         rawItem: {
           id: 'approval-1',
-          callId: 'tool-generate-screenplay-1',
+          callId: 'tool-generate-bible-1',
         },
       }]
     }
@@ -220,10 +220,15 @@ vi.mock('@openai/agents', () => {
     streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
     streamState.capturedEnabledToolNames = await collectEnabledToolNames(agent.tools)
     if (streamState.simulateSecondTurnAfterFirstWorkflowTool) {
+      const executableWorkflowToolNames = new Set([
+        'ingest_script',
+        'plan_chapters',
+        'replan_chapter',
+      ])
       const executable = agent.tools.find((tool) => (
         streamState.capturedEnabledToolNames.includes(tool.name)
         && typeof tool.execute === 'function'
-        && tool.name.startsWith('generate_edit_')
+        && (tool.name.startsWith('generate_edit_') || executableWorkflowToolNames.has(tool.name))
       ))
       if (!executable?.execute) {
         throw new Error('TEST_EXECUTABLE_WORKFLOW_TOOL_NOT_FOUND')
@@ -444,7 +449,10 @@ function createRegistry(): ProjectAgentOperationRegistry {
   const queryIds = [
     'get_project_context',
     'get_project_snapshot',
+    'get_episode_overview',
+    'get_chapter_detail',
     'get_task',
+    'get_task_batch',
     'list_tasks',
     ...EDIT_FIRST_CHOICE_OPERATION_IDS,
   ]
@@ -548,12 +556,12 @@ describe('project agent runtime deterministic tool injection', () => {
     persistenceState.appendProjectAssistantThreadMessages.mockClear()
     runLockState.safelyReleaseProjectAgentRunLock.mockClear()
     registryState.registry = createRegistry()
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_ingest_script', ['ingest_script'])
     workflowRefreshState.resolveEditFirstWorkflowState.mockReset()
     workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValue(phaseState.editFirstWorkflow)
   })
 
-  it('injects edit-first choice and screenplay tools without an LLM router', async () => {
+  it('injects edit-first choice and bible tools without an LLM router', async () => {
     const response = await runAssistant({})
     await drainCapturedResponseStream()
     await vi.waitFor(() => {
@@ -564,18 +572,21 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([
       'get_project_context',
       'get_project_snapshot',
+      'get_episode_overview',
+      'get_chapter_detail',
       'get_task',
+      'get_task_batch',
       'list_tasks',
       ...EDIT_FIRST_CHOICE_OPERATION_IDS,
-      'generate_edit_screenplay',
+      'ingest_script',
     ]))
     expect(streamState.capturedToolNames).not.toContain('get_task_status')
     expect(streamState.capturedToolNames).not.toContain('get_project_assets')
     expect(streamState.capturedToolNames).not.toContain('get_project_data')
-    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).toContain('ingest_script')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
-    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
-    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].needsApproval).toBeUndefined()
+    expect(streamState.capturedTools.ingest_script.needsApproval).toEqual(expect.any(Function))
+    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.bible_review].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('[project_state_snapshot]')
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',
@@ -591,8 +602,8 @@ describe('project agent runtime deterministic tool injection', () => {
       details: expect.objectContaining({
         toolset: expect.objectContaining({
           operationIds: expect.arrayContaining([
-            EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
-            'generate_edit_screenplay',
+            EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+            'ingest_script',
           ]),
         }),
       }),
@@ -613,7 +624,7 @@ describe('project agent runtime deterministic tool injection', () => {
   })
 
   it('injects compact runtime project state facts into the model input', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_ingest_script', ['ingest_script'])
 
     const response = await runAssistant({
       context: {
@@ -635,8 +646,8 @@ describe('project agent runtime deterministic tool injection', () => {
     const content = snapshotItem?.content
     if (typeof content !== 'string') throw new Error('PROJECT_STATE_SNAPSHOT_TEST_CONTENT_MISSING')
     expect(content).toContain('phase=draft')
-    expect(content).toContain('workflowStage=ready_to_generate_screenplay')
-    expect(content).toContain('workflowNextAction=generate_edit_screenplay')
+    expect(content).toContain('workflowStage=ready_to_ingest_script')
+    expect(content).toContain('workflowNextAction=ingest_script')
     expect(content).toContain('enabledOperationIds=')
     expect(content).toContain('progress.storyboardCount=')
     expect(content).not.toContain('source=runtime')
@@ -650,13 +661,12 @@ describe('project agent runtime deterministic tool injection', () => {
 
   it('feeds the choice back as an in-band tool result while using workflow availability for next tools', async () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'duration_and_aspect_ratio',
+      choiceType: 'bible_review',
       toolCallId: 'tool-choice-1',
       latestUserText: '民俗恐怖片',
       output: {
         ok: true,
-        durationTier: 'medium',
-        aspectRatio: '16:9',
+        decision: 'approve',
       },
     })
     expect(choiceResult).not.toBeNull()
@@ -672,7 +682,7 @@ describe('project agent runtime deterministic tool injection', () => {
       control: {
         kind: 'choice',
         interruptionId: 'choice-interruption-1',
-        choiceType: 'duration_and_aspect_ratio',
+        choiceType: 'bible_review',
         toolCallId: 'tool-choice-1',
         cardId: 'edit-first-duration-aspect-ratio',
         choiceResult: choiceResult!,
@@ -690,15 +700,15 @@ describe('project agent runtime deterministic tool injection', () => {
     const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
     expect(runInputItems.some((item) => item.type === 'function_call' && item.callId === 'tool-choice-1')).toBe(true)
     expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
-    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).toContain('ingest_script')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
-    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_screenplay')
-    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio)
+    expect(streamState.capturedEnabledToolNames).toContain('ingest_script')
+    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
   })
 
   it('allows a choice response run to finish when the model chooses not to call another tool', async () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
       latestUserText: '恐怖片',
       output: {
@@ -707,9 +717,9 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
-      'revise_edit_screenplay',
+      'revise_bible',
     ])
 
     const response = await createProjectAgentChatResponse({
@@ -722,9 +732,9 @@ describe('project agent runtime deterministic tool injection', () => {
       control: {
         kind: 'choice',
         interruptionId: 'choice-interruption-1',
-        choiceType: 'screenplay_review',
+        choiceType: 'bible_review',
         toolCallId: 'tool-choice-review',
-        cardId: 'edit-first-screenplay-review',
+        cardId: 'edit-first-bible-review',
         choiceResult: choiceResult!,
       },
       messages: [
@@ -744,9 +754,9 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('does not expose screenplay review choice again after that choice was already approved', async () => {
+  it('does not expose bible review choice again after that choice was already approved', async () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'screenplay_review',
+      choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
       latestUserText: '确认剧本',
       output: {
@@ -755,9 +765,9 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
-      'revise_edit_screenplay',
+      'revise_bible',
     ])
 
     const response = await createProjectAgentChatResponse({
@@ -770,9 +780,9 @@ describe('project agent runtime deterministic tool injection', () => {
       control: {
         kind: 'choice',
         interruptionId: 'choice-interruption-1',
-        choiceType: 'screenplay_review',
+        choiceType: 'bible_review',
         toolCallId: 'tool-choice-review',
-        cardId: 'edit-first-screenplay-review',
+        cardId: 'edit-first-bible-review',
         choiceResult: choiceResult!,
       },
       messages: [
@@ -782,28 +792,27 @@ describe('project agent runtime deterministic tool injection', () => {
     await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
+    expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_style_previews')
-    expect(streamState.capturedEnabledToolNames).toContain('revise_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).toContain('revise_bible')
   })
 
-  it('keeps screenplay review choice available after screenplay generation from a choice response', async () => {
+  it('keeps follow-up bible operations available after bible generation from a choice response', async () => {
     const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'duration_and_aspect_ratio',
+      choiceType: 'bible_review',
       toolCallId: 'tool-choice-1',
       latestUserText: '恐怖片',
       output: {
         ok: true,
-        durationTier: 'short',
-        aspectRatio: '16:9',
+        decision: 'approve',
       },
     })
     expect(choiceResult).not.toBeNull()
 
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
-    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValueOnce(buildWorkflow('screenplay_ready_for_review', [
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValueOnce(buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
-      'revise_edit_screenplay',
+      'revise_bible',
     ]))
 
     const response = await createProjectAgentChatResponse({
@@ -816,7 +825,7 @@ describe('project agent runtime deterministic tool injection', () => {
       control: {
         kind: 'choice',
         interruptionId: 'choice-interruption-1',
-        choiceType: 'duration_and_aspect_ratio',
+        choiceType: 'bible_review',
         toolCallId: 'tool-choice-1',
         cardId: 'edit-first-duration-aspect-ratio',
         choiceResult: choiceResult!,
@@ -828,14 +837,14 @@ describe('project agent runtime deterministic tool injection', () => {
     await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(streamState.executedToolNames).toEqual(['generate_edit_screenplay'])
-    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
+    expect(streamState.executedToolNames).toEqual(['ingest_script'])
+    expect(streamState.capturedEnabledToolNamesAfterExecution).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
     expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('generate_edit_style_previews')
-    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('revise_edit_screenplay')
+    expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('revise_bible')
   })
 
   it('keeps the interrupted approval operation available when resuming after workflow state changed', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', ['generate_edit_style_previews'])
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', ['generate_edit_style_previews'])
 
     const response = await createProjectAgentChatResponse({
       request: buildRequest(),
@@ -852,9 +861,9 @@ describe('project agent runtime deterministic tool injection', () => {
           activityId: 'activity-approval-1',
           type: 'approval',
           status: 'consumed',
-          operationId: 'generate_edit_screenplay',
+          operationId: 'ingest_script',
           approvalId: 'approval-1',
-          toolCallId: 'tool-generate-screenplay-1',
+          toolCallId: 'tool-generate-bible-1',
           runState: 'serialized-state',
         },
         approved: true,
@@ -867,13 +876,13 @@ describe('project agent runtime deterministic tool injection', () => {
     await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedToolNames).toContain('generate_edit_screenplay')
+    expect(streamState.capturedToolNames).toContain('ingest_script')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
   })
 
   it('binds async task waits after approval resume instead of returning to awaiting approval', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_screenplay', ['generate_edit_screenplay'])
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_ingest_script', ['ingest_script'])
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
 
     const response = await createProjectAgentChatResponse({
@@ -891,9 +900,9 @@ describe('project agent runtime deterministic tool injection', () => {
           activityId: 'activity-approval-1',
           type: 'approval',
           status: 'consumed',
-          operationId: 'generate_edit_screenplay',
+          operationId: 'ingest_script',
           approvalId: 'approval-1',
-          toolCallId: 'tool-generate-screenplay-1',
+          toolCallId: 'tool-generate-bible-1',
           runState: 'serialized-state',
         },
         approved: true,
@@ -911,7 +920,7 @@ describe('project agent runtime deterministic tool injection', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       taskIds: ['task-generated-1'],
     }))
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
@@ -925,16 +934,16 @@ describe('project agent runtime deterministic tool injection', () => {
     }))
   })
 
-  it('keeps screenplay review card available after screenplay generation', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('screenplay_ready_for_review', [
+  it('keeps bible review card available after bible generation', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
-      'revise_edit_screenplay',
+      'revise_bible',
     ])
 
     await runAssistant({ text: '剧本满意' })
 
-    expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.screenplay_review)
-    expect(streamState.capturedToolNames).toContain('revise_edit_screenplay')
+    expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
+    expect(streamState.capturedToolNames).toContain('revise_bible')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
   })
 
@@ -944,7 +953,7 @@ describe('project agent runtime deterministic tool injection', () => {
     await runAssistant({ text: '继续生成资产' })
 
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_script_assets')
-    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_screenplay')
+    expect(streamState.capturedEnabledToolNames).not.toContain('ingest_script')
   })
 
   it('enables asset revision after an asset review choice response sends revision notes', async () => {
@@ -992,8 +1001,8 @@ describe('project agent runtime deterministic tool injection', () => {
     const response = await runAssistant({ assistantPermissionMode: 'auto' })
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedTools.generate_edit_screenplay.needsApproval).toBeUndefined()
-    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio].needsApproval).toBeUndefined()
+    expect(streamState.capturedTools.ingest_script.needsApproval).toBeUndefined()
+    expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.bible_review].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('当前权限模式：auto')
   })
 
@@ -1067,8 +1076,8 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runInputItems[noteIndex].content).toContain('operation=generate_edit_script')
   })
 
-  it('injects the immediate workflow operation on the single assistant path', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', ['generate_edit_script'])
+  it('injects the chapter planning operation on the single assistant path', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', ['plan_chapters'])
 
     await runAssistant({
       context: { episodeId: 'episode-1' },
@@ -1076,8 +1085,11 @@ describe('project agent runtime deterministic tool injection', () => {
     })
 
     expect(streamState.capturedToolNames).toContain('get_project_context')
+    expect(streamState.capturedToolNames).toContain('get_episode_overview')
     expect(streamState.capturedToolNames).toContain(EDIT_FIRST_CHOICE_TOOL_IDS.style)
+    expect(streamState.capturedToolNames).toContain('plan_chapters')
     expect(streamState.capturedToolNames).toContain('generate_edit_script')
+    expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
   })
 
   it('logs and marks the run failed when the UI stream fails before finish', async () => {
@@ -1096,7 +1108,7 @@ describe('project agent runtime deterministic tool injection', () => {
         runId: 'run-user_turn',
         episodeId: 'episode-1',
         error: 'BROKEN_STREAM',
-        workflowStage: 'ready_to_generate_screenplay',
+        workflowStage: 'ready_to_ingest_script',
         runStatusFinalized: false,
       }),
     }))
@@ -1156,7 +1168,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
   it('fails loudly when live workflow refresh fails after a tool mutates state', async () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', [
-      'generate_edit_script',
+      'plan_chapters',
     ])
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
     workflowRefreshState.resolveEditFirstWorkflowState.mockRejectedValueOnce(new Error('DB_WORKFLOW_REFRESH_FAILED'))
@@ -1165,7 +1177,7 @@ describe('project agent runtime deterministic tool injection', () => {
       /PROJECT_AGENT_RUN_FAILED requestId=req-1: DB_WORKFLOW_REFRESH_FAILED/,
     )
 
-    expect(streamState.executedToolNames).toEqual(['generate_edit_script'])
+    expect(streamState.executedToolNames).toEqual(['plan_chapters'])
     expect(streamState.capturedEnabledToolNamesAfterExecution).toEqual([])
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',

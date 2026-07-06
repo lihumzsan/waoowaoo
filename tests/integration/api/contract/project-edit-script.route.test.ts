@@ -43,18 +43,18 @@ const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
 })))
 
 const taskSubmissionMock = vi.hoisted(() => ({
-  submitProjectEditScreenplayGenerationTask: vi.fn(async () => ({
+  submitProjectEditScriptGenerationTask: vi.fn(async () => ({
     success: true,
     async: true,
     status: 'queued',
-    taskId: 'task-screenplay',
+    taskId: 'task-edit-script',
     runId: null,
     deduped: false,
     episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
-    taskType: 'edit_screenplay_generate',
-    targetType: 'ProjectEditScreenplay',
-    targetId: 'screenplay-1',
+    chapterId: 'chapter-1',
+    taskType: 'edit_script_generate',
+    targetType: 'ProjectEditChapter',
+    targetId: 'chapter-1',
   })),
   submitProjectEditShotExecutionPlanTask: vi.fn(async () => ({
     success: true,
@@ -73,7 +73,6 @@ const taskSubmissionMock = vi.hoisted(() => ({
 
 const editScriptServiceMock = vi.hoisted(() => ({
   confirmProjectEditStylePreview: vi.fn(),
-  readProjectEditScreenplay: vi.fn(),
   readProjectEditScript: vi.fn(),
   readProjectEditShotExecutionPlan: vi.fn(),
   updateProjectEditScriptAssetRequirementDescription: vi.fn(),
@@ -120,7 +119,6 @@ describe('api contract - project edit script routes', () => {
       method: 'POST',
       body: {
         episodeId: 'episode-1',
-        screenplayId: 'screenplay-1',
         videoRatio: '16:9',
       },
     })
@@ -132,64 +130,21 @@ describe('api contract - project edit script routes', () => {
       async: true,
       status: 'queued',
       taskId: 'task-edit-script',
+      chapterId: 'chapter-1',
+      targetType: 'ProjectEditChapter',
+      targetId: 'chapter-1',
     })
-    expect(submitOperationTaskMock).toHaveBeenCalledWith({
+    expect(taskSubmissionMock.submitProjectEditScriptGenerationTask).toHaveBeenCalledWith({
       request: expect.any(Request),
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-      targetType: 'ProjectEpisode',
-      targetId: 'episode-1',
-      operationId: 'generate_edit_script',
       source: 'project-ui',
       confirmed: true,
-      payload: {
-        episodeId: 'episode-1',
-        screenplayId: 'screenplay-1',
-        videoRatio: '16:9',
-        displayMode: 'detail',
-      },
-      dedupeKey: 'edit_script_generate:project-1:episode-1',
-      billingInfo: null,
       locale: 'zh',
+      videoRatio: '16:9',
     })
-  })
-
-  it('POST /api/projects/[projectId]/edit-script/screenplay submits the screenplay generation contract', async () => {
-    const mod = await import('@/app/api/projects/[projectId]/edit-script/screenplay/route') as ProjectPostRoute
-    const request = buildMockRequest({
-      path: '/api/projects/project-1/edit-script/screenplay',
-      method: 'POST',
-      body: {
-        episodeId: 'episode-1',
-        prompt: '生成一个夜晚追逐短片',
-        durationTier: 'medium',
-        aspectRatio: '16:9',
-      },
-    })
-
-    const response = await mod.POST(request, { params: Promise.resolve({ projectId: 'project-1' }) })
-
-    expect(response.status).toBe(200)
-    await expect(readJson(response)).resolves.toMatchObject({
-      async: true,
-      status: 'queued',
-      taskId: 'task-screenplay',
-      screenplayId: 'screenplay-1',
-    })
-    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).toHaveBeenCalledWith({
-      request: expect.any(Request),
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      userId: 'user-1',
-      locale: 'zh',
-      prompt: '生成一个夜晚追逐短片',
-      durationTier: 'medium',
-      aspectRatio: '16:9',
-      source: 'project-ui',
-      confirmed: true,
-    })
+    expect(submitOperationTaskMock).not.toHaveBeenCalled()
   })
 
   it('POST /api/projects/[projectId]/edit-script/shot-execution-plan submits the shot execution plan contract', async () => {
@@ -234,8 +189,8 @@ describe('api contract - project edit script routes', () => {
         episodeId: 'episode-1',
         editScriptId: 'edit-script-1',
         segments: [
-          { shotNumbers: [1, 2, 3, 4], continuity: 'new segment' },
-          { shotNumbers: [5, 6], continuity: 'next segment' },
+          { shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'], continuity: 'new segment' },
+          { shotIds: ['shot-5', 'shot-6'], continuity: 'next segment' },
         ],
       },
     })
@@ -246,23 +201,4 @@ describe('api contract - project edit script routes', () => {
     expect(editScriptServiceMock.updateProjectEditScriptAssetRequirementDescription).not.toHaveBeenCalled()
   })
 
-  it('POST /api/projects/[projectId]/edit-script/screenplay rejects unauthenticated submissions without creating a task', async () => {
-    authMock.state.authenticated = false
-    const mod = await import('@/app/api/projects/[projectId]/edit-script/screenplay/route') as ProjectPostRoute
-    const request = buildMockRequest({
-      path: '/api/projects/project-1/edit-script/screenplay',
-      method: 'POST',
-      body: {
-        episodeId: 'episode-1',
-        prompt: '生成一个夜晚追逐短片',
-        durationTier: 'medium',
-        aspectRatio: '16:9',
-      },
-    })
-
-    const response = await mod.POST(request, { params: Promise.resolve({ projectId: 'project-1' }) })
-
-    expect(response.status).toBe(401)
-    expect(taskSubmissionMock.submitProjectEditScreenplayGenerationTask).not.toHaveBeenCalled()
-  })
 })

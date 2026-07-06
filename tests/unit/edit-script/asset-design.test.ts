@@ -14,6 +14,7 @@ const aiDesignMock = vi.mocked(aiDesign)
 
 const shots: readonly EditScriptShot[] = [
   {
+    shotId: 'shot-1',
     shotNumber: 1,
     durationSec: 8,
     scene: { name: '环形太空舱中控室' },
@@ -38,7 +39,7 @@ const requirements: readonly EditAssetRequirement[] = [
     kind: 'character',
     name: '冷静研究员',
     description: '主要出镜人物，贯穿太空舱镜头。',
-    shotNumbers: [1],
+    shotIds: ['shot-1'],
     status: 'pending',
     targetId: null,
     errorMessage: null,
@@ -47,7 +48,7 @@ const requirements: readonly EditAssetRequirement[] = [
     kind: 'location',
     name: '环形太空舱中控室',
     description: '主要场景，研究员在此执行操作。',
-    shotNumbers: [1],
+    shotIds: ['shot-1'],
     status: 'pending',
     targetId: null,
     errorMessage: null,

@@ -27,7 +27,7 @@ export interface StoryboardConsistencyAssetSnapshot {
   readonly kind: EditAssetRequirement['kind']
   readonly name: string
   readonly description: string
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly targetId: string
   readonly previewImageUrl: string | null
   readonly spatialProfile?: LocationSpatialProfile | null
@@ -41,10 +41,11 @@ export interface StoryboardConsistencyGenerationSegment extends EditGenerationSe
 export interface StoryboardConsistencySourceSnapshot {
   readonly projectId: string
   readonly episodeId: string
+  readonly chapterId: string
   readonly project: {
     readonly videoRatio: string
   }
-  readonly editScript: Pick<EditScriptPayload, 'id' | 'durationSec' | 'shotCount' | 'userPrompt' | 'screenplayText'>
+  readonly editScript: Pick<EditScriptPayload, 'id' | 'chapterId' | 'durationSec' | 'shotCount' | 'sourceDocumentId' | 'sourceStart' | 'sourceEnd' | 'sourceText'>
   readonly styleBible: EditScriptStyleBible
   readonly shots: readonly EditScriptShot[]
   readonly shotExecutionPlan: {
@@ -57,7 +58,7 @@ export interface StoryboardConsistencySourceSnapshot {
 
 export interface StoryboardPanelPromptDraft {
   readonly panelIndex: number
-  readonly sourceShotNumber: number
+  readonly sourceShotId: string
   readonly sourceGenerationSegmentId: string
   readonly prompt: string | null
   readonly videoPrompt: string
@@ -70,7 +71,7 @@ const sourceAssetSchema = z.object({
   kind: z.enum(['character', 'location']),
   name: z.string(),
   description: z.string(),
-  shotNumbers: z.array(z.number().int().positive()),
+  shotIds: z.array(z.string().min(1)),
   targetId: z.string().min(1),
   previewImageUrl: z.string().nullable(),
   spatialProfile: locationSpatialProfileSchema.nullable().optional(),
@@ -84,15 +85,19 @@ export const storyboardConsistencyGenerationSegmentSchema = editGenerationSegmen
 export const storyboardConsistencySourceSnapshotSchema = z.object({
   projectId: z.string().min(1),
   episodeId: z.string().min(1),
+  chapterId: z.string().min(1),
   project: z.object({
     videoRatio: z.string().min(1),
   }),
   editScript: z.object({
     id: z.string().min(1),
+    chapterId: z.string().min(1),
     durationSec: z.number().int().nonnegative(),
     shotCount: z.number().int().nonnegative(),
-    userPrompt: z.string().optional(),
-    screenplayText: z.string().nullable().optional(),
+    sourceDocumentId: z.string().min(1).optional(),
+    sourceStart: z.number().int().nonnegative().optional(),
+    sourceEnd: z.number().int().nonnegative().optional(),
+    sourceText: z.string().nullable().optional(),
   }),
   styleBible: editScriptStyleBibleSchema.shape.styleBible,
   shots: z.array(editScriptShotSchema).min(1),

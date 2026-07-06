@@ -50,7 +50,7 @@ describe('createProjectAgentUiMessageStream', () => {
     streamState.chunks = [
       {
         type: 'tool-approval-request',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolCallId: 'tool_ingest_script_call-1',
         approvalId: 'approval-1',
       } as UIMessageChunk,
       { type: 'finish' } as UIMessageChunk,
@@ -59,7 +59,7 @@ describe('createProjectAgentUiMessageStream', () => {
     const chunks = await readChunks(createProjectAgentUiMessageStream({
       source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
       initialChunks: [],
-      toolNames: ['generate_edit_screenplay'],
+      toolNames: ['ingest_script'],
       beforeFinish: async () => [],
       onSettled: async () => undefined,
     }))
@@ -67,20 +67,20 @@ describe('createProjectAgentUiMessageStream', () => {
     expect(chunks.slice(0, 3)).toEqual([
       expect.objectContaining({
         type: 'tool-input-start',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
-        toolName: 'generate_edit_screenplay',
+        toolCallId: 'tool_ingest_script_call-1',
+        toolName: 'ingest_script',
         dynamic: true,
       }),
       expect.objectContaining({
         type: 'tool-input-available',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
-        toolName: 'generate_edit_screenplay',
+        toolCallId: 'tool_ingest_script_call-1',
+        toolName: 'ingest_script',
         input: {},
         dynamic: true,
       }),
       expect.objectContaining({
         type: 'tool-approval-request',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolCallId: 'tool_ingest_script_call-1',
         approvalId: 'approval-1',
       }),
     ])
@@ -90,13 +90,13 @@ describe('createProjectAgentUiMessageStream', () => {
     streamState.chunks = [
       {
         type: 'tool-input-start',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
-        toolName: 'generate_edit_screenplay',
+        toolCallId: 'tool_ingest_script_call-1',
+        toolName: 'ingest_script',
         dynamic: true,
       } as UIMessageChunk,
       {
         type: 'tool-approval-request',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolCallId: 'tool_ingest_script_call-1',
         approvalId: 'approval-1',
       } as UIMessageChunk,
     ]
@@ -104,7 +104,7 @@ describe('createProjectAgentUiMessageStream', () => {
     const chunks = await readChunks(createProjectAgentUiMessageStream({
       source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
       initialChunks: [],
-      toolNames: ['generate_edit_screenplay'],
+      toolNames: ['ingest_script'],
       beforeFinish: async () => [],
       onSettled: async () => undefined,
     }))
@@ -116,7 +116,7 @@ describe('createProjectAgentUiMessageStream', () => {
     streamState.chunks = [
       {
         type: 'tool-output-available',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolCallId: 'tool_ingest_script_call-1',
         output: { ok: true },
       } as UIMessageChunk,
       { type: 'finish' } as UIMessageChunk,
@@ -125,7 +125,7 @@ describe('createProjectAgentUiMessageStream', () => {
     const chunks = await readChunks(createProjectAgentUiMessageStream({
       source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
       initialChunks: [],
-      toolNames: ['generate_edit_screenplay'],
+      toolNames: ['ingest_script'],
       beforeFinish: async () => [],
       onSettled: async () => undefined,
     }))
@@ -133,20 +133,20 @@ describe('createProjectAgentUiMessageStream', () => {
     expect(chunks.slice(0, 3)).toEqual([
       expect.objectContaining({
         type: 'tool-input-start',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
-        toolName: 'generate_edit_screenplay',
+        toolCallId: 'tool_ingest_script_call-1',
+        toolName: 'ingest_script',
         dynamic: true,
       }),
       expect.objectContaining({
         type: 'tool-input-available',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
-        toolName: 'generate_edit_screenplay',
+        toolCallId: 'tool_ingest_script_call-1',
+        toolName: 'ingest_script',
         input: {},
         dynamic: true,
       }),
       expect.objectContaining({
         type: 'tool-output-available',
-        toolCallId: 'tool_generate_edit_screenplay_call-1',
+        toolCallId: 'tool_ingest_script_call-1',
         output: { ok: true },
       }),
     ])

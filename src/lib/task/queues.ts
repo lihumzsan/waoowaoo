@@ -76,8 +76,12 @@ const VIDEO_TYPES = new Set<TaskType>([
   TASK_TYPE.VIDEO_PANEL,
   TASK_TYPE.VIDEO_GROUP,
   TASK_TYPE.FINAL_VIDEO_RENDER,
+  TASK_TYPE.CHAPTER_RENDER,
 ])
-const MUSIC_TYPES = new Set<TaskType>([TASK_TYPE.MUSIC_GENERATE, TASK_TYPE.BGM_SCORE_GENERATE])
+const MUSIC_TYPES = new Set<TaskType>([
+  TASK_TYPE.MUSIC_GENERATE,
+  TASK_TYPE.MUSIC_SCORE_PLAN,
+])
 
 export function getQueueTypeByTaskType(type: TaskType): QueueType {
   if (IMAGE_TYPES.has(type)) return 'image'

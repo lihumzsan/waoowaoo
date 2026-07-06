@@ -3,10 +3,6 @@ import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
-import {
-  isEditFirstDurationTier,
-  type EditFirstDurationTier,
-} from '@/lib/edit-script/duration-tier'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -23,25 +19,12 @@ export interface EditFirstChoiceResult {
   inputItems: AgentInputItem[]
 }
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function readAspectRatio(value: unknown): EditScriptVideoRatio | null {
   if (value === '9:16' || value === '16:9' || value === '21:9') return value
-  return null
-}
-
-function readDurationTier(output: UnknownRecord): EditFirstDurationTier | null {
-  const direct = output.durationTier
-  if (isEditFirstDurationTier(direct)) return direct
-  const selections = isRecord(output.selections) ? output.selections : null
-  const selected = selections?.durationTier
-  if (isEditFirstDurationTier(selected)) return selected
   return null
 }
 
@@ -85,24 +68,7 @@ export function buildEditFirstChoiceResult(params: {
 }): EditFirstChoiceResult | null {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
 
-  if (params.choiceType === 'duration_and_aspect_ratio') {
-    const durationTier = readDurationTier(params.output)
-    const aspectRatio = readAspectRatio(params.output.aspectRatio)
-    if (!durationTier || !aspectRatio || !params.latestUserText) return null
-    return {
-      inputItems: buildChoiceInputItems({
-        toolCallId: params.toolCallId,
-        choiceType: params.choiceType,
-        result: {
-          prompt: params.latestUserText,
-          durationTier,
-          aspectRatio,
-        },
-      }),
-    }
-  }
-
-  if (params.choiceType === 'screenplay_review') {
+  if (params.choiceType === 'bible_review') {
     const decision = readString(params.output.decision)
     if (decision === 'revise') {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
@@ -140,6 +106,18 @@ export function buildEditFirstChoiceResult(params: {
         }),
       }
     }
+    if (decision !== 'approve') return null
+    return {
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        result: { decision: 'approve' },
+      }),
+    }
+  }
+
+  if (params.choiceType === 'budget_confirmation') {
+    const decision = readString(params.output.decision)
     if (decision !== 'approve') return null
     return {
       inputItems: buildChoiceInputItems({

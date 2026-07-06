@@ -304,7 +304,7 @@ describe('createProjectAgentOperationTool', () => {
       onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
     }
     const operation = {
-      ...buildOperation(EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio, 'query'),
+      ...buildOperation(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review, 'query'),
       effects: EFFECTS_NONE,
       confirmation: {
         required: false,
@@ -333,7 +333,7 @@ describe('createProjectAgentOperationTool', () => {
       toolCall: {
         type: 'function_call',
         callId: 'call-choice-1',
-        name: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+        name: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })
@@ -346,7 +346,7 @@ describe('createProjectAgentOperationTool', () => {
       type: 'data-agent-operation-start',
     }))
     expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.duration_and_aspect_ratio,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       toolCallId: 'call-choice-1',
       input: {
         episodeId: 'episode-1',

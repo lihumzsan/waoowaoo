@@ -81,8 +81,8 @@ describe('project location-backed confirm mutations', () => {
 describe('episode artifact readiness', () => {
   it('treats script as ready only when edit-first script text exists', () => {
     expect(hasScriptArtifacts(null)).toBe(false)
-    expect(hasScriptArtifacts({ screenplay: '' })).toBe(false)
-    expect(hasScriptArtifacts({ screenplay: '  {"scenes":[]}' })).toBe(true)
+    expect(hasScriptArtifacts({ bible: '' })).toBe(false)
+    expect(hasScriptArtifacts({ bible: '  {"scenes":[]}' })).toBe(true)
   })
 
   it('treats storyboard as ready only when at least one storyboard has panels', () => {
@@ -99,7 +99,7 @@ describe('episode artifact readiness', () => {
   it('derives full episode artifact readiness from persisted outputs', () => {
     const readiness = resolveEpisodeArtifactReadiness({
       novelText: 'story',
-      editScript: { screenplay: '{"scenes":[]}' },
+      editScript: { bible: '{"scenes":[]}' },
       storyboards: [
         {
           id: 'sb-1',

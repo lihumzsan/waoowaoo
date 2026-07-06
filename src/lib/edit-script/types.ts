@@ -1,7 +1,5 @@
 import { z } from 'zod'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
-import { EDIT_FIRST_DURATION_TIERS } from './duration-tier'
-
 export const EDIT_ASSET_KINDS = ['character', 'location'] as const
 export type EditAssetKind = (typeof EDIT_ASSET_KINDS)[number]
 
@@ -32,7 +30,7 @@ export interface EditStylePreviewPayload {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
-  readonly screenplayId: string
+  readonly bibleId: string
   readonly styleKey: EditStylePreviewKey
   readonly aspectRatio: EditScriptVideoRatio
   readonly title: string
@@ -61,7 +59,7 @@ export interface EditStylePreviewGenerationPayload {
   readonly async: true
   readonly projectId: string
   readonly episodeId: string
-  readonly screenplayId: string
+  readonly bibleId: string
   readonly status: 'queued'
   readonly total: number
   readonly taskIds: ReadonlyArray<string>
@@ -70,17 +68,6 @@ export interface EditStylePreviewGenerationPayload {
     readonly taskId: string
   }>
   readonly stylePreviews: readonly EditStylePreviewGenerationItem[]
-}
-
-export interface EditScreenplayPayload {
-  readonly id: string
-  readonly projectId: string
-  readonly episodeId: string
-  readonly userPrompt: string
-  readonly styleBible: EditScriptStyleBible | null
-  readonly stylePreviews: readonly EditStylePreviewPayload[]
-  readonly screenplayText: string
-  readonly status: string
 }
 
 export const EDIT_CHARACTER_VISIBILITIES = ['visible', 'partial', 'hidden', 'occluded', 'offscreen'] as const
@@ -102,6 +89,7 @@ export interface EditScriptKeyObject {
 }
 
 export interface EditScriptShot {
+  readonly shotId: string
   readonly shotNumber: number
   readonly durationSec: number
   readonly scene: {
@@ -114,12 +102,12 @@ export interface EditScriptShot {
 }
 
 export interface EditGenerationSegment {
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly continuity: string
 }
 
 export interface EditGenerationSegmentExecution {
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly continuousVideoPrompt: string
 }
 
@@ -128,7 +116,7 @@ export interface EditAssetRequirement {
   readonly kind: EditAssetKind
   readonly name: string
   readonly description: string
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
   readonly status?: EditAssetStatus
   readonly targetId?: string | null
   readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
@@ -172,10 +160,13 @@ export interface EditScriptPayload {
   readonly id?: string
   readonly projectId?: string
   readonly episodeId?: string
-  readonly screenplayId?: string
-  readonly userPrompt?: string
+  readonly chapterId?: string
+  readonly bibleId?: string
+  readonly sourceDocumentId?: string
+  readonly sourceStart?: number
+  readonly sourceEnd?: number
   readonly styleBible: EditScriptStyleBible | null
-  readonly screenplayText?: string | null
+  readonly sourceText?: string | null
   readonly durationSec: number
   readonly shotCount: number
   readonly status?: string
@@ -258,6 +249,7 @@ export interface EditShotExecutionBlocking {
 }
 
 export interface EditShotExecution {
+  readonly shotId: string
   readonly shotNumber: number
   readonly camera: EditShotExecutionCamera
   readonly blocking: EditShotExecutionBlocking
@@ -268,6 +260,7 @@ export interface EditShotExecutionPlanPayload {
   readonly id: string
   readonly projectId: string
   readonly episodeId: string
+  readonly chapterId: string
   readonly editScriptId: string
   readonly status: string
   readonly shots: readonly EditShotExecution[]
@@ -287,6 +280,7 @@ export const editScriptKeyObjectSchema = z.object({
 }).strict()
 
 export const editScriptShotSchema = z.object({
+  shotId: z.string().trim().min(1),
   shotNumber: z.number().int().positive(),
   durationSec: z.number().int().min(1).max(5),
   scene: z.object({
@@ -299,7 +293,7 @@ export const editScriptShotSchema = z.object({
 }).strict()
 
 export const editGenerationSegmentSchema = z.object({
-  shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+  shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
   continuity: z.string().trim().min(1),
 }).strict()
 
@@ -312,6 +306,7 @@ export const editScriptStructureSchema = editScriptCoreSchema
 
 export const editShotExecutionPlanSchema = z.object({
   shots: z.array(z.object({
+    shotId: z.string().trim().min(1),
     shotNumber: z.number().int().positive(),
     camera: z.object({
       shotScale: z.string().trim().min(1),
@@ -347,7 +342,7 @@ export const editShotExecutionPlanSchema = z.object({
     videoPrompt: z.string().trim().min(1),
   }).strict()).min(1).max(60),
   generationSegmentExecutions: z.array(z.object({
-    shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+    shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
     continuousVideoPrompt: z.string().trim().min(1),
   }).strict()).min(1).max(60),
 }).strict()
@@ -432,7 +427,7 @@ export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
   name: z.string().trim().min(1),
   description: z.string().trim().min(1),
-  shotNumbers: z.array(z.number().int().positive()).min(1),
+  shotIds: z.array(z.string().trim().min(1)).min(1),
 })
 
 export const editAssetExtractionSchema = z.object({
@@ -441,37 +436,30 @@ export const editAssetExtractionSchema = z.object({
 
 export const createEditScriptRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
   prompt: z.never().optional(),
-  screenplayId: z.string().trim().min(1).optional(),
   videoRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS).optional(),
 })
 
 export const createEditShotExecutionPlanRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1).optional(),
 })
 
 export const getEditShotExecutionPlanRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
-})
-
-export const createEditScreenplayRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  prompt: z.string().trim().min(1),
-  durationTier: z.enum(EDIT_FIRST_DURATION_TIERS),
-  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
-})
-
-export const getEditScreenplayRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
 })
 
 export const getEditScriptRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
 })
 
 export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1),
   requirementId: z.string().trim().min(1),
   description: z.string().trim().min(1),
@@ -479,11 +467,13 @@ export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object
 
 export const generateEditAssetsRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1).optional(),
   requirementId: editScriptAssetRequirementIdSchema.optional(),
 })
 
 export const generateEditStoryboardRequestSchema = z.object({
   episodeId: z.string().trim().min(1),
+  chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1).optional(),
 })

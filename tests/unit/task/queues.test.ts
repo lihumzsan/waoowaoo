@@ -61,7 +61,7 @@ describe('task queues', () => {
     const taskTypes = await import('@/lib/task/types')
 
     expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.MUSIC_GENERATE)).toBe('music')
-    expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.BGM_SCORE_GENERATE)).toBe('music')
+    expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.MUSIC_SCORE_PLAN)).toBe('music')
 
     const queue = queuesModule.getQueueByType('music')
     expect(queue).toBeDefined()

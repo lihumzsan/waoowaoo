@@ -9,17 +9,18 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
   return {
     projectId: 'project-1',
     episodeId: 'episode-1',
+    chapterId: 'chapter-1',
     project: { videoRatio: '16:9' },
     editScript: {
       id: 'edit-script-1',
       durationSec: 3,
       shotCount: 1,
-      userPrompt: 'test prompt',
-      screenplayText: 'test screenplay',
+      sourceText: 'test bible',
     },
     styleBible: buildZenStyleBibleFixture(),
     shots: [
       {
+        shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
         scene: { name: 'Cabin living room' },
@@ -47,6 +48,7 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
     shotExecutionPlan: {
       shots: [
         {
+          shotId: 'shot-1',
           shotNumber: 1,
           camera: {
             shotScale: 'medium',
@@ -96,14 +98,14 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
       ],
       generationSegmentExecutions: [
         {
-          shotNumbers: [1],
+          shotIds: ['shot-1'],
           continuousVideoPrompt: 'Continuous segment prompt. [00:00-00:03] Shot 1 preserves the chair axis and hidden subject.',
         },
       ],
     },
     generationSegments: [
       {
-        shotNumbers: [1],
+        shotIds: ['shot-1'],
         continuity: 'Anna approaches the chair in one beat.',
         segmentIndex: 0,
         sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',

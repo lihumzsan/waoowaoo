@@ -34,7 +34,7 @@ describe('api contract - plan run step retry route', () => {
 
     retryPlanStepMock.mockResolvedValue({
       planRun: { id: 'plan-run-1' },
-      invalidatedStepKeys: ['screenplay_clip_2', 'finalize_storyboard'],
+      invalidatedStepKeys: ['bible_clip_2', 'finalize_storyboard'],
     })
   })
 
@@ -43,11 +43,11 @@ describe('api contract - plan run step retry route', () => {
     const route = await import('@/app/api/plan-runs/[planRunId]/steps/[stepKey]/retry/route')
 
     const req = buildMockRequest({
-      path: '/api/plan-runs/plan-run-1/steps/screenplay_clip_2/retry',
+      path: '/api/plan-runs/plan-run-1/steps/bible_clip_2/retry',
       method: 'POST',
     })
     const res = await route.POST(req, {
-      params: Promise.resolve({ planRunId: 'plan-run-1', stepKey: 'screenplay_clip_2' }),
+      params: Promise.resolve({ planRunId: 'plan-run-1', stepKey: 'bible_clip_2' }),
     } as RouteContext)
 
     expect(res.status).toBe(400)
@@ -57,12 +57,12 @@ describe('api contract - plan run step retry route', () => {
     const route = await import('@/app/api/plan-runs/[planRunId]/steps/[stepKey]/retry/route')
 
     const req = buildMockRequest({
-      path: '/api/plan-runs/plan-run-1/steps/screenplay_clip_2/retry',
+      path: '/api/plan-runs/plan-run-1/steps/bible_clip_2/retry',
       method: 'POST',
       body: { reason: 'manual retry' },
     })
     const res = await route.POST(req, {
-      params: Promise.resolve({ planRunId: 'plan-run-1', stepKey: 'screenplay_clip_2' }),
+      params: Promise.resolve({ planRunId: 'plan-run-1', stepKey: 'bible_clip_2' }),
     } as RouteContext)
 
     expect(res.status).toBe(200)
@@ -74,13 +74,13 @@ describe('api contract - plan run step retry route', () => {
     }
     expect(payload.success).toBe(true)
     expect(payload.planRunId).toBe('plan-run-1')
-    expect(payload.stepKey).toBe('screenplay_clip_2')
-    expect(payload.invalidatedStepKeys).toEqual(['screenplay_clip_2', 'finalize_storyboard'])
+    expect(payload.stepKey).toBe('bible_clip_2')
+    expect(payload.invalidatedStepKeys).toEqual(['bible_clip_2', 'finalize_storyboard'])
 
     expect(retryPlanStepMock).toHaveBeenCalledWith(expect.objectContaining({
       planRunId: 'plan-run-1',
       userId: 'user-1',
-      stepKey: 'screenplay_clip_2',
+      stepKey: 'bible_clip_2',
     }))
   })
 })
