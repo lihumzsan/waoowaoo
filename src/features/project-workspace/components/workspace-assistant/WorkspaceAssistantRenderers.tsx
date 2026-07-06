@@ -18,6 +18,7 @@ import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { useTaskTargetStateMap, type TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useQuery } from '@tanstack/react-query'
 import BillingActionButton from '@/components/billing/BillingActionButton'
+import { TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import {
   buildBillingActionQuotePreviewFromQuote,
   type BillingActionQuotePreview,
@@ -49,6 +50,7 @@ import { queryKeys } from '@/lib/query/keys'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1292,6 +1294,12 @@ function HiddenConversationSummaryMessage(props: {
   return <>{props.children}</>
 }
 
+function WorkspaceAssistantUserTextAttachments() {
+  const metadata = useMessage((state) => state.metadata)
+  const attachments = readProjectAssistantTextAttachmentsFromMetadata(metadata)
+  return <TextAttachmentChips attachments={attachments} className={attachments.length > 0 ? 'mt-2' : undefined} />
+}
+
 export function WorkspaceAssistantThreadMessage(props: {
   messagePartComponents: MessagePartComponents
 }) {
@@ -1302,6 +1310,7 @@ export function WorkspaceAssistantThreadMessage(props: {
           <div className="ml-auto flex w-full max-w-[88%] flex-col items-end">
             <MessagePrimitive.Root className={WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS}>
               <MessagePrimitive.Parts />
+              <WorkspaceAssistantUserTextAttachments />
             </MessagePrimitive.Root>
           </div>
         </HiddenConversationSummaryMessage>

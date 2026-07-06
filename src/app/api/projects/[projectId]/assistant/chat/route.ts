@@ -34,6 +34,7 @@ import {
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
   createProjectAgentRun,
   ensureProjectAgentRunSlotAvailable,
@@ -77,6 +78,9 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_AGENT_CONTROL_ENDPOINT_REQUIRED'
       || error.message === 'PROJECT_AGENT_CHOICE_RESPONSE_INVALID'
       || error.message === 'PROJECT_AGENT_MESSAGES_NOT_ACCEPTED'
+      || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENTS_INVALID'
+      || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENTS_TOO_MANY'
+      || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
         code: error.message,
@@ -132,6 +136,7 @@ async function validateUserMessage(message: unknown): Promise<UIMessage> {
   if (!validatedMessage || validatedMessage.role !== 'user') {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
   }
+  readProjectAssistantTextAttachmentsFromMessage(validatedMessage)
   return validatedMessage
 }
 

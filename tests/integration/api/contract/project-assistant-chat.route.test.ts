@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { buildMockRequest } from '../../../helpers/request'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
 
 const authState = vi.hoisted(() => ({
   authenticated: true,
@@ -143,6 +147,21 @@ const messageCompressionMock = vi.hoisted(() => ({
   compressMessages: vi.fn(async () => compressionState.compressedMessages),
 }))
 
+function buildTextAttachment(): ProjectAssistantTextAttachment {
+  const normalizedText = '第一幕\n对白'
+
+  return {
+    id: 'attachment-1',
+    kind: 'txt',
+    fileName: 'story.txt',
+    mimeType: 'text/plain',
+    sizeBytes: 128,
+    checksum: 'a'.repeat(64),
+    charCount: normalizedText.length,
+    normalizedText,
+  }
+}
+
 vi.mock('@/lib/api-auth', () => {
   const unauthorized = () => new Response(
     JSON.stringify({ error: { code: 'UNAUTHORIZED' } }),
@@ -282,6 +301,53 @@ describe('project assistant chat route', () => {
       }],
     }))
     expect(interruptionMock.declinePendingProjectAgentInterruptionsForUserTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('POST /api/projects/[projectId]/assistant/chat -> accepts file-only user messages through attachment metadata', async () => {
+    const attachment = buildTextAttachment()
+    const metadata = {
+      custom: {
+        [PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY]: [attachment],
+      },
+    }
+
+    const response = await chatPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/chat',
+        method: 'POST',
+        body: {
+          message: {
+            id: 'u-file',
+            role: 'user',
+            parts: [{ type: 'text', text: '' }],
+            metadata,
+          },
+          context: {
+            episodeId: 'episode-1',
+          },
+          assistantPermissionMode: 'ask',
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(runMock.createProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({
+      appendMessages: [{
+        id: 'u-file',
+        role: 'user',
+        parts: [{ type: 'text', text: '' }],
+        metadata,
+      }],
+    }))
+    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [{
+        id: 'u-file',
+        role: 'user',
+        parts: [{ type: 'text', text: '' }],
+        metadata,
+      }],
+    }))
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a pending approval interruption via structured control', async () => {

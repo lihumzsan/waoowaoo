@@ -1,10 +1,11 @@
 import {
   createHomeProjectLaunch,
-  writeHomeAssistantAutoStartMessage,
+  writeHomeAssistantAutoStartDraft,
   type CreateHomeProjectLaunchParams,
   type CreateHomeProjectLaunchResult,
   type HomeWorkspaceLaunchTarget,
 } from './create-project-launch'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 type CreateHomeProjectLaunch = (
   params: CreateHomeProjectLaunchParams,
@@ -14,10 +15,12 @@ type WriteHomeAssistantAutoStartMessage = (input: {
   readonly projectId: string
   readonly episodeId: string
   readonly message: string
+  readonly attachments?: readonly ProjectAssistantTextAttachment[]
 }) => void
 
 export interface SubmitHomeQuickStartLaunchParams {
   readonly inputValue: string
+  readonly attachments?: readonly ProjectAssistantTextAttachment[]
   readonly isSubmitting: boolean
   readonly apiFetch: CreateHomeProjectLaunchParams['apiFetch']
   readonly projectName: string
@@ -32,6 +35,7 @@ export interface SubmitHomeQuickStartLaunchParams {
 
 export async function submitHomeQuickStartLaunch({
   inputValue,
+  attachments,
   isSubmitting,
   apiFetch,
   projectName,
@@ -41,10 +45,11 @@ export async function submitHomeQuickStartLaunch({
   navigate,
   resolveErrorMessage,
   createProjectLaunch = createHomeProjectLaunch,
-  writeAutoStartMessage = writeHomeAssistantAutoStartMessage,
+  writeAutoStartMessage = writeHomeAssistantAutoStartDraft,
 }: SubmitHomeQuickStartLaunchParams): Promise<void> {
   const storyText = inputValue.trim()
-  if (!storyText || isSubmitting) return
+  const draftAttachments = attachments ?? []
+  if ((!storyText && draftAttachments.length === 0) || isSubmitting) return
 
   setError(null)
   setSubmitting(true)
@@ -55,12 +60,14 @@ export async function submitHomeQuickStartLaunch({
       projectName,
       storyText,
       episodeName,
+      hasAssistantDraftContent: storyText.length > 0 || draftAttachments.length > 0,
     })
 
     writeAutoStartMessage({
       projectId: result.projectId,
       episodeId: result.episodeId,
       message: storyText,
+      attachments: draftAttachments,
     })
     navigate(result.target)
   } catch (error) {

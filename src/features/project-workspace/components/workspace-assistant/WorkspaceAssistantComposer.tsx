@@ -12,16 +12,22 @@ import React, {
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
+import { TextAttachmentChips } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 interface WorkspaceAssistantComposerProps {
   readonly value: string
   readonly error: string | null
   readonly pending: boolean
+  readonly attachments: readonly ProjectAssistantTextAttachment[]
+  readonly attachDisabled?: boolean
   readonly assistantPermissionMode: AssistantPermissionMode
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
+  readonly onAttachClick: () => void
+  readonly onRemoveAttachment: (attachmentId: string) => void
   readonly onAssistantPermissionModeChange: (mode: AssistantPermissionMode) => void
 }
 
@@ -56,9 +62,13 @@ export function WorkspaceAssistantComposer({
   value,
   error,
   pending,
+  attachments,
+  attachDisabled = false,
   assistantPermissionMode,
   onChange,
   onSubmit,
+  onAttachClick,
+  onRemoveAttachment,
   onAssistantPermissionModeChange,
 }: WorkspaceAssistantComposerProps) {
   const t = useTranslations('assistantAgent')
@@ -148,29 +158,46 @@ export function WorkspaceAssistantComposer({
           }}
           className="min-h-10 max-h-[7rem] w-full resize-none overflow-y-auto bg-transparent pr-1 text-sm leading-5 text-[var(--glass-text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] disabled:cursor-not-allowed disabled:opacity-60"
         />
+        <TextAttachmentChips
+          attachments={attachments}
+          onRemove={pending ? undefined : onRemoveAttachment}
+          className={attachments.length > 0 ? 'mt-2' : undefined}
+        />
         <div className="mt-1 flex h-8 shrink-0 items-center justify-between gap-2">
-          <button
-            ref={triggerRef}
-            type="button"
-            aria-label={t('panel.permissionModeToggle', { mode: permissionModeLabel })}
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-controls={menuOpen ? menuId : undefined}
-            title={t('panel.permissionModeMenuTitle')}
-            onClick={() => {
-              if (menuOpen) closeMenu()
-              else openMenu()
-            }}
-            className="glass-selection-control inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium leading-none"
-          >
-            <AppIcon name={assistantPermissionMode === 'ask' ? 'lock' : 'bolt'} className="h-3 w-3" aria-hidden="true" />
-            <span>{permissionModeLabel}</span>
-            <AppIcon name="chevronDown" className={cx('h-3 w-3 text-[var(--glass-text-tertiary)] transition-transform', menuOpen && 'rotate-180')} aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-label={t('attachments.openUpload')}
+              title={t('attachments.openUpload')}
+              disabled={pending || attachDisabled}
+              onClick={onAttachClick}
+              className="glass-selection-control inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--glass-text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <AppIcon name="plus" className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              ref={triggerRef}
+              type="button"
+              aria-label={t('panel.permissionModeToggle', { mode: permissionModeLabel })}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-controls={menuOpen ? menuId : undefined}
+              title={t('panel.permissionModeMenuTitle')}
+              onClick={() => {
+                if (menuOpen) closeMenu()
+                else openMenu()
+              }}
+              className="glass-selection-control inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium leading-none"
+            >
+              <AppIcon name={assistantPermissionMode === 'ask' ? 'lock' : 'bolt'} className="h-3 w-3" aria-hidden="true" />
+              <span>{permissionModeLabel}</span>
+              <AppIcon name="chevronDown" className={cx('h-3 w-3 text-[var(--glass-text-tertiary)] transition-transform', menuOpen && 'rotate-180')} aria-hidden="true" />
+            </button>
+          </div>
           <button
             type="button"
             aria-label={t('panel.send')}
-            disabled={!value.trim() || pending}
+            disabled={(!value.trim() && attachments.length === 0) || pending}
             onClick={() => { void onSubmit() }}
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >

@@ -1,4 +1,9 @@
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY,
+  readProjectAssistantTextAttachmentsFromMetadata,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
 
 export const HOME_ASSISTANT_AUTOSTART_QUERY = 'assistantAutoStart' as const
 export const HOME_ASSISTANT_AUTOSTART_VALUE = 'home-input' as const
@@ -34,12 +39,18 @@ export interface CreateHomeProjectLaunchParams {
   projectName: string
   storyText: string
   episodeName: string
+  hasAssistantDraftContent?: boolean
 }
 
 export interface CreateHomeProjectLaunchResult {
   projectId: string
   episodeId: string
   target: HomeWorkspaceLaunchTarget
+}
+
+export interface HomeAssistantAutoStartDraft {
+  readonly message: string
+  readonly attachments: readonly ProjectAssistantTextAttachment[]
 }
 
 function readObject(value: unknown): Record<string, unknown> | null {
@@ -89,31 +100,61 @@ export function buildHomeAssistantAutoStartStorageKey(projectId: string, episode
   return `${HOME_ASSISTANT_AUTOSTART_STORAGE_PREFIX}:${projectId}:${episodeId}`
 }
 
-export function writeHomeAssistantAutoStartMessage(input: {
+export function writeHomeAssistantAutoStartDraft(input: {
   readonly projectId: string
   readonly episodeId: string
   readonly message: string
+  readonly attachments?: readonly ProjectAssistantTextAttachment[]
 }): void {
   if (typeof window === 'undefined') {
     throw new Error('HOME_ASSISTANT_AUTOSTART_STORAGE_UNAVAILABLE')
   }
   const message = input.message.trim()
-  if (!message) {
-    throw new Error('HOME_ASSISTANT_AUTOSTART_MESSAGE_EMPTY')
+  const attachments = input.attachments ?? []
+  if (!message && attachments.length === 0) {
+    throw new Error('HOME_ASSISTANT_AUTOSTART_DRAFT_EMPTY')
   }
   window.sessionStorage.setItem(
     buildHomeAssistantAutoStartStorageKey(input.projectId, input.episodeId),
-    message,
+    JSON.stringify({
+      message,
+      attachments,
+    } satisfies HomeAssistantAutoStartDraft),
   )
 }
 
-export function readHomeAssistantAutoStartMessage(projectId: string, episodeId: string): string | null {
-  if (typeof window === 'undefined') return null
-  const message = window.sessionStorage.getItem(buildHomeAssistantAutoStartStorageKey(projectId, episodeId))
-  return message?.trim() || null
+function parseHomeAssistantAutoStartDraft(rawValue: string | null): HomeAssistantAutoStartDraft | null {
+  if (!rawValue) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(rawValue)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const record = parsed as Record<string, unknown>
+  const message = typeof record.message === 'string' ? record.message.trim() : ''
+  const rawAttachments = record.attachments
+  const attachments = rawAttachments === undefined
+    ? []
+    : readProjectAssistantTextAttachmentsFromMetadata({
+        custom: {
+          [PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY]: rawAttachments,
+        },
+      })
+  return message || attachments.length > 0
+    ? { message, attachments }
+    : null
 }
 
-export function removeHomeAssistantAutoStartMessage(projectId: string, episodeId: string): void {
+export function readHomeAssistantAutoStartDraft(projectId: string, episodeId: string): HomeAssistantAutoStartDraft | null {
+  if (typeof window === 'undefined') return null
+  return parseHomeAssistantAutoStartDraft(
+    window.sessionStorage.getItem(buildHomeAssistantAutoStartStorageKey(projectId, episodeId)),
+  )
+}
+
+export function removeHomeAssistantAutoStartDraft(projectId: string, episodeId: string): void {
   if (typeof window === 'undefined') return
   window.sessionStorage.removeItem(buildHomeAssistantAutoStartStorageKey(projectId, episodeId))
 }
@@ -123,9 +164,10 @@ export async function createHomeProjectLaunch({
   projectName,
   storyText,
   episodeName,
+  hasAssistantDraftContent = false,
 }: CreateHomeProjectLaunchParams): Promise<CreateHomeProjectLaunchResult> {
-  if (!storyText.trim()) {
-    throw new Error('HOME_STORY_TEXT_EMPTY')
+  if (!storyText.trim() && !hasAssistantDraftContent) {
+    throw new Error('HOME_ASSISTANT_DRAFT_EMPTY')
   }
 
   const projectResponse = await apiFetch('/api/projects', {

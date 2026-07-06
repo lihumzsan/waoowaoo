@@ -16,6 +16,7 @@ vi.mock('next-auth/react', () => ({
 }))
 
 vi.mock('next-intl', () => ({
+  useLocale: () => 'zh',
   useTranslations: (namespace: string) => (key: string) => `${namespace}.${key}`,
 }))
 
@@ -75,7 +76,7 @@ vi.mock('@/lib/api-fetch', () => ({
 
 vi.mock('@/lib/home/create-project-launch', () => ({
   createHomeProjectLaunch: vi.fn(),
-  writeHomeAssistantAutoStartMessage: vi.fn(),
+  writeHomeAssistantAutoStartDraft: vi.fn(),
 }))
 
 describe('resolveTextareaTargetHeight', () => {

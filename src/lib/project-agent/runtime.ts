@@ -87,6 +87,10 @@ import {
   createProjectAgentUiMessageStream,
   type ProjectAgentUiChunk,
 } from './agents-ui-stream'
+import {
+  appendProjectAssistantTextAttachmentsToUserText,
+  readProjectAssistantTextAttachmentsFromMessage,
+} from './text-attachments'
 import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import type { OperationPlanView } from '@/lib/operations/planning'
@@ -175,18 +179,25 @@ function readTextFromParts(parts: readonly unknown[]): string {
   }).join('\n')
 }
 
-function toAgentInputItems(messages: UIMessage[]): AgentInputItem[] {
+function toAgentInputItems(messages: UIMessage[], locale: ReturnType<typeof normalizeProjectAgentLocale>): AgentInputItem[] {
   const items: AgentInputItem[] = []
   for (const message of messages) {
     const text = readTextFromParts(message.parts)
-    if (!text.trim()) continue
     if (message.role === 'user') {
+      const attachments = readProjectAssistantTextAttachmentsFromMessage(message)
+      const content = appendProjectAssistantTextAttachmentsToUserText({
+        locale,
+        userText: text,
+        attachments,
+      })
+      if (!content.trim()) continue
       items.push({
         role: 'user',
-        content: text,
+        content,
       } satisfies AgentInputItem)
       continue
     }
+    if (!text.trim()) continue
     if (message.role === 'assistant') {
       items.push({
         role: 'assistant',
@@ -740,10 +751,10 @@ export async function createProjectAgentChatResponse(input: {
     : [
         ...(control.kind === 'user_turn'
           ? withDeclinedApprovalsNote(
-              toAgentInputItems(runtimeMessages),
+              toAgentInputItems(runtimeMessages, locale),
               buildDeclinedApprovalsInputItem(control.declinedInterruptions),
             )
-          : toAgentInputItems(runtimeMessages)),
+          : toAgentInputItems(runtimeMessages, locale)),
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
         buildProjectStateInputItem({

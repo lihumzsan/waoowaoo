@@ -12,11 +12,19 @@ import { BrandPageLoading } from '@/components/ui/BrandLoading'
 import { AppIcon, IconGradientDefs } from '@/components/ui/icons'
 import StoryInputComposer from '@/components/story-input/StoryInputComposer'
 import TypewriterHero from '@/components/home/TypewriterHero'
+import {
+  TextAttachmentChips,
+  TextAttachmentUploadDialog,
+} from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { Link, useRouter } from '@/i18n/navigation'
 import { apiFetch } from '@/lib/api-fetch'
 import { submitHomeQuickStartLaunch } from '@/lib/home/quick-start-submit'
 import { formatDefaultProjectTimestamp } from '@/lib/projects/default-name'
 import { HOME_QUICK_START_MIN_ROWS } from '@/lib/ui/textarea-height'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
 
 interface ProjectStats {
   episodes: number
@@ -42,10 +50,13 @@ export default function HomePage() {
   const router = useRouter()
   const t = useTranslations('home')
   const tc = useTranslations('common')
+  const ta = useTranslations('assistantAgent')
 
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
+  const [attachments, setAttachments] = useState<ProjectAssistantTextAttachment[]>([])
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -87,6 +98,7 @@ export default function HomePage() {
   const handleCreate = async () => {
     await submitHomeQuickStartLaunch({
       inputValue,
+      attachments,
       isSubmitting: createLoading,
       apiFetch,
       projectName: t('defaultProjectName', {
@@ -101,6 +113,20 @@ export default function HomePage() {
       resolveErrorMessage: (error) => error instanceof Error ? error.message : t('createFailed'),
     })
   }
+
+  const handleAttachmentUploaded = useCallback((attachment: ProjectAssistantTextAttachment) => {
+    setAttachments((current) => {
+      if (current.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) return current
+      return [...current, attachment]
+    })
+    if (createError) {
+      setCreateError(null)
+    }
+  }, [createError])
+
+  const handleRemoveAttachment = useCallback((attachmentId: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }, [])
 
   // 时间格式化
   const formatTimeAgo = (dateString: string): string => {
@@ -308,17 +334,34 @@ export default function HomePage() {
               primaryAction={(
                 <button
                   onClick={() => void handleCreate()}
-                  disabled={!inputValue.trim() || createLoading}
+                  disabled={(!inputValue.trim() && attachments.length === 0) || createLoading}
                   className="glass-btn-base glass-btn-primary h-10 flex-shrink-0 px-5 text-sm disabled:opacity-50"
                 >
                   {createLoading ? tc('loading') : t('startCreation')}
                   <AppIcon name="arrowRight" className="w-4 h-4" />
                 </button>
               )}
-              footer={createError ? (
-                <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
-                  {createError}
-                </p>
+              secondaryActions={(
+                <button
+                  type="button"
+                  aria-label={ta('attachments.openUpload')}
+                  title={ta('attachments.openUpload')}
+                  disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+                  onClick={() => setAttachmentDialogOpen(true)}
+                  className="glass-btn-base glass-btn-secondary h-10 w-10 flex-shrink-0 px-0 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <AppIcon name="plus" className="w-4 h-4" />
+                </button>
+              )}
+              footer={attachments.length > 0 || createError ? (
+                <div className="space-y-3">
+                  <TextAttachmentChips attachments={attachments} onRemove={createLoading ? undefined : handleRemoveAttachment} />
+                  {createError ? (
+                    <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+                      {createError}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             />
           </div>
@@ -411,6 +454,12 @@ export default function HomePage() {
           </div>
         )}
       </section>
+      <TextAttachmentUploadDialog
+        open={attachmentDialogOpen}
+        disabled={createLoading || attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
+        onClose={() => setAttachmentDialogOpen(false)}
+        onUploaded={handleAttachmentUploaded}
+      />
     </div>
   )
 }

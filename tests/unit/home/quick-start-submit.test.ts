@@ -7,6 +7,7 @@ import {
   type HomeWorkspaceLaunchTarget,
 } from '@/lib/home/create-project-launch'
 import { submitHomeQuickStartLaunch } from '@/lib/home/quick-start-submit'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 function buildLaunchResult(): CreateHomeProjectLaunchResult {
   return {
@@ -19,6 +20,21 @@ function buildLaunchResult(): CreateHomeProjectLaunchResult {
         [HOME_ASSISTANT_AUTOSTART_QUERY]: HOME_ASSISTANT_AUTOSTART_VALUE,
       },
     },
+  }
+}
+
+function buildAttachment(): ProjectAssistantTextAttachment {
+  const normalizedText = '剧本文本'
+
+  return {
+    id: 'attachment-1',
+    kind: 'txt',
+    fileName: 'story.txt',
+    mimeType: 'text/plain',
+    sizeBytes: 42,
+    checksum: 'a'.repeat(64),
+    charCount: normalizedText.length,
+    normalizedText,
   }
 }
 
@@ -36,6 +52,7 @@ describe('submitHomeQuickStartLaunch', () => {
       readonly projectId: string
       readonly episodeId: string
       readonly message: string
+      readonly attachments?: readonly ProjectAssistantTextAttachment[]
     }) => void>()
     const navigate = vi.fn<(target: HomeWorkspaceLaunchTarget) => void>()
     const submittingEvents: boolean[] = []
@@ -43,6 +60,7 @@ describe('submitHomeQuickStartLaunch', () => {
 
     await submitHomeQuickStartLaunch({
       inputValue: '  第一章内容  ',
+      attachments: [],
       isSubmitting: false,
       apiFetch,
       projectName: '项目名',
@@ -66,11 +84,13 @@ describe('submitHomeQuickStartLaunch', () => {
       projectName: '项目名',
       storyText: '第一章内容',
       episodeName: '第 1 集',
+      hasAssistantDraftContent: true,
     })
     expect(writeAutoStartMessage).toHaveBeenCalledWith({
       projectId: 'project-1',
       episodeId: 'episode-1',
       message: '第一章内容',
+      attachments: [],
     })
     expect(navigate).toHaveBeenCalledWith(buildLaunchResult().target)
   })
@@ -84,6 +104,7 @@ describe('submitHomeQuickStartLaunch', () => {
       readonly projectId: string
       readonly episodeId: string
       readonly message: string
+      readonly attachments?: readonly ProjectAssistantTextAttachment[]
     }) => void>()
     const navigate = vi.fn<(target: HomeWorkspaceLaunchTarget) => void>()
     const submittingEvents: boolean[] = []
@@ -91,6 +112,7 @@ describe('submitHomeQuickStartLaunch', () => {
 
     await submitHomeQuickStartLaunch({
       inputValue: '第一章内容',
+      attachments: [],
       isSubmitting: false,
       apiFetch,
       projectName: '项目名',
@@ -111,5 +133,50 @@ describe('submitHomeQuickStartLaunch', () => {
     expect(errorEvents).toEqual([null, 'create failed explicitly'])
     expect(writeAutoStartMessage).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('allows a file-only quick-start draft and stores attachments for assistant autostart', async () => {
+    const attachment = buildAttachment()
+    const apiFetch = vi.fn<CreateHomeProjectLaunchParams['apiFetch']>()
+    const createProjectLaunch = vi
+      .fn<(params: CreateHomeProjectLaunchParams) => Promise<CreateHomeProjectLaunchResult>>()
+      .mockResolvedValue(buildLaunchResult())
+    const writeAutoStartMessage = vi.fn<(input: {
+      readonly projectId: string
+      readonly episodeId: string
+      readonly message: string
+      readonly attachments?: readonly ProjectAssistantTextAttachment[]
+    }) => void>()
+    const navigate = vi.fn<(target: HomeWorkspaceLaunchTarget) => void>()
+
+    await submitHomeQuickStartLaunch({
+      inputValue: '   ',
+      attachments: [attachment],
+      isSubmitting: false,
+      apiFetch,
+      projectName: '项目名',
+      episodeName: '第 1 集',
+      setSubmitting: vi.fn(),
+      setError: vi.fn(),
+      navigate,
+      resolveErrorMessage: (error) => error instanceof Error ? error.message : 'create failed',
+      createProjectLaunch,
+      writeAutoStartMessage,
+    })
+
+    expect(createProjectLaunch).toHaveBeenCalledWith({
+      apiFetch,
+      projectName: '项目名',
+      storyText: '',
+      episodeName: '第 1 集',
+      hasAssistantDraftContent: true,
+    })
+    expect(writeAutoStartMessage).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      message: '',
+      attachments: [attachment],
+    })
+    expect(navigate).toHaveBeenCalledWith(buildLaunchResult().target)
   })
 })

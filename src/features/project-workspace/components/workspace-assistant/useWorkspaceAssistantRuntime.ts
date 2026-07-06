@@ -26,6 +26,10 @@ import {
   ensureUniqueUIMessages,
 } from '@/lib/project-agent/ui-message-validation'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import {
+  buildProjectAssistantTextAttachmentMetadata,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 
 export type WorkspaceAssistantChoiceType = 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
@@ -50,6 +54,11 @@ interface WorkspaceAssistantTrackedRun {
 interface WorkspaceAssistantReplyActivity {
   sequence: number
   requestSettled: boolean
+}
+
+export interface WorkspaceAssistantSendMessageInput {
+  readonly text: string
+  readonly attachments?: readonly ProjectAssistantTextAttachment[]
 }
 
 type WorkspaceAssistantPendingApproval = Extract<ProjectAgentSessionPendingInteraction, { kind: 'approval' }>
@@ -87,7 +96,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   pendingOperationId: string | null
   activeFocusRequest: WorkspaceAssistantActiveFocusRequest | null
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
-  sendMessage: (text: string) => Promise<void>
+  sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
   submitChoiceResponse: (params: {
     runId: string
@@ -434,12 +443,18 @@ export function useWorkspaceAssistantRuntime({
 
   // The user's new message supersedes any pending approval server-side; the
   // stream answers with an interruption-resolved part so the card closes.
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (input: WorkspaceAssistantSendMessageInput) => {
     chat.clearError()
     setControlError(null)
     const activitySequence = beginReplyActivity()
+    const attachments = input.attachments ?? []
+    const text = input.text.trim()
+    const metadata = buildProjectAssistantTextAttachmentMetadata(attachments)
     try {
-      await chat.sendMessage({ text })
+      await chat.sendMessage({
+        text,
+        ...(metadata ? { metadata } : {}),
+      })
       markReplyActivityRequestSettled(activitySequence)
     } catch (error) {
       clearReplyActivity(activitySequence)

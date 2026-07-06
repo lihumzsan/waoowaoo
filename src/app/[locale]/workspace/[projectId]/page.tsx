@@ -16,8 +16,8 @@ import { readApiErrorMessage } from '@/lib/api/read-error-message'
 import {
   HOME_ASSISTANT_AUTOSTART_QUERY,
   HOME_ASSISTANT_AUTOSTART_VALUE,
-  readHomeAssistantAutoStartMessage,
-  removeHomeAssistantAutoStartMessage,
+  readHomeAssistantAutoStartDraft,
+  removeHomeAssistantAutoStartDraft,
 } from '@/lib/home/create-project-launch'
 
 interface Episode {
@@ -112,9 +112,9 @@ export default function ProjectDetailPage() {
     projectId,
     !isGlobalAssetsView ? selectedEpisodeId : null
   )
-  const assistantAutoStartMessage = useMemo(() => (
+  const assistantAutoStartDraft = useMemo(() => (
     shouldAutoStartAssistant && selectedEpisodeId
-      ? readHomeAssistantAutoStartMessage(projectId, selectedEpisodeId)
+      ? readHomeAssistantAutoStartDraft(projectId, selectedEpisodeId)
       : null
   ), [projectId, selectedEpisodeId, shouldAutoStartAssistant])
   const assistantAutoStartKey = shouldAutoStartAssistant && selectedEpisodeId
@@ -122,15 +122,15 @@ export default function ProjectDetailPage() {
     : null
   const clearAssistantAutoStart = useCallback(() => {
     if (selectedEpisodeId) {
-      removeHomeAssistantAutoStartMessage(projectId, selectedEpisodeId)
+      removeHomeAssistantAutoStartDraft(projectId, selectedEpisodeId)
     }
     updateUrlParams({ assistantAutoStart: null })
   }, [projectId, selectedEpisodeId, updateUrlParams])
 
   useEffect(() => {
-    if (!shouldAutoStartAssistant || !selectedEpisodeId || assistantAutoStartMessage) return
+    if (!shouldAutoStartAssistant || !selectedEpisodeId || assistantAutoStartDraft) return
     clearAssistantAutoStart()
-  }, [assistantAutoStartMessage, clearAssistantAutoStart, selectedEpisodeId, shouldAutoStartAssistant])
+  }, [assistantAutoStartDraft, clearAssistantAutoStart, selectedEpisodeId, shouldAutoStartAssistant])
 
   // 零状态：无剧集时自动创建第一集
   const shouldAutoCreateEpisode = episodes.length === 0
@@ -318,7 +318,7 @@ export default function ProjectDetailPage() {
               episode={currentEpisode}
               viewMode="episode"
               episodes={episodes}
-              assistantAutoStartMessage={assistantAutoStartMessage}
+              assistantAutoStartDraft={assistantAutoStartDraft}
               assistantAutoStartKey={assistantAutoStartKey}
               workflowLabEnabled={workflowLabEnabled}
               onAssistantAutoStartConsumed={clearAssistantAutoStart}

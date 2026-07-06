@@ -37,6 +37,21 @@
     "pendingApprovalTitle": "Pending approval",
     "pendingApprovalCount": "{count} pending actions"
   },
+  "attachments": {
+    "openUpload": "Attach text file",
+    "dialogTitle": "Attach a text file",
+    "dialogDescription": "TXT, Markdown, and DOCX are parsed as text. Max {maxSize} or {maxChars} characters.",
+    "closeDialog": "Close file upload",
+    "dropTitle": "Drop a file here",
+    "supportedTypes": "Supported: .txt, .md, .docx",
+    "selectedMeta": "Ready to parse · {size}",
+    "chooseFile": "Choose file",
+    "cancel": "Cancel",
+    "attach": "Attach",
+    "uploading": "Parsing...",
+    "fileMeta": "{chars} chars · {size}",
+    "removeFile": "Remove {fileName}"
+  },
   "toolCall": {
     "title": "Tool Call",
     "success": "Success",

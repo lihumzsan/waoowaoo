@@ -5,7 +5,11 @@ import {
   createHomeProjectLaunch,
   HOME_ASSISTANT_AUTOSTART_QUERY,
   HOME_ASSISTANT_AUTOSTART_VALUE,
+  readHomeAssistantAutoStartDraft,
+  removeHomeAssistantAutoStartDraft,
+  writeHomeAssistantAutoStartDraft,
 } from '@/lib/home/create-project-launch'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 function buildJsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -14,9 +18,38 @@ function buildJsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function buildAttachment(): ProjectAssistantTextAttachment {
+  const normalizedText = '剧本文本'
+
+  return {
+    id: 'attachment-1',
+    kind: 'txt',
+    fileName: 'story.txt',
+    mimeType: 'text/plain',
+    sizeBytes: 42,
+    checksum: 'a'.repeat(64),
+    charCount: normalizedText.length,
+    normalizedText,
+  }
+}
+
+function createMemoryStorage(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
+  const values = new Map<string, string>()
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value)
+    },
+    removeItem: (key) => {
+      values.delete(key)
+    },
+  }
+}
+
 describe('createHomeProjectLaunch', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('creates project, empty first episode, and returns an assistant auto-start workspace target', async () => {
@@ -103,5 +136,26 @@ describe('buildHomeWorkspaceLaunchTarget', () => {
     expect(buildHomeAssistantAutoStartStorageKey('project-9', 'episode-4')).toBe(
       'waoowaoo:home-assistant-autostart:project-9:episode-4',
     )
+  })
+
+  it('stores assistant auto-start as a structured draft with uploaded text attachments', () => {
+    const sessionStorage = createMemoryStorage()
+    vi.stubGlobal('window', { sessionStorage } as unknown as Window)
+    const attachment = buildAttachment()
+
+    writeHomeAssistantAutoStartDraft({
+      projectId: 'project-9',
+      episodeId: 'episode-4',
+      message: '请分析',
+      attachments: [attachment],
+    })
+
+    expect(readHomeAssistantAutoStartDraft('project-9', 'episode-4')).toEqual({
+      message: '请分析',
+      attachments: [attachment],
+    })
+
+    removeHomeAssistantAutoStartDraft('project-9', 'episode-4')
+    expect(readHomeAssistantAutoStartDraft('project-9', 'episode-4')).toBeNull()
   })
 })

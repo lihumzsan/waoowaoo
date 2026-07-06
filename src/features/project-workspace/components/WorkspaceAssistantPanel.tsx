@@ -21,6 +21,7 @@ import {
 import { useWorkspaceAssistantRuntime, type WorkspaceAssistantChoiceType } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { apiFetch } from '@/lib/api-fetch'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
+import { TextAttachmentUploadDialog } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -53,6 +54,10 @@ import {
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
+import {
+  PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES,
+  type ProjectAssistantTextAttachment,
+} from '@/lib/project-agent/text-attachments'
 import type { ProjectAgentSessionActivity, ProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 
@@ -90,7 +95,10 @@ interface WorkspaceAssistantPanelProps {
   projectId: string
   episodeId?: string
   selection?: WorkspaceAssistantSelectionContext
-  autoStartMessage?: string | null
+  autoStartDraft?: {
+    readonly message: string
+    readonly attachments: readonly ProjectAssistantTextAttachment[]
+  } | null
   autoStartKey?: string | null
   onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
@@ -256,7 +264,7 @@ export default function WorkspaceAssistantPanel({
   projectId,
   episodeId,
   selection,
-  autoStartMessage,
+  autoStartDraft,
   autoStartKey,
   onAutoStartConsumed,
   onActiveOperationChange,
@@ -276,6 +284,8 @@ export default function WorkspaceAssistantPanel({
   } | null>(null)
   const layout = buildWorkspaceAssistantPanelLayout(assistantPanelWidth)
   const [composerText, setComposerText] = useState('')
+  const [composerAttachments, setComposerAttachments] = useState<ProjectAssistantTextAttachment[]>([])
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false)
   const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const [assistantPermissionMode, setAssistantPermissionModeState] = useState<AssistantPermissionMode>(
@@ -431,16 +441,24 @@ export default function WorkspaceAssistantPanel({
     })
   }, [flushResolvedWaitFollowUps, subscribeTaskEvents])
   const consumedMessageKeysRef = useRef<Set<string>>(new Set())
-  const sendAssistantMessageOnce = useCallback(async (key: string, message: string, hidden = false) => {
+  const sendAssistantMessageOnce = useCallback(async (
+    key: string,
+    message: string,
+    hidden = false,
+    attachments: readonly ProjectAssistantTextAttachment[] = [],
+  ) => {
     const normalizedMessage = message.trim()
-    if (!normalizedMessage) return
+    if (!normalizedMessage && attachments.length === 0) return
     const reservedKey = reserveWorkspaceAssistantMessageKey(key, consumedMessageKeysRef.current)
     if (!reservedKey) return
     try {
       if (hidden) {
         await assistantRuntime.sendHiddenMessage(normalizedMessage)
       } else {
-        await assistantRuntime.sendMessage(normalizedMessage)
+        await assistantRuntime.sendMessage({
+          text: normalizedMessage,
+          attachments,
+        })
       }
     } catch (error) {
       releaseWorkspaceAssistantMessageKey(reservedKey, consumedMessageKeysRef.current)
@@ -449,27 +467,46 @@ export default function WorkspaceAssistantPanel({
   }, [assistantRuntime])
   const handleComposerSubmit = useCallback(async () => {
     const normalizedText = composerText.trim()
-    if (!normalizedText) return
+    if (!normalizedText && composerAttachments.length === 0) return
     // 发消息时把底部停靠的视觉风格卡收成细条，避免大卡占满底部、把刚发的消息顶出视口
     setStylePreviewDockCollapsed(true)
     setComposerText('')
+    setComposerAttachments([])
     try {
-      await assistantRuntime.sendMessage(normalizedText)
+      await assistantRuntime.sendMessage({
+        text: normalizedText,
+        attachments: composerAttachments,
+      })
     } catch (error) {
       setComposerText(normalizedText)
+      setComposerAttachments([...composerAttachments])
       throw error
     }
-  }, [assistantRuntime, composerText])
+  }, [assistantRuntime, composerAttachments, composerText])
+  const handleAttachmentUploaded = useCallback((attachment: ProjectAssistantTextAttachment) => {
+    setComposerAttachments((current) => {
+      if (current.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES) return current
+      return [...current, attachment]
+    })
+  }, [])
+  const handleRemoveComposerAttachment = useCallback((attachmentId: string) => {
+    setComposerAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+  }, [])
   useEffect(() => {
-    if (!autoStartMessage || !autoStartKey) return
+    if (!autoStartDraft || !autoStartKey) return
     if (assistantRuntime.storageLoading || assistantRuntime.pending) return
     onAutoStartConsumed?.()
-    void sendAssistantMessageOnce(autoStartKey, autoStartMessage)
+    void sendAssistantMessageOnce(
+      autoStartKey,
+      autoStartDraft.message,
+      false,
+      autoStartDraft.attachments,
+    )
   }, [
     assistantRuntime.pending,
     assistantRuntime.storageLoading,
     autoStartKey,
-    autoStartMessage,
+    autoStartDraft,
     onAutoStartConsumed,
     sendAssistantMessageOnce,
   ])
@@ -771,9 +808,13 @@ export default function WorkspaceAssistantPanel({
                     value={composerText}
                     error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
                     pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                    attachments={composerAttachments}
+                    attachDisabled={composerAttachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
                     assistantPermissionMode={assistantPermissionMode}
                     onChange={setComposerText}
                     onSubmit={handleComposerSubmit}
+                    onAttachClick={() => setAttachmentDialogOpen(true)}
+                    onRemoveAttachment={handleRemoveComposerAttachment}
                     onAssistantPermissionModeChange={setAssistantPermissionMode}
                   />
                 </div>
@@ -785,6 +826,16 @@ export default function WorkspaceAssistantPanel({
       {previewImageUrl ? (
         <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
       ) : null}
+      <TextAttachmentUploadDialog
+        open={attachmentDialogOpen}
+        disabled={
+          assistantRuntime.pending
+          || assistantRuntime.storageLoading
+          || composerAttachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES
+        }
+        onClose={() => setAttachmentDialogOpen(false)}
+        onUploaded={handleAttachmentUploaded}
+      />
     </aside>
   )
 }

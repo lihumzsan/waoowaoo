@@ -1,5 +1,6 @@
 import type { Project } from '@/types/project'
 import type { ProjectStoryboard } from '@/types/project'
+import type { ProjectAssistantTextAttachment } from '@/lib/project-agent/text-attachments'
 
 export interface Episode {
   id: string
@@ -20,7 +21,10 @@ export interface ProjectWorkspaceProps {
   episode?: Episode | null
   viewMode?: 'global-assets' | 'episode'
   episodes?: Episode[]
-  assistantAutoStartMessage?: string | null
+  assistantAutoStartDraft?: {
+    readonly message: string
+    readonly attachments: readonly ProjectAssistantTextAttachment[]
+  } | null
   assistantAutoStartKey?: string | null
   workflowLabEnabled?: boolean
   onAssistantAutoStartConsumed?: () => void

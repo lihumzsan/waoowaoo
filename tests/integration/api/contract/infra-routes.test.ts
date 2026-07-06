@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { NextRequest } from 'next/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ROUTE_CATALOG } from '../../../contracts/route-catalog'
 import { buildMockRequest } from '../../../helpers/request'
@@ -88,9 +89,19 @@ describe('api contract - infra routes (behavior)', () => {
     await fs.mkdir(tempState.uploadDirAbs, { recursive: true })
   }
 
+  function buildTextAttachmentRequest(file: File): NextRequest {
+    const form = new FormData()
+    form.set('file', file)
+    return new NextRequest(new URL('/api/assistant/text-attachments', 'http://localhost:3000'), {
+      method: 'POST',
+      body: form,
+    })
+  }
+
   it('infra route group exists', () => {
     expect(routes.map((entry) => entry.routeFile)).toEqual(expect.arrayContaining([
       'src/app/api/admin/download-logs/route.ts',
+      'src/app/api/assistant/text-attachments/route.ts',
       'src/app/api/cos/image/route.ts',
       'src/app/api/files/[...path]/route.ts',
       'src/app/api/storage/sign/route.ts',
@@ -125,6 +136,47 @@ describe('api contract - infra routes (behavior)', () => {
     expect(text).toContain('worker log line 1')
     expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8')
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="waoowaoo-logs-/)
+  })
+
+  it('POST /api/assistant/text-attachments rejects unauthenticated requests', async () => {
+    const mod = await import('@/app/api/assistant/text-attachments/route')
+    const req = buildTextAttachmentRequest(new File(['hello'], 'story.txt', { type: 'text/plain' }))
+
+    const res = await mod.POST(req, { params: Promise.resolve({}) })
+
+    expect(res.status).toBe(401)
+  })
+
+  it('POST /api/assistant/text-attachments parses uploaded txt into a structured attachment', async () => {
+    authState.authenticated = true
+    const mod = await import('@/app/api/assistant/text-attachments/route')
+    const req = buildTextAttachmentRequest(new File(['  hello\r\nworld  '], 'story.txt', { type: 'text/plain' }))
+
+    const res = await mod.POST(req, { params: Promise.resolve({}) })
+    const payload = await res.json() as {
+      attachment: {
+        id: string
+        kind: string
+        fileName: string
+        mimeType: string
+        sizeBytes: number
+        checksum: string
+        charCount: number
+        normalizedText: string
+      }
+    }
+
+    expect(res.status).toBe(200)
+    expect(payload.attachment).toMatchObject({
+      kind: 'txt',
+      fileName: 'story.txt',
+      mimeType: 'text/plain',
+      charCount: 11,
+      normalizedText: 'hello\nworld',
+    })
+    expect(payload.attachment.id).toMatch(/^text-attachment:/)
+    expect(payload.attachment.sizeBytes).toBeGreaterThan(0)
+    expect(payload.attachment.checksum).toMatch(/^[a-f0-9]{64}$/)
   })
 
   it('GET /api/deployment exposes cloud mode before signup without requiring authentication', async () => {

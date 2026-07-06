@@ -141,7 +141,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             projectId={projectId}
             episodeId={episodeId}
             selection={assistantSelection}
-            autoStartMessage={props.assistantAutoStartMessage ?? null}
+            autoStartDraft={props.assistantAutoStartDraft ?? null}
             autoStartKey={props.assistantAutoStartKey ?? null}
             onAutoStartConsumed={props.onAssistantAutoStartConsumed}
             onActiveOperationChange={setActiveAssistantFocusRequest}

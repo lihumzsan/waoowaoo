@@ -1,6 +1,10 @@
 import { generateText, type LanguageModel, type UIMessage } from 'ai'
 import { buildCompressionPrompt, buildSummaryText } from './copy'
 import type { ProjectAgentLocale } from './locale'
+import {
+  appendProjectAssistantTextAttachmentsToUserText,
+  readProjectAssistantTextAttachmentsFromMessage,
+} from './text-attachments'
 
 const MAX_MESSAGE_COUNT = 50
 const MAX_ESTIMATED_TOKENS = 12000
@@ -26,11 +30,18 @@ function readMessagePartText(part: unknown): string | null {
   return null
 }
 
-function extractMessageText(message: UIMessage): string {
+function extractMessageText(message: UIMessage, locale: ProjectAgentLocale = 'zh'): string {
   const chunks = message.parts
     .map((part) => readMessagePartText(part))
     .filter((value): value is string => Boolean(value))
-  return chunks.join(' ').trim()
+  const text = chunks.join(' ').trim()
+  if (message.role !== 'user') return text
+  const attachments = readProjectAssistantTextAttachmentsFromMessage(message)
+  return appendProjectAssistantTextAttachmentsToUserText({
+    locale,
+    userText: text,
+    attachments,
+  })
 }
 
 function readCustomMetadata(message: UIMessage): UnknownObject | null {
@@ -47,24 +58,24 @@ export function isConversationSummaryMessage(message: UIMessage): boolean {
   return readCustomMetadata(message)?.projectAgentConversationSummary === true
 }
 
-export function estimateMessageTokens(messages: UIMessage[]): number {
+export function estimateMessageTokens(messages: UIMessage[], locale: ProjectAgentLocale = 'zh'): number {
   let total = 0
   for (const message of messages) {
     total += 12
-    total += Math.ceil(extractMessageText(message).length / 4)
+    total += Math.ceil(extractMessageText(message, locale).length / 4)
   }
   return total
 }
 
-export function shouldCompressMessages(messages: UIMessage[]): boolean {
+export function shouldCompressMessages(messages: UIMessage[], locale: ProjectAgentLocale = 'zh'): boolean {
   if (messages.length > MAX_MESSAGE_COUNT) return true
-  return estimateMessageTokens(messages) >= Math.floor(MAX_ESTIMATED_TOKENS * TOKEN_THRESHOLD_RATIO)
+  return estimateMessageTokens(messages, locale) >= Math.floor(MAX_ESTIMATED_TOKENS * TOKEN_THRESHOLD_RATIO)
 }
 
-function buildTranscript(messages: UIMessage[]): string {
+function buildTranscript(messages: UIMessage[], locale: ProjectAgentLocale): string {
   return messages
     .map((message) => {
-      const text = extractMessageText(message)
+      const text = extractMessageText(message, locale)
       if (!text) return null
       return `${message.role.toUpperCase()}: ${text}`
     })
@@ -100,12 +111,12 @@ export async function compressMessages(params: {
   locale: ProjectAgentLocale
   model: LanguageModel
 }): Promise<UIMessage[]> {
-  if (!shouldCompressMessages(params.messages)) return params.messages
+  if (!shouldCompressMessages(params.messages, params.locale)) return params.messages
   if (params.messages.length <= KEEP_RECENT_MESSAGES) return params.messages
 
   const recentMessages = params.messages.slice(-KEEP_RECENT_MESSAGES)
   const olderMessages = params.messages.slice(0, -KEEP_RECENT_MESSAGES)
-  const transcript = buildTranscript(olderMessages)
+  const transcript = buildTranscript(olderMessages, params.locale)
   if (!transcript) return recentMessages
 
   const compressionPrompt = buildCompressionPrompt(params.locale, transcript)

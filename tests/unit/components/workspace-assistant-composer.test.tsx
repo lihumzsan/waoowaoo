@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceAssistantComposer } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantComposer'
 
 vi.mock('next-intl', () => ({
+  useLocale: () => 'zh',
   useTranslations: () => (key: string) => key,
 }))
 
@@ -16,9 +17,12 @@ describe('WorkspaceAssistantComposer', () => {
         value: '继续生成剪辑表',
         error: null,
         pending: false,
+        attachments: [],
         assistantPermissionMode: 'ask',
         onChange: () => undefined,
         onSubmit: async () => undefined,
+        onAttachClick: () => undefined,
+        onRemoveAttachment: () => undefined,
         onAssistantPermissionModeChange: () => undefined,
       }),
     )
@@ -26,6 +30,7 @@ describe('WorkspaceAssistantComposer', () => {
     expect(html).toContain('aria-label="panel.send"')
     expect(html).toContain('lucide-arrow-right')
     expect(html).toContain('aria-label="panel.permissionModeToggle"')
+    expect(html).toContain('aria-label="attachments.openUpload"')
     expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('lucide-lock')
     expect(html).toContain('lucide-chevron-down')
