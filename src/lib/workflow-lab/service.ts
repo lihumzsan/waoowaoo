@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
+import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib/project-agent/persistence'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
@@ -476,6 +477,7 @@ export async function forkWorkflowLabCheckpointProject(params: {
         episodeNumber: true,
       },
     })
+    await createDefaultEditChapter(labEpisode.id, tx)
     mapEpisodeId({
       maps,
       sourceEpisodeId: sourceEpisode.id,

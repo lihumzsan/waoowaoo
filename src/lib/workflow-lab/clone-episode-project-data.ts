@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import { DEFAULT_EDIT_CHAPTER_INDEX } from '@/lib/edit-chapter'
 import { mapWorkflowLabId, toInputJson, type WorkflowLabCloneMaps } from './clone-json'
 import { cloneWorkflowLabEditFirstArtifacts } from './clone-edit-first'
 import { cloneWorkflowLabStoryboards } from './clone-storyboards'
@@ -36,6 +37,11 @@ export async function cloneEpisodeProjectData(params: {
   })
 
   if (shouldWorkflowLabCloneVideos(params.stage)) {
+    const targetChapter = await params.tx.projectEditChapter.findUnique({
+      where: { episodeId_chapterIndex: { episodeId: params.targetEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
+      select: { id: true },
+    })
+    if (!targetChapter) throw new Error('WORKFLOW_LAB_TARGET_DEFAULT_EDIT_CHAPTER_REQUIRED')
     const finalOutput = await params.tx.projectEpisodeFinalOutput.findUnique({
       where: { episodeId: params.sourceEpisodeId },
     })
@@ -43,13 +49,28 @@ export async function cloneEpisodeProjectData(params: {
       await params.tx.projectEpisodeFinalOutput.create({
         data: {
           episodeId: params.targetEpisodeId,
-          ...(finalOutput.bgmScoreJson !== null
-            ? { bgmScoreJson: finalOutput.bgmScoreJson as Prisma.InputJsonValue }
-            : {}),
           renderStatus: finalOutput.renderStatus,
           renderTaskId: null,
           outputUrl: finalOutput.outputUrl,
           outputMediaId: finalOutput.outputMediaId,
+        },
+      })
+    }
+    const musicScore = await params.tx.projectEditMusicScore.findUnique({
+      where: { episodeId: params.sourceEpisodeId },
+    })
+    if (musicScore) {
+      await params.tx.projectEditMusicScore.create({
+        data: {
+          episodeId: params.targetEpisodeId,
+          ...(musicScore.cuesJson !== null ? { cuesJson: musicScore.cuesJson as Prisma.InputJsonValue } : {}),
+          ...(musicScore.mixJson !== null ? { mixJson: musicScore.mixJson as Prisma.InputJsonValue } : {}),
+          ...(musicScore.diagnosticsJson !== null ? { diagnosticsJson: musicScore.diagnosticsJson as Prisma.InputJsonValue } : {}),
+          version: musicScore.version,
+          status: musicScore.status,
+          taskId: null,
+          timelineSignature: musicScore.timelineSignature,
+          musicModel: musicScore.musicModel,
         },
       })
     }
@@ -63,8 +84,9 @@ export async function cloneEpisodeProjectData(params: {
         data: {
           projectId: params.targetProjectId,
           episodeId: params.targetEpisodeId,
+          chapterId: targetChapter.id,
           gridMode: group.gridMode,
-          shotNumbers: toInputJson(group.shotNumbers),
+          shotIds: toInputJson(group.shotIds),
           durationSec: group.durationSec,
           prompt: group.prompt,
           status: group.status,

@@ -10,15 +10,14 @@ export type TaskTypeBehaviorMatrixEntry = {
 }
 
 function resolveChainTestByTaskType(taskType: TaskType): string {
-  if (taskType === 'video_panel' || taskType === 'video_group') {
+  if (taskType === 'video_panel' || taskType === 'video_group' || taskType === 'chapter_render') {
     return 'tests/integration/chain/video.chain.test.ts'
   }
-  if (taskType === 'music_generate' || taskType === 'bgm_score_generate') {
+  if (taskType === 'music_generate' || taskType === 'music_score_plan') {
     return 'tests/integration/chain/music.chain.test.ts'
   }
   if (
-    taskType === 'edit_screenplay_generate'
-    || taskType === 'edit_screenplay_revise'
+    taskType === 'edit_bible_generate'
     || taskType === 'edit_shot_execution_plan_generate'
     || taskType === 'ai_modify_appearance'
     || taskType === 'ai_modify_location'
@@ -38,9 +37,12 @@ function resolveChainTestByTaskType(taskType: TaskType): string {
 
 function resolveApiContractByTaskType(taskType: TaskType): string {
   if (
-    taskType === 'edit_screenplay_generate'
-    || taskType === 'edit_screenplay_revise'
-    || taskType === 'edit_shot_execution_plan_generate'
+    taskType === 'edit_bible_generate'
+  ) {
+    return 'tests/integration/api/contract/project-edit-bible.route.test.ts'
+  }
+  if (
+    taskType === 'edit_shot_execution_plan_generate'
   ) {
     return 'tests/integration/api/contract/project-edit-script.route.test.ts'
   }
@@ -65,7 +67,7 @@ function resolveApiContractByTaskType(taskType: TaskType): string {
     || taskType === 'video_panel'
     || taskType === 'video_group'
     || taskType === 'music_generate'
-    || taskType === 'bgm_score_generate'
+    || taskType === 'music_score_plan'
     || taskType === 'modify_asset_image'
     || taskType === 'regenerate_group'
     || taskType === 'asset_hub_image'

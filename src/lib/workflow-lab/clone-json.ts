@@ -10,7 +10,7 @@ export interface WorkflowLabCloneMaps {
   readonly characterAppearanceIds: WorkflowLabIdMap
   readonly storyboardIds: WorkflowLabIdMap
   readonly panelIds: WorkflowLabIdMap
-  readonly screenplayIds: WorkflowLabIdMap
+  readonly bibleIds: WorkflowLabIdMap
   readonly stylePreviewIds: WorkflowLabIdMap
   readonly editScriptIds: WorkflowLabIdMap
   readonly assetRequirementIds: WorkflowLabIdMap
@@ -27,7 +27,7 @@ export function createWorkflowLabCloneMaps(): WorkflowLabCloneMaps {
     characterAppearanceIds: new Map(),
     storyboardIds: new Map(),
     panelIds: new Map(),
-    screenplayIds: new Map(),
+    bibleIds: new Map(),
     stylePreviewIds: new Map(),
     editScriptIds: new Map(),
     assetRequirementIds: new Map(),

@@ -35,7 +35,7 @@ function resolveChainTest(routeFile: string): string {
   }
   if (
     routeFile.includes('/analyze')
-    || routeFile.includes('/screenplay-conversion')
+    || routeFile.includes('/bible-conversion')
     || routeFile.includes('/reference-to-character')
   ) {
     return 'tests/integration/chain/text.chain.test.ts'

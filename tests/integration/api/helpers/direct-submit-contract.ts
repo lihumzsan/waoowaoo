@@ -99,7 +99,7 @@ function inferTaskContractFromOperation(params: {
       }
     case 'generate_episode_bgm_score':
       return {
-        type: TASK_TYPE.BGM_SCORE_GENERATE,
+        type: TASK_TYPE.MUSIC_SCORE_PLAN,
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
@@ -252,18 +252,15 @@ export const prismaMock = {
       editScript: { durationSec: 30 },
     })),
   },
-  projectEpisodeFinalOutput: {
+  projectEditMusicScore: {
     findUnique: vi.fn(async () => ({
-      bgmScoreJson: {
-        schemaVersion: 2,
-        status: 'completed',
-        mix: {
-          mediaId: 'media-bgm',
-          url: '/m/bgm.m4a',
-          storageKey: 'music/bgm.m4a',
-          mimeType: 'audio/mp4',
-          durationMs: 30000,
-        },
+      status: 'completed',
+      mixJson: {
+        mediaId: 'media-bgm',
+        url: '/m/bgm.m4a',
+        storageKey: 'music/bgm.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 30000,
       },
     })),
   },
@@ -414,7 +411,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       outputFormat: 'mp3',
     },
     params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.BGM_SCORE_GENERATE,
+    expectedTaskType: TASK_TYPE.MUSIC_SCORE_PLAN,
     expectedTargetType: 'ProjectEpisode',
     expectedProjectId: 'project-1',
     expectedPayloadSubset: {

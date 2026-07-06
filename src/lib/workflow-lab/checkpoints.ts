@@ -7,17 +7,16 @@ import type {
 } from '@/lib/project-agent/types'
 import type { WorkflowLabCheckpointSummary } from './types'
 
-const CHOICE_STAGE_BY_TYPE: Record<EditFirstChoiceType, EditFirstWorkflowStage> = {
-  duration_and_aspect_ratio: 'ready_to_generate_screenplay',
-  screenplay_review: 'screenplay_ready_for_review',
+const FIXED_CHOICE_STAGE_BY_TYPE: Partial<Record<EditFirstChoiceType, EditFirstWorkflowStage>> = {
+  bible_review: 'bible_ready_for_review',
   style: 'needs_style_choice',
   asset_review: 'assets_ready_for_review',
 }
 
 const OPERATION_STAGE_BY_ID: Readonly<Record<string, EditFirstWorkflowStage>> = {
-  generate_edit_screenplay: 'ready_to_generate_screenplay',
-  revise_edit_screenplay: 'screenplay_ready_for_review',
-  generate_edit_style_previews: 'screenplay_ready_for_review',
+  ingest_script: 'ready_to_ingest_script',
+  revise_bible: 'bible_ready_for_review',
+  generate_edit_style_previews: 'bible_ready_for_review',
   generate_edit_script: 'ready_to_generate_edit_script',
   generate_edit_script_assets: 'ready_to_generate_assets',
   generate_edit_shot_execution_plan: 'ready_to_generate_shot_execution_plan',
@@ -38,12 +37,33 @@ function readString(value: unknown): string | null {
 
 function readChoiceType(value: unknown): EditFirstChoiceType | null {
   if (
-    value === 'duration_and_aspect_ratio'
-    || value === 'screenplay_review'
+    value === 'bible_review'
     || value === 'style'
     || value === 'asset_review'
+    || value === 'budget_confirmation'
   ) return value
   return null
+}
+
+function isBudgetConfirmationWorkflowStage(value: string): value is EditFirstWorkflowStage {
+  return value === 'ready_to_generate_edit_script'
+    || value === 'ready_to_generate_assets'
+    || value === 'ready_to_generate_shot_execution_plan'
+    || value === 'ready_to_generate_storyboard'
+    || value === 'ready_to_generate_storyboard_images'
+    || value === 'ready_to_generate_videos'
+    || value === 'ready_to_render_chapters'
+    || value === 'ready_to_generate_bgm_score'
+    || value === 'ready_to_render_final'
+}
+
+function readChoiceWorkflowStage(choiceCard: ProjectAgentChoiceCardPartData): EditFirstWorkflowStage | null {
+  if (choiceCard.choiceType !== 'budget_confirmation') {
+    return FIXED_CHOICE_STAGE_BY_TYPE[choiceCard.choiceType] ?? null
+  }
+  const parts = choiceCard.cardId.split(':')
+  const stage = parts[1] ?? ''
+  return isBudgetConfirmationWorkflowStage(stage) ? stage : null
 }
 
 function readChoiceCard(part: unknown): ProjectAgentChoiceCardPartData | null {
@@ -121,7 +141,8 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
     message.parts.forEach((part, partIndex) => {
       const choiceCard = readChoiceCard(part)
       if (choiceCard) {
-        const stage = CHOICE_STAGE_BY_TYPE[choiceCard.choiceType]
+        const stage = readChoiceWorkflowStage(choiceCard)
+        if (!stage) return
         checkpoints.push({
           id: buildCheckpointId({
             kind: 'choice',

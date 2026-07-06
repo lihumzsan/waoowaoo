@@ -215,7 +215,7 @@ describe('api contract - project media generation routes (operation adapter)', (
           episodeId: 'episode-1',
           mode: 'grid',
           gridMode: '2x2',
-          shotNumbers: [1, 2, 3, 4],
+          shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
         },
       }),
       { params: Promise.resolve({ projectId: 'project-1' }) },
@@ -255,7 +255,7 @@ describe('api contract - project media generation routes (operation adapter)', (
         body: {
           episodeId: 'episode-1',
           mode: 'asset-reference',
-          blockIndex: 0,
+          segmentIndex: 0,
           referenceImageUrls: ['https://example.com/character.png'],
         },
       }),
@@ -293,7 +293,7 @@ describe('api contract - project media generation routes (operation adapter)', (
       operationId: 'generate_video_group',
       input: expect.objectContaining({
         gridMode: '2x2',
-        shotNumbers: [1, 2, 3, 4],
+        shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
       }),
     }))
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).toHaveBeenNthCalledWith(4, expect.objectContaining({
@@ -312,7 +312,7 @@ describe('api contract - project media generation routes (operation adapter)', (
       operationId: 'generate_asset_reference_video',
       input: expect.objectContaining({
         mode: 'asset-reference',
-        blockIndex: 0,
+        segmentIndex: 0,
         referenceImageUrls: ['https://example.com/character.png'],
       }),
     }))
@@ -342,6 +342,33 @@ describe('api contract - project media generation routes (operation adapter)', (
       details: {
         code: 'TASK_MODEL_MANAGED_BY_CONFIG',
         field: 'videoModel',
+      },
+    })
+    expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()
+  })
+
+  it('POST /api/projects/[projectId]/generate-video -> rejects legacy asset-reference blockIndex without submitting an operation', async () => {
+    const response = await generateVideoPost(
+      buildMockRequest({
+        path: '/api/projects/project-1/generate-video',
+        method: 'POST',
+        body: {
+          episodeId: 'episode-1',
+          mode: 'asset-reference',
+          blockIndex: 0,
+          referenceImageUrls: ['https://example.com/character.png'],
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1' }) },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: {
+        code: 'ASSET_REFERENCE_VIDEO_SEGMENT_REQUIRED',
+        field: 'segmentIndex',
       },
     })
     expect(apiAdapterMock.executeProjectAgentOperationFromApi).not.toHaveBeenCalled()

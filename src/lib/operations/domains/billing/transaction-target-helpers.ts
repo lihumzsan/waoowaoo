@@ -75,3 +75,13 @@ export function formatShotNumbers(value: unknown): string {
   if (numbers.length <= 4) return numbers.join(', ')
   return `${numbers.slice(0, 4).join(', ')}...`
 }
+
+export function formatShotIds(value: unknown): string {
+  if (!Array.isArray(value)) return ''
+  const shotIds = value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
+  if (shotIds.length === 0) return ''
+  if (shotIds.length <= 4) return shotIds.join(', ')
+  return `${shotIds.slice(0, 4).join(', ')}...`
+}

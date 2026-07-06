@@ -24,7 +24,7 @@ function buildMessages(): UIMessage[] {
         {
           type: 'data-assistant-choice-card',
           data: {
-            cardId: 'edit-first-style:screenplay-source',
+            cardId: 'edit-first-style:bible-source',
             toolCallId: 'tool-1',
             choiceType: 'style',
             title: 'Choose style',
@@ -93,6 +93,47 @@ function buildMessages(): UIMessage[] {
 }
 
 describe('workflow lab checkpoints', () => {
+  it('derives budget confirmation checkpoints from the concrete card stage', () => {
+    const messages: UIMessage[] = [
+      {
+        id: 'assistant-budget',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'confirm budget' },
+          {
+            type: 'data-assistant-choice-card',
+            data: {
+              cardId: 'edit-first-budget:ready_to_render_chapters:render_chapters',
+              toolCallId: 'tool-budget',
+              choiceType: 'budget_confirmation',
+              variant: 'confirm',
+              title: 'Confirm budget',
+              description: 'Render chapters.',
+              groups: [],
+              submitLabel: 'Confirm',
+              submit: {
+                kind: 'submit_tool_output',
+              },
+            },
+          },
+        ],
+      },
+    ]
+
+    const checkpoints = listWorkflowLabCheckpointsFromMessages({
+      sourceEpisodeId: 'episode-source',
+      messages,
+    })
+
+    expect(checkpoints).toHaveLength(1)
+    expect(checkpoints[0]).toMatchObject({
+      kind: 'choice',
+      workflowStage: 'ready_to_render_chapters',
+      choiceType: 'budget_confirmation',
+      operationId: 'request_edit_budget_confirmation_choice',
+    })
+  })
+
   it('derives restorable checkpoints from real assistant data parts', () => {
     const checkpoints = listWorkflowLabCheckpointsFromMessages({
       sourceEpisodeId: 'episode-source',
@@ -177,7 +218,7 @@ describe('workflow lab checkpoints', () => {
         sourceEpisodeId: 'episode-source',
         targetEpisodeId: 'episode-lab',
         idMap: new Map([
-          ['screenplay-source', 'screenplay-lab'],
+          ['bible-source', 'bible-lab'],
           ['preview-source', 'preview-lab'],
         ]),
       }),
@@ -186,7 +227,7 @@ describe('workflow lab checkpoints', () => {
     expect(JSON.stringify(rewritten)).toContain('project-lab')
     expect(JSON.stringify(rewritten)).toContain('episode-lab')
     expect(JSON.stringify(rewritten)).toContain('preview-lab')
-    expect(JSON.stringify(rewritten)).toContain('edit-first-style:screenplay-lab')
-    expect(JSON.stringify(rewritten)).not.toContain('screenplay-source')
+    expect(JSON.stringify(rewritten)).toContain('edit-first-style:bible-lab')
+    expect(JSON.stringify(rewritten)).not.toContain('bible-source')
   })
 })

@@ -129,7 +129,7 @@ function buildPanelRestoreData(payload: Record<string, unknown>, targetStoryboar
   const srtStart = readOptionalNullableNumberField(panel, 'srtStart')
   const srtEnd = readOptionalNullableNumberField(panel, 'srtEnd')
   const duration = readOptionalNullableNumberField(panel, 'duration')
-  const sourceShotNumber = readOptionalNullableIntegerField(panel, 'sourceShotNumber')
+  const sourceShotId = readOptionalNullableStringField(panel, 'sourceShotId')
 
   const lastVideoGenerationOptions = readOptionalJsonField(panel, 'lastVideoGenerationOptions')
   const executionSnapshotJson = readOptionalJsonField(panel, 'executionSnapshotJson')
@@ -161,7 +161,7 @@ function buildPanelRestoreData(payload: Record<string, unknown>, targetStoryboar
     ...(videoMediaId !== undefined ? { videoMediaId } : {}),
     ...(sceneType !== undefined ? { sceneType } : {}),
     ...(candidateImages !== undefined ? { candidateImages } : {}),
-    ...(sourceShotNumber !== undefined ? { sourceShotNumber } : {}),
+    ...(sourceShotId !== undefined ? { sourceShotId } : {}),
     ...(sourceGenerationSegmentId !== undefined ? { sourceGenerationSegmentId } : {}),
     ...(executionSnapshotJson !== undefined ? { executionSnapshotJson } : {}),
     ...(renderFactsJson !== undefined ? { renderFactsJson } : {}),

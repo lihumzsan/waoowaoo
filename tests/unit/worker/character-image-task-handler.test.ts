@@ -29,7 +29,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findFirst: vi.fn(),
   },
-  projectEditScreenplay: {
+  projectEditBible: {
     findFirst: vi.fn(),
   },
   projectEditAssetRequirement: {
@@ -123,7 +123,7 @@ describe('worker character-image-task-handler behavior', () => {
       selectedIndex: 1,
     })
     prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
   })
 
   it('characterModel not configured -> explicit error', async () => {
@@ -210,7 +210,7 @@ describe('worker character-image-task-handler behavior', () => {
   })
 
   it('appends Style Bible block to final character asset image prompt', async () => {
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
     })
 

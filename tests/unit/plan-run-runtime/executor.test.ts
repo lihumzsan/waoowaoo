@@ -87,7 +87,7 @@ describe('plan run executor', () => {
     const invokeStep = vi.fn(async () => ({
       ok: true as const,
       data: {
-        taskId: 'task-screenplay-1',
+        taskId: 'task-bible-1',
       },
     }))
 
@@ -96,11 +96,11 @@ describe('plan run executor', () => {
       projectId: 'project-1',
       episodeId: 'episode-current',
       input: {
-        goal: 'write screenplay',
+        goal: 'write bible',
         steps: [
           {
             stepKey: 'write_script_01',
-            operationId: 'generate_edit_screenplay',
+            operationId: 'ingest_script',
           },
         ],
       },
@@ -110,10 +110,10 @@ describe('plan run executor', () => {
     expect(result).toMatchObject({
       success: true,
       status: 'waiting_task',
-      waitingTaskId: 'task-screenplay-1',
+      waitingTaskId: 'task-bible-1',
     })
     expect(invokeStep).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       input: {
         episodeId: 'episode-current',
         confirmed: true,
@@ -134,11 +134,11 @@ describe('plan run executor', () => {
       projectId: 'project-1',
       episodeId: 'episode-current',
       input: {
-        goal: 'write screenplay for a selected episode',
+        goal: 'write bible for a selected episode',
         steps: [
           {
             stepKey: 'write_script_01',
-            operationId: 'generate_edit_screenplay',
+            operationId: 'ingest_script',
             input: {
               episodeId: 'episode-explicit',
             },
@@ -149,7 +149,7 @@ describe('plan run executor', () => {
     })
 
     expect(invokeStep).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       input: {
         episodeId: 'episode-explicit',
         confirmed: true,

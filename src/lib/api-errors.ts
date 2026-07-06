@@ -26,7 +26,7 @@ const GENERATION_OPERATION_PATTERNS = [
   /\/generate(?:-|\/|$)/,
   /\/regenerate(?:-|\/|$)/,
   /\/analyze(?:-|\/|$)/,
-  /\/screenplay-conversion(?:\/|$)/,
+  /\/bible-conversion(?:\/|$)/,
   /\/ai-(?:create|modify)-/,
 ]
 

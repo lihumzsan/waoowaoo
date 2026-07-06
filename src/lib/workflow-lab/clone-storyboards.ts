@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { DEFAULT_EDIT_CHAPTER_INDEX } from '@/lib/edit-chapter'
 import {
   mapWorkflowLabId,
   readMappedId,
@@ -12,6 +13,11 @@ export async function cloneWorkflowLabStoryboards(params: {
   readonly targetEpisodeId: string
   readonly maps: WorkflowLabCloneMaps
 }) {
+  const targetChapter = await params.tx.projectEditChapter.findUnique({
+    where: { episodeId_chapterIndex: { episodeId: params.targetEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
+    select: { id: true },
+  })
+  if (!targetChapter) throw new Error('WORKFLOW_LAB_TARGET_DEFAULT_EDIT_CHAPTER_REQUIRED')
   const storyboards = await params.tx.projectStoryboard.findMany({
     where: { episodeId: params.sourceEpisodeId },
     orderBy: { createdAt: 'asc' },
@@ -30,6 +36,7 @@ export async function cloneWorkflowLabStoryboards(params: {
     const createdStoryboard = await params.tx.projectStoryboard.create({
       data: {
         episodeId: params.targetEpisodeId,
+        chapterId: targetChapter.id,
         ...(targetEditScriptId ? { editScriptId: targetEditScriptId } : {}),
         storyboardImageUrl: storyboard.storyboardImageUrl,
         panelCount: storyboard.panelCount,
@@ -72,7 +79,7 @@ export async function cloneWorkflowLabStoryboards(params: {
           videoMediaId: panel.videoMediaId,
           sceneType: panel.sceneType,
           candidateImages: panel.candidateImages,
-          sourceShotNumber: panel.sourceShotNumber,
+          sourceShotId: panel.sourceShotId,
           sourceGenerationSegmentId: panel.sourceGenerationSegmentId,
           executionSnapshotJson: panel.executionSnapshotJson === null
             ? Prisma.JsonNull

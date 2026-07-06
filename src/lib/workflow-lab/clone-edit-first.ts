@@ -1,12 +1,13 @@
 import { Prisma } from '@prisma/client'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import { toInputJson, toNullableInputJson, mapWorkflowLabId, readMappedId, type WorkflowLabCloneMaps } from './clone-json'
+import { DEFAULT_EDIT_CHAPTER_INDEX } from '@/lib/edit-chapter'
+import { toInputJson, toNullableInputJson, mapWorkflowLabId, type WorkflowLabCloneMaps } from './clone-json'
 import {
   resolveWorkflowLabEditAssetReviewStatus,
-  resolveWorkflowLabScreenplayStatus,
+  resolveWorkflowLabBibleStatus,
   resolveWorkflowLabStylePreviewStatus,
   shouldWorkflowLabCloneEditScript,
-  shouldWorkflowLabCloneScreenplay,
+  shouldWorkflowLabCloneBible,
   shouldWorkflowLabCloneShotExecutionPlan,
   shouldWorkflowLabCloneStylePreviews,
   shouldWorkflowLabKeepAssetRequirementTarget,
@@ -20,43 +21,60 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
   readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
-  if (!shouldWorkflowLabCloneScreenplay(params.stage)) return
+  if (!shouldWorkflowLabCloneBible(params.stage)) return
 
-  const screenplay = await params.tx.projectEditScreenplay.findUnique({
+  const bible = await params.tx.projectEditBible.findUnique({
     where: { episodeId: params.sourceEpisodeId },
     include: {
+      sourceDocument: true,
       stylePreviews: {
         orderBy: { createdAt: 'asc' },
       },
     },
   })
 
-  if (screenplay) {
-    const createdScreenplay = await params.tx.projectEditScreenplay.create({
+  if (bible) {
+    const targetSourceDocument = await params.tx.projectEpisodeSourceDocument.create({
       data: {
-        projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
-        userPrompt: screenplay.userPrompt,
-        styleBibleJson: toNullableInputJson(screenplay.styleBibleJson),
-        screenplayText: screenplay.screenplayText,
-        status: resolveWorkflowLabScreenplayStatus(params.stage, screenplay.status),
+        normalizedText: bible.sourceDocument.normalizedText,
+        checksum: bible.sourceDocument.checksum,
+        sourceKind: bible.sourceDocument.sourceKind,
+        rawFileMediaId: bible.sourceDocument.rawFileMediaId,
+        version: bible.sourceDocument.version,
+      },
+      select: { id: true },
+    })
+    const createdBible = await params.tx.projectEditBible.create({
+      data: {
+        episodeId: params.targetEpisodeId,
+        sourceDocumentId: targetSourceDocument.id,
+        bibleJson: toNullableInputJson(bible.bibleJson),
+        beatSheetJson: toNullableInputJson(bible.beatSheetJson),
+        ledgerJson: toNullableInputJson(bible.ledgerJson),
+        emotionalCurveJson: toNullableInputJson(bible.emotionalCurveJson),
+        styleBibleJson: toNullableInputJson(bible.styleBibleJson),
+        diagnosticsJson: toNullableInputJson(bible.diagnosticsJson),
+        version: bible.version,
+        status: resolveWorkflowLabBibleStatus(params.stage, bible.status),
+        lockedAt: bible.lockedAt,
       },
       select: { id: true },
     })
     mapWorkflowLabId({
       maps: params.maps,
-      scopedMap: params.maps.screenplayIds,
-      sourceId: screenplay.id,
-      targetId: createdScreenplay.id,
+      scopedMap: params.maps.bibleIds,
+      sourceId: bible.id,
+      targetId: createdBible.id,
     })
 
     if (shouldWorkflowLabCloneStylePreviews(params.stage)) {
-      for (const preview of screenplay.stylePreviews) {
+      for (const preview of bible.stylePreviews) {
         const createdPreview = await params.tx.projectEditStylePreview.create({
           data: {
             projectId: params.targetProjectId,
             episodeId: params.targetEpisodeId,
-            editScreenplayId: createdScreenplay.id,
+            editBibleId: createdBible.id,
             styleKey: preview.styleKey,
             aspectRatio: preview.aspectRatio,
             title: preview.title,
@@ -82,9 +100,20 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
   }
 
   if (!shouldWorkflowLabCloneEditScript(params.stage)) return
+  const [sourceChapter, targetChapter] = await Promise.all([
+    params.tx.projectEditChapter.findUnique({
+      where: { episodeId_chapterIndex: { episodeId: params.sourceEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
+      select: { id: true },
+    }),
+    params.tx.projectEditChapter.findUnique({
+      where: { episodeId_chapterIndex: { episodeId: params.targetEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
+      select: { id: true },
+    }),
+  ])
+  if (!sourceChapter || !targetChapter) throw new Error('WORKFLOW_LAB_DEFAULT_EDIT_CHAPTER_REQUIRED')
 
   const editScript = await params.tx.projectEditScript.findUnique({
-    where: { episodeId: params.sourceEpisodeId },
+    where: { chapterId: sourceChapter.id },
     include: {
       requirements: {
         orderBy: { createdAt: 'asc' },
@@ -99,7 +128,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
     data: {
       projectId: params.targetProjectId,
       episodeId: params.targetEpisodeId,
-      editScreenplayId: readMappedId(params.maps.screenplayIds, editScript.editScreenplayId),
+      chapterId: targetChapter.id,
       corePlanJson: toNullableInputJson(editScript.corePlanJson),
       durationSec: editScript.durationSec,
       shotCount: editScript.shotCount,
@@ -127,10 +156,11 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
         editScriptId: createdEditScript.id,
         projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
+        chapterId: targetChapter.id,
         kind: requirement.kind,
         name: requirement.name,
         description: requirement.description,
-        requiredForShotNumbers: toInputJson(requirement.requiredForShotNumbers),
+        requiredForShotIds: toInputJson(requirement.requiredForShotIds),
         status: keepTarget ? requirement.status : 'pending',
         targetId: mappedTargetId,
         errorMessage: keepTarget ? requirement.errorMessage : null,
@@ -150,6 +180,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       data: {
         projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
+        chapterId: targetChapter.id,
         editScriptId: createdEditScript.id,
         executionPlanJson: toInputJson(editScript.shotExecutionPlan.executionPlanJson),
         status: editScript.shotExecutionPlan.status,

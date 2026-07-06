@@ -25,7 +25,7 @@ import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/
 function buildJob(): Job<TaskJobData> {
   const data: TaskJobData = {
     taskId: 'task-1',
-    type: TASK_TYPE.EDIT_SCREENPLAY_GENERATE,
+    type: TASK_TYPE.EDIT_BIBLE_GENERATE,
     locale: 'zh',
     projectId: 'project-1',
     userId: 'user-1',
@@ -58,18 +58,18 @@ describe('createWorkerLLMStreamCallbacks', () => {
       stage: 'streaming',
       provider: 'ark',
       step: {
-        id: 'screenplay_clip_1',
+        id: 'bible_clip_1',
         attempt: 2,
-        title: 'progress.streamStep.screenplayConversion',
+        title: 'progress.streamStep.bibleConversion',
         index: 1,
         total: 1,
       },
     })
     expect(callbacks.onComplete).toBeTruthy()
-    callbacks.onComplete?.('final screenplay text', {
-      id: 'screenplay_clip_1',
+    callbacks.onComplete?.('final bible text', {
+      id: 'bible_clip_1',
       attempt: 2,
-      title: 'progress.streamStep.screenplayConversion',
+      title: 'progress.streamStep.bibleConversion',
       index: 1,
       total: 1,
     })
@@ -83,10 +83,10 @@ describe('createWorkerLLMStreamCallbacks', () => {
     expect(finalProgressCall).toBeDefined()
     const payload = (finalProgressCall as unknown as [unknown, unknown, Record<string, unknown>])[2]
     expect(payload.done).toBe(true)
-    expect(payload.output).toBe('final screenplay text')
-    expect(payload.stepId).toBe('screenplay_clip_1')
+    expect(payload.output).toBe('final bible text')
+    expect(payload.stepId).toBe('bible_clip_1')
     expect(payload.stepAttempt).toBe(2)
-    expect(payload.stepTitle).toBe('progress.streamStep.screenplayConversion')
+    expect(payload.stepTitle).toBe('progress.streamStep.bibleConversion')
     expect(payload.stepIndex).toBe(1)
     expect(payload.stepTotal).toBe(1)
   })
@@ -148,7 +148,7 @@ describe('createWorkerLLMStreamCallbacks', () => {
       delta: 'hello',
       seq: 1,
       lane: 'main',
-      step: { id: 'edit_screenplay_generate', attempt: 1, title: 'split', index: 1, total: 1 },
+      step: { id: 'edit_bible_generate', attempt: 1, title: 'split', index: 1, total: 1 },
     })
     await callbacks.flush()
 
@@ -160,7 +160,7 @@ describe('createWorkerLLMStreamCallbacks', () => {
         delta: 'hello',
       }),
       expect.objectContaining({
-        stepId: 'edit_screenplay_generate',
+        stepId: 'edit_bible_generate',
       }),
     )
   })

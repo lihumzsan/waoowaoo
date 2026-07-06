@@ -22,7 +22,7 @@ describe('task submitter helpers', () => {
   })
 
   it('normalizes negative stage values', () => {
-    const normalized = normalizeTaskPayload(TASK_TYPE.EDIT_SCREENPLAY_GENERATE, {
+    const normalized = normalizeTaskPayload(TASK_TYPE.EDIT_BIBLE_GENERATE, {
       flowId: 'flow-a',
       flowStageIndex: -9,
       flowStageTotal: -1,
@@ -37,7 +37,7 @@ describe('task submitter helpers', () => {
   })
 
   it('prefers payload meta flow values when valid', () => {
-    const normalized = normalizeTaskPayload(TASK_TYPE.EDIT_SCREENPLAY_GENERATE, {
+    const normalized = normalizeTaskPayload(TASK_TYPE.EDIT_BIBLE_GENERATE, {
       flowId: 'outer-flow',
       flowStageIndex: 1,
       flowStageTotal: 2,

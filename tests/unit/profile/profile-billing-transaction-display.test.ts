@@ -12,9 +12,9 @@ describe('profile billing transaction display', () => {
     expect(getProfileTransactionActionTranslationKey('recharge', TASK_TYPE.IMAGE_PANEL)).toBe('transactionKinds.recharge')
   })
 
-  it('uses sync billing action labels that include hyphenated prompt ids', () => {
+  it('uses sync billing action labels for active prompt ids only', () => {
     expect(getProfileTransactionActionTranslationKey('consume', 'shot-execution-plan')).toBe('actionTypes.shot-execution-plan')
-    expect(getProfileTransactionActionTranslationKey('consume', 'asset-extract')).toBe('actionTypes.asset-extract')
+    expect(getProfileTransactionActionTranslationKey('consume', 'asset-extract')).toBe('transactionKinds.consume')
     expect(getProfileTransactionActionTranslationKey('consume', 'unknown_action')).toBe('transactionKinds.consume')
   })
 

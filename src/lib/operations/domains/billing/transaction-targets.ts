@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import {
   assignTargetView,
-  formatShotNumbers,
+  formatShotIds,
   groupTargetRefs,
   idsFor,
   type BillingTransactionTargetView,
@@ -24,7 +24,7 @@ export async function resolveBillingTransactionTargets(
   const videoGroupIds = idsFor(idsByType, 'ProjectVideoGroup')
   const stylePreviewIds = idsFor(idsByType, 'ProjectEditStylePreview')
   const episodeIds = idsFor(idsByType, 'ProjectEpisode')
-  const editScreenplayIds = idsFor(idsByType, 'ProjectEditScreenplay')
+  const editBibleIds = idsFor(idsByType, 'ProjectEditBible')
   const editScriptIds = idsFor(idsByType, 'ProjectEditScript')
   const editShotExecutionPlanIds = idsFor(idsByType, 'ProjectEditShotExecutionPlan')
   const projectIds = idsFor(idsByType, 'Project')
@@ -41,7 +41,7 @@ export async function resolveBillingTransactionTargets(
     videoGroups,
     stylePreviews,
     episodes,
-    editScreenplays,
+    editBibles,
     editScripts,
     editShotExecutionPlans,
     projects,
@@ -83,7 +83,7 @@ export async function resolveBillingTransactionTargets(
     videoGroupIds.length > 0
       ? prisma.projectVideoGroup.findMany({
         where: { id: { in: videoGroupIds } },
-        select: { id: true, shotNumbers: true, durationSec: true },
+        select: { id: true, shotIds: true, durationSec: true },
       })
       : Promise.resolve([]),
     stylePreviewIds.length > 0
@@ -98,9 +98,9 @@ export async function resolveBillingTransactionTargets(
         select: { id: true, episodeNumber: true, name: true },
       })
       : Promise.resolve([]),
-    editScreenplayIds.length > 0
-      ? prisma.projectEditScreenplay.findMany({
-        where: { id: { in: editScreenplayIds } },
+    editBibleIds.length > 0
+      ? prisma.projectEditBible.findMany({
+        where: { id: { in: editBibleIds } },
         select: { id: true, episode: { select: { episodeNumber: true, name: true } } },
       })
       : Promise.resolve([]),
@@ -194,7 +194,7 @@ export async function resolveBillingTransactionTargets(
   }
 
   for (const group of videoGroups) {
-    const shots = formatShotNumbers(group.shotNumbers)
+    const shots = formatShotIds(group.shotIds)
     assignTargetView(result, refsByKey, {
       targetType: 'ProjectVideoGroup',
       targetId: group.id,
@@ -221,12 +221,12 @@ export async function resolveBillingTransactionTargets(
     })
   }
 
-  for (const screenplay of editScreenplays) {
+  for (const bible of editBibles) {
     assignTargetView(result, refsByKey, {
-      targetType: 'ProjectEditScreenplay',
-      targetId: screenplay.id,
-      labelKey: 'transactionTargets.projectEditScreenplay',
-      labelParams: { number: screenplay.episode.episodeNumber },
+      targetType: 'ProjectEditBible',
+      targetId: bible.id,
+      labelKey: 'transactionTargets.projectEditBible',
+      labelParams: { number: bible.episode.episodeNumber },
     })
   }
 

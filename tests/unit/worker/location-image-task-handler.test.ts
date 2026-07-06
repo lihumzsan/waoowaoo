@@ -25,7 +25,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findFirst: vi.fn(),
   },
-  projectEditScreenplay: {
+  projectEditBible: {
     findFirst: vi.fn(),
   },
   projectEditAssetRequirement: {
@@ -134,7 +134,7 @@ describe('worker location-image-task-handler behavior', () => {
       ],
     })
     prismaMock.projectEditScript.findFirst.mockResolvedValue(null)
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
   })
 
   it('locationModel missing -> explicit error', async () => {
@@ -228,7 +228,7 @@ describe('worker location-image-task-handler behavior', () => {
   })
 
   it('appends Style Bible block to final location asset image prompt', async () => {
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValueOnce({
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
       styleBibleJson: buildZenStyleBibleFixture(),
     })
 

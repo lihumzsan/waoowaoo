@@ -2,36 +2,39 @@ import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 
 const WORKFLOW_LAB_STAGE_ORDER: Record<EditFirstWorkflowStage, number> = {
   not_started: 0,
-  ready_to_generate_screenplay: 1,
-  screenplay_ready_for_review: 2,
-  style_preview_generating: 3,
-  needs_style_choice: 4,
-  ready_to_generate_edit_script: 5,
-  edit_script_generating: 6,
-  ready_to_generate_assets: 7,
-  assets_generating: 8,
-  assets_ready_for_review: 9,
-  ready_to_generate_shot_execution_plan: 10,
-  ready_to_generate_storyboard: 11,
-  storyboard_generating: 12,
-  ready_to_generate_storyboard_images: 13,
-  storyboard_images_generating: 14,
-  ready_to_generate_videos: 15,
-  videos_generating: 16,
-  ready_to_generate_bgm_score: 17,
-  bgm_score_generating: 18,
-  ready_to_render_final: 19,
-  final_rendering: 20,
-  completed: 21,
-  failed: 22,
+  ready_to_ingest_script: 1,
+  bible_generating: 2,
+  bible_ready_for_review: 3,
+  style_preview_generating: 4,
+  needs_style_choice: 5,
+  ready_to_generate_edit_script: 6,
+  edit_script_generating: 7,
+  ready_to_generate_assets: 8,
+  assets_generating: 9,
+  assets_ready_for_review: 10,
+  ready_to_generate_shot_execution_plan: 11,
+  ready_to_generate_storyboard: 12,
+  storyboard_generating: 13,
+  ready_to_generate_storyboard_images: 14,
+  storyboard_images_generating: 15,
+  ready_to_generate_videos: 16,
+  videos_generating: 17,
+  ready_to_render_chapters: 18,
+  chapters_rendering: 19,
+  ready_to_generate_bgm_score: 20,
+  bgm_score_generating: 21,
+  ready_to_render_final: 22,
+  final_rendering: 23,
+  completed: 24,
+  failed: 25,
 }
 
 export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold: EditFirstWorkflowStage): boolean {
   return WORKFLOW_LAB_STAGE_ORDER[stage] >= WORKFLOW_LAB_STAGE_ORDER[threshold]
 }
 
-export function shouldWorkflowLabCloneScreenplay(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'screenplay_ready_for_review')
+export function shouldWorkflowLabCloneBible(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'bible_ready_for_review')
 }
 
 export function shouldWorkflowLabCloneStylePreviews(stage: EditFirstWorkflowStage): boolean {
@@ -54,11 +57,10 @@ export function shouldWorkflowLabCloneVideos(stage: EditFirstWorkflowStage): boo
   return workflowLabStageAtLeast(stage, 'ready_to_generate_bgm_score')
 }
 
-export function resolveWorkflowLabScreenplayStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
-  if (!shouldWorkflowLabCloneScreenplay(stage)) return sourceStatus
-  if (!shouldWorkflowLabCloneStylePreviews(stage)) return 'screenplay_ready'
-  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_edit_script')) return 'style_preview_ready'
-  return 'ready'
+export function resolveWorkflowLabBibleStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
+  if (!shouldWorkflowLabCloneBible(stage)) return sourceStatus
+  if (!shouldWorkflowLabCloneStylePreviews(stage)) return 'ready_for_review'
+  return 'confirmed'
 }
 
 export function resolveWorkflowLabStylePreviewStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {

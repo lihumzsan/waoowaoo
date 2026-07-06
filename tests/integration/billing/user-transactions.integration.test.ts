@@ -50,9 +50,16 @@ describe('billing/user transactions integration', () => {
         name: '第三集',
       },
     })
+    const chapter = await prisma.projectEditChapter.create({
+      data: {
+        episodeId: episode.id,
+        chapterIndex: 0,
+      },
+    })
     const storyboard = await prisma.projectStoryboard.create({
       data: {
         episodeId: episode.id,
+        chapterId: chapter.id,
       },
     })
     const panel = await prisma.projectPanel.create({
@@ -149,9 +156,16 @@ describe('billing/user transactions integration', () => {
         name: '批量生图集',
       },
     })
+    const chapter = await prisma.projectEditChapter.create({
+      data: {
+        episodeId: episode.id,
+        chapterIndex: 0,
+      },
+    })
     const storyboard = await prisma.projectStoryboard.create({
       data: {
         episodeId: episode.id,
+        chapterId: chapter.id,
       },
     })
 

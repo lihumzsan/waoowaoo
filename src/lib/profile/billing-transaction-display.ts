@@ -40,7 +40,7 @@ const LEGACY_PROFILE_ACTION_KEYS = [
   'story_to_script_run',
   'script_to_storyboard_run',
   'clips_build',
-  'screenplay_convert',
+  'bible_convert',
   'storyboard',
   'storyboard_candidate',
   'character',
@@ -56,11 +56,12 @@ const LEGACY_PROFILE_ACTION_KEYS = [
 ] as const
 
 const SYNC_PROFILE_ACTION_KEYS = [
+  AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
+  AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
+  AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
+  AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
   AI_PROMPT_IDS.EDIT_SCRIPT_STYLE_PREVIEW_OPTIONS,
-  AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY,
-  AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION,
   AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
-  AI_PROMPT_IDS.EDIT_SCRIPT_ASSET_EXTRACT,
   AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
   'ai_design_character',
   'ai_design_location',
