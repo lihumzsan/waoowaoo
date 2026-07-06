@@ -47,9 +47,10 @@ export function buildWorkspaceCanvasFocusKey(
 type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
 
 const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceCanvasFocusNodeKind[]>> = {
-  generate_edit_screenplay: ['editScreenplay'],
-  revise_edit_screenplay: ['editScreenplay'],
-  generate_edit_style_previews: ['editScreenplay', 'editStyleBible'],
+  ingest_script: ['editBible'],
+  revise_bible: ['editBible'],
+  generate_edit_style_previews: ['editBible', 'editStyleBible'],
+  plan_chapters: ['editScript'],
   generate_edit_script: ['editScript'],
   generate_edit_script_assets: ['editAssetGroup'],
   generate_edit_shot_execution_plan: ['editShotExecutionPlan'],
@@ -61,11 +62,12 @@ const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceC
   generate_video_group: ['videoPlan'],
   generate_episode_bgm_score: ['bgmScore'],
   generate_project_music: ['bgmScore'],
+  render_chapters: ['finalTimeline', 'videoPlan'],
   render_final_video: ['finalTimeline'],
 }
 
 const RUNNING_FOCUS_KIND_PRIORITY: readonly WorkspaceCanvasFocusNodeKind[] = [
-  'editScreenplay',
+  'editBible',
   'editScript',
   'editAssetGroup',
   'editShotExecutionPlan',

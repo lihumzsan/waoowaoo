@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import type {
-  WorkspaceEditScreenplayGenerationInput,
+  WorkspaceEditBibleGenerationInput,
   WorkspaceRuntimeValue,
 } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
@@ -33,8 +33,8 @@ interface UseWorkspaceRuntimeParams {
   handleUpdateEpisode: (key: string, value: unknown) => Promise<void>
   handleUpdateConfig: (key: string, value: unknown) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
-  handleGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
-  handleGenerateEditScript: (screenplayId?: string) => Promise<void>
+  handleGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
+  handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   handleSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
@@ -76,7 +76,7 @@ export function useWorkspaceRuntime({
   handleUpdateEpisode,
   handleUpdateConfig,
   onRequestAssistantGuidance,
-  handleGenerateEditScreenplay,
+  handleGenerateEditBible,
   handleGenerateEditScript,
   openAssetLibrary,
   handleGeneratePanelImage,
@@ -113,7 +113,7 @@ export function useWorkspaceRuntime({
     onNovelTextChange: (value) => handleUpdateEpisode('novelText', value),
     onVideoRatioChange: (value) => handleUpdateConfig('videoRatio', value),
     onRequestAssistantGuidance,
-    onGenerateEditScreenplay: handleGenerateEditScreenplay,
+    onGenerateEditBible: handleGenerateEditBible,
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
@@ -146,7 +146,7 @@ export function useWorkspaceRuntime({
     handleGenerateVideo,
     handleUpdateConfig,
     handleUpdateEpisode,
-    handleGenerateEditScreenplay,
+    handleGenerateEditBible,
     handleGenerateEditScript,
     handleUpdatePanelVideoModel,
     handleUpdateEditAssetRequirementDescription,

@@ -6,7 +6,12 @@ import { logError } from '@/lib/logging/core'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
-import { readProjectEditScript } from '@/lib/edit-script/service'
+import {
+  readProjectEditScript,
+  readProjectEditScripts,
+  readProjectEditShotExecutionPlans,
+} from '@/lib/edit-script/service'
+import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { deleteObject } from '@/lib/storage'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
@@ -792,10 +797,14 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           createData.novelText = input.novelText
         }
 
-        const episode = await prisma.projectEpisode.create({ data: createData })
-        await prisma.project.update({
-          where: { id: ctx.projectId },
-          data: { lastEpisodeId: episode.id },
+        const episode = await prisma.$transaction(async (tx) => {
+          const createdEpisode = await tx.projectEpisode.create({ data: createData })
+          await createDefaultEditChapter(createdEpisode.id, tx)
+          await tx.project.update({
+            where: { id: ctx.projectId },
+            data: { lastEpisodeId: createdEpisode.id },
+          })
+          return createdEpisode
         })
         return { episode }
       },
@@ -842,10 +851,23 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               select: {
                 id: true,
                 episodeId: true,
-                bgmScoreJson: true,
                 renderStatus: true,
                 renderTaskId: true,
                 outputUrl: true,
+                updatedAt: true,
+              },
+            },
+            musicScore: {
+              select: {
+                id: true,
+                status: true,
+                version: true,
+                taskId: true,
+                timelineSignature: true,
+                musicModel: true,
+                cuesJson: true,
+                mixJson: true,
+                diagnosticsJson: true,
                 updatedAt: true,
               },
             },
@@ -858,9 +880,17 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           data: { lastEpisodeId: input.episodeId },
         }).catch((error: unknown) => logError('update lastEpisodeId failed', error))
 
-        const [episodeWithSignedUrls, editScript] = await Promise.all([
+        const [episodeWithSignedUrls, editScript, editScripts, editShotExecutionPlans] = await Promise.all([
           attachMediaFieldsToProject(episode),
           readProjectEditScript({
+            projectId: ctx.projectId,
+            episodeId: input.episodeId,
+          }),
+          readProjectEditScripts({
+            projectId: ctx.projectId,
+            episodeId: input.episodeId,
+          }),
+          readProjectEditShotExecutionPlans({
             projectId: ctx.projectId,
             episodeId: input.episodeId,
           }),
@@ -869,7 +899,9 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           episode: {
             ...episodeWithSignedUrls,
             editScript,
-            finalVideo: normalizeFinalVideoSummary(episode.finalOutput),
+            editScripts,
+            editShotExecutionPlans,
+            finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore),
           },
         }
       },

@@ -123,7 +123,7 @@ describe('workspace assistant reply loading indicator', () => {
     expect(resolveWorkspaceAssistantAwaitingExternalTask({
       replyInFlight: true,
       currentRunStatus: 'awaiting_task',
-      activeExternalTaskOperationId: 'generate_edit_screenplay',
+      activeExternalTaskOperationId: 'ingest_script',
     })).toBe(false)
   })
 

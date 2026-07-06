@@ -7,7 +7,7 @@ import {
   shouldShowChoiceCardManualSubmit,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
 import {
-  buildStylePreviewGenerationCardFromScreenplay,
+  buildStylePreviewGenerationCardFromBible,
   findActiveStylePreviewGenerationCard,
 } from '@/features/project-workspace/components/workspace-assistant/active-style-preview-generation'
 
@@ -68,7 +68,7 @@ describe('workspace assistant choice card actions', () => {
             agentRunId: 'run-1',
             projectId: 'project-1',
             episodeId: 'episode-1',
-            screenplayId: 'screenplay-1',
+            bibleId: 'bible-1',
             items: [{
               id: 'preview-1',
               styleKey: 'style_a',
@@ -93,18 +93,18 @@ describe('workspace assistant choice card actions', () => {
 
     const active = findActiveStylePreviewGenerationCard(messages)
 
-    expect(active?.data.screenplayId).toBe('screenplay-1')
+    expect(active?.data.bibleId).toBe('bible-1')
     expect(active?.data.agentRunId).toBe('run-1')
     expect(active?.data.items.map((item) => item.id)).toEqual(['preview-1'])
   })
 
-  it('recovers a style preview generation card from screenplay state after refresh', () => {
-    const active = buildStylePreviewGenerationCardFromScreenplay({
-      id: 'screenplay-1',
+  it('recovers a style preview generation card from bible state after refresh', () => {
+    const active = buildStylePreviewGenerationCardFromBible({
+      id: 'bible-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
       userPrompt: 'prompt',
-      screenplayText: 'screenplay',
+      bibleText: 'bible',
       status: 'style_preview_generating',
       styleBible: null,
       stylePreviews: [
@@ -112,7 +112,7 @@ describe('workspace assistant choice card actions', () => {
           id: 'preview-1',
           projectId: 'project-1',
           episodeId: 'episode-1',
-          screenplayId: 'screenplay-1',
+          bibleId: 'bible-1',
           styleKey: 'style_a',
           aspectRatio: '16:9',
           title: '暗黑风格',

@@ -362,7 +362,7 @@ describe('sse invalidation behavior', () => {
         shotExecutionPlanId: 'execution-1',
         editScriptId: 'edit-1',
         affectedResources: [
-          { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
+          { kind: 'editBible', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'editShotExecutionPlan', projectId: 'project-1', episodeId: 'episode-1' },
           { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
@@ -485,7 +485,7 @@ describe('sse invalidation behavior', () => {
       userId: 'user-2',
       ts: '2026-04-24T00:00:00.000Z',
       affectedResources: [
-        { kind: 'editScreenplay', projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: 'editBible', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
@@ -496,9 +496,9 @@ describe('sse invalidation behavior', () => {
     expect(hasInvalidation((arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.project.editScreenplay('project-1', 'episode-1')[0]
+        && key[0] === queryKeys.project.editBible('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
-        && key[2] === 'edit-screenplay'
+        && key[2] === 'edit-bible'
         && key[3] === 'episode-1'
     })).toBe(true)
 

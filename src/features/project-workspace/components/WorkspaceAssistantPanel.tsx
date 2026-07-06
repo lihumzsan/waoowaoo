@@ -18,7 +18,7 @@ import {
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
-import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
+import { useWorkspaceAssistantRuntime, type WorkspaceAssistantChoiceType } from './workspace-assistant/useWorkspaceAssistantRuntime'
 import { apiFetch } from '@/lib/api-fetch'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
@@ -208,19 +208,6 @@ export function resolveWorkspaceAssistantAwaitingExternalTask(params: {
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readResponseErrorMessage(payload: unknown, fallback: string): string {
-  if (!isRecord(payload)) return fallback
-  const error = isRecord(payload.error) ? payload.error : null
-  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
-  const details = isRecord(error?.details) ? error.details : null
-  if (typeof details?.message === 'string' && details.message.trim()) return details.message.trim()
-  return fallback
-}
-
 function WorkspaceAssistantRunFailureNotice() {
   const t = useTranslations('assistantAgent')
   return (
@@ -235,6 +222,10 @@ function WorkspaceAssistantRunFailureNotice() {
       </div>
     </div>
   )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function readAssistantToolOutput(part: unknown): unknown | null {
@@ -503,7 +494,7 @@ export default function WorkspaceAssistantPanel({
   const handleSubmitChoiceResponse = async (params: {
     runId: string
     interruptionId: string | null
-    choiceType: 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
+    choiceType: WorkspaceAssistantChoiceType
     toolCallId: string | null
     output: Record<string, unknown>
     visibleUserText?: string
@@ -551,29 +542,6 @@ export default function WorkspaceAssistantPanel({
     })
     onStyleBibleConfirmed?.()
   }
-  const handleSetProjectVideoRatioChoice = async (params: {
-    projectId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => {
-    if (params.projectId !== projectId) {
-      throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
-    }
-    const response = await apiFetch(`/api/projects/${projectId}/config`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        videoRatio: params.aspectRatio,
-      }),
-    })
-    const payload: unknown = await response.json().catch(() => null)
-    if (!response.ok || (isRecord(payload) && payload.ok === false)) {
-      throw new Error(readResponseErrorMessage(payload, t('cards.operationExecutionFailedFallback')))
-    }
-    await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
-    if (episodeId) {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
-    }
-  }
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
@@ -619,7 +587,6 @@ export default function WorkspaceAssistantPanel({
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,
-    onSetProjectVideoRatioChoice: handleSetProjectVideoRatioChoice,
     onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
     onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
@@ -795,7 +762,6 @@ export default function WorkspaceAssistantPanel({
                     <AssistantChoiceCardView
                       data={displayedActiveChoiceCard.data}
                       onSubmitChoiceResponse={handleSubmitChoiceResponse}
-                      onSetProjectVideoRatioChoice={handleSetProjectVideoRatioChoice}
                       onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
                     />
                   </div>

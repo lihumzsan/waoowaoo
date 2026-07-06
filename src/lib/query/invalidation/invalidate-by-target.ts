@@ -17,7 +17,7 @@ function invalidateEpisodeScoped(params: {
   if (!params.episodeId) return
   params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(params.episodeId) })
-  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
@@ -30,7 +30,7 @@ function invalidateEditFirstStylePreview(params: {
 }) {
   if (!params.episodeId) return
   params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
-  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(params.projectId, params.episodeId) })
+  params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.context(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.projectData(params.projectId) })
 }
@@ -118,7 +118,8 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
     params.targetType === 'ProjectPanel' ||
     params.targetType === 'ProjectStoryboard' ||
     params.targetType === 'ProjectVideoGroup' ||
-    params.targetType === 'ProjectEditScreenplay' ||
+    params.targetType === 'ProjectEditBible' ||
+    params.targetType === 'ProjectEditChapter' ||
     params.targetType === 'ProjectEditShotExecutionPlan' ||
     params.targetType === 'ProjectEditScript'
   ) {

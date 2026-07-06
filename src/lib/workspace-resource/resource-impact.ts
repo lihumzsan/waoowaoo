@@ -3,7 +3,7 @@ import { TASK_EVENT_TYPE, TASK_TYPE, type WorkspaceResourceName, type WorkspaceR
 type UnknownRecord = Record<string, unknown>
 
 export const WORKSPACE_RESOURCE_KIND = {
-  EDIT_SCREENPLAY: 'editScreenplay',
+  EDIT_BIBLE: 'editBible',
   EDIT_SCRIPT: 'editScript',
   EDIT_SHOT_EXECUTION_PLAN: 'editShotExecutionPlan',
   STORYBOARDS: 'storyboards',
@@ -78,7 +78,7 @@ export function readWorkspaceResourceRefs(value: unknown): WorkspaceResourceRef[
 
 function editPipelineRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
   return [
-    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY, projectId, episodeId),
+    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.STORYBOARDS, projectId, episodeId),
@@ -90,7 +90,7 @@ function editPipelineRefs(projectId: string, episodeId: string): WorkspaceResour
 
 function editStylePreviewRefs(projectId: string, episodeId: string): WorkspaceResourceRef[] {
   return [
-    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY, projectId, episodeId),
+    resourceRef(WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId, episodeId),
     resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId),
@@ -147,8 +147,7 @@ function globalAssetRefs(projectId: string): WorkspaceResourceRef[] {
 }
 
 function isEditPipelineTaskType(taskType: string | null): boolean {
-  return taskType === TASK_TYPE.EDIT_SCREENPLAY_GENERATE ||
-    taskType === TASK_TYPE.EDIT_SCREENPLAY_REVISE ||
+  return taskType === TASK_TYPE.EDIT_BIBLE_GENERATE ||
     taskType === TASK_TYPE.EDIT_SCRIPT_GENERATE ||
     taskType === TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
 }
@@ -190,8 +189,9 @@ function isStoryboardTaskType(taskType: string | null): boolean {
 function isMediaTaskType(taskType: string | null): boolean {
   return taskType === TASK_TYPE.VIDEO_PANEL ||
     taskType === TASK_TYPE.VIDEO_GROUP ||
+    taskType === TASK_TYPE.CHAPTER_RENDER ||
     taskType === TASK_TYPE.FINAL_VIDEO_RENDER ||
-    taskType === TASK_TYPE.BGM_SCORE_GENERATE
+    taskType === TASK_TYPE.MUSIC_SCORE_PLAN
 }
 
 function isStoryboardTargetType(targetType: string | null): boolean {
@@ -213,7 +213,8 @@ function isGlobalAssetTargetType(targetType: string | null): boolean {
 }
 
 function isMediaTargetType(targetType: string | null): boolean {
-  return targetType === 'ProjectVideoGroup'
+  return targetType === 'ProjectVideoGroup' ||
+    targetType === 'ProjectEditChapter'
 }
 
 function readWriteResultData(value: unknown): unknown[] {
@@ -228,14 +229,20 @@ function readWriteResultData(value: unknown): unknown[] {
   return candidates.length > 0 ? candidates : [value]
 }
 
-function isEditScreenplayRecord(value: unknown): value is UnknownRecord {
+function isEditBibleRecord(value: unknown): value is UnknownRecord {
   if (!isRecord(value)) return false
   return Boolean(
     readString(value.projectId)
       && readString(value.episodeId)
-      && readString(value.screenplayText)
+      && readString(value.sourceDocumentId)
       && readString(value.status),
   )
+}
+
+function readEditBibleRecord(value: unknown): UnknownRecord | null {
+  if (isEditBibleRecord(value)) return value
+  if (!isRecord(value)) return null
+  return isEditBibleRecord(value.editBible) ? value.editBible : null
 }
 
 function isEditScriptRecord(value: unknown): value is UnknownRecord {
@@ -271,7 +278,15 @@ export function extractWorkspaceResourceRefsFromWriteResult(params: {
 }): WorkspaceResourceRef[] {
   const refs: WorkspaceResourceRef[] = []
   for (const data of readWriteResultData(params.result)) {
-    if (isEditScreenplayRecord(data) || isEditShotExecutionPlanRecord(data)) {
+    const editBible = readEditBibleRecord(data)
+    if (editBible) {
+      const projectId = readString(editBible.projectId) ?? params.fallbackProjectId
+      const episodeId = readString(editBible.episodeId)
+      if (!episodeId) continue
+      refs.push(...editPipelineRefs(projectId, episodeId))
+      continue
+    }
+    if (isEditShotExecutionPlanRecord(data)) {
       const projectId = readString(data.projectId) ?? params.fallbackProjectId
       const episodeId = readString(data.episodeId)
       if (!episodeId) continue

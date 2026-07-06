@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProjectEditScreenplay } from '@/types/project'
+import type { ProjectEditBible } from '@/types/project'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildWorkspaceNodeCanvasProjection,
@@ -23,43 +23,43 @@ function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowStat
   }
 }
 
-function screenplay(status: string): ProjectEditScreenplay {
+function bible(status: string): ProjectEditBible {
   return {
-    id: 'screenplay-1',
+    id: 'bible-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
     userPrompt: 'story prompt',
-    screenplayText: 'screenplay text',
+    bibleText: 'bible text',
     status,
     stylePreviews: [],
   }
 }
 
-function editScreenplayNode(status: string, activeAssistantOperationId?: string): WorkspaceCanvasFlowNode {
+function editBibleNode(status: string, activeAssistantOperationId?: string): WorkspaceCanvasFlowNode {
   const projection = buildWorkspaceNodeCanvasProjection({
     projectId: 'project-1',
     episodeId: 'episode-1',
     episodeName: 'Episode 1',
     storyboards: [],
-    editFirstWorkflow: workflow('screenplay_ready_for_review'),
-    editScreenplay: screenplay(status),
+    editFirstWorkflow: workflow('bible_ready_for_review'),
+    editBible: bible(status),
     activeAssistantOperationId,
     savedLayouts: [],
     translate: t,
   })
-  const node = projection.nodes.find((candidate) => candidate.data.kind === 'editScreenplay')
-  if (!node) throw new Error('EDIT_SCREENPLAY_NODE_MISSING')
+  const node = projection.nodes.find((candidate) => candidate.data.kind === 'editBible')
+  if (!node) throw new Error('EDIT_BIBLE_NODE_MISSING')
   return node
 }
 
 describe('project canvas artifact phase', () => {
-  it('does not render a placeholder node when the screenplay artifact does not exist', () => {
+  it('does not render a placeholder node when the bible artifact does not exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
       storyboards: [],
-      editFirstWorkflow: workflow('ready_to_generate_screenplay'),
+      editFirstWorkflow: workflow('ready_to_ingest_script'),
       savedLayouts: [],
       translate: t,
     })
@@ -68,8 +68,8 @@ describe('project canvas artifact phase', () => {
     expect(projection.edges).toEqual([])
   })
 
-  it('treats screenplay review as a succeeded artifact instead of a running node', () => {
-    const node = editScreenplayNode('screenplay_ready')
+  it('treats bible review as a succeeded artifact instead of a running node', () => {
+    const node = editBibleNode('ready_for_review')
 
     expect(node.data.artifactPhase).toBe('succeeded')
     expect(node.data.statusLabel).toBe('status.succeeded')
@@ -77,7 +77,7 @@ describe('project canvas artifact phase', () => {
   })
 
   it('treats style confirmation as a succeeded artifact instead of a running node', () => {
-    const node = editScreenplayNode('style_preview_ready')
+    const node = editBibleNode('confirmed')
 
     expect(node.data.artifactPhase).toBe('succeeded')
     expect(node.data.statusLabel).toBe('status.succeeded')
@@ -85,7 +85,7 @@ describe('project canvas artifact phase', () => {
   })
 
   it('uses the explicit assistant operation as the running signal', () => {
-    const node = editScreenplayNode('screenplay_ready', 'generate_edit_screenplay')
+    const node = editBibleNode('ready_for_review', 'ingest_script')
 
     expect(node.data.artifactPhase).toBe('running')
     expect(node.data.statusLabel).toBe('status.processing')

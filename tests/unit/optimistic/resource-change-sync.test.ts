@@ -7,17 +7,18 @@ import {
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/query/resource-change-sync'
 import { queryKeys } from '@/lib/query/keys'
-import type { ProjectEditScreenplay, ProjectEditScript } from '@/types/project'
+import type { ProjectEditBible, ProjectEditScript } from '@/types/project'
 import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
-function createScreenplay(): ProjectEditScreenplay {
+function createBible(): ProjectEditBible {
   return {
-    id: 'screenplay-1',
+    id: 'bible-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
+    sourceDocumentId: 'source-1',
     userPrompt: 'make a quiet short film',
-    screenplayText: '标题：《静水》',
+    bibleText: '标题：《静水》',
     status: 'ready',
   }
 }
@@ -41,7 +42,7 @@ function createEditScript(): ProjectEditScript {
         kind: 'character',
         name: 'Pilot',
         description: 'A quiet pilot.',
-        shotNumbers: [1],
+        shotIds: ['shot-1'],
         status: 'generating',
         targetId: 'character-1',
         taskTargetType: 'CharacterAppearance',
@@ -58,14 +59,14 @@ describe('resource-change-sync', () => {
     const changes = extractWorkspaceResourceChangesFromWriteResult({
       result: {
         ok: true,
-        data: createScreenplay(),
+        data: createBible(),
       },
       projectId: 'project-1',
       fallbackEpisodeId: 'episode-1',
     })
 
     expect(changes.map((change) => change.kind)).toEqual([
-      WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,
@@ -115,27 +116,27 @@ describe('resource-change-sync', () => {
     expect(changes.some((change) => change.kind === WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS)).toBe(true)
   })
 
-  it('actively refetches screenplay query from successful assistant tool write result', async () => {
+  it('actively refetches bible query from successful assistant tool write result', async () => {
     const queryClient = new QueryClient()
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
     const refetchQueries = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
-    const screenplay = createScreenplay()
+    const bible = createBible()
 
     await syncWorkspaceResourceChangesFromWriteResult({
       queryClient,
       result: {
         success: true,
-        result: screenplay,
+        result: bible,
       },
       projectId: 'project-1',
       fallbackEpisodeId: 'episode-1',
     })
 
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.project.editScreenplay('project-1', 'episode-1'),
+      queryKey: queryKeys.project.editBible('project-1', 'episode-1'),
     })
     expect(refetchQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.project.editScreenplay('project-1', 'episode-1'),
+      queryKey: queryKeys.project.editBible('project-1', 'episode-1'),
       type: 'active',
     })
     expect(invalidateQueries).toHaveBeenCalledWith({
@@ -174,7 +175,7 @@ describe('resource-change-sync', () => {
     })
 
     expect(changes.map((change) => change.kind)).toEqual([
-      WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,

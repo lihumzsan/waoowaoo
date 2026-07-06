@@ -298,9 +298,9 @@
     "addAsset": "Add Asset",
     "noAssets": "No assets selected. Click \"Add Asset\" to choose."
   },
-  "screenplay": {
+  "bible": {
     "tabs": {
-      "formatted": "Screenplay",
+      "formatted": "Bible",
       "original": "Original"
     },
     "scene": "Scene {number}",
@@ -310,10 +310,10 @@
     "save": "Save",
     "saving": "Saving...",
     "cancel": "Cancel",
-    "saveFailed": "Failed to save screenplay. Please retry.",
+    "saveFailed": "Failed to save bible. Please retry.",
     "emptyEditable": "Click to fill",
     "convertToAction": "Convert to visual description",
-    "parseFailedTitle": "Failed to parse screenplay format",
+    "parseFailedTitle": "Failed to parse bible format",
     "parseFailedDescription": "Please check the original content"
   },
   "assets": {

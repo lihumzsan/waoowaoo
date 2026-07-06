@@ -6,7 +6,7 @@ export interface BatchVideoGenerationPlanParams {
   generationOptions?: VideoGenerationOptions
   mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
   gridMode?: '2x2' | '3x3'
-  shotNumbers?: readonly number[]
+  shotIds?: readonly string[]
   segmentIndex?: number
   referenceImageUrls?: readonly string[]
 }
@@ -19,7 +19,7 @@ export interface BatchVideoGenerationPlanRequest {
     generationOptions?: VideoGenerationOptions
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
-    shotNumbers?: readonly number[]
+    shotIds?: readonly string[]
     segmentIndex?: number
     referenceImageUrls?: readonly string[]
   }
@@ -41,7 +41,7 @@ export function resolveBatchVideoGenerationOperationId(params: {
 
 export function buildBatchVideoGenerationPlanRequest(params: BatchVideoGenerationPlanParams): BatchVideoGenerationPlanRequest {
   const all = !(
-    (params.mode === 'grid' && Array.isArray(params.shotNumbers) && params.shotNumbers.length > 0)
+    (params.mode === 'grid' && Array.isArray(params.shotIds) && params.shotIds.length > 0)
     || (params.mode === 'asset-reference' && typeof params.segmentIndex === 'number')
   )
   const input: BatchVideoGenerationPlanRequest['input'] = {
@@ -53,8 +53,8 @@ export function buildBatchVideoGenerationPlanRequest(params: BatchVideoGeneratio
   }
   if (params.mode === 'grid') {
     input.gridMode = params.gridMode === '3x3' ? '3x3' : '2x2'
-    if (Array.isArray(params.shotNumbers) && params.shotNumbers.length > 0) {
-      input.shotNumbers = params.shotNumbers
+    if (Array.isArray(params.shotIds) && params.shotIds.length > 0) {
+      input.shotIds = params.shotIds
     }
   }
   if (typeof params.segmentIndex === 'number') input.segmentIndex = params.segmentIndex

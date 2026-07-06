@@ -57,9 +57,10 @@
           "updatedAt": "2026-06-29T00:00:00.000Z",
           "sceneType": null,
           "candidateImages": null,
-          "sourceShotNumber": 1,
+          "sourceShotId": "shot-1",
           "sourceGenerationSegmentId": "demo-edit-script:generationSegment:1",
           "executionSnapshotJson": {
+            "shotId": "shot-1",
             "shotNumber": 1,
             "camera": {
               "shotScale": "中景",
@@ -166,8 +167,8 @@
       ]
     }
   ],
-  "editScreenplay": {
-    "id": "demo-screenplay",
+  "editBible": {
+    "id": "demo-bible",
     "projectId": "demo-project-edit-pipeline",
     "episodeId": "demo-episode-edit-pipeline",
     "userPrompt": "安娜进入木屋客厅，靠近一张背对门口的高背椅。",
@@ -198,14 +199,14 @@
         }
       }
     },
-    "screenplayText": "木屋客厅空气潮湿。安娜站在门口，看见客厅中央有一张高背椅。椅中人物始终在场，但被椅背和阴影遮住。",
+    "bibleText": "木屋客厅空气潮湿。安娜站在门口，看见客厅中央有一张高背椅。椅中人物始终在场，但被椅背和阴影遮住。",
     "status": "ready"
   },
   "editScript": {
     "id": "demo-edit-script",
     "projectId": "demo-project-edit-pipeline",
     "episodeId": "demo-episode-edit-pipeline",
-    "screenplayId": "demo-screenplay",
+    "bibleId": "demo-bible",
     "userPrompt": "安娜进入木屋客厅，靠近一张背对门口的高背椅。",
     "styleBible": {
       "rawUserStyle": "暗黑童话定格动画",
@@ -234,7 +235,7 @@
         }
       }
     },
-    "screenplayText": "木屋客厅空气潮湿。安娜站在门口，看见客厅中央有一张高背椅。椅中人物始终在场，但被椅背和阴影遮住。",
+    "bibleText": "木屋客厅空气潮湿。安娜站在门口，看见客厅中央有一张高背椅。椅中人物始终在场，但被椅背和阴影遮住。",
     "durationSec": 3,
     "shotCount": 1,
     "status": "ready",

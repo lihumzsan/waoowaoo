@@ -56,9 +56,9 @@ describe('invalidateByTarget', () => {
     expect(hasInvalidation(testClient, (arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.project.editScreenplay('project-1', 'episode-1')[0]
+        && key[0] === queryKeys.project.editBible('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
-        && key[2] === 'edit-screenplay'
+        && key[2] === 'edit-bible'
         && key[3] === 'episode-1'
     })).toBe(true)
     expect(hasInvalidation(testClient, (arg) => {
@@ -129,7 +129,7 @@ describe('invalidateByTarget', () => {
     })).toBe(true)
   })
 
-  it('ProjectEditStylePreview invalidates edit screenplay after preview image tasks complete', () => {
+  it('ProjectEditStylePreview invalidates edit bible after preview image tasks complete', () => {
     const testClient = createQueryClient()
 
     invalidateByTarget({
@@ -142,9 +142,9 @@ describe('invalidateByTarget', () => {
     expect(hasInvalidation(testClient, (arg) => {
       const key = arg.queryKey || []
       return Array.isArray(key)
-        && key[0] === queryKeys.project.editScreenplay('project-1', 'episode-1')[0]
+        && key[0] === queryKeys.project.editBible('project-1', 'episode-1')[0]
         && key[1] === 'project-1'
-        && key[2] === 'edit-screenplay'
+        && key[2] === 'edit-bible'
         && key[3] === 'episode-1'
     })).toBe(true)
     expect(hasInvalidation(testClient, (arg) => {

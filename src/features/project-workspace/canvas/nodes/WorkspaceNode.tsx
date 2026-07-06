@@ -41,7 +41,7 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'video'
     case 'finalTimeline':
       return 'film'
-    case 'editScreenplay':
+    case 'editBible':
       return 'bookOpen'
     case 'editStylePreview':
       return 'image'
@@ -1882,7 +1882,7 @@ function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly nam
   )
 }
 
-function EditScreenplayContent({
+function EditBibleContent({
   data,
   labels,
   expanded,
@@ -1891,16 +1891,16 @@ function EditScreenplayContent({
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
-  const details = data.editScreenplayDetails
+  const details = data.editBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const parsed = parseScreenplayOutline(details.screenplayText)
+  const parsed = parseBibleOutline(details.bibleText)
   const streamClassName = data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''
 
   const collapsedContent = (
     <div className={`space-y-2 ${streamClassName}`}>
       {parsed.summary
         ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
-        : renderSection(labels('screenplay'), renderSummaryText(details.screenplayText, 6))}
+        : renderSection(labels('bible'), renderSummaryText(details.bibleText, 6))}
     </div>
   )
 
@@ -1912,29 +1912,48 @@ function EditScreenplayContent({
         {parsed.characters.length > 0 ? (
           <div className="space-y-1.5">
             <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="people" className="h-3 w-3" />{labels('characters')}</p>
-            <ScreenplayAccordion items={parsed.characters.map((c) => ({ key: c.name, title: c.name, body: c.desc }))} />
+            <BibleAccordion items={parsed.characters.map((c) => ({ key: c.name, title: c.name, body: c.desc }))} />
           </div>
         ) : null}
         {parsed.scenes.length > 0 ? (
           <div className="space-y-1.5">
             <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}><FieldGlyph name="frame" className="h-3 w-3" />{labels('scenes')}</p>
-            <ScreenplayAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
+            <BibleAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
           </div>
         ) : (
-          renderSection(labels('screenplay'), renderTextBlock(details.screenplayText))
+          renderSection(labels('bible'), renderTextBlock(details.bibleText))
         )}
+        {details.chapters.length > 0 ? renderSection(labels('chapters'), (
+          <div className="space-y-2">
+            {details.chapters.map((chapter) => (
+              <div key={chapter.id} className="rounded-md border border-[var(--glass-border-subtle)] bg-[var(--glass-surface-soft)] px-2.5 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <p className={`${SELECTABLE_TEXT_CLASS} text-xs font-semibold text-[var(--glass-text-primary)]`}>
+                    {String(chapter.chapterIndex + 1).padStart(2, '0')} · {chapter.title}
+                  </p>
+                  <p className="shrink-0 text-[10px] text-[var(--glass-text-tertiary)]">{chapter.targetDurationSec}s</p>
+                </div>
+                <p className={`${SELECTABLE_TEXT_CLASS} mt-1 line-clamp-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{chapter.summary}</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px] text-[var(--glass-text-tertiary)]">
+                  <span>{labels('planStatus')}: {chapter.status}</span>
+                  <span>{labels('renderStatus')}: {chapter.renderStatus ?? '-'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )) : null}
         {renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt))}
       </WorkspaceCanvasMotionPresence>
     </>
   )
 }
 
-interface ScreenplayOutline {
+interface BibleOutline {
   readonly summary: string
   readonly characters: readonly { readonly name: string; readonly desc: string }[]
   readonly scenes: readonly { readonly header: string; readonly actions: readonly string[] }[]
 }
-function parseScreenplayOutline(text: string): ScreenplayOutline {
+function parseBibleOutline(text: string): BibleOutline {
   const lines = (text ?? '').split('\n')
   let summary = ''
   const characters: { name: string; desc: string }[] = []
@@ -1955,7 +1974,7 @@ function parseScreenplayOutline(text: string): ScreenplayOutline {
   return { summary, characters, scenes }
 }
 
-function ScreenplayAccordion({ items }: { readonly items: readonly { readonly key: string; readonly badge?: string; readonly title: string; readonly body: string }[] }) {
+function BibleAccordion({ items }: { readonly items: readonly { readonly key: string; readonly badge?: string; readonly title: string; readonly body: string }[] }) {
   const [open, setOpen] = useState<string | null>(null)
   return (
     <div className="divide-y divide-slate-100 overflow-hidden rounded-[14px] border border-slate-200 bg-white">
@@ -2151,7 +2170,7 @@ function VideoPlanContent({
       void dispatchNodeAction(data, {
         type: 'generate_video_group',
         gridMode: details.gridMode === '3x3' ? '3x3' : '2x2',
-        shotNumbers: details.shotNumbers,
+        shotIds: details.shotIds,
         generationOptions: videoPlanGenerationOptions(data),
       })
       return
@@ -2325,8 +2344,8 @@ function NodeContent({
       return <FinalContent data={data} labels={labels} expanded={expanded} />
     case 'bgmScore':
       return <BgmScoreContent data={data} labels={labels} expanded={expanded} />
-    case 'editScreenplay':
-      return <EditScreenplayContent data={data} labels={labels} expanded={expanded} />
+    case 'editBible':
+      return <EditBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editStylePreview':
       return <StyleBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editStyleBible':
@@ -2441,7 +2460,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
       observer.disconnect()
       clearDeferredMeasure()
     }
-  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editScreenplayDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>

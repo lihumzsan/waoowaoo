@@ -1,11 +1,19 @@
 'use client'
 
 import { useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { EpisodeSelector } from '@/components/ui/CapsuleNav'
+import { AppIcon } from '@/components/ui/icons'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
-import type { ProjectPanel } from '@/types/project'
+import type { ProjectEditChapter, ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
+import {
+  WORKSPACE_SCOPE_BIBLE_REVIEW_ID,
+  WORKSPACE_SCOPE_OVERVIEW_ID,
+  workspaceChapterScopeId,
+  type WorkspaceScopeId,
+} from '../workspace-scope'
 
 interface EpisodeSummary {
   id: string
@@ -16,12 +24,12 @@ interface EpisodeSummary {
   editScript?: {
     content?: string | null
     scriptText?: string | null
-    screenplay?: string | null
+    bible?: string | null
   } | null
-  editScreenplay?: {
+  editBible?: {
     content?: string | null
     scriptText?: string | null
-    screenplay?: string | null
+    bible?: string | null
   } | null
   storyboards?: Array<{
     panels?: ProjectPanel[] | null
@@ -73,6 +81,69 @@ interface WorkspaceHeaderShellProps {
   onEpisodeDelete?: (episodeId: string) => void
   onProjectRename?: (newName: string) => void | Promise<void>
   projectConfigurable: boolean
+  workspaceChapters?: readonly ProjectEditChapter[]
+  currentWorkspaceScopeId?: WorkspaceScopeId
+  onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
+}
+
+function chapterStatusTone(chapter: ProjectEditChapter): string {
+  if (chapter.renderStatus === 'completed') return 'bg-[var(--glass-tone-success-fg)]'
+  if (chapter.renderStatus === 'generating' || chapter.status === 'generating') return 'bg-[var(--glass-accent-from)]'
+  if (chapter.renderStatus === 'failed' || chapter.status === 'failed') return 'bg-[var(--glass-tone-danger-fg)]'
+  if (chapter.status === 'confirmed' || chapter.status === 'ready') return 'bg-[var(--glass-tone-info-fg)]'
+  return 'bg-[var(--glass-stroke-strong)]'
+}
+
+function WorkspaceScopeSelector(props: {
+  readonly chapters: readonly ProjectEditChapter[]
+  readonly activeId: WorkspaceScopeId
+  readonly onSelect?: (scopeId: WorkspaceScopeId) => void
+}) {
+  const t = useTranslations('projectWorkflow.workspaceScope')
+  const buttonClassName = 'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60'
+  const inactiveClassName = 'border-[var(--glass-stroke-base)] bg-white/75 text-[var(--glass-text-secondary)] hover:bg-white hover:text-[var(--glass-text-primary)]'
+  const activeClassName = 'border-[var(--glass-stroke-strong)] bg-neutral-900 text-white shadow-sm'
+  const itemClassName = (id: WorkspaceScopeId) => `${buttonClassName} ${props.activeId === id ? activeClassName : inactiveClassName}`
+
+  return (
+    <nav className="fixed left-[330px] right-[420px] top-20 z-40 overflow-hidden rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/75 px-2 py-2 shadow-lg backdrop-blur-2xl">
+      <div className="flex items-center gap-2 overflow-x-auto app-scrollbar">
+        <button
+          type="button"
+          className={itemClassName(WORKSPACE_SCOPE_OVERVIEW_ID)}
+          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_OVERVIEW_ID)}
+        >
+          <AppIcon name="grid" className="h-4 w-4" />
+          {t('overview')}
+        </button>
+        <button
+          type="button"
+          className={itemClassName(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
+          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
+        >
+          <AppIcon name="bookOpen" className="h-4 w-4" />
+          {t('bibleReview')}
+        </button>
+        {props.chapters.map((chapter) => {
+          const scopeId = workspaceChapterScopeId(chapter.id)
+          return (
+            <button
+              key={chapter.id}
+              type="button"
+              className={itemClassName(scopeId)}
+              onClick={() => props.onSelect?.(scopeId)}
+              title={chapter.title}
+            >
+              <span className={`h-2 w-2 shrink-0 rounded-full ${chapterStatusTone(chapter)}`} />
+              <span className="max-w-[160px] truncate">
+                {t('chapter', { index: chapter.chapterIndex + 1 })}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </nav>
+  )
 }
 
 export default function WorkspaceHeaderShell({
@@ -105,6 +176,9 @@ export default function WorkspaceHeaderShell({
   onEpisodeDelete,
   onProjectRename,
   projectConfigurable,
+  workspaceChapters = [],
+  currentWorkspaceScopeId = WORKSPACE_SCOPE_OVERVIEW_ID,
+  onWorkspaceScopeSelect,
 }: WorkspaceHeaderShellProps) {
   const handleCapabilityOverridesChange = useCallback((value: CapabilitySelections) => {
     void onUpdateConfig('capabilityOverrides', value)
@@ -166,7 +240,7 @@ export default function WorkspaceHeaderShell({
               const episodeArtifacts = resolveEpisodeArtifactReadiness({
                 novelText: ep.novelText ?? null,
                 editScript: ep.editScript ?? null,
-                editScreenplay: ep.editScreenplay ?? null,
+                editBible: ep.editBible ?? null,
                 storyboards: ep.storyboards || [],
               })
               return {
@@ -188,6 +262,13 @@ export default function WorkspaceHeaderShell({
           />
         )
       })()}
+      {currentEpisodeId ? (
+        <WorkspaceScopeSelector
+          chapters={workspaceChapters}
+          activeId={currentWorkspaceScopeId}
+          onSelect={onWorkspaceScopeSelect}
+        />
+      ) : null}
 
     </>
   )

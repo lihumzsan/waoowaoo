@@ -118,7 +118,7 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
       generationOptions: params.action.generationOptions,
       mode: 'grid',
       gridMode: params.action.gridMode,
-      shotNumbers: params.action.shotNumbers,
+      shotIds: params.action.shotIds,
     })
     return {
       cacheKey: buildCacheKey({

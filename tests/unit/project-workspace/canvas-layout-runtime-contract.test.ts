@@ -173,7 +173,7 @@ describe('workspace canvas layout runtime contract', () => {
       'EditScriptContent',
       'EditShotExecutionPlanContent',
       'StyleBibleContent',
-      'EditScreenplayContent',
+      'EditBibleContent',
       'EditAssetContent',
       'VideoPlanContent',
     ])
@@ -225,7 +225,7 @@ describe('workspace canvas layout runtime contract', () => {
       'VideoContent',
       'FinalContent',
       'EditPipelineStepContent',
-      'EditScreenplayContent',
+      'EditBibleContent',
       'EditAssetContent',
       'VideoPlanContent',
     ]

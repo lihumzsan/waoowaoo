@@ -77,7 +77,14 @@ describe('workspace current layout', () => {
   it('uses the episode canvas payload as the edit script display source', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
 
-    expect(canvas).toContain('storyboards, editScript, finalVideo, videoGroups')
+    expect(canvas).toContain('storyboards,')
+    expect(canvas).toContain('editScript,')
+    expect(canvas).toContain('editScripts,')
+    expect(canvas).toContain('editShotExecutionPlans,')
+    expect(canvas).toContain('finalVideo,')
+    expect(canvas).toContain('videoGroups,')
+    expect(canvas).toContain('storyboards: scopedStoryboards')
+    expect(canvas).toContain('videoGroups: scopedVideoGroups')
     expect(canvas).not.toContain('useProjectEditScript')
   })
 

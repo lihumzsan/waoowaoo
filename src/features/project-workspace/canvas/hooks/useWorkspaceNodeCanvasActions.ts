@@ -13,17 +13,15 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_edit_screenplay') {
-      await runtime.onGenerateEditScreenplay({
+    if (action.type === 'ingest_script') {
+      await runtime.onGenerateEditBible({
         prompt: action.prompt,
-        durationTier: action.durationTier,
-        aspectRatio: action.aspectRatio,
       })
       return
     }
 
     if (action.type === 'generate_edit_script') {
-      await runtime.onGenerateEditScript(action.screenplayId)
+      await runtime.onGenerateEditScript()
       return
     }
 
@@ -96,7 +94,7 @@ export function useWorkspaceNodeCanvasActions() {
         generationOptions: action.generationOptions,
         mode: 'grid',
         gridMode: action.gridMode,
-        shotNumbers: action.shotNumbers,
+        shotIds: action.shotIds,
       })
       return
     }

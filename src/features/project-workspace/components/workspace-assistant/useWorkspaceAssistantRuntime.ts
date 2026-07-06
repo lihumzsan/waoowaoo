@@ -28,7 +28,7 @@ import {
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 
-export type WorkspaceAssistantChoiceType = 'duration_and_aspect_ratio' | 'screenplay_review' | 'style' | 'asset_review'
+export type WorkspaceAssistantChoiceType = 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 

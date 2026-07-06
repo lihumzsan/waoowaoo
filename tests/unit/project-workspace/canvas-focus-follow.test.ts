@@ -79,18 +79,18 @@ describe('workspace canvas focus follow', () => {
 
   it('resolves confirmed style bible focus requests to the style bible card', () => {
     const nodes = [
-      workspaceNode('edit-screenplay:screenplay-1', 'editScreenplay', false),
-      workspaceNode('edit-style-bible:screenplay-1', 'editStyleBible', false),
+      workspaceNode('edit-bible:bible-1', 'editBible', false),
+      workspaceNode('edit-style-bible:bible-1', 'editStyleBible', false),
     ]
 
-    expect(resolveWorkspaceCanvasStyleBibleFocusNodeIds(nodes)).toEqual(['edit-style-bible:screenplay-1'])
+    expect(resolveWorkspaceCanvasStyleBibleFocusNodeIds(nodes)).toEqual(['edit-style-bible:bible-1'])
   })
 
   it('uses the explicit request key so the same style bible card can be refocused', () => {
-    const nodeIds = ['edit-style-bible:screenplay-1']
+    const nodeIds = ['edit-style-bible:bible-1']
 
     expect(buildWorkspaceCanvasFocusKey(nodeIds, 'style-bible-confirmed:1'))
-      .toBe('style-bible-confirmed:1:edit-style-bible:screenplay-1')
+      .toBe('style-bible-confirmed:1:edit-style-bible:bible-1')
     expect(resolveCanvasFocusFollowDecision({
       focusKey: buildWorkspaceCanvasFocusKey(nodeIds, 'style-bible-confirmed:2'),
       enabled: true,

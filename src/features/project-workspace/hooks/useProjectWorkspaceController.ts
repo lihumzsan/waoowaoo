@@ -20,14 +20,14 @@ import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
 import {
   useAssetActions,
-  useCreateProjectEditScreenplay,
+  useCreateProjectEditBible,
   useCreateProjectEditScript,
   useCreateProjectEditShotExecutionPlan,
   useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
   useUpdateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/query/hooks'
-import type { WorkspaceEditScreenplayGenerationInput } from '../WorkspaceRuntimeContext'
+import type { WorkspaceEditBibleGenerationInput } from '../WorkspaceRuntimeContext'
 
 export function useProjectWorkspaceController({
   project,
@@ -116,7 +116,7 @@ export function useProjectWorkspaceController({
     projectId,
     episodeId,
   })
-  const createEditScreenplay = useCreateProjectEditScreenplay(projectId)
+  const createEditBible = useCreateProjectEditBible(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
   const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
   const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
@@ -124,21 +124,19 @@ export function useProjectWorkspaceController({
   const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
   const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
-  const handleGenerateEditScreenplay = async (input: WorkspaceEditScreenplayGenerationInput) => {
+  const handleGenerateEditBible = async (input: WorkspaceEditBibleGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
-    await createEditScreenplay.mutateAsync({
+    await createEditBible.mutateAsync({
       episodeId,
-      prompt: input.prompt,
-      durationTier: input.durationTier,
-      aspectRatio: input.aspectRatio,
+      text: input.prompt,
+      sourceKind: 'prompt_generated_outline',
     })
     await onRefresh({ mode: 'full' })
   }
-  const handleGenerateEditScript = async (screenplayId?: string) => {
+  const handleGenerateEditScript = async () => {
     if (!episodeId) throw new Error('Episode ID is required')
     await createEditScript.mutateAsync({
       episodeId,
-      ...(screenplayId ? { screenplayId } : {}),
     })
     await onRefresh({ mode: 'full' })
   }
@@ -176,7 +174,7 @@ export function useProjectWorkspaceController({
     assetsLoading,
     isTransitioning: execution.isTransitioning,
     isConfirmingAssets: execution.isConfirmingAssets,
-    isAssistantWorkflowStarting: createEditScreenplay.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
+    isAssistantWorkflowStarting: createEditBible.isPending || createEditScript.isPending || createEditShotExecutionPlan.isPending,
     videoRatio: projectSnapshot.videoRatio,
     videoModel: projectSnapshot.videoModel,
     singleShotVideoModel: projectSnapshot.singleShotVideoModel,
@@ -186,7 +184,7 @@ export function useProjectWorkspaceController({
     handleUpdateEpisode: configActions.handleUpdateEpisode,
     handleUpdateConfig: configActions.handleUpdateConfig,
     onRequestAssistantGuidance: execution.requestAssistantGuidance,
-    handleGenerateEditScreenplay,
+    handleGenerateEditBible,
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,

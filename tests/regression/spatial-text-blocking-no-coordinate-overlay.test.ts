@@ -4,6 +4,7 @@ import type { EditScriptShot, EditShotExecution } from '@/lib/edit-script/types'
 import { buildZenStyleBibleFixture } from '../fixtures/edit-script-style-bible'
 
 const shot: EditScriptShot = {
+  shotId: 'shot-1',
   shotNumber: 1,
   durationSec: 3,
   scene: { name: '老店室内' },
@@ -23,6 +24,7 @@ const shot: EditScriptShot = {
 }
 
 const execution: EditShotExecution = {
+  shotId: 'shot-1',
   shotNumber: 1,
   camera: {
     shotScale: '中景',

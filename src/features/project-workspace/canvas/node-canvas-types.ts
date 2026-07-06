@@ -2,8 +2,6 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeStateLike, TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
-import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
 import type { WorkspaceCanvasArtifactPhase } from './artifact-phase'
 
@@ -12,7 +10,7 @@ export type WorkspaceCanvasNodeKind =
   | 'imageAsset'
   | 'videoClip'
   | 'finalTimeline'
-  | 'editScreenplay'
+  | 'editBible'
   | 'editStylePreview'
   | 'editStyleBible'
   | 'editPipelineStep'
@@ -24,16 +22,14 @@ export type WorkspaceCanvasNodeKind =
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editScreenplay' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editBible' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {
-      readonly type: 'generate_edit_screenplay'
+      readonly type: 'ingest_script'
       readonly prompt: string
-      readonly durationTier: EditFirstDurationTier
-      readonly aspectRatio: EditScriptVideoRatio
     }
-  | { readonly type: 'generate_edit_script'; readonly screenplayId?: string }
+  | { readonly type: 'generate_edit_script' }
   | { readonly type: 'generate_edit_shot_execution_plan'; readonly editScriptId: string }
   | { readonly type: 'open_asset_library'; readonly characterId?: string | null }
   | {
@@ -76,7 +72,7 @@ export type WorkspaceCanvasNodeAction =
   | {
       readonly type: 'generate_video_group'
       readonly gridMode: '2x2' | '3x3'
-      readonly shotNumbers: readonly number[]
+      readonly shotIds: readonly string[]
       readonly generationOptions?: Record<string, string | number | boolean>
     }
   | {
@@ -183,7 +179,7 @@ export interface WorkspaceCanvasBgmScoreTimedTextSection {
 }
 
 export interface WorkspaceCanvasEditScriptDetails {
-  readonly screenplayText?: string | null
+  readonly bibleText?: string | null
   readonly durationSec: number
   readonly shotCount: number
   readonly shots: readonly {
@@ -226,9 +222,19 @@ export interface WorkspaceCanvasEditProcessGroupDetails {
   readonly steps: readonly WorkspaceCanvasEditProcessStep[]
 }
 
-export interface WorkspaceCanvasEditScreenplayDetails {
-  readonly screenplayText: string
+export interface WorkspaceCanvasEditBibleDetails {
+  readonly bibleText: string
   readonly userPrompt: string
+  readonly chapters: readonly {
+    readonly id: string
+    readonly chapterIndex: number
+    readonly title: string
+    readonly summary: string
+    readonly targetDurationSec: number
+    readonly status: string
+    readonly renderStatus?: string | null
+    readonly outputMediaId?: string | null
+  }[]
 }
 
 export interface WorkspaceCanvasStyleBibleVisualPolicy {
@@ -262,6 +268,7 @@ export interface WorkspaceCanvasVideoPlanDetails {
   readonly segmentIndex: number
   readonly kind: 'group'
   readonly videoGroupId?: string | null
+  readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
   readonly durationSec: number
   readonly gridMode?: '2x2' | '3x3'
@@ -284,6 +291,7 @@ export interface WorkspaceCanvasVideoPlanDetails {
     readonly name: string
     readonly kind: 'character' | 'location'
     readonly imageUrl?: string | null
+    readonly shotIds: readonly string[]
     readonly shotNumbers: readonly number[]
   }[]
   readonly validationMessage?: string | null
@@ -294,6 +302,7 @@ export interface WorkspaceCanvasEditAssetDetails {
   readonly requirementId: string
   readonly kind: 'character' | 'location'
   readonly description: string
+  readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
   readonly targetId?: string | null
   readonly taskTargetType?: 'CharacterAppearance' | 'LocationImage' | null
@@ -312,6 +321,7 @@ export interface WorkspaceCanvasEditAssetGroupItem {
   readonly name: string
   readonly eyebrow: string
   readonly description: string
+  readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
   readonly statusLabel: string
   readonly isRunning: boolean
@@ -400,7 +410,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly videoDetails?: WorkspaceCanvasVideoDetails
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
-  readonly editScreenplayDetails?: WorkspaceCanvasEditScreenplayDetails
+  readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails
   readonly editPipelineStepDetails?: WorkspaceCanvasEditPipelineStepDetails
   readonly editProcessGroupDetails?: WorkspaceCanvasEditProcessGroupDetails

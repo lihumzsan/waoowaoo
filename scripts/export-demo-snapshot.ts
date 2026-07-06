@@ -11,11 +11,11 @@ import {
   isDemoPublicAssetPath,
   type DemoProjectSnapshot,
 } from '@/lib/demo/demo-snapshot'
-import { readProjectEditScreenplay, readProjectEditScript } from '@/lib/edit-script/service'
+import { readProjectEditBible, readProjectEditScript } from '@/lib/edit-script/service'
 import { normalizeFinalVideoSummary } from '@/lib/operations/domains/gui/final-video-summary'
 import type {
   ProjectClip,
-  ProjectEditScreenplay,
+  ProjectEditBible,
   ProjectEditScript,
   ProjectFinalVideo,
   ProjectShot,
@@ -322,7 +322,7 @@ async function buildSnapshot(options: ExportOptions): Promise<DemoProjectSnapsho
 
   const mediaEpisode = await attachMediaFieldsToProject(cloneJson(episode) as Record<string, unknown>)
   const serializedEpisode = cloneJson(mediaEpisode)
-  const editScreenplay = await readProjectEditScreenplay({
+  const editBible = await readProjectEditBible({
     projectId: options.projectId,
     episodeId: options.episodeId,
   })
@@ -355,7 +355,7 @@ async function buildSnapshot(options: ExportOptions): Promise<DemoProjectSnapsho
     clips: readArray<ProjectClip>(serializedEpisode.clips),
     storyboards: readArray<ProjectStoryboard>(serializedEpisode.storyboards),
     shots: readArray<ProjectShot>(serializedEpisode.shots),
-    editScreenplay: editScreenplay as ProjectEditScreenplay | null,
+    editBible: editBible as ProjectEditBible | null,
     editScript: editScript as ProjectEditScript | null,
     finalVideo,
     videoGroups: readArray<ProjectVideoGroup>(serializedEpisode.videoGroups),

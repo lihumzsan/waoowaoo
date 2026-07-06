@@ -161,15 +161,17 @@ export {
 } from './useProjectContext'
 
 export {
-    useProjectEditScreenplay,
+    useProjectEditBible,
     useProjectEditScript,
     useProjectEditShotExecutionPlan,
     useCreateProjectEditShotExecutionPlan,
-    useCreateProjectEditScreenplay,
+    useCreateProjectEditBible,
     useCreateProjectEditScript,
+    useConfirmProjectEditBible,
     useConfirmProjectEditStylePreview,
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
+    useReviseProjectEditBible,
     useUpdateProjectEditScriptAssetRequirementDescription,
 } from './useProjectEditScript'
 

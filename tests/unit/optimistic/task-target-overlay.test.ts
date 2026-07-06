@@ -157,7 +157,7 @@ describe('task-target-overlay', () => {
       projectId,
       targetType: 'ProjectEpisode',
       targetId: 'episode-1',
-      runningTaskType: 'bgm_score_generate',
+      runningTaskType: 'music_score_plan',
       intent: 'generate',
     })
 
@@ -170,7 +170,7 @@ describe('task-target-overlay', () => {
       targetType: 'ProjectEpisode',
       targetId: 'episode-1',
       taskId: 'task-bgm-real',
-      taskType: 'bgm_score_generate',
+      taskType: 'music_score_plan',
       intent: 'generate',
       hasOutputAtStart: null,
       progress: null,

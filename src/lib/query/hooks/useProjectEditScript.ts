@@ -3,9 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
-import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { ProjectEditScreenplay, ProjectEditScript, ProjectEditShotExecutionPlan } from '@/types/project'
+import type { ProjectEditBible, ProjectEditChapter, ProjectEditScript, ProjectEditShotExecutionPlan, ProjectEditStylePreview } from '@/types/project'
 import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 
@@ -30,8 +29,9 @@ interface GenerateEditScriptAssetsMutationResult {
   readonly submittedTasks: readonly EditScriptAssetSubmittedTask[]
 }
 
-interface EditScreenplayResponse {
-  screenplay: ProjectEditScreenplay | null
+interface EditBibleResponse {
+  editBible: ProjectEditBible | null
+  chapters?: ProjectEditChapter[]
 }
 
 interface EditShotExecutionPlanResponse {
@@ -40,15 +40,26 @@ interface EditShotExecutionPlanResponse {
 
 interface CreateEditScriptInput {
   episodeId: string
-  screenplayId?: string
   videoRatio?: EditScriptVideoRatio
 }
 
-interface CreateEditScreenplayInput {
+interface CreateEditBibleInput {
   episodeId: string
-  prompt: string
-  durationTier: EditFirstDurationTier
-  aspectRatio: EditScriptVideoRatio
+  text: string
+  sourceKind?: 'upload' | 'paste' | 'prompt_generated_outline'
+  rawFileMediaId?: string
+}
+
+interface ConfirmEditBibleInput {
+  episodeId: string
+}
+
+interface ReviseEditBibleInput {
+  episodeId: string
+  bible?: unknown
+  beatSheet?: unknown
+  ledger?: unknown
+  emotionalCurve?: unknown
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -86,7 +97,7 @@ interface GenerateEditScriptTaskResponse {
   status?: string
   deduped?: boolean
   episodeId?: string
-  screenplayId?: string
+  bibleId?: string
   targetType?: string
   targetId?: string
 }
@@ -120,18 +131,23 @@ export function useProjectEditScript(projectId: string | null, episodeId: string
   })
 }
 
-export function useProjectEditScreenplay(projectId: string | null, episodeId: string | null) {
+export function useProjectEditBible(projectId: string | null, episodeId: string | null) {
   return useQuery({
-    queryKey: queryKeys.project.editScreenplay(projectId || '', episodeId || ''),
+    queryKey: queryKeys.project.editBible(projectId || '', episodeId || ''),
     queryFn: async () => {
       if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
       const search = new URLSearchParams({ episodeId })
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/screenplay?${search.toString()}`)
+      const response = await apiFetch(`/api/projects/${projectId}/bible?${search.toString()}`)
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to load edit screenplay')
+        throw await readJsonError(response, 'Failed to load edit bible')
       }
-      const data = await response.json() as EditScreenplayResponse
-      return data.screenplay
+      const data = await response.json() as EditBibleResponse
+      return data.editBible
+        ? {
+            ...data.editBible,
+            chapters: data.chapters ?? [],
+          }
+        : null
     },
     enabled: Boolean(projectId && episodeId),
     staleTime: 5000,
@@ -186,31 +202,109 @@ export function useCreateProjectEditScript(projectId: string | null) {
   })
 }
 
-export function useCreateProjectEditScreenplay(projectId: string | null) {
+export function useCreateProjectEditBible(projectId: string | null) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: CreateEditScreenplayInput) => {
+    mutationFn: async (input: CreateEditBibleInput) => {
       if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/screenplay`, {
+      const response = await apiFetch(`/api/projects/${projectId}/bible`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({
+          episodeId: input.episodeId,
+          sourceKind: input.sourceKind ?? 'paste',
+          text: input.text,
+          ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
+        }),
       })
       if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate edit screenplay')
+        throw await readJsonError(response, 'Failed to generate edit bible')
       }
       const data = await response.json() as GenerateEditScriptTaskResponse
-      if (data.async !== true || !data.taskId) throw new Error('EDIT_SCREENPLAY_TASK_RESPONSE_EMPTY')
+      if (data.async !== true || !data.taskId) throw new Error('EDIT_BIBLE_TASK_RESPONSE_EMPTY')
       return data
     },
     onSuccess: async (_result, variables) => {
       if (!projectId) return
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
+      ])
+    },
+  })
+}
+
+export function useConfirmProjectEditBible(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: ConfirmEditBibleInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/bible`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'confirm',
+          episodeId: input.episodeId,
+        }),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to confirm edit bible')
+      }
+      const data = await response.json() as { editBible?: ProjectEditBible | null }
+      if (!data.editBible) throw new Error('EDIT_BIBLE_CONFIRM_RESPONSE_EMPTY')
+      return data.editBible
+    },
+    onSuccess: async (editBible) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+      ])
+    },
+  })
+}
+
+export function useReviseProjectEditBible(projectId: string | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: ReviseEditBibleInput) => {
+      if (!projectId) throw new Error('Project ID is required')
+      const response = await apiFetch(`/api/projects/${projectId}/bible`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'revise',
+          episodeId: input.episodeId,
+          ...(input.bible !== undefined ? { bible: input.bible } : {}),
+          ...(input.beatSheet !== undefined ? { beatSheet: input.beatSheet } : {}),
+          ...(input.ledger !== undefined ? { ledger: input.ledger } : {}),
+          ...(input.emotionalCurve !== undefined ? { emotionalCurve: input.emotionalCurve } : {}),
+        }),
+      })
+      if (!response.ok) {
+        throw await readJsonError(response, 'Failed to revise edit bible')
+      }
+      const data = await response.json() as EditBibleResponse
+      if (!data.editBible) throw new Error('EDIT_BIBLE_REVISE_RESPONSE_EMPTY')
+      return data.editBible
+    },
+    onSuccess: async (editBible) => {
+      if (!projectId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editBible.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, editBible.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },
@@ -222,7 +316,7 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
   return useMutation({
     mutationFn: async (input: ConfirmEditStylePreviewInput) => {
       if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/screenplay`, {
+      const response = await apiFetch(`/api/projects/${projectId}/bible/style-preview`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(input),
@@ -230,19 +324,18 @@ export function useConfirmProjectEditStylePreview(projectId: string | null) {
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to confirm edit style preview')
       }
-      const data = await response.json() as EditScreenplayResponse
-      if (!data.screenplay) throw new Error('EDIT_SCREENPLAY_RESPONSE_EMPTY')
-      return data.screenplay
+      const data = await response.json() as { stylePreview?: ProjectEditStylePreview | null }
+      if (!data.stylePreview) throw new Error('EDIT_STYLE_PREVIEW_RESPONSE_EMPTY')
+      return data.stylePreview
     },
-    onSuccess: async (screenplay) => {
+    onSuccess: async (stylePreview) => {
       if (!projectId) return
-      queryClient.setQueryData(queryKeys.project.editScreenplay(projectId, screenplay.episodeId), screenplay)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, screenplay.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, screenplay.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(projectId, stylePreview.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, stylePreview.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, stylePreview.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, stylePreview.episodeId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, stylePreview.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
     },

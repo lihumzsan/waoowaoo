@@ -1,7 +1,7 @@
 import type { WorkspaceCanvasNodeData } from '../node-canvas-types'
 
 export type WorkspaceCanvasStreamKind =
-  | 'editScreenplay'
+  | 'editBible'
   | 'editScript'
   | 'editShotExecutionPlan'
   | 'bgmScore'
@@ -14,7 +14,7 @@ export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   | 'statusLabel'
   | 'isRunning'
   | 'streamPresentation'
-  | 'editScreenplayDetails'
+  | 'editBibleDetails'
   | 'editScriptDetails'
   | 'editPipelineStepDetails'
   | 'bgmScoreDetails'

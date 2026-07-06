@@ -65,7 +65,7 @@ describe('workspace canvas node presentation profiles', () => {
 
   it('uses measured content height without keeping collapsed-height whitespace', () => {
     expect(resolveWorkspaceCanvasMeasuredNodeHeight({
-      kind: 'editScreenplay',
+      kind: 'editBible',
       measuredHeight: 260,
     })).toBe(260)
     expect(resolveWorkspaceCanvasMeasuredNodeHeight({

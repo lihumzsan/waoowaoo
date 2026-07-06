@@ -44,12 +44,11 @@ import {
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { apiFetch } from '@/lib/api-fetch'
-import type { ProjectEditScreenplay, ProjectEditStylePreview } from '@/types/project'
+import type { ProjectEditBible, ProjectEditStylePreview } from '@/types/project'
 import { queryKeys } from '@/lib/query/keys'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import { isEditFirstDurationTier } from '@/lib/edit-script/duration-tier'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -375,10 +374,6 @@ export function AssistantChoiceCardView(props: {
     output: Record<string, unknown>
     visibleUserText?: string
   }) => Promise<void>
-  onSetProjectVideoRatioChoice: (params: {
-    projectId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
@@ -457,35 +452,6 @@ export function AssistantChoiceCardView(props: {
             choiceType: card.choiceType,
             cardId: card.cardId,
             decision: 'approve',
-            selections: submitSelections,
-            labels,
-          },
-        })
-        props.onSubmitted?.(card.cardId)
-      } else if (card.submit.kind === 'set_project_video_ratio') {
-        const aspectRatio = submitSelections.aspectRatio
-        const durationTier = submitSelections.durationTier
-        if (!isEditFirstDurationTier(durationTier)) {
-          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_DURATION_TIER')
-        }
-        if (!isEditScriptVideoRatio(aspectRatio)) {
-          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_ASPECT_RATIO')
-        }
-        await props.onSetProjectVideoRatioChoice({
-          projectId: card.submit.projectId,
-          aspectRatio,
-        })
-        await props.onSubmitChoiceResponse({
-          runId: readChoiceRunId(),
-          interruptionId: card.interruptionId ?? null,
-          choiceType: card.choiceType,
-          toolCallId: card.toolCallId,
-          output: {
-            ok: true,
-            choiceType: card.choiceType,
-            cardId: card.cardId,
-            durationTier,
-            aspectRatio,
             selections: submitSelections,
             labels,
           },
@@ -910,16 +876,16 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
   const [localPreviewImageUrl, setLocalPreviewImageUrl] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
-  // 第一性原理：候选清单的唯一事实来源是 screenplay.stylePreviews（实时查询）。
-  // part 携带的 data.items 仅作首帧种子；screenplay 一到就接管 —— 追加候选会自动出现，
+  // 第一性原理：候选清单的唯一事实来源是 editBible.stylePreviews（实时查询）。
+  // part 携带的 data.items 仅作首帧种子；Bible 一到就接管 —— 追加候选会自动出现，
   // 不再依赖快照清单或 taskId 是否回填。
-  const screenplayQuery = useQuery({
-    queryKey: queryKeys.project.editScreenplay(data.projectId, data.episodeId),
-    queryFn: async (): Promise<ProjectEditScreenplay | null> => {
-      const response = await apiFetch(`/api/projects/${data.projectId}/edit-script/screenplay?episodeId=${encodeURIComponent(data.episodeId)}`)
-      if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_SCREENPLAY_FETCH_FAILED')
-      const payload = await response.json() as { screenplay?: ProjectEditScreenplay | null }
-      return payload.screenplay ?? null
+  const editBibleQuery = useQuery({
+    queryKey: queryKeys.project.editBible(data.projectId, data.episodeId),
+    queryFn: async (): Promise<ProjectEditBible | null> => {
+      const response = await apiFetch(`/api/projects/${data.projectId}/bible?episodeId=${encodeURIComponent(data.episodeId)}`)
+      if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_BIBLE_FETCH_FAILED')
+      const payload = await response.json() as { editBible?: ProjectEditBible | null }
+      return payload.editBible ?? null
     },
     refetchInterval: (query) => {
       const previews = query.state.data?.stylePreviews ?? []
@@ -929,7 +895,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
       return allTerminal ? false : 2500
     },
   })
-  const liveStylePreviews = screenplayQuery.data?.stylePreviews ?? null
+  const liveStylePreviews = editBibleQuery.data?.stylePreviews ?? null
   const previewsById = useMemo(() => (
     new Map((liveStylePreviews ?? []).map((preview) => [preview.id, preview]))
   ), [liveStylePreviews])
@@ -963,9 +929,9 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
     return resolveEditStylePreviewCardStatus({
       preview,
       taskState,
-      loading: screenplayQuery.isLoading || taskTargetStateQuery.isLoading,
+      loading: editBibleQuery.isLoading || taskTargetStateQuery.isLoading,
     })
-  }), [displayedItems, previewsById, screenplayQuery.isLoading, taskStateMap, taskTargetStateQuery.isLoading])
+  }), [displayedItems, previewsById, editBibleQuery.isLoading, taskStateMap, taskTargetStateQuery.isLoading])
   const hasConfirmedPreview = displayedItems.some((item) => previewsById.get(item.id)?.status === 'confirmed')
   const hasGeneratingPreview = cardStatuses.some((status) => status === 'generating')
 
@@ -1031,7 +997,7 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
           const cardStatus = resolveEditStylePreviewCardStatus({
             preview,
             taskState,
-            loading: screenplayQuery.isLoading || taskTargetStateQuery.isLoading,
+            loading: editBibleQuery.isLoading || taskTargetStateQuery.isLoading,
           })
           const ready = cardStatus === 'completed' && isEditStylePreviewChoiceReady(preview)
           const failed = cardStatus === 'failed'
@@ -1244,10 +1210,6 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
     output: Record<string, unknown>
     visibleUserText?: string
   }) => Promise<void>
-  onSetProjectVideoRatioChoice: (params: {
-    projectId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => Promise<void>
   onConfirmEditStylePreviewChoice: (params: {
     projectId: string
     episodeId: string
@@ -1266,7 +1228,6 @@ export function useWorkspaceAssistantMessagePartComponents({
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
   onSubmitChoiceResponse,
-  onSetProjectVideoRatioChoice,
   onConfirmEditStylePreviewChoice,
   onStylePreviewSelected,
   onPreviewImage,
@@ -1290,7 +1251,6 @@ export function useWorkspaceAssistantMessagePartComponents({
               <AssistantChoiceCardView
                 data={props.data}
                 onSubmitChoiceResponse={onSubmitChoiceResponse}
-                onSetProjectVideoRatioChoice={onSetProjectVideoRatioChoice}
                 onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
             ),
@@ -1316,7 +1276,6 @@ export function useWorkspaceAssistantMessagePartComponents({
     hideStylePreviewGenerationCards,
     onConfirmEditStylePreviewChoice,
     onPreviewImage,
-    onSetProjectVideoRatioChoice,
     onStylePreviewSelected,
     onSubmitChoiceResponse,
   ])

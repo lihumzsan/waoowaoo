@@ -106,12 +106,12 @@ describe('adaptive image aspect frame', () => {
     Reflect.set(globalThis, 'React', React)
     const { default: WorkspaceNode } = await import('@/features/project-workspace/canvas/nodes/WorkspaceNode')
     const data: WorkspaceCanvasNodeData = {
-      nodeId: 'edit-style-bible:screenplay-1',
+      nodeId: 'edit-style-bible:bible-1',
       projectId: 'project-1',
       kind: 'editStyleBible',
       layoutNodeType: 'editStyleBible',
       targetType: 'editStyleBible',
-      targetId: 'screenplay-1',
+      targetId: 'bible-1',
       title: 'Style Bible',
       eyebrow: '风格圣经',
       body: '非真人的高质感暗黑3D动画方案。',

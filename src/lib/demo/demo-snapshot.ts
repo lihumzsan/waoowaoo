@@ -1,5 +1,5 @@
 import type {
-  ProjectEditScreenplay,
+  ProjectEditBible,
   ProjectEditScript,
   ProjectFinalVideo,
   ProjectStoryboard,
@@ -33,7 +33,7 @@ export interface DemoProjectSnapshot {
     readonly srtContent: string | null
   }
   readonly storyboards: readonly ProjectStoryboard[]
-  readonly editScreenplay: ProjectEditScreenplay | null
+  readonly editBible: ProjectEditBible | null
   readonly editScript: ProjectEditScript | null
   readonly finalVideo: ProjectFinalVideo | null
   readonly videoGroups: readonly ProjectVideoGroup[]

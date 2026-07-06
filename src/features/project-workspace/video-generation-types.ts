@@ -18,7 +18,7 @@ export interface WorkspaceBatchVideoGenerationParams {
   readonly generationOptions?: WorkspaceVideoGenerationOptions
   readonly mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
   readonly gridMode?: '2x2' | '3x3'
-  readonly shotNumbers?: readonly number[]
+  readonly shotIds?: readonly string[]
   readonly segmentIndex?: number
   readonly referenceImageUrls?: readonly string[]
 }

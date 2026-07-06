@@ -47,10 +47,9 @@ export function workspaceCanvasArtifactPhaseFromTerminalStatus(
   if (status === 'failed') return 'failed'
   if (
     status === 'ready'
+    || status === 'ready_for_review'
     || status === 'completed'
     || status === 'confirmed'
-    || status === 'screenplay_ready'
-    || status === 'style_preview_ready'
   ) {
     return 'succeeded'
   }
@@ -64,9 +63,9 @@ export function workspaceCanvasArtifactPhaseFromTaskBackedStatus(
   if (terminalPhase) return terminalPhase
   if (
     status === 'generating'
+    || status === 'pending'
     || status === 'queued'
     || status === 'processing'
-    || status === 'style_preview_generating'
   ) return 'running'
   return null
 }

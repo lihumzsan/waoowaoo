@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import type {
   ProjectEditAssetRequirement,
-  ProjectEditScreenplay,
+  ProjectEditBible,
   ProjectEditScript,
   ProjectEditShotExecutionPlan,
   ProjectFinalVideo,
@@ -45,7 +45,7 @@ function requirement(
     kind: 'location',
     name: '客厅',
     description: '昏暗客厅',
-    shotNumbers: [1],
+    shotIds: ['shot-1'],
     status: 'completed',
     targetId: 'location-1',
     taskTargetType: 'LocationImage',
@@ -56,13 +56,13 @@ function requirement(
   }
 }
 
-function editScreenplay(overrides: Partial<ProjectEditScreenplay> = {}): ProjectEditScreenplay {
+function editBible(overrides: Partial<ProjectEditBible> = {}): ProjectEditBible {
   return {
-    id: 'screenplay-1',
+    id: 'bible-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
     userPrompt: 'story prompt',
-    screenplayText: 'screenplay text',
+    bibleText: 'bible text',
     status: 'ready',
     ...overrides,
   }
@@ -77,12 +77,12 @@ function editScript(input: {
     id: 'edit-script-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
+    bibleId: 'bible-1',
     userPrompt: 'story prompt',
     styleBible: null,
-    screenplayText: 'screenplay text',
+    bibleText: 'bible text',
     durationSec: 30,
-    shotCount: input.generationSegments?.flatMap((segment) => segment.shotNumbers).length ?? 0,
+    shotCount: input.generationSegments?.flatMap((segment) => segment.shotIds).length ?? 0,
     status: input.status,
     assetReviewStatus: 'pending',
     shots: [],
@@ -96,9 +96,11 @@ function shotExecutionPlan(): ProjectEditShotExecutionPlan {
     id: 'shot-execution-plan-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
+    chapterId: 'chapter-1',
     editScriptId: 'edit-script-1',
     status: 'ready',
     shots: [{
+      shotId: 'shot-1',
       shotNumber: 1,
       camera: {
         shotScale: '中景',
@@ -127,7 +129,9 @@ function shotExecutionPlan(): ProjectEditShotExecutionPlan {
         objects: [],
         spatialNote: '林晓坐在客厅沙发前。',
       },
+      videoPrompt: 'shot video prompt',
     }],
+    generationSegmentExecutions: [],
   }
 }
 
@@ -152,7 +156,7 @@ function panel(): ProjectPanel {
     videoPrompt: 'panel video prompt',
     videoUrl: null,
     actingNotes: null,
-    sourceShotNumber: 1,
+    sourceShotId: 'shot-1',
   }
 }
 
@@ -175,8 +179,9 @@ function videoGroup(overrides: Partial<ProjectVideoGroup> = {}): ProjectVideoGro
     id: 'video-group-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
+    chapterId: 'chapter-1',
     gridMode: '2x2',
-    shotNumbers: [1],
+    shotIds: ['shot-1'],
     durationSec: 3,
     prompt: 'video prompt',
     status: 'completed',
@@ -199,11 +204,9 @@ function finalVideo(overrides: Partial<ProjectFinalVideo> = {}): ProjectFinalVid
     renderTaskId: null,
     outputUrl: null,
     updatedAt: null,
-    bgmScore: {
-      schemaVersion: 2,
+    musicScore: {
       status: 'completed',
       taskId: 'task-bgm-1',
-      editScriptId: 'edit-script-1',
       timelineSignature: 'timeline-signature',
       durationSeconds: 30,
       musicModel: 'music-model',
@@ -220,40 +223,40 @@ function finalVideo(overrides: Partial<ProjectFinalVideo> = {}): ProjectFinalVid
 }
 
 describe('project canvas edit-first visibility', () => {
-  it('does not duplicate screenplay status in footer meta', () => {
+  it('does not duplicate bible status in footer meta', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
       storyboards: [],
-      editFirstWorkflow: workflow('screenplay_ready_for_review'),
-      editScreenplay: editScreenplay(),
+      editFirstWorkflow: workflow('bible_ready_for_review'),
+      editBible: editBible(),
       savedLayouts: [],
       translate: t,
     })
-    const screenplay = projection.nodes.find((node) => node.data.kind === 'editScreenplay')
+    const bible = projection.nodes.find((node) => node.data.kind === 'editBible')
 
-    expect(screenplay?.data.statusLabel).toBeTruthy()
-    expect(screenplay?.data.meta).toBe('')
+    expect(bible?.data.statusLabel).toBeTruthy()
+    expect(bible?.data.meta).toBe('')
   })
 
-  it('uses the screenplay node as the edit-first root without an analysis fallback node', () => {
+  it('uses the bible node as the edit-first root without an analysis fallback node', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
       episodeName: 'Episode 1',
       storyboards: [],
-      editFirstWorkflow: workflow('screenplay_ready_for_review'),
-      editScreenplay: editScreenplay(),
+      editFirstWorkflow: workflow('bible_ready_for_review'),
+      editBible: editBible(),
       savedLayouts: [],
       translate: t,
     })
-    const screenplay = projection.nodes.find((node) => node.data.kind === 'editScreenplay')
+    const bible = projection.nodes.find((node) => node.data.kind === 'editBible')
 
     expect(projection.nodes.some((node) => node.id.startsWith('analysis:'))).toBe(false)
     expect(projection.edges.some((edge) => edge.source.startsWith('analysis:') || edge.target.startsWith('analysis:'))).toBe(false)
-    expect(screenplay).toBeDefined()
-    expect(projection.edges.some((edge) => edge.target === screenplay?.id)).toBe(false)
+    expect(bible).toBeDefined()
+    expect(projection.edges.some((edge) => edge.target === bible?.id)).toBe(false)
   })
 
   it('does not render asset or execution nodes while the edit script is still generating', () => {
@@ -282,7 +285,7 @@ describe('project canvas edit-first visibility', () => {
       episodeName: 'Episode 1',
       storyboards: [],
       editFirstWorkflow: workflow('completed'),
-      editScreenplay: editScreenplay(),
+      editBible: editBible(),
       savedLayouts: [],
       translate: t,
     })
@@ -345,7 +348,7 @@ describe('project canvas edit-first visibility', () => {
       editFirstWorkflow: workflow('ready_to_generate_videos'),
       editScript: editScript({
         status: 'ready',
-        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+        generationSegments: [{ shotIds: ['shot-1'], continuity: 'first segment' }],
       }),
       savedLayouts: [],
       translate: t,
@@ -414,7 +417,7 @@ describe('project canvas edit-first visibility', () => {
       editFirstWorkflow: workflow('ready_to_generate_videos'),
       editScript: editScript({
         status: 'ready',
-        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+        generationSegments: [{ shotIds: ['shot-1'], continuity: 'first segment' }],
       }),
       finalVideo: finalVideo(),
       savedLayouts: [],
@@ -434,7 +437,7 @@ describe('project canvas edit-first visibility', () => {
       editFirstWorkflow: workflow('ready_to_render_final'),
       editScript: editScript({
         status: 'ready',
-        generationSegments: [{ shotNumbers: [1], continuity: 'first segment' }],
+        generationSegments: [{ shotIds: ['shot-1'], continuity: 'first segment' }],
       }),
       videoGroups: [videoGroup()],
       finalVideo: finalVideo(),

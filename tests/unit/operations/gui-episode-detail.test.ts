@@ -12,6 +12,17 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectEditScript: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
+  },
+  projectEditChapter: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+  },
+  projectEditBible: {
+    findUnique: vi.fn(),
+  },
+  projectEditShotExecutionPlan: {
+    findMany: vi.fn(),
   },
   task: {
     findFirst: vi.fn(),
@@ -54,9 +65,9 @@ import { createGuiOperations } from '@/lib/operations/domains/gui/gui-ops'
 interface EpisodeDetailResult {
   readonly episode: {
     readonly editScript: {
-      readonly shots: readonly { readonly shotNumber: number }[]
-      readonly generationSegments: readonly { readonly shotNumbers: readonly number[] }[]
-      readonly screenplayText?: string | null
+      readonly shots: readonly { readonly shotId: string; readonly shotNumber: number }[]
+      readonly generationSegments: readonly { readonly shotIds: readonly string[] }[]
+      readonly bibleId?: string | null
     } | null
   }
 }
@@ -76,6 +87,7 @@ function corePlan() {
   return {
     shots: [
       {
+        shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 4,
         scene: { name: 'Studio' },
@@ -96,7 +108,7 @@ function corePlan() {
     ],
     generationSegments: [
       {
-        shotNumbers: [1],
+        shotIds: ['shot-1'],
         continuity: 'The host remains at the timeline station.',
       },
     ],
@@ -108,7 +120,8 @@ function rawEditScriptRow() {
     id: 'edit-script-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
-    editScreenplayId: 'screenplay-1',
+    chapterId: 'chapter-default',
+    editBibleId: 'bible-1',
     corePlanJson: corePlan(),
     durationSec: 4,
     shotCount: 1,
@@ -135,16 +148,24 @@ describe('gui get_episode_detail operation', () => {
     })
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
       ...rawEditScriptRow(),
-      editScreenplay: {
-        id: 'screenplay-1',
+      editBible: {
+        id: 'bible-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
         userPrompt: 'Create an edit plan.',
         styleBibleJson: null,
-        screenplayText: 'Screenplay text',
+        bibleText: 'Bible text',
         status: 'completed',
       },
     })
+    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-default' })
+    prismaMock.projectEditChapter.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditBible.findUnique.mockResolvedValue({
+      id: 'bible-1',
+      styleBibleJson: null,
+    })
+    prismaMock.projectEditScript.findMany.mockResolvedValue([])
+    prismaMock.projectEditShotExecutionPlan.findMany.mockResolvedValue([])
   })
 
   it('returns the normalized edit script read model instead of the raw episode relation', async () => {
@@ -157,17 +178,18 @@ describe('gui get_episode_detail operation', () => {
       expect.objectContaining({ shotNumber: 1 }),
     ])
     expect(result.episode.editScript?.generationSegments).toEqual([
-      { shotNumbers: [1], continuity: 'The host remains at the timeline station.' },
+      { shotIds: ['shot-1'], continuity: 'The host remains at the timeline station.' },
     ])
-    expect(result.episode.editScript?.screenplayText).toBe('Screenplay text')
+    expect(result.episode.editScript?.bibleId).toBe('bible-1')
     expect(result.episode.editScript).not.toHaveProperty('corePlanJson')
     expect(prismaMock.projectEditScript.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         projectId: 'project-1',
         episodeId: 'episode-1',
+        chapterId: 'chapter-default',
       },
       include: expect.objectContaining({
-        editScreenplay: true,
+        requirements: expect.any(Object),
       }),
     }))
   })

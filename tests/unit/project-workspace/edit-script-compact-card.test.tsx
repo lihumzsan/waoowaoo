@@ -136,7 +136,7 @@ function editScriptNodeData(input?: {
     streamPresentation,
     onToggleExpanded: () => undefined,
     editScriptDetails: {
-      screenplayText: '剧本文本',
+      bibleText: '剧本文本',
       durationSec: 7,
       shotCount: 2,
       shots: [
@@ -287,6 +287,7 @@ function editAssetGroupNodeData(input?: {
           name: '林晓',
           eyebrow: '主要人物',
           description: '年轻女性。',
+          shotIds: ['shot-1', 'shot-2'],
           shotNumbers: [1, 2],
           statusLabel: '成功',
           isRunning: false,
@@ -300,6 +301,7 @@ function editAssetGroupNodeData(input?: {
           name: '客厅',
           eyebrow: '主要场景',
           description: '深夜客厅。',
+          shotIds: ['shot-1', 'shot-2'],
           shotNumbers: [1, 2],
           statusLabel: '成功',
           isRunning: false,

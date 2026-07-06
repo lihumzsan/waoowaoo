@@ -203,20 +203,6 @@ export function applyWorkspaceSSEEvent(params: {
   }
 
   if (
-    (
-      normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
-      normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
-    ) &&
-    (
-      event.taskType === TASK_TYPE.EDIT_SCREENPLAY_GENERATE ||
-      event.taskType === TASK_TYPE.EDIT_SCREENPLAY_REVISE
-    ) &&
-    resolvedEpisodeId
-  ) {
-    queryClient.invalidateQueries({ queryKey: queryKeys.project.editScreenplay(projectId, resolvedEpisodeId) })
-  }
-
-  if (
     normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
   ) {

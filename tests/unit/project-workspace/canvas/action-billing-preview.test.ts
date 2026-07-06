@@ -28,7 +28,7 @@ describe('workspace canvas action billing previews', () => {
     const request = resolve({
       type: 'generate_video_group',
       gridMode: '3x3',
-      shotNumbers: [1, 2, 3],
+      shotIds: ['shot-1', 'shot-2', 'shot-3'],
       generationOptions: { duration: 5, loop: false },
     })
 
@@ -38,7 +38,7 @@ describe('workspace canvas action billing previews', () => {
       episodeId: 'episode-1',
       mode: 'grid',
       gridMode: '3x3',
-      shotNumbers: [1, 2, 3],
+      shotIds: ['shot-1', 'shot-2', 'shot-3'],
       generationOptions: { duration: 5, loop: false },
     })
   })

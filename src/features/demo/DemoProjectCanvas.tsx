@@ -115,7 +115,7 @@ function DemoProjectCanvasContent({ snapshot }: { readonly snapshot: DemoProject
       episodeName: snapshot.episode.name,
       storyboards: snapshot.storyboards,
       editFirstWorkflow: DEMO_EDIT_FIRST_WORKFLOW,
-      editScreenplay: snapshot.editScreenplay,
+      editBible: snapshot.editBible,
       editScript: snapshot.editScript,
       editScriptPending: false,
       finalVideo: snapshot.finalVideo,

@@ -3,8 +3,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
-import type { EditFirstDurationTier } from '@/lib/edit-script/duration-tier'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type {
   WorkspaceBatchVideoGenerationParams,
   WorkspaceVideoGenerationOptions,
@@ -19,10 +17,8 @@ export interface WorkspaceVideoModelOption {
   videoPricingTiers?: VideoPricingTier[]
 }
 
-export interface WorkspaceEditScreenplayGenerationInput {
+export interface WorkspaceEditBibleGenerationInput {
   readonly prompt: string
-  readonly durationTier: EditFirstDurationTier
-  readonly aspectRatio: EditScriptVideoRatio
 }
 
 export interface WorkspaceRuntimeValue {
@@ -39,8 +35,8 @@ export interface WorkspaceRuntimeValue {
   onNovelTextChange: (value: string) => Promise<void>
   onVideoRatioChange: (value: string) => Promise<void>
   onRequestAssistantGuidance: () => Promise<void>
-  onGenerateEditScreenplay: (input: WorkspaceEditScreenplayGenerationInput) => Promise<void>
-  onGenerateEditScript: (screenplayId?: string) => Promise<void>
+  onGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
+  onGenerateEditScript: () => Promise<void>
   onOpenAssetLibrary: () => void
   onGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
   onSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>

@@ -41,7 +41,7 @@ function buildStylePreview(overrides: Partial<ProjectEditStylePreview>): Project
     id: 'preview-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
+    bibleId: 'bible-1',
     styleKey: 'style_a',
     aspectRatio: '16:9',
     title: 'Style A',
@@ -214,7 +214,7 @@ describe('workspace assistant panel layout', () => {
 
   it('renders completed tool calls with ok=false as failed instead of successful', () => {
     const html = renderAssistantToolCallCard({
-      toolName: 'request_edit_duration_aspect_ratio_choice',
+      toolName: 'request_edit_bible_review_choice',
       toolCallId: 'tool-call-choice-1',
       status: { type: 'complete' },
       args: {
@@ -229,9 +229,9 @@ describe('workspace assistant panel layout', () => {
       },
     })
 
-    expect(html).toContain('失败 · 选择时长与画幅')
+    expect(html).toContain('失败 · 审核 Bible')
     expect(html).toContain('PROJECT_AGENT_ACTIVITY_OVERLAP')
-    expect(html).not.toContain('成功 · 选择时长与画幅')
+    expect(html).not.toContain('成功 · 审核 Bible')
   })
 
   it('uses server-side pending approval state instead of reviving persisted approval cards', () => {
@@ -376,7 +376,7 @@ describe('workspace assistant panel layout', () => {
   it('shows the active run card only for external task waits', () => {
     expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
       storageLoading: false,
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       stylePreviewGenerationDocked: false,
     })).toBe(true)
     expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
@@ -386,7 +386,7 @@ describe('workspace assistant panel layout', () => {
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantExternalTaskRunCard({
       storageLoading: true,
-      operationId: 'generate_edit_screenplay',
+      operationId: 'ingest_script',
       stylePreviewGenerationDocked: false,
     })).toBe(false)
     expect(shouldShowWorkspaceAssistantExternalTaskRunCard({

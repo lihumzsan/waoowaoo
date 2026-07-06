@@ -19,8 +19,8 @@ type ResourceSyncPolicy = {
 }
 
 function policyForResource(ref: WorkspaceResourceRef): ResourceSyncPolicy {
-  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY && ref.episodeId) {
-    const queryKey = queryKeys.project.editScreenplay(ref.projectId, ref.episodeId)
+  if (ref.kind === WORKSPACE_RESOURCE_KIND.EDIT_BIBLE && ref.episodeId) {
+    const queryKey = queryKeys.project.editBible(ref.projectId, ref.episodeId)
     return { invalidate: [queryKey], refetchActive: [queryKey] }
   }
 

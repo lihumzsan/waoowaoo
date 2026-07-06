@@ -29,12 +29,21 @@ import {
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectContext, useProjectEditScreenplay, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
+import { useProjectContext, useProjectEditBible, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
+import BibleReviewPanel from '../bible-review/BibleReviewPanel'
+import ChapterFocusPanel from '../overview/ChapterFocusPanel'
+import ProjectOverviewPanel from '../overview/ProjectOverviewPanel'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
+import {
+  WORKSPACE_SCOPE_BIBLE_REVIEW_ID,
+  readWorkspaceScopeId,
+  workspaceChapterScopeId,
+  type WorkspaceScopeId,
+} from '../workspace-scope'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
   useWorkspaceCanvasActionBillingPreviews,
@@ -102,6 +111,8 @@ interface ProjectWorkspaceCanvasContentProps {
   editScriptPending?: boolean
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
+  workspaceScopeId?: WorkspaceScopeId
+  onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
 }
 
 interface CanvasViewportControlsProps {
@@ -239,16 +250,57 @@ function ProjectWorkspaceCanvasContent({
   editScriptPending = false,
   activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
+  workspaceScopeId,
+  onWorkspaceScopeSelect,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const billingT = useTranslations('assistantAgent')
   const { projectId, episodeId } = useWorkspaceProvider()
   const runtime = useWorkspaceRuntime()
-  const { episodeName, storyboards, editScript, finalVideo, videoGroups } = useWorkspaceEpisodeCanvasData()
+  const {
+    episodeName,
+    storyboards,
+    editScript,
+    editScripts,
+    editShotExecutionPlans,
+    finalVideo,
+    videoGroups,
+  } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
-  const { data: editScreenplay } = useProjectEditScreenplay(projectId, episodeId ?? null)
+  const { data: editBible } = useProjectEditBible(projectId, episodeId ?? null)
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
+  const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'overview')
+  const selectedChapter = workspaceScope.kind === 'chapter'
+    ? editBible?.chapters?.find((chapter) => chapter.id === workspaceScope.chapterId) ?? null
+    : null
+  const scopedStoryboards = useMemo(() => (
+    workspaceScope.kind === 'chapter'
+      ? storyboards.filter((storyboard) => storyboard.chapterId === workspaceScope.chapterId)
+      : storyboards
+  ), [storyboards, workspaceScope])
+  const scopedVideoGroups = useMemo(() => (
+    workspaceScope.kind === 'chapter'
+      ? videoGroups.filter((group) => group.chapterId === workspaceScope.chapterId)
+      : videoGroups
+  ), [videoGroups, workspaceScope])
+  const scopedEditScript = useMemo(() => {
+    if (workspaceScope.kind === 'chapter') {
+      return editScripts.find((script) => script.chapterId === workspaceScope.chapterId)
+        ?? (editScript?.chapterId === workspaceScope.chapterId ? editScript : null)
+    }
+    return editScript ?? editScripts[0] ?? null
+  }, [editScript, editScripts, workspaceScope])
+  const scopedEditShotExecutionPlan = useMemo(() => {
+    if (workspaceScope.kind === 'chapter') {
+      return editShotExecutionPlans.find((plan) => plan.chapterId === workspaceScope.chapterId)
+        ?? (editShotExecutionPlan?.chapterId === workspaceScope.chapterId ? editShotExecutionPlan : null)
+    }
+    return editShotExecutionPlan
+      ?? editShotExecutionPlans.find((plan) => plan.editScriptId === scopedEditScript?.id)
+      ?? editShotExecutionPlans[0]
+      ?? null
+  }, [editShotExecutionPlan, editShotExecutionPlans, scopedEditScript?.id, workspaceScope])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -296,20 +348,22 @@ function ProjectWorkspaceCanvasContent({
   const editScriptGenerationTaskState = editScriptGenerationTaskStateMap.getQueryState(editScriptGenerationTargets[0] ?? { targetType: '', targetId: '' })
   const editScriptGenerationActive = isTaskRuntimeRunningPhase(editScriptGenerationTaskState?.phase)
   const projectedEditScript = useMemo(() => (
-    editScript
+    scopedEditScript
       ? {
-          ...editScript,
+          ...scopedEditScript,
           status: editScriptGenerationActive
             ? 'generating'
-            : editScript.status === 'generating'
+            : scopedEditScript.status === 'generating'
               ? 'ready'
-              : editScript.status,
+              : scopedEditScript.status,
         }
-      : editScript
-  ), [editScript, editScriptGenerationActive])
+      : scopedEditScript
+  ), [scopedEditScript, editScriptGenerationActive])
   const effectiveEditScriptPending = editScriptPending
     || activeAssistantOperationId === 'generate_edit_script'
-    || (editScriptGenerationActive && !editScript)
+    || activeAssistantOperationId === 'plan_chapters'
+    || activeAssistantOperationId === 'replan_chapter'
+    || (editScriptGenerationActive && !scopedEditScript)
   const nodeRunningStatusLabel = useCallback((): string => (
     t('status.processing')
   ), [t])
@@ -565,16 +619,16 @@ function ProjectWorkspaceCanvasContent({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
     episodeName,
-    storyboards,
+    storyboards: scopedStoryboards,
     editFirstWorkflow,
-    editScreenplay,
+    editBible,
     editScript: projectedEditScript,
-    editShotExecutionPlan,
+    editShotExecutionPlan: scopedEditShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,
     finalVideo,
-    videoGroups,
+    videoGroups: scopedVideoGroups,
     defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
     defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
     savedLayouts: savedNodeLayouts,
@@ -851,15 +905,15 @@ function ProjectWorkspaceCanvasContent({
       projectId,
       episodeId,
       episodeName,
-      storyboards,
+      storyboards: scopedStoryboards,
       editFirstWorkflow,
-      editScreenplay,
+      editBible,
       editScript: projectedEditScript,
-      editShotExecutionPlan,
+      editShotExecutionPlan: scopedEditShotExecutionPlan,
       activeAssistantOperationId,
       editScriptPending: effectiveEditScriptPending,
       finalVideo,
-      videoGroups,
+      videoGroups: scopedVideoGroups,
       defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
       defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
       savedLayouts: EMPTY_SAVED_NODE_LAYOUTS,
@@ -870,7 +924,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editScreenplay, editShotExecutionPlan, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, storyboards, t, videoGroups])
+  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -993,6 +1047,43 @@ function ProjectWorkspaceCanvasContent({
               </button>
             </Panel>
           ) : null}
+          {workspaceScope.kind === 'overview' ? (
+            <Panel
+              position="top-left"
+              className="!z-[65] !m-0"
+              style={{ left: 16, top: 128 }}
+            >
+              <ProjectOverviewPanel
+                editBible={editBible}
+                workflow={editFirstWorkflow}
+                onOpenBibleReview={() => onWorkspaceScopeSelect?.(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
+                onSelectChapter={(chapterId) => onWorkspaceScopeSelect?.(workspaceChapterScopeId(chapterId))}
+              />
+            </Panel>
+          ) : null}
+          {workspaceScope.kind === 'bible_review' ? (
+            <Panel
+              position="top-left"
+              className="!z-[65] !m-0"
+              style={{ left: 16, top: 128 }}
+            >
+              <BibleReviewPanel
+                projectId={projectId ?? null}
+                episodeId={episodeId}
+                editBible={editBible}
+                onSelectChapter={(chapterId) => onWorkspaceScopeSelect?.(workspaceChapterScopeId(chapterId))}
+              />
+            </Panel>
+          ) : null}
+          {workspaceScope.kind === 'chapter' ? (
+            <Panel
+              position="top-left"
+              className="!z-[65] !m-0"
+              style={{ left: 16, top: 128 }}
+            >
+              <ChapterFocusPanel chapter={selectedChapter} />
+            </Panel>
+          ) : null}
         </ReactFlow>
       </div>
     </div>
@@ -1004,6 +1095,8 @@ interface ProjectWorkspaceCanvasProps {
   editScriptPending?: boolean
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
+  workspaceScopeId?: WorkspaceScopeId
+  onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
 }
 
 export default function ProjectWorkspaceCanvas({
@@ -1011,6 +1104,8 @@ export default function ProjectWorkspaceCanvas({
   editScriptPending = false,
   activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
+  workspaceScopeId,
+  onWorkspaceScopeSelect,
 }: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
@@ -1019,6 +1114,8 @@ export default function ProjectWorkspaceCanvas({
         editScriptPending={editScriptPending}
         activeAssistantFocusRequest={activeAssistantFocusRequest}
         styleBibleFocusRequestId={styleBibleFocusRequestId}
+        workspaceScopeId={workspaceScopeId}
+        onWorkspaceScopeSelect={onWorkspaceScopeSelect}
       />
     </ReactFlowProvider>
   )

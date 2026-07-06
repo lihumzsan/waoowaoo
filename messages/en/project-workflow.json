@@ -25,7 +25,7 @@
     "batchVideoFailed": "Batch video generation failed",
     "videoModelRequired": "Please choose a video model first",
     "finalRenderFailed": "AI final edit failed",
-    "bgmScoreFailed": "BGM generation failed",
+    "bgmScoreFailed": "Music score generation failed",
     "updateFailed": "Update failed",
     "saveFailed": "Save failed",
     "storyToScriptRunning": "Story→Script V2 running",
@@ -47,6 +47,80 @@
     },
     "confirm": "Continue and Clear",
     "cancel": "Cancel"
+  },
+  "workspaceScope": {
+    "overview": "Overview",
+    "bibleReview": "Bible Review",
+    "chapter": "Chapter {index}"
+  },
+  "overviewPanel": {
+    "title": "Overview Canvas",
+    "stage": "Stage: {stage}",
+    "subtitle": "Global context, chapter split, and production status for the current episode.",
+    "subtitleWithTitle": "Global context, chapter split, and production status for {title}.",
+    "chapters": "Chapters",
+    "targetDuration": "Target Duration",
+    "confirmed": "Confirmed Chapters",
+    "rendered": "Rendered Chapters",
+    "characters": "Characters {count}",
+    "locations": "Locations {count}",
+    "ledgerEvents": "Ledger Events {count}",
+    "emotionalCues": "Emotional Cues {count}",
+    "worldRules": "World Rules {count}",
+    "chapterDuration": "{duration}s",
+    "chapterStatus": "Plan: {status}",
+    "chapterRenderStatus": "Render: {status}",
+    "emptyChapters": "No chapters have been planned yet.",
+    "openBibleReview": "Open Bible Review"
+  },
+  "bibleReview": {
+    "title": "Bible Review",
+    "description": "Review this episode's global bible, beat sheet, ledger, emotional curve, and chapter split before asset and shot planning.",
+    "empty": "This episode has no bible ready for review.",
+    "untitled": "Untitled Bible",
+    "status": "Status: {status}",
+    "version": "v{version}",
+    "confirmSuccess": "Bible confirmed.",
+    "revisionSuccess": "Bible revision submitted.",
+    "confirm": "Confirm Bible",
+    "submitRevision": "Submit Structured Revision",
+    "submitting": "Submitting",
+    "submitFailed": "Submit failed: {error}",
+    "lockedHint": "Confirmation locks the bible; downstream production blocks direct edits.",
+    "characters": "Characters",
+    "locations": "Locations",
+    "emptyCharacters": "No characters.",
+    "emptyLocations": "No locations.",
+    "worldRules": "World Rules",
+    "chapters": "Chapter Split",
+    "chapterDuration": "{duration}s",
+    "emptyChapters": "No chapters.",
+    "structuredDrafts": "Structured Data",
+    "stats": {
+      "chapters": "Chapters {count}",
+      "beats": "Beats {count}",
+      "ledgerEvents": "Ledger Events {count}",
+      "emotionalCues": "Emotional Cues {count}"
+    },
+    "draft": {
+      "bible": "Bible JSON",
+      "beatSheet": "Beat Sheet JSON",
+      "ledger": "Ledger JSON",
+      "emotionalCurve": "Emotional Curve JSON"
+    }
+  },
+  "chapterFocus": {
+    "title": "Chapter View",
+    "empty": "The selected chapter was not found.",
+    "heading": "Chapter {index} · {title}",
+    "targetDuration": "Target Duration",
+    "durationValue": "{duration}s",
+    "sourceRange": "Source Range",
+    "planStatus": "Plan Status",
+    "renderStatus": "Render Status",
+    "beatCount": "Beats {count}",
+    "eventCount": "Ledger Events {count}",
+    "hasOutput": "Has Output"
   },
   "canvas": {
     "title": "Project Canvas",
@@ -112,7 +186,7 @@
         "jumpToActive": "View Current Generation"
       },
       "actions": {
-        "generateScript": "Generate Screenplay",
+        "generateScript": "Generate Bible",
         "confirmEditStylePreview": "Confirm This Style",
         "generateEditScript": "Generate Edit Table",
         "generateShotExecutionPlan": "Generate Shot Execution Plan",
@@ -121,8 +195,8 @@
         "regenerateImage": "Regenerate",
         "generateVideo": "Generate Video",
         "generateAllVideos": "Batch Generate",
-        "generateBgmScore": "Generate BGM",
-        "generatingBgm": "Generating BGM",
+        "generateBgmScore": "Generate Music Plan",
+        "generatingBgm": "Generating Music",
         "renderFinalVideo": "AI Edit",
         "aiEditing": "AI Editing",
         "generateEditAssets": "Generate All",
@@ -136,11 +210,11 @@
         "ready": "Ready",
         "succeeded": "Succeeded",
         "confirmed": "Confirmed",
-        "awaitingScreenplayReview": "Awaiting Screenplay Review",
+        "awaitingBibleReview": "Awaiting Bible Review",
         "awaitingStyleConfirmation": "Awaiting Style Confirmation",
         "finalReady": "Final Ready",
         "aiEditing": "AI Editing",
-        "generatingBgm": "Generating BGM",
+        "generatingBgm": "Generating Music",
         "processing": "Processing",
         "failed": "Failed"
       },
@@ -158,7 +232,7 @@
         "image": "No image prompt",
         "video": "No video prompt",
         "location": "No location",
-        "screenplay": "No screenplay",
+        "bible": "No bible",
         "editScript": "No edit table",
         "editAsset": "No asset description"
       },
@@ -184,7 +258,10 @@
         "noCharacters": "No characters",
         "editScriptCompactSummary": "{count} shots",
         "editScriptCompactSummaryWithCharacters": "{count} shots · Characters {characters}",
-        "screenplay": "Screenplay",
+        "bible": "Bible",
+        "chapters": "Chapters",
+        "planStatus": "Plan Status",
+        "renderStatus": "Render Status",
         "originalRequest": "Original Request",
         "styleSummary": "Style Summary",
         "rawUserStyle": "User Style",
@@ -316,7 +393,7 @@
         "baseVideo": "Base Video",
         "lastOptions": "Last Generation Options",
         "finalStats": "Final Stats",
-        "bgmScoreStats": "BGM Stats",
+        "bgmScoreStats": "Music Stats",
         "totalShots": "Total Shots",
         "totalImages": "Images",
         "totalVideos": "Videos",
@@ -334,7 +411,7 @@
         "virtualLayers": "Internal Arrangement Layers",
         "finalMusicPrompt": "Final Music Prompt",
         "promptDesignMissing": "Prompt design missing",
-        "promptDesignMissingDescription": "This BGM was generated with old data or without saved score design. Regenerate BGM to view the dynamic design sections and final prompt.",
+        "promptDesignMissingDescription": "This score was generated with old data or without saved score design. Regenerate the music plan to view the dynamic design sections and final prompt.",
         "videoOrder": "Video Order",
         "editScriptMeta": "Edit Table Info",
         "shotIndexHeader": "Shot",
@@ -369,8 +446,8 @@
           "editScriptPreview": "Edit Table Video Preview",
           "editScriptTimeline": "Shot Timeline",
           "videoControls": "Video Controls",
-          "bgmScoreOutput": "BGM Output",
-          "bgmScoreStats": "BGM Stats",
+          "bgmScoreOutput": "Music Output",
+          "bgmScoreStats": "Music Stats",
           "bgmScoreOverview": "Score Overview",
           "bgmScoreDesign": "Score Design",
           "bgmScorePromptSections": "Prompt Sections",
@@ -389,7 +466,7 @@
         "fields": {
           "summary": "Summary",
           "duration": "Duration",
-          "screenplay": "Screenplay JSON",
+          "bible": "Bible JSON",
           "locations": "Locations",
           "characters": "Characters",
           "props": "Props",
@@ -467,8 +544,8 @@
           "generateAssetReferenceVideos": "Generate With References",
           "uploadReferenceImage": "Upload Reference",
           "uploadingReference": "Uploading",
-          "generateBgmScore": "Generate BGM",
-          "generatingBgm": "Generating BGM",
+          "generateBgmScore": "Generate Music Plan",
+          "generatingBgm": "Generating Music",
           "renderFinalVideo": "AI Edit",
           "openFinalVideo": "Open Final Video",
           "downloadVideos": "Download Videos",
@@ -517,8 +594,8 @@
           "storyboardReferenceSelection": "{count} storyboard image(s) selected. This mode only uses storyboard images as generation references.",
           "noNextPanelForFirstLast": "This shot has no next shot, so first/last frame mode cannot be used.",
           "finalRenderRequiresVideos": "Generate every shot video before running the AI final edit.",
-          "finalRenderRequiresBgm": "Generate the continuous BGM before running the AI final edit.",
-          "promptDesignMissingDescription": "This BGM was generated with old data or without saved score design. Regenerate BGM to view the dynamic design sections and final prompt."
+          "finalRenderRequiresBgm": "Final editing will continue silently when no music score has been generated.",
+          "promptDesignMissingDescription": "This score was generated with old data or without saved score design. Regenerate the music plan to view the dynamic design sections and final prompt."
         },
         "status": {
           "videoReady": "Ready",
@@ -534,7 +611,7 @@
           "totalVideos": "{count} videos",
           "missingVideos": "{count} missing",
           "totalDuration": "{count}s",
-          "bgmStatus": "BGM status: {status}",
+          "bgmStatus": "Music status: {status}",
           "bgmDesignSectionCount": "{count} design notes",
           "bgmPromptSectionCount": "{count} prompt sections",
           "bgmVirtualLayerCount": "{count} internal layers",
@@ -583,13 +660,13 @@
           "meta": "{mode} · shots {shots} · {duration}s"
         },
         "bgmScore": {
-          "title": "BGM Music Project",
+          "title": "Music Plan",
           "eyebrow": "Continuous Score",
-          "body": "{videos} video segments will guide the BGM arrangement.",
-          "meta": "Waiting to generate continuous BGM",
-          "ready": "BGM ready · {count} prompt sections",
-          "readyMissingPromptDesign": "BGM ready · prompt design missing",
-          "failed": "BGM generation failed"
+          "body": "{videos} video segments will guide the music design.",
+          "meta": "Waiting to generate music plan",
+          "ready": "Music ready · {count} prompt sections",
+          "readyMissingPromptDesign": "Music ready · prompt design missing",
+          "failed": "Music generation failed"
         },
         "finalTimeline": {
           "title": "Final Timeline",
@@ -598,17 +675,17 @@
           "meta": "Order comes from domain data",
           "outputReady": "Final video generated. Preview it in details."
         },
-        "editScreenplay": {
-          "title": "Screenplay",
+        "editBible": {
+          "title": "Bible",
           "eyebrow": "Screenwriting Module",
           "meta": "Story input for the edit-first table",
-          "pendingTitle": "Generating Screenplay",
-          "pendingBody": "AI is generating the screenplay, narrative direction, and style input from the current video brief.",
-          "pendingMeta": "This will become an editable screenplay when generation completes"
+          "pendingTitle": "Generating Bible",
+          "pendingBody": "AI is generating the bible, narrative direction, and style input from the current video brief.",
+          "pendingMeta": "This will become an editable bible when generation completes"
         },
         "editStylePreview": {
           "eyebrow": "Style Candidate",
-          "body": "A 3x3 film tone preview generated from the screenplay.",
+          "body": "A 3x3 film tone preview generated from the bible.",
           "meta": "Becomes the single Style Bible"
         },
         "editStyleBible": {

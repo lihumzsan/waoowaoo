@@ -8,7 +8,7 @@ import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-fi
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type {
   ProjectEditAssetRequirement,
-  ProjectEditScreenplay,
+  ProjectEditBible,
   ProjectEditScript,
   ProjectEditScriptShot,
   ProjectEditShotExecutionPlan,
@@ -35,7 +35,7 @@ import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE,
-  WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE,
+  WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE,
   WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y,
   WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
@@ -66,7 +66,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly episodeName?: string
   readonly storyboards: readonly ProjectStoryboard[]
   readonly editFirstWorkflow: EditFirstWorkflowState
-  readonly editScreenplay?: ProjectEditScreenplay | null
+  readonly editBible?: ProjectEditBible | null
   readonly editScript?: ProjectEditScript | null
   readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
   readonly activeAssistantOperationId?: string | null
@@ -144,25 +144,23 @@ function parseStringList(value: string | null | undefined): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean)
 }
 
-function uniqueNumbers(values: readonly number[]): number[] {
-  const seen = new Set<number>()
-  const output: number[] = []
-  values.forEach((value) => {
-    if (!Number.isInteger(value) || seen.has(value)) return
-    seen.add(value)
-    output.push(value)
+function readShotIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const output: string[] = []
+  value.forEach((item) => {
+    if (typeof item !== 'string') return
+    const shotId = item.trim()
+    if (!shotId || seen.has(shotId)) return
+    seen.add(shotId)
+    output.push(shotId)
   })
   return output
 }
 
-function readShotNumbers(value: unknown): number[] {
-  if (!Array.isArray(value)) return []
-  return uniqueNumbers(value.flatMap((item) => (typeof item === 'number' ? [item] : [])))
-}
-
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
+  return left.every((shotId, index) => shotId === right[index])
 }
 
 function runtimeTargets(...targets: Array<TaskRuntimeTarget | null>): readonly TaskRuntimeTarget[] {
@@ -222,14 +220,18 @@ function stylePreviewAspectRatioValue(value: '9:16' | '16:9' | '21:9' | null | u
   }
 }
 
-function confirmedStylePreviewAspectRatio(screenplay: ProjectEditScreenplay | null | undefined): number | null {
-  const confirmed = screenplay?.stylePreviews?.find((preview) => preview.status === 'confirmed') ?? null
-  const fallback = screenplay?.stylePreviews?.[0] ?? null
+function confirmedStylePreviewAspectRatio(bible: ProjectEditBible | null | undefined): number | null {
+  const confirmed = bible?.stylePreviews?.find((preview) => preview.status === 'confirmed') ?? null
+  const fallback = bible?.stylePreviews?.[0] ?? null
   return stylePreviewAspectRatioValue(confirmed?.aspectRatio ?? fallback?.aspectRatio)
 }
 
 function resolvePanelShotNumber(panel: ProjectPanel): number {
-  return panel.sourceShotNumber ?? panel.panelNumber ?? panel.panelIndex + 1
+  return panel.panelNumber ?? panel.panelIndex + 1
+}
+
+function resolvePanelShotId(panel: ProjectPanel): string {
+  return panel.sourceShotId ?? `panel:${panel.id}`
 }
 
 function collectPanels(storyboards: readonly ProjectStoryboard[]): ProjectPanel[] {
@@ -296,20 +298,20 @@ function maxNodeBottomY(
   return matchingBottoms.length > 0 ? Math.max(...matchingBottoms) : null
 }
 
-function panelByShotNumber(storyboards: readonly ProjectStoryboard[]): ReadonlyMap<number, ProjectPanel> {
-  const panels = new Map<number, ProjectPanel>()
+function panelByShotId(storyboards: readonly ProjectStoryboard[]): ReadonlyMap<string, ProjectPanel> {
+  const panels = new Map<string, ProjectPanel>()
   collectPanels(storyboards).forEach((panel) => {
-    const shotNumber = resolvePanelShotNumber(panel)
-    if (!panels.has(shotNumber)) panels.set(shotNumber, panel)
+    const shotId = resolvePanelShotId(panel)
+    if (!panels.has(shotId)) panels.set(shotId, panel)
   })
   return panels
 }
 
-function videoGroupForShotNumbers(
+function videoGroupForShotIds(
   videoGroups: readonly ProjectVideoGroup[],
-  shotNumbers: readonly number[],
+  shotIds: readonly string[],
 ): ProjectVideoGroup | null {
-  return videoGroups.find((group) => sameShotNumbers(readShotNumbers(group.shotNumbers), shotNumbers)) ?? null
+  return videoGroups.find((group) => sameShotIds(readShotIds(group.shotIds), shotIds)) ?? null
 }
 
 function inferGridMode(shotCount: number): '2x2' | '3x3' | undefined {
@@ -357,10 +359,21 @@ function buildStyleBibleDetails(value: unknown): WorkspaceCanvasStyleBibleDetail
   return styleBibleHasPolicyText(details) ? details : null
 }
 
-function confirmedStylePreviewImageUrl(screenplay: ProjectEditScreenplay | null | undefined): string | null {
-  return screenplay?.stylePreviews?.find((preview) => (
+function confirmedStylePreviewImageUrl(bible: ProjectEditBible | null | undefined): string | null {
+  return bible?.stylePreviews?.find((preview) => (
     preview.status === 'confirmed' && Boolean(stringValue(preview.imageUrl))
   ))?.imageUrl ?? null
+}
+
+function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): string {
+  if (!editBible) return ''
+  if (typeof editBible.textPreview === 'string' && editBible.textPreview.trim()) return editBible.textPreview.trim()
+  const bible = editBible.bible
+  if (bible && typeof bible === 'object') {
+    const synopsis = (bible as { synopsis?: unknown }).synopsis
+    if (typeof synopsis === 'string' && synopsis.trim()) return synopsis.trim()
+  }
+  return ''
 }
 
 function assetPreviewUrl(requirement: ProjectEditAssetRequirement): string | null {
@@ -476,12 +489,12 @@ function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate
 }
 
 function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasBgmScoreDetails | undefined {
-  const bgmScore = finalVideo?.bgmScore
+  const bgmScore = finalVideo?.musicScore
   if (!bgmScore) return undefined
   return {
     status: bgmScore.status,
-    durationSeconds: bgmScore.durationSeconds,
-    musicModel: bgmScore.musicModel,
+    durationSeconds: bgmScore.durationSeconds ?? null,
+    musicModel: bgmScore.musicModel ?? null,
     hasPromptDesign: Boolean(bgmScore.plan),
     promptDesignMissing: !bgmScore.plan,
     designSectionCount: bgmScore.plan?.scoreDesign.sections.length ?? 0,
@@ -512,23 +525,25 @@ function videoPlanDetails(input: {
   readonly editScript: ProjectEditScript
   readonly segmentIndex: number
   readonly videoGroup: ProjectVideoGroup | null
-  readonly panelsByShot: ReadonlyMap<number, ProjectPanel>
+  readonly panelsByShot: ReadonlyMap<string, ProjectPanel>
   readonly requirements: readonly ProjectEditAssetRequirement[]
   readonly defaultVideoModel?: string | null
 }): WorkspaceCanvasVideoPlanDetails {
   const segment = input.editScript.generationSegments[input.segmentIndex]
   if (!segment) throw new Error(`GENERATION_SEGMENT_MISSING:${input.segmentIndex}`)
-  const durationSec = segment.shotNumbers.reduce((total, shotNumber) => {
-    const shot = input.editScript.shots.find((candidate) => candidate.shotNumber === shotNumber)
+  const segmentShots = segment.shotIds.map((shotId) => input.editScript.shots.find((candidate) => candidate.shotId === shotId)).filter((shot): shot is ProjectEditScriptShot => Boolean(shot))
+  const shotNumbers = segmentShots.map((shot) => shot.shotNumber)
+  const durationSec = segment.shotIds.reduce((total, shotId) => {
+    const shot = input.editScript.shots.find((candidate) => candidate.shotId === shotId)
     return total + (shot?.durationSec ?? 0)
   }, 0)
-  const sourceImages = segment.shotNumbers.map((shotNumber) => {
-    const panel = input.panelsByShot.get(shotNumber) ?? null
+  const sourceImages = segment.shotIds.map((shotId, index) => {
+    const panel = input.panelsByShot.get(shotId) ?? null
     return {
       panelId: panel?.id ?? null,
       storyboardId: panel?.storyboardId ?? null,
       panelIndex: panel?.panelIndex ?? null,
-      shotNumber,
+      shotNumber: shotNumbers[index] ?? index + 1,
       imageUrl: primaryPanelImageUrl(panel),
       aspectRatio: null,
     }
@@ -538,9 +553,10 @@ function videoPlanDetails(input: {
     segmentIndex: input.segmentIndex,
     kind: 'group',
     videoGroupId: input.videoGroup?.id ?? null,
-    shotNumbers: segment.shotNumbers,
+    shotNumbers,
+    shotIds: segment.shotIds,
     durationSec,
-    gridMode: inferGridMode(segment.shotNumbers.length),
+    gridMode: inferGridMode(segment.shotIds.length),
     continuity: segment.continuity,
     prompt: input.videoGroup?.prompt ?? null,
     assetReferenceVideoModel: input.defaultVideoModel ?? null,
@@ -549,13 +565,16 @@ function videoPlanDetails(input: {
     errorMessage: input.videoGroup?.errorMessage ?? null,
     sourceImages,
     assetReferences: input.requirements
-      .filter((requirement) => requirement.shotNumbers.some((shotNumber) => segment.shotNumbers.includes(shotNumber)))
+      .filter((requirement) => requirement.shotIds.some((shotId) => segment.shotIds.includes(shotId)))
       .map((requirement) => ({
         id: requirement.id,
         name: requirement.name,
         kind: requirement.kind,
         imageUrl: assetPreviewUrl(requirement),
-        shotNumbers: requirement.shotNumbers,
+        shotNumbers: requirement.shotIds
+          .map((shotId) => input.editScript.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
+          .filter((value): value is number => typeof value === 'number'),
+        shotIds: requirement.shotIds,
       })),
     validationMessage: null,
   }
@@ -568,7 +587,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     episodeName,
     storyboards,
     editFirstWorkflow,
-    editScreenplay = null,
+    editBible = null,
     editScript = null,
     editShotExecutionPlan = null,
     activeAssistantOperationId = null,
@@ -585,46 +604,56 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
 
   const nodes: WorkspaceCanvasFlowNode[] = []
   const edges: WorkspaceCanvasFlowEdge[] = []
-  const panelsByShot = panelByShotNumber(storyboards)
+  const panelsByShot = panelByShotId(storyboards)
   const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
-  const styleBibleDetails = buildStyleBibleDetails(editScreenplay?.styleBible)
-  const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editScreenplay)
-  const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editScreenplay)
-  const screenplayRunning = activeAssistantOperationId === 'generate_edit_screenplay'
-    || (editScreenplay ? hasStreamTarget(streamTargets, 'editScreenplay', editScreenplay.id) : false)
+  const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
+  const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
+  const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
+  const bibleRunning = activeAssistantOperationId === 'ingest_script'
+    || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const phaseLabels = artifactPhaseLabels(translate)
 
-  let screenplayNodeId: string | null = null
-  if (editScreenplay || editScriptPending || screenplayRunning) {
-    const screenplayPresentation = screenplayRunning || !editScreenplay
+  let bibleNodeId: string | null = null
+  if (editBible || editScriptPending || bibleRunning) {
+    const biblePresentation = bibleRunning || !editBible
       ? workspaceCanvasRunningPresentation(phaseLabels)
-      : artifactPresentationFromTaskBackedStatus(editScreenplay.status, phaseLabels)
+      : artifactPresentationFromTaskBackedStatus(editBible.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
-    screenplayNodeId = editScreenplay
-      ? workspaceNodeId.editScreenplay(editScreenplay.id)
-      : workspaceNodeId.editScreenplay(`pending:${episodeId}`)
+    bibleNodeId = editBible
+      ? workspaceNodeId.editBible(editBible.id)
+      : workspaceNodeId.editBible(`pending:${episodeId}`)
     nodes.push(createNode({
-      id: screenplayNodeId,
-      position: layoutPosition(savedLayouts, screenplayNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
-      width: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.width,
-      height: WORKSPACE_CANVAS_EDIT_SCREENPLAY_NODE_SIZE.height,
+      id: bibleNodeId,
+      position: layoutPosition(savedLayouts, bibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
+      width: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height,
       data: {
         projectId,
         episodeName,
-        kind: 'editScreenplay',
-        layoutNodeType: 'editScreenplay',
-        targetType: 'editScreenplay',
-        targetId: editScreenplay?.id ?? `pending:${episodeId}`,
-        title: translate('nodes.editScreenplay.title'),
-        eyebrow: translate('nodes.editScreenplay.eyebrow'),
-        body: editScreenplay?.screenplayText ?? translate('nodes.editScreenplay.pendingBody'),
+        kind: 'editBible',
+        layoutNodeType: 'editBible',
+        targetType: 'editBible',
+        targetId: editBible?.id ?? `pending:${episodeId}`,
+        title: translate('nodes.editBible.title'),
+        eyebrow: translate('nodes.editBible.eyebrow'),
+        body: editBiblePreviewText(editBible) || translate('nodes.editBible.pendingBody'),
         meta: '',
-        ...screenplayPresentation,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditScreenplay(editScreenplay?.id ?? null)),
-        editScreenplayDetails: editScreenplay
+        ...biblePresentation,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(editBible?.id ?? null)),
+        editBibleDetails: editBible
           ? {
-              screenplayText: editScreenplay.screenplayText,
-              userPrompt: editScreenplay.userPrompt,
+              bibleText: editBiblePreviewText(editBible),
+              userPrompt: editBible.sourceDocumentId,
+              chapters: (editBible.chapters ?? []).map((chapter) => ({
+                id: chapter.id,
+                chapterIndex: chapter.chapterIndex,
+                title: chapter.title,
+                summary: chapter.summary,
+                targetDurationSec: chapter.targetDurationSec,
+                status: chapter.status,
+                renderStatus: chapter.renderStatus ?? null,
+                outputMediaId: chapter.outputMediaId ?? null,
+              })),
             }
           : undefined,
         onAction,
@@ -633,8 +662,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let styleBibleNodeId: string | null = null
-  if (styleBibleDetails && editScreenplay) {
-    styleBibleNodeId = workspaceNodeId.editStyleBible(editScreenplay.id)
+  if (styleBibleDetails && editBible) {
+    styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     nodes.push(createNode({
       id: styleBibleNodeId,
       position: layoutPosition(savedLayouts, styleBibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y + (ROW_GAP_Y + 80) * 2 }),
@@ -646,7 +675,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         kind: 'editStyleBible',
         layoutNodeType: 'editStyleBible',
         targetType: 'editStyleBible',
-        targetId: editScreenplay.id,
+        targetId: editBible.id,
         title: translate('nodes.editStyleBible.title'),
         eyebrow: translate('nodes.editStyleBible.eyebrow'),
         body: styleBibleDetails.styleSummary ?? translate('nodes.editStyleBible.body'),
@@ -658,7 +687,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    if (screenplayNodeId) edges.push(createEdge(`edge:${screenplayNodeId}:${styleBibleNodeId}`, screenplayNodeId, styleBibleNodeId))
+    if (bibleNodeId) edges.push(createEdge(`edge:${bibleNodeId}:${styleBibleNodeId}`, bibleNodeId, styleBibleNodeId))
   }
 
   let editScriptNodeId: string | null = null
@@ -679,12 +708,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           }
     const editScriptDetails = editScript
       ? {
-          screenplayText: editScript.screenplayText,
+          bibleText: editScript.sourceText ?? '',
           durationSec: editScript.durationSec,
           shotCount: editScript.shotCount,
           shots: editScript.shots.map((shot) => {
-            const panel = panelsByShot.get(shot.shotNumber) ?? null
+            const panel = panelsByShot.get(shot.shotId) ?? null
             return {
+              shotId: shot.shotId,
               shotNumber: shot.shotNumber,
               durationSec: shot.durationSec,
               sceneName: shot.scene.name,
@@ -726,16 +756,16 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ...editScriptPresentation,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
         actionLabel: editScript ? undefined : translate('actions.generateEditScript'),
-        action: editScreenplay && !editScript ? { type: 'generate_edit_script', screenplayId: editScreenplay.id } : undefined,
-        actionDisabled: !editScreenplay,
+        action: editBible && !editScript ? { type: 'generate_edit_script' } : undefined,
+        actionDisabled: !editBible,
         editScriptDetails,
         onAction,
       },
     }))
     if (styleBibleNodeId) {
       edges.push(createEdge(`edge:${styleBibleNodeId}:${editScriptNodeId}`, styleBibleNodeId, editScriptNodeId))
-    } else if (screenplayNodeId) {
-      edges.push(createEdge(`edge:${screenplayNodeId}:${editScriptNodeId}`, screenplayNodeId, editScriptNodeId))
+    } else if (bibleNodeId) {
+      edges.push(createEdge(`edge:${bibleNodeId}:${editScriptNodeId}`, bibleNodeId, editScriptNodeId))
     }
   }
 
@@ -785,7 +815,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             name: requirement.name,
             eyebrow: requirement.kind,
             description: requirement.description,
-            shotNumbers: requirement.shotNumbers,
+            shotIds: requirement.shotIds,
+            shotNumbers: requirement.shotIds
+              .map((shotId) => editScript.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
+              .filter((value): value is number => typeof value === 'number'),
             statusLabel: artifactPresentationFromTaskBackedStatus(requirement.status, phaseLabels)?.statusLabel ?? '',
             isRunning: requirement.status === 'generating',
             previewImageUrl: assetPreviewUrl(requirement),
@@ -851,7 +884,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   const panelList = collectPanels(storyboards)
-  const shotNodeIdsByShotNumber = new Map<number, string>()
+  const shotNodeIdsByShotId = new Map<string, string>()
   let storyboardSourceNodeId: string | null = null
   if (executionNodeId) {
     storyboardSourceNodeId = executionNodeId
@@ -864,8 +897,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   if (editFirstCanvasVisibility.storyboardPanels && storyboardSourceNodeId) {
     panelList.forEach((panel, index) => {
       const shotNumber = resolvePanelShotNumber(panel)
+      const shotId = resolvePanelShotId(panel)
       const nodeId = workspaceNodeId.shot(panel.id)
-      shotNodeIdsByShotNumber.set(shotNumber, nodeId)
+      shotNodeIdsByShotId.set(shotId, nodeId)
       const previewImageUrl = primaryPanelImageUrl(panel)
       const previewAspectRatio = mediaAspectRatio(panel.media) ?? stylePreviewAspectRatio
       const shotRunning = panel.imageTaskRunning || panel.videoTaskRunning
@@ -932,7 +966,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
     editScript.generationSegments.forEach((segment, index) => {
       const nodeId = workspaceNodeId.videoPlan(editScript.id, index + 1)
-      const videoGroup = videoGroupForShotNumbers(videoGroups, segment.shotNumbers)
+      const videoGroup = videoGroupForShotIds(videoGroups, segment.shotIds)
       const details = videoPlanDetails({
         editScript,
         segmentIndex: index,
@@ -941,7 +975,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         requirements: editScript.requirements,
         defaultVideoModel: defaultSequenceVideoModel ?? defaultVideoModel,
       })
-      const gridMode = inferGridMode(segment.shotNumbers.length)
+      const gridMode = inferGridMode(segment.shotIds.length)
       const canGenerateGroup = Boolean(gridMode && details.sourceImages.every((image) => Boolean(image.imageUrl)))
       const videoGroupPresentation = videoGroup
         ? artifactPresentationFromTaskBackedStatus(videoGroup.status, phaseLabels)
@@ -972,7 +1006,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           body: segment.continuity,
           meta: translate('nodes.videoPlan.meta', {
             mode: translate('nodeFields.videoPlanGroup'),
-            shots: segment.shotNumbers.length,
+            shots: segment.shotIds.length,
             duration: details.durationSec,
           }),
           ...(videoGroupPresentation ?? { statusLabel: '', isRunning: false }),
@@ -982,18 +1016,18 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             ? {
                 type: 'generate_video_group',
                 gridMode,
-                shotNumbers: segment.shotNumbers,
+                shotIds: segment.shotIds,
               }
             : undefined,
           videoPlanDetails: details,
           onAction,
         },
       }))
-      segment.shotNumbers.forEach((shotNumber) => {
-        const shotNodeId = shotNodeIdsByShotNumber.get(shotNumber)
-        if (shotNodeId) edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotNumber}`, shotNodeId, nodeId))
+      segment.shotIds.forEach((shotId) => {
+        const shotNodeId = shotNodeIdsByShotId.get(shotId)
+        if (shotNodeId) edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotId}`, shotNodeId, nodeId))
       })
-      if (!segment.shotNumbers.some((shotNumber) => shotNodeIdsByShotNumber.has(shotNumber)) && executionNodeId) {
+      if (!segment.shotIds.some((shotId) => shotNodeIdsByShotId.has(shotId)) && executionNodeId) {
         edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
       }
     })
@@ -1075,7 +1109,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           totalVideos: panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).length + videoGroups.filter((group) => Boolean(group.videoMedia?.url ?? group.videoUrl)).length,
           totalDuration: editScript?.durationSec ?? null,
           orderedVideoLabels: [
-            ...videoGroups.map((group) => group.shotNumbers).map((shotNumbers) => readShotNumbers(shotNumbers).join(', ')),
+            ...videoGroups.map((group) => readShotIds(group.shotIds)
+              .map((shotId) => editScript?.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? shotId)
+              .join(', ')),
             ...panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).map((panel) => String(resolvePanelShotNumber(panel))),
           ],
           outputUrl: finalVideo?.outputUrl,
@@ -1105,7 +1141,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeName,
     storyboards,
     editFirstWorkflow,
-    editScreenplay,
+    editBible,
     editScript,
     editShotExecutionPlan,
     activeAssistantOperationId,
@@ -1126,7 +1162,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeName,
     storyboards,
     editFirstWorkflow,
-    editScreenplay,
+    editBible,
     editScript,
     editShotExecutionPlan,
     activeAssistantOperationId,
@@ -1145,7 +1181,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     episodeName,
     storyboards,
     editFirstWorkflow,
-    editScreenplay,
+    editBible,
     editScript,
     editShotExecutionPlan,
     activeAssistantOperationId,

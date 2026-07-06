@@ -360,10 +360,10 @@ function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCa
 function textStreamPresentation(): WorkspaceCanvasStreamPresentation {
   return {
     isStreaming: true,
-    activeItemKey: 'screenplay',
-    displayedItemKeys: ['screenplay'],
+    activeItemKey: 'bible',
+    displayedItemKeys: ['bible'],
     pinnedItemKeys: [],
-    revealedFieldCountByKey: { screenplay: Number.MAX_SAFE_INTEGER },
+    revealedFieldCountByKey: { bible: Number.MAX_SAFE_INTEGER },
   }
 }
 
@@ -437,34 +437,35 @@ function createStreamRuntimeEntry(input: {
   }
 }
 
-function buildEditScreenplayRuntimeEntries(
+function buildEditBibleRuntimeEntries(
   snapshots: readonly TextStreamSnapshot[],
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
-  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editScreenplay.text')
+  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editBible.text')
   return matchingSnapshots.flatMap((snapshot) => {
-    if (snapshot.targetType !== 'ProjectEditScreenplay' || !snapshot.targetId) return []
-    const screenplayText = snapshot.text.trim()
-    if (!screenplayText) return []
-    const nodeId = workspaceNodeId.editScreenplay(snapshot.targetId)
+    if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return []
+    const bibleText = snapshot.text.trim()
+    if (!bibleText) return []
+    const nodeId = workspaceNodeId.editBible(snapshot.targetId)
     return [createStreamRuntimeEntry({
       nodeId,
-      streamKind: 'editScreenplay',
+      streamKind: 'editBible',
       taskId: snapshot.taskId,
       taskType: snapshot.taskType,
       targetType: snapshot.targetType,
       targetId: snapshot.targetId,
       episodeId: snapshot.episodeId,
       data: {
-        body: screenplayText,
-        meta: translate('nodes.editScreenplay.pendingMeta'),
+        body: bibleText,
+        meta: translate('nodes.editBible.pendingMeta'),
         artifactPhase: 'running',
         statusLabel: translate('status.processing'),
         isRunning: true,
         streamPresentation: textStreamPresentation(),
-        editScreenplayDetails: {
-          screenplayText,
+        editBibleDetails: {
+          bibleText,
           userPrompt: '',
+          chapters: [],
         },
       },
     })]
@@ -641,7 +642,7 @@ function buildStreamRuntimeEntries(
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   return [
-    ...buildEditScreenplayRuntimeEntries(textSnapshots, translate),
+    ...buildEditBibleRuntimeEntries(textSnapshots, translate),
     buildEditScriptRuntimeEntry(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
@@ -655,10 +656,10 @@ function hasPersistedStreamContentForPatch(
   const baseNode = baseNodes.find((node) => node.id === patch.nodeId) ?? null
   if (baseNode) {
     if (
-      patch.streamKind === 'editScreenplay'
-      && baseNode.data.kind === 'editScreenplay'
-      && baseNode.data.editScreenplayDetails
-      && baseNode.data.editScreenplayDetails.screenplayText.trim().length > 0
+      patch.streamKind === 'editBible'
+      && baseNode.data.kind === 'editBible'
+      && baseNode.data.editBibleDetails
+      && baseNode.data.editBibleDetails.bibleText.trim().length > 0
       && baseNode.data.isRunning !== true
     ) {
       return true

@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { AnimatedBackground } from '@/components/ui/SharedComponents'
 import { apiFetch } from '@/lib/api-fetch'
+import { useProjectEditBible } from '@/lib/query/hooks'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
@@ -17,6 +18,11 @@ import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant
 import { WorkspaceRuntimeProvider } from './WorkspaceRuntimeContext'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
+import {
+  WORKSPACE_SCOPE_OVERVIEW_ID,
+  readWorkspaceScopeId,
+  type WorkspaceScopeId,
+} from './workspace-scope'
 import { isPublicDeploymentFeatures, type PublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import '@/styles/animations.css'
 
@@ -34,6 +40,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
   const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
+  const [workspaceScopeId, setWorkspaceScopeId] = useState<WorkspaceScopeId>(WORKSPACE_SCOPE_OVERVIEW_ID)
   const isEpisodeWorkspace = props.viewMode === 'episode'
 
   const {
@@ -47,6 +54,11 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     onEpisodeDelete,
     onProjectRename,
   } = props
+  const { data: editBibleForWorkspace } = useProjectEditBible(projectId, episodeId ?? null)
+  const workspaceChapters = useMemo(
+    () => editBibleForWorkspace?.chapters ?? [],
+    [editBibleForWorkspace?.chapters],
+  )
 
   useEffect(() => {
     let canceled = false
@@ -65,6 +77,17 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
       canceled = true
     }
   }, [])
+
+  useEffect(() => {
+    setWorkspaceScopeId(WORKSPACE_SCOPE_OVERVIEW_ID)
+  }, [episodeId])
+
+  useEffect(() => {
+    const scope = readWorkspaceScopeId(workspaceScopeId)
+    if (scope.kind !== 'chapter') return
+    const chapterExists = workspaceChapters.some((chapter) => chapter.id === scope.chapterId)
+    if (!chapterExists) setWorkspaceScopeId(WORKSPACE_SCOPE_OVERVIEW_ID)
+  }, [workspaceChapters, workspaceScopeId])
 
   if (!vm.project.projectData) {
     return <BrandLoading className="h-full min-h-[240px]" />
@@ -104,6 +127,9 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onEpisodeDelete={onEpisodeDelete}
         onProjectRename={onProjectRename}
         projectConfigurable={projectConfigurable}
+        workspaceChapters={workspaceChapters}
+        currentWorkspaceScopeId={workspaceScopeId}
+        onWorkspaceScopeSelect={setWorkspaceScopeId}
       />
 
       <div className={isEpisodeWorkspace ? 'h-full min-h-0 overflow-hidden' : undefined}>
@@ -133,6 +159,8 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
                 onAssistantSelectionChange={setAssistantSelection}
                 activeAssistantFocusRequest={activeAssistantFocusRequest}
                 styleBibleFocusRequestId={styleBibleFocusRequestId}
+                workspaceScopeId={workspaceScopeId}
+                onWorkspaceScopeSelect={setWorkspaceScopeId}
               />
             </WorkspaceRuntimeProvider>
           </div>

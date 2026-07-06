@@ -30,7 +30,7 @@ export type StructuredStreamAdapterKey =
   | 'bgm.virtualLayers'
 
 export type TextStreamAdapterKey =
-  | 'editScreenplay.text'
+  | 'editBible.text'
 
 export type StructuredStreamParsedItem =
   | {
@@ -114,7 +114,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'bgm.scoreDesign.sections',
-    taskTypes: [TASK_TYPE.BGM_SCORE_GENERATE],
+    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
     stepIds: ['bgm_score_plan'],
     mode: 'array',
     path: ['scoreDesign', 'sections'],
@@ -128,7 +128,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'bgm.promptSections',
-    taskTypes: [TASK_TYPE.BGM_SCORE_GENERATE],
+    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
     stepIds: ['bgm_score_plan'],
     mode: 'array',
     path: ['promptSections'],
@@ -142,7 +142,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'bgm.virtualLayers',
-    taskTypes: [TASK_TYPE.BGM_SCORE_GENERATE],
+    taskTypes: [TASK_TYPE.MUSIC_SCORE_PLAN],
     stepIds: ['bgm_score_plan'],
     mode: 'array',
     path: ['virtualLayers'],
@@ -156,18 +156,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
 ]
 
-export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = [
-  {
-    key: 'editScreenplay.text',
-    taskTypes: [TASK_TYPE.EDIT_SCREENPLAY_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY],
-  },
-  {
-    key: 'editScreenplay.text',
-    taskTypes: [TASK_TYPE.EDIT_SCREENPLAY_REVISE],
-    stepIds: [AI_PROMPT_IDS.EDIT_SCRIPT_SCREENPLAY_REVISION],
-  },
-]
+export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = []
 
 export function findStructuredStreamAdapters(meta: StructuredStreamTaskEventMeta): readonly StructuredStreamAdapter[] {
   if (!meta.taskType || !meta.stepId) return []

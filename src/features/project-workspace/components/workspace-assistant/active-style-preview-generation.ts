@@ -1,6 +1,6 @@
 import type { UIMessage } from 'ai'
 import type { EditStylePreviewGenerationPartData } from '@/lib/project-agent/types'
-import type { ProjectEditScreenplay } from '@/types/project'
+import type { ProjectEditBible } from '@/types/project'
 
 interface ActiveStylePreviewGenerationCard {
   key: string
@@ -23,7 +23,7 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   if (!isRecord(part) || part.type !== 'data-edit-style-preview-generation') return null
   const data = isRecord(part.data) ? part.data : null
   if (!data || data.operationId !== 'generate_edit_style_previews') return null
-  if (typeof data.projectId !== 'string' || typeof data.episodeId !== 'string' || typeof data.screenplayId !== 'string') return null
+  if (typeof data.projectId !== 'string' || typeof data.episodeId !== 'string' || typeof data.bibleId !== 'string') return null
   const agentRunId = typeof data.agentRunId === 'string' && data.agentRunId.trim()
     ? data.agentRunId.trim()
     : null
@@ -47,7 +47,7 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
     ...(agentRunId ? { agentRunId } : {}),
     projectId: data.projectId,
     episodeId: data.episodeId,
-    screenplayId: data.screenplayId,
+    bibleId: data.bibleId,
     items,
   }
 }
@@ -62,7 +62,7 @@ export function findActiveStylePreviewGenerationCard(
       const data = readStylePreviewGenerationPart(message.parts[partIndex])
       if (!data) continue
       return {
-        key: `${message.id}:part:${String(partIndex)}:${data.screenplayId}`,
+        key: `${message.id}:part:${String(partIndex)}:${data.bibleId}`,
         data,
       }
     }
@@ -70,11 +70,11 @@ export function findActiveStylePreviewGenerationCard(
   return null
 }
 
-export function buildStylePreviewGenerationCardFromScreenplay(
-  screenplay: ProjectEditScreenplay | null | undefined,
+export function buildStylePreviewGenerationCardFromBible(
+  bible: ProjectEditBible | null | undefined,
 ): ActiveStylePreviewGenerationCard | null {
-  if (!screenplay) return null
-  const stylePreviews = screenplay.stylePreviews ?? []
+  if (!bible) return null
+  const stylePreviews = bible.stylePreviews ?? []
   if (stylePreviews.some((preview) => preview.status === 'confirmed')) return null
   const items = stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
     if (!isStyleKey(preview.styleKey)) return []
@@ -89,12 +89,12 @@ export function buildStylePreviewGenerationCardFromScreenplay(
   })
   if (items.length === 0) return null
   return {
-    key: `screenplay:${screenplay.id}:style-previews`,
+    key: `bible:${bible.id}:style-previews`,
     data: {
       operationId: 'generate_edit_style_previews',
-      projectId: screenplay.projectId,
-      episodeId: screenplay.episodeId,
-      screenplayId: screenplay.id,
+      projectId: bible.projectId,
+      episodeId: bible.episodeId,
+      bibleId: bible.id,
       items,
     },
   }

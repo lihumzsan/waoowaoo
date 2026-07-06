@@ -35,7 +35,7 @@
         "clickToRemove": "点击移除 {name}",
         "clickToAdd": "点击添加 {name}"
     },
-    "screenplay": {
+    "bible": {
         "scene": "场景 {number}",
         "location": "场景：",
         "locationTime": "时间：",

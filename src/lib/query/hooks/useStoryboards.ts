@@ -53,7 +53,7 @@ interface BatchVideoGenerationParams {
     generationOptions?: VideoGenerationOptions
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
-    shotNumbers?: readonly number[]
+    shotIds?: readonly string[]
     segmentIndex?: number
     referenceImageUrls?: readonly string[]
 }
@@ -215,7 +215,7 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                 generationOptions: params.generationOptions,
                 mode: params.mode,
                 gridMode: params.gridMode,
-                shotNumbers: params.shotNumbers,
+                shotIds: params.shotIds,
                 segmentIndex: params.segmentIndex,
                 referenceImageUrls: params.referenceImageUrls,
             })
@@ -329,7 +329,7 @@ export function useGenerateBgmScore(projectId: string | null, episodeId: string 
                 projectId,
                 targetType: 'ProjectEpisode',
                 targetId: episodeId,
-                runningTaskType: 'bgm_score_generate',
+                runningTaskType: 'music_score_plan',
                 intent: 'generate',
                 stage: 'bgm_score_prepare',
             })

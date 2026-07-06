@@ -98,8 +98,8 @@ export const queryKeys = {
             ['project', projectId, 'context', episodeId ?? '', contextScope ?? ''] as const,
         assistantThread: (projectId: string, episodeId?: string | null) =>
             ['project', projectId, 'assistant-thread', episodeId ?? ''] as const,
-        editScreenplay: (projectId: string, episodeId: string) =>
-            ['project', projectId, 'edit-screenplay', episodeId] as const,
+        editBible: (projectId: string, episodeId: string) =>
+            ['project', projectId, 'edit-bible', episodeId] as const,
         editScript: (projectId: string, episodeId: string) =>
             ['project', projectId, 'edit-script', episodeId] as const,
         editShotExecutionPlan: (projectId: string, episodeId: string) =>

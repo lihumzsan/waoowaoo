@@ -27,7 +27,7 @@ describe('resource-impact', () => {
       taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
       targetType: 'ProjectEditScript',
     })).toEqual([
-      WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,
@@ -68,7 +68,7 @@ describe('resource-impact', () => {
       TASK_TYPE.VIDEO_PANEL,
       TASK_TYPE.VIDEO_GROUP,
       TASK_TYPE.FINAL_VIDEO_RENDER,
-      TASK_TYPE.BGM_SCORE_GENERATE,
+      TASK_TYPE.MUSIC_SCORE_PLAN,
     ]) {
       expect(kindsForTask({ taskType, targetType: 'ProjectVideoGroup' })).toEqual([
         WORKSPACE_RESOURCE_KIND.VIDEOS,
@@ -85,7 +85,7 @@ describe('resource-impact', () => {
       taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
       targetType: 'ProjectEditStylePreview',
     })).toEqual([
-      WORKSPACE_RESOURCE_KIND.EDIT_SCREENPLAY,
+      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
