@@ -85,6 +85,9 @@ export const TASK_RUNTIME_TARGETS = {
   projectEpisodeEditScriptGeneration(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
   },
+  projectEditChapterScriptGeneration(chapterId: string | null | undefined) {
+    return target('ProjectEditChapter', chapterId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
+  },
   projectEditBible(bibleId: string | null | undefined) {
     return target('ProjectEditBible', bibleId, [
       TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,

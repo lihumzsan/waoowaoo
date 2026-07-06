@@ -120,5 +120,15 @@ describe('long-form project canvas node identity', () => {
       'shot-chapter-1',
       'shot-chapter-2',
     ])
+    expect(editScriptNodes.map((node) => node.data.runtimeTargets?.[0])).toEqual([
+      expect.objectContaining({
+        targetType: 'ProjectEditChapter',
+        targetId: 'chapter-1',
+      }),
+      expect.objectContaining({
+        targetType: 'ProjectEditChapter',
+        targetId: 'chapter-2',
+      }),
+    ])
   })
 })

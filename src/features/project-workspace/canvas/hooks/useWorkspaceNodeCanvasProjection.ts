@@ -698,9 +698,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     if (scriptNodes.length > 0) {
       scriptNodes.forEach((script, index) => {
         const nodeId = workspaceNodeId.editScript(episodeId, script.chapterId ?? null)
+        const scriptChapterId = script.chapterId ?? null
         if (editScript?.id === script.id || (!editScriptNodeId && index === 0)) editScriptNodeId = nodeId
         const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
-          || hasStreamTarget(streamTargets, 'editScript', script.id)
+          || (scriptChapterId ? hasStreamTarget(streamTargets, 'editScript', scriptChapterId) : false)
           || (editScriptPending && script.status === 'generating')
         const editScriptPresentation = editScriptRunning
           ? workspaceCanvasRunningPresentation(phaseLabels)
@@ -753,7 +754,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
               completed: countCompletedEditAssetRequirements(script.requirements),
             }),
             ...editScriptPresentation,
-            runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+            runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditChapterScriptGeneration(scriptChapterId)),
             editScriptDetails,
             onAction,
           },
@@ -766,6 +767,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       })
     } else {
       editScriptNodeId = workspaceNodeId.editScript(episodeId, null)
+      const pendingChapterId = editBible?.chapters?.length === 1 ? editBible.chapters[0]?.id ?? null : null
       nodes.push(createNode({
         id: editScriptNodeId,
         position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: STAGE_START_Y }),
@@ -786,7 +788,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             statusLabel: translate('status.pending'),
             isRunning: false,
           }),
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditChapterScriptGeneration(pendingChapterId)),
           actionLabel: translate('actions.generateEditScript'),
           action: editBible ? { type: 'generate_edit_script' } : undefined,
           actionDisabled: !editBible,

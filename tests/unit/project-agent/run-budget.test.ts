@@ -87,9 +87,39 @@ describe('project agent run budget', () => {
 
   it('blocks after three consecutive failed activities in a run', async () => {
     prismaState.findMany.mockResolvedValue([
-      { kind: 'activity.failed', payload: { kind: 'activity.failed' } },
-      { kind: 'activity.failed', payload: { kind: 'activity.failed' } },
-      { kind: 'activity.failed', payload: { kind: 'activity.failed' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-1',
+          type: 'operation',
+          operationId: 'get_project_snapshot',
+          targetKey: 'episodeId:episode-1',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-1' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-2',
+          type: 'operation',
+          operationId: 'get_project_snapshot',
+          targetKey: 'episodeId:episode-2',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-2' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-3',
+          type: 'operation',
+          operationId: 'get_project_snapshot',
+          targetKey: 'episodeId:episode-3',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-3' } },
     ])
 
     const result = await enforceProjectAgentOperationRunBudget({
@@ -110,6 +140,54 @@ describe('project agent run budget', () => {
         },
       },
     })
+  })
+
+  it('does not count unrelated operation failures against the current operation target', async () => {
+    prismaState.findMany.mockResolvedValue([
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-other-1',
+          type: 'operation',
+          operationId: 'get_episode_overview',
+          targetKey: 'episodeId:episode-1',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-other-1' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-other-2',
+          type: 'operation',
+          operationId: 'replan_chapter',
+          targetKey: 'chapterId:chapter-2',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-other-2' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-current',
+          type: 'operation',
+          operationId: 'replan_chapter',
+          targetKey: 'chapterId:chapter-1',
+        },
+      },
+      { kind: 'activity.failed', payload: { kind: 'activity.failed', activityId: 'activity-current' } },
+    ])
+
+    const result = await enforceProjectAgentOperationRunBudget({
+      projectId: 'project-1',
+      userId: 'user-1',
+      runId: 'run-1',
+      operationId: 'replan_chapter',
+      targetKey: 'chapterId:chapter-1',
+    })
+
+    expect(result).toBeNull()
   })
 
   it('allows no more than ten automatic task follow-up wakeups per run', async () => {

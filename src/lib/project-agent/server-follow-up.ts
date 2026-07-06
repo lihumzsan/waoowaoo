@@ -21,6 +21,7 @@ import {
 import { loadProjectAssistantThread } from './persistence'
 
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
+let scheduledFollowUpChain: Promise<void> = Promise.resolve()
 
 function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessage {
   return {
@@ -212,4 +213,33 @@ export async function runResolvedProjectAgentWaitFollowUpsForTaskEvent(input: {
     }
   }
   return { claimed, ran }
+}
+
+export function scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent(input: {
+  projectId: string
+  userId: string
+  episodeId?: string | null
+}): void {
+  scheduledFollowUpChain = scheduledFollowUpChain
+    .catch(() => undefined)
+    .then(async () => {
+      try {
+        await runResolvedProjectAgentWaitFollowUpsForTaskEvent(input)
+      } catch (error) {
+        logger.error({
+          action: 'assistant.wait-follow-up.schedule-failed',
+          message: 'Scheduled server-side project agent follow-up failed',
+          projectId: input.projectId,
+          userId: input.userId,
+          details: {
+            episodeId: input.episodeId ?? null,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    })
+}
+
+export async function flushScheduledProjectAgentWaitFollowUpsForTest(): Promise<void> {
+  await scheduledFollowUpChain
 }

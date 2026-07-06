@@ -3,6 +3,10 @@ import type { ProjectAgentContext } from './types'
 import type { ProjectAgentToolResult } from '@/lib/operations/types'
 
 type UnknownObject = { [key: string]: unknown }
+type OperationActivityIdentity = {
+  readonly operationId: string | null
+  readonly targetKey: string | null
+}
 
 const OPERATION_TARGET_ATTEMPT_LIMIT = 2
 const CONSECUTIVE_FAILURE_LIMIT = 3
@@ -70,17 +74,28 @@ export async function enforceProjectAgentOperationRunBudget(input: {
 
   let sameTargetAttempts = 0
   let consecutiveFailures = 0
+  const operationActivitiesById = new Map<string, OperationActivityIdentity>()
   for (const event of events) {
     const payload = readPayload(event.payload)
     if (!payload) continue
     if (event.kind === 'activity.started') {
-      if (
-        payload.type === 'operation'
-        && payload.operationId === input.operationId
-        && payload.targetKey === input.targetKey
-      ) {
+      const activityId = readTrimmedString(payload.activityId)
+      const operationId = readTrimmedString(payload.operationId)
+      const targetKey = readTrimmedString(payload.targetKey)
+      if (payload.type === 'operation' && activityId) {
+        operationActivitiesById.set(activityId, {
+          operationId,
+          targetKey,
+        })
+      }
+      if (operationId === input.operationId && targetKey === input.targetKey) {
         sameTargetAttempts += 1
       }
+      continue
+    }
+    const activityId = readTrimmedString(payload.activityId)
+    const activity = activityId ? operationActivitiesById.get(activityId) ?? null : null
+    if (!activity || activity.operationId !== input.operationId) {
       continue
     }
     if (event.kind === 'activity.completed') {

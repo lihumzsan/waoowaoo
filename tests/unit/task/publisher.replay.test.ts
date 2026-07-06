@@ -32,8 +32,8 @@ const prismaQueryRawMock = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<unknown[]>>(async () => []),
 )
 const redisPublishMock = vi.hoisted(() => vi.fn(async () => 1))
-const runResolvedProjectAgentWaitFollowUpsForTaskEventMock = vi.hoisted(() =>
-  vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined),
+const scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock = vi.hoisted(() =>
+  vi.fn<(...args: unknown[]) => void>(() => undefined),
 )
 
 vi.mock('@/lib/prisma', () => ({
@@ -56,7 +56,7 @@ vi.mock('@/lib/redis', () => ({
 }))
 
 vi.mock('@/lib/project-agent/server-follow-up', () => ({
-  runResolvedProjectAgentWaitFollowUpsForTaskEvent: runResolvedProjectAgentWaitFollowUpsForTaskEventMock,
+  scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent: scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock,
 }))
 
 import {
@@ -76,8 +76,7 @@ describe('task publisher replay', () => {
     prismaQueryRawMock.mockReset()
     prismaQueryRawMock.mockResolvedValue([])
     redisPublishMock.mockReset()
-    runResolvedProjectAgentWaitFollowUpsForTaskEventMock.mockReset()
-    runResolvedProjectAgentWaitFollowUpsForTaskEventMock.mockResolvedValue(undefined)
+    scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock.mockReset()
   })
 
   it('replays persisted lifecycle + stream rows in chronological order', async () => {
@@ -250,11 +249,15 @@ describe('task publisher replay', () => {
       }),
     }))
     expect(message?.payload?.affectedResources).toEqual(expectedAffectedResources)
-    expect(runResolvedProjectAgentWaitFollowUpsForTaskEventMock).toHaveBeenCalledWith({
+    expect(redisPublishMock).toHaveBeenCalledTimes(1)
+    expect(scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
     })
+    expect(redisPublishMock.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock.mock.invocationCallOrder[0] ?? 0,
+    )
   })
 
   it('replays lifecycle + stream rows in listEventsAfter', async () => {

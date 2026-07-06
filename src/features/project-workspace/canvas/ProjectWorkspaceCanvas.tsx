@@ -30,7 +30,7 @@ import {
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectContext, useProjectEditBible, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
+import { useProjectContext, useProjectEditBibleResponse, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -261,7 +261,9 @@ function ProjectWorkspaceCanvasContent({
     videoGroups,
   } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
-  const { data: editBible } = useProjectEditBible(projectId, episodeId ?? null)
+  const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
+  const editBible = editBibleResponse?.editBible ?? null
+  const editBibleChapters = editBibleResponse?.chapters ?? []
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
@@ -325,38 +327,61 @@ function ProjectWorkspaceCanvasContent({
   })
 
   const savedNodeLayouts = layout?.nodeLayouts ?? EMPTY_SAVED_NODE_LAYOUTS
+  const editScriptGenerationChapterIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (workspaceScope.kind === 'chapter') ids.add(workspaceScope.chapterId)
+    if (scopedEditScript?.chapterId) ids.add(scopedEditScript.chapterId)
+    if (editScript?.chapterId) ids.add(editScript.chapterId)
+    editScripts.forEach((script) => {
+      if (script.chapterId) ids.add(script.chapterId)
+    })
+    editBibleChapters.forEach((chapter) => {
+      if (chapter.id) ids.add(chapter.id)
+    })
+    return Array.from(ids)
+  }, [editBibleChapters, editScript?.chapterId, editScripts, scopedEditScript?.chapterId, workspaceScope])
   const editScriptGenerationTargets = useMemo(
-    () => {
-      const target = TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)
-      return target ? [target] : []
-    },
-    [episodeId],
+    () => editScriptGenerationChapterIds
+      .map((chapterId) => TASK_RUNTIME_TARGETS.projectEditChapterScriptGeneration(chapterId))
+      .filter((target): target is NonNullable<typeof target> => target !== null),
+    [editScriptGenerationChapterIds],
   )
   const editScriptGenerationTaskStateMap = useTaskTargetStateMap(projectId, editScriptGenerationTargets, {
     enabled: Boolean(projectId && episodeId),
     staleTime: 1000,
   })
-  const editScriptGenerationTaskState = editScriptGenerationTaskStateMap.getQueryState(editScriptGenerationTargets[0] ?? { targetType: '', targetId: '' })
-  const editScriptGenerationActive = isTaskRuntimeRunningPhase(editScriptGenerationTaskState?.phase)
+  const editScriptGenerationActiveChapterIds = useMemo(() => {
+    const ids = new Set<string>()
+    editScriptGenerationTargets.forEach((target) => {
+      const state = editScriptGenerationTaskStateMap.getQueryState(target)
+      if (isTaskRuntimeRunningPhase(state?.phase)) ids.add(target.targetId)
+    })
+    return ids
+  }, [editScriptGenerationTargets, editScriptGenerationTaskStateMap])
+  const editScriptGenerationActive = scopedEditScript?.chapterId
+    ? editScriptGenerationActiveChapterIds.has(scopedEditScript.chapterId)
+    : editScriptGenerationActiveChapterIds.size > 0
   const projectedEditScript = useMemo(() => (
     scopedEditScript
       ? {
           ...scopedEditScript,
-          status: editScriptGenerationActive
+          status: scopedEditScript.chapterId && editScriptGenerationActiveChapterIds.has(scopedEditScript.chapterId)
             ? 'generating'
             : scopedEditScript.status === 'generating'
               ? 'ready'
               : scopedEditScript.status,
         }
       : scopedEditScript
-  ), [scopedEditScript, editScriptGenerationActive])
+  ), [scopedEditScript, editScriptGenerationActiveChapterIds])
   const projectedEditScripts = useMemo((): readonly ProjectEditScript[] => {
     if (workspaceScope.kind === 'chapter') return projectedEditScript ? [projectedEditScript] : []
     const byId = new Map<string, ProjectEditScript>()
-    editScripts.forEach((script) => byId.set(script.id, script))
+    editScripts.forEach((script) => byId.set(script.id, script.chapterId && editScriptGenerationActiveChapterIds.has(script.chapterId)
+      ? { ...script, status: 'generating' }
+      : script))
     if (projectedEditScript) byId.set(projectedEditScript.id, projectedEditScript)
     return Array.from(byId.values())
-  }, [editScripts, projectedEditScript, workspaceScope])
+  }, [editScriptGenerationActiveChapterIds, editScripts, projectedEditScript, workspaceScope])
   const effectiveEditScriptPending = editScriptPending
     || activeAssistantOperationId === 'generate_edit_script'
     || activeAssistantOperationId === 'plan_chapters'

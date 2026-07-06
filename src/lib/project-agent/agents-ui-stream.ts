@@ -44,11 +44,24 @@ function readTextChunkDelta(chunk: ProjectAgentUiChunk): string | null {
   return typeof delta === 'string' ? delta : null
 }
 
-function assertNoProjectStateSnapshotProtocol(chunk: ProjectAgentUiChunk): void {
-  const delta = readTextChunkDelta(chunk)
-  if (!delta) return
-  if (delta.includes('[project_state_snapshot]') || delta.includes('[/project_state_snapshot]')) {
-    throw new Error('PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK')
+const PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS = [
+  '[project_state_snapshot]',
+  '[/project_state_snapshot]',
+] as const
+const PROJECT_STATE_SNAPSHOT_PROTOCOL_TAIL_LENGTH = Math.max(
+  ...PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.map((marker) => marker.length),
+) - 1
+
+function createProjectStateSnapshotProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
+  let textTail = ''
+  return (chunk: ProjectAgentUiChunk) => {
+    const delta = readTextChunkDelta(chunk)
+    if (!delta) return
+    const candidate = `${textTail}${delta}`
+    if (PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
+      throw new Error('PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK')
+    }
+    textTail = candidate.slice(-PROJECT_STATE_SNAPSHOT_PROTOCOL_TAIL_LENGTH)
   }
 }
 
@@ -116,6 +129,7 @@ export function createProjectAgentUiMessageStream(params: {
       convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
+      const assertNoProjectStateSnapshotProtocol = createProjectStateSnapshotProtocolGuard()
       const emitChunk = (chunk: ProjectAgentUiChunk) => {
         params.onChunk?.(chunk)
         controller.enqueue(chunk)
