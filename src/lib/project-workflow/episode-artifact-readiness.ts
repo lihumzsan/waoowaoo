@@ -13,7 +13,10 @@ type StoryboardPanelLike = {
 type EpisodeScriptLike = {
   content?: string | null
   scriptText?: string | null
-  bible?: string | null
+  bible?: unknown | null
+  beatSheet?: unknown | null
+  ledger?: unknown | null
+  emotionalCurve?: unknown | null
   [key: string]: unknown
 }
 
@@ -24,13 +27,17 @@ type StoryboardLike = {
 
 type EpisodeLike = {
   novelText?: string | null
-  editScript?: EpisodeScriptLike | null
-  editBible?: EpisodeScriptLike | null
+  editScript?: unknown | null
+  editBible?: unknown | null
   storyboards?: unknown[] | null
 }
 
 function hasNonEmptyText(value: string | null | undefined) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function hasStructuredValue(value: unknown) {
+  return typeof value === 'object' && value !== null
 }
 
 function isEpisodeScriptLike(value: unknown): value is EpisodeScriptLike {
@@ -49,7 +56,11 @@ export function hasScriptArtifacts(script: unknown | null | undefined) {
   if (!isEpisodeScriptLike(script)) return false
   return hasNonEmptyText(script.content)
     || hasNonEmptyText(script.scriptText)
-    || hasNonEmptyText(script.bible)
+    || hasNonEmptyText(typeof script.bible === 'string' ? script.bible : null)
+    || hasStructuredValue(script.bible)
+    || hasStructuredValue(script.beatSheet)
+    || hasStructuredValue(script.ledger)
+    || hasStructuredValue(script.emotionalCurve)
 }
 
 export function hasStoryboardArtifacts(storyboards: unknown[] | null | undefined) {

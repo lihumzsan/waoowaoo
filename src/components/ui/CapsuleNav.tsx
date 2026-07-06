@@ -168,11 +168,40 @@ interface Episode {
     id: string
     title: string
     summary?: string
+    overview?: EpisodeSelectorOverview
     status?: {
         story?: StepStatus
         script?: StepStatus
         visual?: StepStatus
     }
+}
+
+interface EpisodeSelectorOverviewMetric {
+    label: string
+    value: string
+}
+
+interface EpisodeSelectorOverviewChip {
+    label: string
+}
+
+interface EpisodeSelectorOverviewChapter {
+    id: string
+    title: string
+    summary: string
+    indexLabel: string
+    meta: readonly string[]
+    tone: 'muted' | 'ready' | 'processing' | 'success' | 'danger'
+}
+
+interface EpisodeSelectorOverview {
+    title: string
+    stageLabel: string
+    statusTone: 'muted' | 'ready' | 'processing' | 'success' | 'warning' | 'danger'
+    metrics: readonly EpisodeSelectorOverviewMetric[]
+    chips: readonly EpisodeSelectorOverviewChip[]
+    chapters: readonly EpisodeSelectorOverviewChapter[]
+    emptyChaptersLabel: string
 }
 
 interface EpisodeSelectorProps {
@@ -301,6 +330,69 @@ export function ProjectNameEditor({ projectName, onRename, t }: ProjectNameEdito
     )
 }
 
+function overviewToneClass(tone: EpisodeSelectorOverview['statusTone'] | EpisodeSelectorOverviewChapter['tone']): string {
+    if (tone === 'success') return 'bg-[var(--glass-tone-success-fg)]'
+    if (tone === 'processing') return 'bg-[var(--glass-accent-from)]'
+    if (tone === 'warning') return 'bg-[var(--glass-tone-warning-fg)]'
+    if (tone === 'danger') return 'bg-[var(--glass-tone-danger-fg)]'
+    if (tone === 'ready') return 'bg-[var(--glass-tone-info-fg)]'
+    return 'bg-[var(--glass-stroke-strong)]'
+}
+
+export function EpisodeOverviewPanel({ overview }: { readonly overview: EpisodeSelectorOverview }) {
+    return (
+        <section className="mb-2 overflow-hidden rounded-xl border border-[var(--glass-stroke-soft)] bg-white/55">
+            <div className="border-b border-[var(--glass-stroke-soft)] px-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${overviewToneClass(overview.statusTone)}`} />
+                    <div className="min-w-0 flex-1 truncate text-sm font-bold text-[var(--glass-text-primary)]">{overview.title}</div>
+                    <span className="shrink-0 rounded-full border border-[var(--glass-stroke-base)] bg-white/60 px-2 py-0.5 text-[10px] font-medium text-[var(--glass-text-secondary)]">
+                        {overview.stageLabel}
+                    </span>
+                </div>
+            </div>
+            <div className="grid grid-cols-3 gap-px bg-[var(--glass-stroke-soft)]">
+                {overview.metrics.map((metric) => (
+                    <div key={metric.label} className="min-w-0 bg-white/70 px-3 py-2">
+                        <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{metric.label}</div>
+                        <div className="mt-0.5 truncate text-sm font-bold text-[var(--glass-text-primary)]">{metric.value}</div>
+                    </div>
+                ))}
+            </div>
+            <div className="space-y-2 px-3 py-2.5">
+                <div className="flex flex-wrap gap-1.5">
+                    {overview.chips.map((chip) => (
+                        <span key={chip.label} className="rounded-full bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--glass-text-secondary)]">
+                            {chip.label}
+                        </span>
+                    ))}
+                </div>
+                <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1 app-scrollbar">
+                    {overview.chapters.length > 0 ? overview.chapters.map((chapter) => (
+                        <div key={chapter.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-[var(--glass-stroke-soft)] bg-white/70 px-2.5 py-2">
+                            <span className="mt-1 flex items-center gap-1">
+                                <span className={`h-1.5 w-1.5 rounded-full ${overviewToneClass(chapter.tone)}`} />
+                                <span className="text-[10px] font-semibold text-[var(--glass-text-tertiary)]">{chapter.indexLabel}</span>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-xs font-semibold text-[var(--glass-text-primary)]">{chapter.title}</div>
+                                <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[var(--glass-text-secondary)]">{chapter.summary}</div>
+                                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[var(--glass-text-tertiary)]">
+                                    {chapter.meta.map((item) => <span key={item}>{item}</span>)}
+                                </div>
+                            </div>
+                        </div>
+                    )) : (
+                        <div className="rounded-lg border border-dashed border-[var(--glass-stroke-base)] px-3 py-4 text-center text-xs text-[var(--glass-text-tertiary)]">
+                            {overview.emptyChaptersLabel}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </section>
+    )
+}
+
 export function EpisodeSelector({
     episodes,
     currentId,
@@ -345,21 +437,28 @@ export function EpisodeSelector({
                     <span className="text-sm font-bold text-[var(--glass-text-primary)] line-clamp-1 max-w-[160px]">
                         {projectName || t('project')}
                     </span>
-                    <span className="text-sm text-[var(--glass-text-secondary)] line-clamp-1 max-w-[160px]">
-                        {currentEp.title}
+                    <span className="flex max-w-[160px] items-center gap-1.5 text-sm text-[var(--glass-text-secondary)]">
+                        {currentEp.overview ? <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${overviewToneClass(currentEp.overview.statusTone)}`} /> : null}
+                        <span className="truncate">{currentEp.title}</span>
                     </span>
+                    {currentEp.overview ? (
+                        <span className="max-w-[160px] truncate text-[11px] text-[var(--glass-text-tertiary)]">
+                            {currentEp.overview.stageLabel}
+                        </span>
+                    ) : null}
                 </div>
                 <AppIcon name="chevronDown" className={`w-4 h-4 text-[var(--glass-text-tertiary)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (
-                <div className="glass-surface-modal absolute left-0 top-full mt-2 w-72 origin-top-left p-2 animate-fadeIn">
+                <div className="glass-surface-modal absolute left-0 top-full mt-2 max-h-[calc(100dvh-7rem)] w-[min(36rem,calc(100vw-3rem))] origin-top-left overflow-y-auto p-2 animate-fadeIn app-scrollbar">
                     <ProjectNameEditor
                         projectName={projectName}
                         onRename={onProjectRename}
                         t={t}
                     />
-                    <div className="max-h-[300px] overflow-y-auto app-scrollbar space-y-1">
+                    {currentEp.overview ? <EpisodeOverviewPanel overview={currentEp.overview} /> : null}
+                    <div className="space-y-1">
                         {episodes.map(ep => {
                             const statusColor = ep.status?.visual === 'ready'
                                 ? 'bg-[var(--glass-tone-success-fg)]'

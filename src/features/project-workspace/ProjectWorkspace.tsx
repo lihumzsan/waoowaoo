@@ -6,7 +6,7 @@ import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
 import { AnimatedBackground } from '@/components/ui/SharedComponents'
 import { apiFetch } from '@/lib/api-fetch'
-import { useProjectEditBible } from '@/lib/query/hooks'
+import { useProjectContext, useProjectEditBible } from '@/lib/query/hooks'
 import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
@@ -55,6 +55,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     onProjectRename,
   } = props
   const { data: editBibleForWorkspace } = useProjectEditBible(projectId, episodeId ?? null)
+  const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const workspaceChapters = useMemo(
     () => editBibleForWorkspace?.chapters ?? [],
     [editBibleForWorkspace?.chapters],
@@ -127,6 +128,8 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         onEpisodeDelete={onEpisodeDelete}
         onProjectRename={onProjectRename}
         projectConfigurable={projectConfigurable}
+        currentEditBible={editBibleForWorkspace ?? null}
+        currentWorkflow={projectContext?.editFirstWorkflow ?? null}
         workspaceChapters={workspaceChapters}
         currentWorkspaceScopeId={workspaceScopeId}
         onWorkspaceScopeSelect={setWorkspaceScopeId}

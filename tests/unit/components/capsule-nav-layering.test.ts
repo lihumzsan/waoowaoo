@@ -4,7 +4,7 @@ import * as React from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { CapsuleNav, EpisodeSelector, ProjectNameEditor } from '@/components/ui/CapsuleNav'
+import { CapsuleNav, EpisodeOverviewPanel, EpisodeSelector, ProjectNameEditor } from '@/components/ui/CapsuleNav'
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
@@ -56,6 +56,46 @@ describe('EpisodeSelector layout', () => {
     expect(capsuleNavSource).toContain('<div className="min-w-0 flex-1">')
     expect(capsuleNavSource).toContain('className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-bg-surface-strong)]')
     expect(capsuleNavSource).toContain('className="w-7 h-7 shrink-0 rounded-lg hover:bg-[var(--glass-tone-danger-bg)]')
+  })
+
+  it('renders current episode production overview inside the episode menu', () => {
+    Reflect.set(globalThis, 'React', React)
+
+    const html = renderToStaticMarkup(
+      createElement(EpisodeOverviewPanel, {
+        overview: {
+          title: '剧集状态 · 雨城',
+          stageLabel: '等待确认剧集规划',
+          statusTone: 'warning' as const,
+          metrics: [
+            { label: '章节', value: '3' },
+            { label: '目标时长', value: '3:20' },
+          ],
+          chips: [
+            { label: '角色 2' },
+            { label: '台账事件 4' },
+          ],
+          chapters: [
+            {
+              id: 'chapter-1',
+              title: '开端',
+              summary: '主角进入雨夜城市。',
+              indexLabel: '第 1 章',
+              tone: 'ready' as const,
+              meta: ['时长 1:15', '计划 已确认', '渲染 未渲染'],
+            },
+          ],
+          emptyChaptersLabel: '暂无章节切分',
+        },
+      }),
+    )
+
+    expect(html).toContain('剧集状态 · 雨城')
+    expect(html).toContain('等待确认剧集规划')
+    expect(html).toContain('目标时长')
+    expect(html).toContain('台账事件 4')
+    expect(html).toContain('第 1 章')
+    expect(html).toContain('计划 已确认')
   })
 })
 
