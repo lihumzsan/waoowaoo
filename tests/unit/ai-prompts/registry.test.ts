@@ -145,6 +145,8 @@ describe('ai prompt registry', () => {
     expect(zhTemplate).toContain('# 工作规则')
     expect(zhTemplate).toContain('只输出纯剧本文本')
     expect(zhTemplate).toContain('不要把内容写成 bullet list、设定表、章节大纲或镜头清单')
+    expect(zhTemplate).toContain('目标时长')
+    expect(zhTemplate).toContain('场景数量、对白密度和节奏')
     expect(zhTemplate).toContain('10,000 字符')
 
     expect(enTemplate).toContain('# Role and Goal')
@@ -152,6 +154,8 @@ describe('ai prompt registry', () => {
     expect(enTemplate).toContain('# Rules')
     expect(enTemplate).toContain('Output plain script text only')
     expect(enTemplate).toContain('Do not write bullet lists, setting tables, chapter outlines, or shot lists')
+    expect(enTemplate).toContain('target runtime')
+    expect(enTemplate).toContain('scene count, dialogue density, and pacing')
     expect(enTemplate).toContain('10,000 characters')
   })
 
