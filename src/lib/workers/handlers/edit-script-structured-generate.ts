@@ -26,6 +26,7 @@ function createWorkerRequest(job: Job<TaskJobData>, path: string): NextRequest {
 export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
+  const chapterId = readText(payload.chapterId)
   const editScriptId = readText(payload.editScriptId) || readText(job.data.targetId)
   if (!episodeId) throw new Error('episodeId is required')
   if (!editScriptId) throw new Error('editScriptId is required')
@@ -47,6 +48,7 @@ export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobDa
         projectId: job.data.projectId,
         userId: job.data.userId,
         episodeId,
+        ...(chapterId ? { chapterId } : {}),
         editScriptId,
         locale: job.data.locale,
       }),
@@ -62,6 +64,7 @@ export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobDa
     return {
       shotExecutionPlanId: shotExecutionPlan.id,
       episodeId,
+      chapterId: shotExecutionPlan.chapterId,
       editScriptId: shotExecutionPlan.editScriptId,
       shotCount: shotExecutionPlan.shots.length,
     }

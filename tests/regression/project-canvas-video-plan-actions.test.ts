@@ -28,16 +28,16 @@ function editScript(): ProjectEditScript {
     id: 'edit-script-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
+    bibleId: 'bible-1',
     userPrompt: 'story prompt',
     styleBible: null,
-    screenplayText: 'screenplay text',
+    bibleText: 'bible text',
     durationSec: 30,
     shotCount: 2,
     status: 'ready',
     assetReviewStatus: 'pending',
     shots: [],
-    generationSegments: [{ shotNumbers: [1, 2], continuity: 'two-shot segment' }],
+    generationSegments: [{ shotIds: ['shot-1', 'shot-2'], continuity: 'two-shot segment' }],
     requirements: [],
   }
 }
@@ -46,7 +46,7 @@ function panel(overrides: {
   readonly id: string
   readonly panelIndex: number
   readonly panelNumber: number
-  readonly sourceShotNumber: number
+  readonly sourceShotId: string
   readonly imageUrl?: string | null
 }): ProjectPanel {
   return {
@@ -69,7 +69,7 @@ function panel(overrides: {
     videoPrompt: 'panel video prompt',
     videoUrl: null,
     actingNotes: null,
-    sourceShotNumber: overrides.sourceShotNumber,
+    sourceShotId: overrides.sourceShotId,
     sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
   }
 }
@@ -94,14 +94,14 @@ function groupedStoryboard(input: { readonly withImages: boolean }): ProjectStor
       id: 'panel-1',
       panelIndex: 0,
       panelNumber: 1,
-      sourceShotNumber: 1,
+      sourceShotId: 'shot-1',
       imageUrl: input.withImages ? '/images/panel-1.png' : null,
     }),
     panel({
       id: 'panel-2',
       panelIndex: 1,
       panelNumber: 2,
-      sourceShotNumber: 2,
+      sourceShotId: 'shot-2',
       imageUrl: input.withImages ? '/images/panel-2.png' : null,
     }),
   ])
@@ -124,7 +124,7 @@ describe('project canvas video plan actions', () => {
     expect(videoPlan?.data.action).toEqual({
       type: 'generate_video_group',
       gridMode: '2x2',
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
     })
     expect(videoPlan?.data.secondaryAction).toBeUndefined()
     expect(videoPlan?.data.secondaryActionLabel).toBeUndefined()

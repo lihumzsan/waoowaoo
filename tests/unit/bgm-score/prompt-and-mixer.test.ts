@@ -9,6 +9,7 @@ describe('bgm score prompt builder', () => {
         userPrompt: 'A suspense scene.',
         durationSec: 12,
         shots: [{
+          shotId: 'shot-1',
           shotNumber: 1,
           durationSec: 12,
           scene: { name: 'Dark room' },
@@ -25,7 +26,7 @@ describe('bgm score prompt builder', () => {
           sound: 'room tone and footsteps only, no BGM',
         }],
         generationSegments: [{
-          shotNumbers: [1],
+          shotIds: ['shot-1'],
           continuity: 'Single suspense shot.',
         }],
       },
@@ -40,6 +41,8 @@ describe('bgm score prompt builder', () => {
         order: 1,
         shotNumber: 1,
         shotNumbers: [1],
+        shotId: 'shot-1',
+        shotIds: ['shot-1'],
         description: 'The detective enters the room.',
         sound: 'room tone and footsteps only, no BGM',
       }],

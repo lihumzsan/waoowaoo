@@ -29,7 +29,7 @@ const artifactCatalog: Record<ArtifactType, ArtifactDefinition> = {
   [ARTIFACT_TYPES.AUDIO_PLAN]: {
     type: ARTIFACT_TYPES.AUDIO_PLAN,
     scope: 'episode',
-    summary: 'Music and BGM planning artifact.',
+    summary: 'Episode music planning artifact.',
   },
   [ARTIFACT_TYPES.ANALYSIS_CHARACTERS]: {
     type: ARTIFACT_TYPES.ANALYSIS_CHARACTERS,

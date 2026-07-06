@@ -19,7 +19,7 @@
 
 读取优先级：
 - 必须先理解完整剪辑核心表 JSON。generationSegments 是生成分段计划，决定音乐段落结构和连续性。
-- 必须读取 generationSegments[].shotNumbers 和 continuity；每个分段都要视为一个连续剧情/运动段落。
+- 必须读取 generationSegments[].shotIds、shotNumbers 和 continuity；每个分段都要视为一个连续剧情/运动段落。
 - 必须读取 shots[] 的 durationSec、scene、action、characters[].performance、keyObjects 和 sound。不要只看 sound 字段。
 - 必须读取项目整体配置 JSON 的 videoRatio，并读取完整剪辑核心表 JSON 中的 styleBible；把画幅、Style Bible 的视觉/声音策略转化为音乐气质、声场、节奏密度和配器取向。
 - 必须参考实际成片素材时间线 JSON，保证音乐段落长度贴合最终可渲染素材；如果实际素材时间线和剪辑核心表有差异，以实际素材时间线的时长为准，但音乐叙事仍以剪辑核心表为主。

@@ -5,32 +5,48 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
-import { inferVideoGridModeForShotCount, totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
+import { inferVideoGridModeForShotCount, resolveVideoGroupShots, totalVideoGroupDuration, validateVideoGroupShotIds } from '@/lib/video-groups/core'
 import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
 import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
+import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
 import { applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
 
-export function parseShotNumbersJson(value: unknown): number[] {
+export function parseShotIdsJson(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((item) => (typeof item === 'number' ? item : Number(item)))
-    .filter((item) => Number.isInteger(item) && item > 0)
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
 }
 
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   return left.every((value, index) => value === right[index])
 }
 
+export async function resolveEditChapterId(episodeId: string, chapterId?: string): Promise<string> {
+  if (chapterId) {
+    const chapter = await prisma.projectEditChapter.findFirst({
+      where: { id: chapterId, episodeId },
+      select: { id: true },
+    })
+    if (!chapter) throw new Error('PROJECT_AGENT_CHAPTER_NOT_FOUND')
+    return chapter.id
+  }
+  const chapter = await resolveDefaultEditChapter(episodeId)
+  return chapter.id
+}
+
 async function findExistingVideoGroup(params: {
   episodeId: string
+  chapterId: string
   gridMode: string
-  shotNumbers: readonly number[]
+  shotIds: readonly string[]
 }) {
   const candidates = await prisma.projectVideoGroup.findMany({
     where: {
       episodeId: params.episodeId,
+      chapterId: params.chapterId,
       gridMode: params.gridMode,
     },
     select: {
@@ -45,15 +61,16 @@ async function findExistingVideoGroup(params: {
       referenceImageMediaId: true,
       videoUrl: true,
       videoMediaId: true,
-      shotNumbers: true,
+      shotIds: true,
     },
   })
-  return candidates.find((candidate) => sameShotNumbers(parseShotNumbersJson(candidate.shotNumbers), params.shotNumbers)) ?? null
+  return candidates.find((candidate) => sameShotIds(parseShotIdsJson(candidate.shotIds), params.shotIds)) ?? null
 }
 
 export function parseEditScriptShots(value: unknown): VideoGroupShot[] {
   const core = normalizeEditScriptStructure(value)
   return core.shots.map((shot) => ({
+    shotId: shot.shotId,
     shotNumber: shot.shotNumber,
     durationSec: shot.durationSec,
     action: shot.action,
@@ -67,11 +84,11 @@ function buildGenerationSegmentVideoPlanFromCore(value: unknown): GenerationSegm
   const core = normalizeEditScriptStructure(value)
   return {
     items: core.generationSegments
-      .filter((segment) => segment.shotNumbers.length >= 2)
+      .filter((segment) => segment.shotIds.length >= 2)
       .map((segment) => ({
         kind: 'group',
-        shotNumbers: segment.shotNumbers,
-        gridMode: inferVideoGridModeForShotCount(segment.shotNumbers.length),
+        shotIds: segment.shotIds,
+        gridMode: inferVideoGridModeForShotCount(segment.shotIds.length),
         continuity: segment.continuity,
       })),
   }
@@ -80,16 +97,20 @@ function buildGenerationSegmentVideoPlanFromCore(value: unknown): GenerationSegm
 export async function buildEpisodeGenerationSegmentVideoPlan(params: {
   ctx: ProjectAgentOperationContext
   episodeId: string
+  chapterId?: string
 }): Promise<{
   readonly editScript: {
+    readonly id: string
     readonly corePlanJson: Prisma.JsonValue | null
   }
   readonly shots: readonly VideoGroupShot[]
   readonly plan: GenerationSegmentVideoPlan
 }> {
+  const chapterId = await resolveEditChapterId(params.episodeId, params.chapterId)
   const editScript = await prisma.projectEditScript.findFirst({
-    where: { projectId: params.ctx.projectId, episodeId: params.episodeId },
+    where: { projectId: params.ctx.projectId, episodeId: params.episodeId, chapterId },
     select: {
+      id: true,
       corePlanJson: true,
     },
   })
@@ -107,30 +128,29 @@ export async function buildEpisodeGenerationSegmentVideoPlan(params: {
 async function resolveVideoGroupInput(params: {
   projectId: string
   episodeId: string
+  chapterId?: string
   gridMode: VideoGridMode
-  shotNumbers: readonly number[]
+  shotIds: readonly string[]
 }) {
-  const shotNumbers = validateVideoGroupShotNumbers({
-    gridMode: params.gridMode,
-    shotNumbers: params.shotNumbers,
-  })
+  const chapterId = await resolveEditChapterId(params.episodeId, params.chapterId)
   const [episode, editScript, panels] = await Promise.all([
     prisma.projectEpisode.findFirst({
       where: { id: params.episodeId, projectId: params.projectId },
       select: { id: true },
     }),
     prisma.projectEditScript.findFirst({
-      where: { episodeId: params.episodeId, projectId: params.projectId },
+      where: { episodeId: params.episodeId, projectId: params.projectId, chapterId },
       select: { id: true, corePlanJson: true },
     }),
     prisma.projectPanel.findMany({
       where: {
-        storyboard: { episodeId: params.episodeId },
-        panelNumber: { in: shotNumbers },
+        storyboard: { episodeId: params.episodeId, chapterId },
+        sourceShotId: { in: [...params.shotIds] },
       },
       select: {
         id: true,
         panelNumber: true,
+        sourceShotId: true,
         imageUrl: true,
         imageMediaId: true,
       },
@@ -139,23 +159,25 @@ async function resolveVideoGroupInput(params: {
   if (!episode) throw new Error('PROJECT_AGENT_EPISODE_NOT_FOUND')
   if (!editScript) throw new Error('PROJECT_AGENT_EDIT_SCRIPT_REQUIRED')
   const shots = parseEditScriptShots(editScript.corePlanJson)
-  const selectedShots = shotNumbers.map((shotNumber) => {
-    const shot = shots.find((item) => item.shotNumber === shotNumber)
-    if (!shot) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
-    return shot
+  const shotIds = validateVideoGroupShotIds({
+    gridMode: params.gridMode,
+    shotIds: params.shotIds,
+    shots,
   })
-  const panelByShotNumber = new Map<number, (typeof panels)[number]>()
+  const selectedShots = resolveVideoGroupShots(shots, shotIds)
+  const panelByShotId = new Map<string, (typeof panels)[number]>()
   panels.forEach((panel) => {
-    if (typeof panel.panelNumber === 'number') panelByShotNumber.set(panel.panelNumber, panel)
+    if (panel.sourceShotId) panelByShotId.set(panel.sourceShotId, panel)
   })
-  shotNumbers.forEach((shotNumber) => {
-    const panel = panelByShotNumber.get(shotNumber)
-    if (!panel) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PANEL_NOT_FOUND:${shotNumber}`)
-    if (!panel.imageUrl && !panel.imageMediaId) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PANEL_IMAGE_MISSING:${shotNumber}`)
+  shotIds.forEach((shotId) => {
+    const panel = panelByShotId.get(shotId)
+    if (!panel) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PANEL_NOT_FOUND:${shotId}`)
+    if (!panel.imageUrl && !panel.imageMediaId) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PANEL_IMAGE_MISSING:${shotId}`)
   })
   return {
     editScript,
-    shotNumbers,
+    chapterId,
+    shotIds,
     selectedShots,
   }
 }
@@ -164,43 +186,42 @@ async function buildGenerationSegmentPrompt(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly chapterId: string
   readonly editScriptId: string
-  readonly shotNumbers: readonly number[]
+  readonly shotIds: readonly string[]
 }): Promise<string> {
   const { sourceSnapshot } = await buildStoryboardConsistencySource({
     projectId: input.projectId,
     episodeId: input.episodeId,
+    chapterId: input.chapterId,
     editScriptId: input.editScriptId,
     userId: input.userId,
   })
-  const segment = sourceSnapshot.generationSegments.find((candidate) => sameShotNumbers(candidate.shotNumbers, input.shotNumbers))
-  if (!segment) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotNumbers.join(',')}`)
-  const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) => sameShotNumbers(candidate.shotNumbers, input.shotNumbers))
-  if (!segmentExecution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SEGMENT_EXECUTION_NOT_FOUND:${input.shotNumbers.join(',')}`)
+  const segment = sourceSnapshot.generationSegments.find((candidate) => sameShotIds(candidate.shotIds, input.shotIds))
+  if (!segment) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotIds.join(',')}`)
+  const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) => sameShotIds(candidate.shotIds, input.shotIds))
+  if (!segmentExecution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SEGMENT_EXECUTION_NOT_FOUND:${input.shotIds.join(',')}`)
   return segmentExecution.continuousVideoPrompt
 }
 
-function validateAssetReferenceShotNumbers(shotNumbers: readonly number[]): number[] {
-  const normalized = shotNumbers.map((value) => Number(value))
-  if (normalized.some((value) => !Number.isInteger(value) || value <= 0)) {
-    throw new Error('PROJECT_AGENT_ASSET_REFERENCE_SHOT_NUMBERS_INVALID')
+function validateAssetReferenceShotIds(shotIds: readonly string[], shots: readonly VideoGroupShot[]): string[] {
+  const normalized = shotIds.map((value) => value.trim())
+  if (normalized.some((value) => value.length === 0)) {
+    throw new Error('PROJECT_AGENT_ASSET_REFERENCE_SHOT_IDS_INVALID')
   }
   if (normalized.length < 1 || normalized.length > 9) {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_SHOT_COUNT_UNSUPPORTED:${normalized.length}`)
   }
+  resolveVideoGroupShots(shots, normalized)
   return normalized
 }
 
-function durationForShotNumbers(shots: readonly VideoGroupShot[], shotNumbers: readonly number[]): number {
-  return shotNumbers.reduce((total, shotNumber) => {
-    const shot = shots.find((item) => item.shotNumber === shotNumber)
-    if (!shot) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_SHOT_NOT_FOUND:${shotNumber}`)
-    return total + shot.durationSec
-  }, 0)
+function durationForShotIds(shots: readonly VideoGroupShot[], shotIds: readonly string[]): number {
+  return totalVideoGroupDuration(resolveVideoGroupShots(shots, shotIds))
 }
 
 function gridModeForAssetReferenceItem(item: GenerationSegmentVideoPlanItem): string {
-  return item.gridMode ?? inferVideoGridModeForShotCount(item.shotNumbers.length)
+  return item.gridMode ?? inferVideoGridModeForShotCount(item.shotIds.length)
 }
 
 export function readStoryboardVideoGridMode(value: unknown): VideoGridMode {
@@ -214,8 +235,9 @@ export type PlannedVideoGroupTaskMetadata = {
   projectId: string
   groupId: string
   episodeId: string
+  chapterId: string
   gridMode: string
-  shotNumbers: number[]
+  shotIds: string[]
   durationSec: number
   previous: ExistingVideoGroupRecord | null
   sourceMode?: 'asset_reference' | null
@@ -235,25 +257,31 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
   const projectId = normalizeString(value.projectId)
   const groupId = normalizeString(value.groupId)
   const episodeId = normalizeString(value.episodeId)
+  const chapterId = normalizeString(value.chapterId)
   const gridMode = normalizeString(value.gridMode)
-  const shotNumbers = parseShotNumbersJson(value.shotNumbers)
+  const shotIds = parseShotIdsJson(value.shotIds)
   const durationSec = Number(value.durationSec)
-  if (!planTaskId || !projectId || !groupId || !episodeId || !gridMode || shotNumbers.length === 0 || !Number.isInteger(durationSec) || durationSec <= 0) {
+  if (!planTaskId || !projectId || !groupId || !episodeId || !chapterId || !gridMode || shotIds.length === 0 || !Number.isInteger(durationSec) || durationSec <= 0) {
     throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
   }
   const prompt = Object.prototype.hasOwnProperty.call(value, 'prompt')
     ? normalizeString(value.prompt) || null
     : undefined
+  const sourceMode = value.sourceMode === 'asset_reference' ? 'asset_reference' : null
+  if (sourceMode === 'asset_reference' && !prompt) {
+    throw new Error('PROJECT_AGENT_ASSET_REFERENCE_PROMPT_REQUIRED')
+  }
   return {
     planTaskId,
     projectId,
     groupId,
     episodeId,
+    chapterId,
     gridMode,
-    shotNumbers,
+    shotIds,
     durationSec,
     previous: isRecord(value.previous) ? value.previous as ExistingVideoGroupRecord : null,
-    sourceMode: value.sourceMode === 'asset_reference' ? 'asset_reference' : null,
+    sourceMode,
     ...(prompt !== undefined ? { prompt } : {}),
     referenceImageUrls: normalizeStringList(value.referenceImageUrls),
     segmentIndex: typeof value.segmentIndex === 'number' && Number.isInteger(value.segmentIndex) ? value.segmentIndex : undefined,
@@ -296,8 +324,9 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
       id: metadata.groupId,
       projectId: metadata.projectId,
       episodeId: metadata.episodeId,
+      chapterId: metadata.chapterId,
       gridMode: metadata.gridMode,
-      shotNumbers: metadata.shotNumbers as unknown as Prisma.InputJsonValue,
+      shotIds: metadata.shotIds as unknown as Prisma.InputJsonValue,
       durationSec: metadata.durationSec,
       prompt: metadata.prompt ?? null,
       status: 'queued',
@@ -357,6 +386,8 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
   input: UnknownObject
   operationId: string
   episodeId: string
+  chapterId?: string
+  editScriptId: string
   item: GenerationSegmentVideoPlanItem
   shots: readonly VideoGroupShot[]
   segmentIndex?: number
@@ -368,17 +399,20 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
   if (referenceImageUrls.length === 0) {
     throw new Error('PROJECT_AGENT_ASSET_REFERENCE_IMAGES_REQUIRED')
   }
-  const shotNumbers = validateAssetReferenceShotNumbers(params.item.shotNumbers)
-  const durationSec = durationForShotNumbers(params.shots, shotNumbers)
+  const chapterId = await resolveEditChapterId(params.episodeId, params.chapterId)
+  const shotIds = validateAssetReferenceShotIds(params.item.shotIds, params.shots)
+  const durationSec = durationForShotIds(params.shots, shotIds)
   if (durationSec < 1 || durationSec > 15) {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_DURATION_UNSUPPORTED:${durationSec}`)
   }
 
   const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
+  delete payload.prompt
   applySystemVideoDuration(payload, durationSec)
   payload.episodeId = params.episodeId
+  payload.chapterId = chapterId
   payload.gridMode = gridModeForAssetReferenceItem(params.item)
-  payload.shotNumbers = shotNumbers
+  payload.shotIds = shotIds
   payload.durationSec = durationSec
   payload.sourceMode = 'asset_reference'
   payload.referenceImageUrls = referenceImageUrls
@@ -393,12 +427,20 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
   const gridMode = String(payload.gridMode)
   const previous = await findExistingVideoGroup({
     episodeId: params.episodeId,
+    chapterId,
     gridMode,
-    shotNumbers,
+    shotIds,
   })
-  const prompt = normalizeString(payload.prompt) || previous?.prompt || null
+  const prompt = await buildGenerationSegmentPrompt({
+    projectId: params.ctx.projectId,
+    userId: params.ctx.userId,
+    episodeId: params.episodeId,
+    chapterId,
+    editScriptId: params.editScriptId,
+    shotIds,
+  })
   const groupId = previous?.id ?? randomUUID()
-  const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotNumbers.join('-')}:${groupId}`
+  const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotIds.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
   return {
     task: createPlannedTask({
@@ -419,8 +461,9 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
       projectId: params.ctx.projectId,
       groupId,
       episodeId: params.episodeId,
+      chapterId,
       gridMode,
-      shotNumbers,
+      shotIds,
       durationSec,
       previous,
       sourceMode: 'asset_reference',
@@ -436,8 +479,9 @@ export async function planVideoGroupTask(params: {
   input: UnknownObject
   operationId: string
   episodeId: string
+  chapterId?: string
   gridMode: VideoGridMode
-  shotNumbers: readonly number[]
+  shotIds: readonly string[]
 }): Promise<{
   task: PlannedTask
   metadata: PlannedVideoGroupTaskMetadata
@@ -445,15 +489,17 @@ export async function planVideoGroupTask(params: {
   const resolved = await resolveVideoGroupInput({
     projectId: params.ctx.projectId,
     episodeId: params.episodeId,
+    chapterId: params.chapterId,
     gridMode: params.gridMode,
-    shotNumbers: params.shotNumbers,
+    shotIds: params.shotIds,
   })
   const durationSec = totalVideoGroupDuration(resolved.selectedShots)
   const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
   applySystemVideoDuration(payload, durationSec)
   payload.episodeId = params.episodeId
+  payload.chapterId = resolved.chapterId
   payload.gridMode = params.gridMode
-  payload.shotNumbers = resolved.shotNumbers
+  payload.shotIds = resolved.shotIds
   payload.durationSec = durationSec
 
   await validateVideoTaskPayloadOrThrow({
@@ -465,18 +511,20 @@ export async function planVideoGroupTask(params: {
 
   const previous = await findExistingVideoGroup({
     episodeId: params.episodeId,
+    chapterId: resolved.chapterId,
     gridMode: params.gridMode,
-    shotNumbers: resolved.shotNumbers,
+    shotIds: resolved.shotIds,
   })
   const prompt = await buildGenerationSegmentPrompt({
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
     episodeId: params.episodeId,
+    chapterId: resolved.chapterId,
     editScriptId: resolved.editScript.id,
-    shotNumbers: resolved.shotNumbers,
+    shotIds: resolved.shotIds,
   })
   const groupId = previous?.id ?? randomUUID()
-  const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotNumbers.join('-')}:${groupId}`
+  const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotIds.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
   return {
     task: createPlannedTask({
@@ -497,8 +545,9 @@ export async function planVideoGroupTask(params: {
       projectId: params.ctx.projectId,
       groupId,
       episodeId: params.episodeId,
+      chapterId: resolved.chapterId,
       gridMode: params.gridMode,
-      shotNumbers: resolved.shotNumbers,
+      shotIds: resolved.shotIds,
       durationSec,
       previous,
       prompt,

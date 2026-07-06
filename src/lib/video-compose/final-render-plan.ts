@@ -25,6 +25,7 @@ export interface FinalRenderPanelInput {
   readonly id: string
   readonly panelIndex: number
   readonly panelNumber?: number | null
+  readonly sourceShotId?: string | null
   readonly duration?: number | null
   readonly description?: string | null
   readonly videoUrl?: string | null
@@ -35,7 +36,7 @@ export interface FinalRenderPanelInput {
 export interface FinalRenderVideoGroupInput {
   readonly id: string
   readonly gridMode: string
-  readonly shotNumbers: unknown
+  readonly shotIds: unknown
   readonly durationSec: number
   readonly status: string
   readonly prompt?: string | null
@@ -61,6 +62,8 @@ export interface FinalRenderClipPlan {
   readonly order: number
   readonly shotNumber: number | null
   readonly shotNumbers: readonly number[]
+  readonly shotId: string | null
+  readonly shotIds: readonly string[]
   readonly description: string | null
   readonly sound: string | null
 }
@@ -78,7 +81,6 @@ export interface FinalRenderMusicPromptInput {
 }
 
 const editScriptCorePlanSchema = editScriptCoreSchema
-const LYRIA_PRO_DURATIONS = [30, 60, 90, 120, 180] as const
 
 function normalizeString(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -123,26 +125,26 @@ function resolveVideoGroupSource(group: FinalRenderVideoGroupInput): string | Fi
   return null
 }
 
-function parseGroupShotNumbers(value: unknown): number[] {
+function parseGroupShotIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map((item) => (typeof item === 'number' ? item : Number(item)))
-    .filter((item) => Number.isInteger(item) && item > 0)
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0)
 }
 
-function shotSoundForGroup(shotNumbers: readonly number[], editScript: FinalRenderEditScriptInput | null): string | null {
+function shotSoundForGroup(shotIds: readonly string[], editScript: FinalRenderEditScriptInput | null): string | null {
   if (!editScript) return null
-  const sounds = shotNumbers
-    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.sound)
+  const sounds = shotIds
+    .map((shotId) => editScript.shots.find((shot) => shot.shotId === shotId)?.sound)
     .map((value) => normalizeString(value))
     .filter(Boolean)
   return sounds.length > 0 ? sounds.join(' / ') : null
 }
 
-function shotDescriptionForGroup(shotNumbers: readonly number[], editScript: FinalRenderEditScriptInput | null, fallback?: string | null): string | null {
+function shotDescriptionForGroup(shotIds: readonly string[], editScript: FinalRenderEditScriptInput | null, fallback?: string | null): string | null {
   if (!editScript) return normalizeString(fallback) || null
-  const descriptions = shotNumbers
-    .map((shotNumber) => editScript.shots.find((shot) => shot.shotNumber === shotNumber)?.action)
+  const descriptions = shotIds
+    .map((shotId) => editScript.shots.find((shot) => shot.shotId === shotId)?.action)
     .map((value) => normalizeString(value))
     .filter(Boolean)
   return descriptions.length > 0 ? descriptions.join(' / ') : normalizeString(fallback) || null
@@ -157,11 +159,22 @@ function storyboardReferencesEditScript(storyboard: FinalRenderStoryboardInput, 
 
 function findShotByPanel(panel: FinalRenderPanelInput, editScript: FinalRenderEditScriptInput | null): EditScriptShot | null {
   if (!editScript) return null
+  const sourceShotId = normalizeString(panel.sourceShotId)
+  if (sourceShotId) {
+    return editScript.shots.find((shot) => shot.shotId === sourceShotId) ?? null
+  }
   const panelNumber = panel.panelNumber
   if (typeof panelNumber === 'number' && Number.isInteger(panelNumber)) {
     return editScript.shots.find((shot) => shot.shotNumber === panelNumber) ?? null
   }
   return null
+}
+
+function shotNumbersForIds(shotIds: readonly string[], editScript: FinalRenderEditScriptInput | null): number[] {
+  if (!editScript) return []
+  return shotIds
+    .map((shotId) => editScript.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
+    .filter((value): value is number => typeof value === 'number' && Number.isInteger(value))
 }
 
 function shotNumberForPanelClip(shot: EditScriptShot | null, panel: FinalRenderPanelInput): number | null {
@@ -200,15 +213,6 @@ export function resolveFinalRenderDimensions(videoRatio: string | null | undefin
   return { width: 1080, height: 1920 }
 }
 
-export function selectFinalRenderMusicDurationSeconds(modelKey: string, targetDurationSeconds: number): number {
-  const target = Math.max(1, Math.ceil(targetDurationSeconds))
-  if (modelKey.includes('lyria-3-clip-preview')) return 30
-  for (const duration of LYRIA_PRO_DURATIONS) {
-    if (target <= duration) return duration
-  }
-  return LYRIA_PRO_DURATIONS[LYRIA_PRO_DURATIONS.length - 1]
-}
-
 export function parseFinalRenderEditScriptShots(value: unknown): readonly EditScriptShot[] {
   const parsed = editScriptCorePlanSchema.safeParse(value)
   if (!parsed.success) return []
@@ -228,14 +232,15 @@ export function parseFinalRenderEditScriptCore(value: unknown): {
   }
 }
 
-function sameShotNumbers(left: readonly number[], right: readonly number[]): boolean {
+function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
-  return left.every((shotNumber, index) => shotNumber === right[index])
+  return left.every((shotId, index) => shotId === right[index])
 }
 
 function buildPanelClip(panel: FinalRenderPanelInput, editScript: FinalRenderEditScriptInput | null): FinalRenderClipPlan {
   const shot = findShotByPanel(panel, editScript)
   const shotNumber = shotNumberForPanelClip(shot, panel)
+  const shotId = shot?.shotId ?? (normalizeString(panel.sourceShotId) || null)
   const durationSeconds = clampPositiveDuration(panel.duration, shot?.durationSec ?? 3)
   const source = resolvePanelVideoSource(panel)
   return {
@@ -247,6 +252,8 @@ function buildPanelClip(panel: FinalRenderPanelInput, editScript: FinalRenderEdi
     order: 0,
     shotNumber,
     shotNumbers: shotNumber === null ? [] : [shotNumber],
+    shotId,
+    shotIds: shotId === null ? [] : [shotId],
     description: normalizeString(panel.description) || null,
     sound: normalizeString(shot?.sound) || null,
   }
@@ -258,54 +265,57 @@ function buildEditScriptOrderedFinalRenderClips(input: {
   readonly editScript: FinalRenderEditScriptInput
 }): FinalRenderClipPlan[] {
   const sortedPanels = sortPanelsForFinalRender(input.panels, input.editScript)
-  const panelByShotNumber = new Map<number, FinalRenderPanelInput>()
+  const panelByShotId = new Map<string, FinalRenderPanelInput>()
   sortedPanels.forEach((panel) => {
     const shot = findShotByPanel(panel, input.editScript)
-    const shotNumber = shotNumberForPanelClip(shot, panel)
-    if (typeof shotNumber === 'number' && !panelByShotNumber.has(shotNumber)) {
-      panelByShotNumber.set(shotNumber, panel)
+    const shotId = shot?.shotId ?? normalizeString(panel.sourceShotId)
+    if (shotId && !panelByShotId.has(shotId)) {
+      panelByShotId.set(shotId, panel)
     }
   })
 
   const groups = input.videoGroups.map((group) => ({
     group,
-    shotNumbers: parseGroupShotNumbers(group.shotNumbers),
+    shotIds: parseGroupShotIds(group.shotIds),
   }))
   const clips: FinalRenderClipPlan[] = []
-  const coveredShotNumbers = new Set<number>()
+  const coveredShotIds = new Set<string>()
 
   input.editScript.generationSegments.forEach((segment) => {
-    const matchingGroup = groups.find((item) => sameShotNumbers(item.shotNumbers, segment.shotNumbers))
+    const matchingGroup = groups.find((item) => sameShotIds(item.shotIds, segment.shotIds))
     const source = matchingGroup ? resolveVideoGroupSource(matchingGroup.group) : null
     if (matchingGroup) {
-      segment.shotNumbers.forEach((shotNumber) => coveredShotNumbers.add(shotNumber))
+      segment.shotIds.forEach((shotId) => coveredShotIds.add(shotId))
+      const shotNumbers = shotNumbersForIds(segment.shotIds, input.editScript)
       clips.push({
         panelId: matchingGroup.group.id,
         groupId: matchingGroup.group.id,
         sourceKind: 'videoGroup',
         source: source ?? '',
-        durationSeconds: clampPositiveDuration(matchingGroup.group.durationSec, segment.shotNumbers.length * 3),
+        durationSeconds: clampPositiveDuration(matchingGroup.group.durationSec, segment.shotIds.length * 3),
         order: 0,
-        shotNumber: segment.shotNumbers[0] ?? null,
-        shotNumbers: segment.shotNumbers,
-        description: shotDescriptionForGroup(segment.shotNumbers, input.editScript, matchingGroup.group.prompt ?? segment.continuity),
-        sound: shotSoundForGroup(segment.shotNumbers, input.editScript),
+        shotNumber: shotNumbers[0] ?? null,
+        shotNumbers,
+        shotId: segment.shotIds[0] ?? null,
+        shotIds: segment.shotIds,
+        description: shotDescriptionForGroup(segment.shotIds, input.editScript, matchingGroup.group.prompt ?? segment.continuity),
+        sound: shotSoundForGroup(segment.shotIds, input.editScript),
       })
       return
     }
 
-    segment.shotNumbers.forEach((shotNumber) => {
-      const panel = panelByShotNumber.get(shotNumber)
+    segment.shotIds.forEach((shotId) => {
+      const panel = panelByShotId.get(shotId)
       if (!panel) return
-      coveredShotNumbers.add(shotNumber)
+      coveredShotIds.add(shotId)
       clips.push(buildPanelClip(panel, input.editScript))
     })
   })
 
   sortedPanels.forEach((panel) => {
     const shot = findShotByPanel(panel, input.editScript)
-    const shotNumber = shotNumberForPanelClip(shot, panel)
-    if (typeof shotNumber === 'number' && coveredShotNumbers.has(shotNumber)) return
+    const shotId = shot?.shotId ?? normalizeString(panel.sourceShotId)
+    if (shotId && coveredShotIds.has(shotId)) return
     clips.push(buildPanelClip(panel, input.editScript))
   })
 
@@ -331,38 +341,46 @@ export function buildFinalRenderClips(input: {
   const groupPlans = (input.videoGroups ?? [])
     .map((group) => ({
       group,
-      shotNumbers: parseGroupShotNumbers(group.shotNumbers),
+      shotIds: parseGroupShotIds(group.shotIds),
     }))
-    .filter((item) => item.shotNumbers.length > 0)
-    .sort((left, right) => left.shotNumbers[0] - right.shotNumbers[0])
+    .filter((item) => item.shotIds.length > 0)
+    .sort((left, right) => {
+      const leftShot = shotNumbersForIds(left.shotIds, input.editScript)[0] ?? Number.POSITIVE_INFINITY
+      const rightShot = shotNumbersForIds(right.shotIds, input.editScript)[0] ?? Number.POSITIVE_INFINITY
+      return leftShot - rightShot
+    })
 
-  const coveredShotNumbers = new Set<number>()
+  const coveredShotIds = new Set<string>()
   const groupClips = groupPlans.map((item): FinalRenderClipPlan => {
-    item.shotNumbers.forEach((shotNumber) => coveredShotNumbers.add(shotNumber))
+    item.shotIds.forEach((shotId) => coveredShotIds.add(shotId))
+    const shotNumbers = shotNumbersForIds(item.shotIds, input.editScript)
     const source = resolveVideoGroupSource(item.group)
     return {
       panelId: item.group.id,
       groupId: item.group.id,
       sourceKind: 'videoGroup' as const,
       source: source ?? '',
-      durationSeconds: clampPositiveDuration(item.group.durationSec, item.shotNumbers.length * 3),
+      durationSeconds: clampPositiveDuration(item.group.durationSec, item.shotIds.length * 3),
       order: 0,
-      shotNumber: item.shotNumbers[0] ?? null,
-      shotNumbers: item.shotNumbers,
-      description: shotDescriptionForGroup(item.shotNumbers, input.editScript, item.group.prompt),
-      sound: shotSoundForGroup(item.shotNumbers, input.editScript),
+      shotNumber: shotNumbers[0] ?? null,
+      shotNumbers,
+      shotId: item.shotIds[0] ?? null,
+      shotIds: item.shotIds,
+      description: shotDescriptionForGroup(item.shotIds, input.editScript, item.group.prompt),
+      sound: shotSoundForGroup(item.shotIds, input.editScript),
     }
   })
 
   const sortedPanels = sortPanelsForFinalRender(input.panels, input.editScript)
     .filter((panel) => {
       const shot = findShotByPanel(panel, input.editScript)
-      const shotNumber = shot?.shotNumber ?? panel.panelNumber ?? null
-      return typeof shotNumber === 'number' ? !coveredShotNumbers.has(shotNumber) : true
+      const shotId = shot?.shotId ?? normalizeString(panel.sourceShotId)
+      return shotId ? !coveredShotIds.has(shotId) : true
     })
   const panelClips = sortedPanels.map((panel) => {
     const shot = findShotByPanel(panel, input.editScript)
     const shotNumber = shotNumberForPanelClip(shot, panel)
+    const shotId = shot?.shotId ?? (normalizeString(panel.sourceShotId) || null)
     const durationSeconds = clampPositiveDuration(panel.duration, shot?.durationSec ?? 3)
     const source = resolvePanelVideoSource(panel)
     if (!source) {
@@ -375,6 +393,8 @@ export function buildFinalRenderClips(input: {
         order: 0,
         shotNumber,
         shotNumbers: shotNumber === null ? [] : [shotNumber],
+        shotId,
+        shotIds: shotId === null ? [] : [shotId],
         description: normalizeString(panel.description) || null,
         sound: normalizeString(shot?.sound) || null,
       }
@@ -388,6 +408,8 @@ export function buildFinalRenderClips(input: {
       order: 0,
       shotNumber,
       shotNumbers: shotNumber === null ? [] : [shotNumber],
+      shotId,
+      shotIds: shotId === null ? [] : [shotId],
       description: normalizeString(panel.description) || null,
       sound: normalizeString(shot?.sound) || null,
     }
@@ -426,10 +448,12 @@ function buildEditScriptJson(editScript: FinalRenderEditScriptInput | null): str
     shotCount: editScript.shots.length,
     generationSegments: editScript.generationSegments.map((segment, index) => ({
       segmentNumber: index + 1,
-      shotNumbers: segment.shotNumbers,
+      shotIds: segment.shotIds,
+      shotNumbers: shotNumbersForIds(segment.shotIds, editScript),
       continuity: segment.continuity,
     })),
     shots: editScript.shots.map((shot) => ({
+      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: shot.scene,
@@ -449,6 +473,8 @@ function buildRenderedTimelineJson(clips: readonly FinalRenderClipPlan[]): strin
     groupId: clip.groupId ?? null,
     shotNumber: clip.shotNumber,
     shotNumbers: clip.shotNumbers,
+    shotId: clip.shotId,
+    shotIds: clip.shotIds,
     durationSeconds: clip.durationSeconds,
     visualSummary: clip.description,
     soundDirection: clip.sound,

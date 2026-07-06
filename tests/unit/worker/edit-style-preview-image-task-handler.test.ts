@@ -23,7 +23,7 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     update: vi.fn(async () => ({})),
   },
-  projectEditScreenplay: {
+  projectEditBible: {
     update: vi.fn(async () => ({})),
   },
 }))
@@ -82,7 +82,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
     vi.clearAllMocks()
     prismaMock.projectEditStylePreview.findFirst.mockResolvedValue({
       id: 'preview-1',
-      editScreenplayId: 'screenplay-1',
+      editBibleId: 'bible-1',
     })
     prismaMock.projectEditStylePreview.findMany.mockResolvedValue([
       { status: 'completed' },
@@ -91,7 +91,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
     ])
   })
 
-  it('generates a 3x3 style preview image and marks the screenplay preview-ready when all options completed', async () => {
+  it('generates a 3x3 style preview image without mutating the parent bible status', async () => {
     const job = buildJob({
       stylePreviewId: 'preview-1',
       imageModel: 'storyboard-image-model',
@@ -122,10 +122,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
         errorMessage: null,
       },
     })
-    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
-      where: { id: 'screenplay-1' },
-      data: { status: 'style_preview_ready' },
-    })
+    expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
     expect(result).toEqual({
       stylePreviewId: 'preview-1',
       imageKey: 'edit-style-preview/preview-1.png',
@@ -136,7 +133,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
     })
   })
 
-  it('marks the screenplay preview-ready when all generated options complete even if there are fewer than three', async () => {
+  it('leaves bible status unchanged when fewer than three sibling previews exist', async () => {
     prismaMock.projectEditStylePreview.findMany.mockResolvedValueOnce([
       { status: 'completed' },
       { status: 'completed' },
@@ -148,13 +145,10 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))
 
-    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
-      where: { id: 'screenplay-1' },
-      data: { status: 'style_preview_ready' },
-    })
+    expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 
-  it('marks the screenplay preview-ready after appended candidates push the total beyond three', async () => {
+  it('leaves bible status unchanged after appended candidates complete', async () => {
     prismaMock.projectEditStylePreview.findMany.mockResolvedValueOnce([
       { status: 'completed' },
       { status: 'completed' },
@@ -169,10 +163,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))
 
-    expect(prismaMock.projectEditScreenplay.update).toHaveBeenCalledWith({
-      where: { id: 'screenplay-1' },
-      data: { status: 'style_preview_ready' },
-    })
+    expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 
   it('does not mark preview-ready while an appended candidate is still generating', async () => {
@@ -190,7 +181,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))
 
-    expect(prismaMock.projectEditScreenplay.update).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 
   it('marks only the failed preview when image generation fails', async () => {
@@ -208,6 +199,6 @@ describe('worker edit-style-preview-image-task-handler', () => {
         errorMessage: 'IMAGE_PROVIDER_FAILED',
       },
     })
-    expect(prismaMock.projectEditScreenplay.update).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 })

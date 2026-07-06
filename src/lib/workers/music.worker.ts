@@ -152,7 +152,7 @@ async function processMusicTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.MUSIC_GENERATE:
       return await handleMusicGenerateTask(job)
-    case TASK_TYPE.BGM_SCORE_GENERATE:
+    case TASK_TYPE.MUSIC_SCORE_PLAN:
       return await handleBgmScoreGenerateTask(job)
     default:
       throw new Error(`Unsupported music task type: ${job.data.type}`)

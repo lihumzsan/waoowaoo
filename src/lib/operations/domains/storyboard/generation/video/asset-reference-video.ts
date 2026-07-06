@@ -4,7 +4,7 @@ import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution, type OperationPlan } from '@/lib/operations/planning'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceGenerationSegmentTask, readPlannedVideoGroupMetadataList } from './video-group-planning'
+import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceGenerationSegmentTask, readPlannedVideoGroupMetadataList, resolveEditChapterId } from './video-group-planning'
 
 export async function executeGenerateAssetReferenceVideoOperation(params: {
   ctx: ProjectAgentOperationContext
@@ -31,6 +31,7 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const chapterId = await resolveEditChapterId(episodeId, normalizeString(params.input.chapterId))
   const segmentIndex = typeof params.input.segmentIndex === 'number' && Number.isInteger(params.input.segmentIndex)
     ? params.input.segmentIndex
     : -1
@@ -38,6 +39,7 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
   const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
+    chapterId,
   })
   const item = planned.plan.items[segmentIndex]
   if (!item) throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_SEGMENT_NOT_FOUND:${segmentIndex}`)
@@ -47,6 +49,8 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
     input: params.input,
     operationId: params.operationId,
     episodeId,
+    chapterId,
+    editScriptId: planned.editScript.id,
     item,
     shots: planned.shots,
     segmentIndex,
@@ -59,6 +63,7 @@ export async function planGenerateAssetReferenceVideoOperation(params: {
     tasks: [plannedTask.task],
     metadata: {
       episodeId,
+      chapterId,
       sourceMode: 'asset_reference',
       segmentIndex,
       videoGroups: [plannedTask.metadata],
@@ -107,9 +112,10 @@ export async function commitGenerateAssetReferenceVideoPlan(params: {
     targetType: 'ProjectVideoGroup',
     targetId: groupMetadata.groupId,
     episodeId: groupMetadata.episodeId,
+    chapterId: groupMetadata.chapterId,
     sourceMode: 'asset_reference' as const,
     segmentIndex,
-    shotNumbers: groupMetadata.shotNumbers,
+    shotIds: groupMetadata.shotIds,
     durationSec: groupMetadata.durationSec,
   }
 }
@@ -139,9 +145,11 @@ export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const chapterId = await resolveEditChapterId(episodeId, normalizeString(params.input.chapterId))
   const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
+    chapterId,
   })
 
   const plannedTasks = []
@@ -151,6 +159,8 @@ export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
       input: params.input,
       operationId: params.operationId,
       episodeId,
+      chapterId,
+      editScriptId: planned.editScript.id,
       item,
       shots: planned.shots,
       segmentIndex,
@@ -164,6 +174,7 @@ export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {
     tasks: plannedTasks.map((item) => item.task),
     metadata: {
       episodeId,
+      chapterId,
       sourceMode: 'asset_reference',
       videoGroups: plannedTasks.map((item) => item.metadata),
     },
@@ -203,7 +214,7 @@ export async function commitGenerateEpisodeAssetReferenceVideosPlan(params: {
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       targetId: item.metadata.groupId,
-      shotNumbers: item.metadata.shotNumbers,
+      shotIds: item.metadata.shotIds,
       durationSec: item.metadata.durationSec,
     })),
     sourceMode: 'asset_reference' as const,

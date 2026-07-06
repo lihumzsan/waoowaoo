@@ -106,6 +106,18 @@ export interface BgmScoreMix {
   readonly durationMs: number
 }
 
+export interface BgmScoreCue {
+  readonly cueId: string
+  readonly index: number
+  readonly startSeconds: number
+  readonly endSeconds: number
+  readonly durationSeconds: number
+  readonly sourceClipOrders: readonly number[]
+  readonly shotIds: readonly string[]
+  readonly shotNumbers: readonly number[]
+  readonly prompt: string
+}
+
 export interface BgmScoreProjectData {
   readonly schemaVersion: 2
   readonly status: BgmScoreStatus
@@ -115,6 +127,7 @@ export interface BgmScoreProjectData {
   readonly durationSeconds: number
   readonly musicModel: string
   readonly plan?: BgmScorePlan
+  readonly cues?: readonly BgmScoreCue[]
   readonly mix?: BgmScoreMix
   readonly errorMessage?: string | null
 }

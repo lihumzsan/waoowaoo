@@ -22,7 +22,7 @@ const serviceMock = vi.hoisted(() => ({
     async: true,
     projectId: 'project-1',
     episodeId: 'episode-1',
-    screenplayId: 'screenplay-1',
+    bibleId: 'bible-1',
     status: 'queued',
     total: 2,
     taskIds: ['child-1', 'child-2'],
@@ -67,11 +67,11 @@ function buildJob(payload: Record<string, unknown> = {}): Job<TaskJobData> {
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      targetType: 'ProjectEditScreenplay',
-      targetId: 'screenplay-1',
+      targetType: 'ProjectEditBible',
+      targetId: 'bible-1',
       payload: {
         episodeId: 'episode-1',
-        screenplayId: 'screenplay-1',
+        bibleId: 'bible-1',
         ...payload,
       },
       userId: 'user-1',
@@ -119,13 +119,13 @@ describe('worker edit-style-previews-generate', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
       parentTaskId: 'parent-task-1',
       styleDirection: '更黑暗一些',
       count: 2,
     }))
     expect(result).toEqual(expect.objectContaining({
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
       total: 2,
       completed: 1,
       failed: 1,
@@ -163,10 +163,10 @@ describe('worker edit-style-previews-generate', () => {
       ])
 
     await expect(handleEditStylePreviewsGenerateTask(buildJob())).rejects.toThrow(
-      'EDIT_STYLE_PREVIEWS_ALL_IMAGES_FAILED:screenplay-1',
+      'EDIT_STYLE_PREVIEWS_ALL_IMAGES_FAILED:bible-1',
     )
     expect(serviceMock.markProjectEditStylePreviewGenerationFailed).toHaveBeenCalledWith({
-      screenplayId: 'screenplay-1',
+      bibleId: 'bible-1',
       message: 'first failed',
     })
   })

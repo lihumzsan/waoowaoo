@@ -26,6 +26,7 @@ import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
+import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
 
 const vocalModeSchema = z.enum(['instrumental', 'vocal'])
 const outputFormatSchema = z.enum(['mp3', 'wav'])
@@ -143,18 +144,15 @@ async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, project
 async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectId: string): Promise<number> {
   const episode = await prisma.projectEpisode.findFirst({
     where: { id: episodeId, projectId },
-    select: {
-      id: true,
-      editScript: {
-        select: { durationSec: true },
-      },
-    },
+    select: { id: true },
   })
   if (!episode) throw new Error('PROJECT_AGENT_EPISODE_NOT_FOUND')
-  const duration = episode.editScript?.durationSec
-  if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
-    throw new Error('PROJECT_AGENT_BGM_SCORE_EDIT_SCRIPT_REQUIRED')
-  }
+  const clips = await loadEpisodeChapterOutputClips({
+    episodeId,
+    projectId,
+  })
+  const duration = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error('PROJECT_AGENT_MUSIC_SCORE_TIMELINE_REQUIRED')
   return Math.max(1, Math.ceil(duration))
 }
 
@@ -280,15 +278,15 @@ async function planGenerateEpisodeBgmScoreOperation(
     tasks: [
       createPlannedTask({
         id: `generate_episode_bgm_score:${episodeId}`,
-        taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+        taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
         locale: resolveRequiredTaskLocale(ctx.request, payload),
         episodeId,
-        dedupeKey: `bgm_score_generate:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
+        dedupeKey: `music_score_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
-          taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+          taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
           payload,
           allowedApiTypes: ['music'],
         }),
@@ -331,7 +329,7 @@ async function commitGenerateEpisodeBgmScoreOperation(
     billingReceipt: result.billingReceiptView,
     projectId: ctx.projectId,
     episodeId,
-    taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   })
@@ -339,7 +337,7 @@ async function commitGenerateEpisodeBgmScoreOperation(
   return {
     ...result,
     musicModel,
-    taskType: TASK_TYPE.BGM_SCORE_GENERATE,
+    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
@@ -384,7 +382,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
     }),
     generate_episode_bgm_score: defineOperation({
       id: 'generate_episode_bgm_score',
-      summary: 'Generate a continuous multi-stem BGM score for an episode after video planning is complete.',
+      summary: 'Generate the episode music score from rendered chapter outputs.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {

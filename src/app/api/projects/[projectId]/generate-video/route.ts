@@ -42,17 +42,18 @@ export const POST = apiHandler(async (
       field: 'mode',
     })
   }
-  if (body.mode === 'asset-reference' && body.all !== true && typeof body.blockIndex !== 'number') {
+  if (body.mode === 'asset-reference' && body.all !== true && typeof body.segmentIndex !== 'number') {
     throw new ApiError('INVALID_PARAMS', {
-      code: 'ASSET_REFERENCE_VIDEO_BLOCK_REQUIRED',
-      field: 'blockIndex',
+      code: 'ASSET_REFERENCE_VIDEO_SEGMENT_REQUIRED',
+      field: 'segmentIndex',
     })
   }
   if (body.gridMode === '2x2' || body.gridMode === '3x3') input.gridMode = body.gridMode
-  if (Array.isArray(body.shotNumbers)) input.shotNumbers = body.shotNumbers
+  if (Array.isArray(body.shotIds)) input.shotIds = body.shotIds
   if (Array.isArray(body.referenceImageUrls)) input.referenceImageUrls = body.referenceImageUrls
-  if (typeof body.blockIndex === 'number') input.blockIndex = body.blockIndex
+  if (typeof body.segmentIndex === 'number') input.segmentIndex = body.segmentIndex
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
+  if (typeof body.chapterId === 'string') input.chapterId = body.chapterId
   if (typeof body.panelId === 'string') input.panelId = body.panelId
   if (typeof body.storyboardId === 'string') input.storyboardId = body.storyboardId
   if (typeof body.panelIndex === 'number') input.panelIndex = body.panelIndex

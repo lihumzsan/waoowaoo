@@ -2,7 +2,9 @@ import { z } from 'zod'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
+import {
+  EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
+} from '@/lib/project-workflow/edit-first-tool-input-schema'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -54,8 +56,9 @@ const generateVideoGroupInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
-  shotNumbers: z.array(z.number().int().positive()).min(1).max(9),
+  shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
@@ -63,6 +66,7 @@ const generateEpisodeVideoGroupsInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
   gridMode: z.enum(VIDEO_GRID_MODES),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
@@ -71,6 +75,7 @@ const generateEpisodeVideosAutoInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
@@ -78,6 +83,7 @@ const generateAssetReferenceVideoInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
   segmentIndex: z.number().int().min(0).max(59),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
@@ -87,6 +93,7 @@ const generateEpisodeAssetReferenceVideosInputSchema = z.object({
   confirmed: z.boolean().optional(),
   confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
   referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
   generationOptions: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
@@ -103,8 +110,9 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
     taskSubmitOperationOutputSchemaBase.extend({
       groupId: z.string().min(1),
       episodeId: z.string().min(1),
+      chapterId: z.string().min(1).optional(),
       gridMode: z.enum(VIDEO_GRID_MODES),
-      shotNumbers: z.array(z.number().int().positive()),
+      shotIds: z.array(z.string().min(1)),
       durationSec: z.number().int().positive(),
     }).passthrough(),
   )
@@ -114,7 +122,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       results: z.array(z.object({
         refId: z.string().min(1),
         taskId: z.string().min(1),
-        shotNumbers: z.array(z.number().int().positive()),
+        shotIds: z.array(z.string().min(1)),
         durationSec: z.number().int().positive(),
       }).passthrough()),
       gridMode: z.enum(VIDEO_GRID_MODES),
@@ -127,14 +135,14 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         refId: z.string().min(1),
         taskId: z.string().min(1),
         kind: z.literal('group'),
-        shotNumbers: z.array(z.number().int().positive()),
+        shotIds: z.array(z.string().min(1)),
         durationSec: z.number().int().positive().optional(),
       }).passthrough()),
       groupVideoModel: z.string().min(1),
       plan: z.object({
         items: z.array(z.object({
           kind: z.literal('group'),
-          shotNumbers: z.array(z.number().int().positive()),
+          shotIds: z.array(z.string().min(1)),
           gridMode: z.enum(VIDEO_GRID_MODES).optional(),
           continuity: z.string().min(1),
         })),
@@ -148,7 +156,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       episodeId: z.string().min(1),
       sourceMode: z.literal('asset_reference'),
       segmentIndex: z.number().int().min(0),
-      shotNumbers: z.array(z.number().int().positive()),
+      shotIds: z.array(z.string().min(1)),
       durationSec: z.number().int().positive(),
     }).passthrough(),
   )
@@ -158,7 +166,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       results: z.array(z.object({
         refId: z.string().min(1),
         taskId: z.string().min(1),
-        shotNumbers: z.array(z.number().int().positive()),
+        shotIds: z.array(z.string().min(1)),
         durationSec: z.number().int().positive(),
       }).passthrough()),
       sourceMode: z.literal('asset_reference'),
@@ -222,7 +230,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         required: true,
         summary: '将按核心剪辑计划中的生成分段提交缺失的连续视频片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEpisodeVideosAutoInputSchema,
       outputSchema: generateEpisodeVideosAutoOutputSchema,
       plan: async (ctx, input) => planGenerateEpisodeVideosAutoOperation({

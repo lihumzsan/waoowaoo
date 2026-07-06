@@ -55,16 +55,18 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
       id: 'execution-1',
       projectId: 'project-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       editScriptId: 'script-1',
       status: 'ready',
       generationSegmentExecutions: [
         {
-          shotNumbers: [1],
+          shotIds: ['shot-1'],
           continuousVideoPrompt: 'Continuous segment video prompt for Anna and the chair in the same room. [00:00-00:03] Shot 1 preserves the same chair axis and room tone.',
         },
       ],
       shots: [
         {
+          shotId: 'shot-1',
           shotNumber: 1,
           camera: {
             shotScale: 'medium',
@@ -118,6 +120,7 @@ describe('handleEditShotExecutionPlanGenerateTask', () => {
     expect(result).toEqual({
       shotExecutionPlanId: 'execution-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       editScriptId: 'script-1',
       shotCount: 1,
     })

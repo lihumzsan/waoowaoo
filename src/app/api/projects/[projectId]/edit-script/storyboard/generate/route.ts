@@ -22,6 +22,7 @@ export const POST = apiHandler(async (
   const result = await submitEditScriptStoryboardPanels({
     projectId,
     episodeId: parsed.data.episodeId,
+    chapterId: parsed.data.chapterId,
     editScriptId: parsed.data.editScriptId,
     userId: authResult.session.user.id,
     locale: resolveRequiredTaskLocale(request, body),

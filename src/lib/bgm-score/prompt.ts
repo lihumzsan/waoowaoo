@@ -22,6 +22,7 @@ function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): 
     durationSec: editScript.durationSec,
     styleBible: editScript.styleBible ?? null,
     shots: editScript.shots.map((shot) => ({
+      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: shot.scene,
@@ -32,7 +33,7 @@ function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): 
     })),
     generationSegments: editScript.generationSegments.map((segment, index) => ({
       segmentNumber: index + 1,
-      shotNumbers: segment.shotNumbers,
+      shotIds: segment.shotIds,
       continuity: segment.continuity,
     })),
   }
@@ -51,6 +52,8 @@ function buildTimelinePayload(clips: readonly FinalRenderClipPlan[]): unknown {
     sourceKind: clip.sourceKind,
     panelId: clip.panelId,
     groupId: clip.groupId ?? null,
+    shotId: clip.shotId,
+    shotIds: clip.shotIds,
     shotNumber: clip.shotNumber,
     shotNumbers: clip.shotNumbers,
     durationSeconds: clip.durationSeconds,

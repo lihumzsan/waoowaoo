@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { prisma } from '../../helpers/prisma'
 import {
   createFixtureEpisode,
@@ -16,13 +16,51 @@ export async function seedMinimalDomainState() {
   const project = await createFixtureProject(user.id)
   const novelProject = await createFixtureNovelProject(project.id)
   const episode = await createFixtureEpisode(novelProject.id)
-  const editScreenplay = await prisma.projectEditScreenplay.create({
+  const sourceText = 'seed bible'
+  const checksum = createHash('sha256').update(sourceText).digest('hex')
+  const sourceDocument = await prisma.projectEpisodeSourceDocument.create({
     data: {
-      projectId: project.id,
       episodeId: episode.id,
-      userPrompt: 'seed prompt',
-      screenplayText: 'seed screenplay',
-      status: 'ready',
+      normalizedText: sourceText,
+      checksum,
+      sourceKind: 'paste',
+      version: 1,
+    },
+  })
+  const editBible = await prisma.projectEditBible.create({
+    data: {
+      episodeId: episode.id,
+      sourceDocumentId: sourceDocument.id,
+      bibleJson: {
+        synopsis: sourceText,
+        characters: [],
+        locations: [],
+        worldRules: [],
+        styleGuide: {},
+      },
+      beatSheetJson: { beats: [] },
+      ledgerJson: { events: [] },
+      emotionalCurveJson: { cues: [] },
+      status: 'confirmed',
+      lockedAt: new Date(),
+    },
+  })
+  const chapter = await prisma.projectEditChapter.create({
+    data: {
+      episodeId: episode.id,
+      chapterIndex: 0,
+      title: 'Seed chapter',
+      summary: sourceText,
+      sourceDocumentId: sourceDocument.id,
+      sourceStart: 0,
+      sourceEnd: sourceText.length,
+      targetDurationSec: 30,
+      provenanceJson: {
+        sourceDocumentId: sourceDocument.id,
+        bibleVersion: editBible.version,
+        beatIds: [],
+        eventIds: [],
+      },
     },
   })
 
@@ -30,10 +68,11 @@ export async function seedMinimalDomainState() {
     data: {
       projectId: project.id,
       episodeId: episode.id,
-      editScreenplayId: editScreenplay.id,
+      chapterId: chapter.id,
       corePlanJson: {
         shots: [
           {
+            shotId: 'shot-1',
             shotNumber: 1,
             durationSec: 3,
             scene: { name: 'Office' },
@@ -52,7 +91,7 @@ export async function seedMinimalDomainState() {
         ],
         generationSegments: [
           {
-            shotNumbers: [1],
+            shotIds: ['shot-1'],
             continuity: 'seed panel continuity',
           },
         ],
@@ -65,6 +104,7 @@ export async function seedMinimalDomainState() {
   const storyboard = await prisma.projectStoryboard.create({
     data: {
       episodeId: episode.id,
+      chapterId: chapter.id,
       editScriptId: editScript.id,
       panelCount: 1,
     },
@@ -75,6 +115,7 @@ export async function seedMinimalDomainState() {
       storyboardId: storyboard.id,
       panelIndex: 0,
       panelNumber: 1,
+      sourceShotId: 'shot-1',
       shotType: '中景',
       cameraMove: '固定',
       description: 'seed panel',
@@ -126,6 +167,7 @@ export async function seedMinimalDomainState() {
       storyboardId: storyboard.id,
       panelIndex: 1,
       panelNumber: 2,
+      sourceShotId: 'shot-2',
       shotType: '近景',
       cameraMove: '推镜',
       description: 'secondary panel',
@@ -142,6 +184,7 @@ export async function seedMinimalDomainState() {
   const foreignStoryboard = await prisma.projectStoryboard.create({
     data: {
       episodeId: episode.id,
+      chapterId: chapter.id,
       panelCount: 1,
     },
   })

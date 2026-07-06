@@ -7,19 +7,22 @@ import { promisify } from 'node:util'
 import type { Job } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { readCompletedBgmScoreMix } from '@/lib/bgm-score/project-data'
+import {
+  readCompletedMusicScoreMix,
+  readMusicScoreTimelineSignature,
+} from '@/lib/music-score/project-data'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
 import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from './shared'
 import {
-  buildFinalRenderClips,
   parseFinalRenderEditScriptCore,
   resolveFinalRenderDimensions,
   type FinalRenderClipPlan,
   type FinalRenderEditScriptInput,
 } from '@/lib/video-compose/final-render-plan'
+import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
 import {
   assertFinalRenderClipsHaveSources,
   normalizeFinalRenderErrorLocale,
@@ -27,8 +30,10 @@ import {
 import {
   concatFinalRenderAudioClips,
   muxFinalRenderAudio,
+  muxFinalRenderSourceAudio,
   renderFinalRenderClipAudio,
 } from '@/lib/video-compose/final-render-audio'
+import { buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
 
 type FinalVideoRenderPayload = {
   readonly episodeId?: unknown
@@ -42,6 +47,7 @@ type CommandResult = {
 
 const execFileAsync = promisify(execFile)
 const DEFAULT_FINAL_RENDER_BGM_VOLUME = 1
+const FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS = 0.25
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -55,6 +61,28 @@ function readBgmVolume(value: unknown): number {
   return value
 }
 
+function assertBgmMixMatchesTimeline(input: {
+  readonly musicScore: {
+    readonly status: string | null
+    readonly timelineSignature?: string | null
+  } | null
+  readonly currentTimelineSignature: string
+  readonly bgmDurationMs: number
+  readonly renderDurationSeconds: number
+}): void {
+  const scoreSignature = readMusicScoreTimelineSignature(input.musicScore)
+  if (!scoreSignature) {
+    throw new Error('FINAL_VIDEO_RENDER_BGM_TIMELINE_SIGNATURE_MISSING')
+  }
+  if (scoreSignature !== input.currentTimelineSignature) {
+    throw new Error(`FINAL_VIDEO_RENDER_BGM_TIMELINE_STALE:${scoreSignature}:${input.currentTimelineSignature}`)
+  }
+  const bgmDurationSeconds = input.bgmDurationMs / 1000
+  if (bgmDurationSeconds + FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS < input.renderDurationSeconds) {
+    throw new Error(`FINAL_VIDEO_RENDER_BGM_DURATION_SHORT:${bgmDurationSeconds.toFixed(3)}:${input.renderDurationSeconds.toFixed(3)}`)
+  }
+}
+
 function extensionFromMimeType(mimeType: string): string {
   if (mimeType.includes('wav')) return 'wav'
   if (mimeType.includes('ogg')) return 'ogg'
@@ -62,7 +90,7 @@ function extensionFromMimeType(mimeType: string): string {
   return 'mp3'
 }
 
-async function runCommand(command: string, args: readonly string[]): Promise<CommandResult> {
+export async function runCommand(command: string, args: readonly string[]): Promise<CommandResult> {
   const result = await execFileAsync(command, [...args], {
     maxBuffer: 32 * 1024 * 1024,
   })
@@ -72,7 +100,7 @@ async function runCommand(command: string, args: readonly string[]): Promise<Com
   }
 }
 
-async function probeDurationSeconds(filePath: string): Promise<number> {
+export async function probeDurationSeconds(filePath: string): Promise<number> {
   const result = await runCommand('ffprobe', [
     '-v',
     'error',
@@ -93,7 +121,7 @@ function escapeConcatPath(filePath: string): string {
   return filePath.replace(/'/g, "'\\''")
 }
 
-async function writeVideoSourceToFile(source: FinalRenderClipPlan['source'], outputPath: string): Promise<void> {
+export async function writeVideoSourceToFile(source: FinalRenderClipPlan['source'], outputPath: string): Promise<void> {
   const storageKey = await resolveStorageKeyFromMediaValue(source)
   if (storageKey) {
     await writeFile(outputPath, await getObjectBuffer(storageKey))
@@ -111,35 +139,45 @@ async function writeVideoSourceToFile(source: FinalRenderClipPlan['source'], out
   await writeFile(outputPath, Buffer.from(await response.arrayBuffer()))
 }
 
-async function buildEditScript(episodeId: string): Promise<FinalRenderEditScriptInput | null> {
-  const script = await prisma.projectEditScript.findUnique({
-    where: { episodeId },
-    select: {
-      id: true,
-      editScreenplay: {
-        select: {
-          userPrompt: true,
-          styleBibleJson: true,
+export async function buildEditScript(episodeId: string, chapterId: string): Promise<FinalRenderEditScriptInput | null> {
+  const [script, editBible] = await Promise.all([
+    prisma.projectEditScript.findUnique({
+      where: { chapterId },
+      select: {
+        id: true,
+        durationSec: true,
+        corePlanJson: true,
+        chapter: {
+          select: {
+            title: true,
+            summary: true,
+          },
         },
       },
-      durationSec: true,
-      corePlanJson: true,
-    },
-  })
+    }),
+    prisma.projectEditBible.findUnique({
+      where: { episodeId },
+      select: { styleBibleJson: true },
+    }),
+  ])
   if (!script) return null
   const core = parseFinalRenderEditScriptCore(script.corePlanJson)
   if (!core || core.shots.length === 0) return null
+  const userPrompt = [script.chapter.title, script.chapter.summary]
+    .map((value) => value?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n')
   return {
     id: script.id,
-    userPrompt: script.editScreenplay.userPrompt,
+    userPrompt,
     durationSec: script.durationSec,
-    styleBible: parseNullableEditScriptStyleBible(script.editScreenplay.styleBibleJson),
+    styleBible: parseNullableEditScriptStyleBible(editBible?.styleBibleJson ?? null),
     shots: core.shots,
     generationSegments: core.generationSegments,
   }
 }
 
-async function normalizeClip(input: {
+export async function normalizeClip(input: {
   readonly sourcePath: string
   readonly outputPath: string
   readonly durationSeconds: number
@@ -165,7 +203,7 @@ async function normalizeClip(input: {
   ])
 }
 
-async function concatClips(input: {
+export async function concatClips(input: {
   readonly clipPaths: readonly string[]
   readonly listPath: string
   readonly outputPath: string
@@ -226,7 +264,7 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-final-render-${randomUUID()}-`))
   try {
     await reportTaskProgress(job, 10, { stage: 'final_render_prepare' })
-    const [project, episode, editScript, panels, videoGroups, finalOutput] = await Promise.all([
+    const [project, episode] = await Promise.all([
       prisma.project.findUnique({
         where: { id: job.data.projectId },
         select: {
@@ -237,36 +275,23 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         where: { id: episodeId, projectId: job.data.projectId },
         select: { id: true },
       }),
-      buildEditScript(episodeId),
-      prisma.projectPanel.findMany({
-        where: { storyboard: { episodeId } },
-        include: {
-          videoMedia: true,
-          storyboard: {
-            select: {
-              id: true,
-              editScriptId: true,
-              createdAt: true,
-              storyboardTextJson: true,
-            },
-          },
-        },
-      }),
-      prisma.projectVideoGroup.findMany({
-        where: { episodeId, projectId: job.data.projectId },
-        include: { videoMedia: true },
-      }),
-      prisma.projectEpisodeFinalOutput.findUnique({
-        where: { episodeId },
-        select: { bgmScoreJson: true },
-      }),
     ])
     if (!project) throw new Error('FINAL_VIDEO_RENDER_PROJECT_NOT_FOUND')
     if (!episode) throw new Error('FINAL_VIDEO_RENDER_EPISODE_NOT_FOUND')
-    const bgmMix = readCompletedBgmScoreMix(finalOutput?.bgmScoreJson ?? null)
-    if (!bgmMix) throw new Error('FINAL_VIDEO_RENDER_BGM_REQUIRED')
-
-    const clips = buildFinalRenderClips({ panels, videoGroups, editScript })
+    const [clips, musicScore] = await Promise.all([
+      loadEpisodeChapterOutputClips({
+        episodeId,
+        projectId: job.data.projectId,
+      }),
+      prisma.projectEditMusicScore.findUnique({
+        where: { episodeId },
+        select: { status: true, mixJson: true, timelineSignature: true },
+      }),
+    ])
+    const bgmMix = readCompletedMusicScoreMix(musicScore)
+    if (musicScore?.status === 'completed' && !bgmMix) {
+      throw new Error('FINAL_VIDEO_RENDER_BGM_MIX_INVALID')
+    }
     if (clips.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_VIDEO_CLIPS')
     assertFinalRenderClipsHaveSources({
       clips,
@@ -314,22 +339,37 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       outputPath: mainAudioPath,
     })
 
-    await reportTaskProgress(job, 55, { stage: 'final_render_music' })
-    const musicPath = path.join(workspaceDir, `bgm.${extensionFromMimeType(bgmMix.mimeType)}`)
-    await writeFile(musicPath, await getObjectBuffer(bgmMix.storageKey))
-
     await reportTaskProgress(job, 78, { stage: 'final_render_compose' })
     const finalPath = path.join(workspaceDir, 'final.mp4')
-    await muxFinalRenderAudio({
-      runCommand,
-      stitchedPath,
-      mainAudioPath,
-      hasSourceAudio,
-      musicPath,
-      outputPath: finalPath,
-      durationSeconds: stitchedDurationSeconds,
-      volume: readBgmVolume(payload.bgmVolume),
-    })
+    if (bgmMix) {
+      await reportTaskProgress(job, 55, { stage: 'final_render_music' })
+      assertBgmMixMatchesTimeline({
+        musicScore,
+        currentTimelineSignature: buildBgmTimelineSignature(clips),
+        bgmDurationMs: bgmMix.durationMs,
+        renderDurationSeconds: stitchedDurationSeconds,
+      })
+      const musicPath = path.join(workspaceDir, `bgm.${extensionFromMimeType(bgmMix.mimeType)}`)
+      await writeFile(musicPath, await getObjectBuffer(bgmMix.storageKey))
+      await muxFinalRenderAudio({
+        runCommand,
+        stitchedPath,
+        mainAudioPath,
+        hasSourceAudio,
+        musicPath,
+        outputPath: finalPath,
+        durationSeconds: stitchedDurationSeconds,
+        volume: readBgmVolume(payload.bgmVolume),
+      })
+    } else {
+      await muxFinalRenderSourceAudio({
+        runCommand,
+        stitchedPath,
+        mainAudioPath,
+        hasSourceAudio,
+        outputPath: finalPath,
+      })
+    }
     const outputBuffer = await readFile(finalPath)
 
     await reportTaskProgress(job, 92, { stage: 'final_render_persist' })

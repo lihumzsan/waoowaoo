@@ -235,8 +235,6 @@ export async function muxFinalRenderAudio(input: {
       '-y',
       '-i',
       input.stitchedPath,
-      '-stream_loop',
-      '-1',
       '-i',
       input.musicPath,
       '-filter_complex',
@@ -264,15 +262,13 @@ export async function muxFinalRenderAudio(input: {
 
   const mainMeasurement = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
   await input.runCommand('ffmpeg', [
-    '-y',
-    '-i',
-    input.stitchedPath,
-    '-i',
-    input.mainAudioPath,
-    '-stream_loop',
-    '-1',
-    '-i',
-    input.musicPath,
+      '-y',
+      '-i',
+      input.stitchedPath,
+      '-i',
+      input.mainAudioPath,
+      '-i',
+      input.musicPath,
     '-filter_complex',
     [
       `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[main_norm]`,
@@ -300,5 +296,67 @@ export async function muxFinalRenderAudio(input: {
     hasSourceAudio: true,
     mainAudio: mainMeasurement,
     bgm: bgmMeasurement,
+  }
+}
+
+export async function muxFinalRenderSourceAudio(input: {
+  readonly runCommand: FinalRenderAudioCommandRunner
+  readonly stitchedPath: string
+  readonly mainAudioPath: string
+  readonly hasSourceAudio: boolean
+  readonly outputPath: string
+}): Promise<{ readonly hasSourceAudio: boolean; readonly mainAudio?: AudioLoudnessMeasurement }> {
+  if (!input.hasSourceAudio) {
+    await input.runCommand('ffmpeg', [
+      '-y',
+      '-i',
+      input.stitchedPath,
+      '-i',
+      input.mainAudioPath,
+      '-map',
+      '0:v:0',
+      '-map',
+      '1:a:0',
+      '-c:v',
+      'copy',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-movflags',
+      '+faststart',
+      '-shortest',
+      input.outputPath,
+    ])
+    return { hasSourceAudio: false }
+  }
+
+  const mainMeasurement = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
+  await input.runCommand('ffmpeg', [
+    '-y',
+    '-i',
+    input.stitchedPath,
+    '-i',
+    input.mainAudioPath,
+    '-filter_complex',
+    `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[aout]`,
+    '-map',
+    '0:v:0',
+    '-map',
+    '[aout]',
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-movflags',
+    '+faststart',
+    '-shortest',
+    input.outputPath,
+  ])
+  return {
+    hasSourceAudio: true,
+    mainAudio: mainMeasurement,
   }
 }

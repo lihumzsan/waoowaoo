@@ -80,22 +80,22 @@ async function sleep(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-async function failScreenplayWhenAllImagesFailed(params: {
-  readonly screenplayId: string
+async function failBibleStylePreviewsWhenAllImagesFailed(params: {
+  readonly bibleId: string
   readonly childTasks: readonly StylePreviewChildTask[]
 }) {
   const messages = params.childTasks
     .map((task) => task.errorMessage?.trim())
     .filter((message): message is string => Boolean(message))
   await markProjectEditStylePreviewGenerationFailed({
-    screenplayId: params.screenplayId,
+    bibleId: params.bibleId,
     message: messages[0] || 'All edit style preview image tasks failed',
   })
 }
 
 async function waitForStylePreviewImageTasks(params: {
   readonly job: Job<TaskJobData>
-  readonly screenplayId: string
+  readonly bibleId: string
 }): Promise<StylePreviewChildSummary> {
   while (true) {
     await assertTaskActive(params.job, 'edit_style_previews_wait_images')
@@ -120,11 +120,11 @@ async function waitForStylePreviewImageTasks(params: {
 
     if (terminalTasks.length === childTasks.length) {
       if (completedTasks.length === 0) {
-        await failScreenplayWhenAllImagesFailed({
-          screenplayId: params.screenplayId,
+        await failBibleStylePreviewsWhenAllImagesFailed({
+          bibleId: params.bibleId,
           childTasks,
         })
-        throw new Error(`EDIT_STYLE_PREVIEWS_ALL_IMAGES_FAILED:${params.screenplayId}`)
+        throw new Error(`EDIT_STYLE_PREVIEWS_ALL_IMAGES_FAILED:${params.bibleId}`)
       }
       return {
         total: childTasks.length,
@@ -142,12 +142,12 @@ async function waitForStylePreviewImageTasks(params: {
 export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
-  const screenplayId = readText(payload.screenplayId) || readText(job.data.targetId)
+  const bibleId = readText(payload.bibleId) || readText(job.data.targetId)
   const styleDirection = readText(payload.styleDirection)
   const count = readCount(payload.count)
 
   if (!episodeId) throw new Error('episodeId is required')
-  if (!screenplayId) throw new Error('screenplayId is required')
+  if (!bibleId) throw new Error('bibleId is required')
 
   await reportTaskProgress(job, 12, {
     stage: 'edit_style_previews_prepare',
@@ -175,7 +175,7 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
           userId: job.data.userId,
           episodeId,
           locale: job.data.locale,
-          screenplayId,
+          bibleId,
           parentTaskId: job.data.taskId,
           ...(styleDirection ? { styleDirection } : {}),
           ...(count ? { count } : {}),
@@ -192,12 +192,12 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
     })
   }
 
-  const childSummary = await waitForStylePreviewImageTasks({ job, screenplayId })
+  const childSummary = await waitForStylePreviewImageTasks({ job, bibleId })
 
   return {
-    screenplayId,
+    bibleId,
     episodeId,
-    status: 'style_preview_ready',
+    status: 'confirmed',
     total: childSummary.total,
     completed: childSummary.completed,
     failed: childSummary.failed,

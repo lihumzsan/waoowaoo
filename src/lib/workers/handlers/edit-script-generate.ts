@@ -29,7 +29,12 @@ function createWorkerRequest(job: Job<TaskJobData>): NextRequest {
 export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
-  const screenplayId = readText(payload.screenplayId)
+  if (job.data.targetType !== 'ProjectEditChapter') throw new Error(`EDIT_SCRIPT_GENERATE_TARGET_CHAPTER_REQUIRED:${job.data.targetType}`)
+  const chapterId = readText(job.data.targetId)
+  const payloadChapterId = readText(payload.chapterId)
+  if (payloadChapterId && payloadChapterId !== chapterId) {
+    throw new Error(`EDIT_SCRIPT_GENERATE_CHAPTER_MISMATCH:${payloadChapterId}:${chapterId}`)
+  }
   const videoRatio = readVideoRatio(payload.videoRatio)
   if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
     throw new Error('LEGACY_ART_STYLE_REMOVED')
@@ -53,8 +58,8 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
         projectId: job.data.projectId,
         userId: job.data.userId,
         episodeId,
+        chapterId,
         locale: job.data.locale,
-        ...(screenplayId ? { screenplayId } : {}),
         ...(videoRatio ? { videoRatio } : {}),
         onGenerationStepPersisted: async (step) => {
           await reportTaskProgress(job, step.progress, {
@@ -77,6 +82,7 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
     return {
       editScriptId: editScript.id ?? null,
       episodeId,
+      chapterId: editScript.chapterId,
       durationSec: editScript.durationSec,
       shotCount: editScript.shotCount,
       requirementCount: editScript.requirements.length,

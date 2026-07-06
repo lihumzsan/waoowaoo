@@ -5,7 +5,6 @@ import {
   parseFinalRenderEditScriptCore,
   parseFinalRenderEditScriptShots,
   resolveFinalRenderDimensions,
-  selectFinalRenderMusicDurationSeconds,
   type FinalRenderEditScriptInput,
   type FinalRenderPanelInput,
 } from '@/lib/video-compose/final-render-plan'
@@ -16,6 +15,7 @@ const editScript: FinalRenderEditScriptInput = {
   durationSec: 8,
   shots: [
     {
+      shotId: 'shot-1',
       shotNumber: 1,
       durationSec: 3,
       scene: { name: 'Neon rooftop' },
@@ -32,6 +32,7 @@ const editScript: FinalRenderEditScriptInput = {
       sound: 'quiet suspense, sparse piano, low synth pulse',
     },
     {
+      shotId: 'shot-2',
       shotNumber: 2,
       durationSec: 5,
       scene: { name: 'Neon rooftop' },
@@ -50,7 +51,7 @@ const editScript: FinalRenderEditScriptInput = {
   ],
   generationSegments: [
     {
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
       continuity: 'continuous rooftop movement and escalating danger',
     },
   ],
@@ -110,7 +111,7 @@ describe('final render plan', () => {
         {
           id: 'group-1',
           gridMode: '2x2',
-          shotNumbers: [1, 2],
+          shotIds: ['shot-1', 'shot-2'],
           durationSec: 8,
           status: 'completed',
           videoUrl: 'videos/group-1.mp4',
@@ -131,13 +132,6 @@ describe('final render plan', () => {
       durationSeconds: 8,
       shotNumber: 1,
     }))
-  })
-
-  it('selects supported Lyria durations without exceeding Pro limits', () => {
-    expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-clip-preview', 118)).toBe(30)
-    expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 31)).toBe(60)
-    expect(selectFinalRenderMusicDurationSeconds('fal::fal-ai/lyria3/pro', 121)).toBe(180)
-    expect(selectFinalRenderMusicDurationSeconds('google::lyria-3-pro-preview', 181)).toBe(180)
   })
 
   it('writes a music prompt from shot emotions, rhythm, structure, and instrumentation', () => {
@@ -188,7 +182,7 @@ describe('final render plan', () => {
     })
 
     expect(core?.generationSegments).toEqual([
-      { shotNumbers: [1, 2], continuity: 'continuous rooftop movement and escalating danger' },
+      { shotIds: ['shot-1', 'shot-2'], continuity: 'continuous rooftop movement and escalating danger' },
     ])
   })
 })

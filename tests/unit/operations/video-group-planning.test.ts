@@ -12,6 +12,11 @@ const prismaMock = vi.hoisted(() => ({
   projectEpisode: {
     findFirst: vi.fn(),
   },
+  projectEditChapter: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
   projectEditScript: {
     findFirst: vi.fn(),
   },
@@ -101,6 +106,7 @@ function buildContext(): ProjectAgentOperationContext {
 function buildShots(): readonly EditScriptShot[] {
   return [
     {
+      shotId: 'shot-1',
       shotNumber: 1,
       durationSec: 2,
       scene: { name: 'Test Room' },
@@ -119,6 +125,7 @@ function buildShots(): readonly EditScriptShot[] {
       sound: 'room tone',
     },
     {
+      shotId: 'shot-2',
       shotNumber: 2,
       durationSec: 3,
       scene: { name: 'Test Room' },
@@ -141,6 +148,7 @@ function buildShots(): readonly EditScriptShot[] {
 
 function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
   return {
+    shotId: shot.shotId,
     shotNumber: shot.shotNumber,
     camera: {
       shotScale: 'medium',
@@ -183,7 +191,7 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
 
 function buildSegmentExecution(segment: EditGenerationSegment): EditGenerationSegmentExecution {
   return {
-    shotNumbers: segment.shotNumbers,
+    shotIds: segment.shotIds,
     continuousVideoPrompt: CONTINUOUS_PROMPT,
   }
 }
@@ -191,19 +199,19 @@ function buildSegmentExecution(segment: EditGenerationSegment): EditGenerationSe
 function buildSourceSnapshot(): StoryboardConsistencySourceSnapshot {
   const shots = buildShots()
   const segment: EditGenerationSegment = {
-    shotNumbers: [1, 2],
+    shotIds: ['shot-1', 'shot-2'],
     continuity: 'Hero approaches the chair in one continuous room beat.',
   }
   return {
     projectId: 'project-1',
     episodeId: 'episode-1',
+    chapterId: 'chapter-1',
     project: { videoRatio: '16:9' },
     editScript: {
       id: 'edit-script-1',
       durationSec: 5,
       shotCount: 2,
-      userPrompt: 'test',
-      screenplayText: 'test screenplay',
+      sourceText: 'test bible',
     },
     styleBible: buildZenStyleBibleFixture(),
     shots,
@@ -227,19 +235,22 @@ describe('video group planning', () => {
     vi.clearAllMocks()
     const sourceSnapshot = buildSourceSnapshot()
     prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
+    prismaMock.projectEditChapter.findFirst.mockResolvedValue({ id: 'chapter-1' })
+    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-1' })
+    prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
       id: 'edit-script-1',
       corePlanJson: {
         shots: sourceSnapshot.shots,
-        generationSegments: sourceSnapshot.generationSegments.map(({ shotNumbers, continuity }) => ({
-          shotNumbers,
+        generationSegments: sourceSnapshot.generationSegments.map(({ shotIds, continuity }) => ({
+          shotIds,
           continuity,
         })),
       },
     })
     prismaMock.projectPanel.findMany.mockResolvedValue([
-      { id: 'panel-1', panelNumber: 1, imageUrl: 'images/panel-1.png', imageMediaId: null },
-      { id: 'panel-2', panelNumber: 2, imageUrl: 'images/panel-2.png', imageMediaId: null },
+      { id: 'panel-1', panelNumber: 1, sourceShotId: 'shot-1', imageUrl: 'images/panel-1.png', imageMediaId: null },
+      { id: 'panel-2', panelNumber: 2, sourceShotId: 'shot-2', imageUrl: 'images/panel-2.png', imageMediaId: null },
     ])
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
     storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValue({
@@ -262,15 +273,16 @@ describe('video group planning', () => {
       operationId: 'generate_edit_script_storyboard_videos',
       episodeId: 'episode-1',
       gridMode: '2x2',
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
     })
 
     expect(planned.task.taskType).toBe(TASK_TYPE.VIDEO_GROUP)
     expect(planned.task.payload).toEqual(expect.objectContaining({
       videoModel: 'google::veo-test',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       gridMode: '2x2',
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
       durationSec: 5,
       generationOptions: expect.objectContaining({
         duration: 5,
@@ -281,6 +293,57 @@ describe('video group planning', () => {
     expect(storyboardSourceMock.buildStoryboardConsistencySource).toHaveBeenCalledWith({
       projectId: 'project-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
+      editScriptId: 'edit-script-1',
+      userId: 'user-1',
+    })
+  })
+
+  it('plans asset-reference video groups from ShotExecutionPlan continuous prompts without prior video group prompt', async () => {
+    const operation = createVideoGenerationOperations().generate_asset_reference_video
+    const plan = await operation.plan?.(buildContext(), {
+      episodeId: 'episode-1',
+      segmentIndex: 0,
+      referenceImageUrls: ['https://example.com/hero.png'],
+      prompt: 'request prompt must not be used',
+    })
+
+    expect(plan).toBeDefined()
+    expect(plan?.operationId).toBe('generate_asset_reference_video')
+    expect(plan?.tasks).toHaveLength(1)
+    expect(plan?.tasks[0]?.taskType).toBe(TASK_TYPE.VIDEO_GROUP)
+    expect(plan?.tasks[0]?.payload).toEqual(expect.objectContaining({
+      videoModel: 'google::veo-test',
+      episodeId: 'episode-1',
+      chapterId: 'chapter-1',
+      gridMode: '2x2',
+      shotIds: ['shot-1', 'shot-2'],
+      sourceMode: 'asset_reference',
+      referenceImageUrls: ['https://example.com/hero.png'],
+      durationSec: 5,
+      generationOptions: expect.objectContaining({
+        duration: 5,
+      }),
+    }))
+    expect(plan?.tasks[0]?.payload).not.toHaveProperty('prompt')
+    expect(plan?.metadata).toEqual(expect.objectContaining({
+      episodeId: 'episode-1',
+      chapterId: 'chapter-1',
+      sourceMode: 'asset_reference',
+      segmentIndex: 0,
+      videoGroups: [
+        expect.objectContaining({
+          sourceMode: 'asset_reference',
+          segmentIndex: 0,
+          shotIds: ['shot-1', 'shot-2'],
+          prompt: CONTINUOUS_PROMPT,
+        }),
+      ],
+    }))
+    expect(storyboardSourceMock.buildStoryboardConsistencySource).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       editScriptId: 'edit-script-1',
       userId: 'user-1',
     })
@@ -298,7 +361,8 @@ describe('video group planning', () => {
     expect(plan?.tasks[0]?.payload).toEqual(expect.objectContaining({
       videoModel: 'google::veo-test',
       episodeId: 'episode-1',
-      shotNumbers: [1, 2],
+      chapterId: 'chapter-1',
+      shotIds: ['shot-1', 'shot-2'],
       durationSec: 5,
       generationOptions: expect.objectContaining({
         duration: 5,
@@ -322,7 +386,7 @@ describe('video group planning', () => {
       referenceImageMediaId: null,
       videoUrl: 'videos/existing.mp4',
       videoMediaId: null,
-      shotNumbers: [1, 2],
+      shotIds: ['shot-1', 'shot-2'],
     }])
     const operation = createVideoGenerationOperations().generate_episode_videos
     const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })

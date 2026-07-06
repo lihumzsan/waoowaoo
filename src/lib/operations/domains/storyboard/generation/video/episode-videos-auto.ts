@@ -6,7 +6,7 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { assertOperationPlanConfirmedCost, compensateSubmittedTasks, resolveConfirmedMaxCostForExecution, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
 import { type GenerationSegmentVideoPlanItem } from '@/lib/video-groups/types'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, parseShotNumbersJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
+import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, parseShotIdsJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, resolveEditChapterId, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
 
 function hasExistingVideoOutput(metadata: PlannedVideoGroupTaskMetadata): boolean {
   return Boolean(normalizeString(metadata.previous?.videoUrl) || normalizeString(metadata.previous?.videoMediaId))
@@ -37,6 +37,7 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
   assertNoManagedVideoModelInput(params.input)
   const episodeId = normalizeString(params.input.episodeId) || normalizeString(params.ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const chapterId = await resolveEditChapterId(episodeId, normalizeString(params.input.chapterId))
 
   const groupVideoModel = await resolveSystemModelKey({
     userId: params.ctx.userId,
@@ -46,6 +47,7 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
   const planned = await buildEpisodeGenerationSegmentVideoPlan({
     ctx: params.ctx,
     episodeId,
+    chapterId,
   })
 
   const tasks: PlannedTask[] = []
@@ -55,7 +57,7 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     readonly refId: string
     readonly taskType: typeof TASK_TYPE.VIDEO_GROUP
     readonly targetType: 'ProjectVideoGroup'
-    readonly shotNumbers: number[]
+    readonly shotIds: string[]
     readonly durationSec?: number
   }> = []
   const videoGroups: PlannedVideoGroupTaskMetadata[] = []
@@ -71,8 +73,9 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
       },
       operationId: params.operationId,
       episodeId,
+      chapterId,
       gridMode: item.gridMode,
-      shotNumbers: item.shotNumbers,
+      shotIds: item.shotIds,
     })
     if (hasExistingVideoOutput(groupPlan.metadata)) continue
     tasks.push(groupPlan.task)
@@ -83,7 +86,7 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
       taskType: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
       kind: 'group',
-      shotNumbers: [...groupPlan.metadata.shotNumbers],
+      shotIds: [...groupPlan.metadata.shotIds],
       durationSec: groupPlan.metadata.durationSec,
     })
   }
@@ -96,11 +99,12 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     tasks,
     metadata: {
       episodeId,
+      chapterId,
       items,
       videoGroups,
       generationSegmentItems: planned.plan.items.map((item) => ({
         ...item,
-        shotNumbers: [...item.shotNumbers],
+        shotIds: [...item.shotIds],
       })),
       groupVideoModel,
     },
@@ -129,26 +133,26 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
       kind,
       targetType,
       taskType,
-      shotNumbers: parseShotNumbersJson(item.shotNumbers),
+      shotIds: parseShotIdsJson(item.shotIds),
       durationSec: typeof item.durationSec === 'number' && Number.isInteger(item.durationSec) ? item.durationSec : undefined,
     }]
   })
   const itemByTaskId = new Map(items.map((item) => [item.planTaskId, item]))
   const generationSegmentItems: Array<{
     kind: 'group'
-    shotNumbers: number[]
+    shotIds: string[]
     continuity: string
     gridMode?: '2x2' | '3x3'
   }> = Array.isArray(metadata.generationSegmentItems)
     ? metadata.generationSegmentItems.flatMap((item) => {
       if (!isRecord(item)) return []
-      const shotNumbers = parseShotNumbersJson(item.shotNumbers)
+      const shotIds = parseShotIdsJson(item.shotIds)
       const continuity = normalizeString(item.continuity)
       const gridMode = item.gridMode === '2x2' || item.gridMode === '3x3' ? item.gridMode : undefined
-      if (shotNumbers.length === 0 || !continuity) return []
+      if (shotIds.length === 0 || !continuity) return []
       return [{
         kind: 'group' as const,
-        shotNumbers,
+        shotIds,
         continuity,
         ...(gridMode ? { gridMode } : {}),
       }]
@@ -239,7 +243,7 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
         targetType: item.task.target.targetType,
         targetId: item.task.target.targetId,
         kind: 'group' as const,
-        shotNumbers: plannedItem?.shotNumbers ?? [],
+        shotIds: plannedItem?.shotIds ?? [],
         durationSec: plannedItem?.durationSec,
       }
     }),

@@ -1,6 +1,8 @@
 import type { Job } from 'bullmq'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import type { FinalRenderClipPlan } from '@/lib/video-compose/final-render-plan'
 
 const execFileMock = vi.hoisted(() => vi.fn())
 const readFileMock = vi.hoisted(() => vi.fn())
@@ -9,13 +11,24 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     upsert: vi.fn(),
   },
+  projectEditMusicScore: {
+    findUnique: vi.fn(),
+  },
   project: {
     findUnique: vi.fn(),
   },
   projectEpisode: {
     findFirst: vi.fn(),
   },
+  projectEditChapter: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+  },
   projectEditScript: {
+    findUnique: vi.fn(),
+  },
+  projectEditBible: {
     findUnique: vi.fn(),
   },
   projectPanel: {
@@ -105,6 +118,7 @@ function buildCorePlan() {
   return {
     shots: [
       {
+        shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
         scene: { name: 'A scene' },
@@ -123,11 +137,33 @@ function buildCorePlan() {
     ],
     generationSegments: [
       {
-        shotNumbers: [1],
+        shotIds: ['shot-1'],
         continuity: 'single test shot',
       },
     ],
   }
+}
+
+function buildDefaultChapterTimelineSignature(): string {
+  const clips: FinalRenderClipPlan[] = [
+    {
+      panelId: 'chapter-1',
+      groupId: null,
+      sourceKind: 'panel',
+      source: {
+        storageKey: 'chapter-video/chapter-1.mp4',
+      },
+      durationSeconds: 3,
+      order: 1,
+      shotNumber: null,
+      shotNumbers: [],
+      shotId: null,
+      shotIds: [],
+      description: 'Chapter 1\nA rendered test chapter.',
+      sound: null,
+    },
+  ]
+  return buildBgmTimelineSignature(clips)
 }
 
 describe('final video render worker', () => {
@@ -185,14 +221,37 @@ describe('final video render worker', () => {
     })
     prismaMock.project.findUnique.mockResolvedValue({ videoRatio: '9:16', analysisModel: 'openai::gpt-4.1' })
     prismaMock.projectEpisode.findFirst.mockResolvedValue({ id: 'episode-1' })
+    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-1' })
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([
+      {
+        id: 'chapter-1',
+        chapterIndex: 0,
+        title: 'Chapter 1',
+        summary: 'A rendered test chapter.',
+        targetDurationSec: 3,
+        renderStatus: 'completed',
+        outputMedia: {
+          storageKey: 'chapter-video/chapter-1.mp4',
+          durationMs: 3000,
+        },
+      },
+    ])
+    prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })
     prismaMock.projectEditScript.findUnique.mockResolvedValue({
       id: 'edit-script-1',
       durationSec: 3,
-      editScreenplay: {
+      chapter: {
+        title: 'Chapter 1',
+        summary: 'A single test chapter.',
+      },
+      editBible: {
         userPrompt: 'Render a final test edit.',
         styleBibleJson: null,
       },
       corePlanJson: buildCorePlan(),
+    })
+    prismaMock.projectEditBible.findUnique.mockResolvedValue({
+      styleBibleJson: null,
     })
     prismaMock.projectPanel.findMany.mockResolvedValue([
       {
@@ -203,7 +262,7 @@ describe('final video render worker', () => {
         description: 'panel 1',
         videoUrl: null,
         videoMedia: null,
-        sourceShotNumber: 1,
+        sourceShotId: 'shot-1',
         sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
         storyboard: {
           id: 'storyboard-1',
@@ -214,17 +273,15 @@ describe('final video render worker', () => {
       },
     ])
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
-    prismaMock.projectEpisodeFinalOutput.findUnique.mockResolvedValue({
-      bgmScoreJson: {
-        schemaVersion: 2,
-        status: 'completed',
-        mix: {
-          mediaId: 'media-bgm',
-          url: '/m/bgm',
-          storageKey: 'music/bgm-score.m4a',
-          mimeType: 'audio/mp4',
-          durationMs: 3000,
-        },
+    prismaMock.projectEditMusicScore.findUnique.mockResolvedValue({
+      status: 'completed',
+      timelineSignature: buildDefaultChapterTimelineSignature(),
+      mixJson: {
+        mediaId: 'media-bgm',
+        url: '/m/bgm',
+        storageKey: 'music/bgm-score.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 3000,
       },
     })
   })
@@ -233,12 +290,23 @@ describe('final video render worker', () => {
     vi.restoreAllMocks()
   })
 
-  it('fails explicitly when an edit-first panel has no rendered video', async () => {
+  it('fails explicitly when a chapter has no rendered output', async () => {
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([
+      {
+        id: 'chapter-1',
+        chapterIndex: 0,
+        title: 'Chapter 1',
+        summary: 'A rendered test chapter.',
+        targetDurationSec: 3,
+        renderStatus: 'completed',
+        outputMedia: null,
+      },
+    ])
     const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
 
     await expect(handleFinalVideoRenderTask(buildJob({
       episodeId: 'episode-1',
-    }))).rejects.toThrow('AI 剪辑缺少可用视频：单镜头视频（镜头 1）。请先生成这些视频后再剪辑。')
+    }))).rejects.toThrow('EPISODE_CHAPTER_OUTPUT_REQUIRED:chapter-1')
 
     expect(generateMusicMock).not.toHaveBeenCalled()
     expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -254,19 +322,18 @@ describe('final video render worker', () => {
     })
   })
 
-  it('uses a stored group video even when a later generation attempt left the group failed', async () => {
-    prismaMock.projectVideoGroup.findMany.mockResolvedValue([
+  it('uses stored chapter render output as the final render source', async () => {
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([
       {
-        id: 'group-1',
-        gridMode: '2x2',
-        shotNumbers: [1],
-        durationSec: 3,
-        status: 'failed',
-        prompt: 'group video prompt',
-        videoUrl: '/m/group-video',
-        videoMedia: {
-          storageKey: 'video/group-source.mp4',
-          url: '/m/group-video',
+        id: 'chapter-1',
+        chapterIndex: 0,
+        title: 'Chapter 1',
+        summary: 'A rendered test chapter.',
+        targetDurationSec: 3,
+        renderStatus: 'completed',
+        outputMedia: {
+          storageKey: 'chapter-video/chapter-1.mp4',
+          durationMs: 3000,
         },
       },
     ])
@@ -282,7 +349,7 @@ describe('final video render worker', () => {
       storageKey: 'final-video/asset.mp4',
     })
     expect(mediaServiceMock.resolveStorageKeyFromMediaValue).toHaveBeenCalledWith(expect.objectContaining({
-      storageKey: 'video/group-source.mp4',
+      storageKey: 'chapter-video/chapter-1.mp4',
     }))
     expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
       where: { episodeId: 'episode-1' },
@@ -295,16 +362,26 @@ describe('final video render worker', () => {
     }))
   })
 
-  it('fails explicitly when completed BGM is missing before final render work starts', async () => {
-    prismaMock.projectEpisodeFinalOutput.findUnique.mockResolvedValue({ bgmScoreJson: null })
+  it('renders final video without BGM when no completed mix exists', async () => {
+    prismaMock.projectEditMusicScore.findUnique.mockResolvedValue(null)
     const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
 
-    await expect(handleFinalVideoRenderTask(buildJob({
+    const result = await handleFinalVideoRenderTask(buildJob({
       episodeId: 'episode-1',
-    }))).rejects.toThrow('FINAL_VIDEO_RENDER_BGM_REQUIRED')
+    }))
 
+    expect(result).toMatchObject({
+      videoMediaId: 'media-final',
+      outputUrl: '/m/final-video',
+      storageKey: 'final-video/asset.mp4',
+    })
     expect(generateMusicMock).not.toHaveBeenCalled()
-    expect(execFileMock).not.toHaveBeenCalled()
+    expect(storageMock.getObjectBuffer).not.toHaveBeenCalledWith('music/bgm-score.m4a')
+    const ffmpegCalls = execFileMock.mock.calls
+      .filter((call) => call[0] === 'ffmpeg')
+      .map((call) => (call[1] as readonly string[]).join(' '))
+    expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-16.000'))).toBe(true)
+    expect(ffmpegCalls.some((args) => args.includes('sidechaincompress'))).toBe(false)
   })
 
   it('mixes preserved source audio with normalized ducked BGM for final renders', async () => {
@@ -320,7 +397,7 @@ describe('final video render worker', () => {
           storageKey: 'video/source.mp4',
           url: '/m/source-video',
         },
-        sourceShotNumber: 1,
+        sourceShotId: 'shot-1',
         sourceGenerationSegmentId: 'edit-script-1:generationSegment:1',
         storyboard: {
           id: 'storyboard-1',

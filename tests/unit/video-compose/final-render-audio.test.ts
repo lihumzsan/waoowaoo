@@ -37,6 +37,7 @@ describe('final render audio mix', () => {
     })
     expect(finalFfmpegCall).toBeTruthy()
     const args = finalFfmpegCall?.[1] ?? []
+    expect(args).not.toContain('-stream_loop')
     const filterComplexIndex = args.indexOf('-filter_complex')
     expect(filterComplexIndex).toBeGreaterThanOrEqual(0)
     const filterGraph = args[filterComplexIndex + 1]

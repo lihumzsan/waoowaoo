@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  chunkVideoGroupShots,
+  chunkVideoGroupShotIds,
   inferVideoGridModeForShotCount,
-  validateVideoGroupShotNumbers,
+  validateVideoGroupShotIds,
   videoGridCellCount,
 } from '@/lib/video-groups/core'
 
@@ -19,18 +19,40 @@ describe('video generation segment grid mode', () => {
     expect(() => inferVideoGridModeForShotCount(10)).toThrow('VIDEO_GROUP_SHOT_COUNT_UNSUPPORTED')
   })
 
-  it('validates continuous shot numbers against the selected grid mode', () => {
+  it('validates continuous shot ids against the selected grid mode', () => {
+    const shots = [
+      { shotId: 'shot-11' },
+      { shotId: 'shot-12' },
+      { shotId: 'shot-13' },
+      { shotId: 'shot-14' },
+      { shotId: 'shot-15' },
+    ]
     expect(videoGridCellCount('2x2')).toBe(4)
     expect(videoGridCellCount('3x3')).toBe(9)
-    expect(validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [11, 12, 13] })).toEqual([11, 12, 13])
-    expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [11, 13] }))
-      .toThrow('VIDEO_GROUP_SHOT_NUMBERS_NOT_CONTINUOUS')
-    expect(() => validateVideoGroupShotNumbers({ gridMode: '2x2', shotNumbers: [11, 12, 13, 14, 15] }))
+    expect(validateVideoGroupShotIds({
+      gridMode: '2x2',
+      shotIds: ['shot-11', 'shot-12', 'shot-13'],
+      shots,
+    })).toEqual(['shot-11', 'shot-12', 'shot-13'])
+    expect(() => validateVideoGroupShotIds({
+      gridMode: '2x2',
+      shotIds: ['shot-11', 'shot-13'],
+      shots,
+    }))
+      .toThrow('VIDEO_GROUP_SHOT_IDS_NOT_CONTINUOUS')
+    expect(() => validateVideoGroupShotIds({
+      gridMode: '2x2',
+      shotIds: ['shot-11', 'shot-12', 'shot-13', 'shot-14', 'shot-15'],
+      shots,
+    }))
       .toThrow('VIDEO_GROUP_SHOT_COUNT_MISMATCH')
   })
 
   it('chunks long generation segments by the selected grid cell count', () => {
-    expect(chunkVideoGroupShots({ gridMode: '3x3', shotNumbers: [1, 2, 3, 4, 5, 6, 7, 8, 9] }))
-      .toEqual([[1, 2, 3, 4, 5, 6, 7, 8, 9]])
+    expect(chunkVideoGroupShotIds({
+      gridMode: '3x3',
+      shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4', 'shot-5', 'shot-6', 'shot-7', 'shot-8', 'shot-9'],
+    }))
+      .toEqual([['shot-1', 'shot-2', 'shot-3', 'shot-4', 'shot-5', 'shot-6', 'shot-7', 'shot-8', 'shot-9']])
   })
 })

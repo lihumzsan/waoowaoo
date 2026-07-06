@@ -19,7 +19,8 @@ import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import { supportsAssetReferenceMultiReferenceVideoModel } from '@/lib/ai-registry/video-model-helpers'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { handleFinalVideoRenderTask } from './final-video-render'
-import { totalVideoGroupDuration, validateVideoGroupShotNumbers } from '@/lib/video-groups/core'
+import { handleChapterRenderTask } from './chapter-render'
+import { resolveVideoGroupShots, totalVideoGroupDuration, validateVideoGroupShotIds } from '@/lib/video-groups/core'
 import type { VideoGridMode, VideoGroupShot } from '@/lib/video-groups/types'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 
@@ -212,13 +213,13 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
   }
 }
 
-function parseShotNumbers(value: unknown): number[] {
-  if (!Array.isArray(value)) throw new Error('VIDEO_GROUP_SHOT_NUMBERS_REQUIRED')
-  const numbers = value.map((item) => Number(item))
-  if (numbers.some((item) => !Number.isInteger(item) || item <= 0)) {
-    throw new Error('VIDEO_GROUP_SHOT_NUMBERS_INVALID')
+function parseShotIds(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new Error('VIDEO_GROUP_SHOT_IDS_REQUIRED')
+  const shotIds = value.map((item) => (typeof item === 'string' ? item.trim() : ''))
+  if (shotIds.some((item) => item.length === 0)) {
+    throw new Error('VIDEO_GROUP_SHOT_IDS_INVALID')
   }
-  return numbers
+  return shotIds
 }
 
 function parseReferenceImageUrls(value: unknown): string[] {
@@ -231,12 +232,12 @@ function parseReferenceImageUrls(value: unknown): string[] {
   return urls
 }
 
-function validateAssetReferenceShotNumbers(value: unknown): number[] {
-  const shotNumbers = parseShotNumbers(value)
-  if (shotNumbers.length < 1 || shotNumbers.length > 9) {
-    throw new Error(`ASSET_REFERENCE_VIDEO_SHOT_COUNT_UNSUPPORTED:${shotNumbers.length}`)
+function validateAssetReferenceShotIds(value: unknown): string[] {
+  const shotIds = parseShotIds(value)
+  if (shotIds.length < 1 || shotIds.length > 9) {
+    throw new Error(`ASSET_REFERENCE_VIDEO_SHOT_COUNT_UNSUPPORTED:${shotIds.length}`)
   }
-  return shotNumbers
+  return shotIds
 }
 
 function parseEditScriptShots(value: unknown): VideoGroupShot[] {
@@ -246,11 +247,14 @@ function parseEditScriptShots(value: unknown): VideoGroupShot[] {
       throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_INVALID')
     }
     const record = item as Record<string, unknown>
+    const shotId = normalizeString(record.shotId)
     const shotNumber = Number(record.shotNumber)
     const durationSec = Number(record.durationSec)
+    if (!shotId) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_ID_INVALID')
     if (!Number.isInteger(shotNumber) || shotNumber <= 0) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_NUMBER_INVALID')
     if (!Number.isInteger(durationSec) || durationSec < 1 || durationSec > 5) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DURATION_INVALID')
     return {
+      shotId,
       shotNumber,
       durationSec,
       action: normalizeString(record.action),
@@ -303,7 +307,11 @@ async function handleAssetReferenceVideoGroupTask(params: {
   readonly generationOptions: VideoOptionMap
 }) {
   const { job, payload, groupId, modelId, generationOptions } = params
-  const shotNumbers = validateAssetReferenceShotNumbers(payload.shotNumbers)
+  const episodeId = job.data.episodeId || normalizeString(payload.episodeId)
+  const chapterId = normalizeString(payload.chapterId)
+  if (!episodeId) throw new Error('ASSET_REFERENCE_VIDEO_EPISODE_REQUIRED')
+  if (!chapterId) throw new Error('ASSET_REFERENCE_VIDEO_CHAPTER_REQUIRED')
+  const shotIds = validateAssetReferenceShotIds(payload.shotIds)
   const referenceImageUrls = parseReferenceImageUrls(payload.referenceImageUrls)
   if (referenceImageUrls.length > 1 && !supportsAssetReferenceMultiReference(modelId)) {
     throw new Error(`ASSET_REFERENCE_VIDEO_MULTI_REFERENCE_UNSUPPORTED:${modelId}`)
@@ -330,7 +338,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
       },
     }),
     prisma.projectEditScript.findFirst({
-      where: { projectId: job.data.projectId, episodeId: job.data.episodeId || normalizeString(payload.episodeId) },
+      where: { projectId: job.data.projectId, episodeId, chapterId },
       select: {
         corePlanJson: true,
       },
@@ -340,11 +348,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
   if (!editScript) throw new Error('ASSET_REFERENCE_VIDEO_EDIT_SCRIPT_REQUIRED')
 
   const allShots = parseEditScriptShots(Array.isArray(editScript.corePlanJson) ? editScript.corePlanJson : isJsonRecord(editScript.corePlanJson) ? editScript.corePlanJson.shots : null)
-  const shots = shotNumbers.map((shotNumber) => {
-    const shot = allShots.find((item) => item.shotNumber === shotNumber)
-    if (!shot) throw new Error(`ASSET_REFERENCE_VIDEO_SHOT_NOT_FOUND:${shotNumber}`)
-    return shot
-  })
+  const shots = resolveVideoGroupShots(allShots, shotIds)
   const durationSec = totalVideoGroupDuration(shots)
   if (durationSec < 1 || durationSec > 15) {
     throw new Error(`ASSET_REFERENCE_VIDEO_DURATION_UNSUPPORTED:${durationSec}`)
@@ -432,7 +436,8 @@ async function handleAssetReferenceVideoGroupTask(params: {
     videoMediaId: videoMedia.id,
     referenceImageUrl: referenceImageUrls[0] ?? null,
     durationSec,
-    shotNumbers,
+    shotIds,
+    shotNumbers: shots.map((shot) => shot.shotNumber),
     sourceMode: 'asset_reference',
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
@@ -457,10 +462,11 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     })
   }
   const gridMode: VideoGridMode = payload.gridMode === '3x3' ? '3x3' : '2x2'
-  const shotNumbers = validateVideoGroupShotNumbers({
-    gridMode,
-    shotNumbers: parseShotNumbers(payload.shotNumbers),
-  })
+  const episodeId = job.data.episodeId || normalizeString(payload.episodeId)
+  const chapterId = normalizeString(payload.chapterId)
+  if (!episodeId) throw new Error('VIDEO_GROUP_EPISODE_REQUIRED')
+  if (!chapterId) throw new Error('VIDEO_GROUP_CHAPTER_REQUIRED')
+  const shotIds = parseShotIds(payload.shotIds)
 
   await prisma.projectVideoGroup.update({
     where: { id: groupId },
@@ -481,15 +487,15 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
       },
     }),
     prisma.projectEditScript.findFirst({
-      where: { projectId: job.data.projectId, episodeId: job.data.episodeId || normalizeString(payload.episodeId) },
+      where: { projectId: job.data.projectId, episodeId, chapterId },
       select: {
         corePlanJson: true,
       },
     }),
     prisma.projectPanel.findMany({
       where: {
-        storyboard: { episodeId: job.data.episodeId || normalizeString(payload.episodeId) },
-        panelNumber: { in: shotNumbers },
+        storyboard: { episodeId, chapterId },
+        sourceShotId: { in: shotIds },
       },
       include: {
         imageMedia: true,
@@ -501,20 +507,21 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   if (!editScript) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_REQUIRED')
 
   const allShots = parseEditScriptShots(Array.isArray(editScript.corePlanJson) ? editScript.corePlanJson : isJsonRecord(editScript.corePlanJson) ? editScript.corePlanJson.shots : null)
-  const shots = shotNumbers.map((shotNumber) => {
-    const shot = allShots.find((item) => item.shotNumber === shotNumber)
-    if (!shot) throw new Error(`VIDEO_GROUP_SHOT_NOT_FOUND:${shotNumber}`)
-    return shot
+  const normalizedShotIds = validateVideoGroupShotIds({
+    gridMode,
+    shotIds,
+    shots: allShots,
   })
-  const panelByShotNumber = new Map<number, (typeof panels)[number]>()
+  const shots = resolveVideoGroupShots(allShots, normalizedShotIds)
+  const panelByShotId = new Map<string, (typeof panels)[number]>()
   panels.forEach((panel) => {
-    if (typeof panel.panelNumber === 'number') panelByShotNumber.set(panel.panelNumber, panel)
+    if (panel.sourceShotId) panelByShotId.set(panel.sourceShotId, panel)
   })
-  const orderedPanels = shotNumbers.map((shotNumber) => {
-    const panel = panelByShotNumber.get(shotNumber)
-    if (!panel) throw new Error(`VIDEO_GROUP_PANEL_NOT_FOUND:${shotNumber}`)
+  const orderedPanels = normalizedShotIds.map((shotId) => {
+    const panel = panelByShotId.get(shotId)
+    if (!panel) throw new Error(`VIDEO_GROUP_PANEL_NOT_FOUND:${shotId}`)
     if (!panel.imageUrl && !panel.imageMedia?.storageKey) {
-      throw new Error(`VIDEO_GROUP_PANEL_IMAGE_MISSING:${shotNumber}`)
+      throw new Error(`VIDEO_GROUP_PANEL_IMAGE_MISSING:${shotId}`)
     }
     return panel
   })
@@ -598,7 +605,8 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     videoUrl: videoMedia.url,
     videoMediaId: videoMedia.id,
     durationSec: totalVideoGroupDuration(shots),
-    shotNumbers,
+    shotIds: normalizedShotIds,
+    shotNumbers: shots.map((shot) => shot.shotNumber),
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
       : {}),
@@ -630,6 +638,8 @@ async function processVideoTask(job: Job<TaskJobData>) {
       }
     case TASK_TYPE.FINAL_VIDEO_RENDER:
       return await handleFinalVideoRenderTask(job)
+    case TASK_TYPE.CHAPTER_RENDER:
+      return await handleChapterRenderTask(job)
     default:
       throw new Error(`Unsupported video task type: ${job.data.type}`)
   }

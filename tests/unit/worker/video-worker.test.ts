@@ -14,6 +14,7 @@ type PanelRow = {
   description: string | null
   videoPrompt: string | null
   duration: number | null
+  sourceShotId: string | null
 }
 
 const workerState = vi.hoisted(() => ({
@@ -90,7 +91,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findFirst: vi.fn(),
   },
-  projectEditScreenplay: {
+  projectEditBible: {
     findFirst: vi.fn(),
   },
 }))
@@ -182,23 +183,25 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
     description: 'panel description',
     videoPrompt: 'panel video prompt',
     duration: 5,
+    sourceShotId: 'shot-1',
     ...(overrides || {}),
   }
 }
 
 function buildCorePlan(
-  shots: readonly { readonly shotNumber: number; readonly durationSec: number; readonly action: string; readonly sound: string }[] = [
-    { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
-    { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
-    { shotNumber: 3, durationSec: 4, action: 'Shot three', sound: 'rise' },
-    { shotNumber: 4, durationSec: 5, action: 'Shot four', sound: 'release' },
+  shots: readonly { readonly shotId?: string; readonly shotNumber: number; readonly durationSec: number; readonly action: string; readonly sound: string }[] = [
+    { shotId: 'shot-1', shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
+    { shotId: 'shot-2', shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
+    { shotId: 'shot-3', shotNumber: 3, durationSec: 4, action: 'Shot three', sound: 'rise' },
+    { shotId: 'shot-4', shotNumber: 4, durationSec: 5, action: 'Shot four', sound: 'release' },
   ],
   generationSegments: readonly EditGenerationSegment[] = [
-    { shotNumbers: shots.map((shot) => shot.shotNumber), continuity: 'continuous group' },
+    { shotIds: shots.map((shot) => shot.shotId ?? `shot-${shot.shotNumber}`), continuity: 'continuous group' },
   ],
 ): { readonly shots: readonly EditScriptShot[]; readonly generationSegments: readonly EditGenerationSegment[] } {
   return {
     shots: shots.map((shot) => ({
+      shotId: shot.shotId ?? `shot-${shot.shotNumber}`,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       scene: { name: 'Test Room' },
@@ -222,6 +225,7 @@ function buildCorePlan(
 
 function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
   return {
+    shotId: shot.shotId,
     shotNumber: shot.shotNumber,
     camera: {
       shotScale: '中景',
@@ -264,7 +268,7 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
 
 function buildGenerationSegmentExecution(segment: EditGenerationSegment): EditGenerationSegmentExecution {
   return {
-    shotNumbers: segment.shotNumbers,
+    shotIds: segment.shotIds,
     continuousVideoPrompt: 'Stored continuous segment prompt from ShotExecutionPlan. [00:00-00:02] Shot 1: Hero and chair hold the same screen direction. <room tone continues>',
   }
 }
@@ -283,13 +287,13 @@ function buildStoryboardSourceResult(
     sourceSnapshot: {
       projectId: 'project-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       project: { videoRatio: '9:16' },
       editScript: {
         id: 'edit-script-1',
         durationSec: corePlan.shots.reduce((total, shot) => total + shot.durationSec, 0),
         shotCount: corePlan.shots.length,
-        userPrompt: 'test prompt',
-        screenplayText: 'test screenplay',
+        sourceText: 'test bible',
       },
       styleBible: buildZenStyleBibleFixture(),
       shots: corePlan.shots,
@@ -308,7 +312,7 @@ function buildStoryboardSourceResult(
           kind: 'character',
           name: 'Hero',
           description: 'Hero reference',
-          shotNumbers: corePlan.shots.map((shot) => shot.shotNumber),
+          shotIds: corePlan.shots.map((shot) => shot.shotId),
           targetId: 'character-hero',
           previewImageUrl: 'https://example.com/hero.png',
         },
@@ -317,7 +321,7 @@ function buildStoryboardSourceResult(
           kind: 'location',
           name: 'Test Room',
           description: 'Room reference',
-          shotNumbers: corePlan.shots.map((shot) => shot.shotNumber),
+          shotIds: corePlan.shots.map((shot) => shot.shotId),
           targetId: 'location-room',
           previewImageUrl: 'https://example.com/room.png',
           spatialProfile: null,
@@ -368,7 +372,7 @@ describe('worker video processor behavior', () => {
     prismaMock.projectVideoGroup.findUnique.mockResolvedValue({
       prompt: 'composed video group prompt',
     })
-    prismaMock.projectEditScreenplay.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     storyboardSourceMock.buildStoryboardConsistencySource.mockResolvedValue(buildStoryboardSourceResult(defaultCorePlan))
 
     const mod = await import('@/lib/workers/video.worker')
@@ -380,10 +384,10 @@ describe('worker video processor behavior', () => {
     expect(processor).toBeTruthy()
 
     prismaMock.projectPanel.findMany.mockResolvedValueOnce([
-      { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
-      { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
-      { ...buildPanel({ id: 'panel-3' }), panelNumber: 3, imageMedia: { storageKey: 'images/panel-3.png' } },
-      { ...buildPanel({ id: 'panel-4' }), panelNumber: 4, imageMedia: { storageKey: 'images/panel-4.png' } },
+      { ...buildPanel({ id: 'panel-1', sourceShotId: 'shot-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
+      { ...buildPanel({ id: 'panel-2', sourceShotId: 'shot-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
+      { ...buildPanel({ id: 'panel-3', sourceShotId: 'shot-3' }), panelNumber: 3, imageMedia: { storageKey: 'images/panel-3.png' } },
+      { ...buildPanel({ id: 'panel-4', sourceShotId: 'shot-4' }), panelNumber: 4, imageMedia: { storageKey: 'images/panel-4.png' } },
     ])
     utilsMock.uploadVideoSourceToCos.mockResolvedValueOnce('group-video/group-1.mp4')
 
@@ -394,7 +398,8 @@ describe('worker video processor behavior', () => {
       payload: {
         videoModel: 'google::veo',
         gridMode: '2x2',
-        shotNumbers: [1, 2, 3, 4],
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2', 'shot-3', 'shot-4'],
         generationOptions: { resolution: '720p' },
       },
     }))
@@ -452,7 +457,8 @@ describe('worker video processor behavior', () => {
       payload: {
         videoModel: 'google::veo',
         gridMode: '2x2',
-        shotNumbers: [1, 2],
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
       },
     }))).rejects.toThrow('VIDEO_GROUP_PROMPT_MISSING:group-1')
 
@@ -475,7 +481,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'ark::seedance',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'asset reference block prompt',
         referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
         generationOptions: { resolution: '720p' },
@@ -538,7 +546,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'ark::seedance',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'ignored payload prompt',
         referenceImageUrls: ['https://example.com/hero.png'],
       },
@@ -573,7 +583,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'fal::bytedance/seedance-2.0',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'seedance asset reference block prompt',
         referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
         generationOptions: { resolution: '720p' },
@@ -618,7 +630,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'fal::alibaba/happy-horse/image-to-video',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'happy horse asset reference block prompt',
         referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
         generationOptions: { resolution: '720p' },
@@ -663,7 +677,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'fal::bytedance/seedance-2.0/fast',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'seedance fast asset reference block prompt',
         referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
         generationOptions: { resolution: '720p' },
@@ -708,7 +724,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'fal::fal-ai/kling-video/v3/pro/image-to-video',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'kling v3 asset reference block prompt',
         referenceImageUrls: ['https://example.com/hero.png', 'https://example.com/location.png'],
         generationOptions: {},
@@ -753,7 +771,9 @@ describe('worker video processor behavior', () => {
       payload: {
         sourceMode: 'asset_reference',
         videoModel: 'fal::fal-ai/kling-video/o3/standard/image-to-video',
-        shotNumbers: [1, 2],
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
         prompt: 'kling o3 two-frame block prompt',
         referenceImageUrls: ['https://example.com/start.png', 'https://example.com/end.png'],
         generationOptions: {},
@@ -790,16 +810,16 @@ describe('worker video processor behavior', () => {
       { shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
       { shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
     ], [
-      { shotNumbers: [1], continuity: 'shot one only' },
-      { shotNumbers: [2], continuity: 'shot two only' },
+      { shotIds: ['shot-1'], continuity: 'shot one only' },
+      { shotIds: ['shot-2'], continuity: 'shot two only' },
     ])
     prismaMock.projectEditScript.findFirst.mockResolvedValueOnce({
       id: 'edit-script-1',
       corePlanJson: twoShotCorePlan,
     })
     prismaMock.projectPanel.findMany.mockResolvedValueOnce([
-      { ...buildPanel({ id: 'panel-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
-      { ...buildPanel({ id: 'panel-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
+      { ...buildPanel({ id: 'panel-1', sourceShotId: 'shot-1' }), panelNumber: 1, imageMedia: { storageKey: 'images/panel-1.png' } },
+      { ...buildPanel({ id: 'panel-2', sourceShotId: 'shot-2' }), panelNumber: 2, imageMedia: { storageKey: 'images/panel-2.png' } },
     ])
     prismaMock.projectVideoGroup.findUnique.mockResolvedValueOnce({
       prompt: 'stored segment prompt for unmatched generation segment',
@@ -813,7 +833,8 @@ describe('worker video processor behavior', () => {
       payload: {
         videoModel: 'google::veo',
         gridMode: '2x2',
-        shotNumbers: [1, 2],
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
       },
     }))
 

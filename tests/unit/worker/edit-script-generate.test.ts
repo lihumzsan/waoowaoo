@@ -5,10 +5,11 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 const serviceMock = vi.hoisted(() => ({
   generateProjectEditScript: vi.fn(async () => ({
     id: 'edit-script-1',
+    chapterId: 'chapter-1',
     durationSec: 60,
     shotCount: 15,
     requirements: [{ id: 'asset-1' }],
-    generationSegments: [{ shotNumbers: [1, 2, 3], continuity: 'continuous approach' }],
+    generationSegments: [{ shotIds: ['shot-1', 'shot-2', 'shot-3'], continuity: 'continuous approach' }],
   })),
 }))
 
@@ -42,8 +43,8 @@ function buildJob(payload: Record<string, unknown>, episodeId: string | null = '
       locale: 'zh',
       projectId: 'project-1',
       episodeId,
-      targetType: 'ProjectEpisode',
-      targetId: 'episode-1',
+      targetType: 'ProjectEditChapter',
+      targetId: 'chapter-1',
       payload,
       userId: 'user-1',
       trace: { requestId: 'request-1' },
@@ -60,10 +61,17 @@ describe('worker edit-script-generate behavior', () => {
     await expect(handleEditScriptGenerateTask(buildJob({}, null))).rejects.toThrow('episodeId is required')
   })
 
+  it('requires ProjectEditChapter target explicitly', async () => {
+    const job = buildJob({ episodeId: 'episode-1' })
+    job.data.targetType = 'ProjectEpisode'
+    job.data.targetId = 'episode-1'
+
+    await expect(handleEditScriptGenerateTask(job)).rejects.toThrow('EDIT_SCRIPT_GENERATE_TARGET_CHAPTER_REQUIRED:ProjectEpisode')
+  })
+
   it('runs edit script service and reports task progress', async () => {
     const result = await handleEditScriptGenerateTask(buildJob({
       episodeId: 'episode-1',
-      screenplayId: 'screenplay-1',
       videoRatio: '9:16',
     }))
 
@@ -71,14 +79,14 @@ describe('worker edit-script-generate behavior', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       locale: 'zh',
-      screenplayId: 'screenplay-1',
       videoRatio: '9:16',
       onGenerationStepPersisted: expect.any(Function),
     }))
-    expect(serviceMock.generateProjectEditScript).toHaveBeenCalledWith(expect.not.objectContaining({
-      prompt: expect.anything(),
-    }))
+    const serviceInput = (serviceMock.generateProjectEditScript.mock.calls[0] as unknown as readonly [Record<string, unknown>] | undefined)?.[0]
+    expect(serviceInput).not.toEqual(expect.objectContaining({ bibleId: expect.anything() }))
+    expect(serviceInput).not.toEqual(expect.objectContaining({ prompt: expect.anything() }))
     expect(workerMock.reportTaskProgress).toHaveBeenCalledWith(expect.anything(), 12, expect.objectContaining({
       stage: 'edit_script_prepare',
     }))
@@ -89,6 +97,7 @@ describe('worker edit-script-generate behavior', () => {
     expect(result).toEqual({
       editScriptId: 'edit-script-1',
       episodeId: 'episode-1',
+      chapterId: 'chapter-1',
       durationSec: 60,
       shotCount: 15,
       requirementCount: 1,
