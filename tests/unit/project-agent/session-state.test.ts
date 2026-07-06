@@ -126,7 +126,7 @@ const choiceCardMock = vi.hoisted(() => ({
     interruptionId: null,
     toolCallId: 'tool-choice-1',
     choiceType: 'bible_review',
-    title: '审核剧本',
+    title: '确认剧集规划',
     groups: [],
     submitLabel: '确认',
     submit: { kind: 'submit_tool_output' },

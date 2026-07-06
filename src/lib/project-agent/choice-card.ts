@@ -148,17 +148,20 @@ function buildBibleReviewChoiceCard(params: {
     toolCallId: params.toolCallId,
     choiceType: 'bible_review',
     variant: 'confirm_or_reply',
-    title: isEnglish ? 'Review Bible' : '审核剧本',
+    title: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
+    description: isEnglish
+      ? 'Review the global story understanding, chapter split, durable facts, and emotional curve. Confirm only when this blueprint can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份全局蓝图将作为各章节制作的基线。',
     groups: [],
-    submitLabel: isEnglish ? 'Confirm' : '确认',
+    submitLabel: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
     submit: {
       kind: 'submit_tool_output',
     },
-    replyLabel: isEnglish ? 'Other ideas' : '其他想法',
+    replyLabel: isEnglish ? 'Request changes' : '需要修改',
     replyPlaceholder: isEnglish
-      ? 'Describe what you want changed in the bible...'
-      : '输入你希望修改的剧情、氛围、角色、结尾或表达方向...',
-    replySubmitLabel: isEnglish ? 'Submit notes' : '提交想法',
+      ? 'Describe what should change in the story understanding, chapter split, durable facts, or emotional direction...'
+      : '输入你希望调整的故事理解、章节切分、长期事实或情绪方向...',
+    replySubmitLabel: isEnglish ? 'Submit change request' : '提交修改意见',
     replyToolOutputKey: 'revisionNotes',
   }
 }

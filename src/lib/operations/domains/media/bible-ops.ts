@@ -362,13 +362,13 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
     }),
     revise_bible: defineOperation({
       id: 'revise_bible',
-      summary: 'Apply explicit user-reviewed revisions to the edit bible JSON and regenerate the chapter split.',
+      summary: 'Apply explicit user-reviewed revisions to the episode planning baseline and regenerate the chapter split.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
         required: true,
-        summary: '将覆盖当前长视频 Bible/章节切分。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将覆盖当前剧集规划基线（全局 Bible、节拍、台账、情绪曲线和章节切分）。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_REVISE_BIBLE_TOOL_INPUT_SCHEMA,
       inputSchema: reviseBibleOperationInputSchema,
@@ -391,13 +391,13 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
     }),
     confirm_bible: defineOperation({
       id: 'confirm_bible',
-      summary: 'Confirm and lock the current ready edit bible so chapter planning can proceed from a stable global state.',
+      summary: 'Confirm and lock the current episode planning baseline so chapter production can proceed from a stable global state.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
         required: true,
-        summary: '将确认并锁定当前长视频 Bible，之后不能直接替换源剧本。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将确认并锁定当前剧集规划基线，之后不能直接替换源剧本。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: confirmBibleOperationInputSchema,

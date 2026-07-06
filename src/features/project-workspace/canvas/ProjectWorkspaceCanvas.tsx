@@ -32,16 +32,11 @@ import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout
 import { useProjectContext, useProjectEditBible, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
-import BibleReviewPanel from '../bible-review/BibleReviewPanel'
-import ChapterFocusPanel from '../overview/ChapterFocusPanel'
-import ProjectOverviewPanel from '../overview/ProjectOverviewPanel'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
 import { useWorkspaceRuntime } from '../WorkspaceRuntimeContext'
 import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
 import {
-  WORKSPACE_SCOPE_BIBLE_REVIEW_ID,
   readWorkspaceScopeId,
-  workspaceChapterScopeId,
   type WorkspaceScopeId,
 } from '../workspace-scope'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
@@ -112,7 +107,6 @@ interface ProjectWorkspaceCanvasContentProps {
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
   workspaceScopeId?: WorkspaceScopeId
-  onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
 }
 
 interface CanvasViewportControlsProps {
@@ -251,7 +245,6 @@ function ProjectWorkspaceCanvasContent({
   activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
   workspaceScopeId,
-  onWorkspaceScopeSelect,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
   const billingT = useTranslations('assistantAgent')
@@ -270,10 +263,7 @@ function ProjectWorkspaceCanvasContent({
   const { data: editBible } = useProjectEditBible(projectId, episodeId ?? null)
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
-  const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'overview')
-  const selectedChapter = workspaceScope.kind === 'chapter'
-    ? editBible?.chapters?.find((chapter) => chapter.id === workspaceScope.chapterId) ?? null
-    : null
+  const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
   const scopedStoryboards = useMemo(() => (
     workspaceScope.kind === 'chapter'
       ? storyboards.filter((storyboard) => storyboard.chapterId === workspaceScope.chapterId)
@@ -1047,43 +1037,6 @@ function ProjectWorkspaceCanvasContent({
               </button>
             </Panel>
           ) : null}
-          {workspaceScope.kind === 'overview' ? (
-            <Panel
-              position="top-left"
-              className="!z-[65] !m-0"
-              style={{ left: 16, top: 128 }}
-            >
-              <ProjectOverviewPanel
-                editBible={editBible}
-                workflow={editFirstWorkflow}
-                onOpenBibleReview={() => onWorkspaceScopeSelect?.(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
-                onSelectChapter={(chapterId) => onWorkspaceScopeSelect?.(workspaceChapterScopeId(chapterId))}
-              />
-            </Panel>
-          ) : null}
-          {workspaceScope.kind === 'bible_review' ? (
-            <Panel
-              position="top-left"
-              className="!z-[65] !m-0"
-              style={{ left: 16, top: 128 }}
-            >
-              <BibleReviewPanel
-                projectId={projectId ?? null}
-                episodeId={episodeId}
-                editBible={editBible}
-                onSelectChapter={(chapterId) => onWorkspaceScopeSelect?.(workspaceChapterScopeId(chapterId))}
-              />
-            </Panel>
-          ) : null}
-          {workspaceScope.kind === 'chapter' ? (
-            <Panel
-              position="top-left"
-              className="!z-[65] !m-0"
-              style={{ left: 16, top: 128 }}
-            >
-              <ChapterFocusPanel chapter={selectedChapter} />
-            </Panel>
-          ) : null}
         </ReactFlow>
       </div>
     </div>
@@ -1096,7 +1049,6 @@ interface ProjectWorkspaceCanvasProps {
   activeAssistantFocusRequest?: WorkspaceAssistantActiveFocusRequest | null
   styleBibleFocusRequestId?: number
   workspaceScopeId?: WorkspaceScopeId
-  onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
 }
 
 export default function ProjectWorkspaceCanvas({
@@ -1105,7 +1057,6 @@ export default function ProjectWorkspaceCanvas({
   activeAssistantFocusRequest = null,
   styleBibleFocusRequestId = 0,
   workspaceScopeId,
-  onWorkspaceScopeSelect,
 }: ProjectWorkspaceCanvasProps) {
   return (
     <ReactFlowProvider>
@@ -1115,7 +1066,6 @@ export default function ProjectWorkspaceCanvas({
         activeAssistantFocusRequest={activeAssistantFocusRequest}
         styleBibleFocusRequestId={styleBibleFocusRequestId}
         workspaceScopeId={workspaceScopeId}
-        onWorkspaceScopeSelect={onWorkspaceScopeSelect}
       />
     </ReactFlowProvider>
   )

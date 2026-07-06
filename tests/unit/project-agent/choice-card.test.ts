@@ -70,13 +70,14 @@ describe('edit-first assistant choice cards', () => {
       toolCallId: 'tool-call-1',
       choiceType: 'bible_review',
       variant: 'confirm_or_reply',
-      title: '审核剧本',
+      title: '确认剧集规划',
+      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份全局蓝图将作为各章节制作的基线。',
       groups: [],
-      submitLabel: '确认',
+      submitLabel: '确认剧集规划',
       submit: {
         kind: 'submit_tool_output',
       },
-      replyLabel: '其他想法',
+      replyLabel: '需要修改',
       replyToolOutputKey: 'revisionNotes',
     })
   })

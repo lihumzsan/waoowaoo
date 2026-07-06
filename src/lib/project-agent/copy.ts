@@ -48,8 +48,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Get a global location by id.',
   },
   request_edit_bible_review_choice: {
-    zh: '在长视频生成流程中，Bible 生成后请求用户审核全局 Bible 和章节切分：确认锁定，或提交修改意见。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
-    en: 'Request edit Bible review after Bible generation: approve locking the global Bible and chapter split, or submit revision notes. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
+    zh: '在长视频生成流程中，剧集规划生成后请求用户确认全局制作蓝图：包括全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。用户可以确认锁定，或提交修改意见。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
+    en: 'Request episode-plan confirmation after planning completes: the global Bible, beat sheet, event ledger, emotional curve, and chapter split. The user can approve locking the plan or submit revision notes. Do not use it for execution permission, and do not describe any card-rendering mechanism to the user.',
   },
   request_edit_style_choice: {
     zh: '在短片生成流程中，视觉风格候选 ready 后请求用户选择一个视觉风格。不要用它做执行权限确认，也不要向用户描述任何卡片弹出机制。',
@@ -72,8 +72,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Apply user-reviewed changes to the current structured Bible, beat sheet, ledger, or emotional curve. Use only while the Bible is unlocked and global planning truly needs to be overwritten; do not pass projectId, episodeId, or system-derived parameters.',
   },
   generate_edit_style_previews: {
-    zh: '用户审核确认 Bible/章节切分后，基于 Bible 生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
-    en: 'Generate bible-based visual style preview images after bible review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
+    zh: '用户确认剧集规划后，基于已确认的全局 Bible 和章节切分生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
+    en: 'Generate visual style preview images after the user confirms the episode plan, using the confirmed global Bible and chapter split. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
   },
   generate_edit_script_assets: {
     zh: '根据当前核心剪辑计划创建/复用所需角色与场景资产，并为缺失图片提交生成任务。系统会从当前剪辑计划解析需要处理的需求；不要为了查找或提交 requirementId 调用只读工具。',
@@ -123,8 +123,8 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     en: 'Chapter detail',
   },
   request_edit_bible_review_choice: {
-    zh: '审核 Bible',
-    en: 'Review Bible',
+    zh: '确认剧集规划',
+    en: 'Confirm episode plan',
   },
   request_edit_style_choice: {
     zh: '选择视觉风格',
@@ -146,12 +146,12 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     en: 'Ingest script',
   },
   confirm_bible: {
-    zh: '确认 Bible',
-    en: 'Confirm Bible',
+    zh: '确认剧集规划',
+    en: 'Confirm episode plan',
   },
   revise_bible: {
-    zh: '修改 Bible',
-    en: 'Revise Bible',
+    zh: '修改剧集规划',
+    en: 'Revise episode plan',
   },
   generate_edit_style_previews: {
     zh: '生成视觉风格',

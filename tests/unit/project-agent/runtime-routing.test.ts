@@ -294,6 +294,10 @@ vi.mock('@/lib/project-agent/message-compression', () => ({
 vi.mock('@/lib/project-agent/project-phase', () => ({
   resolveProjectPhase: vi.fn(async () => ({
     phase: 'draft',
+    planning: {
+      editBibleStatus: 'ready_for_review',
+      chapterCount: 3,
+    },
     progress: {
       storyboardCount: 0,
       panelCount: 0,
@@ -649,6 +653,8 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(content).toContain('workflowStage=ready_to_ingest_script')
     expect(content).toContain('workflowNextAction=ingest_script')
     expect(content).toContain('enabledOperationIds=')
+    expect(content).toContain('planning.editBibleStatus=ready_for_review')
+    expect(content).toContain('planning.chapterCount=3')
     expect(content).toContain('progress.storyboardCount=')
     expect(content).not.toContain('source=runtime')
     expect(content).not.toContain('authoritative=true')
@@ -758,7 +764,7 @@ describe('project agent runtime deterministic tool injection', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
-      latestUserText: '确认剧本',
+      latestUserText: '确认剧集规划',
       output: {
         ok: true,
         decision: 'approve',
@@ -786,7 +792,7 @@ describe('project agent runtime deterministic tool injection', () => {
         choiceResult: choiceResult!,
       },
       messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '确认剧本' }] },
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '确认剧集规划' }] },
       ],
     })
     await flushAsyncWork()

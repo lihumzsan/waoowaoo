@@ -16,6 +16,10 @@ export type ProjectPhase = (typeof PROJECT_PHASE)[keyof typeof PROJECT_PHASE]
 
 export interface ProjectPhaseSnapshot {
   phase: ProjectPhase
+  planning: {
+    editBibleStatus: string | null
+    chapterCount: number
+  }
   progress: {
     storyboardCount: number
     panelCount: number
@@ -26,6 +30,30 @@ export interface ProjectPhaseSnapshot {
   staleArtifacts: string[]
   availableActions: string[]
   editFirstWorkflow: EditFirstWorkflowState
+}
+
+async function resolveEpisodePlanningState(episodeId: string | null): Promise<ProjectPhaseSnapshot['planning']> {
+  if (!episodeId) {
+    return {
+      editBibleStatus: null,
+      chapterCount: 0,
+    }
+  }
+
+  const [editBible, chapterCount] = await Promise.all([
+    prisma.projectEditBible.findUnique({
+      where: { episodeId },
+      select: { status: true },
+    }),
+    prisma.projectEditChapter.count({
+      where: { episodeId },
+    }),
+  ])
+
+  return {
+    editBibleStatus: editBible?.status ?? null,
+    chapterCount,
+  }
 }
 
 function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): ProjectPhaseSnapshot['availableActions'] {
@@ -131,7 +159,7 @@ export async function resolveProjectPhase(params: {
   })
   const progress = projection.progress
 
-  const [recentFailedRuns, staleArtifacts, editFirstWorkflow] = await Promise.all([
+  const [recentFailedRuns, staleArtifacts, editFirstWorkflow, planning] = await Promise.all([
     listPlanRuns({
       userId: params.userId,
       projectId: params.projectId,
@@ -150,6 +178,7 @@ export async function resolveProjectPhase(params: {
       userId: params.userId,
       episodeId: projection.episodeId || null,
     }),
+    resolveEpisodePlanningState(projection.episodeId || null),
   ])
 
   let phase: ProjectPhase = PROJECT_PHASE.DRAFT
@@ -173,6 +202,7 @@ export async function resolveProjectPhase(params: {
 
   return {
     phase,
+    planning,
     progress,
     activePlanRuns: projection.activePlanRuns,
     activePlanRunCount: projection.activePlanRuns.length,

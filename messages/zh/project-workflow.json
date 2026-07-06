@@ -49,78 +49,8 @@
     "cancel": "取消"
   },
   "workspaceScope": {
-    "overview": "总览",
-    "bibleReview": "剧本审核",
+    "all": "全部",
     "chapter": "第 {index} 章"
-  },
-  "overviewPanel": {
-    "title": "总览画布",
-    "stage": "阶段：{stage}",
-    "subtitle": "当前 Episode 的全局上下文、章节切分和生产状态。",
-    "subtitleWithTitle": "{title} 的全局上下文、章节切分和生产状态。",
-    "chapters": "章节",
-    "targetDuration": "目标时长",
-    "confirmed": "已确认章",
-    "rendered": "已渲染章",
-    "characters": "角色 {count}",
-    "locations": "场景 {count}",
-    "ledgerEvents": "台账事件 {count}",
-    "emotionalCues": "情绪点 {count}",
-    "worldRules": "世界规则 {count}",
-    "chapterDuration": "{duration} 秒",
-    "chapterStatus": "计划：{status}",
-    "chapterRenderStatus": "渲染：{status}",
-    "emptyChapters": "暂无章节切分。",
-    "openBibleReview": "打开剧本审核"
-  },
-  "bibleReview": {
-    "title": "剧本审核",
-    "description": "审核当前 Episode 的全局 Bible、节拍、台账、情绪曲线和章节切分；确认后进入资产与镜头规划。",
-    "empty": "当前 Episode 还没有可审核的 Bible。",
-    "untitled": "未命名剧本",
-    "status": "状态：{status}",
-    "version": "v{version}",
-    "confirmSuccess": "剧本已确认。",
-    "revisionSuccess": "剧本修订已提交。",
-    "confirm": "确认剧本",
-    "submitRevision": "提交结构化修订",
-    "submitting": "提交中",
-    "submitFailed": "提交失败：{error}",
-    "lockedHint": "确认后锁定；已进入下游生产时不能直接修改。",
-    "characters": "角色",
-    "locations": "场景",
-    "emptyCharacters": "暂无角色。",
-    "emptyLocations": "暂无场景。",
-    "worldRules": "世界规则",
-    "chapters": "章节切分",
-    "chapterDuration": "{duration} 秒",
-    "emptyChapters": "暂无章节。",
-    "structuredDrafts": "结构化数据",
-    "stats": {
-      "chapters": "章节 {count}",
-      "beats": "节拍 {count}",
-      "ledgerEvents": "台账事件 {count}",
-      "emotionalCues": "情绪点 {count}"
-    },
-    "draft": {
-      "bible": "Bible JSON",
-      "beatSheet": "Beat Sheet JSON",
-      "ledger": "Ledger JSON",
-      "emotionalCurve": "Emotional Curve JSON"
-    }
-  },
-  "chapterFocus": {
-    "title": "章节视图",
-    "empty": "未找到当前章节。",
-    "heading": "第 {index} 章 · {title}",
-    "targetDuration": "目标时长",
-    "durationValue": "{duration} 秒",
-    "sourceRange": "原文范围",
-    "planStatus": "规划状态",
-    "renderStatus": "渲染状态",
-    "beatCount": "节拍 {count}",
-    "eventCount": "台账事件 {count}",
-    "hasOutput": "已有输出"
   },
   "canvas": {
     "title": "项目画布",
@@ -186,7 +116,7 @@
         "jumpToActive": "查看当前生成"
       },
       "actions": {
-        "generateScript": "生成剧本",
+        "generateScript": "生成剧集规划",
         "confirmEditStylePreview": "确认此风格",
         "generateEditScript": "生成剪辑表",
         "generateShotExecutionPlan": "生成镜头执行计划",
@@ -210,7 +140,7 @@
         "ready": "已就绪",
         "succeeded": "成功",
         "confirmed": "已确认",
-        "awaitingBibleReview": "等待剧本确认",
+        "awaitingBibleReview": "等待剧集规划确认",
         "awaitingStyleConfirmation": "等待风格确认",
         "finalReady": "已成片",
         "aiEditing": "AI剪辑中",
@@ -232,7 +162,7 @@
         "image": "暂无图片提示词",
         "video": "暂无视频提示词",
         "location": "未指定场景",
-        "bible": "暂无剧本",
+        "bible": "暂无剧集规划",
         "editScript": "暂无剪辑表",
         "editAsset": "暂无资产描述"
       },
@@ -258,7 +188,7 @@
         "noCharacters": "无角色",
         "editScriptCompactSummary": "{count} 个镜头",
         "editScriptCompactSummaryWithCharacters": "{count} 个镜头 · 人物 {characters}",
-        "bible": "剧本",
+        "bible": "剧集规划",
         "chapters": "章节",
         "planStatus": "计划状态",
         "renderStatus": "渲染状态",
@@ -466,7 +396,7 @@
         "fields": {
           "summary": "摘要",
           "duration": "时长",
-          "bible": "剧本 JSON",
+          "bible": "剧集规划 JSON",
           "locations": "场景",
           "characters": "角色",
           "props": "道具",
@@ -676,12 +606,12 @@
           "outputReady": "成片已生成，可在详情中预览"
         },
         "editBible": {
-          "title": "剧本",
-          "eyebrow": "编剧模块",
-          "meta": "作为剪辑先行表的剧情输入",
-          "pendingTitle": "剧本生成中",
-          "pendingBody": "AI 正在根据当前短片需求生成剧本、叙事方向和风格输入。",
-          "pendingMeta": "生成完成后会替换为可编辑剧本"
+          "title": "剧集规划",
+          "eyebrow": "全局制作蓝图",
+          "meta": "确认后作为各章节制作的全局基线",
+          "pendingTitle": "剧集规划生成中",
+          "pendingBody": "AI 正在解析源剧本，生成全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。",
+          "pendingMeta": "生成完成后由 assistant 发起确认"
         },
         "editStylePreview": {
           "eyebrow": "风格候选",

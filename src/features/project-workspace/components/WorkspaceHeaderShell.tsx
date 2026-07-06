@@ -9,8 +9,7 @@ import type { ProjectEditChapter, ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
 import {
-  WORKSPACE_SCOPE_BIBLE_REVIEW_ID,
-  WORKSPACE_SCOPE_OVERVIEW_ID,
+  WORKSPACE_SCOPE_ALL_ID,
   workspaceChapterScopeId,
   type WorkspaceScopeId,
 } from '../workspace-scope'
@@ -105,24 +104,18 @@ function WorkspaceScopeSelector(props: {
   const activeClassName = 'border-[var(--glass-stroke-strong)] bg-neutral-900 text-white shadow-sm'
   const itemClassName = (id: WorkspaceScopeId) => `${buttonClassName} ${props.activeId === id ? activeClassName : inactiveClassName}`
 
+  if (props.chapters.length === 0) return null
+
   return (
     <nav className="fixed left-[330px] right-[420px] top-20 z-40 overflow-hidden rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/75 px-2 py-2 shadow-lg backdrop-blur-2xl">
       <div className="flex items-center gap-2 overflow-x-auto app-scrollbar">
         <button
           type="button"
-          className={itemClassName(WORKSPACE_SCOPE_OVERVIEW_ID)}
-          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_OVERVIEW_ID)}
+          className={itemClassName(WORKSPACE_SCOPE_ALL_ID)}
+          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_ALL_ID)}
         >
           <AppIcon name="grid" className="h-4 w-4" />
-          {t('overview')}
-        </button>
-        <button
-          type="button"
-          className={itemClassName(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
-          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_BIBLE_REVIEW_ID)}
-        >
-          <AppIcon name="bookOpen" className="h-4 w-4" />
-          {t('bibleReview')}
+          {t('all')}
         </button>
         {props.chapters.map((chapter) => {
           const scopeId = workspaceChapterScopeId(chapter.id)
@@ -177,7 +170,7 @@ export default function WorkspaceHeaderShell({
   onProjectRename,
   projectConfigurable,
   workspaceChapters = [],
-  currentWorkspaceScopeId = WORKSPACE_SCOPE_OVERVIEW_ID,
+  currentWorkspaceScopeId = WORKSPACE_SCOPE_ALL_ID,
   onWorkspaceScopeSelect,
 }: WorkspaceHeaderShellProps) {
   const handleCapabilityOverridesChange = useCallback((value: CapabilitySelections) => {

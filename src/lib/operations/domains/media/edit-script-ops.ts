@@ -355,7 +355,7 @@ async function resolvePlanChaptersTargets(input: {
 }
 
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
-  bible_review: 'Request bible review after the bible is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   budget_confirmation: 'Request explicit user budget confirmation before the assistant starts the current billable or batch production stage. This tool has a fixed choice type; do not pass a choiceType argument.',
@@ -519,7 +519,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
         required: true,
-        summary: '将基于已确认 Bible、风格和当前章节源文本生成并覆盖本章核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将基于已确认剧集规划、风格和当前章节源文本生成并覆盖本章核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptInputSchema,

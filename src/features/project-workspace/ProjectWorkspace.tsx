@@ -19,7 +19,7 @@ import { WorkspaceRuntimeProvider } from './WorkspaceRuntimeContext'
 import { useProjectWorkspaceController } from './hooks/useProjectWorkspaceController'
 import type { ProjectWorkspaceProps } from './types'
 import {
-  WORKSPACE_SCOPE_OVERVIEW_ID,
+  WORKSPACE_SCOPE_ALL_ID,
   readWorkspaceScopeId,
   type WorkspaceScopeId,
 } from './workspace-scope'
@@ -40,7 +40,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
   const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
-  const [workspaceScopeId, setWorkspaceScopeId] = useState<WorkspaceScopeId>(WORKSPACE_SCOPE_OVERVIEW_ID)
+  const [workspaceScopeId, setWorkspaceScopeId] = useState<WorkspaceScopeId>(WORKSPACE_SCOPE_ALL_ID)
   const isEpisodeWorkspace = props.viewMode === 'episode'
 
   const {
@@ -79,14 +79,14 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   }, [])
 
   useEffect(() => {
-    setWorkspaceScopeId(WORKSPACE_SCOPE_OVERVIEW_ID)
+    setWorkspaceScopeId(WORKSPACE_SCOPE_ALL_ID)
   }, [episodeId])
 
   useEffect(() => {
     const scope = readWorkspaceScopeId(workspaceScopeId)
     if (scope.kind !== 'chapter') return
     const chapterExists = workspaceChapters.some((chapter) => chapter.id === scope.chapterId)
-    if (!chapterExists) setWorkspaceScopeId(WORKSPACE_SCOPE_OVERVIEW_ID)
+    if (!chapterExists) setWorkspaceScopeId(WORKSPACE_SCOPE_ALL_ID)
   }, [workspaceChapters, workspaceScopeId])
 
   if (!vm.project.projectData) {
@@ -160,7 +160,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
                 activeAssistantFocusRequest={activeAssistantFocusRequest}
                 styleBibleFocusRequestId={styleBibleFocusRequestId}
                 workspaceScopeId={workspaceScopeId}
-                onWorkspaceScopeSelect={setWorkspaceScopeId}
               />
             </WorkspaceRuntimeProvider>
           </div>

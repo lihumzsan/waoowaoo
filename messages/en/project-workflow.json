@@ -49,78 +49,8 @@
     "cancel": "Cancel"
   },
   "workspaceScope": {
-    "overview": "Overview",
-    "bibleReview": "Bible Review",
+    "all": "All",
     "chapter": "Chapter {index}"
-  },
-  "overviewPanel": {
-    "title": "Overview Canvas",
-    "stage": "Stage: {stage}",
-    "subtitle": "Global context, chapter split, and production status for the current episode.",
-    "subtitleWithTitle": "Global context, chapter split, and production status for {title}.",
-    "chapters": "Chapters",
-    "targetDuration": "Target Duration",
-    "confirmed": "Confirmed Chapters",
-    "rendered": "Rendered Chapters",
-    "characters": "Characters {count}",
-    "locations": "Locations {count}",
-    "ledgerEvents": "Ledger Events {count}",
-    "emotionalCues": "Emotional Cues {count}",
-    "worldRules": "World Rules {count}",
-    "chapterDuration": "{duration}s",
-    "chapterStatus": "Plan: {status}",
-    "chapterRenderStatus": "Render: {status}",
-    "emptyChapters": "No chapters have been planned yet.",
-    "openBibleReview": "Open Bible Review"
-  },
-  "bibleReview": {
-    "title": "Bible Review",
-    "description": "Review this episode's global bible, beat sheet, ledger, emotional curve, and chapter split before asset and shot planning.",
-    "empty": "This episode has no bible ready for review.",
-    "untitled": "Untitled Bible",
-    "status": "Status: {status}",
-    "version": "v{version}",
-    "confirmSuccess": "Bible confirmed.",
-    "revisionSuccess": "Bible revision submitted.",
-    "confirm": "Confirm Bible",
-    "submitRevision": "Submit Structured Revision",
-    "submitting": "Submitting",
-    "submitFailed": "Submit failed: {error}",
-    "lockedHint": "Confirmation locks the bible; downstream production blocks direct edits.",
-    "characters": "Characters",
-    "locations": "Locations",
-    "emptyCharacters": "No characters.",
-    "emptyLocations": "No locations.",
-    "worldRules": "World Rules",
-    "chapters": "Chapter Split",
-    "chapterDuration": "{duration}s",
-    "emptyChapters": "No chapters.",
-    "structuredDrafts": "Structured Data",
-    "stats": {
-      "chapters": "Chapters {count}",
-      "beats": "Beats {count}",
-      "ledgerEvents": "Ledger Events {count}",
-      "emotionalCues": "Emotional Cues {count}"
-    },
-    "draft": {
-      "bible": "Bible JSON",
-      "beatSheet": "Beat Sheet JSON",
-      "ledger": "Ledger JSON",
-      "emotionalCurve": "Emotional Curve JSON"
-    }
-  },
-  "chapterFocus": {
-    "title": "Chapter View",
-    "empty": "The selected chapter was not found.",
-    "heading": "Chapter {index} · {title}",
-    "targetDuration": "Target Duration",
-    "durationValue": "{duration}s",
-    "sourceRange": "Source Range",
-    "planStatus": "Plan Status",
-    "renderStatus": "Render Status",
-    "beatCount": "Beats {count}",
-    "eventCount": "Ledger Events {count}",
-    "hasOutput": "Has Output"
   },
   "canvas": {
     "title": "Project Canvas",
@@ -186,7 +116,7 @@
         "jumpToActive": "View Current Generation"
       },
       "actions": {
-        "generateScript": "Generate Bible",
+        "generateScript": "Generate Episode Plan",
         "confirmEditStylePreview": "Confirm This Style",
         "generateEditScript": "Generate Edit Table",
         "generateShotExecutionPlan": "Generate Shot Execution Plan",
@@ -210,7 +140,7 @@
         "ready": "Ready",
         "succeeded": "Succeeded",
         "confirmed": "Confirmed",
-        "awaitingBibleReview": "Awaiting Bible Review",
+        "awaitingBibleReview": "Awaiting Episode Plan Confirmation",
         "awaitingStyleConfirmation": "Awaiting Style Confirmation",
         "finalReady": "Final Ready",
         "aiEditing": "AI Editing",
@@ -232,7 +162,7 @@
         "image": "No image prompt",
         "video": "No video prompt",
         "location": "No location",
-        "bible": "No bible",
+        "bible": "No episode plan",
         "editScript": "No edit table",
         "editAsset": "No asset description"
       },
@@ -258,7 +188,7 @@
         "noCharacters": "No characters",
         "editScriptCompactSummary": "{count} shots",
         "editScriptCompactSummaryWithCharacters": "{count} shots · Characters {characters}",
-        "bible": "Bible",
+        "bible": "Episode Plan",
         "chapters": "Chapters",
         "planStatus": "Plan Status",
         "renderStatus": "Render Status",
@@ -466,7 +396,7 @@
         "fields": {
           "summary": "Summary",
           "duration": "Duration",
-          "bible": "Bible JSON",
+          "bible": "Episode Plan JSON",
           "locations": "Locations",
           "characters": "Characters",
           "props": "Props",
@@ -676,12 +606,12 @@
           "outputReady": "Final video generated. Preview it in details."
         },
         "editBible": {
-          "title": "Bible",
-          "eyebrow": "Screenwriting Module",
-          "meta": "Story input for the edit-first table",
-          "pendingTitle": "Generating Bible",
-          "pendingBody": "AI is generating the bible, narrative direction, and style input from the current video brief.",
-          "pendingMeta": "This will become an editable bible when generation completes"
+          "title": "Episode Plan",
+          "eyebrow": "Global Production Blueprint",
+          "meta": "Confirmed once as the baseline for every chapter",
+          "pendingTitle": "Generating Episode Plan",
+          "pendingBody": "AI is parsing the source script into the global Bible, beat sheet, event ledger, emotional curve, and chapter split.",
+          "pendingMeta": "The assistant will request confirmation when it is ready"
         },
         "editStylePreview": {
           "eyebrow": "Style Candidate",

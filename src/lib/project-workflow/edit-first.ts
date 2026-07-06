@@ -301,10 +301,10 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.bibleStatus === 'ready_for_review') {
-    const nextAction = workflowAction('confirm_bible', 'Confirm bible')
+    const nextAction = workflowAction('confirm_bible', 'Confirm episode plan')
     return state({
       stage: 'bible_ready_for_review',
-      blocking: { kind: 'needs_user_choice', reason: 'review bible and choose approval or revision before style preview generation' },
+      blocking: { kind: 'needs_user_choice', reason: 'review the episode planning baseline and choose approval or revision before style preview generation' },
       nextAction,
       allowedOperationIds: [nextAction.operationId, 'revise_bible'],
     })
