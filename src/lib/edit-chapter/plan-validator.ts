@@ -1,19 +1,12 @@
-import type { EditAssetKind } from '@/lib/edit-script/types'
 import type { LedgerEvent, LedgerSnapshot } from '@/lib/edit-ledger'
+import { AppError } from '@/lib/errors/app-error'
 import type { NormalizedChapterPlanOutput } from './schemas'
-
-export interface ChapterPlanAssetRef {
-  readonly kind: EditAssetKind
-  readonly name: string
-}
 
 export interface ChapterPlanValidationInput {
   readonly chapterId: string
   readonly output: NormalizedChapterPlanOutput
   readonly entrySnapshot: LedgerSnapshot
   readonly events: readonly LedgerEvent[]
-  readonly allowedAssets: readonly ChapterPlanAssetRef[]
-  readonly referencedAssets: readonly ChapterPlanAssetRef[]
 }
 
 export interface ChapterPlanValidationResult {
@@ -61,10 +54,6 @@ function isFactAllowedByLedger(fact: string, allowedFacts: ReadonlySet<string>):
   return false
 }
 
-function assetKey(asset: ChapterPlanAssetRef): string {
-  return `${asset.kind}:${normalizeSemanticText(asset.name)}`
-}
-
 function buildAllowedFactSet(input: {
   readonly entrySnapshot: LedgerSnapshot
   readonly events: readonly LedgerEvent[]
@@ -77,10 +66,6 @@ function buildAllowedFactSet(input: {
   return facts
 }
 
-function buildAllowedAssetSet(assets: readonly ChapterPlanAssetRef[]): ReadonlySet<string> {
-  return new Set(assets.map(assetKey))
-}
-
 export function validateChapterPlan(input: ChapterPlanValidationInput): ChapterPlanValidationResult {
   const allowedFacts = buildAllowedFactSet({
     entrySnapshot: input.entrySnapshot,
@@ -88,13 +73,13 @@ export function validateChapterPlan(input: ChapterPlanValidationInput): ChapterP
   })
   const unknownFacts = input.output.persistentFactsIntroduced.filter((fact) => !isFactAllowedByLedger(fact, allowedFacts))
   if (unknownFacts.length > 0) {
-    throw new Error(`PLAN_VALIDATION_FAILED:PERSISTENT_FACT_UNKNOWN:${input.chapterId}:${unknownFacts.join('|')}`)
-  }
-
-  const allowedAssets = buildAllowedAssetSet(input.allowedAssets)
-  const unknownAssets = input.referencedAssets.filter((asset) => !allowedAssets.has(assetKey(asset)))
-  if (unknownAssets.length > 0) {
-    throw new Error(`PLAN_VALIDATION_FAILED:ASSET_UNKNOWN:${input.chapterId}:${unknownAssets.map(assetKey).join('|')}`)
+    throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:PERSISTENT_FACT_UNKNOWN:${input.chapterId}:${unknownFacts.join('|')}`, {
+      details: {
+        chapterId: input.chapterId,
+        reason: 'PERSISTENT_FACT_UNKNOWN',
+        unknownFacts,
+      },
+    })
   }
 
   return {

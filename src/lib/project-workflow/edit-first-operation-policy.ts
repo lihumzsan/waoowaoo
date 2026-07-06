@@ -1,6 +1,5 @@
 export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'ingest_script',
-  'confirm_bible',
   'revise_bible',
   'generate_edit_style_previews',
   'plan_chapters',

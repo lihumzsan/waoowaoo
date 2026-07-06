@@ -99,7 +99,7 @@ export type EditBibleChapterPlan = z.infer<typeof editBibleChapterPlanSchema>
 
 export const ingestEditBibleScriptInputSchema = z.object({
   episodeId: z.string().trim().min(1),
-  sourceKind: z.enum(['upload', 'paste', 'prompt_generated_outline']).default('paste'),
+  sourceKind: z.enum(['upload', 'paste', 'prompt_generated_outline']),
   text: z.string().min(1),
   rawFileMediaId: z.string().trim().min(1).optional(),
   confirmed: z.boolean().optional(),

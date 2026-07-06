@@ -204,10 +204,11 @@ function buildCorePlan(
       shotId: shot.shotId ?? `shot-${shot.shotNumber}`,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      scene: { name: 'Test Room' },
+      scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: shot.action,
       characters: [
         {
+          characterId: 'character-1',
           name: 'Hero',
           visibility: 'visible',
           role: 'focus',

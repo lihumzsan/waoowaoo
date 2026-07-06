@@ -182,6 +182,26 @@ describe('createProjectAgentUiMessageStream', () => {
     ])
   })
 
+  it('fails the stream when model text attempts to emit project_state_snapshot protocol frames', async () => {
+    streamState.chunks = [
+      { type: 'text-start', id: 'text-1' } as UIMessageChunk,
+      { type: 'text-delta', id: 'text-1', delta: '[project_state_snapshot] phase=draft' } as UIMessageChunk,
+      { type: 'finish' } as UIMessageChunk,
+    ]
+    const onError = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish: async () => [],
+      onError,
+      onSettled: async () => undefined,
+    })
+
+    await expect(readChunks(stream)).rejects.toThrow('PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK')
+    expect(onError).toHaveBeenCalledWith(expect.any(Error))
+  })
+
   it('marks the stream cancelled and settles once when the reader disconnects before finish', async () => {
     streamState.keepOpen = true
     const beforeFinish = vi.fn(async () => [])

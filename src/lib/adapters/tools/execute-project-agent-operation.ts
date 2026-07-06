@@ -18,6 +18,10 @@ import {
   withOperationErrorDetails,
 } from '@/lib/adapters/operation-error-normalizer'
 import { writeOperationDataPart } from '@/lib/operations/types'
+import {
+  resolveOperationEffectiveEpisodeId,
+  resolveOperationScopeInput,
+} from '@/lib/operations/environment-input'
 
 function attachConfirmedMaxCost(input: unknown, confirmedMaxCost: number | undefined): unknown {
   if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) return input
@@ -58,32 +62,16 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
-  const parsed = operation.inputSchema.safeParse(params.input)
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: buildToolError({
-        code: 'OPERATION_INPUT_INVALID',
-        message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
-        operationId: params.operationId,
-        details: withOperationErrorDetails(operation),
-        issues: parsed.error.issues,
-      }),
-    }
-  }
-
-  const confirmedMaxCost = params.context.confirmedMaxCostByOperationId?.[params.operationId]
-  const parsedInput = attachConfirmedMaxCost(parsed.data, confirmedMaxCost)
-  const contextEpisodeId = typeof params.context.episodeId === 'string' ? params.context.episodeId.trim() : ''
-  const inputEpisodeId = (() => {
-    const data = parsedInput
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return ''
-    const record = data as Record<string, unknown>
-    const value = record.episodeId
-    return typeof value === 'string' ? value.trim() : ''
-  })()
-  const effectiveEpisodeId = contextEpisodeId || inputEpisodeId
-  const hasEpisodeId = effectiveEpisodeId.length > 0
+  const scopedInput = resolveOperationScopeInput({
+    input: params.input,
+    context: params.context,
+    prerequisites: operation.prerequisites,
+  })
+  const effectiveEpisode = resolveOperationEffectiveEpisodeId({
+    input: scopedInput,
+    context: params.context,
+  })
+  const hasEpisodeId = effectiveEpisode.episodeId.length > 0
 
   if (operation.prerequisites.episodeId === 'required' && !hasEpisodeId) {
     return {
@@ -111,12 +99,29 @@ export async function executeProjectAgentOperationFromTool(params: {
         details: withOperationErrorDetails(operation, {
           prerequisite: 'episodeId',
           required: 'forbidden',
-          actual: effectiveEpisodeId,
-          source: contextEpisodeId ? 'context' : 'input',
+          actual: effectiveEpisode.episodeId,
+          source: effectiveEpisode.source,
         }),
       }),
     }
   }
+
+  const confirmedMaxCost = params.context.confirmedMaxCostByOperationId?.[params.operationId]
+  const scopedInputWithCost = attachConfirmedMaxCost(scopedInput, confirmedMaxCost)
+  const parsed = operation.inputSchema.safeParse(scopedInputWithCost)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: buildToolError({
+        code: 'OPERATION_INPUT_INVALID',
+        message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
+        operationId: params.operationId,
+        details: withOperationErrorDetails(operation),
+        issues: parsed.error.issues,
+      }),
+    }
+  }
+  const parsedInput = parsed.data
 
   const requiresConfirmation = shouldRequireAssistantToolApproval({
     mode: params.assistantPermissionMode,
@@ -203,7 +208,7 @@ export async function executeProjectAgentOperationFromTool(params: {
     result: outputParsed.data,
     fallbackProjectId: params.projectId,
     userId: params.userId,
-    fallbackEpisodeId: effectiveEpisodeId || null,
+    fallbackEpisodeId: effectiveEpisode.episodeId || null,
   })
   return {
     ok: true,

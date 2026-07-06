@@ -110,10 +110,11 @@ function buildShots(): readonly EditScriptShot[] {
       shotId: 'shot-1',
       shotNumber: 1,
       durationSec: 2,
-      scene: { name: 'Test Room' },
+      scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: 'Hero stands beside the chair.',
       characters: [
         {
+          characterId: 'character-1',
           name: 'Hero',
           visibility: 'visible',
           role: 'focus',
@@ -129,10 +130,11 @@ function buildShots(): readonly EditScriptShot[] {
       shotId: 'shot-2',
       shotNumber: 2,
       durationSec: 3,
-      scene: { name: 'Test Room' },
+      scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: 'Hero steps closer to the chair.',
       characters: [
         {
+          characterId: 'character-1',
           name: 'Hero',
           visibility: 'visible',
           role: 'focus',

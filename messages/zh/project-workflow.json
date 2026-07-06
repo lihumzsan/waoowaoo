@@ -54,13 +54,13 @@
   },
   "workflowStages": {
     "not_started": "未开始",
-    "ready_to_ingest_script": "等待摄入源剧本",
+    "ready_to_ingest_script": "等待准备剧本蓝图",
     "bible_generating": "剧集规划生成中",
     "bible_ready_for_review": "等待确认剧集规划",
     "style_preview_generating": "风格候选生成中",
     "needs_style_choice": "等待选择视觉风格",
-    "ready_to_generate_edit_script": "等待生成章节剪辑表",
-    "edit_script_generating": "章节剪辑表生成中",
+    "ready_to_generate_edit_script": "等待生成核心剪辑表",
+    "edit_script_generating": "核心剪辑表生成中",
     "ready_to_generate_assets": "等待生成资产",
     "assets_generating": "资产生成中",
     "assets_ready_for_review": "等待确认资产",
@@ -145,7 +145,7 @@
     },
     "nodeDescriptions": {
       "story": "剧集原始素材与创作方向。",
-      "storyboardGroup": "与剪辑先行表对应的分镜组。",
+      "storyboardGroup": "与核心剪辑表对应的分镜组。",
       "panelImage": "图片阶段的镜头节点，下一阶段会迁移操作入口。",
       "videoPanel": "挂在来源图片镜头后的成片节点。",
       "timeline": "生成视频素材最终汇入的成片目标。"
@@ -184,7 +184,7 @@
       "actions": {
         "generateScript": "生成剧集规划",
         "confirmEditStylePreview": "确认此风格",
-        "generateEditScript": "生成剪辑表",
+        "generateEditScript": "生成核心剪辑表",
         "generateShotExecutionPlan": "生成镜头执行计划",
         "generateStoryboard": "生成分镜",
         "generateImage": "生成图片",
@@ -409,7 +409,7 @@
         "promptDesignMissing": "提示词设计缺失",
         "promptDesignMissingDescription": "当前配乐是旧版数据或生成时未写入配乐设计。请重新生成配乐后查看动态设计部分和最终提示词。",
         "videoOrder": "视频顺序",
-        "editScriptMeta": "剪辑表信息",
+        "editScriptMeta": "核心剪辑表信息",
         "shotIndexHeader": "镜头",
         "shotIndex": "镜头 {index}",
         "sceneCharacters": "人物/场景",
@@ -439,7 +439,7 @@
           "candidates": "候选图",
           "imageGeneration": "图片生成 / 编辑",
           "videoPreview": "视频预览",
-          "editScriptPreview": "剪辑表视频预览",
+          "editScriptPreview": "核心剪辑表视频预览",
           "editScriptTimeline": "镜头时间线",
           "videoControls": "视频控制",
           "bgmScoreOutput": "配乐输出",
@@ -646,13 +646,13 @@
         "videoGroup": {
           "title": "连续片段 {index}",
           "eyebrow": "连续视频",
-          "body": "按剪辑先行顺序生成的连续视频片段",
+          "body": "按核心剪辑表顺序生成的连续视频片段",
           "meta": "{grid} · 镜头 {shots} · {duration} 秒"
         },
         "videoPlan": {
           "title": "视频片段 {index}",
           "eyebrow": "视频生成片段",
-          "body": "剪辑先行表中的视频生成片段",
+          "body": "核心剪辑表中的视频生成片段",
           "meta": "{mode} · 镜头 {shots} · {duration} 秒"
         },
         "bgmScore": {
@@ -692,7 +692,7 @@
         },
         "editPipelineStep": {
           "eyebrow": "剪辑生成步骤",
-          "body": "从剪辑先行表拆出的阶段字段",
+          "body": "从核心剪辑表拆出的阶段字段",
           "pendingBody": "等待上一步完成后实时写入",
           "meta": "{count} 项新增字段"
         },
@@ -703,12 +703,12 @@
           "meta": "{count} 步已完成"
         },
         "editScript": {
-          "title": "剪辑表",
+          "title": "核心剪辑表",
           "eyebrow": "核心剪辑表",
           "meta": "{shots} 个镜头 · {duration} 秒 · 资产 {completed}/{assets}",
-          "pendingTitle": "剪辑表生成中",
-          "pendingBody": "AI 正在根据当前短片需求生成剪辑先行表，并提取人物、场景、镜头节奏、视频片段和声音设计。",
-          "pendingMeta": "生成完成后会替换为可编辑剪辑表"
+          "pendingTitle": "核心剪辑表生成中",
+          "pendingBody": "AI 正在根据当前剧集规划生成核心剪辑表，并锁定人物、场景、镜头节奏、视频片段和声音设计。",
+          "pendingMeta": "生成完成后会替换为可编辑核心剪辑表"
         },
         "editShotExecutionPlan": {
           "title": "镜头执行计划",

@@ -29,9 +29,9 @@ interface GenerateEditScriptAssetsMutationResult {
   readonly submittedTasks: readonly EditScriptAssetSubmittedTask[]
 }
 
-interface EditBibleResponse {
+export interface EditBibleResponse {
   editBible: ProjectEditBible | null
-  chapters?: ProjectEditChapter[]
+  chapters: ProjectEditChapter[]
 }
 
 interface EditShotExecutionPlanResponse {
@@ -46,7 +46,7 @@ interface CreateEditScriptInput {
 interface CreateEditBibleInput {
   episodeId: string
   text: string
-  sourceKind?: 'upload' | 'paste' | 'prompt_generated_outline'
+  sourceKind: 'upload' | 'paste' | 'prompt_generated_outline'
   rawFileMediaId?: string
 }
 
@@ -113,6 +113,24 @@ async function readJsonError(response: Response, fallback: string): Promise<Erro
   return await readProjectEditScriptJsonError(response, fallback)
 }
 
+async function fetchProjectEditBibleResponse(projectId: string, episodeId: string): Promise<EditBibleResponse> {
+  const search = new URLSearchParams({ episodeId })
+  const response = await apiFetch(`/api/projects/${projectId}/bible?${search.toString()}`)
+  if (!response.ok) {
+    throw await readJsonError(response, 'Failed to load edit bible')
+  }
+  const data = await response.json() as { editBible: ProjectEditBible | null; chapters?: ProjectEditChapter[] }
+  return {
+    editBible: data.editBible
+      ? {
+          ...data.editBible,
+          chapters: data.chapters ?? [],
+        }
+      : null,
+    chapters: data.chapters ?? [],
+  }
+}
+
 export function useProjectEditScript(projectId: string | null, episodeId: string | null) {
   return useQuery({
     queryKey: queryKeys.project.editScript(projectId || '', episodeId || ''),
@@ -136,18 +154,20 @@ export function useProjectEditBible(projectId: string | null, episodeId: string 
     queryKey: queryKeys.project.editBible(projectId || '', episodeId || ''),
     queryFn: async () => {
       if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
-      const search = new URLSearchParams({ episodeId })
-      const response = await apiFetch(`/api/projects/${projectId}/bible?${search.toString()}`)
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to load edit bible')
-      }
-      const data = await response.json() as EditBibleResponse
-      return data.editBible
-        ? {
-            ...data.editBible,
-            chapters: data.chapters ?? [],
-          }
-        : null
+      return await fetchProjectEditBibleResponse(projectId, episodeId)
+    },
+    select: (data) => data.editBible,
+    enabled: Boolean(projectId && episodeId),
+    staleTime: 5000,
+  })
+}
+
+export function useProjectEditBibleResponse(projectId: string | null, episodeId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.project.editBible(projectId || '', episodeId || ''),
+    queryFn: async () => {
+      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
+      return await fetchProjectEditBibleResponse(projectId, episodeId)
     },
     enabled: Boolean(projectId && episodeId),
     staleTime: 5000,
@@ -212,7 +232,7 @@ export function useCreateProjectEditBible(projectId: string | null) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           episodeId: input.episodeId,
-          sourceKind: input.sourceKind ?? 'paste',
+          sourceKind: input.sourceKind,
           text: input.text,
           ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
         }),

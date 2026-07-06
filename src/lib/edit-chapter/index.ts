@@ -11,14 +11,23 @@ export {
 export {
   chapterPlanInputSchema,
   chapterPlanOutputSchema,
+  buildChapterPlanOutputSchema,
+  enrichChapterPlanOutputWithAssetNames,
   normalizeChapterPlanOutput,
+  type ChapterPlanAssetMenu,
   type ChapterPlanInput,
   type ChapterPlanOutput,
   type NormalizedChapterPlanOutput,
 } from './schemas'
 export {
   validateChapterPlan,
-  type ChapterPlanAssetRef,
   type ChapterPlanValidationInput,
   type ChapterPlanValidationResult,
 } from './plan-validator'
+export {
+  assertChapterPlanAssetMenuReady,
+  buildChapterPlanAssetMenu,
+  loadKnownPlanAssets,
+  type ExistingAssetRef,
+  type KnownPlanAsset,
+} from './asset-menu'

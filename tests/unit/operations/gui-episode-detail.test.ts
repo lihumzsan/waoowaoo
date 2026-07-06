@@ -90,10 +90,15 @@ function corePlan() {
         shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 4,
-        scene: { name: 'Studio' },
+        scene: {
+          locationId: 'location-1',
+          name: 'Studio',
+          subScene: 'timeline desk',
+        },
         action: 'The host reviews the completed edit plan.',
         characters: [
           {
+            characterId: 'character-1',
             name: 'Host',
             visibility: 'visible',
             role: 'focus',

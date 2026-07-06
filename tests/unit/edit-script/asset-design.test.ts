@@ -17,10 +17,11 @@ const shots: readonly EditScriptShot[] = [
     shotId: 'shot-1',
     shotNumber: 1,
     durationSec: 8,
-    scene: { name: '环形太空舱中控室' },
+    scene: { locationId: 'location-1', name: '环形太空舱中控室', subScene: '环形太空舱中控室' },
     action: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
     characters: [
       {
+        characterId: 'character-1',
         name: '冷静研究员',
         visibility: 'visible',
         role: 'focus',
@@ -112,9 +113,10 @@ describe('edit script asset design', () => {
       expect.objectContaining({
         shotNumber: 1,
         action: '冷静研究员站在环形太空舱中控台前，红色状态灯缓慢闪烁。',
-        scene: { name: '环形太空舱中控室' },
+        scene: { locationId: 'location-1', name: '环形太空舱中控室', subScene: '环形太空舱中控室' },
         characters: [
           {
+            characterId: 'character-1',
             name: '冷静研究员',
             visibility: 'visible',
             role: 'focus',

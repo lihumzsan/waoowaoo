@@ -169,6 +169,7 @@ describe('ai prompt registry', () => {
         story_bible_json: '{"characters":[],"locations":[]}',
         entry_snapshot_json: '{"facts":[],"entities":[]}',
         chapter_events_json: '[]',
+        asset_menu_json: '{"locations":[{"id":"loc-1","name":"地下室","description":"地下室"}],"characters":[{"id":"char-1","name":"林小雨","description":"主角"}]}',
         duration_guidance: '短时长档位，约 30 秒。',
         generation_segment_max_duration_seconds: '15',
         aspect_ratio: '16:9',

@@ -5,6 +5,7 @@ import type {
   ProjectAgentToolInputSchema,
   RuntimeSchema,
 } from './types'
+import { isOperationEnvironmentInputKey } from './environment-input'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -71,6 +72,7 @@ function readProperties(schema: JsonObject): Record<string, JsonValue> {
   const out: Record<string, JsonValue> = {}
   for (const [key, property] of Object.entries(value)) {
     if (key === 'confirmed' || key === 'confirmedMaxCost') continue
+    if (isOperationEnvironmentInputKey(key)) continue
     if (isNeverSchema(property)) continue
     out[key] = toJsonValue(property)
   }
@@ -194,9 +196,10 @@ function assertNoForbiddenToolSchemaSurface(params: {
     && (
       Object.prototype.hasOwnProperty.call(properties, 'confirmed')
       || Object.prototype.hasOwnProperty.call(properties, 'confirmedMaxCost')
+      || Object.keys(properties).some(isOperationEnvironmentInputKey)
     )
   ) {
-    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_INTERNAL_CONFIRMATION_EXPOSED:${operationId}:${path}`)
+    throw new Error(`PROJECT_AGENT_TOOL_INPUT_SCHEMA_INTERNAL_FIELD_EXPOSED:${operationId}:${path}`)
   }
   if (isRecord(properties)) {
     for (const [propertyKey, propertySchema] of Object.entries(properties)) {

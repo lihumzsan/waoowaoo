@@ -89,7 +89,7 @@ describe('workspace assistant approval card dismissal', () => {
     expect(runtimeSource).toContain('resolveWorkspaceAssistantDisplayedPendingInteraction({')
 
     // A failed control request must surface explicitly instead of vanishing.
-    expect(runtimeSource).toContain('setControlError(error instanceof Error ? error : new Error(String(error)))')
+    expect(runtimeSource).toContain('setControlError(buildWorkspaceAssistantControlError(params.endpoint, error))')
     expect(runtimeSource).toContain('error: chat.error ?? controlError ?? undefined')
   })
 })

@@ -11,6 +11,7 @@
 - “本章开始前已成立的事实”是入章时必须遵守的既有设定。
 - “本章内的事件记录”是本章允许新增或改变的长期事实。
 - Style Bible 只提供风格事实，不替代镜头内的人物、动作、物体和声音事实。
+- 已确认资产菜单是场景与人物身份的唯一来源。镜头只能引用菜单中的资产编号，不能创造新场景资产或新人物资产。
 - 时长档位与节奏约束决定总时长范围。
 
 # 工作规则
@@ -18,7 +19,10 @@
 - shotId 只需在本次输出内唯一，用于让 generationSegments 指向 shots，使用简短格式，例如 `shot-001`、`shot-002`。
 - shotNumber 必须从 1 连续递增，只表示展示顺序，不跳号、不重复、不重排。
 - 每个 shot 的 durationSec 必须是 1 到 5 秒的正整数。
+- 每个 shot.scene.locationId 必须从“已确认资产菜单”的 locations[].id 中选择，禁止输出菜单外编号。
+- 每个 shot.scene.subScene 是镜头级取景描述，可以写同一资产下的局部区域、角落、桌面、门口、特写对象周边等，但不能把它当成新资产身份。
 - 每个 shot.characters 必须覆盖该镜头叙事上真实在场的所有人物，不允许只写镜头焦点人物。
+- 每个 shot.characters[].characterId 必须从“已确认资产菜单”的 characters[].id 中选择，禁止输出菜单外编号。
 - 人物在场但暂时看不见时，必须保留该人物，并用 visibility 表达状态；visibility 只能使用 `visible`、`partial`、`hidden`、`occluded`、`offscreen`。
 - 多人对话、中景、过肩、空间交代镜头中，非焦点人物只要仍在画面空间或镜头空间内，就必须出现在 characters。
 - role 只能使用 `focus`、`supporting`、`listener`、`hidden_subject`、`background`；`hidden_subject` 用于高背椅后、门后、阴影中等“在场但被隐藏、等待揭示”的人物。
@@ -46,6 +50,9 @@
 本章内的事件记录：
 {{chapter_events_json}}
 
+已确认资产菜单：
+{{asset_menu_json}}
+
 时长档位与节奏约束：
 {{duration_guidance}}
 
@@ -66,12 +73,13 @@ Style Bible：
       "shotNumber": 1,
       "durationSec": 3,
       "scene": {
-        "name": "具体场景名称"
+        "locationId": "从已确认资产菜单 locations[].id 中选择",
+        "subScene": "该场景资产内的具体取景区域或局部描述"
       },
       "action": "这个镜头真实发生的画面动作",
       "characters": [
         {
-          "name": "人物名称",
+          "characterId": "从已确认资产菜单 characters[].id 中选择",
           "visibility": "visible",
           "role": "focus",
           "performance": "该人物在这个镜头中的表演或状态"
@@ -100,6 +108,8 @@ Style Bible：
 # 自检
 
 - shots 是否只使用输出 Schema 的字段。
+- 每个 scene.locationId 是否都来自已确认资产菜单 locations[].id。
+- 每个 characters[].characterId 是否都来自已确认资产菜单 characters[].id。
 - 每个镜头是否保留所有在场人物，包括隐藏、遮挡、非焦点和听者。
 - visibility 和 role 是否只使用允许的枚举值。
 - 高背椅、门、桌子、武器等影响遮挡/揭示的物体是否进入 keyObjects。

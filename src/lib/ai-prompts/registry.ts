@@ -74,6 +74,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
       'story_bible_json',
       'entry_snapshot_json',
       'chapter_events_json',
+      'asset_menu_json',
       'duration_guidance',
       'generation_segment_max_duration_seconds',
       'aspect_ratio',

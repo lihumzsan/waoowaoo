@@ -41,9 +41,14 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
       shotId: shot.shotId.trim(),
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      scene: { name: shot.scene.name.trim() },
+      scene: {
+        locationId: shot.scene.locationId.trim(),
+        name: shot.scene.name.trim(),
+        subScene: shot.scene.subScene.trim(),
+      },
       action: shot.action.trim(),
       characters: shot.characters.map((character) => ({
+        characterId: character.characterId.trim(),
         name: character.name.trim(),
         visibility: character.visibility,
         role: character.role,

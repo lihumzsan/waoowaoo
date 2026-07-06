@@ -7,10 +7,11 @@ const shot: EditScriptShot = {
   shotId: 'shot-1',
   shotNumber: 1,
   durationSec: 3,
-  scene: { name: '老店室内' },
+  scene: { locationId: 'location-1', name: '老店室内', subScene: '老店室内' },
   action: '人物从门口走到柜台前停下。',
   characters: [
     {
+      characterId: 'character-1',
       name: '店主',
       visibility: 'visible',
       role: 'focus',

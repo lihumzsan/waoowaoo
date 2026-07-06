@@ -64,8 +64,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Request explicit user budget and continuation confirmation before starting the current batch or billable long-form production stage. Use only when the workflow exposes this tool; do not use it as a substitute for Bible, asset, or style review.',
   },
   ingest_script: {
-    zh: '摄入用户上传或粘贴的源剧本，并提交异步任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。只传用户本轮提供的 text，不要传 projectId、episodeId、画幅、时长档位或系统可推导参数。',
-    en: 'Ingest the uploaded or pasted source script and submit the async task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. Pass only the text supplied by the user this turn; do not pass projectId, episodeId, aspect ratio, duration tier, or system-derived parameters.',
+    zh: '准备本集剧本输入，并提交异步任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。完整剧本传 sourceKind=paste；一句话创作需求、标题、梗概或需要扩写的自然语言需求传 sourceKind=prompt_generated_outline。只传用户本轮提供的 text 和 sourceKind，不要传 projectId、episodeId、画幅、时长档位或系统可推导参数。',
+    en: 'Prepare this episode script input and submit the async task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. Use sourceKind=paste for a complete script; use sourceKind=prompt_generated_outline for a one-line creative request, title, logline, or natural-language request that needs expansion. Pass only text and sourceKind from this turn; do not pass projectId, episodeId, aspect ratio, duration tier, or system-derived parameters.',
   },
   revise_bible: {
     zh: '按用户审核意见修改当前结构化 Bible/节拍表/台账/情绪曲线。仅在 Bible 未锁定且确实需要覆盖全局规划时使用；不要传 projectId、episodeId 或系统可推导参数。',
@@ -138,16 +138,16 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '确认预算',
     en: 'Confirm budget',
   },
+  confirm_bible: {
+    zh: '确认剧集规划',
+    en: 'Confirm episode plan',
+  },
 } satisfies Record<string, ProjectAgentOperationTitleCopy>
 
 const EDIT_FIRST_OPERATION_TITLE_COPY = {
   ingest_script: {
-    zh: '摄入源剧本',
-    en: 'Ingest script',
-  },
-  confirm_bible: {
-    zh: '确认剧集规划',
-    en: 'Confirm episode plan',
+    zh: '准备剧本蓝图',
+    en: 'Prepare script plan',
   },
   revise_bible: {
     zh: '修改剧集规划',

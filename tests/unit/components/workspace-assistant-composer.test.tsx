@@ -14,7 +14,7 @@ describe('WorkspaceAssistantComposer', () => {
   it('renders a compact arrow-only send button without the assistant hint copy', () => {
     const html = renderToStaticMarkup(
       createElement(WorkspaceAssistantComposer, {
-        value: '继续生成剪辑表',
+        value: '继续生成核心剪辑表',
         error: null,
         pending: false,
         attachments: [],

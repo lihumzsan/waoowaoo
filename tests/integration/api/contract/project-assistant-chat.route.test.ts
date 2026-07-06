@@ -29,6 +29,13 @@ const editScriptServiceMock = vi.hoisted(() => ({
   })),
 }))
 
+const editBibleMock = vi.hoisted(() => ({
+  confirmEpisodeEditBible: vi.fn(async (): Promise<unknown> => ({
+    id: 'bible-1',
+    status: 'confirmed',
+  })),
+}))
+
 const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
   listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
@@ -183,6 +190,13 @@ vi.mock('@/lib/api-auth', () => {
 vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 vi.mock('@/lib/edit-script/service', () => editScriptServiceMock)
+vi.mock('@/lib/edit-bible', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/edit-bible')>('@/lib/edit-bible')
+  return {
+    ...actual,
+    confirmEpisodeEditBible: editBibleMock.confirmEpisodeEditBible,
+  }
+})
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
 vi.mock('@/lib/project-agent/waits', () => waitMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionMock)
@@ -190,6 +204,12 @@ vi.mock('@/lib/project-agent/runs', () => runMock)
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
 vi.mock('@/lib/project-agent/thread-log', () => threadLogMock)
 vi.mock('@/lib/project-agent/event', () => eventMock)
+vi.mock('@/lib/project-agent/run-budget', () => ({
+  buildProjectAgentOperationTargetKey: vi.fn(({ operationId }: { operationId: string }) => `${operationId}:test-target`),
+  enforceProjectAgentOperationRunBudget: vi.fn(async () => null),
+  isProjectAgentRunWakeupBudgetAvailable: vi.fn(async () => true),
+  PROJECT_AGENT_RUN_WAKEUP_LIMIT: 10,
+}))
 vi.mock('@/lib/config-service', () => modelConfigMock)
 vi.mock('@/lib/project-agent/model', () => modelResolverMock)
 vi.mock('@/lib/project-agent/message-compression', () => messageCompressionMock)

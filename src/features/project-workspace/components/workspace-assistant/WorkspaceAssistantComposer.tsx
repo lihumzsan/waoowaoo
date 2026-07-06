@@ -52,9 +52,11 @@ function isInsufficientBalanceErrorText(error: string): boolean {
 
 function resolveComposerErrorMessageKey(
   error: string,
-): 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.sendErrorGeneric' {
+): 'panel.sendErrorBusy' | 'panel.sendErrorInsufficientBalance' | 'panel.cardResponseErrorGeneric' | 'panel.backgroundFollowUpErrorGeneric' | 'panel.sendErrorGeneric' {
   if (error.includes('PROJECT_AGENT_RUN_ACTIVE')) return 'panel.sendErrorBusy'
   if (isInsufficientBalanceErrorText(error)) return 'panel.sendErrorInsufficientBalance'
+  if (error.includes('PROJECT_ASSISTANT_CARD_RESPONSE_FAILED')) return 'panel.cardResponseErrorGeneric'
+  if (error.includes('PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED')) return 'panel.backgroundFollowUpErrorGeneric'
   return 'panel.sendErrorGeneric'
 }
 

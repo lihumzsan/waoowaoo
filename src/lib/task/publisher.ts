@@ -9,6 +9,7 @@ import {
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { resolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
+import { runResolvedProjectAgentWaitFollowUpsForTaskEvent } from '@/lib/project-agent/server-follow-up'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
 import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
@@ -354,6 +355,13 @@ export async function publishTaskLifecycleEvent(params: {
     userId: params.userId,
     lifecycleType: normalizedType,
   })
+  if (normalizedType === TASK_EVENT_TYPE.COMPLETED || normalizedType === TASK_EVENT_TYPE.FAILED) {
+    await runResolvedProjectAgentWaitFollowUpsForTaskEvent({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: eventEpisodeId,
+    })
+  }
   await redis.publish(getProjectChannel(params.projectId), JSON.stringify(message))
   return message
 }

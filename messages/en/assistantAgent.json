@@ -18,6 +18,8 @@
     "runFailedDetail": "The run stopped before the assistant could finish. Retry the instruction or adjust the request.",
     "sendErrorBusy": "The assistant is still processing the previous action, so this message was not sent. Wait for it to finish and try again.",
     "sendErrorInsufficientBalance": "Insufficient balance. The message was not sent; your input is kept. Top up and retry.",
+    "cardResponseErrorGeneric": "Card response failed. Retry the card action.",
+    "backgroundFollowUpErrorGeneric": "Background follow-up was interrupted. Refresh status or retry the current step.",
     "sendErrorGeneric": "Failed to send the message. Your input is kept — please retry.",
     "permissionModeLabel": "Permission",
     "permissionModeAsk": "Ask",

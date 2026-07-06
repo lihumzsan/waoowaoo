@@ -54,13 +54,13 @@
   },
   "workflowStages": {
     "not_started": "Not Started",
-    "ready_to_ingest_script": "Ready To Ingest Source Script",
+    "ready_to_ingest_script": "Ready To Prepare Script Plan",
     "bible_generating": "Generating Episode Plan",
     "bible_ready_for_review": "Awaiting Episode Plan Confirmation",
     "style_preview_generating": "Generating Style Options",
     "needs_style_choice": "Awaiting Style Choice",
-    "ready_to_generate_edit_script": "Ready To Generate Chapter Edit Tables",
-    "edit_script_generating": "Generating Chapter Edit Tables",
+    "ready_to_generate_edit_script": "Ready To Generate Core Edit Table",
+    "edit_script_generating": "Generating Core Edit Table",
     "ready_to_generate_assets": "Ready To Generate Assets",
     "assets_generating": "Generating Assets",
     "assets_ready_for_review": "Awaiting Asset Confirmation",
@@ -145,7 +145,7 @@
     },
     "nodeDescriptions": {
       "story": "Episode source material and creative direction.",
-      "storyboardGroup": "Storyboard group aligned to the edit-first table.",
+      "storyboardGroup": "Storyboard group aligned to the core edit table.",
       "panelImage": "Image-stage panel node. Actions migrate here in the next phase.",
       "videoPanel": "Video-stage node attached to its source image panel.",
       "timeline": "Final composition target for generated video material."
@@ -184,7 +184,7 @@
       "actions": {
         "generateScript": "Generate Episode Plan",
         "confirmEditStylePreview": "Confirm This Style",
-        "generateEditScript": "Generate Edit Table",
+        "generateEditScript": "Generate Core Edit Table",
         "generateShotExecutionPlan": "Generate Shot Execution Plan",
         "generateStoryboard": "Generate Storyboard",
         "generateImage": "Generate Image",
@@ -229,7 +229,7 @@
         "video": "No video prompt",
         "location": "No location",
         "bible": "No episode plan",
-        "editScript": "No edit table",
+        "editScript": "No core edit table",
         "editAsset": "No asset description"
       },
       "errors": {
@@ -409,7 +409,7 @@
         "promptDesignMissing": "Prompt design missing",
         "promptDesignMissingDescription": "This score was generated with old data or without saved score design. Regenerate the music plan to view the dynamic design sections and final prompt.",
         "videoOrder": "Video Order",
-        "editScriptMeta": "Edit Table Info",
+        "editScriptMeta": "Core Edit Table Info",
         "shotIndexHeader": "Shot",
         "shotIndex": "Shot {index}",
         "sceneCharacters": "Characters / Scene",
@@ -439,7 +439,7 @@
           "candidates": "Candidates",
           "imageGeneration": "Image Generation / Edit",
           "videoPreview": "Video Preview",
-          "editScriptPreview": "Edit Table Video Preview",
+          "editScriptPreview": "Core Edit Table Video Preview",
           "editScriptTimeline": "Shot Timeline",
           "videoControls": "Video Controls",
           "bgmScoreOutput": "Music Output",
@@ -619,7 +619,7 @@
           "panelReference": "Shot {number}",
           "previewShot": "Shot {number}",
           "previewShotAlt": "Shot {number} preview",
-          "editScriptPreviewTitle": "Watch the edit table by shot rhythm"
+          "editScriptPreviewTitle": "Watch the core edit table by shot rhythm"
         }
       },
       "nodes": {
@@ -646,13 +646,13 @@
         "videoGroup": {
           "title": "Continuous Segment {index}",
           "eyebrow": "Continuous Video",
-          "body": "Continuous video segment generated from edit-first order",
+          "body": "Continuous video segment generated from core edit table order",
           "meta": "{grid} · shots {shots} · {duration}s"
         },
         "videoPlan": {
           "title": "Video Segment {index}",
           "eyebrow": "Video Generation Segment",
-          "body": "Video generation segment from the edit-first table",
+          "body": "Video generation segment from the core edit table",
           "meta": "{mode} · shots {shots} · {duration}s"
         },
         "bgmScore": {
@@ -692,7 +692,7 @@
         },
         "editPipelineStep": {
           "eyebrow": "Edit Generation Step",
-          "body": "Step fields projected from the edit-first table",
+          "body": "Step fields projected from the core edit table",
           "pendingBody": "Waiting for the previous step to persist",
           "meta": "{count} new field(s)"
         },
@@ -703,12 +703,12 @@
           "meta": "{count} step(s) completed"
         },
         "editScript": {
-          "title": "Edit Table",
+          "title": "Core Edit Table",
           "eyebrow": "Core Edit Table",
           "meta": "{shots} shots · {duration}s · assets {completed}/{assets}",
-          "pendingTitle": "Generating Edit Table",
-          "pendingBody": "AI is generating the edit-first table from the current video brief, including characters, locations, shot rhythm, video segments, and sound design.",
-          "pendingMeta": "This will become an editable edit table when generation completes"
+          "pendingTitle": "Generating Core Edit Table",
+          "pendingBody": "AI is generating the core edit table from the current episode plan, including characters, locations, shot rhythm, video segments, and sound design.",
+          "pendingMeta": "This will become an editable core edit table when generation completes"
         },
         "editShotExecutionPlan": {
           "title": "Shot Execution Plan",

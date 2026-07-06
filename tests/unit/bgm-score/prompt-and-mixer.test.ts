@@ -12,10 +12,11 @@ describe('bgm score prompt builder', () => {
           shotId: 'shot-1',
           shotNumber: 1,
           durationSec: 12,
-          scene: { name: 'Dark room' },
+          scene: { locationId: 'location-1', name: 'Dark room', subScene: 'Dark room' },
           action: 'The detective enters the room.',
           characters: [
             {
+              characterId: 'character-1',
               name: 'Detective',
               visibility: 'visible',
               role: 'focus',

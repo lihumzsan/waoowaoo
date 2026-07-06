@@ -183,6 +183,7 @@ export interface WorkspaceCanvasEditScriptDetails {
   readonly durationSec: number
   readonly shotCount: number
   readonly shots: readonly {
+    readonly shotId: string
     readonly shotNumber: number
     readonly durationSec: number
     readonly sceneName: string

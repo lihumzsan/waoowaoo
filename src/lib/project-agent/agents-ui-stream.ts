@@ -35,6 +35,23 @@ function isToolOutputChunk(chunk: ProjectAgentUiChunk): boolean {
     || type === 'tool-output-denied'
 }
 
+function readTextChunkDelta(chunk: ProjectAgentUiChunk): string | null {
+  if (!isRecord(chunk)) return null
+  const type = readChunkString(chunk, 'type')
+  if (type !== 'text-delta') return null
+  const record = chunk as unknown as Record<string, unknown>
+  const delta = record.delta
+  return typeof delta === 'string' ? delta : null
+}
+
+function assertNoProjectStateSnapshotProtocol(chunk: ProjectAgentUiChunk): void {
+  const delta = readTextChunkDelta(chunk)
+  if (!delta) return
+  if (delta.includes('[project_state_snapshot]') || delta.includes('[/project_state_snapshot]')) {
+    throw new Error('PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK')
+  }
+}
+
 function inferToolNameFromCallId(toolCallId: string, toolNames: readonly string[]): string {
   const normalized = toolCallId.startsWith('tool_') ? toolCallId.slice('tool_'.length) : toolCallId
   const match = [...toolNames]
@@ -104,6 +121,7 @@ export function createProjectAgentUiMessageStream(params: {
         controller.enqueue(chunk)
       }
       const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
+        assertNoProjectStateSnapshotProtocol(chunk)
         const toolCallId = readChunkString(chunk, 'toolCallId')
         if (toolCallId && isToolInputChunk(chunk)) {
           startedToolCallIds.add(toolCallId)

@@ -385,6 +385,11 @@ vi.mock('@/lib/project-agent/event', () => ({
   appendProjectAgentEvents: eventState.appendProjectAgentEvents,
 }))
 
+vi.mock('@/lib/project-agent/run-budget', () => ({
+  buildProjectAgentOperationTargetKey: vi.fn(({ operationId }: { operationId: string }) => `${operationId}:test-target`),
+  enforceProjectAgentOperationRunBudget: vi.fn(async () => null),
+}))
+
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 import { createProjectAgentWait } from '@/lib/project-agent/waits'
@@ -641,7 +646,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(response.status).toBe(200)
     const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
     const snapshotItem = runInputItems.find((item) => (
-      item.role === 'user'
+      item.role === 'system'
       && typeof item.content === 'string'
       && item.content.includes('[project_state_snapshot]')
     ))
@@ -1087,7 +1092,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     await runAssistant({
       context: { episodeId: 'episode-1' },
-      text: '继续生成剪辑表',
+      text: '继续生成核心剪辑表',
     })
 
     expect(streamState.capturedToolNames).toContain('get_project_context')

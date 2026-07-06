@@ -144,10 +144,10 @@
     "editBibleRevisionGenerate": "Revise edit-first bible",
     "editBiblePersist": "Persist edit-first bible",
     "editBibleRevisionPersist": "Persist revised edit-first bible",
-    "editScriptPrepare": "Prepare edit-first table generation",
-    "editScriptGenerate": "Generate edit-first table",
+    "editScriptPrepare": "Prepare core edit table generation",
+    "editScriptGenerate": "Generate core edit table",
     "editScriptPrimary": "Generate core edit table",
-    "editScriptPersist": "Persist edit-first table"
+    "editScriptPersist": "Persist core edit table"
   },
   "streamStep": {
     "analyzeCharacters": "Analyze characters",

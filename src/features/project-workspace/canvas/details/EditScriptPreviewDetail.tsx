@@ -15,6 +15,7 @@ interface EditScriptPreviewDetailProps {
 }
 
 interface PreviewShot {
+  readonly shotId: string
   readonly shotNumber: number
   readonly durationSec: number
   readonly startSec: number
@@ -75,6 +76,7 @@ function buildPreviewShots(details: WorkspaceCanvasEditScriptDetails): readonly 
     const startSec = cursor
     cursor += shot.durationSec
     return {
+      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
       startSec,
@@ -312,10 +314,10 @@ export default function EditScriptPreviewDetail({
                 {...workspaceCanvasScrollableRegionProps<HTMLDivElement>()}
               >
                 {shots.map((shot) => {
-                  const active = activeShot?.shotNumber === shot.shotNumber
+                  const active = activeShot?.shotId === shot.shotId
                   return (
                     <button
-                      key={shot.shotNumber}
+                      key={shot.shotId}
                       type="button"
                       className={`min-w-[180px] rounded-lg border bg-white p-3 text-left transition ${active ? 'border-slate-950 shadow-sm' : 'border-slate-200 hover:border-slate-300'}`}
                       onClick={() => selectShot(shot)}

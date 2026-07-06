@@ -247,11 +247,11 @@ describe('workspace assistant panel layout', () => {
   it('resolves progress stage labels without crashing on missing translations', () => {
     const progressT = createProgressTranslator({
       stage: {
-        editScriptPersist: '保存剪辑先行表',
+        editScriptPersist: '保存核心剪辑表',
       },
     })
 
-    expect(resolveProgressStageLabel('progress.stage.editScriptPersist', progressT)).toBe('保存剪辑先行表')
+    expect(resolveProgressStageLabel('progress.stage.editScriptPersist', progressT)).toBe('保存核心剪辑表')
     expect(resolveProgressStageLabel('progress.stage.missingStage', progressT)).toBe('MISSING_MESSAGE:progress.stage.missingStage')
     expect(resolveProgressStageLabel('外部阶段', progressT)).toBe('外部阶段')
   })

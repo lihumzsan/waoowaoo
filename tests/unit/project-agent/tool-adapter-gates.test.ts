@@ -66,7 +66,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  it('[prerequisite episodeId required + input includes episodeId] -> allows execution', async () => {
+  it('[prerequisite episodeId required + context includes episodeId] -> allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       needs_episode: makeTestOperation({
@@ -85,11 +85,11 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       operationId: 'needs_episode',
       projectId: 'project-1',
       userId: 'user-1',
-      context: {},
+      context: { episodeId: 'ep-1' },
       assistantPermissionMode: 'auto',
       source: 'assistant-panel',
       writer: buildWriter(),
-      input: { episodeId: 'ep-1' },
+      input: {},
     })
 
     expect(result.ok).toBe(true)
@@ -128,7 +128,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).not.toHaveBeenCalled()
   })
 
-  it('[prerequisite episodeId forbidden + input includes episodeId] -> returns OPERATION_PREREQUISITE_MISSING', async () => {
+  it('[prerequisite episodeId forbidden + input includes episodeId] -> strips model-supplied environment input and allows execution', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       forbids_episode: makeTestOperation({
@@ -154,10 +154,9 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       input: { episodeId: 'ep-1' },
     })
 
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('OPERATION_PREREQUISITE_MISSING')
-    expect(execute).not.toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect((execute.mock.calls[0] as unknown[] | undefined)?.[1]).toEqual({})
   })
 
   it('[auto write without operation confirmation requirement] -> allows execution', async () => {

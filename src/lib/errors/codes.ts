@@ -9,6 +9,14 @@ export const ERROR_CATEGORY = {
 
 export type ErrorCategory = (typeof ERROR_CATEGORY)[keyof typeof ERROR_CATEGORY]
 
+export const ERROR_FAILURE_CLASS = {
+  TRANSIENT_PROVIDER: 'TRANSIENT_PROVIDER',
+  PERMANENT_PROVIDER: 'PERMANENT_PROVIDER',
+  OUTPUT_VALIDATION: 'OUTPUT_VALIDATION',
+} as const
+
+export type ErrorFailureClass = (typeof ERROR_FAILURE_CLASS)[keyof typeof ERROR_FAILURE_CLASS]
+
 export const ERROR_CATALOG = {
   UNAUTHORIZED: {
     httpStatus: 401,
@@ -136,6 +144,20 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.MODEL_OUTPUT_SCHEMA_INVALID',
     defaultMessage: 'Model output did not match the required schema',
   },
+  PLAN_VALIDATION_FAILED: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PLAN_VALIDATION_FAILED',
+    defaultMessage: 'Generated plan did not pass validation',
+  },
+  EDIT_SCRIPT_ASSET_MENU_EMPTY: {
+    httpStatus: 409,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.EDIT_SCRIPT_ASSET_MENU_EMPTY',
+    defaultMessage: 'No confirmed assets are available for chapter planning',
+  },
   PROVIDER_POLL_FAILED: {
     httpStatus: 502,
     retryable: true,
@@ -229,4 +251,13 @@ export function resolveUnifiedErrorCode(code: unknown): UnifiedErrorCode | null 
 
 export function getErrorSpec(code: UnifiedErrorCode) {
   return ERROR_CATALOG[code]
+}
+
+export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
+  if (code === 'MODEL_OUTPUT_SCHEMA_INVALID' || code === 'PLAN_VALIDATION_FAILED') {
+    return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
+  }
+  return ERROR_CATALOG[code].retryable
+    ? ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER
+    : ERROR_FAILURE_CLASS.PERMANENT_PROVIDER
 }

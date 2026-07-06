@@ -3,7 +3,6 @@
 import { useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { EpisodeSelector } from '@/components/ui/CapsuleNav'
-import { AppIcon } from '@/components/ui/icons'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
 import type { ProjectEditChapter, ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
@@ -119,14 +118,6 @@ interface EpisodeSelectorOverview {
   readonly emptyChaptersLabel: string
 }
 
-function chapterStatusTone(chapter: ProjectEditChapter): string {
-  if (chapter.renderStatus === 'completed') return 'bg-[var(--glass-tone-success-fg)]'
-  if (chapter.renderStatus === 'processing' || chapter.status === 'generating') return 'bg-[var(--glass-accent-from)]'
-  if (chapter.renderStatus === 'failed' || chapter.status === 'failed') return 'bg-[var(--glass-tone-danger-fg)]'
-  if (chapter.status === 'confirmed' || chapter.status === 'ready') return 'bg-[var(--glass-tone-info-fg)]'
-  return 'bg-[var(--glass-stroke-strong)]'
-}
-
 function resolveOverviewTone(overview: EpisodePlanningOverview): EpisodeSelectorOverview['statusTone'] {
   if (overview.failedChapterCount > 0 || overview.blockingKind === 'failed') return 'danger'
   if (overview.blockingKind === 'processing' || overview.processingChapterCount > 0) return 'processing'
@@ -142,52 +133,6 @@ function resolveChapterTone(chapter: EpisodePlanningOverview['chapters'][number]
   if (chapter.renderStatus === 'completed') return 'success'
   if (chapter.status === 'confirmed' || chapter.status === 'ready') return 'ready'
   return 'muted'
-}
-
-function WorkspaceScopeSelector(props: {
-  readonly chapters: readonly ProjectEditChapter[]
-  readonly activeId: WorkspaceScopeId
-  readonly onSelect?: (scopeId: WorkspaceScopeId) => void
-}) {
-  const t = useTranslations('projectWorkflow.workspaceScope')
-  const buttonClassName = 'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60'
-  const inactiveClassName = 'border-[var(--glass-stroke-base)] bg-white/75 text-[var(--glass-text-secondary)] hover:bg-white hover:text-[var(--glass-text-primary)]'
-  const activeClassName = 'border-[var(--glass-stroke-strong)] bg-neutral-900 text-white shadow-sm'
-  const itemClassName = (id: WorkspaceScopeId) => `${buttonClassName} ${props.activeId === id ? activeClassName : inactiveClassName}`
-
-  if (props.chapters.length === 0) return null
-
-  return (
-    <nav className="fixed left-[330px] right-[420px] top-20 z-40 overflow-hidden rounded-2xl border border-[var(--glass-stroke-base)] bg-[var(--glass-bg-surface)]/75 px-2 py-2 shadow-lg backdrop-blur-2xl">
-      <div className="flex items-center gap-2 overflow-x-auto app-scrollbar">
-        <button
-          type="button"
-          className={itemClassName(WORKSPACE_SCOPE_ALL_ID)}
-          onClick={() => props.onSelect?.(WORKSPACE_SCOPE_ALL_ID)}
-        >
-          <AppIcon name="grid" className="h-4 w-4" />
-          {t('all')}
-        </button>
-        {props.chapters.map((chapter) => {
-          const scopeId = workspaceChapterScopeId(chapter.id)
-          return (
-            <button
-              key={chapter.id}
-              type="button"
-              className={itemClassName(scopeId)}
-              onClick={() => props.onSelect?.(scopeId)}
-              title={chapter.title}
-            >
-              <span className={`h-2 w-2 shrink-0 rounded-full ${chapterStatusTone(chapter)}`} />
-              <span className="max-w-[160px] truncate">
-                {t('chapter', { index: chapter.chapterIndex + 1 })}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </nav>
-  )
 }
 
 export default function WorkspaceHeaderShell({
@@ -234,6 +179,12 @@ export default function WorkspaceHeaderShell({
   const handleConfigPatch = useCallback((patch: Record<string, unknown>) => {
     void onUpdateConfigPatch(patch)
   }, [onUpdateConfigPatch])
+  const handleOverviewScopeSelect = useCallback((scopeId: string) => {
+    const scope = scopeId === WORKSPACE_SCOPE_ALL_ID || scopeId.startsWith('chapter:')
+      ? scopeId as WorkspaceScopeId
+      : WORKSPACE_SCOPE_ALL_ID
+    onWorkspaceScopeSelect?.(scope)
+  }, [onWorkspaceScopeSelect])
 
   const chapterPlanStatusLabel = useCallback((status: string) => {
     if (status === 'confirmed') return overviewT('chapterStatus.confirmed')
@@ -374,16 +325,13 @@ export default function WorkspaceHeaderShell({
             onRename={(id, newName) => onEpisodeRename?.(id, newName)}
             onDelete={onEpisodeDelete}
             onProjectRename={onProjectRename}
+            currentOverviewScopeId={currentWorkspaceScopeId}
+            allOverviewScopeId={WORKSPACE_SCOPE_ALL_ID}
+            getChapterOverviewScopeId={workspaceChapterScopeId}
+            onOverviewScopeSelect={handleOverviewScopeSelect}
           />
         )
       })()}
-      {currentEpisodeId ? (
-        <WorkspaceScopeSelector
-          chapters={workspaceChapters}
-          activeId={currentWorkspaceScopeId}
-          onSelect={onWorkspaceScopeSelect}
-        />
-      ) : null}
 
     </>
   )

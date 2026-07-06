@@ -162,6 +162,7 @@ export {
 
 export {
     useProjectEditBible,
+    useProjectEditBibleResponse,
     useProjectEditScript,
     useProjectEditShotExecutionPlan,
     useCreateProjectEditShotExecutionPlan,

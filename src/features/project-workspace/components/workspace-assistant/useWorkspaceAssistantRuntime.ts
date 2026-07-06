@@ -202,6 +202,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+function buildWorkspaceAssistantControlError(endpoint: WorkspaceAssistantControlEndpoint, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = endpoint === 'task-follow-up'
+    ? 'PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED'
+    : 'PROJECT_ASSISTANT_CARD_RESPONSE_FAILED'
+  return new Error(`${code}:${message}`)
+}
+
 export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunStatus): boolean {
   return status === 'running'
 }
@@ -637,7 +645,7 @@ export function useWorkspaceAssistantRuntime({
       requestSucceeded = true
     } catch (error) {
       if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
-      setControlError(error instanceof Error ? error : new Error(String(error)))
+      setControlError(buildWorkspaceAssistantControlError(params.endpoint, error))
       clearReplyActivity(activitySequence)
       throw error
     } finally {

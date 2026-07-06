@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
 import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
+import type { ProjectEditScript } from '@/types/project'
 import {
   isTaskRuntimeRunningPhase,
   taskRuntimeStateMapSignature,
@@ -349,6 +350,13 @@ function ProjectWorkspaceCanvasContent({
         }
       : scopedEditScript
   ), [scopedEditScript, editScriptGenerationActive])
+  const projectedEditScripts = useMemo((): readonly ProjectEditScript[] => {
+    if (workspaceScope.kind === 'chapter') return projectedEditScript ? [projectedEditScript] : []
+    const byId = new Map<string, ProjectEditScript>()
+    editScripts.forEach((script) => byId.set(script.id, script))
+    if (projectedEditScript) byId.set(projectedEditScript.id, projectedEditScript)
+    return Array.from(byId.values())
+  }, [editScripts, projectedEditScript, workspaceScope])
   const effectiveEditScriptPending = editScriptPending
     || activeAssistantOperationId === 'generate_edit_script'
     || activeAssistantOperationId === 'plan_chapters'
@@ -613,6 +621,7 @@ function ProjectWorkspaceCanvasContent({
     editFirstWorkflow,
     editBible,
     editScript: projectedEditScript,
+    editScripts: projectedEditScripts,
     editShotExecutionPlan: scopedEditShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending: effectiveEditScriptPending,
@@ -899,6 +908,7 @@ function ProjectWorkspaceCanvasContent({
       editFirstWorkflow,
       editBible,
       editScript: projectedEditScript,
+      editScripts: projectedEditScripts,
       editShotExecutionPlan: scopedEditShotExecutionPlan,
       activeAssistantOperationId,
       editScriptPending: effectiveEditScriptPending,
@@ -914,7 +924,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
+  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, projectedEditScripts, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()

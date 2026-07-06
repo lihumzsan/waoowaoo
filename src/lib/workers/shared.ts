@@ -18,6 +18,7 @@ import { TASK_EVENT_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/t
 import { TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
+import { ERROR_FAILURE_CLASS } from '@/lib/errors/codes'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
@@ -339,12 +340,13 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       ? Math.max(1, Math.floor(rawMaxAttempts))
       : 1
     const currentAttempt = attemptsMade + 1
-    const bullmqWillRetry = normalizedError.retryable && currentAttempt < maxAttempts
+    const bullmqWillRetry = normalizedError.failureClass === ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER && currentAttempt < maxAttempts
     const workerFailureLog = {
       action: bullmqWillRetry ? 'worker.retryable_failed' : 'worker.failed',
       message: normalizedError.message,
       errorCode: normalizedError.code,
       retryable: normalizedError.retryable,
+      failureClass: normalizedError.failureClass,
       provider: normalizedError.provider || undefined,
       durationMs: Date.now() - startedAt,
       details: {
@@ -361,12 +363,14 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
             stack: error.stack,
             code: normalizedError.code,
             retryable: normalizedError.retryable,
+            failureClass: normalizedError.failureClass,
             causeChain: errorCauseChain,
           }
           : {
             message: String(error),
             code: normalizedError.code,
             retryable: normalizedError.retryable,
+            failureClass: normalizedError.failureClass,
             causeChain: errorCauseChain,
           },
     }
@@ -381,6 +385,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
           message: normalizedError.message,
           errorCode: normalizedError.code,
           retryable: true,
+          failureClass: normalizedError.failureClass,
           durationMs: Date.now() - startedAt,
           details: {
             taskType: data.type,

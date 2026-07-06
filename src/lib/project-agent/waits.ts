@@ -5,6 +5,11 @@ import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { appendProjectAgentEvents } from './event'
+import {
+  isProjectAgentRunWakeupBudgetAvailable,
+  PROJECT_AGENT_RUN_WAKEUP_LIMIT,
+} from './run-budget'
+import { safelyUpdateProjectAgentRunStatus } from './runs'
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed'
@@ -90,6 +95,7 @@ export interface ProjectAgentWaitFollowUp {
   followUpActivityId: string | null
   waitId: string
   followUpKey: string
+  followUpMode: ProjectAgentWaitFollowUpMode
   operationId: string
   taskIds: string[]
   failedTaskIds: string[]
@@ -228,6 +234,7 @@ async function buildWaitFollowUpFromRow(
     followUpActivityId: params.followUpActivityId,
     waitId: row.id,
     followUpKey: row.followUpKey,
+    followUpMode: normalizeWaitFollowUpMode(row.followUpMode),
     operationId: row.operationId,
     taskIds,
     failedTaskIds,
@@ -678,6 +685,7 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
       episodeId,
       operationId,
       taskIds,
+      followUpMode,
       status,
       terminalStatus,
       terminalTaskIds,
@@ -772,6 +780,7 @@ export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeI
 export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgentWaitScopeInput & {
   limit?: number
   claimTtlMs?: number
+  followUpMode?: ProjectAgentWaitFollowUpMode
 }): Promise<ProjectAgentWaitFollowUp[]> {
   await reconcilePendingProjectAgentWaitsForScope(input)
   const { assistantId, scopeRef } = buildWaitScope(input)
@@ -810,6 +819,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
       AND status = 'resolved'
       AND followedAt IS NULL
       AND followUpKey IS NOT NULL
+      ${input.followUpMode ? Prisma.sql`AND followUpMode = ${input.followUpMode}` : Prisma.empty}
     ORDER BY resolvedAt ASC
     LIMIT ${limit}
   `
@@ -826,6 +836,7 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
       episodeId,
       operationId,
       taskIds,
+      followUpMode,
       status,
       terminalStatus,
       terminalTaskIds,
@@ -906,6 +917,34 @@ export async function consumeProjectAgentWaitFollowUp(input: {
   `
   const row = rows[0]
   if (!row || (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') || !row.followUpKey) {
+    return null
+  }
+  const wakeupBudgetAvailable = await isProjectAgentRunWakeupBudgetAvailable({
+    projectId: input.projectId,
+    userId: input.userId,
+    runId: input.runId,
+  })
+  if (!wakeupBudgetAvailable) {
+    await prisma.projectAgentWait.updateMany({
+      where: {
+        id: row.id,
+        status: 'claimed',
+        claimId: input.claimId,
+        followedAt: null,
+      },
+      data: {
+        status: 'followed',
+        followedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    })
+    await safelyUpdateProjectAgentRunStatus({
+      runId: input.runId,
+      status: 'failed',
+      stopReason: 'run_budget_exceeded',
+      errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
+      errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
+    })
     return null
   }
   const followUpActivityId = randomUUID()

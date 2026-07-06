@@ -14,13 +14,8 @@ const workflow: EditFirstWorkflowState = {
     kind: 'needs_user_choice',
     reason: 'review the episode plan',
   },
-  nextAction: {
-    id: 'confirm_bible',
-    operationId: 'confirm_bible',
-    title: 'Confirm episode plan',
-    requiresUserConfirmation: true,
-  },
-  allowedOperationIds: ['confirm_bible', 'revise_bible'],
+  nextAction: null,
+  allowedOperationIds: ['revise_bible'],
 }
 
 const chapters: ProjectEditChapter[] = [

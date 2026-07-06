@@ -9,6 +9,7 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     followUpActivityId: 'activity-follow-up-1',
     waitId: 'wait-1',
     followUpKey: 'follow-up-key-1',
+    followUpMode: 'resume_agent',
     operationId: 'generate_edit_script_storyboard',
     taskIds: ['task-1'],
     failedTaskIds: [],

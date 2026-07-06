@@ -2,8 +2,10 @@ import type { NextRequest } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
+import type { ZodType } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
+import { AppError } from '@/lib/errors/app-error'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
@@ -18,13 +20,18 @@ import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import {
   assembleChapterPlanInput,
+  buildChapterPlanOutputSchema,
   normalizeChapterPlanOutput,
   resolveDefaultEditChapter,
   validateChapterPlan,
   type AssembledChapterPlanInput,
-  type ChapterPlanAssetRef,
   type NormalizedChapterPlanOutput,
 } from '@/lib/edit-chapter'
+import {
+  loadKnownPlanAssets,
+  type ExistingAssetRef,
+  type KnownPlanAsset,
+} from '@/lib/edit-chapter/asset-menu'
 import { EDIT_BIBLE_STATUS } from '@/lib/edit-bible/constraints'
 import { EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO } from '@/lib/edit-script/style-preview-image-constants'
 import type { Locale } from '@/i18n/routing'
@@ -198,19 +205,6 @@ interface PersistedEditShotExecutionPlan {
 
 type ChapterEditScriptSource = AssembledChapterPlanInput
 
-interface ExistingAssetRef {
-  readonly id: string
-  readonly previewImageUrl: string | null
-  readonly hasOutput: boolean
-  readonly taskTargetType: 'CharacterAppearance' | 'LocationImage'
-  readonly taskTargetId: string
-  readonly spatialProfileJson?: unknown | null
-  readonly spatialProfileStatus?: LocationSpatialProfileStatus | null
-  readonly spatialProfileError?: string | null
-  readonly spatialProfileAnalyzedAt?: Date | null
-  readonly spatialProfileModel?: string | null
-}
-
 const EDIT_SCRIPT_ASSET_REVIEW_PENDING = 'pending'
 const EDIT_SCRIPT_ASSET_REVIEW_APPROVED = 'approved'
 
@@ -272,164 +266,59 @@ function rewriteStructureWithSystemShotIds(structure: NormalizedChapterPlanOutpu
   }
 }
 
-function normalizePlanAssetName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ')
-}
-
-function planAssetKey(asset: ChapterPlanAssetRef): string {
-  return `${asset.kind}:${normalizePlanAssetName(asset.name).toLocaleLowerCase()}`
-}
-
-function collectReferencedAssetsFromPlan(structure: NormalizedChapterPlanOutput): readonly ChapterPlanAssetRef[] {
-  const assets = new Map<string, ChapterPlanAssetRef>()
-  for (const shot of structure.shots) {
-    const locationName = normalizePlanAssetName(shot.scene.name)
-    if (locationName) {
-      const locationAsset: ChapterPlanAssetRef = { kind: 'location', name: locationName }
-      assets.set(planAssetKey(locationAsset), locationAsset)
-    }
-    for (const character of shot.characters) {
-      const characterName = normalizePlanAssetName(character.name)
-      if (!characterName) continue
-      const characterAsset: ChapterPlanAssetRef = { kind: 'character', name: characterName }
-      assets.set(planAssetKey(characterAsset), characterAsset)
-    }
-  }
-  return [...assets.values()]
-}
-
-interface KnownPlanAsset {
-  readonly kind: EditAssetKind
-  readonly name: string
-  readonly description: string
-  readonly asset: ExistingAssetRef
-}
-
-async function loadKnownPlanAssets(projectId: string): Promise<readonly KnownPlanAsset[]> {
-  const characters = await prisma.projectCharacter.findMany({
-    where: { projectId },
-    select: {
-      id: true,
-      name: true,
-      introduction: true,
-      profileData: true,
-      appearances: {
-        orderBy: { appearanceIndex: 'asc' },
-        take: 1,
-        select: {
-          id: true,
-          description: true,
-          imageUrl: true,
-          imageMediaId: true,
-          imageUrls: true,
-        },
-      },
-    },
-  })
-  const locations = await prisma.projectLocation.findMany({
-    where: { projectId, assetKind: 'location' },
-    select: {
-      id: true,
-      name: true,
-      summary: true,
-      selectedImageId: true,
-      images: {
-        orderBy: { imageIndex: 'asc' },
-        select: {
-          id: true,
-          description: true,
-          imageUrl: true,
-          imageMediaId: true,
-          isSelected: true,
-          spatialProfileJson: true,
-          spatialProfileStatus: true,
-          spatialProfileError: true,
-          spatialProfileAnalyzedAt: true,
-          spatialProfileModel: true,
-        },
-      },
-    },
-  })
-  const characterAssets: KnownPlanAsset[] = characters.map((character) => {
-    const appearance = character.appearances[0] ?? null
-    const imageUrls = appearance ? decodeImageUrlsFromDb(appearance.imageUrls, 'editScript.planAssets.character.imageUrls') : []
-    const previewImageUrl = appearance?.imageUrl || imageUrls[0] || null
-    return {
-      kind: 'character',
-      name: normalizePlanAssetName(character.name),
-      description: character.profileData?.trim()
-        || character.introduction?.trim()
-        || appearance?.description?.trim()
-        || normalizePlanAssetName(character.name),
-      asset: {
-        id: character.id,
-        previewImageUrl,
-        hasOutput: Boolean(appearance?.imageMediaId || previewImageUrl),
-        taskTargetType: 'CharacterAppearance',
-        taskTargetId: appearance?.id ?? character.id,
-      },
-    }
-  })
-  const locationAssets: KnownPlanAsset[] = locations.map((location) => {
-    const image = location.images.find((item) => item.id === location.selectedImageId)
-      ?? location.images.find((item) => item.isSelected)
-      ?? location.images.find((item) => Boolean(item.imageUrl))
-      ?? location.images[0]
-      ?? null
-    return {
-      kind: 'location',
-      name: normalizePlanAssetName(location.name),
-      description: location.summary?.trim()
-        || image?.description?.trim()
-        || normalizePlanAssetName(location.name),
-      asset: {
-        id: location.id,
-        previewImageUrl: image?.imageUrl || null,
-        hasOutput: Boolean(image?.imageMediaId || image?.imageUrl),
-        taskTargetType: 'LocationImage',
-        taskTargetId: location.id,
-        spatialProfileJson: image?.spatialProfileJson ?? null,
-        spatialProfileStatus: image?.spatialProfileStatus as LocationSpatialProfileStatus | null,
-        spatialProfileError: image?.spatialProfileError ?? null,
-        spatialProfileAnalyzedAt: image?.spatialProfileAnalyzedAt ?? null,
-        spatialProfileModel: image?.spatialProfileModel ?? null,
-      },
-    }
-  })
-  return [...characterAssets, ...locationAssets]
-}
-
 function buildProjectedAssetRequirements(input: {
   readonly structure: NormalizedChapterPlanOutput
   readonly knownAssets: readonly KnownPlanAsset[]
 }): readonly EditAssetRequirement[] {
-  const knownAssetsByKey = new Map(input.knownAssets.map((asset) => [planAssetKey(asset), asset]))
+  const knownAssetsById = new Map(input.knownAssets.map((asset) => [asset.id, asset]))
   const grouped = new Map<string, {
     readonly kind: EditAssetKind
     readonly name: string
     readonly shotIds: Set<string>
+    readonly assetId: string
   }>()
   for (const shot of input.structure.shots) {
-    const locationName = normalizePlanAssetName(shot.scene.name)
-    if (locationName) {
-      const locationAsset: ChapterPlanAssetRef = { kind: 'location', name: locationName }
-      const key = planAssetKey(locationAsset)
-      const current = grouped.get(key) ?? { kind: 'location' as const, name: locationName, shotIds: new Set<string>() }
-      current.shotIds.add(shot.shotId)
-      grouped.set(key, current)
+    const locationAsset = knownAssetsById.get(shot.scene.locationId)
+    if (!locationAsset || locationAsset.kind !== 'location') {
+      throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:ASSET_UNKNOWN:location:${shot.scene.locationId}`, {
+        details: {
+          assetKind: 'location',
+          assetId: shot.scene.locationId,
+        },
+      })
     }
+    const locationKey = `location:${locationAsset.id}`
+    const currentLocation = grouped.get(locationKey) ?? {
+      kind: 'location' as const,
+      name: locationAsset.name,
+      assetId: locationAsset.id,
+      shotIds: new Set<string>(),
+    }
+    currentLocation.shotIds.add(shot.shotId)
+    grouped.set(locationKey, currentLocation)
     for (const character of shot.characters) {
-      const characterName = normalizePlanAssetName(character.name)
-      if (!characterName) continue
-      const characterAsset: ChapterPlanAssetRef = { kind: 'character', name: characterName }
-      const key = planAssetKey(characterAsset)
-      const current = grouped.get(key) ?? { kind: 'character' as const, name: characterName, shotIds: new Set<string>() }
+      const characterAsset = knownAssetsById.get(character.characterId)
+      if (!characterAsset || characterAsset.kind !== 'character') {
+        throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:ASSET_UNKNOWN:character:${character.characterId}`, {
+          details: {
+            assetKind: 'character',
+            assetId: character.characterId,
+          },
+        })
+      }
+      const key = `character:${characterAsset.id}`
+      const current = grouped.get(key) ?? {
+        kind: 'character' as const,
+        name: characterAsset.name,
+        assetId: characterAsset.id,
+        shotIds: new Set<string>(),
+      }
       current.shotIds.add(shot.shotId)
       grouped.set(key, current)
     }
   }
   return [...grouped.entries()].map(([key, requirement]) => {
-    const knownAsset = knownAssetsByKey.get(key)
+    const knownAsset = knownAssetsById.get(requirement.assetId)
     if (!knownAsset) throw new Error(`EDIT_SCRIPT_ASSET_NOT_PRECONFIRMED:${key}`)
     return {
       kind: requirement.kind,
@@ -561,6 +450,8 @@ async function runStructuredPromptStep<TData>(input: {
   readonly stepTitle: string
   readonly stepIndex: number
   readonly stepTotal: number
+  readonly schema?: ZodType<unknown>
+  readonly maxRepairRounds?: number
   readonly validate: (raw: unknown) => TData
 }): Promise<TData> {
   const finalPromptContent = buildAiPromptContent({
@@ -587,8 +478,9 @@ async function runStructuredPromptStep<TData>(input: {
       stepIndex: input.stepIndex,
       stepTotal: input.stepTotal,
     },
-    schema: z.unknown(),
+    schema: input.schema ?? z.unknown(),
     parse: { kind: 'object' },
+    ...(input.maxRepairRounds !== undefined ? { maxRepairRounds: input.maxRepairRounds } : {}),
     validate: input.validate,
   })
 
@@ -1698,18 +1590,22 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
   })
 
   try {
-    const rawStructure = await runStructuredPromptStep({
+    const knownAssets = await loadKnownPlanAssets(input.projectId)
+    const structure = await runStructuredPromptStep({
       userId: input.userId,
       projectId: input.projectId,
       model,
       locale,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
+      schema: buildChapterPlanOutputSchema(scriptSource.assetMenu),
+      maxRepairRounds: 2,
       variables: {
         user_request: userPrompt,
         bible_text: scriptSource.sourceText,
         story_bible_json: stringifyForPrompt(scriptSource.storyBibleJson),
         entry_snapshot_json: stringifyForPrompt(scriptSource.entrySnapshot),
         chapter_events_json: stringifyForPrompt(scriptSource.events),
+        asset_menu_json: stringifyForPrompt(scriptSource.assetMenu),
         duration_guidance: durationGuidance,
         generation_segment_max_duration_seconds: String(EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC),
         aspect_ratio: effectiveVideoRatio,
@@ -1718,18 +1614,17 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       stepTitle: 'Edit core table',
       stepIndex: 1,
       stepTotal: 1,
-      validate: normalizeChapterPlanOutput,
-    })
-    const structure = rewriteStructureWithSystemShotIds(rawStructure)
-    const knownAssets = await loadKnownPlanAssets(input.projectId)
-    const referencedAssets = collectReferencedAssetsFromPlan(structure)
-    validateChapterPlan({
-      chapterId,
-      output: structure,
-      entrySnapshot: scriptSource.entrySnapshot,
-      events: scriptSource.events,
-      allowedAssets: knownAssets.map((asset) => ({ kind: asset.kind, name: asset.name })),
-      referencedAssets,
+      validate: (raw) => {
+        const normalized = normalizeChapterPlanOutput(raw, scriptSource.assetMenu)
+        const withShotIds = rewriteStructureWithSystemShotIds(normalized)
+        validateChapterPlan({
+          chapterId,
+          output: withShotIds,
+          entrySnapshot: scriptSource.entrySnapshot,
+          events: scriptSource.events,
+        })
+        return withShotIds
+      },
     })
     const requirements = buildProjectedAssetRequirements({
       structure,

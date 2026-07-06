@@ -23,16 +23,18 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
         shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
-        scene: { name: 'Cabin living room' },
+        scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
         action: 'Anna approaches the high-backed chair.',
         characters: [
           {
+            characterId: 'character-anna',
             name: 'Anna',
             visibility: 'visible',
             role: 'focus',
             performance: 'moves carefully toward the chair',
           },
           {
+            characterId: 'character-grandmother',
             name: 'Disguised Grandmother',
             visibility: 'hidden',
             role: 'hidden_subject',

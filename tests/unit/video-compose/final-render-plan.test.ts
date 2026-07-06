@@ -18,10 +18,11 @@ const editScript: FinalRenderEditScriptInput = {
       shotId: 'shot-1',
       shotNumber: 1,
       durationSec: 3,
-      scene: { name: 'Neon rooftop' },
+      scene: { locationId: 'location-1', name: 'Neon rooftop', subScene: 'Neon rooftop' },
       action: 'Runner looks over the roof edge',
       characters: [
         {
+          characterId: 'character-1',
           name: 'Runner',
           visibility: 'visible',
           role: 'focus',
@@ -35,10 +36,11 @@ const editScript: FinalRenderEditScriptInput = {
       shotId: 'shot-2',
       shotNumber: 2,
       durationSec: 5,
-      scene: { name: 'Neon rooftop' },
+      scene: { locationId: 'location-1', name: 'Neon rooftop', subScene: 'Neon rooftop' },
       action: 'Runner sprints and jumps',
       characters: [
         {
+          characterId: 'character-1',
           name: 'Runner',
           visibility: 'visible',
           role: 'focus',

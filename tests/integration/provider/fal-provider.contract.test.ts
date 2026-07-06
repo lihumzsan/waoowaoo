@@ -110,6 +110,31 @@ describe('provider contract - fal queue', () => {
     })
   })
 
+  it('throws FAL status 500 as a transient poll failure instead of returning a failed terminal result', async () => {
+    server!.defineScenario({
+      method: 'GET',
+      path: '/fal/fal-ai/veo3.1/requests/req_status_500/status',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 500,
+        body: {
+          detail: [{ type: 'downstream_service_error' }],
+        },
+      },
+    })
+
+    let capturedError: unknown = null
+    try {
+      await queryFalStatus('fal-ai/veo3.1/fast/image-to-video', 'req_status_500', 'fal-key-500')
+    } catch (error) {
+      capturedError = error
+    }
+
+    expect(capturedError).toMatchObject({ status: 500 })
+    expect(capturedError).toBeInstanceOf(Error)
+    expect((capturedError as Error).message).toContain('status 500')
+  })
+
   it('marks a failed status response as failed with explicit provider error', async () => {
     server!.defineScenario({
       method: 'GET',

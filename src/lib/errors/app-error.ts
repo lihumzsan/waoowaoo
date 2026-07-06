@@ -1,5 +1,7 @@
 import {
+  getErrorFailureClass,
   getErrorSpec,
+  type ErrorFailureClass,
   type UnifiedErrorCode,
 } from './codes'
 import {
@@ -15,6 +17,7 @@ export class AppError extends Error {
   readonly details: NormalizedErrorDetails
   readonly httpStatus: number
   readonly category: string
+  readonly failureClass: ErrorFailureClass
   readonly userMessageKey: string
   readonly cause?: unknown
 
@@ -36,6 +39,7 @@ export class AppError extends Error {
     this.details = options?.details ?? null
     this.httpStatus = spec.httpStatus
     this.category = spec.category
+    this.failureClass = getErrorFailureClass(code)
     this.userMessageKey = spec.userMessageKey
     this.cause = options?.cause
   }

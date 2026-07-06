@@ -193,9 +193,14 @@ export interface ProjectEditScriptShot {
   shotId: string
   shotNumber: number
   durationSec: number
-  scene: { name: string }
+  scene: {
+    locationId: string
+    name: string
+    subScene: string
+  }
   action: string
   characters: Array<{
+    characterId: string
     name: string
     visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
     role: 'focus' | 'supporting' | 'listener' | 'hidden_subject' | 'background'

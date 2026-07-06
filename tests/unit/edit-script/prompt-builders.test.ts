@@ -40,10 +40,11 @@ const shot11: EditScriptShot = {
   shotId: 'shot-11',
   shotNumber: 11,
   durationSec: 3,
-  scene: { name: 'Cabin living room' },
+  scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
   action: 'A high-backed chair stands in the center of the room.',
   characters: [
     {
+      characterId: 'character-grandmother',
       name: 'Disguised Grandmother',
       visibility: 'hidden',
       role: 'hidden_subject',
@@ -60,16 +61,18 @@ const shot12: EditScriptShot = {
   shotId: 'shot-12',
   shotNumber: 12,
   durationSec: 3,
-  scene: { name: 'Cabin living room' },
+  scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
   action: 'Anna steps toward the chair.',
   characters: [
     {
+      characterId: 'character-anna',
       name: 'Anna',
       visibility: 'visible',
       role: 'focus',
       performance: 'walks cautiously',
     },
     {
+      characterId: 'character-grandmother',
       name: 'Disguised Grandmother',
       visibility: 'hidden',
       role: 'hidden_subject',

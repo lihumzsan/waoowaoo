@@ -1,6 +1,6 @@
 import { InsufficientBalanceError } from '@/lib/billing/errors'
 import { getPrismaErrorCode, isLikelyPrismaDisconnectError, isPrismaRetryableCode } from '@/lib/prisma-error'
-import { DEFAULT_ERROR_CODE, getErrorSpec, isKnownErrorCode, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
+import { DEFAULT_ERROR_CODE, getErrorFailureClass, getErrorSpec, isKnownErrorCode, resolveUnifiedErrorCode, type UnifiedErrorCode } from './codes'
 import type { ErrorContext, NormalizedError, NormalizedErrorDetails } from './types'
 
 export type NormalizeOptions = {
@@ -182,6 +182,7 @@ function buildNormalizedError(
     httpStatus: spec.httpStatus,
     retryable: spec.retryable,
     category: spec.category,
+    failureClass: getErrorFailureClass(code),
     userMessageKey: spec.userMessageKey,
     details,
     provider: provider || null,

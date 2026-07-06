@@ -419,9 +419,30 @@ function buildProjectStateInputItem(params: {
     '[/project_state_snapshot]',
   ]
   return {
-    role: 'user',
+    role: 'system',
     content: lines.join('\n'),
-  } satisfies AgentInputItem
+  } as AgentInputItem
+}
+
+function isProjectStateInputItem(item: AgentInputItem): boolean {
+  if (!isRecord(item)) return false
+  const record = item as unknown as UnknownObject
+  const role = record.role
+  if (role !== 'system') return false
+  const content = record.content
+  return typeof content === 'string' && content.includes('[project_state_snapshot]')
+}
+
+function replaceProjectStateInputItem(
+  items: string | AgentInputItem[] | null | undefined,
+  snapshotItem: AgentInputItem,
+): string | AgentInputItem[] {
+  if (!items) return [snapshotItem]
+  if (typeof items === 'string') return [snapshotItem, { role: 'user', content: items } as AgentInputItem]
+  return [
+    ...items.filter((item) => !isProjectStateInputItem(item)),
+    snapshotItem,
+  ]
 }
 
 function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
@@ -745,6 +766,12 @@ export async function createProjectAgentChatResponse(input: {
     }
   })
   const toolDescriptions = new Map(selectedTools.map((item) => [item.operation.id, item.description]))
+  const projectStateInputItem = buildProjectStateInputItem({
+    projectId: input.projectId,
+    episodeId: context.episodeId || null,
+    phase,
+    enabledOperationIds: initialEnabledOperationIds,
+  })
 
   const agentInput: AgentInputItem[] = control.kind === 'approval'
     ? []
@@ -757,12 +784,7 @@ export async function createProjectAgentChatResponse(input: {
           : toAgentInputItems(runtimeMessages, locale)),
         ...(control.kind === 'choice' ? control.choiceResult.inputItems : []),
         ...(control.kind === 'task_follow_up' ? [buildTaskFollowUpInputItem(control.followUp)] : []),
-        buildProjectStateInputItem({
-          projectId: input.projectId,
-          episodeId: context.episodeId || null,
-          phase,
-          enabledOperationIds: initialEnabledOperationIds,
-        }),
+        projectStateInputItem,
       ]
 
   const initialChunks: ProjectAgentUiChunk[] = [
@@ -1000,6 +1022,7 @@ export async function createProjectAgentChatResponse(input: {
             message: (control.kind === 'approval' ? control.reason : null) || 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
           })
         }
+        state._originalInput = replaceProjectStateInputItem(state._originalInput, projectStateInputItem)
         return state
       })()
     : agentInput

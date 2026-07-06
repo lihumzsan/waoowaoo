@@ -68,6 +68,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly editFirstWorkflow: EditFirstWorkflowState
   readonly editBible?: ProjectEditBible | null
   readonly editScript?: ProjectEditScript | null
+  readonly editScripts?: readonly ProjectEditScript[]
   readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
   readonly activeAssistantOperationId?: string | null
   readonly editScriptPending?: boolean
@@ -589,6 +590,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     editFirstWorkflow,
     editBible = null,
     editScript = null,
+    editScripts = [],
     editShotExecutionPlan = null,
     activeAssistantOperationId = null,
     editScriptPending = false,
@@ -620,8 +622,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       : artifactPresentationFromTaskBackedStatus(editBible.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
     bibleNodeId = editBible
-      ? workspaceNodeId.editBible(editBible.id)
-      : workspaceNodeId.editBible(`pending:${episodeId}`)
+      ? workspaceNodeId.editBible(episodeId)
+      : workspaceNodeId.editBible(episodeId)
     nodes.push(createNode({
       id: bibleNodeId,
       position: layoutPosition(savedLayouts, bibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
@@ -633,7 +635,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         kind: 'editBible',
         layoutNodeType: 'editBible',
         targetType: 'editBible',
-        targetId: editBible?.id ?? `pending:${episodeId}`,
+        targetId: editBible?.id ?? episodeId,
         title: translate('nodes.editBible.title'),
         eyebrow: translate('nodes.editBible.eyebrow'),
         body: editBiblePreviewText(editBible) || translate('nodes.editBible.pendingBody'),
@@ -691,27 +693,24 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let editScriptNodeId: string | null = null
-  if (editFirstCanvasVisibility.editScript || editScript || editScriptPending) {
-    const editScriptTargetId = editScript?.id ?? `pending:${episodeId}`
-    editScriptNodeId = workspaceNodeId.editScript(episodeId)
-    const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
-      || (editScript ? hasStreamTarget(streamTargets, 'editScript', editScript.id) : false)
-      || editScriptPending
-    const editScriptPresentation = editScriptRunning
-      ? workspaceCanvasRunningPresentation(phaseLabels)
-      : editScript
-        ? artifactPresentationFromTaskBackedStatus(editScript.status, phaseLabels)
-          ?? workspaceCanvasFailedPresentation(phaseLabels)
-        : {
-            statusLabel: translate('status.pending'),
-            isRunning: false,
-          }
-    const editScriptDetails = editScript
-      ? {
-          bibleText: editScript.sourceText ?? '',
-          durationSec: editScript.durationSec,
-          shotCount: editScript.shotCount,
-          shots: editScript.shots.map((shot) => {
+  if (editFirstCanvasVisibility.editScript || editScript || editScripts.length > 0 || editScriptPending) {
+    const scriptNodes = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
+    if (scriptNodes.length > 0) {
+      scriptNodes.forEach((script, index) => {
+        const nodeId = workspaceNodeId.editScript(episodeId, script.chapterId ?? null)
+        if (editScript?.id === script.id || (!editScriptNodeId && index === 0)) editScriptNodeId = nodeId
+        const editScriptRunning = activeAssistantOperationId === 'generate_edit_script'
+          || hasStreamTarget(streamTargets, 'editScript', script.id)
+          || (editScriptPending && script.status === 'generating')
+        const editScriptPresentation = editScriptRunning
+          ? workspaceCanvasRunningPresentation(phaseLabels)
+          : artifactPresentationFromTaskBackedStatus(script.status, phaseLabels)
+            ?? workspaceCanvasFailedPresentation(phaseLabels)
+        const editScriptDetails = {
+          bibleText: script.sourceText ?? '',
+          durationSec: script.durationSec,
+          shotCount: script.shotCount,
+          shots: script.shots.map((shot) => {
             const panel = panelsByShot.get(shot.shotId) ?? null
             return {
               shotId: shot.shotId,
@@ -728,44 +727,77 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             }
           }),
         }
-      : undefined
-    nodes.push(createNode({
-      id: editScriptNodeId,
-      position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: STAGE_START_Y }),
-      width: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width,
-      height: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'editScript',
-        layoutNodeType: 'editScript',
-        targetType: 'editScript',
-        targetId: editScriptTargetId,
-        title: translate('nodes.editScript.title'),
-        eyebrow: translate('nodes.editScript.eyebrow'),
-        body: editScript?.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.action}`).join('\n')
-          ?? translate('nodes.editScript.pendingBody'),
-        meta: editScript
-          ? translate('nodes.editScript.meta', {
-              shots: editScript.shotCount,
-              duration: editScript.durationSec,
-              assets: editScript.requirements.length,
-              completed: countCompletedEditAssetRequirements(editScript.requirements),
-            })
-          : translate('nodes.editScript.pendingMeta'),
-        ...editScriptPresentation,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
-        actionLabel: editScript ? undefined : translate('actions.generateEditScript'),
-        action: editBible && !editScript ? { type: 'generate_edit_script' } : undefined,
-        actionDisabled: !editBible,
-        editScriptDetails,
-        onAction,
-      },
-    }))
-    if (styleBibleNodeId) {
-      edges.push(createEdge(`edge:${styleBibleNodeId}:${editScriptNodeId}`, styleBibleNodeId, editScriptNodeId))
-    } else if (bibleNodeId) {
-      edges.push(createEdge(`edge:${bibleNodeId}:${editScriptNodeId}`, bibleNodeId, editScriptNodeId))
+        nodes.push(createNode({
+          id: nodeId,
+          position: layoutPosition(savedLayouts, nodeId, {
+            x: STORY_COLUMN_X + COLUMN_GAP_X,
+            y: STAGE_START_Y + index * (WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height + 64),
+          }),
+          width: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width,
+          height: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height,
+          data: {
+            projectId,
+            episodeName,
+            kind: 'editScript',
+            layoutNodeType: 'editScript',
+            targetType: 'editScript',
+            targetId: script.id,
+            title: translate('nodes.editScript.title'),
+            eyebrow: translate('nodes.editScript.eyebrow'),
+            body: script.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.action}`).join('\n')
+              || translate('nodes.editScript.pendingBody'),
+            meta: translate('nodes.editScript.meta', {
+              shots: script.shotCount,
+              duration: script.durationSec,
+              assets: script.requirements.length,
+              completed: countCompletedEditAssetRequirements(script.requirements),
+            }),
+            ...editScriptPresentation,
+            runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+            editScriptDetails,
+            onAction,
+          },
+        }))
+        if (styleBibleNodeId) {
+          edges.push(createEdge(`edge:${styleBibleNodeId}:${nodeId}`, styleBibleNodeId, nodeId))
+        } else if (bibleNodeId) {
+          edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
+        }
+      })
+    } else {
+      editScriptNodeId = workspaceNodeId.editScript(episodeId, null)
+      nodes.push(createNode({
+        id: editScriptNodeId,
+        position: layoutPosition(savedLayouts, editScriptNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X, y: STAGE_START_Y }),
+        width: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height,
+        data: {
+          projectId,
+          episodeName,
+          kind: 'editScript',
+          layoutNodeType: 'editScript',
+          targetType: 'editScript',
+          targetId: episodeId,
+          title: translate('nodes.editScript.title'),
+          eyebrow: translate('nodes.editScript.eyebrow'),
+          body: translate('nodes.editScript.pendingBody'),
+          meta: translate('nodes.editScript.pendingMeta'),
+          ...(editScriptPending ? workspaceCanvasRunningPresentation(phaseLabels) : {
+            statusLabel: translate('status.pending'),
+            isRunning: false,
+          }),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeEditScriptGeneration(episodeId)),
+          actionLabel: translate('actions.generateEditScript'),
+          action: editBible ? { type: 'generate_edit_script' } : undefined,
+          actionDisabled: !editBible,
+          onAction,
+        },
+      }))
+      if (styleBibleNodeId) {
+        edges.push(createEdge(`edge:${styleBibleNodeId}:${editScriptNodeId}`, styleBibleNodeId, editScriptNodeId))
+      } else if (bibleNodeId) {
+        edges.push(createEdge(`edge:${bibleNodeId}:${editScriptNodeId}`, bibleNodeId, editScriptNodeId))
+      }
     }
   }
 
@@ -1143,6 +1175,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editFirstWorkflow,
     editBible,
     editScript,
+    editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending,
@@ -1164,6 +1197,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editFirstWorkflow,
     editBible,
     editScript,
+    editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending,
@@ -1183,6 +1217,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editFirstWorkflow,
     editBible,
     editScript,
+    editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
     editScriptPending,

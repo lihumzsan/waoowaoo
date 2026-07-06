@@ -1,8 +1,8 @@
 export const workspaceNodeId = {
-  editBible: (bibleId: string): string => `edit-bible:${bibleId}`,
+  editBible: (episodeId: string): string => `edit-bible:episode:${episodeId}`,
   editStyleBible: (sourceId: string): string => `edit-style-bible:${sourceId}`,
   editProcessGroup: (episodeId: string): string => `edit-process:${episodeId}`,
-  editScript: (episodeId: string): string => `edit-script:${episodeId}`,
+  editScript: (episodeId: string, chapterId?: string | null): string => `edit-script:${episodeId}:${chapterId?.trim() || 'episode'}`,
   editAssetGroup: (editScriptId: string): string => `edit-asset-group:${editScriptId}`,
   editShotExecutionPlan: (editScriptId: string): string => `edit-shot-execution-plan:edit-script:${editScriptId}`,
   shot: (panelId: string): string => `shot:${panelId}`,

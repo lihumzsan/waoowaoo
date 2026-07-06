@@ -12,16 +12,18 @@ function corePlan() {
         shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
-        scene: { name: 'Cabin' },
+        scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'chair corner' },
         action: 'Anna studies the high-backed chair.',
         characters: [
           {
+            characterId: 'character-anna',
             name: 'Anna',
             visibility: 'visible',
             role: 'focus',
             performance: 'steps closer with caution',
           },
           {
+            characterId: 'character-grandmother',
             name: 'Disguised Grandmother',
             visibility: 'hidden',
             role: 'hidden_subject',
@@ -37,16 +39,18 @@ function corePlan() {
         shotId: 'shot-2',
         shotNumber: 2,
         durationSec: 3,
-        scene: { name: 'Cabin' },
+        scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'beside the chair' },
         action: 'Anna reaches the chair.',
         characters: [
           {
+            characterId: 'character-anna',
             name: 'Anna',
             visibility: 'partial',
             role: 'focus',
             performance: 'leans toward the chair',
           },
           {
+            characterId: 'character-grandmother',
             name: 'Disguised Grandmother',
             visibility: 'hidden',
             role: 'hidden_subject',
@@ -190,6 +194,7 @@ describe('edit-first core plan normalization', () => {
       },
     ])
     expect(normalized.shots[0]?.characters).toContainEqual({
+      characterId: 'character-grandmother',
       name: 'Disguised Grandmother',
       visibility: 'hidden',
       role: 'hidden_subject',

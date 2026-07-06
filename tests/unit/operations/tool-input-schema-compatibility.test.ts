@@ -143,6 +143,7 @@ describe('tool input schema compatibility', () => {
     const registry = createProjectAgentOperationRegistry()
 
     expect(Object.keys(registry.ingest_script.toolInputSchema.properties)).toEqual([
+      'sourceKind',
       'text',
     ])
     expect(Object.keys(registry.revise_bible.toolInputSchema.properties)).toEqual([

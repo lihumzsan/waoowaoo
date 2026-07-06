@@ -307,7 +307,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       },
       confirmation: {
         required: true,
-        summary: '将按剪辑先行顺序批量生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑表顺序批量生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       inputSchema: generateEpisodeVideoGroupsInputSchema,
       outputSchema: generateEpisodeVideoGroupsOutputSchema,

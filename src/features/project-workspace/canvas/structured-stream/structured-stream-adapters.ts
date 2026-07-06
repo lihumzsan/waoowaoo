@@ -95,7 +95,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
       shot: editScriptShotSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'editScriptShot'
-      ? numberKey(item.shot.shotNumber, fallbackIndex)
+      ? (item.shot.shotId || numberKey(item.shot.shotNumber, fallbackIndex))
       : String(fallbackIndex + 1),
   },
   {
@@ -156,7 +156,18 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
 ]
 
-export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = []
+export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = [
+  {
+    key: 'editBible.text',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [
+      AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
+      AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
+      AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
+      AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
+    ],
+  },
+]
 
 export function findStructuredStreamAdapters(meta: StructuredStreamTaskEventMeta): readonly StructuredStreamAdapter[] {
   if (!meta.taskType || !meta.stepId) return []

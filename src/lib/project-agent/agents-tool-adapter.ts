@@ -24,6 +24,10 @@ import {
 } from './approval-preflight'
 import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
 import { normalizeOperationRuntimeSignal } from './runtime-signal'
+import {
+  buildProjectAgentOperationTargetKey,
+  enforceProjectAgentOperationRunBudget,
+} from './run-budget'
 import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
 
 type UnknownObject = { [key: string]: unknown }
@@ -184,6 +188,25 @@ export function createProjectAgentOperationTool(
         params.onExecutionSettled?.()
         return approvalPreflightFailure
       }
+      const operationTargetKey = buildProjectAgentOperationTargetKey({
+        operationId: params.operation.id,
+        projectId: params.projectId,
+        context: params.context,
+        toolInput: normalizedInput,
+      })
+      if (params.operation.intent === 'act' && !isInterruptingOperation(params.operation.agentFlow)) {
+        const budgetFailure = await enforceProjectAgentOperationRunBudget({
+          projectId: params.projectId,
+          userId: params.userId,
+          runId,
+          operationId: params.operation.id,
+          targetKey: operationTargetKey,
+        })
+        if (budgetFailure) {
+          params.onExecutionSettled?.()
+          return budgetFailure
+        }
+      }
       if (isInterruptingOperation(params.operation.agentFlow)) {
         try {
           const result = await executeProjectAgentOperationFromTool({
@@ -230,6 +253,7 @@ export function createProjectAgentOperationTool(
               activityId: operationActivityId,
               type: 'operation',
               operationId: params.operation.id,
+              targetKey: operationTargetKey,
               ...(toolCallId ? { toolCallId } : {}),
             },
           },

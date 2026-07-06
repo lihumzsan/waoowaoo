@@ -141,6 +141,7 @@ function editScriptNodeData(input?: {
       shotCount: 2,
       shots: [
         {
+          shotId: 'shot-1',
           shotNumber: 1,
           durationSec: 3,
           sceneName: '客厅深夜',
@@ -153,6 +154,7 @@ function editScriptNodeData(input?: {
           videoUrl: null,
         },
         {
+          shotId: 'shot-2',
           shotNumber: 2,
           durationSec: 4,
           sceneName: '手机屏幕特写',
@@ -345,12 +347,12 @@ describe('edit script compact canvas card', () => {
       expanded: false,
       streamPresentation: {
         isStreaming: true,
-        activeItemKey: '2',
-        displayedItemKeys: ['1', '2'],
+        activeItemKey: 'shot-2',
+        displayedItemKeys: ['shot-1', 'shot-2'],
         pinnedItemKeys: [],
         revealedFieldCountByKey: {
-          1: Number.MAX_SAFE_INTEGER,
-          2: Number.MAX_SAFE_INTEGER,
+          'shot-1': Number.MAX_SAFE_INTEGER,
+          'shot-2': Number.MAX_SAFE_INTEGER,
         },
       },
     }))

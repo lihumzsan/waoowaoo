@@ -93,13 +93,8 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
       }
     } catch { }
 
-    _ulogError(`[FAL Status] 500 错误，标记任务为失败: ${errorDetail}`)
-    return {
-      status: 'COMPLETED',
-      completed: true,
-      failed: true,
-      error: errorDetail,
-    }
+    _ulogError(`[FAL Status] 500 错误，交由瞬时错误重试: ${errorDetail}`)
+    throw new FetchStatusError(status, errorDetail)
   }
 
   return null

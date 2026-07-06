@@ -72,6 +72,7 @@ export type ProjectAgentEventPayload =
     type: ProjectAgentActivityType
     operationId?: string | null
     sourceOperationId?: string | null
+    targetKey?: string | null
     toolCallId?: string | null
     choiceType?: EditFirstChoiceType | null
   }

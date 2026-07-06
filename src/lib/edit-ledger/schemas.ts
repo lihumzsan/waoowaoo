@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { editSourceRangeSchema } from '@/lib/edit-source-document'
+import { editSourceRangeSchema } from '@/lib/edit-source-document/schemas'
 
 export const ledgerEntityRefSchema = z.object({
   entityType: z.enum(['character', 'location', 'prop', 'world']),

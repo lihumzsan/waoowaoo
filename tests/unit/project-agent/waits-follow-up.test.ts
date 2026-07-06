@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const prismaState = vi.hoisted(() => ({
   queryRaw: vi.fn(),
   executeRaw: vi.fn(),
+  eventCount: vi.fn(),
+  waitUpdateMany: vi.fn(),
 }))
 
 const eventState = vi.hoisted(() => ({
@@ -13,6 +15,12 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRaw: prismaState.queryRaw,
     $executeRaw: prismaState.executeRaw,
+    projectAgentEvent: {
+      count: prismaState.eventCount,
+    },
+    projectAgentWait: {
+      updateMany: prismaState.waitUpdateMany,
+    },
   },
 }))
 
@@ -26,6 +34,9 @@ describe('project agent wait follow-up details', () => {
   beforeEach(() => {
     prismaState.queryRaw.mockReset()
     prismaState.executeRaw.mockReset()
+    prismaState.eventCount.mockReset()
+    prismaState.eventCount.mockResolvedValue(0)
+    prismaState.waitUpdateMany.mockReset()
     eventState.appendProjectAgentEvents.mockClear()
   })
 

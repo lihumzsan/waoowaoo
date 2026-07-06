@@ -3,6 +3,7 @@ import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
+import { confirmEpisodeEditBible } from '@/lib/edit-bible'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -148,8 +149,20 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
   episodeId: string | null
 }): Promise<void> {
   if (params.output.ok !== true && params.output.ok !== undefined) return
-  if (params.choiceType !== 'asset_review') return
   const decision = readString(params.output.decision)
+  if (params.choiceType === 'bible_review') {
+    if (decision !== 'approve') return
+    if (!params.episodeId) {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_EPISODE_ID_REQUIRED')
+    }
+    await confirmEpisodeEditBible({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+    })
+    return
+  }
+  if (params.choiceType !== 'asset_review') return
   if (decision !== 'approve') return
   if (!params.episodeId) {
     throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')

@@ -121,10 +121,15 @@ function buildCorePlan() {
         shotId: 'shot-1',
         shotNumber: 1,
         durationSec: 3,
-        scene: { name: 'A scene' },
+        scene: {
+          locationId: 'location-1',
+          name: 'A scene',
+          subScene: 'center workbench',
+        },
         action: 'A shot',
         characters: [
           {
+            characterId: 'character-1',
             name: 'Hero',
             visibility: 'visible',
             role: 'focus',

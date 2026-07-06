@@ -15,6 +15,11 @@ import {
   type EditScriptStyleBible,
 } from '@/lib/edit-script/types'
 import { chapterPlanInputSchema, type ChapterPlanInput } from './schemas'
+import {
+  assertChapterPlanAssetMenuReady,
+  buildChapterPlanAssetMenu,
+  loadKnownPlanAssets,
+} from './asset-menu'
 
 type PrismaClientLike = typeof prisma | Prisma.TransactionClient
 
@@ -113,6 +118,8 @@ export async function assembleChapterPlanInput(input: {
     sourceEnd: chapter.sourceEnd,
   })
   const sourceText = chapter.sourceDocument.normalizedText.slice(chapter.sourceStart, chapter.sourceEnd)
+  const assetMenu = buildChapterPlanAssetMenu(await loadKnownPlanAssets(input.projectId))
+  assertChapterPlanAssetMenuReady(assetMenu)
   const assembled = chapterPlanInputSchema.parse({
     projectId: input.projectId,
     episodeId: input.episodeId,
@@ -132,6 +139,7 @@ export async function assembleChapterPlanInput(input: {
     styleBibleJson,
     entrySnapshot,
     events: [...events],
+    assetMenu,
   })
   return {
     ...assembled,

@@ -213,6 +213,10 @@ interface EpisodeSelectorProps {
     onDelete?: (id: string) => void
     projectName?: string  // 项目名称，显示在左上角
     onProjectRename?: (newName: string) => void | Promise<void>
+    currentOverviewScopeId?: string
+    allOverviewScopeId?: string
+    getChapterOverviewScopeId?: (chapterId: string) => string
+    onOverviewScopeSelect?: (scopeId: string) => void
 }
 
 interface ProjectNameEditorProps {
@@ -339,7 +343,26 @@ function overviewToneClass(tone: EpisodeSelectorOverview['statusTone'] | Episode
     return 'bg-[var(--glass-stroke-strong)]'
 }
 
-export function EpisodeOverviewPanel({ overview }: { readonly overview: EpisodeSelectorOverview }) {
+export function EpisodeOverviewPanel({
+    overview,
+    currentScopeId,
+    allScopeId,
+    getChapterScopeId,
+    onScopeSelect,
+}: {
+    readonly overview: EpisodeSelectorOverview
+    readonly currentScopeId?: string
+    readonly allScopeId?: string
+    readonly getChapterScopeId?: (chapterId: string) => string
+    readonly onScopeSelect?: (scopeId: string) => void
+}) {
+    const scopeT = useTranslations('projectWorkflow.workspaceScope')
+    const scopeButtonClass = (active: boolean) => [
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition',
+        active
+            ? 'border-[var(--glass-stroke-strong)] bg-neutral-900 text-white'
+            : 'border-[var(--glass-stroke-soft)] bg-white/70 text-[var(--glass-text-secondary)] hover:bg-white hover:text-[var(--glass-text-primary)]',
+    ].join(' ')
     return (
         <section className="mb-2 overflow-hidden rounded-xl border border-[var(--glass-stroke-soft)] bg-white/55">
             <div className="border-b border-[var(--glass-stroke-soft)] px-3 py-2.5">
@@ -361,6 +384,16 @@ export function EpisodeOverviewPanel({ overview }: { readonly overview: EpisodeS
             </div>
             <div className="space-y-2 px-3 py-2.5">
                 <div className="flex flex-wrap gap-1.5">
+                    {allScopeId && onScopeSelect ? (
+                        <button
+                            type="button"
+                            className={scopeButtonClass(currentScopeId === allScopeId)}
+                            onClick={() => onScopeSelect(allScopeId)}
+                        >
+                            <AppIcon name="grid" className="h-3 w-3" />
+                            {scopeT('all')}
+                        </button>
+                    ) : null}
                     {overview.chips.map((chip) => (
                         <span key={chip.label} className="rounded-full bg-[var(--glass-bg-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--glass-text-secondary)]">
                             {chip.label}
@@ -368,8 +401,18 @@ export function EpisodeOverviewPanel({ overview }: { readonly overview: EpisodeS
                     ))}
                 </div>
                 <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1 app-scrollbar">
-                    {overview.chapters.length > 0 ? overview.chapters.map((chapter) => (
-                        <div key={chapter.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-[var(--glass-stroke-soft)] bg-white/70 px-2.5 py-2">
+                    {overview.chapters.length > 0 ? overview.chapters.map((chapter) => {
+                        const scopeId = getChapterScopeId?.(chapter.id)
+                        const active = Boolean(scopeId && currentScopeId === scopeId)
+                        const className = [
+                            'flex min-w-0 items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition',
+                            active
+                                ? 'border-[var(--glass-stroke-strong)] bg-white shadow-sm'
+                                : 'border-[var(--glass-stroke-soft)] bg-white/70',
+                            scopeId && onScopeSelect ? 'hover:border-[var(--glass-stroke-strong)]' : '',
+                        ].join(' ')
+                        const content = (
+                            <>
                             <span className="mt-1 flex items-center gap-1">
                                 <span className={`h-1.5 w-1.5 rounded-full ${overviewToneClass(chapter.tone)}`} />
                                 <span className="text-[10px] font-semibold text-[var(--glass-text-tertiary)]">{chapter.indexLabel}</span>
@@ -381,8 +424,23 @@ export function EpisodeOverviewPanel({ overview }: { readonly overview: EpisodeS
                                     {chapter.meta.map((item) => <span key={item}>{item}</span>)}
                                 </div>
                             </div>
-                        </div>
-                    )) : (
+                            </>
+                        )
+                        return scopeId && onScopeSelect ? (
+                            <button
+                                key={chapter.id}
+                                type="button"
+                                className={className}
+                                onClick={() => onScopeSelect(scopeId)}
+                            >
+                                {content}
+                            </button>
+                        ) : (
+                            <div key={chapter.id} className={className}>
+                                {content}
+                            </div>
+                        )
+                    }) : (
                         <div className="rounded-lg border border-dashed border-[var(--glass-stroke-base)] px-3 py-4 text-center text-xs text-[var(--glass-text-tertiary)]">
                             {overview.emptyChaptersLabel}
                         </div>
@@ -401,7 +459,11 @@ export function EpisodeSelector({
     onRename,
     onDelete,
     projectName,
-    onProjectRename
+    onProjectRename,
+    currentOverviewScopeId,
+    allOverviewScopeId,
+    getChapterOverviewScopeId,
+    onOverviewScopeSelect
 }: EpisodeSelectorProps) {
     const t = useTranslations('common')
     const [isOpen, setIsOpen] = useState(false)
@@ -457,7 +519,15 @@ export function EpisodeSelector({
                         onRename={onProjectRename}
                         t={t}
                     />
-                    {currentEp.overview ? <EpisodeOverviewPanel overview={currentEp.overview} /> : null}
+                    {currentEp.overview ? (
+                        <EpisodeOverviewPanel
+                            overview={currentEp.overview}
+                            currentScopeId={currentOverviewScopeId}
+                            allScopeId={allOverviewScopeId}
+                            getChapterScopeId={getChapterOverviewScopeId}
+                            onScopeSelect={onOverviewScopeSelect}
+                        />
+                    ) : null}
                     <div className="space-y-1">
                         {episodes.map(ep => {
                             const statusColor = ep.status?.visual === 'ready'

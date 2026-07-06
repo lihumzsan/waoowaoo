@@ -18,6 +18,8 @@
     "runFailedDetail": "这次运行在助手完成回复前失败，请调整或重试同一指令。",
     "sendErrorBusy": "助手正在处理上一个操作，这条消息没有发出去。请等当前处理完成后重试。",
     "sendErrorInsufficientBalance": "余额不足，消息发送失败。内容已保留，请充值后重试。",
+    "cardResponseErrorGeneric": "卡片响应提交失败，请重试该卡片操作。",
+    "backgroundFollowUpErrorGeneric": "后台任务跟进中断，请刷新状态或重试当前步骤。",
     "sendErrorGeneric": "消息发送失败，内容已保留，请重试。",
     "permissionModeLabel": "权限",
     "permissionModeAsk": "Ask",

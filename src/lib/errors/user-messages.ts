@@ -19,6 +19,8 @@ export const USER_ERROR_MESSAGES_ZH: Record<UnifiedErrorCode, string> = {
   EMPTY_RESPONSE: '模型返回空响应（无有效内容），请稍后重试。',
   PARSE_ERROR: '模型输出无法解析，请稍后重试。',
   MODEL_OUTPUT_SCHEMA_INVALID: '模型输出格式不符合要求，请稍后重试。',
+  PLAN_VALIDATION_FAILED: '模型输出未通过制作规则校验，请修改后重试。',
+  EDIT_SCRIPT_ASSET_MENU_EMPTY: '缺少已确认的角色或场景资产，请先确认资产后再生成核心剪辑表。',
   PROVIDER_POLL_FAILED: '外部任务查询失败，请稍后重试。',
   PROVIDER_SUBMIT_FAILED: '外部任务提交失败，请稍后重试。',
   INSUFFICIENT_BALANCE: '余额不足，请充值后重试。',

@@ -78,6 +78,11 @@ export const EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
 })
 
 export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  sourceKind: {
+    type: 'string',
+    enum: ['paste', 'prompt_generated_outline'],
+    description: 'Classify the user input. Use paste only for a complete script provided by the user. Use prompt_generated_outline for a creative instruction, title, logline, or short natural-language request that needs the system to expand it before planning.',
+  },
   text: stringProperty('The source script text, pasted script, or user prompt to turn into a prompt-generated outline. Do not include projectId or episodeId.'),
 })
 

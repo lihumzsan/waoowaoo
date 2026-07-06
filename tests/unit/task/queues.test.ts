@@ -121,7 +121,7 @@ describe('task queues', () => {
       expect.objectContaining({
         jobId: 'task-1',
         priority: 0,
-        attempts: 1,
+        attempts: 3,
         backoff: {
           type: 'exponential',
           delay: TASK_RETRY_BACKOFF_BASE_MS,
@@ -131,7 +131,7 @@ describe('task queues', () => {
     expect(remove.mock.invocationCallOrder[0]).toBeLessThan(queueMock.add.mock.invocationCallOrder[0])
   })
 
-  it('uses the task retry registry when enqueueing opt-in text tasks', async () => {
+  it('uses default task-level retry for idempotent queued work', async () => {
     const queuesModule = await import('@/lib/task/queues')
     const taskTypes = await import('@/lib/task/types')
     const queue = queuesModule.getQueueByType('text')
@@ -157,7 +157,7 @@ describe('task queues', () => {
       taskTypes.TASK_TYPE.EDIT_SCRIPT_GENERATE,
       jobData,
       expect.objectContaining({
-        attempts: 2,
+        attempts: 3,
         backoff: {
           type: 'exponential',
           delay: TASK_RETRY_BACKOFF_BASE_MS,
@@ -190,6 +190,37 @@ describe('task queues', () => {
 
     expect(queueMock.add).toHaveBeenCalledWith(
       taskTypes.TASK_TYPE.FINAL_VIDEO_RENDER,
+      jobData,
+      expect.objectContaining({
+        attempts: 1,
+      }),
+    )
+  })
+
+  it('does not enable task-level retry for chapter render', async () => {
+    const queuesModule = await import('@/lib/task/queues')
+    const taskTypes = await import('@/lib/task/types')
+    const queue = queuesModule.getQueueByType('video')
+    const queueMock = queue as unknown as typeof queueInstances[number]
+
+    const jobData = {
+      taskId: 'task-chapter-render-1',
+      type: taskTypes.TASK_TYPE.CHAPTER_RENDER,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectEditChapter',
+      targetId: 'chapter-1',
+      payload: { meta: { locale: 'zh' } },
+      billingInfo: null,
+      userId: 'user-1',
+      trace: null,
+    } satisfies TaskJobData
+
+    await queuesModule.addTaskJob(jobData)
+
+    expect(queueMock.add).toHaveBeenCalledWith(
+      taskTypes.TASK_TYPE.CHAPTER_RENDER,
       jobData,
       expect.objectContaining({
         attempts: 1,

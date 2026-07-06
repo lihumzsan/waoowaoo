@@ -11,9 +11,10 @@ function planWithFacts(facts: readonly string[]): NormalizedChapterPlanOutput {
       shotId: 'shot-001',
       shotNumber: 1,
       durationSec: 3,
-      scene: { name: 'Room' },
+      scene: { locationId: 'location-1', name: 'Room', subScene: 'Room' },
       action: 'A character opens the door.',
       characters: [{
+        characterId: 'character-1',
         name: 'A',
         visibility: 'visible',
         role: 'focus',
@@ -49,16 +50,6 @@ const chapterEvent: LedgerEvent = {
   persistentFacts: ['A knows the hidden room exists'],
 }
 
-const allowedAssets = [
-  { kind: 'character' as const, name: 'A' },
-  { kind: 'location' as const, name: 'Room' },
-]
-
-const referencedAssets = [
-  { kind: 'character' as const, name: 'A' },
-  { kind: 'location' as const, name: 'Room' },
-]
-
 describe('validateChapterPlan', () => {
   it('accepts persistent facts declared by the entry snapshot and chapter ledger events', () => {
     const result = validateChapterPlan({
@@ -69,8 +60,6 @@ describe('validateChapterPlan', () => {
       ]),
       entrySnapshot,
       events: [chapterEvent],
-      allowedAssets,
-      referencedAssets,
     })
 
     expect(result.ok).toBe(true)
@@ -86,8 +75,6 @@ describe('validateChapterPlan', () => {
       output: planWithFacts(['A becomes king']),
       entrySnapshot,
       events: [chapterEvent],
-      allowedAssets,
-      referencedAssets,
     })).toThrow('PLAN_VALIDATION_FAILED:PERSISTENT_FACT_UNKNOWN:chapter-1:A becomes king')
   })
 
@@ -97,24 +84,9 @@ describe('validateChapterPlan', () => {
       output: planWithFacts(['A already owns the key.']),
       entrySnapshot,
       events: [chapterEvent],
-      allowedAssets,
-      referencedAssets,
     })
 
     expect(result.persistentFactsIntroduced).toEqual(['A already owns the key.'])
   })
 
-  it('fails explicitly when the chapter plan references an asset outside the confirmed asset library', () => {
-    expect(() => validateChapterPlan({
-      chapterId: 'chapter-1',
-      output: planWithFacts([]),
-      entrySnapshot,
-      events: [chapterEvent],
-      allowedAssets,
-      referencedAssets: [
-        ...referencedAssets,
-        { kind: 'location', name: 'Unknown room' },
-      ],
-    })).toThrow('PLAN_VALIDATION_FAILED:ASSET_UNKNOWN:chapter-1:location:unknown room')
-  })
 })

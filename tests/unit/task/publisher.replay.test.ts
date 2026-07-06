@@ -32,6 +32,9 @@ const prismaQueryRawMock = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<unknown[]>>(async () => []),
 )
 const redisPublishMock = vi.hoisted(() => vi.fn(async () => 1))
+const runResolvedProjectAgentWaitFollowUpsForTaskEventMock = vi.hoisted(() =>
+  vi.fn<(...args: unknown[]) => Promise<void>>(async () => undefined),
+)
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -52,6 +55,10 @@ vi.mock('@/lib/redis', () => ({
   },
 }))
 
+vi.mock('@/lib/project-agent/server-follow-up', () => ({
+  runResolvedProjectAgentWaitFollowUpsForTaskEvent: runResolvedProjectAgentWaitFollowUpsForTaskEventMock,
+}))
+
 import {
   listEventsAfter,
   listRecentTerminalLifecycleEvents,
@@ -69,6 +76,8 @@ describe('task publisher replay', () => {
     prismaQueryRawMock.mockReset()
     prismaQueryRawMock.mockResolvedValue([])
     redisPublishMock.mockReset()
+    runResolvedProjectAgentWaitFollowUpsForTaskEventMock.mockReset()
+    runResolvedProjectAgentWaitFollowUpsForTaskEventMock.mockResolvedValue(undefined)
   })
 
   it('replays persisted lifecycle + stream rows in chronological order', async () => {
@@ -241,6 +250,11 @@ describe('task publisher replay', () => {
       }),
     }))
     expect(message?.payload?.affectedResources).toEqual(expectedAffectedResources)
+    expect(runResolvedProjectAgentWaitFollowUpsForTaskEventMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
   })
 
   it('replays lifecycle + stream rows in listEventsAfter', async () => {

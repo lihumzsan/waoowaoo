@@ -4,7 +4,7 @@ import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
-import { readEpisodeEditChapters } from '@/lib/edit-bible'
+import { readEpisodeEditChapters } from '@/lib/edit-bible/service'
 import { resolveProjectContextPolicy } from './policy'
 import type { ProjectContextSnapshot } from './types'
 
@@ -15,7 +15,8 @@ function compactPreview(value: string, maxLength: number): string {
 }
 
 function countGenerationSegments(corePlanJson: unknown): number {
-  return editScriptStructureSchema.parse(corePlanJson).generationSegments.length
+  const parsed = editScriptStructureSchema.safeParse(corePlanJson)
+  return parsed.success ? parsed.data.generationSegments.length : 0
 }
 
 async function listLatestArtifactsForContext(params: {
@@ -229,7 +230,9 @@ export async function assembleProjectContext(params: {
   )
   const storyboardCount = episode?.storyboards.length || 0
   const panelCount = panelSnapshots.length
-  const generationSegmentCount = editScript ? countGenerationSegments(editScript.corePlanJson) : 0
+  const generationSegmentCount = editScript?.status === 'ready' && editScript.corePlanJson
+    ? countGenerationSegments(editScript.corePlanJson)
+    : 0
 
   return {
     projectId: project.id,

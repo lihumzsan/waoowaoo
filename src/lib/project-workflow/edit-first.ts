@@ -301,12 +301,10 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.bibleStatus === 'ready_for_review') {
-    const nextAction = workflowAction('confirm_bible', 'Confirm episode plan')
     return state({
       stage: 'bible_ready_for_review',
       blocking: { kind: 'needs_user_choice', reason: 'review the episode planning baseline and choose approval or revision before style preview generation' },
-      nextAction,
-      allowedOperationIds: [nextAction.operationId, 'revise_bible'],
+      allowedOperationIds: ['revise_bible'],
     })
   }
 
@@ -633,7 +631,7 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
     case 'bible_generating':
       return []
     case 'bible_ready_for_review':
-      return ['confirm_bible', 'revise_bible']
+      return ['revise_bible']
     case 'style_preview_generating':
       return []
     case 'needs_style_choice':

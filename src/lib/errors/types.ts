@@ -1,4 +1,4 @@
-import type { ErrorCategory, UnifiedErrorCode } from './codes'
+import type { ErrorCategory, ErrorFailureClass, UnifiedErrorCode } from './codes'
 
 export type ErrorContext = 'api' | 'worker'
 
@@ -10,6 +10,7 @@ export type NormalizedError = {
   httpStatus: number
   retryable: boolean
   category: ErrorCategory
+  failureClass: ErrorFailureClass
   userMessageKey: string
   details: NormalizedErrorDetails
   provider?: string | null

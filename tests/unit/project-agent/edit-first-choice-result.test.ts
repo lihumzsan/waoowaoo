@@ -4,12 +4,18 @@ import {
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
 import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
+import { confirmEpisodeEditBible } from '@/lib/edit-bible'
 
 vi.mock('@/lib/edit-script/service', () => ({
   approveProjectEditScriptAssets: vi.fn(async () => undefined),
 }))
 
+vi.mock('@/lib/edit-bible', () => ({
+  confirmEpisodeEditBible: vi.fn(async () => undefined),
+}))
+
 const approveProjectEditScriptAssetsMock = vi.mocked(approveProjectEditScriptAssets)
+const confirmEpisodeEditBibleMock = vi.mocked(confirmEpisodeEditBible)
 
 function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstChoiceResult>): {
   callId: string
@@ -33,6 +39,7 @@ function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstC
 describe('buildEditFirstChoiceResult', () => {
   beforeEach(() => {
     approveProjectEditScriptAssetsMock.mockClear()
+    confirmEpisodeEditBibleMock.mockClear()
   })
 
   it('serializes bible approval without selecting the next operation', () => {
@@ -134,6 +141,25 @@ describe('buildEditFirstChoiceResult', () => {
     const { parsed } = readSyntheticToolResult(choiceResult)
     expect(parsed.decision).toBe('approve')
     expect(parsed.nextOperationId).toBeUndefined()
+  })
+
+  it('persists approved bible review as the user decision without a second confirmation operation', async () => {
+    await applyEditFirstChoiceResultSideEffects({
+      choiceType: 'bible_review',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(confirmEpisodeEditBibleMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
   })
 
   it('rejects budget confirmation without approval', () => {

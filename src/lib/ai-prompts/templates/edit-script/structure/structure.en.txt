@@ -11,6 +11,7 @@ You decide story-level content only. Do not write camera parameters, camera posi
 - "Facts established before this chapter" are existing facts that must be respected on entry.
 - "Events within this chapter" are the durable facts this chapter may introduce or change.
 - Style Bible provides style facts only. It does not replace shot-level character, action, object, or sound facts.
+- The confirmed asset menu is the only source of scene and character identity. Shots may reference only asset ids from the menu, and must not invent new location or character assets.
 - Duration guidance determines the target duration range.
 
 # Rules
@@ -18,7 +19,10 @@ You decide story-level content only. Do not write camera parameters, camera posi
 - shotId only needs to be unique within this response so generationSegments can point to shots. Use short ids such as `shot-001`, `shot-002`.
 - shotNumber must start at 1 and increase continuously. It expresses display order only. Do not skip, duplicate, or reorder.
 - Each durationSec must be an integer from 1 to 5.
+- Each shot.scene.locationId must be selected from locations[].id in the confirmed asset menu. Do not output ids outside the menu.
+- Each shot.scene.subScene is a shot-level framing/location detail inside that location asset, such as a corner, desk, doorway, tabletop, or area around a close-up object. It is not a new asset identity.
 - Each shots[].characters must include every character narratively present in that shot, not only the focus character.
+- Each shots[].characters[].characterId must be selected from characters[].id in the confirmed asset menu. Do not output ids outside the menu.
 - If a character is present but temporarily not visible, keep the character and express the state with visibility. visibility must be one of `visible`, `partial`, `hidden`, `occluded`, `offscreen`.
 - In dialogue, medium shots, over-the-shoulder shots, and spatial establishing shots, non-focus characters must remain in characters as long as they are still within the image or shot space.
 - role must be one of `focus`, `supporting`, `listener`, `hidden_subject`, `background`. Use `hidden_subject` for characters present but hidden for a reveal, such as behind a high-backed chair, behind a door, or in shadow.
@@ -46,6 +50,9 @@ Facts established before this chapter:
 Events within this chapter:
 {{chapter_events_json}}
 
+Confirmed asset menu:
+{{asset_menu_json}}
+
 Duration guidance:
 {{duration_guidance}}
 
@@ -66,12 +73,13 @@ Return JSON only. Do not use markdown or explanations.
       "shotNumber": 1,
       "durationSec": 3,
       "scene": {
-        "name": "specific scene name"
+        "locationId": "select one id from confirmed asset menu locations[].id",
+        "subScene": "specific area or local framing inside that location asset"
       },
       "action": "what truly happens on screen in this shot",
       "characters": [
         {
-          "name": "character name",
+          "characterId": "select one id from confirmed asset menu characters[].id",
           "visibility": "visible",
           "role": "focus",
           "performance": "this character's performance or state in this shot"
@@ -100,6 +108,8 @@ Return JSON only. Do not use markdown or explanations.
 # Self-check
 
 - Do shots use only fields listed in the output schema?
+- Does every scene.locationId come from confirmed asset menu locations[].id?
+- Does every characters[].characterId come from confirmed asset menu characters[].id?
 - Does every shot keep all present characters, including hidden, occluded, non-focus, and listener characters?
 - Do visibility and role use only the allowed enum values?
 - Are high-backed chairs, doors, tables, weapons, and other occlusion/reveal objects included in keyObjects when relevant?

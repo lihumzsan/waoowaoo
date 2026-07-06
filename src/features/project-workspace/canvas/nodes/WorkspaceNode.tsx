@@ -1430,7 +1430,7 @@ function EditScriptContent({
     const characterNames = editScriptShotCharacterNames(shot)
     const keyObjectNames = uniqueCompactEntityNames(shot.keyObjects)
     return {
-      key: String(shot.shotNumber),
+      key: shot.shotId,
       badge: shot.shotNumber,
       title: shot.sceneName || labels('shotIndex', { index: shot.shotNumber }),
       subtitle: shot.action,

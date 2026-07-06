@@ -132,6 +132,12 @@ function validateParsed<TParsed, TData>(
   try {
     return { ok: true, data: options.validate(parsed.data) }
   } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return {
+        ok: false,
+        error,
+      }
+    }
     return {
       ok: false,
       error: new AppError('MODEL_OUTPUT_SCHEMA_INVALID', error instanceof Error ? error.message : 'Model output failed validation', {

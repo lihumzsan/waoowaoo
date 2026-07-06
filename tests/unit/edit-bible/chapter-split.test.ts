@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { splitEditBibleIntoChapterPlans, validateEditBibleBundle, type EditBibleBundle } from '@/lib/edit-bible'
+import { splitEditBibleIntoChapterPlans } from '@/lib/edit-bible/chapter-split'
+import { validateEditBibleBundle } from '@/lib/edit-bible/cross-check'
+import type { EditBibleBundle } from '@/lib/edit-bible/schemas'
 
 function buildBundle(): EditBibleBundle {
   return {

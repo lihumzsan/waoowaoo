@@ -12,8 +12,9 @@ import {
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { TaskTerminatedError } from '@/lib/task/errors'
-import { isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
+import { clearTaskExternalId, isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
 import { type TaskJobData } from '@/lib/task/types'
+import { AppError } from '@/lib/errors/app-error'
 import { reportTaskProgress } from './shared'
 import { prisma } from '@/lib/prisma'
 import {
@@ -177,7 +178,13 @@ export async function waitExternalResult(
           externalId,
         },
       })
-      throw new Error(status.error || `External task failed: ${externalId}`)
+      await clearTaskExternalId(job.data.taskId)
+      throw new AppError('EXTERNAL_ERROR', status.error || `External task failed: ${externalId}`, {
+        details: {
+          externalId,
+          externalStatus: status.status,
+        },
+      })
     }
 
     const elapsed = Date.now() - startAt

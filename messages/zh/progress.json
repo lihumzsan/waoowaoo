@@ -69,7 +69,7 @@
     "analyzeGlobal": "全局分析",
     "editBibleGenerate": "剪辑先行剧本生成",
     "editBibleRevise": "剪辑先行剧本修订",
-    "editScriptGenerate": "剪辑先行表生成",
+    "editScriptGenerate": "核心剪辑表生成",
     "aiModifyAppearance": "角色描述修改",
     "aiModifyLocation": "场景描述修改",
     "aiModifyProp": "道具描述修改",
@@ -144,10 +144,10 @@
     "editBibleRevisionGenerate": "修订剪辑先行剧本",
     "editBiblePersist": "保存剪辑先行剧本",
     "editBibleRevisionPersist": "保存修订后的剪辑先行剧本",
-    "editScriptPrepare": "准备剪辑先行表生成",
-    "editScriptGenerate": "生成剪辑先行表",
+    "editScriptPrepare": "准备核心剪辑表生成",
+    "editScriptGenerate": "生成核心剪辑表",
     "editScriptPrimary": "生成核心剪辑表",
-    "editScriptPersist": "保存剪辑先行表"
+    "editScriptPersist": "保存核心剪辑表"
   },
   "streamStep": {
     "analyzeCharacters": "角色分析",

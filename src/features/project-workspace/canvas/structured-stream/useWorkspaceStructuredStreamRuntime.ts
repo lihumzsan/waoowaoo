@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
   appendStructuredJsonChunk,
   createStructuredStreamObjectParseState,
@@ -90,6 +91,7 @@ interface TextStreamSnapshot {
   readonly targetType: string | null
   readonly targetId: string | null
   readonly episodeId: string | null
+  readonly stepId: string | null
   readonly adapterKey: TextStreamAdapterKey
   readonly text: string
 }
@@ -323,6 +325,7 @@ function textSnapshotsFromAccumulators(
       targetType: accumulator.targetType,
       targetId: accumulator.targetId,
       episodeId: accumulator.episodeId,
+      stepId: accumulator.stepId,
       adapterKey: accumulator.adapter.key,
       text: accumulator.text,
     }))
@@ -442,19 +445,37 @@ function buildEditBibleRuntimeEntries(
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editBible.text')
-  return matchingSnapshots.flatMap((snapshot) => {
-    if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return []
-    const bibleText = snapshot.text.trim()
+  const stepOrder = [
+    AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
+    AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
+    AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
+    AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
+  ] as const
+  const grouped = new Map<string, TextStreamSnapshot[]>()
+  matchingSnapshots.forEach((snapshot) => {
+    if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return
+    const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
+    grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
+  })
+  return [...grouped.values()].flatMap((group) => {
+    const firstSnapshot = group[0] ?? null
+    if (!firstSnapshot?.targetId) return []
+    const bibleText = group
+      .slice()
+      .sort((left, right) => stepOrder.indexOf(left.stepId as (typeof stepOrder)[number]) - stepOrder.indexOf(right.stepId as (typeof stepOrder)[number]))
+      .map((snapshot) => snapshot.text.trim())
+      .filter(Boolean)
+      .join('\n\n')
     if (!bibleText) return []
-    const nodeId = workspaceNodeId.editBible(snapshot.targetId)
+    const nodeId = workspaceNodeId.editBible(firstSnapshot.episodeId ?? firstSnapshot.targetId)
     return [createStreamRuntimeEntry({
       nodeId,
       streamKind: 'editBible',
-      taskId: snapshot.taskId,
-      taskType: snapshot.taskType,
-      targetType: snapshot.targetType,
-      targetId: snapshot.targetId,
-      episodeId: snapshot.episodeId,
+      taskId: firstSnapshot.taskId,
+      taskType: firstSnapshot.taskType,
+      targetType: firstSnapshot.targetType,
+      targetId: firstSnapshot.targetId,
+      episodeId: firstSnapshot.episodeId,
       data: {
         body: bibleText,
         meta: translate('nodes.editBible.pendingMeta'),
@@ -472,60 +493,65 @@ function buildEditBibleRuntimeEntries(
   })
 }
 
-function buildEditScriptRuntimeEntry(
+function buildEditScriptRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
   translate: Translate,
-): WorkspaceCanvasStreamRuntimeEntry | null {
-  const shotItems = itemsOfKind(snapshots, 'editScript.shots', 'editScriptShot')
-  const error = snapshots.find((snapshot) => snapshot.adapterKey === 'editScript.shots' && snapshot.errorMessage)?.errorMessage ?? null
-  if (shotItems.length === 0 && !error) return null
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'editScript.shots') ?? null
-  if (!firstSnapshot) return null
-  const durationSec = shotItems.reduce((total, item) => total + item.shot.durationSec, 0)
-  const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'editScript.shots')
-    .flatMap((snapshot) => snapshot.items)
-  const nodeId = workspaceNodeId.editScript(episodeId)
-  return createStreamRuntimeEntry({
-    nodeId,
-    streamKind: 'editScript',
-    taskId: firstSnapshot.taskId,
-    taskType: firstSnapshot.taskType,
-    targetType: firstSnapshot.targetType,
-    targetId: episodeId,
-    episodeId: firstSnapshot.episodeId ?? episodeId,
-    data: {
-      body: error ?? translate('nodes.editScript.pendingBody'),
-      meta: error
-        ? error
-        : translate('nodes.editScript.meta', {
-            shots: shotItems.length,
-            duration: durationSec,
-            assets: 0,
-            completed: 0,
-          }),
-      artifactPhase: error ? 'failed' : 'running',
-      statusLabel: error ? translate('status.failed') : translate('status.processing'),
-      isRunning: !error,
-      streamPresentation: streamPresentation(rawItems),
-      editScriptDetails: shotItems.length > 0 ? {
-        durationSec,
-        shotCount: shotItems.length,
-        shots: shotItems.map(({ shot }) => ({
-          shotNumber: shot.shotNumber,
-          durationSec: shot.durationSec,
-          sceneName: shot.scene.name,
-          action: shot.action,
-          characters: shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`),
-          keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
-          imagePrompt: null,
-          sound: shot.sound,
-          imageUrl: null,
-          videoUrl: null,
-        })),
-      } : undefined,
-    },
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
+  const editScriptSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editScript.shots')
+  const targetIds = Array.from(new Set(editScriptSnapshots.map((snapshot) => snapshot.targetId).filter((targetId): targetId is string => Boolean(targetId))))
+  return targetIds.flatMap((targetId) => {
+    const scopedSnapshots = editScriptSnapshots.filter((snapshot) => snapshot.targetId === targetId)
+    const shotItems = itemsOfKind(scopedSnapshots, 'editScript.shots', 'editScriptShot')
+    const error = scopedSnapshots.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
+    if (shotItems.length === 0 && !error) return []
+    const firstSnapshot = scopedSnapshots[0] ?? null
+    if (!firstSnapshot) return []
+    const durationSec = shotItems.reduce((total, item) => total + item.shot.durationSec, 0)
+    const rawItems = scopedSnapshots.flatMap((snapshot) => snapshot.items)
+    const nodeId = workspaceNodeId.editScript(firstSnapshot.episodeId ?? episodeId, targetId)
+    return [createStreamRuntimeEntry({
+      nodeId,
+      streamKind: 'editScript',
+      taskId: firstSnapshot.taskId,
+      taskType: firstSnapshot.taskType,
+      targetType: firstSnapshot.targetType,
+      targetId,
+      episodeId: firstSnapshot.episodeId ?? episodeId,
+      data: {
+        body: error ?? translate('nodes.editScript.pendingBody'),
+        meta: error
+          ? error
+          : translate('nodes.editScript.meta', {
+              shots: shotItems.length,
+              duration: durationSec,
+              assets: 0,
+              completed: 0,
+            }),
+        artifactPhase: error ? 'failed' : 'running',
+        statusLabel: error ? translate('status.failed') : translate('status.processing'),
+        isRunning: !error,
+        streamPresentation: streamPresentation(rawItems),
+        editScriptDetails: shotItems.length > 0 ? {
+          durationSec,
+          shotCount: shotItems.length,
+          shots: shotItems
+            .map(({ shot }) => ({
+              shotId: shot.shotId,
+              shotNumber: shot.shotNumber,
+              durationSec: shot.durationSec,
+              sceneName: shot.scene.name,
+              action: shot.action,
+              characters: shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`),
+              keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
+              imagePrompt: null,
+              sound: shot.sound,
+              imageUrl: null,
+              videoUrl: null,
+            })),
+        } : undefined,
+      },
+    })]
   })
 }
 
@@ -643,7 +669,7 @@ function buildStreamRuntimeEntries(
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   return [
     ...buildEditBibleRuntimeEntries(textSnapshots, translate),
-    buildEditScriptRuntimeEntry(snapshots, episodeId, translate),
+    ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
