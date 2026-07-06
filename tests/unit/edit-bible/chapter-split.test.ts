@@ -84,7 +84,7 @@ function buildBundle(): EditBibleBundle {
 }
 
 describe('edit bible chapter splitting', () => {
-  it('splits ordered beats by natural beat cuts inside duration and source limits', () => {
+  it('splits ordered beats by adaptive episode duration inside duration and source limits', () => {
     const sourceText = '剧'.repeat(5400)
     const bundle = validateEditBibleBundle({
       bundle: buildBundle(),
@@ -97,21 +97,13 @@ describe('edit bible chapter splitting', () => {
       expect.objectContaining({
         chapterIndex: 0,
         sourceStart: 0,
-        sourceEnd: 900,
-        targetDurationSec: 60,
-        beatIds: ['beat-1'],
-        eventIds: ['event-1'],
+        sourceEnd: 1800,
+        targetDurationSec: 120,
+        beatIds: ['beat-1', 'beat-2'],
+        eventIds: ['event-1', 'event-2'],
       }),
       expect.objectContaining({
         chapterIndex: 1,
-        sourceStart: 900,
-        sourceEnd: 1800,
-        targetDurationSec: 60,
-        beatIds: ['beat-2'],
-        eventIds: ['event-2'],
-      }),
-      expect.objectContaining({
-        chapterIndex: 2,
         sourceStart: 1800,
         sourceEnd: 5400,
         targetDurationSec: 80,
@@ -146,8 +138,8 @@ describe('edit bible chapter splitting', () => {
       eventId: 'event-crossing-cut',
       kind: 'plot',
       summary: '事件跨过第一章切点。',
-      sourceStart: 800,
-      sourceEnd: 1000,
+      sourceStart: 1700,
+      sourceEnd: 1900,
       entities: [{ entityType: 'character', entityName: '林秋' }],
       persistentFacts: ['跨界事件不能被双计'],
     })

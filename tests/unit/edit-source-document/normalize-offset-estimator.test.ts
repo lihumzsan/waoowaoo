@@ -41,4 +41,10 @@ describe('edit source document normalization and offsets', () => {
       expect((error as EditSourceDocumentValidationError).code).toBe('EDIT_SOURCE_DOCUMENT_EMPTY')
     }
   })
+
+  it('rejects normalized source documents over the ten thousand character episode limit', () => {
+    expect(normalizeEditSourceDocumentText('剧'.repeat(10_000))).toHaveLength(10_000)
+    expect(() => normalizeEditSourceDocumentText('剧'.repeat(10_001)))
+      .toThrow('EDIT_SOURCE_DOCUMENT_CHAR_LIMIT_EXCEEDED:length=10001:max=10000')
+  })
 })

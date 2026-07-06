@@ -28,6 +28,13 @@ function beatGroupDuration(beats: readonly EditBibleBeat[]): number {
   return beats.reduce((sum, beat) => sum + beat.estimatedDurationSec, 0)
 }
 
+function resolveAdaptiveChapterTargetDurationSec(beats: readonly EditBibleBeat[]): number {
+  const totalDurationSec = beatGroupDuration(beats)
+  if (totalDurationSec <= EDIT_BIBLE_CHAPTER_LIMITS.maxDurationSec) return totalDurationSec
+  const chapterCount = Math.ceil(totalDurationSec / EDIT_BIBLE_CHAPTER_LIMITS.maxDurationSec)
+  return totalDurationSec / chapterCount
+}
+
 function assertBeatCanBeChapter(beat: EditBibleBeat) {
   if (beatSourceLength(beat) > EDIT_BIBLE_CHAPTER_LIMITS.maxSourceChars) {
     throw new Error(
@@ -63,10 +70,11 @@ function scoreCutCandidate(input: {
   readonly startIndex: number
   readonly endExclusive: number
   readonly ledger: Ledger
+  readonly targetDurationSec: number
 }): number {
   const duration = beatGroupDuration(input.beats)
   const sourceLength = beatGroupSourceLength(input.beats)
-  const targetPenalty = Math.abs(duration - EDIT_BIBLE_CHAPTER_LIMITS.targetDurationSec)
+  const targetPenalty = Math.abs(duration - input.targetDurationSec)
   const shortPenalty = duration < EDIT_BIBLE_CHAPTER_LIMITS.minDurationSec
     ? (EDIT_BIBLE_CHAPTER_LIMITS.minDurationSec - duration) * 8
     : 0
@@ -91,6 +99,7 @@ function chooseNextBeatGroup(input: {
   readonly beats: readonly EditBibleBeat[]
   readonly startIndex: number
   readonly ledger: Ledger
+  readonly targetDurationSec: number
 }): ChapterBeatGroup {
   const candidates: ChapterCutCandidate[] = []
   for (let endExclusive = input.startIndex + 1; endExclusive <= input.beats.length; endExclusive += 1) {
@@ -105,6 +114,7 @@ function chooseNextBeatGroup(input: {
         startIndex: input.startIndex,
         endExclusive,
         ledger: input.ledger,
+        targetDurationSec: input.targetDurationSec,
       }),
     })
   }
@@ -128,11 +138,13 @@ function groupBeatsIntoChapters(input: {
   for (const beat of input.beats) {
     assertBeatCanBeChapter(beat)
   }
+  const targetDurationSec = resolveAdaptiveChapterTargetDurationSec(input.beats)
   while (startIndex < input.beats.length) {
     const group = chooseNextBeatGroup({
       beats: input.beats,
       startIndex,
       ledger: input.ledger,
+      targetDurationSec,
     })
     groups.push(group)
     startIndex += group.beats.length
