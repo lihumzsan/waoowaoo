@@ -8,8 +8,8 @@ type ProjectAgentOperationTitleCopy = {
 
 const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string }> = {
   get_project_context: {
-    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取具体项目/剧集内容，例如完整剧本、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或系统可推导的工具参数调用。',
-    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input, such as full bible text, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or system-derived tool parameters.',
+    zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取具体项目/剧集内容，例如完整 Bible/章节切分、历史生成结果、失败详情、活动任务详情、资产/分镜/面板字段。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态或系统可推导的工具参数调用。',
+    en: 'Load concrete project/episode content only when the injected project_state_snapshot and conversation context are insufficient for a concrete request or user-intent tool input, such as the full Bible/chapter split, historical generation results, failure details, active task details, or asset/storyboard/panel fields. Do not call merely to confirm the current phase, progress, next step, projectId, episodeId, approval state, or system-derived tool parameters.',
   },
   get_project_snapshot: {
     zh: '仅在本轮注入的 project_state_snapshot 与对话上下文不足以回答具体请求或补齐用户新表达的创作/修改意图时，读取详细项目投影。禁止仅为了确认当前阶段、进度、下一步、projectId、episodeId、审批状态、普通状态或系统可推导的工具参数而调用。只有明确需要面板字段、提示词、描述或媒体 URL 时才使用 detail=full。',
@@ -72,7 +72,7 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Apply user-reviewed changes to the current structured Bible, beat sheet, ledger, or emotional curve. Use only while the Bible is unlocked and global planning truly needs to be overwritten; do not pass projectId, episodeId, or system-derived parameters.',
   },
   generate_edit_style_previews: {
-    zh: '用户审核确认剧本后，基于剧本生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
+    zh: '用户审核确认 Bible/章节切分后，基于 Bible 生成视觉风格候选图。风格选择阶段用户要求重做、调整、更黑暗/更抽象/指定非真人画风时也可调用；非真人画风可以包含动漫 3D 或风格化 3D；只有用户给出新方向时才用 styleDirection 传入，不要传系统可推导参数；重新生成会追加候选。',
     en: 'Generate bible-based visual style preview images after bible review. Also use during visual style choice when the user asks to redo, adjust, make darker/more abstract, or specify a non-real-person art direction; non-real-person art direction may include anime 3D or stylized 3D. Pass styleDirection only when the user gives a new direction; do not pass system-derived parameters. Regeneration appends new candidates.',
   },
   generate_edit_script_assets: {
