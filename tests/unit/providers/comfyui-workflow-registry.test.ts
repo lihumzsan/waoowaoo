@@ -505,7 +505,8 @@ describe('comfyui workflow registry', () => {
 
     expect(smartPrompt).toContain('[0-65]')
     expect(smartPrompt).toContain('[195-259]')
-    expect(smartPrompt).toContain('frontal')
+    expect(smartPrompt).toContain('requested head and gaze direction')
+    expect(smartPrompt).toContain('lower portion of the frame stays clean')
     expect(smartPrompt.toLowerCase()).not.toContain('no profile turn')
     expect(smartPrompt.toLowerCase()).not.toContain('no new people')
     expect(smartPrompt.toLowerCase()).not.toContain('no subtitles')
@@ -535,6 +536,47 @@ describe('comfyui workflow registry', () => {
     expect(smartPrompt).toContain('正在说话')
     expect(smartPrompt).toContain('Audio-backed talking-head')
     expect(smartPrompt).not.toMatch(/字幕|台词|文字/)
+  })
+
+  it('uses real negative text conditioning for audio-backed Smart VBVR subtitle suppression', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: [
+        'GLOBAL: night office, Chen Ji, same source-frame composition, stable lighting.',
+        'LOCAL: Chen Ji sits near the right-side window, turns his face toward the window, and speaks softly.',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 6,
+      targetFrameCount: 150,
+    })
+
+    const negativeSourceId = Array.isArray(workflow['164']?.inputs.negative)
+      ? String(workflow['164'].inputs.negative[0])
+      : ''
+    const negativeNode = workflow[negativeSourceId]
+    const negativeText = String(negativeNode?.inputs.text ?? '')
+
+    expect(negativeNode?.class_type).toBe('CLIPTextEncode')
+    expect(negativeNode?.inputs.clip).toEqual(['416', 0])
+    expect(negativeText.toLowerCase()).toContain('subtitle')
+    expect(negativeText.toLowerCase()).toContain('caption')
+    expect(negativeText.toLowerCase()).toContain('lower third')
+    expect(negativeText).toContain('Chinese characters')
+    expect(Object.values(workflow).some((node) => node.class_type === 'ConditioningZeroOut')).toBe(false)
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+
+    expect(smartPrompt).toContain('turns his face toward the window')
+    expect(smartPrompt).toContain('requested head and gaze direction')
+    expect(smartPrompt).toContain('lower portion of the frame stays clean')
+    expect(smartPrompt.toLowerCase()).not.toContain('subtitle')
+    expect(smartPrompt.toLowerCase()).not.toContain('caption')
+    expect(smartPrompt.toLowerCase()).not.toContain('text overlay')
   })
 
   it('does not inject continuity packet or negative concepts into Smart VBVR positive prompts', () => {

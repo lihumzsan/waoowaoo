@@ -728,6 +728,8 @@ const SMART_VBVR_NEGATIVE_LINE_PATTERN =
   /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|avoid|never|forbidden|no\s+(?:subtitles?|captions?|readable\s+text|new\s+people|new\s+characters|extra\s+people|rotation|profile\s+turns?|head\s+turns?|crowds?|guards?|police|scene\s+cuts?|scene\s+changes?))\b|(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d)/iu
 const SMART_VBVR_UNSTABLE_SUBJECT_PATTERN =
   /\b(?:subtitles?|captions?|watermarks?|crowds?|guards?|police|profile\s+turns?|head\s+turns?|extra\s+people|new\s+people|new\s+characters|rotation|rotating|orbiting|spinning|scene\s+cuts?|scene\s+changes?)\b/i
+const SMART_VBVR_AUDIO_CLEAN_FRAME_GUARD =
+  'The lower portion of the frame stays clean and unobstructed, with clothing, desk edge, and room background remaining visible and free of glyph-like marks.'
 
 function cleanSmartVbvrPositiveText(value: unknown, maxLength = 300): string {
   const text = readTrimmedString(value)
@@ -758,6 +760,16 @@ function formatSmartVbvrVisibleSubjects(input: EnhanceLtx23VideoPromptInput): st
   return names.slice(0, 4).join(', ')
 }
 
+function appendSmartVbvrAudioCleanFrameGuard(prompt: string): string {
+  const text = readTrimmedString(prompt)
+  if (!text) return SMART_VBVR_AUDIO_CLEAN_FRAME_GUARD
+  if (text.toLowerCase().includes('lower portion of the frame stays clean')) return text
+  return [
+    text,
+    SMART_VBVR_AUDIO_CLEAN_FRAME_GUARD,
+  ].join('\n')
+}
+
 function buildSmartVbvrAudioPrompt(input: EnhanceLtx23VideoPromptInput): string {
   const location = cleanSmartVbvrPositiveText(input.continuity?.location || input.panel.location, 120)
     || 'the same source-image room'
@@ -771,7 +783,7 @@ function buildSmartVbvrAudioPrompt(input: EnhanceLtx23VideoPromptInput): string 
 
   return [
     `GLOBAL: ${location}, ${subjects}, ${shotType}, same source-frame composition, stable identity, clothing, lighting, desk, and room layout.`,
-    `LOCAL: ${action}. The visible speaker stays frontal to camera and speaks with subtle reference audio mouth movement, tiny facial motion, restrained breathing, and a restrained slow push-in.`,
+    `LOCAL: ${action}. The visible speaker follows the requested head and gaze direction while speaking with subtle reference audio mouth movement, tiny facial motion, restrained breathing, and a restrained slow push-in. ${SMART_VBVR_AUDIO_CLEAN_FRAME_GUARD}`,
   ].join('\n')
 }
 
@@ -792,12 +804,12 @@ function sanitizeSmartVbvrAudioPromptCandidate(
 
   if (PROMPT_RELAY_GLOBAL_MARKER_PATTERN.test(cleaned) && PROMPT_RELAY_LOCAL_MARKER_PATTERN.test(cleaned)) {
     if (/\breference[-\s]audio\b/i.test(cleaned) && /\bmouth movement\b/i.test(cleaned)) {
-      return cleaned
+      return appendSmartVbvrAudioCleanFrameGuard(cleaned)
     }
-    return [
+    return appendSmartVbvrAudioCleanFrameGuard([
       cleaned,
       'Match mouth movement and timing to the reference audio with subtle lip motion.',
-    ].join('\n')
+    ].join('\n'))
   }
 
   return buildSmartVbvrAudioPrompt(input)

@@ -1848,12 +1848,36 @@ const AUDIO_TALKING_HEAD_PATTERNS = [
   /\b(?:speak|speaks|speaking|talk|talks|talking|say|says|dialogue|voice|mouth|lip|lips|lip[-\s]?sync)\b/i,
   /(?:\u8bf4\u8bdd|\u8bb2\u8bdd|\u53d1\u8a00|\u5f00\u53e3|\u53e3\u578b|\u5634\u5507|\u5634\u5df4|\u53f0\u8bcd|\u914d\u97f3|\u56de\u7b54|\u63d0\u95ee|\u95ee\u8bdd)/u,
 ]
+const AUDIO_TALKING_HEAD_CLEAN_FRAME_PROMPT =
+  'The lower portion of the frame stays clean and unobstructed, with clothing, desk edge, and room background remaining visible and free of glyph-like marks.'
 const AUDIO_TALKING_HEAD_STABILITY_PROMPT = [
   'Audio-backed talking-head:',
   'same source-frame composition and same visible subject count throughout.',
-  'The speaker stays frontal to camera with stable identity, clothing, lighting, desk, and room layout.',
+  'The speaker follows the requested head and gaze direction with stable identity, clothing, lighting, desk, and room layout.',
   'Use subtle reference audio mouth movement, tiny facial motion, and a restrained slow push-in.',
+  AUDIO_TALKING_HEAD_CLEAN_FRAME_PROMPT,
 ].join(' ')
+const AUDIO_TALKING_HEAD_TEXT_ARTIFACT_NEGATIVE_PROMPT = [
+  'subtitles',
+  'caption',
+  'captions',
+  'closed captions',
+  'lower third',
+  'text overlay',
+  'on-screen text',
+  'readable text',
+  'dialogue text',
+  'speech text',
+  'Chinese characters',
+  'English letters',
+  'glyph-like marks',
+  'signage',
+  'watermark',
+  'logo',
+  'blurry text',
+  'distorted text',
+  'artifacts around text',
+].join(', ')
 const AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN =
   /^\s*(?:Panel continuity packet|Mode|Source text|Current shot action|Visible characters|Location lock|Shot\/camera lock|Props lock|Previous shot context|Next shot context|Dialogue lines|Target duration|Creator prompt intent|Hard constraints|Source-frame continuity lock|Allowed visible subjects|Forbidden additions)\s*:/i
 const AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN =
@@ -2588,6 +2612,40 @@ function applyPromptRelaySmartControls(
   }
 }
 
+function isConditioningZeroOutNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return normalizeUiDecorationNodeType(node.class_type) === 'conditioningzeroout'
+}
+
+function applyAudioTalkingHeadTextArtifactNegativeConditioning(graph: ComfyUiWorkflowGraph): void {
+  const promptRelayClipByNodeId = new Map<string, unknown>()
+
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!isRecord(node.inputs) || !isPromptRelaySmartEncodeNode(node)) continue
+    if (!isConnectionValue(node.inputs.clip)) continue
+    promptRelayClipByNodeId.set(normalizeNodeId(nodeId), cloneConnectionValue(node.inputs.clip))
+  }
+
+  if (promptRelayClipByNodeId.size === 0) return
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs) || !isConditioningZeroOutNode(node)) continue
+    const sourceNodeId = readConnectionNodeId(node.inputs.conditioning)
+    if (!sourceNodeId) continue
+    const clipConnection = promptRelayClipByNodeId.get(sourceNodeId)
+    if (!clipConnection) continue
+
+    node.class_type = 'CLIPTextEncode'
+    node.inputs = {
+      clip: cloneConnectionValue(clipConnection),
+      text: AUDIO_TALKING_HEAD_TEXT_ARTIFACT_NEGATIVE_PROMPT,
+    }
+    node._meta = {
+      ...(isRecord(node._meta) ? node._meta : {}),
+      title: 'Smart VBVR text artifact negative prompt',
+    }
+  }
+}
+
 function applyLtx23WorkflowProfileControls(
   graph: ComfyUiWorkflowGraph,
   workflowKey: string,
@@ -2634,6 +2692,9 @@ function applyLtx23WorkflowProfileControls(
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
     audioTalkingHeadStages,
   })
+  if (audioTalkingHeadStages) {
+    applyAudioTalkingHeadTextArtifactNegativeConditioning(graph)
+  }
 }
 
 function formatDateSegment(date: Date): string {
