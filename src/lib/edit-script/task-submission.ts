@@ -348,6 +348,11 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
     ...(input.chapterId ? { chapterId: input.chapterId } : {}),
     ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
   })
+  await assertEditShotExecutionPlanNeedsGeneration({
+    projectId: input.projectId,
+    episodeId: target.episodeId,
+    editScriptId: target.editScriptId,
+  })
   const result = await submitOperationTask({
     request: input.request,
     projectId: input.projectId,
@@ -418,6 +423,28 @@ async function resolveEpisodeEditShotExecutionPlanTaskTargets(input: {
       chapterId: script.chapterId,
       editScriptId: script.id,
     }))
+}
+
+async function assertEditShotExecutionPlanNeedsGeneration(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScriptId: string
+}): Promise<void> {
+  const existingReadyPlan = await prisma.projectEditShotExecutionPlan.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      editScriptId: input.editScriptId,
+      status: 'ready',
+    },
+    select: { id: true },
+  })
+  if (existingReadyPlan) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SHOT_EXECUTION_PLAN_ALREADY_READY',
+      message: 'Shot execution plan is already ready for this edit script.',
+    })
+  }
 }
 
 export async function submitProjectEditShotExecutionPlanBatchTasks(input: {

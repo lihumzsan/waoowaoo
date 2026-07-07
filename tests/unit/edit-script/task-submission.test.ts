@@ -13,6 +13,9 @@ const prismaMock = vi.hoisted(() => ({
   projectEditChapter: {
     findFirst: vi.fn(),
   },
+  projectEditShotExecutionPlan: {
+    findFirst: vi.fn(),
+  },
   task: {
     findFirst: vi.fn(),
   },
@@ -32,6 +35,7 @@ vi.mock('@/lib/config-service', () => ({
 }))
 
 import {
+  submitProjectEditShotExecutionPlanTask,
   submitProjectEditShotExecutionPlanBatchTasks,
   submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
@@ -134,6 +138,7 @@ describe('edit shot execution plan task submission', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.task.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditShotExecutionPlan.findFirst.mockResolvedValue(null)
     prismaMock.projectEditChapter.findFirst.mockImplementation(async (input: { readonly where: { readonly id: string } }) => ({
       id: input.where.id,
     }))
@@ -249,6 +254,42 @@ describe('edit shot execution plan task submission', () => {
       }),
     ])
     expect(submittedTaskIds).toEqual(['task-missing', 'task-failed'])
+  })
+
+  it('rejects a single shot execution plan task when the edit script already has a ready plan', async () => {
+    prismaMock.projectEditScript.findFirst.mockResolvedValue({
+      id: 'script-ready',
+      episodeId: 'episode-1',
+      chapterId: 'chapter-ready',
+      status: 'ready',
+      requirements: [],
+    })
+    prismaMock.projectEditShotExecutionPlan.findFirst.mockResolvedValue({
+      id: 'plan-ready',
+    })
+
+    await expect(submitProjectEditShotExecutionPlanTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      chapterId: 'chapter-ready',
+      editScriptId: 'script-ready',
+      source: 'assistant-panel',
+      confirmed: true,
+      locale: 'zh',
+    })).rejects.toThrow('Shot execution plan is already ready for this edit script.')
+
+    expect(prismaMock.projectEditShotExecutionPlan.findFirst).toHaveBeenCalledWith({
+      where: {
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        editScriptId: 'script-ready',
+        status: 'ready',
+      },
+      select: { id: true },
+    })
+    expect(submitOperationTaskMock).not.toHaveBeenCalled()
   })
 
   it('fails explicitly when no episode edit scripts need shot execution planning', async () => {

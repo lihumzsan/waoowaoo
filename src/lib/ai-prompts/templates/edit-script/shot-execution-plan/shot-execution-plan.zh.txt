@@ -44,6 +44,7 @@
 连续视频提示词：
 - generationSegmentExecutions 必须按核心剪辑计划中 generationSegments 的顺序输出，shotIds 必须完全一致。
 - 每一项只输出 shotIds 和 continuousVideoPrompt 两个字段。
+- 输入里的 generationSegments[].continuity 只是写 continuousVideoPrompt 的素材；输出字段名必须改写为 continuousVideoPrompt，绝不能复制 continuity 这个字段名。
 - 每一项必须输出 continuousVideoPrompt 非空字符串；不要输出 continuity、description、summary 或任何其他字段。
 - continuousVideoPrompt 写成一个完整的连续视频片段，不是把单镜头 videoPrompt 机械拼起来。
 - continuousVideoPrompt 只使用各输入中已有的事实，不新增剧情、角色、道具、对白或声音事件。
