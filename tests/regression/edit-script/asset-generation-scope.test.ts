@@ -26,6 +26,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditAssetRequirement: {
     findFirst: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
   },
   projectCharacter: {
     findMany: vi.fn(),
@@ -163,6 +164,7 @@ describe('edit script asset generation scope regression', () => {
     vi.clearAllMocks()
     prismaMock.projectEditAssetRequirement.findFirst.mockResolvedValue(null)
     prismaMock.projectEditAssetRequirement.update.mockImplementation(async (input: unknown) => input)
+    prismaMock.projectEditAssetRequirement.count.mockResolvedValue(2)
     prismaMock.projectEditChapter.findFirst.mockImplementation(async (input: { readonly where: { readonly id: string } }) => ({
       id: input.where.id,
       sourceStart: null,
@@ -245,6 +247,8 @@ describe('edit script asset generation scope regression', () => {
     expect(result).toMatchObject({
       async: true,
       total: 2,
+      processedRequirementCount: 2,
+      remainingRequirementCount: 2,
       taskIds: ['task-character-alice', 'task-character-bob'],
     })
   })
@@ -298,7 +302,39 @@ describe('edit script asset generation scope regression', () => {
     expect(result).toMatchObject({
       async: true,
       total: 1,
+      processedRequirementCount: 2,
+      remainingRequirementCount: 2,
       taskIds: ['task-character-alice'],
     })
+  })
+
+  it('fails explicitly when no tasks are submitted but scoped requirements remain unfinished', async () => {
+    const firstRequirement = requirement({
+      id: 'requirement-1',
+      chapterId: 'chapter-1',
+      name: 'Alice',
+      targetId: 'character-alice',
+    })
+    const firstScript = script({ id: 'script-1', chapterId: 'chapter-1', requirements: [firstRequirement] })
+
+    prismaMock.projectEditScript.findMany.mockResolvedValue([firstScript])
+    prismaMock.projectEditScript.findFirst.mockResolvedValue(firstScript)
+    prismaMock.projectCharacter.findFirst.mockResolvedValue(characterAssetRow({
+      id: 'character-alice',
+      name: 'Alice',
+      appearanceId: 'appearance-character-alice',
+      hasOutput: true,
+    }))
+    prismaMock.projectEditAssetRequirement.count.mockResolvedValue(1)
+
+    await expect(generateProjectEditScriptAssets({
+      request: request(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+    })).rejects.toThrow('No edit script asset generation tasks were submitted while asset requirements remain unfinished.')
+
+    expect(submitAssetGenerateTaskMock).not.toHaveBeenCalled()
   })
 })

@@ -172,6 +172,8 @@ const editScriptAssetGenerationOutputSchema = z.object({
   async: z.boolean(),
   noop: z.boolean().optional(),
   total: z.number().int().min(0),
+  processedRequirementCount: z.number().int().min(0),
+  remainingRequirementCount: z.number().int().min(0),
   taskIds: z.array(z.string().min(1)),
   results: z.array(z.object({
     refId: z.string().min(1),
@@ -732,8 +734,10 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         const output = editScriptAssetGenerationOutputSchema.parse({
           success: result.success,
           async: result.async,
-          noop: result.taskIds.length === 0 ? true : undefined,
+          noop: result.taskIds.length === 0 && result.remainingRequirementCount === 0 ? true : undefined,
           total: result.total,
+          processedRequirementCount: result.processedRequirementCount,
+          remainingRequirementCount: result.remainingRequirementCount,
           taskIds: [...result.taskIds],
           results: result.results.map((item) => ({ ...item })),
           submittedTasks: result.submittedTasks.map((item) => ({ ...item })),

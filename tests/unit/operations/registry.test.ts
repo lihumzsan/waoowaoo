@@ -132,6 +132,8 @@ describe('project agent operation registry', () => {
       async: false,
       noop: true,
       total: 0,
+      processedRequirementCount: 1,
+      remainingRequirementCount: 0,
       taskIds: [],
       results: [],
       submittedTasks: [],

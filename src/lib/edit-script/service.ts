@@ -2121,6 +2121,7 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
       : script.requirements
   ))
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
+  const processedRequirementCount = requirements.length
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
   const submittedByAssetKey = new Map<string, EditScriptAssetGenerationTask>()
@@ -2234,6 +2235,12 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
   )
   if (!updated) throw new ApiError('NOT_FOUND')
   const editScript = await mapPersistedEditScript(updated)
+  const remainingRequirementCount = await prisma.projectEditAssetRequirement.count({
+    where: {
+      editScriptId: { in: scripts.map((script) => script.id) },
+      status: { not: 'completed' },
+    },
+  })
   if (submittedTasks.length === 0 && failedRequirements.length > 0) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCRIPT_ASSET_GENERATION_FAILED',
@@ -2241,10 +2248,20 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
       failedRequirements,
     })
   }
+  if (submittedTasks.length === 0 && remainingRequirementCount > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSET_GENERATION_STALLED',
+      message: 'No edit script asset generation tasks were submitted while asset requirements remain unfinished.',
+      remainingRequirementCount,
+      processedRequirementCount,
+    })
+  }
   return {
     success: true,
     async: submittedTasks.length > 0,
     total: submittedTasks.length,
+    processedRequirementCount,
+    remainingRequirementCount,
     taskIds: submittedTasks.map((task) => task.taskId),
     results: submittedTasks.map((task) => ({
       refId: task.requirementId,
