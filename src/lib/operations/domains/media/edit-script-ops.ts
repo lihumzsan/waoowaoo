@@ -848,7 +848,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: editShotExecutionPlanOperationOutputSchema,
       execute: async (ctx, input: GenerateEditShotExecutionPlanInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        if (!input.chapterId && !input.editScriptId) {
+        if (ctx.source === 'assistant-panel' || (!input.chapterId && !input.editScriptId)) {
           const batchKey = createTaskBatchKey('edit_shot_execution_plan_generate')
           const submittedTaskIds: string[] = []
           let result: Awaited<ReturnType<typeof submitProjectEditShotExecutionPlanBatchTasks>>

@@ -194,6 +194,8 @@ describe('ai prompt registry', () => {
     expect(executionTemplate).toContain('即使 visibility 是 `hidden`、`occluded` 或 `offscreen`')
     expect(executionTemplate).toContain('blocking.objects[] 中的每一个物体对象都必须输出且只输出')
     expect(executionTemplate).toContain('禁止给物体输出 facing、eyeline、visibility、role 或任何其他字段')
+    expect(executionTemplate).toContain('blocking.axis.subjects 必须是非空字符串数组')
+    expect(executionTemplate).toContain('不要输出 continuity、description、summary 或任何其他字段')
     expect(executionTemplate).toContain('只返回 JSON')
   })
 
@@ -204,5 +206,7 @@ describe('ai prompt registry', () => {
     expect(executionTemplate).toContain('Even when visibility is `hidden`, `occluded`, or `offscreen`')
     expect(executionTemplate).toContain('Every item in `blocking.objects[]` must output exactly these three fields')
     expect(executionTemplate).toContain('Do not output `facing`, `eyeline`, `visibility`, `role`, or any other field for objects')
+    expect(executionTemplate).toContain('blocking.axis.subjects must be a non-empty string array')
+    expect(executionTemplate).toContain('Do not output continuity, description, summary, or any other field')
   })
 })
