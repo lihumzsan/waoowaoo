@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 const prismaMock = vi.hoisted(() => ({
   user: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
   },
   project: {
     findUnique: vi.fn(),
@@ -44,9 +45,10 @@ import { requireProjectAuth, requireUserAuth } from '@/lib/api-auth'
 describe('requireProjectAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1' })
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1', name: 'tester@example.com', email: null })
+    prismaMock.user.findFirst.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({
-      user: { id: 'user-1', name: 'Tester' },
+      user: { id: 'user-1', name: 'tester@example.com' },
     })
   })
 
@@ -105,13 +107,14 @@ describe('requireProjectAuth', () => {
 describe('requireUserAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.user.findFirst.mockResolvedValue(null)
     getServerSessionMock.mockResolvedValue({
-      user: { id: 'user-1', name: 'Tester' },
+      user: { id: 'user-1', name: 'tester@example.com' },
     })
   })
 
   it('returns the session only after the session user exists in the database', async () => {
-    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1' })
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1', name: 'tester@example.com', email: null })
 
     const result = await requireUserAuth()
 
@@ -122,13 +125,70 @@ describe('requireUserAuth', () => {
 
     expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'user-1' },
-      select: { id: true },
+      select: { id: true, name: true, email: true },
     })
     expect(result.session.user.id).toBe('user-1')
   })
 
-  it('rejects a stale session user before user-owned writes can hit foreign keys', async () => {
+  it('normalizes a stale session id to the database user matched by login name', async () => {
+    getServerSessionMock.mockResolvedValue({
+      user: { id: 'stale-user-id', name: 'tester@example.com' },
+    })
     prismaMock.user.findUnique.mockResolvedValue(null)
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'tester@example.com',
+      email: null,
+    })
+
+    const result = await requireUserAuth()
+
+    expect(result).not.toBeInstanceOf(NextResponse)
+    if (result instanceof NextResponse) {
+      throw new Error('Expected auth context')
+    }
+
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith({
+      where: { name: { in: ['tester@example.com'] } },
+      select: { id: true, name: true, email: true },
+    })
+    expect(result.session.user.id).toBe('user-1')
+  })
+
+  it('normalizes project auth through the same database user identity', async () => {
+    getServerSessionMock.mockResolvedValue({
+      user: { id: 'stale-user-id', name: 'tester@example.com' },
+    })
+    prismaMock.user.findUnique.mockResolvedValue(null)
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'tester@example.com',
+      email: null,
+    })
+    prismaMock.project.findUnique.mockResolvedValue({
+      id: 'project-1',
+      userId: 'user-1',
+      name: 'Project One',
+      analysisModel: null,
+    })
+
+    const result = await requireProjectAuth('project-1')
+
+    expect(result).not.toBeInstanceOf(NextResponse)
+    if (result instanceof NextResponse) {
+      throw new Error('Expected auth context')
+    }
+
+    expect(result.session.user.id).toBe('user-1')
+    expect(result.project.userId).toBe('user-1')
+  })
+
+  it('rejects an unresolvable stale session user before user-owned writes can hit foreign keys', async () => {
+    getServerSessionMock.mockResolvedValue({
+      user: { id: 'stale-user-id', name: 'missing@example.com' },
+    })
+    prismaMock.user.findUnique.mockResolvedValue(null)
+    prismaMock.user.findFirst.mockResolvedValue(null)
 
     const result = await requireUserAuth()
 
@@ -138,6 +198,7 @@ describe('requireUserAuth', () => {
     }
 
     expect(result.status).toBe(401)
+    expect(prismaMock.project.findUnique).not.toHaveBeenCalled()
     await expect(result.json()).resolves.toEqual(expect.objectContaining({
       code: 'UNAUTHORIZED',
       message: 'Unauthorized',
