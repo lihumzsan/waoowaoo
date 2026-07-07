@@ -170,6 +170,7 @@ type EditScriptSummaryOutput = z.infer<typeof editScriptSummaryOutputSchema>
 const editScriptAssetGenerationOutputSchema = z.object({
   success: z.literal(true),
   async: z.boolean(),
+  noop: z.boolean().optional(),
   total: z.number().int().min(0),
   taskIds: z.array(z.string().min(1)),
   results: z.array(z.object({
@@ -197,6 +198,7 @@ const editScriptAssetGenerationOutputSchema = z.object({
 const editScriptAssetRevisionOutputSchema = z.object({
   success: z.literal(true),
   async: z.boolean(),
+  noop: z.boolean().optional(),
   total: z.number().int().min(0),
   revisionNotes: z.string().min(1),
   taskIds: z.array(z.string().min(1)),
@@ -730,6 +732,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         const output = editScriptAssetGenerationOutputSchema.parse({
           success: result.success,
           async: result.async,
+          noop: result.taskIds.length === 0 ? true : undefined,
           total: result.total,
           taskIds: [...result.taskIds],
           results: result.results.map((item) => ({ ...item })),
@@ -776,6 +779,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         const output = editScriptAssetRevisionOutputSchema.parse({
           success: result.success,
           async: result.async,
+          noop: result.taskIds.length === 0 ? true : undefined,
           total: result.total,
           revisionNotes: result.revisionNotes,
           taskIds: [...result.taskIds],

@@ -122,6 +122,41 @@ describe('project agent operation registry', () => {
     }
   })
 
+  it('allows edit script asset generation to finish with noop when assets already exist', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const operation = registry.generate_edit_script_assets
+    expect(operation).toBeDefined()
+
+    const parsed = operation.outputSchema.safeParse({
+      success: true,
+      async: false,
+      noop: true,
+      total: 0,
+      taskIds: [],
+      results: [],
+      submittedTasks: [],
+      editScript: {
+        id: 'script-1',
+        durationSec: 60,
+        shotCount: 12,
+        assetReviewStatus: 'pending',
+        requirements: [{
+          id: 'requirement-1',
+          kind: 'character',
+          name: '林默',
+          status: 'completed',
+          targetId: 'character-1',
+        }],
+        generationSegments: [{
+          shotIds: ['shot-1'],
+          continuity: '同一空间连续行动。',
+        }],
+      },
+    })
+
+    expect(parsed.success).toBe(true)
+  })
+
   it('registers final video render as a confirmed but non-billable assistant-callable operation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.render_final_video
