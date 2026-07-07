@@ -870,6 +870,55 @@ async function getPersistedEditScript(projectId: string, episodeId: string, edit
   })
 }
 
+async function getPersistedEditScriptsForAssetGeneration(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScriptId?: string
+  readonly chapterId?: string
+  readonly requirementId?: string
+}): Promise<readonly PersistedEditScript[]> {
+  if (input.editScriptId || input.chapterId) {
+    const script = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId, input.chapterId)
+    return script ? [script] : []
+  }
+
+  if (input.requirementId) {
+    const requirement = await prisma.projectEditAssetRequirement.findFirst({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        id: input.requirementId,
+      },
+      select: {
+        editScriptId: true,
+        chapterId: true,
+      },
+    })
+    if (!requirement) return []
+    const script = await getPersistedEditScript(input.projectId, input.episodeId, requirement.editScriptId, requirement.chapterId)
+    return script ? [script] : []
+  }
+
+  return await prisma.projectEditScript.findMany({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      status: 'ready',
+    },
+    include: {
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+    orderBy: [
+      { createdAt: 'asc' },
+    ],
+  })
+}
+
 async function getPersistedEditShotExecutionPlan(projectId: string, episodeId: string, editScriptId?: string, chapterId?: string): Promise<PersistedEditShotExecutionPlan | null> {
   const resolvedChapterId = await resolveEditChapterId(episodeId, chapterId)
   return await prisma.projectEditShotExecutionPlan.findFirst({
@@ -2057,15 +2106,24 @@ async function submitRequirementImageTask(input: {
 }
 
 export async function generateProjectEditScriptAssets(input: GenerateEditScriptAssetsInput): Promise<EditScriptAssetGenerationPayload> {
-  const script = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId, input.chapterId)
-  if (!script) throw new ApiError('NOT_FOUND')
+  const scripts = await getPersistedEditScriptsForAssetGeneration({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    editScriptId: input.editScriptId,
+    chapterId: input.chapterId,
+    requirementId: input.requirementId,
+  })
+  if (scripts.length === 0) throw new ApiError('NOT_FOUND')
 
-  const requirements = input.requirementId
-    ? script.requirements.filter((requirement) => requirement.id === input.requirementId)
-    : script.requirements
+  const requirements = scripts.flatMap((script) => (
+    input.requirementId
+      ? script.requirements.filter((requirement) => requirement.id === input.requirementId)
+      : script.requirements
+  ))
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
+  const submittedByAssetKey = new Map<string, EditScriptAssetGenerationTask>()
   const failedRequirements: Array<{
     readonly requirementId: string
     readonly kind: string
@@ -2120,6 +2178,12 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
       data: { targetId: asset.id, status: 'generating', errorMessage: null },
     })
 
+    const assetKey = `${requirement.kind}:${asset.id}`
+    const submittedForAsset = submittedByAssetKey.get(assetKey)
+    if (submittedForAsset) {
+      continue
+    }
+
     try {
       const submittedTask = await submitRequirementImageTask({
         request: input.request,
@@ -2130,12 +2194,14 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         kind: requirement.kind,
         assetId: asset.id,
       })
-      submittedTasks.push({
+      const task: EditScriptAssetGenerationTask = {
         requirementId: requirement.id,
         kind: requirement.kind,
         name: requirement.name,
         ...submittedTask,
-      })
+      }
+      submittedByAssetKey.set(assetKey, task)
+      submittedTasks.push(task)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       if (createdAssetId) {
@@ -2158,7 +2224,14 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
     }
   }
 
-  const updated = await getPersistedEditScript(input.projectId, input.episodeId, script.id, script.chapterId)
+  const representativeScript = scripts[0]
+  if (!representativeScript) throw new ApiError('NOT_FOUND')
+  const updated = await getPersistedEditScript(
+    input.projectId,
+    input.episodeId,
+    representativeScript.id,
+    representativeScript.chapterId,
+  )
   if (!updated) throw new ApiError('NOT_FOUND')
   const editScript = await mapPersistedEditScript(updated)
   if (submittedTasks.length === 0 && failedRequirements.length > 0) {
