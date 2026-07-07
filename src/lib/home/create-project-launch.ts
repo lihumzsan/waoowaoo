@@ -26,13 +26,7 @@ interface ApiFetchLike {
   (input: string, init?: RequestInit): Promise<Response>
 }
 
-export interface HomeWorkspaceLaunchTarget {
-  pathname: string
-  query: {
-    episode: string
-    [HOME_ASSISTANT_AUTOSTART_QUERY]: typeof HOME_ASSISTANT_AUTOSTART_VALUE
-  }
-}
+export type HomeWorkspaceLaunchTarget = string
 
 export interface CreateHomeProjectLaunchParams {
   apiFetch: ApiFetchLike
@@ -87,13 +81,11 @@ async function readEpisodeId(response: Response): Promise<string> {
 }
 
 export function buildHomeWorkspaceLaunchTarget(projectId: string, episodeId: string): HomeWorkspaceLaunchTarget {
-  return {
-    pathname: `/workspace/${projectId}`,
-    query: {
-      episode: episodeId,
-      [HOME_ASSISTANT_AUTOSTART_QUERY]: HOME_ASSISTANT_AUTOSTART_VALUE,
-    },
-  }
+  const params = new URLSearchParams({
+    episode: episodeId,
+    [HOME_ASSISTANT_AUTOSTART_QUERY]: HOME_ASSISTANT_AUTOSTART_VALUE,
+  })
+  return `/workspace/${encodeURIComponent(projectId)}?${params.toString()}`
 }
 
 export function buildHomeAssistantAutoStartStorageKey(projectId: string, episodeId: string): string {
