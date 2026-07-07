@@ -75,6 +75,11 @@ Handle the tool result:
 - Failure returns ok=false with error {code, message, operationId, ...}: read error.code and error.message, then apply Failure handling below.
 - After a tool returns async=true, do not poll in the same turn; state that the system will keep monitoring and wait for the terminal event.
 
+Stage names must match the artifact being created:
+- `generate_edit_script_assets` only creates/reuses character and location assets and submits missing asset-image tasks; it does not generate storyboard panels or storyboard images. When the current stage exposes this tool, describe the action as "generating required assets" or "filling missing character/location assets". Do not call it "generating storyboard images", and do not ask whether the user wants to start storyboard image generation.
+- Only `generate_edit_script_storyboard` may be called storyboard-panel generation; only `generate_edit_script_storyboard_images` may be called storyboard-image generation.
+- If the user says "start generating storyboards/storyboard images" while the earliest gap is still assets or spatial profiles, run the asset-stage tool first and explain that storyboard work can start only after asset review and the shot execution plan are complete.
+
 # Failure handling and retry boundaries
 
 When a background generation/revision task for the current stage reaches a terminal failure, first classify ownership of the failure; never mechanically resubmit the same task unchanged:
