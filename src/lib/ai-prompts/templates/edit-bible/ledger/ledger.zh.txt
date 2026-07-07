@@ -26,6 +26,8 @@
 剧本原文：
 {{source_document}}
 
+原文长度（UTF-16 code unit）：{{source_length}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
@@ -57,5 +59,6 @@
 - 是否没有把瞬时动作、镜头描述或普通气氛写成事件。
 - kind 和 entityType 是否只使用允许的枚举值。
 - sourceStart/sourceEnd 是否按 UTF-16 code unit 计数的半开区间，且 sourceEnd 大于 sourceStart。
+- 每个范围是否满足 `0 <= sourceStart < sourceEnd <= 原文长度`。
 - persistentFacts 是否都是事件之后仍然成立的事实。
 - 是否严格只输出 JSON。

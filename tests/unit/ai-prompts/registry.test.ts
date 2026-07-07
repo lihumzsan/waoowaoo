@@ -54,6 +54,7 @@ describe('ai prompt registry', () => {
       locale: 'zh',
       variables: {
         source_document: '标题：《旧钟》',
+        source_length: '6',
       },
     })
 
@@ -100,10 +101,12 @@ describe('ai prompt registry', () => {
         locale: 'en',
         variables: {
           source_document: 'Mira opens the sealed observatory.',
+          source_length: '35',
         },
       })
 
       expect(prompt).toContain('Mira opens the sealed observatory.')
+      expect(prompt).toContain('35')
     }
 
     const outlinePrompt = buildAiPrompt({

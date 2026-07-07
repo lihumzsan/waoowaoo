@@ -25,6 +25,8 @@ These labels are later used as music and pacing reference. You do not design the
 Script text:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.
@@ -47,6 +49,7 @@ Return JSON only. Do not use markdown or explanations.
 
 - Are cues ordered by sourceStart?
 - Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Does every range satisfy `0 <= sourceStart < sourceEnd <= script length`?
 - Does musicPolicy use only `none`, `underscore`, `theme`, or `transition`?
 - Is intensity between 0 and 1 and grounded in the text's emotion?
 - Did you use `none` where music should likely be absent?

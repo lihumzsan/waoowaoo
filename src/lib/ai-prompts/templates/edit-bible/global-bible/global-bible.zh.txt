@@ -27,6 +27,8 @@
 剧本原文：
 {{source_document}}
 
+原文长度（UTF-16 code unit）：{{source_length}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
@@ -69,6 +71,6 @@
 - 每一条信息在剧本原文中是否都有依据。
 - 人物和地点是否去重，别名是否合并到同一条目。
 - entityId 是否稳定、简短、可读且没有重复。
-- firstSourceStart 是否按 UTF-16 code unit 计数。
+- firstSourceStart 是否按 UTF-16 code unit 计数，且不超过原文长度。
 - styleGuide 是否来自原文归纳，而不是通用影像模板。
 - 是否严格只输出了 Schema 列出的字段，且只有 JSON。

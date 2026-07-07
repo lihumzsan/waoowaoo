@@ -26,6 +26,8 @@ Your job is only to split and describe these beats. Do not organize them into ch
 Script text:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.
@@ -50,6 +52,7 @@ Return JSON only. Do not use markdown or explanations.
 
 - Are beats ordered by sourceStart and non-overlapping?
 - Is every sourceEnd greater than sourceStart, and are the offsets UTF-16 code units?
+- Does every range satisfy `0 <= sourceStart < sourceEnd <= script length`?
 - Did the beat ranges cover all story-bearing text?
 - Did you split on natural story turns instead of fixed character counts?
 - Is every estimatedDurationSec reasonable, with no beat above 120 seconds?

@@ -96,19 +96,19 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL]: {
     pathStem: 'edit-bible/global-bible',
-    variableKeys: ['source_document'],
+    variableKeys: ['source_document', 'source_length'],
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET]: {
     pathStem: 'edit-bible/beat-sheet',
-    variableKeys: ['source_document'],
+    variableKeys: ['source_document', 'source_length'],
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER]: {
     pathStem: 'edit-bible/ledger',
-    variableKeys: ['source_document'],
+    variableKeys: ['source_document', 'source_length'],
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE]: {
     pathStem: 'edit-bible/emotional-curve',
-    variableKeys: ['source_document'],
+    variableKeys: ['source_document', 'source_length'],
   },
 }
 

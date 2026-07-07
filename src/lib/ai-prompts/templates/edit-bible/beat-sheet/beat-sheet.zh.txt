@@ -26,6 +26,8 @@
 剧本原文：
 {{source_document}}
 
+原文长度（UTF-16 code unit）：{{source_length}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
@@ -50,6 +52,7 @@
 
 - beats 是否按 sourceStart 递增且互不重叠。
 - 每个 sourceEnd 是否大于 sourceStart，且都按 UTF-16 code unit 计数。
+- 每个范围是否满足 `0 <= sourceStart < sourceEnd <= 原文长度`。
 - 是否覆盖了所有有剧情意义的原文。
 - 是否在自然剧情转折点切分，而不是按固定字数机械切分。
 - 每个 beat 的 estimatedDurationSec 是否合理，是否没有超过 120 秒。

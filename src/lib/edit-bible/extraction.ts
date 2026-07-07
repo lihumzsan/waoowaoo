@@ -5,10 +5,12 @@ import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
 import { EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS } from './constraints'
-import { validateEditBibleBundle } from './cross-check'
 import {
-  editBibleBeatSheetSchema,
-  editBibleEmotionalCurveSchema,
+  validateEditBibleBeatSheetAgainstSourceText,
+  validateEditBibleBundle,
+  validateEditBibleEmotionalCurveAgainstSourceText,
+} from './cross-check'
+import {
   editBibleSchema,
   type EditBibleBeatSheet,
   type EditBibleBundle,
@@ -16,15 +18,13 @@ import {
   type EditBibleEmotionalCurve,
   type EditBible,
 } from './schemas'
-import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
+import { validateLedgerAgainstSourceText, type Ledger } from '@/lib/edit-ledger'
 
 type EditBiblePromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_LEDGER
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE
-
-type EditBibleArtifactKey = 'bible' | 'beatSheet' | 'ledger' | 'emotionalCurve'
 
 class EditBibleExtractionError extends Error {
   readonly diagnostics: EditBibleDiagnostics
@@ -63,6 +63,7 @@ async function runEditBibleStructuredStep<TData>(input: {
     locale: input.locale,
     variables: {
       source_document: input.sourceDocument,
+      source_length: String(input.sourceDocument.length),
     },
     cacheVariableKeys: ['source_document'],
     minCacheChars: EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS,
@@ -124,7 +125,10 @@ export async function generateEditBibleArtifacts(input: {
       stepTitle: 'Edit bible beat sheet',
       stepIndex: 2,
       stepTotal: 4,
-      validate: (raw) => editBibleBeatSheetSchema.parse(raw),
+      validate: (raw) => validateEditBibleBeatSheetAgainstSourceText({
+        beatSheet: raw,
+        sourceText: input.sourceDocument,
+      }),
     })],
     ['ledger', runEditBibleStructuredStep<Ledger>({
       ...input,
@@ -132,7 +136,10 @@ export async function generateEditBibleArtifacts(input: {
       stepTitle: 'Edit bible ledger',
       stepIndex: 3,
       stepTotal: 4,
-      validate: (raw) => ledgerSchema.parse(raw),
+      validate: (raw) => validateLedgerAgainstSourceText({
+        ledger: raw,
+        sourceText: input.sourceDocument,
+      }),
     })],
     ['emotionalCurve', runEditBibleStructuredStep<EditBibleEmotionalCurve>({
       ...input,
@@ -140,7 +147,10 @@ export async function generateEditBibleArtifacts(input: {
       stepTitle: 'Edit bible emotional curve',
       stepIndex: 4,
       stepTotal: 4,
-      validate: (raw) => editBibleEmotionalCurveSchema.parse(raw),
+      validate: (raw) => validateEditBibleEmotionalCurveAgainstSourceText({
+        emotionalCurve: raw,
+        sourceText: input.sourceDocument,
+      }),
     })],
   ] as const
   const settled = await Promise.allSettled(entries.map((entry) => entry[1]))

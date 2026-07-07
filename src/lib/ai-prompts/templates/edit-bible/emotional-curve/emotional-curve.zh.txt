@@ -25,6 +25,8 @@
 剧本原文：
 {{source_document}}
 
+原文长度（UTF-16 code unit）：{{source_length}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
@@ -47,6 +49,7 @@
 
 - cues 是否按 sourceStart 递增。
 - sourceStart/sourceEnd 是否按 UTF-16 code unit 计数的半开区间，且 sourceEnd 大于 sourceStart。
+- 每个范围是否满足 `0 <= sourceStart < sourceEnd <= 原文长度`。
 - musicPolicy 是否只使用 `none`、`underscore`、`theme`、`transition`。
 - intensity 是否在 0 到 1 之间，并且与原文情绪强度相符。
 - 是否在不适合配乐的位置使用了 `none`。

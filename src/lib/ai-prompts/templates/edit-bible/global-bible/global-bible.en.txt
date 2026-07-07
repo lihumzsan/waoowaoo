@@ -27,6 +27,8 @@ Include only facts the script states or clearly implies. Do not add your own inv
 Script text:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.
@@ -69,6 +71,6 @@ Return JSON only. Do not use markdown or explanations.
 - Is every piece of information grounded in the script text?
 - Are characters and locations deduplicated, with aliases merged into one entry?
 - Are entityId values stable, short, readable, and unique?
-- Is firstSourceStart counted in UTF-16 code units?
+- Is firstSourceStart counted in UTF-16 code units and within the script length?
 - Is styleGuide inferred from the text instead of generic cinematic filler?
 - Is the response strictly limited to the schema fields, and JSON only?

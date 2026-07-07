@@ -26,6 +26,8 @@ This event list is later used to keep the story consistent, so record only event
 Script text:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.
@@ -57,5 +59,6 @@ Return JSON only. Do not use markdown or explanations.
 - Did you avoid momentary actions, shot descriptions, and ordinary ambience?
 - Do kind and entityType use only the allowed enum values?
 - Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Does every range satisfy `0 <= sourceStart < sourceEnd <= script length`?
 - Does persistentFacts contain only facts that remain true after the event?
 - Is the response strict JSON only?

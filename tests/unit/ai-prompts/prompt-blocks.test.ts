@@ -6,6 +6,7 @@ describe('ai prompt cacheable content blocks', () => {
   it('keeps rendered prompt text unchanged while marking large variables as cacheable blocks', () => {
     const variables = {
       source_document: '生成一个科幻短片',
+      source_length: '8',
     }
     const content = buildAiPromptContent({
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
@@ -37,6 +38,7 @@ describe('ai prompt cacheable content blocks', () => {
       locale: 'zh',
       variables: {
         source_document: '短',
+        source_length: '1',
       },
       cacheVariableKeys: ['source_document'],
       minCacheChars: 10,
