@@ -48,6 +48,7 @@ describe('project agent run budget', () => {
         kind: 'activity.started',
         payload: {
           kind: 'activity.started',
+          activityId: 'activity-1',
           type: 'operation',
           operationId: 'replan_chapter',
           targetKey: 'chapterId:chapter-1',
@@ -57,6 +58,7 @@ describe('project agent run budget', () => {
         kind: 'activity.started',
         payload: {
           kind: 'activity.started',
+          activityId: 'activity-2',
           type: 'operation',
           operationId: 'replan_chapter',
           targetKey: 'chapterId:chapter-1',
@@ -83,6 +85,43 @@ describe('project agent run budget', () => {
         },
       },
     })
+  })
+
+  it('does not count completed same-target operations against the retry budget', async () => {
+    prismaState.findMany.mockResolvedValue([
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-1',
+          type: 'operation',
+          operationId: 'generate_edit_shot_execution_plan',
+          targetKey: 'episodeId:episode-1',
+        },
+      },
+      { kind: 'activity.completed', payload: { kind: 'activity.completed', activityId: 'activity-1' } },
+      {
+        kind: 'activity.started',
+        payload: {
+          kind: 'activity.started',
+          activityId: 'activity-2',
+          type: 'operation',
+          operationId: 'generate_edit_shot_execution_plan',
+          targetKey: 'episodeId:episode-1',
+        },
+      },
+      { kind: 'activity.completed', payload: { kind: 'activity.completed', activityId: 'activity-2' } },
+    ])
+
+    const result = await enforceProjectAgentOperationRunBudget({
+      projectId: 'project-1',
+      userId: 'user-1',
+      runId: 'run-1',
+      operationId: 'generate_edit_shot_execution_plan',
+      targetKey: 'episodeId:episode-1',
+    })
+
+    expect(result).toBeNull()
   })
 
   it('blocks after three consecutive failed activities in a run', async () => {
