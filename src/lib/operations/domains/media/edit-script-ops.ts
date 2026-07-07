@@ -5,6 +5,7 @@ import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
 import {
+  submitProjectEditShotExecutionPlanBatchTasks,
   submitProjectEditScriptGenerationTask,
   submitProjectEditShotExecutionPlanTask,
   submitProjectEditStylePreviewsGenerationTask,
@@ -456,6 +457,36 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       targetId: z.string().min(1),
     }).passthrough(),
   )
+  const editShotExecutionPlanBatchTaskSubmitOutputSchema = z.object({
+    success: z.literal(true),
+    async: z.literal(true),
+    episodeId: z.string().min(1),
+    batchKey: z.string().min(1),
+    total: z.number().int().min(1),
+    taskIds: z.array(z.string().min(1)),
+    results: z.array(z.object({
+      refId: z.string().min(1),
+      taskId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
+      targetType: z.literal('ProjectEditScript'),
+      targetId: z.string().min(1),
+    })),
+    submittedTasks: z.array(z.object({
+      chapterId: z.string().min(1),
+      editScriptId: z.string().min(1),
+      taskId: z.string().min(1),
+      status: z.string().min(1),
+      runId: z.string().nullable(),
+      deduped: z.boolean(),
+      taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
+      targetType: z.literal('ProjectEditScript'),
+      targetId: z.string().min(1),
+    })),
+  }).passthrough()
+  const editShotExecutionPlanOperationOutputSchema = z.union([
+    editShotExecutionPlanTaskSubmitOutputSchema,
+    editShotExecutionPlanBatchTaskSubmitOutputSchema,
+  ])
   const editScriptStoryboardTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
       episodeId: z.string().min(1),
@@ -807,16 +838,49 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       summary: 'Generate the full shot execution plan from the ready core edit plan, completed assets, spatial profiles, and Style Bible.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_SYNC_AI_WRITE,
+      effects: EFFECTS_BULK_WRITE,
       confirmation: {
         required: true,
         summary: '将基于核心剪辑计划、资产和空间档案生成并覆盖本集镜头执行计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditShotExecutionPlanInputSchema,
-      outputSchema: editShotExecutionPlanTaskSubmitOutputSchema,
+      outputSchema: editShotExecutionPlanOperationOutputSchema,
       execute: async (ctx, input: GenerateEditShotExecutionPlanInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        if (!input.chapterId && !input.editScriptId) {
+          const batchKey = createTaskBatchKey('edit_shot_execution_plan_generate')
+          const submittedTaskIds: string[] = []
+          let result: Awaited<ReturnType<typeof submitProjectEditShotExecutionPlanBatchTasks>>
+          try {
+            result = await submitProjectEditShotExecutionPlanBatchTasks({
+              request: ctx.request,
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              episodeId,
+              batchKey,
+              source: ctx.source,
+              confirmed: input.confirmed === true,
+              locale: resolveLocale(ctx.context.locale),
+              onSubmittedTask: (taskId) => {
+                submittedTaskIds.push(taskId)
+              },
+            })
+          } catch (error) {
+            await compensateSubmittedTasks(submittedTaskIds)
+            throw error
+          }
+          writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
+            operationId: 'generate_edit_shot_execution_plan',
+            total: result.total,
+            taskTotal: result.total,
+            targetTotal: result.total,
+            taskIds: result.taskIds,
+            results: result.results,
+          })
+          return editShotExecutionPlanOperationOutputSchema.parse(result)
+        }
+
         const result = await submitProjectEditShotExecutionPlanTask({
           request: ctx.request,
           projectId: ctx.projectId,
@@ -842,7 +906,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           targetId: result.editScriptId,
         })
 
-        return editShotExecutionPlanTaskSubmitOutputSchema.parse(result)
+        return editShotExecutionPlanOperationOutputSchema.parse(result)
       },
     }),
     generate_edit_script_storyboard: defineOperation({

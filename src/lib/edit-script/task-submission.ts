@@ -14,6 +14,12 @@ import {
 
 type OperationTaskSubmitResult = Awaited<ReturnType<typeof submitOperationTask>>
 
+type EditShotExecutionPlanTaskTarget = {
+  readonly episodeId: string
+  readonly chapterId: string
+  readonly editScriptId: string
+}
+
 export type EditShotExecutionPlanTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
   readonly chapterId: string
@@ -21,6 +27,33 @@ export type EditShotExecutionPlanTaskSubmitResult = OperationTaskSubmitResult & 
   readonly taskType: typeof TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
   readonly targetType: 'ProjectEditScript'
   readonly targetId: string
+}
+
+export type EditShotExecutionPlanBatchTaskSubmitResult = {
+  readonly success: true
+  readonly async: true
+  readonly episodeId: string
+  readonly batchKey: string
+  readonly total: number
+  readonly taskIds: string[]
+  readonly results: Array<{
+    readonly refId: string
+    readonly taskId: string
+    readonly taskType: typeof TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
+    readonly targetType: 'ProjectEditScript'
+    readonly targetId: string
+  }>
+  readonly submittedTasks: Array<{
+    readonly chapterId: string
+    readonly editScriptId: string
+    readonly taskId: string
+    readonly status: string
+    readonly runId: string | null
+    readonly deduped: boolean
+    readonly taskType: typeof TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
+    readonly targetType: 'ProjectEditScript'
+    readonly targetId: string
+  }>
 }
 
 export type EditScriptTaskSubmitResult = OperationTaskSubmitResult & {
@@ -304,6 +337,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
   readonly episodeId: string
   readonly chapterId?: string
   readonly editScriptId?: string
+  readonly batchKey?: string | null
   readonly source: string
   readonly confirmed: boolean
   readonly locale: Locale
@@ -336,6 +370,7 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
       },
     }),
     dedupeKey: `edit_shot_execution_plan_generate:${input.projectId}:${target.editScriptId}`,
+    batchKey: input.batchKey ?? undefined,
     locale: input.locale,
   })
 
@@ -347,5 +382,108 @@ export async function submitProjectEditShotExecutionPlanTask(input: {
     taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
     targetType: 'ProjectEditScript',
     targetId: target.editScriptId,
+  }
+}
+
+async function resolveEpisodeEditShotExecutionPlanTaskTargets(input: {
+  readonly projectId: string
+  readonly episodeId: string
+}): Promise<readonly EditShotExecutionPlanTaskTarget[]> {
+  const editScripts = await prisma.projectEditScript.findMany({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      status: 'ready',
+    },
+    select: {
+      id: true,
+      episodeId: true,
+      chapterId: true,
+      shotExecutionPlan: {
+        select: {
+          status: true,
+        },
+      },
+    },
+    orderBy: [
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ],
+  })
+
+  return editScripts
+    .filter((script) => script.shotExecutionPlan?.status !== 'ready')
+    .map((script) => ({
+      episodeId: script.episodeId,
+      chapterId: script.chapterId,
+      editScriptId: script.id,
+    }))
+}
+
+export async function submitProjectEditShotExecutionPlanBatchTasks(input: {
+  readonly request: NextRequest
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly batchKey: string
+  readonly source: string
+  readonly confirmed: boolean
+  readonly locale: Locale
+  readonly onSubmittedTask?: (taskId: string) => void
+}): Promise<EditShotExecutionPlanBatchTaskSubmitResult> {
+  const targets = await resolveEpisodeEditShotExecutionPlanTaskTargets({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+  })
+  if (targets.length === 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SHOT_EXECUTION_PLAN_TARGETS_REQUIRED',
+      message: 'No edit scripts require shot execution plan generation.',
+    })
+  }
+
+  const submittedTasks: EditShotExecutionPlanBatchTaskSubmitResult['submittedTasks'] = []
+  for (const target of targets) {
+    const result = await submitProjectEditShotExecutionPlanTask({
+      request: input.request,
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: target.episodeId,
+      chapterId: target.chapterId,
+      editScriptId: target.editScriptId,
+      batchKey: input.batchKey,
+      source: input.source,
+      confirmed: input.confirmed,
+      locale: input.locale,
+    })
+    input.onSubmittedTask?.(result.taskId)
+    submittedTasks.push({
+      chapterId: result.chapterId,
+      editScriptId: result.editScriptId,
+      taskId: result.taskId,
+      status: result.status,
+      runId: result.runId ?? null,
+      deduped: result.deduped,
+      taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: result.editScriptId,
+    })
+  }
+
+  return {
+    success: true,
+    async: true,
+    episodeId: input.episodeId,
+    batchKey: input.batchKey,
+    total: submittedTasks.length,
+    taskIds: submittedTasks.map((task) => task.taskId),
+    results: submittedTasks.map((task) => ({
+      refId: task.editScriptId,
+      taskId: task.taskId,
+      taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: task.editScriptId,
+    })),
+    submittedTasks,
   }
 }
