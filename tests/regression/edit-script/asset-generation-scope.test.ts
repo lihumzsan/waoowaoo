@@ -22,6 +22,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditScript: {
     findMany: vi.fn(),
     findFirst: vi.fn(),
+    updateMany: vi.fn(),
   },
   projectEditAssetRequirement: {
     findFirst: vi.fn(),
@@ -65,7 +66,10 @@ vi.mock('@/lib/assets/services/asset-actions', () => ({
   submitAssetGenerateTask: submitAssetGenerateTaskMock,
 }))
 
-import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
+import {
+  approveProjectEditScriptAssets,
+  generateProjectEditScriptAssets,
+} from '@/lib/edit-script/service'
 
 function request(): NextRequest {
   return new Request('http://localhost/api/projects/project-1/edit-script/assets/generate', {
@@ -165,6 +169,7 @@ describe('edit script asset generation scope regression', () => {
     prismaMock.projectEditAssetRequirement.findFirst.mockResolvedValue(null)
     prismaMock.projectEditAssetRequirement.update.mockImplementation(async (input: unknown) => input)
     prismaMock.projectEditAssetRequirement.count.mockResolvedValue(2)
+    prismaMock.projectEditScript.updateMany.mockResolvedValue({ count: 0 })
     prismaMock.projectEditChapter.findFirst.mockImplementation(async (input: { readonly where: { readonly id: string } }) => ({
       id: input.where.id,
       sourceStart: null,
@@ -336,5 +341,52 @@ describe('edit script asset generation scope regression', () => {
     })).rejects.toThrow('No edit script asset generation tasks were submitted while asset requirements remain unfinished.')
 
     expect(submitAssetGenerateTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('approves every ready edit script when asset review is episode-scoped', async () => {
+    const firstScript = script({
+      id: 'script-1',
+      chapterId: 'chapter-1',
+      requirements: [
+        {
+          ...requirement({ id: 'requirement-1', chapterId: 'chapter-1', name: 'Alice', targetId: 'character-alice' }),
+          status: 'completed',
+        },
+      ],
+    })
+    const secondScript = script({
+      id: 'script-2',
+      chapterId: 'chapter-2',
+      requirements: [
+        {
+          ...requirement({ id: 'requirement-2', chapterId: 'chapter-2', name: 'Bob', targetId: 'character-bob' }),
+          status: 'completed',
+        },
+      ],
+    })
+
+    prismaMock.projectEditScript.findMany.mockResolvedValue([firstScript, secondScript])
+
+    const result = await approveProjectEditScriptAssets({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+    })
+
+    expect(prismaMock.projectEditScript.findFirst).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['script-1', 'script-2'] },
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        project: {
+          userId: 'user-1',
+        },
+      },
+      data: {
+        assetReviewStatus: 'approved',
+      },
+    })
+    expect(result.assetReviewStatus).toBe('approved')
   })
 })
