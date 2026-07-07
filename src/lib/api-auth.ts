@@ -56,6 +56,17 @@ async function getInternalTaskSession(): Promise<AuthSession | null> {
     }
 }
 
+async function findExistingSessionUser(session: AuthSession): Promise<{ id: string } | null> {
+    return await withRetry({
+        scope: 'prisma:requireUserAuth',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { id: true },
+        }),
+    })
+}
+
 /**
  * 可选的关联数据加载配置
  */
@@ -186,6 +197,10 @@ export async function requireAuth(): Promise<AuthSession> {
     if (!session?.user?.id) {
         throw { response: unauthorized() }
     }
+    const user = await findExistingSessionUser(session)
+    if (!user) {
+        throw { response: unauthorized() }
+    }
     bindAuthLogContext(session)
     return session
 }
@@ -309,6 +324,10 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
 export async function requireUserAuth(): Promise<{ session: AuthSession } | NextResponse> {
     const session = await getAuthSession()
     if (!session?.user?.id) {
+        return unauthorized()
+    }
+    const user = await findExistingSessionUser(session)
+    if (!user) {
         return unauthorized()
     }
     bindAuthLogContext(session)
