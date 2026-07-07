@@ -129,12 +129,73 @@ function names(values: readonly { readonly name: string }[]): Set<string> {
   return new Set(values.map((value) => value.name.trim().toLocaleLowerCase()))
 }
 
+type UnknownRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function omitInputOnlyRole(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'role'))
+}
+
+function normalizeBlockingInputOnlyFields(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  return {
+    ...value,
+    ...(Array.isArray(value.characters)
+      ? { characters: value.characters.map(omitInputOnlyRole) }
+      : {}),
+    ...(Array.isArray(value.objects)
+      ? { objects: value.objects.map(omitInputOnlyRole) }
+      : {}),
+  }
+}
+
+function normalizeShotExecutionInputOnlyFields(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  return {
+    ...value,
+    ...(isRecord(value.blocking)
+      ? { blocking: normalizeBlockingInputOnlyFields(value.blocking) }
+      : {}),
+  }
+}
+
+function normalizeSegmentExecutionInputOnlyFields(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  const continuousVideoPrompt = typeof value.continuousVideoPrompt === 'string'
+    ? value.continuousVideoPrompt
+    : typeof value.continuity === 'string'
+      ? value.continuity
+      : undefined
+  const rest = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'continuity'))
+  return {
+    ...rest,
+    ...(continuousVideoPrompt !== undefined ? { continuousVideoPrompt } : {}),
+  }
+}
+
+function normalizeEditShotExecutionPlanInputOnlyFields(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw
+  return {
+    ...raw,
+    ...(Array.isArray(raw.shots)
+      ? { shots: raw.shots.map(normalizeShotExecutionInputOnlyFields) }
+      : {}),
+    ...(Array.isArray(raw.generationSegmentExecutions)
+      ? { generationSegmentExecutions: raw.generationSegmentExecutions.map(normalizeSegmentExecutionInputOnlyFields) }
+      : {}),
+  }
+}
+
 export function normalizeEditShotExecutionPlan(
   raw: unknown,
   coreShots: readonly EditScriptShot[],
   coreGenerationSegments: readonly EditGenerationSegment[],
 ): Omit<EditShotExecutionPlanPayload, 'id' | 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId' | 'status'> {
-  const parsed = editShotExecutionPlanSchema.parse(raw)
+  const parsed = editShotExecutionPlanSchema.parse(normalizeEditShotExecutionPlanInputOnlyFields(raw))
   const shots = parsed.shots
     .map((shot): EditShotExecution => ({
       shotId: shot.shotId.trim(),

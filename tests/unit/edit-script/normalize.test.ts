@@ -300,6 +300,45 @@ describe('shot execution plan normalization', () => {
       .toThrow(/Unrecognized key[\s\S]*motionFlow/)
   })
 
+  it('normalizes copied input-only continuity and role fields before strict execution validation', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const plan = executionPlan()
+    const copiedInputFieldsPlan = {
+      ...plan,
+      shots: plan.shots.map((shot) => ({
+        ...shot,
+        blocking: {
+          ...shot.blocking,
+          characters: shot.blocking.characters.map((character) => ({
+            ...character,
+            role: 'copied-input-character-role',
+          })),
+          objects: shot.blocking.objects.map((object) => ({
+            ...object,
+            role: 'copied-input-object-role',
+          })),
+        },
+      })),
+      generationSegmentExecutions: plan.generationSegmentExecutions.map((segment) => ({
+        shotIds: segment.shotIds,
+        continuity: segment.continuousVideoPrompt,
+      })),
+    }
+
+    const normalizedExecution = normalizeEditShotExecutionPlan(
+      copiedInputFieldsPlan,
+      normalizedCore.shots,
+      normalizedCore.generationSegments,
+    )
+
+    expect(normalizedExecution.generationSegmentExecutions[0]).toEqual({
+      shotIds: ['shot-1', 'shot-2'],
+      continuousVideoPrompt: expect.stringContaining('Cabin reveal continuous segment'),
+    })
+    expect(JSON.stringify(normalizedExecution)).not.toContain('"role":')
+    expect(JSON.stringify(normalizedExecution)).not.toContain('"continuity":')
+  })
+
   it('rejects execution plans that drop in-scene characters or required objects', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
     const missingCharacter = {

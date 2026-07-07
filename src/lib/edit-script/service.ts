@@ -67,6 +67,7 @@ import {
 } from './types'
 import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
 import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
+import { buildShotExecutionPlanPromptStructure } from './shot-execution-plan-prompt'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -1865,14 +1866,14 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
     variables: {
       style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
-      structure_json: stringifyForPrompt({
+      structure_json: stringifyForPrompt(buildShotExecutionPlanPromptStructure({
         id: mappedEditScript.id,
         durationSec: mappedEditScript.durationSec,
         shotCount: mappedEditScript.shotCount,
         sourceText: mappedEditScript.sourceText,
         shots: mappedEditScript.shots,
         generationSegments: mappedEditScript.generationSegments,
-      }),
+      })),
       asset_context_json: stringifyForPrompt(assets),
       spatial_profiles_json: stringifyForPrompt(assets
         .filter((asset) => asset.kind === 'location')

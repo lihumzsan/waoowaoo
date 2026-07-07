@@ -42,9 +42,9 @@ Single-shot video prompt:
 - videoPrompt must not add plot, characters, props, dialogue, or sound events, and must not mechanically copy an image prompt.
 
 Continuous video prompt:
-- generationSegmentExecutions must follow the order of generationSegments in the core edit plan, and each shotIds array must match exactly.
+- generationSegmentExecutions must follow the order of videoGenerationSegments in the core edit plan, and each shotIds array must match exactly.
 - Each item outputs only two fields: shotIds and continuousVideoPrompt.
-- The input generationSegments[].continuity value is only source material for writing continuousVideoPrompt; the output field name must be continuousVideoPrompt, and the continuity field name must never be copied into output.
+- The input videoGenerationSegments[].continuityReference value is only source material for writing continuousVideoPrompt; the output field name must be continuousVideoPrompt, and the continuity field name must never be copied into output.
 - Each item must output continuousVideoPrompt as a non-empty string. Do not output continuity, description, summary, or any other field.
 - continuousVideoPrompt is written as one complete continuous video segment, not a mechanical concatenation of single-shot videoPrompt values.
 - continuousVideoPrompt may use only facts present in the inputs. Do not add plot, characters, props, dialogue, or sound events.
