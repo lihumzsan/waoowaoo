@@ -48,20 +48,40 @@ const PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS = [
   '[project_state_snapshot]',
   '[/project_state_snapshot]',
 ] as const
-const PROJECT_STATE_SNAPSHOT_PROTOCOL_TAIL_LENGTH = Math.max(
-  ...PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.map((marker) => marker.length),
+const RAW_TOOL_CALL_PROTOCOL_MARKERS = [
+  '<call:',
+] as const
+
+const TEXT_PROTOCOL_MARKERS = [
+  ...PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS,
+  ...RAW_TOOL_CALL_PROTOCOL_MARKERS,
+] as const
+
+const TEXT_PROTOCOL_TAIL_LENGTH = Math.max(
+  ...TEXT_PROTOCOL_MARKERS.map((marker) => marker.length),
 ) - 1
 
-function createProjectStateSnapshotProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
+function resolveTextProtocolLeakCode(candidate: string): string | null {
+  if (PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
+    return 'PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK'
+  }
+  if (RAW_TOOL_CALL_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
+    return 'PROJECT_AGENT_OUTPUT_TOOL_CALL_PROTOCOL_LEAK'
+  }
+  return null
+}
+
+function createTextProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
   let textTail = ''
   return (chunk: ProjectAgentUiChunk) => {
     const delta = readTextChunkDelta(chunk)
     if (!delta) return
     const candidate = `${textTail}${delta}`
-    if (PROJECT_STATE_SNAPSHOT_PROTOCOL_MARKERS.some((marker) => candidate.includes(marker))) {
-      throw new Error('PROJECT_AGENT_OUTPUT_PROTOCOL_FRAME_LEAK')
+    const leakCode = resolveTextProtocolLeakCode(candidate)
+    if (leakCode) {
+      throw new Error(leakCode)
     }
-    textTail = candidate.slice(-PROJECT_STATE_SNAPSHOT_PROTOCOL_TAIL_LENGTH)
+    textTail = candidate.slice(-TEXT_PROTOCOL_TAIL_LENGTH)
   }
 }
 
@@ -129,13 +149,13 @@ export function createProjectAgentUiMessageStream(params: {
       convertedReader = reader
       let finishChunk: ProjectAgentUiChunk | null = null
       const startedToolCallIds = new Set<string>()
-      const assertNoProjectStateSnapshotProtocol = createProjectStateSnapshotProtocolGuard()
+      const assertNoTextProtocolLeak = createTextProtocolGuard()
       const emitChunk = (chunk: ProjectAgentUiChunk) => {
         params.onChunk?.(chunk)
         controller.enqueue(chunk)
       }
       const enqueueChunk = (chunk: ProjectAgentUiChunk) => {
-        assertNoProjectStateSnapshotProtocol(chunk)
+        assertNoTextProtocolLeak(chunk)
         const toolCallId = readChunkString(chunk, 'toolCallId')
         if (toolCallId && isToolInputChunk(chunk)) {
           startedToolCallIds.add(toolCallId)
