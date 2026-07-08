@@ -34,6 +34,7 @@ import {
   renderFinalRenderClipAudio,
 } from '@/lib/video-compose/final-render-audio'
 import { buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
+import { resolveFfmpegBinary } from '@/lib/video-compose/ffmpeg-binaries'
 
 type FinalVideoRenderPayload = {
   readonly episodeId?: unknown
@@ -106,7 +107,10 @@ function extensionFromMimeType(mimeType: string): string {
 }
 
 export async function runCommand(command: string, args: readonly string[]): Promise<CommandResult> {
-  const result = await execFileAsync(command, [...args], {
+  const executable = command === 'ffmpeg' || command === 'ffprobe'
+    ? resolveFfmpegBinary(command)
+    : command
+  const result = await execFileAsync(executable, [...args], {
     maxBuffer: 32 * 1024 * 1024,
   })
   return {
