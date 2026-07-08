@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import Navbar from "@/components/Navbar"
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton"
 import PasswordInput from "@/components/auth/PasswordInput"
 import PasswordStrengthIndicator from "@/components/auth/PasswordStrengthIndicator"
 import { apiFetch } from '@/lib/api-fetch'
@@ -272,6 +273,18 @@ export default function SignUp() {
                 {loading ? t('signupButtonLoading') : t('signupButton')}
               </button>
             </form>
+
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+              <span className="text-xs text-[var(--glass-text-tertiary)]">{t('orContinueWith')}</span>
+              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+            </div>
+
+            <GoogleSignInButton
+              label={t('continueWithGoogle')}
+              loadingLabel={t('googleButtonLoading')}
+              onError={() => setError(t('googleLoginError'))}
+            />
 
             <div className="mt-6 text-center">
               <p className="text-[var(--glass-text-secondary)]">

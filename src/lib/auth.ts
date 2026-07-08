@@ -1,12 +1,18 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
+import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import GoogleProvider from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { logAuthAction } from './logging/semantic'
 import { prisma } from './prisma'
+import { createAuthAdapter } from '@/lib/auth/next-auth-adapter'
+import { readGoogleOAuthConfig, readVerifiedGoogleProfileEmail } from '@/lib/auth/google-oauth'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const authOptions: any = {
-  adapter: PrismaAdapter(prisma),
+type AppNextAuthOptions = NextAuthOptions & {
+  trustHost?: boolean
+}
+
+export const authOptions: AppNextAuthOptions = {
+  adapter: createAuthAdapter(),
   // 🔥 允许从任意 Host 访问（解决局域网访问问题）
   trustHost: true,
   // 🔥 根据 URL 协议决定是否使用 Secure Cookie
@@ -51,7 +57,11 @@ export const authOptions: any = {
           name: user.name,
         }
       }
-    })
+    }),
+    GoogleProvider({
+      ...readGoogleOAuthConfig(),
+      allowDangerousEmailAccountLinking: false,
+    }),
   ],
   session: {
     strategy: "jwt"
@@ -60,17 +70,27 @@ export const authOptions: any = {
     signIn: "/auth/signin",
   },
   callbacks: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async jwt({ token, user }: any) {
+    async signIn({ account, profile }) {
+      if (account?.provider !== 'google') return true
+
+      const verifiedEmail = readVerifiedGoogleProfileEmail(profile)
+      if (!verifiedEmail) {
+        logAuthAction('LOGIN', 'google', { error: 'Google email not verified' })
+        return false
+      }
+
+      logAuthAction('LOGIN', verifiedEmail, { provider: 'google', success: true })
+      return true
+    },
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id
       }
       return token
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async session({ session, token }: any) {
-      if (token && session.user) {
-        session.user.id = token.id as string
+    async session({ session, token }) {
+      if (session.user && typeof token.id === 'string') {
+        session.user.id = token.id
       }
       return session
     }

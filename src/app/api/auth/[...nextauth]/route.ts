@@ -4,8 +4,10 @@ import { authOptions } from "@/lib/auth"
 import { checkRateLimit, getClientIp, AUTH_LOGIN_LIMIT } from '@/lib/rate-limit'
 import { logAuthAction } from '@/lib/logging/semantic'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const nextAuthHandler = (NextAuth as any)(authOptions)
+type NextAuthRouteContext = { params: Promise<{ nextauth: string[] }> }
+type NextAuthRouteHandler = (req: NextRequest, ctx: NextAuthRouteContext) => Promise<Response>
+
+const nextAuthHandler = NextAuth(authOptions) as unknown as NextAuthRouteHandler
 
 /**
  * 登录 POST 请求加 IP 限流保护。
@@ -16,7 +18,7 @@ const nextAuthHandler = (NextAuth as any)(authOptions)
  *    如果返回自定义 JSON 格式会导致 signIn() 内部 new URL(data.url) 抛异常。
  *    因此限流时返回 NextAuth 兼容的格式：{ url: "...?error=RateLimited" }
  */
-async function handlePost(req: NextRequest, ctx: { params: Promise<{ nextauth: string[] }> }) {
+async function handlePost(req: NextRequest, ctx: NextAuthRouteContext) {
     const { nextauth: segments } = await ctx.params
     const isCredentialsCallback =
         segments.length >= 2
@@ -43,7 +45,7 @@ async function handlePost(req: NextRequest, ctx: { params: Promise<{ nextauth: s
     return nextAuthHandler(req, ctx)
 }
 
-function handleGet(req: NextRequest, ctx: { params: Promise<{ nextauth: string[] }> }) {
+function handleGet(req: NextRequest, ctx: NextAuthRouteContext) {
     return nextAuthHandler(req, ctx)
 }
 
