@@ -96,6 +96,7 @@
     "test:integration:chain": "cross-env BILLING_TEST_BOOTSTRAP=1 vitest run tests/integration/chain",
     "test:integration:task": "cross-env BILLING_TEST_BOOTSTRAP=1 vitest run tests/integration/task",
     "test:system": "cross-env SYSTEM_TEST_BOOTSTRAP=1 vitest run tests/system",
+    "e2e:long-form": "tsx scripts/e2e-long-form/index.ts",
     "test:regression:cases": "cross-env SYSTEM_TEST_BOOTSTRAP=1 vitest run tests/regression",
     "test:behavior:unit": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/unit/helpers tests/unit/worker tests/unit/optimistic tests/unit/guards",
     "test:behavior:api": "cross-env BILLING_TEST_BOOTSTRAP=0 vitest run tests/integration/api/contract",
