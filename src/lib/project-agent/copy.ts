@@ -64,8 +64,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Before starting a batch of production tasks that will consume credits or incur billing, confirm the budget and the intent to continue with the user. Use it only as a pre-billing/pre-batch confirmation — it does not replace Bible, asset, or style content review.',
   },
   request_script_intake_choice: {
-    zh: '当用户给的不是完整可拍剧本，且还没有足够详细到可以直接扩写的创作简报时，用它发起扩写前创作问诊，让用户先补齐会改变剧本走向的关键变量。只有用户已经贴出完整剧本，或已经给出详细到不需要追问的创作简报时，才不要用它。',
-    en: 'Use this for pre-expansion creative intake when the user has not provided a complete filmable script and the brief is not detailed enough to expand directly. Ask the user to fill the key variables that would change the script direction. Skip it only when the user already pasted a complete script, or provided a brief detailed enough that no follow-up is needed.',
+    zh: '当用户的输入缺少剧本的基础结构信息（时代与背景、主角与人物动机、核心冲突、关键人物关系、类型基调、结局走向等标准剧本要素）时，用它发起扩写前创作问诊，让用户先把这些基本结构补齐，再进入扩写。在绝大部分情况下，除非用户直接给出了完整可拍剧本，否则都要先调用这个工具来问诊；只有用户已经贴出完整可拍剧本时才跳过它。',
+    en: 'Use this for pre-expansion creative intake whenever the user\'s input lacks the basic structural information of a script (era and setting, protagonist and character motivation, core conflict, key relationships, genre and tone, ending direction — the standard script elements). Have the user fill in that basic structure before expansion. In the vast majority of cases you should run intake first; skip it only when the user has directly provided a complete, filmable script.',
   },
   ingest_script: {
     zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报，并提交任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。用户贴的是完整可拍剧本时，sourceKind=paste；只有问诊后的 normalizedBrief，或用户原始输入已经详细到不需要追问时，sourceKind=prompt_generated_outline。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',

@@ -54,15 +54,17 @@ describe('script intake choice', () => {
     })
 
     expect(zhPrompt).toContain('可以直接扩写的创作简报')
-    expect(zhPrompt).toContain('题材/基调、主角或核心关系、核心冲突或欲望、关键转折或结局方向')
-    expect(zhPrompt).toContain('绝对不要超过 6 个问题')
-    expect(zhPrompt).toContain('当前系统 schema 最多只接受 5 个问题')
+    expect(zhPrompt).toContain('时代与背景设定')
+    expect(zhPrompt).toContain('主角的核心动机/欲望/目标')
+    expect(zhPrompt).toContain('绝对不要超过 5 个问题')
+    expect(zhPrompt).toContain('系统最多只接受 5 个')
     expect(zhPrompt).toContain('不要询问完整剧本的所有信息')
 
     expect(enPrompt).toContain('directly expandable creative brief')
-    expect(enPrompt).toContain('genre/tone, protagonist or core relationship, central conflict or desire, key turn or ending direction')
-    expect(enPrompt).toContain('Never return more than 6 questions')
-    expect(enPrompt).toContain('the current system schema accepts at most 5')
+    expect(enPrompt).toContain('era and setting')
+    expect(enPrompt).toContain("the protagonist's core motivation/desire/goal")
+    expect(enPrompt).toContain('Never return more than 5 questions')
+    expect(enPrompt).toContain('the system accepts at most 5')
     expect(enPrompt).toContain('Do not ask for every piece of script information')
   })
 
