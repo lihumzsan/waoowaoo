@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import {
+  OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
+  OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
+} from '@/lib/ai-providers/openrouter/models'
 
 const prismaMock = vi.hoisted(() => ({
   project: {
@@ -43,6 +47,8 @@ const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
   'PROVIDER_CREDENTIAL_MODE',
   'BILLING_MODE',
+  'PLATFORM_DEFAULT_ANALYSIS_MODEL',
+  'PLATFORM_DEFAULT_VIDEO_MODEL',
   'PLATFORM_VIDEO_RESOLUTION',
   'PLATFORM_VIDEO_GENERATE_AUDIO',
 ] as const
@@ -93,6 +99,8 @@ describe('cloud video generation runtime options', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
+    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY
+    process.env.PLATFORM_DEFAULT_VIDEO_MODEL = OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY
     process.env.PLATFORM_VIDEO_RESOLUTION = '480p'
     process.env.PLATFORM_VIDEO_GENERATE_AUDIO = 'true'
     mockPanelAndProject()

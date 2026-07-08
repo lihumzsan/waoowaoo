@@ -1856,6 +1856,10 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
       message: 'Style Bible is required before shot execution plan generation',
     })
   }
+  const editScriptId = mappedEditScript.id
+  if (!editScriptId) {
+    throw new Error(`EDIT_SCRIPT_ID_REQUIRED:${editScript.id}`)
+  }
   const assets = await buildAssetSnapshots(mappedEditScript.requirements)
   const model = resolveTextModel(config)
   const parsed = await runStructuredPromptStep({
@@ -1867,10 +1871,10 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     variables: {
       style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
       structure_json: stringifyForPrompt(buildShotExecutionPlanPromptStructure({
-        id: mappedEditScript.id,
+        id: editScriptId,
         durationSec: mappedEditScript.durationSec,
         shotCount: mappedEditScript.shotCount,
-        sourceText: mappedEditScript.sourceText,
+        sourceText: mappedEditScript.sourceText ?? null,
         shots: mappedEditScript.shots,
         generationSegments: mappedEditScript.generationSegments,
       })),
