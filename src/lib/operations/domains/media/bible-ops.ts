@@ -69,6 +69,13 @@ const episodeOverviewOutputSchema = editBibleReadOutputSchema.extend({
     rendered: z.number().int().min(0),
     failedRender: z.number().int().min(0),
   }),
+  videoSegmentSummary: z.object({
+    total: z.number().int().min(0),
+    completed: z.number().int().min(0),
+    processing: z.number().int().min(0),
+    failed: z.number().int().min(0),
+    totalDurationSec: z.number().int().min(0),
+  }),
 }).passthrough()
 
 const chapterDetailOutputSchema = z.object({
@@ -149,6 +156,40 @@ function summarizeChapters(chapters: ReadonlyArray<{
     planned: chapters.filter((chapter) => chapter.status === 'ready').length,
     rendered: chapters.filter((chapter) => chapter.renderStatus === 'completed').length,
     failedRender: chapters.filter((chapter) => chapter.renderStatus === 'failed').length,
+  }
+}
+
+function hasGeneratedVideoOutput(group: {
+  readonly videoUrl?: string | null
+  readonly videoMediaId?: string | null
+}): boolean {
+  return Boolean(group.videoUrl?.trim() || group.videoMediaId?.trim())
+}
+
+function isProcessingStatus(status: string | null | undefined): boolean {
+  return status === 'queued' || status === 'processing' || status === 'generating' || status === 'running'
+}
+
+function summarizeVideoSegments(groups: ReadonlyArray<{
+  readonly status?: string | null
+  readonly durationSec?: number | null
+  readonly videoUrl?: string | null
+  readonly videoMediaId?: string | null
+}>): {
+  readonly total: number
+  readonly completed: number
+  readonly processing: number
+  readonly failed: number
+  readonly totalDurationSec: number
+} {
+  return {
+    total: groups.length,
+    completed: groups.filter(hasGeneratedVideoOutput).length,
+    processing: groups.filter((group) => isProcessingStatus(group.status)).length,
+    failed: groups.filter((group) => group.status === 'failed').length,
+    totalDurationSec: groups
+      .filter(hasGeneratedVideoOutput)
+      .reduce((sum, group) => sum + (Number.isInteger(group.durationSec) ? group.durationSec ?? 0 : 0), 0),
   }
 }
 
@@ -330,14 +371,27 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: episodeOverviewOutputSchema,
       execute: async (ctx, input) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const [editBible, chapters] = await Promise.all([
+        const [editBible, chapters, videoGroups] = await Promise.all([
           readEpisodeEditBible({ projectId: ctx.projectId, episodeId }),
           readEpisodeEditChapters({ projectId: ctx.projectId, episodeId }),
+          prisma.projectVideoGroup.findMany({
+            where: {
+              projectId: ctx.projectId,
+              episodeId,
+            },
+            select: {
+              status: true,
+              durationSec: true,
+              videoUrl: true,
+              videoMediaId: true,
+            },
+          }),
         ])
         return episodeOverviewOutputSchema.parse({
           editBible,
           chapters,
           chapterSummary: summarizeChapters(chapters),
+          videoSegmentSummary: summarizeVideoSegments(videoGroups),
         })
       },
     }),
