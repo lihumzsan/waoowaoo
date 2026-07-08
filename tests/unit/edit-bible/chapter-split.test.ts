@@ -14,14 +14,7 @@ function buildBundle(): EditBibleBundle {
           name: '林秋',
           aliases: [],
           summary: '追查断电事件的主角',
-          voiceProfile: {
-            ageImpression: '青年女性声感',
-            pitchRange: '中音区偏高',
-            timbre: '清亮，边缘柔和不尖锐',
-            resonance: '口腔前部共鸣清晰，鼻腔色彩轻',
-            vocalWeight: '偏轻声线，声音密度适中',
-            texture: '表面干净，几乎无颗粒感',
-          },
+          voiceProfile: '清亮偏冷带轻气声的青年女声',
         },
       ],
       locations: [

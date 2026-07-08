@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import {
   editBibleCharacterVoiceProfileSchema,
-  formatEditBibleCharacterVoiceProfile,
   type EditBibleCharacterVoiceProfile,
 } from '@/lib/edit-bible/voice-profile'
 import type { EditScriptShot } from './types'
@@ -10,7 +9,6 @@ export interface EditScriptCharacterVoiceProfile {
   readonly characterId: string
   readonly name: string
   readonly voiceProfile: EditBibleCharacterVoiceProfile
-  readonly voiceSignature: string
 }
 
 export interface EditScriptDialogueVoiceLine extends EditScriptCharacterVoiceProfile {
@@ -77,7 +75,6 @@ export function resolveEditScriptDialogueVoiceContext(input: {
           characterId: character.characterId,
           name: character.name,
           voiceProfile,
-          voiceSignature: formatEditBibleCharacterVoiceProfile(voiceProfile),
         }
         charactersById.set(character.characterId, voiceCharacter)
         return {

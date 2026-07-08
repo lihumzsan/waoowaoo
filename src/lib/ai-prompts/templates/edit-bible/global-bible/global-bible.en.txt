@@ -15,8 +15,8 @@ Include only facts the script states or clearly implies. Do not add your own inv
 - Write synopsis as a complete story overview covering the central conflict, relationships, emotional movement, and the ending (or the current endpoint of the text).
 - Output title and logline only when the text provides them or they can be summarized with high confidence. Otherwise omit these fields.
 - characters should include only people who recur or affect story understanding. Do not turn one-off generic mentions, background extras, or environmental descriptions into characters.
-- Each characters[].voiceProfile must be a structured intrinsic voiceprint profile. It describes only the character's stable voice body, not the current line performance. It must cover age impression, pitch range, timbre color, resonance placement, vocal weight, and surface texture.
-- voiceProfile must not include speaking pace, pauses, volume, emotion, sentence-ending treatment, whispering, shouting, crying delivery, or other dynamic delivery states. Those belong to shot performance or line execution, not the character's intrinsic timbre.
+- Each characters[].voiceProfile must be one compact intrinsic voice phrase, about 3-6 words in English or 15-20 Chinese characters. It describes only the character's stable voice color, not the current line performance.
+- voiceProfile should prioritize controllable traits: age/gender voice impression, pitch weight, and timbre texture. Do not include speaking pace, pauses, volume, emotion, sentence-ending treatment, whispering, shouting, crying delivery, or other dynamic delivery states.
 - Infer voiceProfile conservatively from source-stated facts or clearly supported identity, age, physical condition, and long-term character presence. Do not reference a specific actor, celebrity, brand, or copyrighted voice.
 - locations should include only places that matter for spatial continuity, atmosphere, or story progression. Do not turn ordinary objects or one-off directions into locations.
 - entityId must be stable, short, and readable, preferably lowercase words with underscores, for example `character_lin_xiaoyu` or `location_old_house`. Do not duplicate one entity.
@@ -45,14 +45,7 @@ Return JSON only. Do not use markdown or explanations.
       "name": "display name",
       "aliases": ["alias or other name"],
       "summary": "persistent identity, relationship, desire, state, or story role",
-      "voiceProfile": {
-        "ageImpression": "voice age and gender impression, e.g. middle-aged male voice impression",
-        "pitchRange": "stable pitch range, e.g. medium-low range, low fundamental without muddiness",
-        "timbre": "core timbre color, e.g. dark, dense, slightly smoky grain, not bright or sharp",
-        "resonance": "resonance placement and cavity color, e.g. clear chest resonance, thicker throat resonance, very light nasal color",
-        "vocalWeight": "voice weight and density, e.g. medium-heavy voice, high density, rounded edges",
-        "texture": "surface texture, e.g. slight sandy dryness, not breathy, not shouted"
-      },
+      "voiceProfile": "compact intrinsic voice phrase, e.g. warm deep grainy middle-aged male voice",
       "firstEvidence": {
         "blockId": "p0001",
         "quote": "verbatim source snippet where the character first appears"
@@ -86,8 +79,8 @@ Return JSON only. Do not use markdown or explanations.
 
 - Is every piece of information grounded in the script text?
 - Are characters and locations deduplicated, with aliases merged into one entry?
-- Does every main character have an executable, stable, non-celebrity structured voiceProfile?
-- Does voiceProfile describe only intrinsic voiceprint traits, without speaking pace, volume, emotion, sentence endings, or situational delivery?
+- Does every main character have an executable, stable, non-celebrity one-phrase voiceProfile?
+- Does voiceProfile describe only intrinsic voice traits, without speaking pace, volume, emotion, sentence endings, or situational delivery?
 - Are entityId values stable, short, readable, and unique?
 - Does firstEvidence use an input block ID, and does the quote appear verbatim inside that block?
 - Is styleGuide inferred from the text instead of generic cinematic filler?

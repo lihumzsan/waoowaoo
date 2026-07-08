@@ -2,14 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveEditScriptDialogueVoiceContext } from '@/lib/edit-script/voice-profiles'
 import type { EditScriptShot } from '@/lib/edit-script/types'
 
-const linXiaoVoiceProfile = {
-  ageImpression: '青年女性声感',
-  pitchRange: '中低音区',
-  timbre: '清冷透明，边缘不尖',
-  resonance: '口腔前部共鸣清晰，鼻腔色彩很轻',
-  vocalWeight: '偏轻到中等声线',
-  texture: '细微气声边缘，表面干净',
-} as const
+const linXiaoVoiceProfile = '清亮偏冷带轻气声的青年女声'
 
 const baseBible = {
   synopsis: '林晓和阿澈在黑暗走廊里听见脚步声。',
@@ -63,13 +56,11 @@ describe('edit script dialogue voice context', () => {
       characterId: 'project-character-lin-xiao',
       name: '林晓',
       voiceProfile: linXiaoVoiceProfile,
-      voiceSignature: 'ageImpression=青年女性声感; pitchRange=中低音区; timbre=清冷透明，边缘不尖; resonance=口腔前部共鸣清晰，鼻腔色彩很轻; vocalWeight=偏轻到中等声线; texture=细微气声边缘，表面干净',
     }])
     expect(context.shots[0]?.dialogue).toEqual([{
       characterId: 'project-character-lin-xiao',
       name: '林晓',
       voiceProfile: linXiaoVoiceProfile,
-      voiceSignature: 'ageImpression=青年女性声感; pitchRange=中低音区; timbre=清冷透明，边缘不尖; resonance=口腔前部共鸣清晰，鼻腔色彩很轻; vocalWeight=偏轻到中等声线; texture=细微气声边缘，表面干净',
       line: '别开灯。',
     }])
   })
@@ -89,7 +80,7 @@ describe('edit script dialogue voice context', () => {
     })).toThrow('EDIT_SCRIPT_DIALOGUE_VOICE_PROFILE_MISSING:1:阿澈')
   })
 
-  it('rejects legacy free-text voice profiles instead of accepting delivery state as timbre', () => {
+  it('rejects delivery-state voice profiles instead of accepting them as timbre', () => {
     expect(() => resolveEditScriptDialogueVoiceContext({
       storyBibleJson: {
         ...baseBible,

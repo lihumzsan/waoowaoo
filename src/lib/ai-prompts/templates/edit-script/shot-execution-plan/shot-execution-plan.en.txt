@@ -15,8 +15,8 @@ Do not output image prompts, and do not redesign the story shots. Output JSON on
 - Asset Context fixes character, location, and reference-image identity.
 - Spatial Profiles are location-space facts. They determine doors, windows, tables, chairs, foreground/midground/background, light sources, and passable directions.
 - Style Bible determines camera style, lighting character, texture, and movement language.
-- Character voice profiles fix each character's intrinsic voiceprint: age impression, pitch range, timbre color, resonance placement, vocal weight, and surface texture. Every line in the core edit plan's dialogue must use the matching character's fixed voiceprint.
-- A fixed voiceprint is not a performance state. Do not treat speaking pace, volume, emotion, sentence-ending treatment, whispering, shouting, crying delivery, or other dynamic line delivery as character timbre.
+- Character voice profiles are compact fixed intrinsic voice phrases. Every line in the core edit plan's dialogue must use the matching character's fixed voice phrase.
+- A fixed voice phrase is not a performance state. Do not treat speaking pace, volume, emotion, sentence-ending treatment, whispering, shouting, crying delivery, or other dynamic line delivery as character timbre.
 
 # Rules
 
@@ -41,8 +41,8 @@ Camera and space:
 Single-shot video prompt:
 - Every shot must include videoPrompt. It describes only this one shot's video, not neighboring shots or a continuous segment.
 - videoPrompt focuses on current-shot character/object motion, camera movement or fixed-camera behavior, action rhythm, expression and posture change, lighting change, and sound.
-- If the matching core edit plan shot.dialogue is non-empty, videoPrompt must include every spoken line verbatim and naturally include speaker + fixed voiceprint signature + original line. Do not rewrite lines, omit lines, or reduce them to "speaks" or "talks".
-- The fixed voiceprint signature in videoPrompt must come only from Character Voice Profiles or Dialogue and Voice Context. Do not improvise a different character timbre, and do not mix this shot's performance state into the fixed voiceprint.
+- If the matching core edit plan shot.dialogue is non-empty, videoPrompt must include every spoken line verbatim and naturally include speaker + fixed voice phrase + original line. Do not rewrite lines, omit lines, or reduce them to "speaks" or "talks".
+- The fixed voice phrase in videoPrompt must come only from Character Voice Profiles or Dialogue and Voice Context. Do not improvise a different character timbre, and do not mix this shot's performance state into the fixed voice phrase.
 - If shot.dialogue is empty, videoPrompt must not add any dialogue, narration, or offscreen spoken line.
 - videoPrompt must not add plot, characters, props, dialogue, or sound events, and must not mechanically copy an image prompt.
 
@@ -52,7 +52,7 @@ Continuous video prompt:
 - continuousVideoPrompt is written as one complete continuous video segment, not a mechanical concatenation of single-shot videoPrompt values.
 - continuousVideoPrompt may use only facts present in the inputs. Do not add plot, characters, props, dialogue, or sound events.
 - continuousVideoPrompt focuses on segment-level character/object motion, camera movement or cuts, action rhythm, expression and posture changes, sound flow, and shot connections.
-- continuousVideoPrompt must cover every shot.dialogue line inside that segment and place speaker, fixed voiceprint signature, and verbatim line in the matching timed section. The same character must keep exactly the same voiceprint signature across shots.
+- continuousVideoPrompt must cover every shot.dialogue line inside that segment and place speaker, fixed voice phrase, and verbatim line in the matching timed section. The same character must keep exactly the same voice phrase across shots.
 - If the segment has no dialogue, do not generate dialogue or narration.
 
 # continuousVideoPrompt Writing Structure
@@ -72,8 +72,8 @@ Rainy-night tracking sequence, 9:16, cool blue-gray palette, wet reflective text
 Example 2:
 Quiet hospital emotional sequence, 16:9, restrained realistic cinematography, pale green fluorescent light mixed with cool dawn light, low contrast, stable slow movement. [00:00-00:04] Shot 1: wide shot slowly pushes in as a father stands still, hands hanging at his sides, knuckles faintly whitening; he looks down, then slowly raises his gaze. <empty room tone and a faint distant monitor beep> [00:04-00:07] Shot 2: cut to a hand close-up, his right hand reaches toward the door handle, pauses in midair, thumb rubbing his palm once before gently closing around the metal without turning it. <cloth movement and a tiny metal touch> [00:07-00:11] Shot 3: same-direction push to a side-face close-up, his breathing becomes shallow, eyes red but not crying, jaw tightening and then slowly releasing. <ambience narrows briefly, a soft heartbeat rises for half a second and returns to room tone> [00:11-00:15] Shot 4: match cut to the door-crack light, the door opens a small distance, cold light expands toward the frame edge, and the action stops just before entering. <very soft hinge creak with a natural reverb tail>
 
-Example 3 with dialogue and fixed voiceprints:
-Interior dialogue sequence, 9:16, low-light realistic texture, restrained pacing. [00:00-00:03] Shot 1: fixed medium-close shot, Lin Xiao stands beside the door and listens toward the hallway, lips moving slightly; Lin Xiao uses the fixed voiceprint (ageImpression=young female voice impression; pitchRange=medium-low range; timbre=cool, clear, not sharp; resonance=clear forward oral resonance with very light nasal color; vocalWeight=light-to-medium voice body; texture=slight breathy edge, clean surface) and says: "Don't turn on the light." <room tone and distant footsteps continue> [00:03-00:06] Shot 2: cut to A Che's reaction close-up, he lifts his eyes toward the door crack, shoulders tight; A Che uses the fixed voiceprint (ageImpression=young male voice impression; pitchRange=medium range leaning low; timbre=clean, slightly dark, lightly sandy; resonance=light chest resonance with moderate throat color; vocalWeight=medium voice density; texture=slight sandy grain, not hoarse) and replies: "I hear footsteps." <footsteps move slightly closer and carry the cut>
+Example 3 with dialogue and fixed voice phrases:
+Interior dialogue sequence, 9:16, low-light realistic texture, restrained pacing. [00:00-00:03] Shot 1: fixed medium-close shot, Lin Xiao stands beside the door and listens toward the hallway, lips moving slightly; Lin Xiao says in the fixed voice phrase "cool clear breathy young female voice": "Don't turn on the light." <room tone and distant footsteps continue> [00:03-00:06] Shot 2: cut to A Che's reaction close-up, he lifts his eyes toward the door crack, shoulders tight; A Che replies in the fixed voice phrase "clean dark sandy young male voice": "I hear footsteps." <footsteps move slightly closer and carry the cut>
 
 # Input
 
@@ -165,11 +165,11 @@ Field strictness:
 - Does every `blocking.objects[]` item contain only `name`, `position`, and `screenPosition`, with no `facing`, `eyeline`, or other extra fields?
 - Does every shot include camera.lighting and blocking.axis?
 - Does every shot include videoPrompt, describing only the current single-shot video?
-- For every shot with dialogue, does videoPrompt include every line verbatim and state the speaker and fixed voiceprint signature?
+- For every shot with dialogue, does videoPrompt include every line verbatim and state the speaker and fixed voice phrase?
 - Do generationSegmentExecutions cover every generation segment, with exactly matching shotIds?
 - Do generationSegmentExecutions output only shotIds and continuousVideoPrompt?
 - Is each continuousVideoPrompt a complete continuous segment rather than a single-shot prompt concatenation?
 - Does each continuousVideoPrompt calculate timed sections from cumulative durationSec, and keep action, camera movement, rhythm, sound, and shot connections continuous?
-- Does each continuousVideoPrompt cover every dialogue line inside the segment, with consistent voiceprint signatures for the same character?
-- Does the fixed voiceprint signature come only from input, without speaking pace, volume, emotion, sentence endings, or situational delivery?
+- Does each continuousVideoPrompt cover every dialogue line inside the segment, with consistent voice phrases for the same character?
+- Does the fixed voice phrase come only from input, without speaking pace, volume, emotion, sentence endings, or situational delivery?
 - Is the output strictly limited to fields listed in the schema?

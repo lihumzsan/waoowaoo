@@ -1,25 +1,13 @@
 import { z } from 'zod'
 
-const voiceProfileIntrinsicTextSchema = z.string().trim().min(1)
+const dynamicDeliveryStatePattern = /语速|音量|句尾|低声|喊叫|哭腔|情绪|停顿|急促|大声|小声|压低|\b(?:pace|speed|volume|emotion|whisper|shout|crying|delivery)\b/i
 
-export const editBibleCharacterVoiceProfileSchema = z.object({
-  ageImpression: voiceProfileIntrinsicTextSchema,
-  pitchRange: voiceProfileIntrinsicTextSchema,
-  timbre: voiceProfileIntrinsicTextSchema,
-  resonance: voiceProfileIntrinsicTextSchema,
-  vocalWeight: voiceProfileIntrinsicTextSchema,
-  texture: voiceProfileIntrinsicTextSchema,
-}).strict()
+export const editBibleCharacterVoiceProfileSchema = z.string()
+  .trim()
+  .min(1)
+  .max(48)
+  .refine((value) => !dynamicDeliveryStatePattern.test(value), {
+    message: 'voiceProfile must describe intrinsic timbre only, not delivery state',
+  })
 
 export type EditBibleCharacterVoiceProfile = z.infer<typeof editBibleCharacterVoiceProfileSchema>
-
-export function formatEditBibleCharacterVoiceProfile(profile: EditBibleCharacterVoiceProfile): string {
-  return [
-    `ageImpression=${profile.ageImpression}`,
-    `pitchRange=${profile.pitchRange}`,
-    `timbre=${profile.timbre}`,
-    `resonance=${profile.resonance}`,
-    `vocalWeight=${profile.vocalWeight}`,
-    `texture=${profile.texture}`,
-  ].join('; ')
-}
