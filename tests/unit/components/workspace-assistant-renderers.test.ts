@@ -200,4 +200,40 @@ describe('workspace assistant renderers', () => {
     expect(html).toContain('21:9')
     expect(html).toContain('确认剧集规划')
   })
+
+  it('renders script intake question labels at readable body size', () => {
+    const html = renderWithIntl(createElement(AssistantChoiceCardView, {
+      data: {
+        cardId: 'script-intake-card',
+        runId: 'run-1',
+        interruptionId: null,
+        toolCallId: 'tool-call-1',
+        choiceType: 'script_intake',
+        variant: 'confirm_or_reply',
+        autoSubmitOnReady: true,
+        title: '补充创作方向',
+        description: '在系统扩写完整剧本前，先选择几个创作方向。',
+        groups: [{
+          key: 'tone',
+          label: '故事整体呈现怎样的视觉与情感基调？',
+          required: true,
+          options: [
+            { value: 'panic', label: '惊悚恐慌', description: '节奏极快。' },
+            { value: 'solemn', label: '哲学敬畏', description: '画面宏大而静谧。' },
+          ],
+        }],
+        submitLabel: '使用这些选择',
+        submit: { kind: 'submit_tool_output' },
+        replyLabel: '或直接补充你的想法',
+        replyPlaceholder: '补充故事设定、氛围、人物、地点，或选项没有覆盖的内容...',
+        replySubmitLabel: '使用这段补充',
+        replyToolOutputKey: 'freeText',
+      },
+      onSubmitChoiceResponse: async () => undefined,
+      onConfirmEditStylePreviewChoice: async () => undefined,
+    } satisfies ComponentProps<typeof AssistantChoiceCardView>))
+
+    expect(html).toContain('故事整体呈现怎样的视觉与情感基调？')
+    expect(html).toContain('text-sm font-semibold leading-6 text-[var(--glass-text-primary)]')
+  })
 })

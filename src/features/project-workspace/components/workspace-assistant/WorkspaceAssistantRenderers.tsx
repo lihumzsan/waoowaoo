@@ -504,9 +504,12 @@ export function AssistantChoiceCardView(props: {
       : isStylePreviewGroup || isAutoSelectionCard
         ? 'grid grid-cols-1 gap-2'
         : 'grid grid-cols-2 gap-2'
+    const groupLabelClass = isAutoSelectionCard
+      ? 'text-sm font-semibold leading-6 text-[var(--glass-text-primary)]'
+      : 'text-[11px] font-semibold text-[var(--glass-text-tertiary)]'
     return (
       <div className="mt-2 space-y-2">
-        <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
+        <div className={groupLabelClass}>{activeGroup.label}</div>
         <div className={optionGridClass}>
           {activeGroup.options.map((option) => {
             const selected = selections[activeGroup.key] === option.value
