@@ -678,6 +678,9 @@ describe('project agent runtime deterministic tool injection', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '16:9',
+        },
       },
     })
     expect(choiceResult).not.toBeNull()
@@ -725,6 +728,9 @@ describe('project agent runtime deterministic tool injection', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '16:9',
+        },
       },
     })
     expect(choiceResult).not.toBeNull()
@@ -773,6 +779,9 @@ describe('project agent runtime deterministic tool injection', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '16:9',
+        },
       },
     })
     expect(choiceResult).not.toBeNull()
@@ -816,6 +825,9 @@ describe('project agent runtime deterministic tool injection', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '16:9',
+        },
       },
     })
     expect(choiceResult).not.toBeNull()

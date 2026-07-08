@@ -495,6 +495,66 @@ export function AssistantChoiceCardView(props: {
     }
   }
 
+  const renderActiveGroup = () => {
+    if (!activeGroup) return null
+    return (
+      <div className="mt-2 space-y-2">
+        <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
+        <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : isStylePreviewGroup ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
+          {activeGroup.options.map((option) => {
+            const selected = selections[activeGroup.key] === option.value
+            return (
+              <button
+                key={`${activeGroup.key}:${option.value}`}
+                type="button"
+                className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
+                onClick={() => {
+                  const nextSelections = {
+                    ...selections,
+                    [activeGroup.key]: option.value,
+                  }
+                  setSelections(nextSelections)
+                  setError(null)
+                  if (activeGroupIndex < card.groups.length - 1) {
+                    setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
+                  }
+                  if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(card.groups, nextSelections)) {
+                    void handleSubmit(nextSelections)
+                  }
+                }}
+                disabled={submitting}
+              >
+                {option.imageUrl ? (
+                  <Image
+                    src={option.imageUrl}
+                    alt={option.label}
+                    width={640}
+                    height={360}
+                    unoptimized
+                    className="h-28 w-full object-cover"
+                  />
+                ) : null}
+                <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-0.5'}`}>
+                  {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                    {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
+                  </div>
+                  {!isAspectRatioGroup && option.description ? (
+                    <div className="line-clamp-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                  ) : null}
+                  {!isAspectRatioGroup && option.meta ? (
+                    <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
+                  ) : null}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="flex items-center gap-2">
@@ -520,6 +580,7 @@ export function AssistantChoiceCardView(props: {
         ) : null}
       </div>
       {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
+      {isConfirmOnly || isConfirmOrReply ? renderActiveGroup() : null}
       {isConfirmOnly ? (
         <div className="mt-3">
           <button
@@ -568,62 +629,7 @@ export function AssistantChoiceCardView(props: {
             </button>
           </div>
         </div>
-      ) : activeGroup ? (
-        <div className="mt-2 space-y-2">
-          <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
-          <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : isStylePreviewGroup ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
-            {activeGroup.options.map((option) => {
-              const selected = selections[activeGroup.key] === option.value
-              return (
-                <button
-                  key={`${activeGroup.key}:${option.value}`}
-                  type="button"
-                  className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selected ? 'border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900/10' : 'border-[var(--glass-stroke-base)] bg-white/80 hover:border-[var(--glass-stroke-strong)] hover:bg-neutral-100'}`}
-                  onClick={() => {
-                    const nextSelections = {
-                      ...selections,
-                      [activeGroup.key]: option.value,
-                    }
-                    setSelections(nextSelections)
-                    setError(null)
-                    if (activeGroupIndex < card.groups.length - 1) {
-                      setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
-                    }
-                    if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(card.groups, nextSelections)) {
-                      void handleSubmit(nextSelections)
-                    }
-                  }}
-                  disabled={submitting}
-                >
-                  {option.imageUrl ? (
-                    <Image
-                      src={option.imageUrl}
-                      alt={option.label}
-                      width={640}
-                      height={360}
-                      unoptimized
-                      className="h-28 w-full object-cover"
-                    />
-                  ) : null}
-                  <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-0.5'}`}>
-                    {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
-                      {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
-                    </div>
-                    {!isAspectRatioGroup && option.description ? (
-                      <div className="line-clamp-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
-                    ) : null}
-                    {!isAspectRatioGroup && option.meta ? (
-                      <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
-                    ) : null}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
+      ) : activeGroup ? renderActiveGroup() : null}
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
       {showManualSubmit ? (
         <>

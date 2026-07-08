@@ -1,4 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const prismaMock = vi.hoisted(() => ({
+  project: {
+    updateMany: vi.fn(async () => ({ count: 1 })),
+  },
+}))
+
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+
 import {
   applyEditFirstChoiceResultSideEffects,
   buildEditFirstChoiceResult,
@@ -40,9 +49,11 @@ describe('buildEditFirstChoiceResult', () => {
   beforeEach(() => {
     approveProjectEpisodeEditScriptAssetsMock.mockClear()
     confirmEpisodeEditBibleMock.mockClear()
+    prismaMock.project.updateMany.mockClear()
+    prismaMock.project.updateMany.mockResolvedValue({ count: 1 })
   })
 
-  it('serializes bible approval without selecting the next operation', () => {
+  it('serializes bible approval with the selected aspect ratio without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
@@ -50,11 +61,15 @@ describe('buildEditFirstChoiceResult', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '16:9',
+        },
       },
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
     expect(parsed.decision).toBe('approve')
+    expect(parsed.aspectRatio).toBe('16:9')
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
@@ -149,17 +164,57 @@ describe('buildEditFirstChoiceResult', () => {
       output: {
         ok: true,
         decision: 'approve',
+        selections: {
+          aspectRatio: '21:9',
+        },
       },
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
     })
 
+    expect(prismaMock.project.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'project-1',
+        userId: 'user-1',
+      },
+      data: {
+        videoRatio: '21:9',
+      },
+    })
     expect(confirmEpisodeEditBibleMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
     })
+  })
+
+  it('rejects bible approval without a selected aspect ratio', () => {
+    expect(buildEditFirstChoiceResult({
+      choiceType: 'bible_review',
+      toolCallId: 'tool-call-1',
+      latestUserText: '确认',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })).toBeNull()
+  })
+
+  it('does not confirm bible review when approval is missing the selected aspect ratio', async () => {
+    await expect(applyEditFirstChoiceResultSideEffects({
+      choiceType: 'bible_review',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })).rejects.toThrow('PROJECT_AGENT_BIBLE_REVIEW_ASPECT_RATIO_REQUIRED')
+
+    expect(prismaMock.project.updateMany).not.toHaveBeenCalled()
+    expect(confirmEpisodeEditBibleMock).not.toHaveBeenCalled()
   })
 
   it('rejects budget confirmation without approval', () => {

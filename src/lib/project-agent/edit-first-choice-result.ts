@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import { prisma } from '@/lib/prisma'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import { confirmEpisodeEditBible } from '@/lib/edit-bible'
@@ -24,9 +25,21 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function isRecord(value: unknown): value is UnknownRecord {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
 function readAspectRatio(value: unknown): EditScriptVideoRatio | null {
   if (value === '9:16' || value === '16:9' || value === '21:9') return value
   return null
+}
+
+function readChoiceAspectRatio(output: UnknownRecord): EditScriptVideoRatio | null {
+  const direct = readAspectRatio(output.aspectRatio)
+  if (direct) return direct
+  const selections = output.selections
+  if (!isRecord(selections)) return null
+  return readAspectRatio(selections.aspectRatio)
 }
 
 function buildChoiceInputItems(params: {
@@ -83,11 +96,13 @@ export function buildEditFirstChoiceResult(params: {
       }
     }
     if (decision === 'approve') {
+      const aspectRatio = readChoiceAspectRatio(params.output)
+      if (!aspectRatio) return null
       return {
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
-          result: { decision: 'approve' },
+          result: { decision: 'approve', aspectRatio },
         }),
       }
     }
@@ -152,8 +167,24 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
   const decision = readString(params.output.decision)
   if (params.choiceType === 'bible_review') {
     if (decision !== 'approve') return
+    const aspectRatio = readChoiceAspectRatio(params.output)
+    if (!aspectRatio) {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_ASPECT_RATIO_REQUIRED')
+    }
     if (!params.episodeId) {
       throw new Error('PROJECT_AGENT_BIBLE_REVIEW_EPISODE_ID_REQUIRED')
+    }
+    const updateResult = await prisma.project.updateMany({
+      where: {
+        id: params.projectId,
+        userId: params.userId,
+      },
+      data: {
+        videoRatio: aspectRatio,
+      },
+    })
+    if (updateResult.count !== 1) {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_PROJECT_NOT_FOUND')
     }
     await confirmEpisodeEditBible({
       projectId: params.projectId,

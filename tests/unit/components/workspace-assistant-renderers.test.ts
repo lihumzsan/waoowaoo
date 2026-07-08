@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
 import {
+  AssistantChoiceCardView,
   ConfirmationActionCard,
   isWorkspaceAssistantToolDetailsOpen,
   setWorkspaceAssistantToolDetailsOpen,
@@ -159,5 +160,44 @@ describe('workspace assistant renderers', () => {
     expect(taskBatchSubmittedCardSource).not.toContain('mutationBatchId')
     expect(taskSubmittedCardSource).not.toContain('undoCurrentChange')
     expect(taskBatchSubmittedCardSource).not.toContain('undoCurrentBatch')
+  })
+
+  it('renders required choice groups for confirm-or-reply choice cards', () => {
+    const html = renderWithIntl(createElement(AssistantChoiceCardView, {
+      data: {
+        cardId: 'edit-first-bible-review',
+        runId: 'run-1',
+        interruptionId: null,
+        toolCallId: 'tool-call-1',
+        choiceType: 'bible_review',
+        variant: 'confirm_or_reply',
+        title: '确认剧集规划',
+        description: '选择比例后确认',
+        groups: [{
+          key: 'aspectRatio',
+          label: '画面比例',
+          required: true,
+          options: [
+            { value: '9:16', label: '9:16' },
+            { value: '16:9', label: '16:9' },
+            { value: '21:9', label: '21:9' },
+          ],
+        }],
+        submitLabel: '确认剧集规划',
+        submit: { kind: 'submit_tool_output' },
+        replyLabel: '需要修改',
+        replyPlaceholder: '输入修改意见',
+        replySubmitLabel: '提交修改意见',
+        replyToolOutputKey: 'revisionNotes',
+      },
+      onSubmitChoiceResponse: async () => undefined,
+      onConfirmEditStylePreviewChoice: async () => undefined,
+    } satisfies ComponentProps<typeof AssistantChoiceCardView>))
+
+    expect(html).toContain('画面比例')
+    expect(html).toContain('9:16')
+    expect(html).toContain('16:9')
+    expect(html).toContain('21:9')
+    expect(html).toContain('确认剧集规划')
   })
 })

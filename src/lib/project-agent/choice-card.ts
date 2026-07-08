@@ -4,9 +4,10 @@ import { getSignedUrl } from '@/lib/storage'
 import type { ProjectAgentLocale } from './locale'
 import type {
   ProjectAgentChoiceCardPartData,
+  ProjectAgentChoiceCardOption,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
+import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 export {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   EDIT_FIRST_CHOICE_TOOL_IDS,
@@ -19,7 +20,7 @@ export type {
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
-const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = ['9:16', '16:9', '21:9']
+const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = EDIT_SCRIPT_VIDEO_RATIOS
 const BUDGET_CONFIRMATION_ALLOWED_STAGES = new Set<string>([
   'ready_to_generate_edit_script',
   'ready_to_generate_assets',
@@ -36,6 +37,14 @@ export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | n
   const normalized = text.trim()
   const ratio = EDIT_FIRST_ASPECT_RATIOS.find((candidate) => normalized.includes(candidate))
   return ratio ?? null
+}
+
+function buildAspectRatioOptions(isEnglish: boolean): ProjectAgentChoiceCardOption[] {
+  return EDIT_FIRST_ASPECT_RATIOS.map((ratio) => ({
+    value: ratio,
+    label: ratio,
+    description: isEnglish ? 'Project video aspect ratio' : '项目视频画面比例',
+  }))
 }
 
 async function buildStyleAndRatioChoiceCard(params: {
@@ -151,9 +160,16 @@ function buildBibleReviewChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
     description: isEnglish
-      ? 'Review the global story understanding, chapter split, durable facts, and emotional curve. Confirm only when this blueprint can drive chapter production.'
-      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份全局蓝图将作为各章节制作的基线。',
-    groups: [],
+      ? 'Review the global story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this blueprint can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份全局蓝图将作为各章节制作的基线。',
+    groups: [
+      {
+        key: 'aspectRatio',
+        label: isEnglish ? 'Aspect Ratio' : '画面比例',
+        required: true,
+        options: buildAspectRatioOptions(isEnglish),
+      },
+    ],
     submitLabel: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
     submit: {
       kind: 'submit_tool_output',

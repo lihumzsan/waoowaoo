@@ -76,8 +76,17 @@ describe('edit-first assistant choice cards', () => {
       choiceType: 'bible_review',
       variant: 'confirm_or_reply',
       title: '确认剧集规划',
-      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势。确认后，这份全局蓝图将作为各章节制作的基线。',
-      groups: [],
+      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份全局蓝图将作为各章节制作的基线。',
+      groups: [{
+        key: 'aspectRatio',
+        label: '画面比例',
+        required: true,
+        options: [
+          { value: '9:16', label: '9:16', description: '项目视频画面比例' },
+          { value: '16:9', label: '16:9', description: '项目视频画面比例' },
+          { value: '21:9', label: '21:9', description: '项目视频画面比例' },
+        ],
+      }],
       submitLabel: '确认剧集规划',
       submit: {
         kind: 'submit_tool_output',

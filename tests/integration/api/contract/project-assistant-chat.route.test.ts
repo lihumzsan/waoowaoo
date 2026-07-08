@@ -36,6 +36,12 @@ const editBibleMock = vi.hoisted(() => ({
   })),
 }))
 
+const prismaMock = vi.hoisted(() => ({
+  project: {
+    updateMany: vi.fn(async (): Promise<{ count: number }> => ({ count: 1 })),
+  },
+}))
+
 const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
   listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
@@ -190,6 +196,7 @@ vi.mock('@/lib/api-auth', () => {
 vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 vi.mock('@/lib/edit-script/service', () => editScriptServiceMock)
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/edit-bible', async () => {
   const actual = await vi.importActual<typeof import('@/lib/edit-bible')>('@/lib/edit-bible')
   return {
@@ -746,6 +753,9 @@ describe('project assistant chat route', () => {
           output: {
             ok: true,
             decision: 'approve',
+            selections: {
+              aspectRatio: '9:16',
+            },
           },
         },
       }),
@@ -763,6 +773,15 @@ describe('project assistant chat route', () => {
         choiceType: 'bible_review',
       }),
     }))
+    expect(prismaMock.project.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'project-1',
+        userId: 'user-1',
+      },
+      data: {
+        videoRatio: '9:16',
+      },
+    })
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a claimed wait follow-up exactly once', async () => {
