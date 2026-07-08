@@ -104,6 +104,7 @@ export interface EditFirstWorkflowSnapshot {
   failedVideoSegmentCount: number
   activeVideoTaskCount: number
   chapterCount: number
+  renderableChapterCount: number
   completedChapterRenderCount: number
   failedChapterRenderCount: number
   activeChapterRenderTaskCount: number
@@ -565,6 +566,9 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
 
   if (!videoReady) {
     const videoAction = workflowAction('generate_episode_videos', 'Generate videos')
+    const allowedOperationIds: EditFirstWorkflowOperationId[] = snapshot.renderableChapterCount > snapshot.completedChapterRenderCount
+      ? [videoAction.operationId, 'render_chapters']
+      : [videoAction.operationId]
     if (snapshot.activeVideoTaskCount > 0) {
       return state({
         stage: 'videos_generating',
@@ -575,7 +579,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'ready_to_generate_videos',
       nextAction: videoAction,
-      allowedOperationIds: [videoAction.operationId],
+      allowedOperationIds,
     })
   }
 
@@ -966,6 +970,11 @@ export async function resolveEditFirstWorkflowState(params: {
   }))
   const plannedVideoGroups = generationSegments.map((segment) =>
     findVideoGroupForShotIds(videoGroupCandidates, segment.chapterId, segment.shotIds))
+  const renderableChapterCount = chapters.filter((chapter) => {
+    const chapterSegments = generationSegments.filter((segment) => segment.chapterId === chapter.id)
+    return chapterSegments.length > 0 && chapterSegments.every((segment) =>
+      videoGroupHasOutput(findVideoGroupForShotIds(videoGroupCandidates, segment.chapterId, segment.shotIds)))
+  }).length
   const bgmScoreStatus = readMusicScoreStatus(musicScore)
   const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
   const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
@@ -1042,6 +1051,7 @@ export async function resolveEditFirstWorkflowState(params: {
     failedVideoSegmentCount: plannedVideoGroups.filter((group) => group?.status === 'failed').length,
     activeVideoTaskCount: plannedVideoGroups.filter((group) => isActiveWorkflowStatus(group?.status)).length,
     chapterCount: chapters.length,
+    renderableChapterCount,
     completedChapterRenderCount: chapters.filter((item) => hasOutputReference(item.outputMediaId ?? null) && item.renderStatus === 'completed').length,
     failedChapterRenderCount: chapters.filter((item) => item.renderStatus === 'failed').length,
     activeChapterRenderTaskCount,
