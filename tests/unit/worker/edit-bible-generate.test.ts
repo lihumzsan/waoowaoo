@@ -38,6 +38,8 @@ const editBibleMock = vi.hoisted(() => ({
 }))
 
 const sourceDocumentMock = vi.hoisted(() => ({
+  EDIT_SOURCE_DOCUMENT_OUTPUT_TOKEN_RESERVE: 512,
+  estimateEditSourceDocumentInputTokens: vi.fn((text: string) => text.length),
   readEpisodeSourceDocumentById: vi.fn(async () => ({
     id: 'source-1',
     episodeId: 'episode-1',
@@ -49,6 +51,45 @@ const sourceDocumentMock = vi.hoisted(() => ({
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   })),
+  materializePromptGeneratedSourceDocument: vi.fn(async () => ({
+    id: 'source-1',
+    episodeId: 'episode-1',
+    normalizedText: '扩写后的完整剧本',
+    checksum: 'checksum-expanded',
+    sourceKind: 'prompt_generated_outline',
+    rawFileMediaId: null,
+    version: 2,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:01:00Z'),
+    estimatedInputTokens: 120,
+  })),
+}))
+
+const aiMock = vi.hoisted(() => ({
+  executeAiTextStep: vi.fn(async () => ({
+    text: '扩写后的完整剧本',
+    reasoning: '',
+    usage: null,
+    completion: null,
+  })),
+}))
+
+const billingMock = vi.hoisted(() => ({
+  withTextBilling: vi.fn(async (
+    _userId: string,
+    _model: string,
+    _maxInputTokens: number,
+    _metadata: unknown,
+    run: () => Promise<unknown>,
+  ) => await run()),
+}))
+
+const promptMock = vi.hoisted(() => ({
+  AI_PROMPT_IDS: {
+    EDIT_BIBLE_OUTLINE_SCRIPT: 'outline-script',
+  },
+  buildAiPromptContent: vi.fn(() => '请扩写用户创意。'),
+  flattenChatMessageContent: vi.fn((value: unknown) => String(value)),
 }))
 
 const workerMock = vi.hoisted(() => ({
@@ -62,6 +103,15 @@ const streamMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/edit-bible', () => editBibleMock)
 vi.mock('@/lib/edit-source-document', () => sourceDocumentMock)
+vi.mock('@/lib/ai-exec/engine', () => aiMock)
+vi.mock('@/lib/billing', () => billingMock)
+vi.mock('@/lib/ai-prompts', () => ({
+  AI_PROMPT_IDS: promptMock.AI_PROMPT_IDS,
+  buildAiPromptContent: promptMock.buildAiPromptContent,
+}))
+vi.mock('@/lib/ai-registry/message-content', () => ({
+  flattenChatMessageContent: promptMock.flattenChatMessageContent,
+}))
 vi.mock('@/lib/workers/shared', () => ({ reportTaskProgress: workerMock.reportTaskProgress }))
 vi.mock('@/lib/workers/utils', () => ({ assertTaskActive: workerMock.assertTaskActive }))
 vi.mock('@/lib/llm-observe/internal-stream-context', () => ({
@@ -94,6 +144,35 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
 describe('worker edit-bible-generate behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sourceDocumentMock.readEpisodeSourceDocumentById.mockResolvedValue({
+      id: 'source-1',
+      episodeId: 'episode-1',
+      normalizedText: '0123456789',
+      checksum: 'checksum-1',
+      sourceKind: 'paste',
+      rawFileMediaId: null,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    })
+    sourceDocumentMock.materializePromptGeneratedSourceDocument.mockResolvedValue({
+      id: 'source-1',
+      episodeId: 'episode-1',
+      normalizedText: '扩写后的完整剧本',
+      checksum: 'checksum-expanded',
+      sourceKind: 'prompt_generated_outline',
+      rawFileMediaId: null,
+      version: 2,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:01:00Z'),
+      estimatedInputTokens: 120,
+    })
+    aiMock.executeAiTextStep.mockResolvedValue({
+      text: '扩写后的完整剧本',
+      reasoning: '',
+      usage: null,
+      completion: null,
+    })
     editBibleMock.generateEditBibleArtifacts.mockResolvedValue({
       bible: {
         synopsis: '故事梗概',
@@ -146,6 +225,7 @@ describe('worker edit-bible-generate behavior', () => {
       locale: 'zh',
       sourceDocument: '0123456789',
     })
+    expect(aiMock.executeAiTextStep).not.toHaveBeenCalled()
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledTimes(1)
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
@@ -161,6 +241,46 @@ describe('worker edit-bible-generate behavior', () => {
       chapterCount: 1,
       version: 1,
     })
+  })
+
+  it('expands prompt_generated_outline inside the worker before bible generation', async () => {
+    sourceDocumentMock.readEpisodeSourceDocumentById.mockResolvedValueOnce({
+      id: 'source-1',
+      episodeId: 'episode-1',
+      normalizedText: '两分钟民科超光速短片',
+      checksum: 'checksum-prompt',
+      sourceKind: 'prompt_generated_outline',
+      rawFileMediaId: null,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    })
+
+    await handleEditBibleGenerateTask(buildJob({
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-1',
+      editBibleId: 'bible-1',
+      analysisModel: 'analysis-model',
+    }))
+
+    expect(aiMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'outline-script',
+      model: 'analysis-model',
+      projectId: 'project-1',
+      userId: 'user-1',
+      meta: expect.objectContaining({
+        stepId: 'outline-script',
+      }),
+    }))
+    expect(sourceDocumentMock.materializePromptGeneratedSourceDocument).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-1',
+      text: '扩写后的完整剧本',
+    })
+    expect(editBibleMock.generateEditBibleArtifacts).toHaveBeenCalledWith(expect.objectContaining({
+      sourceDocument: '扩写后的完整剧本',
+    }))
   })
 
   it('marks the bible failed when generation throws', async () => {

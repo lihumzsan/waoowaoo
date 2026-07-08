@@ -15,19 +15,20 @@ export async function resolveDefaultEditChapter(
   episodeId: string,
   client: PrismaClientLike = prisma,
 ): Promise<EditChapterIdentity> {
-  const chapter = await client.projectEditChapter.findUnique({
-    where: {
-      episodeId_chapterIndex: {
-        episodeId,
-        chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX,
-      },
-    },
+  const chapters = await client.projectEditChapter.findMany({
+    where: { episodeId },
     select: {
       id: true,
       episodeId: true,
       chapterIndex: true,
     },
+    orderBy: { chapterIndex: 'asc' },
+    take: 2,
   })
+  if (chapters.length > 1) {
+    throw new Error(`DEFAULT_CHAPTER_FOR_MULTI_CHAPTER_EPISODE_FORBIDDEN:${episodeId}`)
+  }
+  const chapter = chapters.find((candidate) => candidate.chapterIndex === DEFAULT_EDIT_CHAPTER_INDEX) ?? null
   if (!chapter) throw new Error(`PROJECT_EDIT_DEFAULT_CHAPTER_MISSING:${episodeId}`)
   return chapter
 }

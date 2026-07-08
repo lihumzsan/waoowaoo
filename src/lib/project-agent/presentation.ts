@@ -20,6 +20,7 @@ export function buildAssistantProjectContextSnapshot(
     latestArtifacts: context.latestArtifacts,
     editBible: context.episodeDetail?.editBible ?? null,
     editScript: context.episodeDetail?.editScript ?? null,
+    editScripts: context.episodeDetail?.editScripts ?? [],
     editFirstWorkflow: context.editFirstWorkflow,
     config: {
       analysisModel: context.policy.analysisModel || null,

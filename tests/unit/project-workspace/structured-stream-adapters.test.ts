@@ -9,6 +9,7 @@ import {
 describe('workspace structured stream adapters', () => {
   it('registers every edit bible streaming prompt step as text for the canvas', () => {
     for (const stepId of [
+      AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
       AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
       AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
@@ -51,5 +52,47 @@ describe('workspace structured stream adapters', () => {
         sound: 'room tone',
       },
     }, 0)).toBe('shot-stable-id')
+  })
+
+  it('accepts raw chapter planning stream shots before asset names are enriched for persistence', () => {
+    const [adapter] = findStructuredStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
+    })
+
+    const parsed = adapter?.parseItem({
+      shotId: 'shot-stream-id',
+      shotNumber: 1,
+      durationSec: 4,
+      scene: {
+        locationId: 'location-1',
+        subScene: '工作台',
+      },
+      action: '民科检查设备。',
+      characters: [{
+        characterId: 'character-1',
+        visibility: 'visible',
+        role: 'focus',
+        performance: '检查设备',
+      }],
+      keyObjects: [],
+      sound: 'room tone',
+    })
+
+    expect(parsed).toMatchObject({
+      kind: 'editScriptShot',
+      shot: {
+        shotId: 'shot-stream-id',
+        scene: {
+          locationId: 'location-1',
+          name: 'location-1',
+          subScene: '工作台',
+        },
+        characters: [{
+          characterId: 'character-1',
+          name: 'character-1',
+        }],
+      },
+    })
   })
 })

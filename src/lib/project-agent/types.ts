@@ -265,6 +265,7 @@ export interface ProjectAssistantContextSnapshot {
   latestArtifacts: ProjectContextSnapshot['latestArtifacts']
   editBible?: ProjectContextEditBibleSnapshot | null
   editScript?: ProjectContextEditScriptSnapshot | null
+  editScripts?: ProjectContextEditScriptSnapshot[]
   editFirstWorkflow: EditFirstWorkflowState
   config: {
     analysisModel?: string | null

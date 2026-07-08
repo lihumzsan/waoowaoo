@@ -242,10 +242,10 @@ describe('video group planning', () => {
       readonly where?: {
         readonly id?: string
       }
-    }) => ({ id: query.where?.id ?? 'chapter-1' }))
-    prismaMock.projectEditChapter.findMany.mockResolvedValue([{ id: 'chapter-1' }])
-    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-1' })
-    prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1' })
+    }) => ({ id: query.where?.id ?? 'chapter-1', chapterIndex: 0 }))
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([{ id: 'chapter-1', chapterIndex: 0 }])
+    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-1', chapterIndex: 0 })
+    prismaMock.projectEditChapter.create.mockResolvedValue({ id: 'chapter-1', chapterIndex: 0 })
     prismaMock.projectEditScript.findFirst.mockResolvedValue({
       id: 'edit-script-1',
       corePlanJson: {
@@ -384,8 +384,8 @@ describe('video group planning', () => {
 
   it('plans the main episode video operation for every chapter when no chapterId is provided', async () => {
     prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([
-      { id: 'chapter-1' },
-      { id: 'chapter-2' },
+      { id: 'chapter-1', chapterIndex: 0 },
+      { id: 'chapter-2', chapterIndex: 1 },
     ])
     prismaMock.projectEditScript.findFirst.mockImplementation(async (query: {
       readonly where?: {

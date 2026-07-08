@@ -756,7 +756,6 @@ export function applyWorkspaceStructuredStreamPatches(
   patches.forEach((patch) => {
     if (usedPatchNodeIds.has(patch.nodeId)) return
     if (hasPersistedStreamContentForPatch(baseNodes, patch)) return
-    throw new Error(`WORKSPACE_STREAM_PATCH_WITHOUT_CANONICAL_NODE:${patch.streamKind}:${patch.nodeId}:${patch.taskId}`)
   })
   return merged
 }

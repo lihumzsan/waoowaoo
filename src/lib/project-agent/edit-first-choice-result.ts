@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
-import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
+import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import { confirmEpisodeEditBible } from '@/lib/edit-bible'
 
 interface UnknownRecord {
@@ -167,7 +167,7 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
   if (!params.episodeId) {
     throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')
   }
-  await approveProjectEditScriptAssets({
+  await approveProjectEpisodeEditScriptAssets({
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.episodeId,

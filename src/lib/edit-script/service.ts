@@ -1068,7 +1068,7 @@ export async function approveProjectEditScriptAssets(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly chapterId?: string
+  readonly chapterId: string
 }): Promise<EditScriptPayload> {
   const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
   const script = await prisma.projectEditScript.findFirst({
@@ -1113,6 +1113,82 @@ export async function approveProjectEditScriptAssets(input: {
     },
   })
   return await mapPersistedEditScript(updated)
+}
+
+export interface EpisodeEditScriptAssetApprovalResult {
+  readonly approvedCount: number
+  readonly scripts: readonly EditScriptPayload[]
+}
+
+export async function approveProjectEpisodeEditScriptAssets(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}): Promise<EpisodeEditScriptAssetApprovalResult> {
+  const scripts = await prisma.projectEditScript.findMany({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      project: {
+        userId: input.userId,
+      },
+    },
+    include: {
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (scripts.length === 0) throw new ApiError('NOT_FOUND')
+
+  const notReady = scripts.flatMap((script) => {
+    const chapterId = script.chapterId ?? 'unknown'
+    return script.requirements
+      .filter((requirement) => normalizeStoredStatus(requirement.status) !== 'completed')
+      .map((requirement) => `${chapterId}:${requirement.name}`)
+  })
+  if (notReady.length > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
+      message: `Edit script assets are not ready: ${notReady.join(', ')}`,
+    })
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.projectEditScript.updateMany({
+      where: {
+        id: { in: scripts.map((script) => script.id) },
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+      },
+      data: {
+        assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_APPROVED,
+      },
+    })
+    return await tx.projectEditScript.findMany({
+      where: {
+        id: { in: scripts.map((script) => script.id) },
+      },
+      include: {
+        requirements: {
+          orderBy: [
+            { kind: 'asc' },
+            { name: 'asc' },
+          ],
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+  })
+
+  return {
+    approvedCount: updated.length,
+    scripts: await Promise.all(updated.map((script) => mapPersistedEditScript(script))),
+  }
 }
 
 export async function confirmProjectEditStylePreview(input: ConfirmEditStylePreviewInput): Promise<EditStylePreviewPayload> {

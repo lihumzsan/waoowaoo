@@ -6,7 +6,7 @@ import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { readEpisodeEditChapters } from '@/lib/edit-bible/service'
 import { resolveProjectContextPolicy } from './policy'
-import type { ProjectContextSnapshot } from './types'
+import type { ProjectContextEditScriptSnapshot, ProjectContextSnapshot } from './types'
 
 function compactPreview(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
@@ -89,7 +89,7 @@ export async function assembleProjectContext(params: {
   selectedPanelId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editBible, editChapters, editScript, runs, latestArtifacts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
+  const [project, episode, editBible, editChapters, editScripts, runs, latestArtifacts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
     }),
@@ -142,13 +142,15 @@ export async function assembleProjectContext(params: {
         })
       : Promise.resolve([]),
     params.episodeId
-      ? prisma.projectEditScript.findFirst({
+      ? prisma.projectEditScript.findMany({
           where: {
             projectId: params.projectId,
             episodeId: params.episodeId,
           },
+          orderBy: { createdAt: 'asc' },
           select: {
             id: true,
+            chapterId: true,
             status: true,
             assetReviewStatus: true,
             durationSec: true,
@@ -162,7 +164,7 @@ export async function assembleProjectContext(params: {
             },
           },
         })
-      : Promise.resolve(null),
+      : Promise.resolve([]),
     listPlanRuns({
       userId: params.userId,
       projectId: params.projectId,
@@ -230,9 +232,24 @@ export async function assembleProjectContext(params: {
   )
   const storyboardCount = episode?.storyboards.length || 0
   const panelCount = panelSnapshots.length
-  const generationSegmentCount = editScript?.status === 'ready' && editScript.corePlanJson
-    ? countGenerationSegments(editScript.corePlanJson)
-    : 0
+  const editScriptSnapshots: ProjectContextEditScriptSnapshot[] = editScripts.map((script) => {
+    const generationSegmentCount = script.status === 'ready' && script.corePlanJson
+      ? countGenerationSegments(script.corePlanJson)
+      : 0
+    return {
+      id: script.id,
+      chapterId: script.chapterId,
+      status: script.status,
+      assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
+      durationSec: script.durationSec,
+      shotCount: script.shotCount,
+      generationSegmentCount,
+      requirementCount: script.requirements.length,
+      pendingRequirementCount: script.requirements.filter((requirement) => requirement.status !== 'completed').length,
+      updatedAt: script.updatedAt.toISOString(),
+    }
+  })
+  const singleEditScript = editScriptSnapshots.length === 1 ? editScriptSnapshots[0] ?? null : null
 
   return {
     projectId: project.id,
@@ -283,19 +300,8 @@ export async function assembleProjectContext(params: {
         renderStatus: chapter.renderStatus,
         outputMediaId: chapter.outputMediaId,
       })),
-      editScript: editScript
-        ? {
-            id: editScript.id,
-            status: editScript.status,
-            assetReviewStatus: editScript.assetReviewStatus === 'approved' ? 'approved' : 'pending',
-            durationSec: editScript.durationSec,
-            shotCount: editScript.shotCount,
-            generationSegmentCount,
-            requirementCount: editScript.requirements.length,
-            pendingRequirementCount: editScript.requirements.filter((requirement) => requirement.status !== 'completed').length,
-            updatedAt: editScript.updatedAt.toISOString(),
-          }
-        : null,
+      editScript: singleEditScript,
+      editScripts: editScriptSnapshots,
       panels: panelSnapshots,
     },
   }

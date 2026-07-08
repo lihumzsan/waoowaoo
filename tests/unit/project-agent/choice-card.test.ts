@@ -4,6 +4,7 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 const prismaState = vi.hoisted(() => ({
   projectFindFirst: vi.fn(),
   bibleFindFirst: vi.fn(),
+  editScriptFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -13,6 +14,9 @@ vi.mock('@/lib/prisma', () => ({
     },
     projectEditBible: {
       findFirst: prismaState.bibleFindFirst,
+    },
+    projectEditScript: {
+      findMany: prismaState.editScriptFindMany,
     },
   },
 }))
@@ -47,6 +51,7 @@ describe('edit-first assistant choice cards', () => {
     vi.clearAllMocks()
     prismaState.projectFindFirst.mockReset()
     prismaState.bibleFindFirst.mockReset()
+    prismaState.editScriptFindMany.mockReset()
   })
 
   it('detects explicit aspect ratio in user text', () => {
@@ -221,6 +226,30 @@ describe('edit-first assistant choice cards', () => {
   })
 
   it('builds an asset review card with revision notes after required assets are ready', async () => {
+    prismaState.editScriptFindMany.mockResolvedValueOnce([{
+      id: 'edit-script-1',
+      chapterId: 'chapter-1',
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      requirements: [
+        {
+          id: 'requirement-character-1',
+          kind: 'character',
+          name: '老李',
+          status: 'completed',
+          targetId: 'character-1',
+          errorMessage: null,
+        },
+        {
+          id: 'requirement-location-1',
+          kind: 'location',
+          name: '地下室',
+          status: 'completed',
+          targetId: 'location-1',
+          errorMessage: null,
+        },
+      ],
+    }])
+
     const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
@@ -232,12 +261,21 @@ describe('edit-first assistant choice cards', () => {
     })
 
     expect(card).toMatchObject({
-      cardId: 'edit-first-asset-review',
+      cardId: expect.stringMatching(/^edit-first-asset-review:episode-1:[a-f0-9]{12}$/),
       toolCallId: 'tool-call-1',
       choiceType: 'asset_review',
       variant: 'confirm_or_reply',
       title: '审核分镜资产',
-      groups: [],
+      groups: [{
+        key: 'assetSummary',
+        label: '已就绪资产',
+        required: false,
+        options: [{
+          value: 'edit-script-1',
+          label: '第 1 章 · 2 个资产',
+          description: '老李 / character\n地下室 / location',
+        }],
+      }],
       submitLabel: '资产满意，继续',
       submit: {
         kind: 'submit_tool_output',
@@ -247,6 +285,32 @@ describe('edit-first assistant choice cards', () => {
       replySubmitLabel: '提交调整意见',
       replyToolOutputKey: 'revisionNotes',
     })
+  })
+
+  it('rejects asset review cards before every chapter asset is completed', async () => {
+    prismaState.editScriptFindMany.mockResolvedValueOnce([{
+      id: 'edit-script-1',
+      chapterId: 'chapter-1',
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      requirements: [{
+        id: 'requirement-location-1',
+        kind: 'location',
+        name: '地下室',
+        status: 'generating',
+        targetId: null,
+        errorMessage: null,
+      }],
+    }])
+
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('assets_ready_for_review'),
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-1',
+    })).rejects.toThrow('EDIT_FIRST_ASSET_REVIEW_ASSETS_NOT_READY:chapter-1:地下室:generating')
   })
 
   it('rejects asset review cards outside the asset review stage', async () => {

@@ -20,14 +20,27 @@ function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowStat
   }
 }
 
-function editBible(): ProjectEditBible {
+function editBible(chapterIds: readonly string[] = []): ProjectEditBible {
   return {
     id: 'bible-row-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
     status: 'ready',
     textPreview: '全局蓝图',
-    chapters: [],
+    chapters: chapterIds.map((chapterId, index) => ({
+      id: chapterId,
+      chapterIndex: index,
+      title: `第 ${index + 1} 章`,
+      summary: `chapter ${index + 1}`,
+      sourceStart: index * 100,
+      sourceEnd: index * 100 + 99,
+      targetDurationSec: 60,
+      beatIds: [],
+      eventIds: [],
+      status: 'ready',
+      renderStatus: null,
+      outputMediaId: null,
+    })),
   }
 }
 
@@ -64,7 +77,19 @@ function editScript(chapterId: string, shotId: string): ProjectEditScript {
       sound: 'room tone',
     }],
     generationSegments: [],
-    requirements: [],
+    requirements: [{
+      id: `requirement-${chapterId}`,
+      kind: 'character',
+      name: '民科',
+      description: '主角',
+      shotIds: [shotId],
+      status: 'completed',
+      targetId: 'character-1',
+      taskTargetType: 'CharacterAppearance',
+      taskTargetId: 'appearance-1',
+      errorMessage: null,
+      previewImageUrl: null,
+    }],
   }
 }
 
@@ -129,6 +154,46 @@ describe('long-form project canvas node identity', () => {
         targetType: 'ProjectEditChapter',
         targetId: 'chapter-2',
       }),
+    ])
+  })
+
+  it('creates chapter-scoped pending core edit table nodes before edit script rows exist', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      editFirstWorkflow: workflow('edit_script_generating'),
+      editBible: editBible(['chapter-1', 'chapter-2', 'chapter-3']),
+      editScriptPending: true,
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.filter((node) => node.data.kind === 'editScript').map((node) => node.id)).toEqual([
+      'edit-script:episode-1:chapter-1',
+      'edit-script:episode-1:chapter-2',
+      'edit-script:episode-1:chapter-3',
+    ])
+  })
+
+  it('keeps chapter asset nodes visible from requirement facts outside the asset review stage', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      editFirstWorkflow: workflow('ready_to_generate_shot_execution_plan'),
+      editBible: editBible(['chapter-1', 'chapter-2']),
+      editScripts: [
+        editScript('chapter-1', 'shot-chapter-1'),
+        editScript('chapter-2', 'shot-chapter-2'),
+      ],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.filter((node) => node.data.kind === 'editAssetGroup').map((node) => node.id)).toEqual([
+      'edit-asset-group:edit-script-chapter-1',
+      'edit-asset-group:edit-script-chapter-2',
     ])
   })
 })

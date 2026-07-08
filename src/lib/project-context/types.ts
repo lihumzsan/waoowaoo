@@ -45,6 +45,7 @@ export interface ProjectContextEditBibleSnapshot {
 
 export interface ProjectContextEditScriptSnapshot {
   id: string
+  chapterId: string | null
   status: string
   assetReviewStatus: 'pending' | 'approved'
   durationSec: number
@@ -89,6 +90,7 @@ export interface ProjectContextEpisodeDetailSnapshot {
   editBible: ProjectContextEditBibleSnapshot | null
   chapters: ProjectContextEditChapterSnapshot[]
   editScript: ProjectContextEditScriptSnapshot | null
+  editScripts: ProjectContextEditScriptSnapshot[]
   panels: ProjectContextPanelSnapshot[]
 }
 

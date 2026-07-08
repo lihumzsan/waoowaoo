@@ -263,7 +263,7 @@ function ProjectWorkspaceCanvasContent({
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
   const editBible = editBibleResponse?.editBible ?? null
-  const editBibleChapters = editBibleResponse?.chapters ?? []
+  const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
   const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
@@ -282,7 +282,7 @@ function ProjectWorkspaceCanvasContent({
       return editScripts.find((script) => script.chapterId === workspaceScope.chapterId)
         ?? (editScript?.chapterId === workspaceScope.chapterId ? editScript : null)
     }
-    return editScript ?? editScripts[0] ?? null
+    return null
   }, [editScript, editScripts, workspaceScope])
   const scopedEditShotExecutionPlan = useMemo(() => {
     if (workspaceScope.kind === 'chapter') {

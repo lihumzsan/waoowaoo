@@ -1,7 +1,9 @@
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
+import { z } from 'zod'
 import {
   editShotExecutionPlanSchema,
-  editScriptShotSchema,
+  EDIT_CHARACTER_ROLES,
+  EDIT_CHARACTER_VISIBILITIES,
   type EditShotExecution,
   type EditScriptShot,
 } from '@/lib/edit-script/types'
@@ -16,6 +18,45 @@ import {
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
 const editShotExecutionPlanShotSchema = editShotExecutionPlanSchema.shape.shots.element
+const editScriptStreamShotSchema = z.object({
+  shotId: z.string().trim().min(1),
+  shotNumber: z.number().int().positive(),
+  durationSec: z.number().int().min(1).max(5),
+  scene: z.object({
+    locationId: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    subScene: z.string().trim().min(1),
+  }).strict(),
+  action: z.string().trim().min(1),
+  characters: z.array(z.object({
+    characterId: z.string().trim().min(1),
+    name: z.string().trim().min(1).optional(),
+    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+    role: z.enum(EDIT_CHARACTER_ROLES),
+    performance: z.string().trim().min(1),
+  }).strict()).min(0).max(20),
+  keyObjects: z.array(z.object({
+    name: z.string().trim().min(1),
+    role: z.string().trim().min(1),
+  }).strict()).min(0).max(20),
+  sound: z.string().trim().min(1),
+}).strict()
+
+function parseEditScriptStreamShot(value: unknown): EditScriptShot {
+  const shot = editScriptStreamShotSchema.parse(value)
+  return {
+    ...shot,
+    scene: {
+      locationId: shot.scene.locationId,
+      name: shot.scene.name ?? shot.scene.locationId,
+      subScene: shot.scene.subScene,
+    },
+    characters: shot.characters.map((character) => ({
+      ...character,
+      name: character.name ?? character.characterId,
+    })),
+  }
+}
 
 export interface StructuredStreamTaskEventMeta {
   readonly taskType: string | null
@@ -92,7 +133,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['shots'],
     parseItem: (value) => ({
       kind: 'editScriptShot',
-      shot: editScriptShotSchema.parse(value),
+      shot: parseEditScriptStreamShot(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'editScriptShot'
       ? (item.shot.shotId || numberKey(item.shot.shotNumber, fallbackIndex))
@@ -161,6 +202,7 @@ export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = [
     key: 'editBible.text',
     taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
     stepIds: [
+      AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
       AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
       AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,

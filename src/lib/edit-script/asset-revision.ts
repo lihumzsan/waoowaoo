@@ -308,7 +308,7 @@ export async function reviseProjectEditScriptAssets(input: ReviseEditScriptAsset
     })
   }
 
-  const updated = await getPersistedEditScriptForRevision(input.projectId, input.episodeId, script.id)
+  const updated = await getPersistedEditScriptForRevision(input.projectId, input.episodeId, script.chapterId, script.id)
   if (!updated) throw new ApiError('NOT_FOUND')
   const editScript = mapPersistedEditScriptForRevision(updated)
   return {

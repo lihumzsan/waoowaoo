@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api-errors'
-import { createEpisodeSourceDocument } from '@/lib/edit-source-document/service'
+import {
+  createEpisodeSourceDocument,
+  materializePromptGeneratedSourceDocument,
+} from '@/lib/edit-source-document/service'
 
 function writableClient() {
   return {
@@ -35,5 +38,41 @@ describe('edit source document service', () => {
         code: 'EDIT_SOURCE_DOCUMENT_EMPTY',
       }),
     })
+  })
+
+  it('materializes prompt generated source text and increments the source document version', async () => {
+    const client = {
+      projectEpisodeSourceDocument: {
+        findFirst: vi.fn(async () => ({ id: 'source-1' })),
+        update: vi.fn(async () => ({
+          id: 'source-1',
+          episodeId: 'episode-1',
+          normalizedText: '扩写后的完整剧本',
+          checksum: 'checksum-expanded',
+          sourceKind: 'prompt_generated_outline',
+          rawFileMediaId: null,
+          version: 2,
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          updatedAt: new Date('2026-01-01T00:01:00Z'),
+        })),
+      },
+    }
+
+    const result = await materializePromptGeneratedSourceDocument({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-1',
+      text: '扩写后的完整剧本',
+      client: client as never,
+    })
+
+    expect(client.projectEpisodeSourceDocument.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'source-1' },
+      data: expect.objectContaining({
+        normalizedText: '扩写后的完整剧本',
+        version: { increment: 1 },
+      }),
+    }))
+    expect(result.version).toBe(2)
   })
 })

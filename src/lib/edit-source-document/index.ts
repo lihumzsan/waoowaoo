@@ -30,6 +30,7 @@ export {
   assertEpisodeSourceWritable,
   createEpisodeSourceDocument,
   deleteEpisodeSourceDocumentForRollback,
+  materializePromptGeneratedSourceDocument,
   readEpisodeSourceDocumentById,
   readLatestEpisodeSourceDocument,
   type CreatedEditSourceDocument,

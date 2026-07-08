@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { getSignedUrl } from '@/lib/storage'
 import type { ProjectAgentLocale } from './locale'
@@ -166,17 +167,81 @@ function buildBibleReviewChoiceCard(params: {
   }
 }
 
-function buildAssetReviewChoiceCard(params: {
+function buildAssetReviewVersion(input: readonly {
+  readonly id: string
+  readonly updatedAt: Date
+  readonly requirements: readonly {
+    readonly id: string
+    readonly status: string
+    readonly targetId: string | null
+  }[]
+}[]): string {
+  const source = input.map((script) => [
+    script.id,
+    script.updatedAt.toISOString(),
+    script.requirements.map((requirement) => [
+      requirement.id,
+      requirement.status,
+      requirement.targetId ?? '',
+    ].join(':')).join(','),
+  ].join('|')).join(';')
+  return createHash('sha256').update(source).digest('hex').slice(0, 12)
+}
+
+async function buildAssetReviewChoiceCard(params: {
+  projectId: string
+  userId: string
+  episodeId: string
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
-}): ProjectAgentChoiceCardPartData {
+}): Promise<ProjectAgentChoiceCardPartData> {
   if (params.workflow.stage !== 'assets_ready_for_review') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=${params.workflow.stage}`)
   }
+  const editScripts = await prisma.projectEditScript.findMany({
+    where: {
+      projectId: params.projectId,
+      episodeId: params.episodeId,
+      project: {
+        userId: params.userId,
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      chapterId: true,
+      updatedAt: true,
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+        select: {
+          id: true,
+          kind: true,
+          name: true,
+          status: true,
+          targetId: true,
+          errorMessage: true,
+        },
+      },
+    },
+  })
+  if (editScripts.length === 0) {
+    throw new Error(`EDIT_FIRST_ASSET_REVIEW_SCRIPT_REQUIRED:${params.episodeId}`)
+  }
+  const notReadyRequirements = editScripts.flatMap((script) =>
+    script.requirements
+      .filter((requirement) => requirement.status !== 'completed')
+      .map((requirement) => `${script.chapterId ?? script.id}:${requirement.name}:${requirement.status}`))
+  if (notReadyRequirements.length > 0) {
+    throw new Error(`EDIT_FIRST_ASSET_REVIEW_ASSETS_NOT_READY:${notReadyRequirements.join(',')}`)
+  }
   const isEnglish = params.locale === 'en'
+  const version = buildAssetReviewVersion(editScripts)
   return {
-    cardId: 'edit-first-asset-review',
+    cardId: `edit-first-asset-review:${params.episodeId}:${version}`,
     toolCallId: params.toolCallId,
     choiceType: 'asset_review',
     variant: 'confirm_or_reply',
@@ -184,7 +249,18 @@ function buildAssetReviewChoiceCard(params: {
     description: isEnglish
       ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
       : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成镜头执行计划。',
-    groups: [],
+    groups: [{
+      key: 'assetSummary',
+      label: isEnglish ? 'Ready assets' : '已就绪资产',
+      required: false,
+      options: editScripts.map((script, index) => ({
+        value: script.id,
+        label: isEnglish
+          ? `Chapter ${String(index + 1)} · ${String(script.requirements.length)} asset(s)`
+          : `第 ${String(index + 1)} 章 · ${String(script.requirements.length)} 个资产`,
+        description: script.requirements.map((requirement) => `${requirement.name} / ${requirement.kind}`).join('\n'),
+      })),
+    }],
     submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
     submit: {
       kind: 'submit_tool_output',
@@ -243,7 +319,10 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   }
 
   if (params.choiceType === 'asset_review') {
-    return buildAssetReviewChoiceCard({
+    return await buildAssetReviewChoiceCard({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

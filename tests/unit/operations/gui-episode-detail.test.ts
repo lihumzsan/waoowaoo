@@ -17,6 +17,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditChapter: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
   projectEditBible: {
     findUnique: vi.fn(),
@@ -165,6 +166,7 @@ describe('gui get_episode_detail operation', () => {
     })
     prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-default' })
     prismaMock.projectEditChapter.findFirst.mockResolvedValue(null)
+    prismaMock.projectEditChapter.findMany.mockResolvedValue([{ id: 'chapter-default', chapterIndex: 0 }])
     prismaMock.projectEditBible.findUnique.mockResolvedValue({
       id: 'bible-1',
       styleBibleJson: null,

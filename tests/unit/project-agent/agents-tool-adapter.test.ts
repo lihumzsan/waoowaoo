@@ -38,6 +38,16 @@ const eventState = vi.hoisted(() => ({
   }),
 }))
 
+const prismaState = vi.hoisted(() => ({
+  projectAgentEvent: {
+    findMany: vi.fn(async () => []),
+    count: vi.fn(async () => 0),
+  },
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: prismaState,
+}))
 vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
   executeProjectAgentOperationFromTool: executeState.executeProjectAgentOperationFromTool,
 }))
@@ -85,6 +95,8 @@ function buildOperation(
 describe('createProjectAgentOperationTool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaState.projectAgentEvent.findMany.mockResolvedValue([])
+    prismaState.projectAgentEvent.count.mockResolvedValue(0)
     executeState.executeProjectAgentOperationFromTool.mockResolvedValue({
       ok: true,
       data: {

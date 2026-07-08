@@ -7,7 +7,7 @@ const sourceDocumentMock = vi.hoisted(() => ({
   createEpisodeSourceDocument: vi.fn(async () => ({
     id: 'source-1',
     episodeId: 'episode-1',
-    normalizedText: '扩写后的完整剧本',
+    normalizedText: '一个车站悬疑故事',
     checksum: 'checksum-1',
     sourceKind: 'prompt_generated_outline',
     rawFileMediaId: null,
@@ -92,7 +92,7 @@ describe('edit bible task submission', () => {
     vi.clearAllMocks()
   })
 
-  it('expands prompt_generated_outline before creating the source document', async () => {
+  it('stores prompt_generated_outline as the raw source and leaves expansion to the worker', async () => {
     const result = await submitProjectEditBibleGenerationTask({
       request: request(),
       projectId: 'project-1',
@@ -110,15 +110,11 @@ describe('edit bible task submission', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
     })
-    expect(sourceDocumentMock.assertEpisodeSourceWritable.mock.invocationCallOrder[0] ?? 0)
-      .toBeLessThan(aiMock.executeAiTextStep.mock.invocationCallOrder[0] ?? 0)
-    expect(aiMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'outline-script',
-      model: 'openrouter::anthropic/claude-sonnet-4.6',
-    }))
+    expect(aiMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(billingMock.withTextBilling).not.toHaveBeenCalled()
     expect(sourceDocumentMock.createEpisodeSourceDocument).toHaveBeenCalledWith(expect.objectContaining({
       sourceKind: 'prompt_generated_outline',
-      text: '扩写后的完整剧本',
+      text: '一个车站悬疑故事',
     }))
     expect(result).toEqual(expect.objectContaining({
       taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,

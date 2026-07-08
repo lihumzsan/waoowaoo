@@ -3,18 +3,18 @@ import {
   applyEditFirstChoiceResultSideEffects,
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
-import { approveProjectEditScriptAssets } from '@/lib/edit-script/service'
+import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import { confirmEpisodeEditBible } from '@/lib/edit-bible'
 
 vi.mock('@/lib/edit-script/service', () => ({
-  approveProjectEditScriptAssets: vi.fn(async () => undefined),
+  approveProjectEpisodeEditScriptAssets: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/edit-bible', () => ({
   confirmEpisodeEditBible: vi.fn(async () => undefined),
 }))
 
-const approveProjectEditScriptAssetsMock = vi.mocked(approveProjectEditScriptAssets)
+const approveProjectEpisodeEditScriptAssetsMock = vi.mocked(approveProjectEpisodeEditScriptAssets)
 const confirmEpisodeEditBibleMock = vi.mocked(confirmEpisodeEditBible)
 
 function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstChoiceResult>): {
@@ -38,7 +38,7 @@ function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstC
 
 describe('buildEditFirstChoiceResult', () => {
   beforeEach(() => {
-    approveProjectEditScriptAssetsMock.mockClear()
+    approveProjectEpisodeEditScriptAssetsMock.mockClear()
     confirmEpisodeEditBibleMock.mockClear()
   })
 
@@ -221,7 +221,7 @@ describe('buildEditFirstChoiceResult', () => {
       episodeId: 'episode-1',
     })
 
-    expect(approveProjectEditScriptAssetsMock).toHaveBeenCalledWith({
+    expect(approveProjectEpisodeEditScriptAssetsMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -240,7 +240,7 @@ describe('buildEditFirstChoiceResult', () => {
       episodeId: 'episode-1',
     })
 
-    expect(approveProjectEditScriptAssetsMock).not.toHaveBeenCalled()
+    expect(approveProjectEpisodeEditScriptAssetsMock).not.toHaveBeenCalled()
   })
 
   it('does not persist asset review from a failed choice result', async () => {
@@ -255,6 +255,6 @@ describe('buildEditFirstChoiceResult', () => {
       episodeId: 'episode-1',
     })
 
-    expect(approveProjectEditScriptAssetsMock).not.toHaveBeenCalled()
+    expect(approveProjectEpisodeEditScriptAssetsMock).not.toHaveBeenCalled()
   })
 })

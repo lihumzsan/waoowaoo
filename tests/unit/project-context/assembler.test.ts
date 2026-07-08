@@ -17,7 +17,7 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
   },
   projectEditScript: {
-    findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
 }))
 
@@ -99,7 +99,7 @@ describe('assembleProjectContext', () => {
     planRunRuntimeMock.listPlanArtifacts.mockResolvedValueOnce([])
     prismaMock.projectEditBible.findFirst.mockResolvedValueOnce(null)
     prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([])
-    prismaMock.projectEditScript.findFirst.mockResolvedValueOnce(null)
+    prismaMock.projectEditScript.findMany.mockResolvedValueOnce([])
     prismaMock.task.findMany
       .mockResolvedValueOnce([
         {
@@ -194,5 +194,64 @@ describe('assembleProjectContext', () => {
     ])
     expect(JSON.stringify(context.recentOperationResults)).not.toContain('largeProviderPayload')
     expect(context.policy.analysisModel).toBe('openrouter::platform-analysis')
+  })
+
+  it('keeps multi-chapter edit scripts as a collection instead of exposing the first script as the episode authority', async () => {
+    prismaMock.project.findUnique.mockResolvedValueOnce({
+      id: 'project-1',
+      name: 'p',
+      videoRatio: '16:9',
+      artStyle: 'x',
+      analysisModel: null,
+    })
+    prismaMock.projectEpisode.findUnique.mockResolvedValueOnce({
+      id: 'episode-1',
+      name: 'e',
+      novelText: null,
+      storyboards: [],
+    })
+    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
+    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
+    planRunRuntimeMock.listPlanArtifacts.mockResolvedValueOnce([])
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce(null)
+    prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([])
+    prismaMock.projectEditScript.findMany.mockResolvedValueOnce([
+      {
+        id: 'script-1',
+        chapterId: 'chapter-1',
+        status: 'ready',
+        assetReviewStatus: 'approved',
+        durationSec: 30,
+        shotCount: 3,
+        corePlanJson: { shots: [], generationSegments: [] },
+        updatedAt: new Date('2026-04-20T00:01:00.000Z'),
+        requirements: [],
+      },
+      {
+        id: 'script-2',
+        chapterId: 'chapter-2',
+        status: 'ready',
+        assetReviewStatus: 'pending',
+        durationSec: 40,
+        shotCount: 4,
+        corePlanJson: { shots: [], generationSegments: [] },
+        updatedAt: new Date('2026-04-20T00:02:00.000Z'),
+        requirements: [],
+      },
+    ])
+    prismaMock.task.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+
+    const mod = await import('@/lib/project-context/assembler')
+    const context = await mod.assembleProjectContext({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(context.episodeDetail?.editScript).toBeNull()
+    expect(context.episodeDetail?.editScripts.map((script) => script.chapterId)).toEqual([
+      'chapter-1',
+      'chapter-2',
+    ])
   })
 })

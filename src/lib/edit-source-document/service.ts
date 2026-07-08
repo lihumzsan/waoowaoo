@@ -196,6 +196,56 @@ export async function readEpisodeSourceDocumentById(input: {
   return mapSourceDocument(record)
 }
 
+export async function materializePromptGeneratedSourceDocument(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly sourceDocumentId: string
+  readonly text: string
+  readonly client?: PrismaClientLike
+}): Promise<CreatedEditSourceDocument> {
+  const client = input.client ?? prisma
+  let normalizedText: string
+  let estimatedInputTokens: number
+  try {
+    normalizedText = normalizeEditSourceDocumentText(input.text)
+    estimatedInputTokens = assertEditSourceDocumentWithinTokenBudget(normalizedText)
+  } catch (error) {
+    if (!isEditSourceDocumentValidationError(error)) throw error
+    throw new ApiError('INVALID_PARAMS', {
+      code: error.code,
+      message: error.message,
+    })
+  }
+  const existing = await client.projectEpisodeSourceDocument.findFirst({
+    where: {
+      id: input.sourceDocumentId,
+      episodeId: input.episodeId,
+      sourceKind: 'prompt_generated_outline',
+      episode: { projectId: input.projectId },
+    },
+    select: { id: true },
+  })
+  if (!existing) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SOURCE_DOCUMENT_PROMPT_GENERATED_REQUIRED',
+      message: 'Only prompt-generated source documents can be materialized by the edit bible worker.',
+    })
+  }
+  const record = await client.projectEpisodeSourceDocument.update({
+    where: { id: input.sourceDocumentId },
+    data: {
+      normalizedText,
+      checksum: checksumNormalizedText(normalizedText),
+      version: { increment: 1 },
+    },
+    select: editSourceDocumentSelect,
+  })
+  return {
+    ...mapSourceDocument(record),
+    estimatedInputTokens,
+  }
+}
+
 export async function deleteEpisodeSourceDocumentForRollback(input: {
   readonly sourceDocumentId: string
   readonly client?: PrismaClientLike

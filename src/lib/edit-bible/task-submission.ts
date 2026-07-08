@@ -1,16 +1,11 @@
 import type { NextRequest } from 'next/server'
 import type { Locale } from '@/i18n/routing'
 import { ApiError } from '@/lib/api-errors'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
-import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
-import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
-import { withTextBilling } from '@/lib/billing'
 import { getProjectModelConfig } from '@/lib/config-service'
 import {
   assertEpisodeSourceWritable,
   createEpisodeSourceDocument,
   deleteEpisodeSourceDocumentForRollback,
-  estimateEditSourceDocumentInputTokens,
   type EditSourceDocumentKind,
 } from '@/lib/edit-source-document'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
@@ -49,62 +44,6 @@ async function buildEditBibleTextTaskPayload(input: {
   }
 }
 
-async function generateSourceDocumentFromPrompt(input: {
-  readonly projectId: string
-  readonly userId: string
-  readonly locale: Locale
-  readonly prompt: string
-}): Promise<string> {
-  const config = await getProjectModelConfig(input.projectId, input.userId)
-  if (!config.analysisModel) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'MISSING_ANALYSIS_MODEL',
-      message: 'Analysis model is required for prompt-to-script source generation',
-    })
-  }
-  const analysisModel = config.analysisModel
-  const finalPromptContent = buildAiPromptContent({
-    promptId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-    locale: input.locale,
-    variables: {
-      user_prompt: input.prompt,
-    },
-  })
-  const finalPrompt = flattenChatMessageContent(finalPromptContent)
-  const maxInputTokens = Math.max(
-    1200,
-    estimateEditSourceDocumentInputTokens(finalPrompt) + EDIT_SOURCE_DOCUMENT_OUTPUT_TOKEN_RESERVE,
-  )
-  const runCompletion = async () => executeAiTextStep({
-    userId: input.userId,
-    model: analysisModel,
-    messages: [{ role: 'user', content: finalPromptContent }],
-    temperature: 0.4,
-    projectId: input.projectId,
-    action: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-    meta: {
-      stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-      stepTitle: 'Expand prompt into source script',
-      stepIndex: 1,
-      stepTotal: 1,
-    },
-  })
-  const result = await withTextBilling(
-    input.userId,
-    analysisModel,
-    maxInputTokens,
-    {
-      projectId: input.projectId,
-      action: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-      metadata: { promptId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT },
-    },
-    runCompletion,
-  )
-  const text = result.text.trim()
-  if (!text) throw new Error('EDIT_BIBLE_PROMPT_SOURCE_GENERATION_EMPTY')
-  return text
-}
-
 export async function submitProjectEditBibleGenerationTask(input: {
   readonly request: NextRequest
   readonly projectId: string
@@ -122,20 +61,12 @@ export async function submitProjectEditBibleGenerationTask(input: {
     userId: input.userId,
     episodeId: input.episodeId,
   })
-  const sourceText = input.sourceKind === 'prompt_generated_outline'
-    ? await generateSourceDocumentFromPrompt({
-        projectId: input.projectId,
-        userId: input.userId,
-        locale: input.locale,
-        prompt: input.text,
-      })
-    : input.text
   const sourceDocument = await createEpisodeSourceDocument({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
     sourceKind: input.sourceKind,
-    text: sourceText,
+    text: input.text,
     ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
   })
 
@@ -157,6 +88,7 @@ export async function submitProjectEditBibleGenerationTask(input: {
         editBibleId: target.editBibleId,
         sourceChecksum: sourceDocument.checksum,
         sourceVersion: sourceDocument.version,
+        sourceKind: input.sourceKind,
         displayMode: 'detail',
       },
     })

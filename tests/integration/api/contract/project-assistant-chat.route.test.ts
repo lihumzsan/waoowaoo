@@ -23,9 +23,9 @@ const apiAdapterMock = vi.hoisted(() => ({
 }))
 
 const editScriptServiceMock = vi.hoisted(() => ({
-  approveProjectEditScriptAssets: vi.fn(async (): Promise<unknown> => ({
-    id: 'edit-script-1',
-    assetReviewStatus: 'approved',
+  approveProjectEpisodeEditScriptAssets: vi.fn(async (): Promise<unknown> => ({
+    approvedCount: 3,
+    scripts: [],
   })),
 }))
 
@@ -655,7 +655,7 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(editScriptServiceMock.approveProjectEditScriptAssets).toHaveBeenCalledWith({
+    expect(editScriptServiceMock.approveProjectEpisodeEditScriptAssets).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -699,7 +699,7 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(editScriptServiceMock.approveProjectEditScriptAssets).not.toHaveBeenCalled()
+    expect(editScriptServiceMock.approveProjectEpisodeEditScriptAssets).not.toHaveBeenCalled()
     const createResponseMock = projectAgentMock.createProjectAgentChatResponse as unknown as {
       mock: {
         calls: Array<[unknown]>
