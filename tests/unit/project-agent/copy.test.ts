@@ -40,6 +40,8 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('工具参数只允许携带用户本轮新表达的创作意图或修改意见')
     expect(prompt).toContain('不要由你提交')
     expect(prompt).toContain('只读后如果信息已足够，必须继续执行当前明确下一步')
+    expect(prompt).toContain('当 workflowNextAction 非空且出现在 enabledOperationIds 中时')
+    expect(prompt).toContain('禁止声称“没有直接工具”“需要去前端点击按钮”')
 
     expect(prompt).toContain('每轮循环')
     expect(prompt).toContain('用户选择返回')
@@ -125,6 +127,8 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('Tool parameters may carry only creative intent or revision notes newly expressed by the user this turn')
     expect(prompt).toContain('Do not submit business parameters the system can derive from current context')
     expect(prompt).toContain('After a read-only call, if you now have enough, continue with the clear next step')
+    expect(prompt).toContain('When workflowNextAction is non-empty and appears in enabledOperationIds')
+    expect(prompt).toContain('Never claim there is "no direct tool", tell the user to click a frontend button')
 
     expect(prompt).toContain('The turn loop')
     expect(prompt).toContain('User-choice return')
