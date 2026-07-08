@@ -1,6 +1,7 @@
-export type EditFirstChoiceType = 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+export type EditFirstChoiceType = 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
 
 export const EDIT_FIRST_CHOICE_TOOL_IDS = {
+  script_intake: 'request_script_intake_choice',
   bible_review: 'request_edit_bible_review_choice',
   style: 'request_edit_style_choice',
   asset_review: 'request_edit_asset_review_choice',
@@ -10,6 +11,7 @@ export const EDIT_FIRST_CHOICE_TOOL_IDS = {
 export type EditFirstChoiceToolId = (typeof EDIT_FIRST_CHOICE_TOOL_IDS)[EditFirstChoiceType]
 
 export const EDIT_FIRST_CHOICE_OPERATION_IDS: readonly EditFirstChoiceToolId[] = [
+  EDIT_FIRST_CHOICE_TOOL_IDS.script_intake,
   EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
   EDIT_FIRST_CHOICE_TOOL_IDS.style,
   EDIT_FIRST_CHOICE_TOOL_IDS.asset_review,

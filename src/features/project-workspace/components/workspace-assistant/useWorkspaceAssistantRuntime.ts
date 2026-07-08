@@ -32,7 +32,7 @@ import {
 } from '@/lib/project-agent/text-attachments'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 
-export type WorkspaceAssistantChoiceType = 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+export type WorkspaceAssistantChoiceType = 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 

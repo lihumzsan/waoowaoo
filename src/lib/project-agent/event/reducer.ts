@@ -45,6 +45,7 @@ function toActivitySnapshot(record: {
   if (
     choiceType !== null
     && choiceType !== 'bible_review'
+    && choiceType !== 'script_intake'
     && choiceType !== 'style'
     && choiceType !== 'asset_review'
     && choiceType !== 'budget_confirmation'

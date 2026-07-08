@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import { confirmEpisodeEditBible } from '@/lib/edit-bible'
+import { normalizeScriptIntakeChoiceBrief } from './script-intake'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -81,6 +82,21 @@ export function buildEditFirstChoiceResult(params: {
   latestUserText: string
 }): EditFirstChoiceResult | null {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
+
+  if (params.choiceType === 'script_intake') {
+    const normalizedBrief = normalizeScriptIntakeChoiceBrief({
+      seedText: params.latestUserText,
+      output: params.output,
+    })
+    if (!normalizedBrief) return null
+    return {
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        result: { decision: 'submit', normalizedBrief },
+      }),
+    }
+  }
 
   if (params.choiceType === 'bible_review') {
     const decision = readString(params.output.decision)
@@ -165,6 +181,7 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
 }): Promise<void> {
   if (params.output.ok !== true && params.output.ok !== undefined) return
   const decision = readString(params.output.decision)
+  if (params.choiceType === 'script_intake') return
   if (params.choiceType === 'bible_review') {
     if (decision !== 'approve') return
     const aspectRatio = readChoiceAspectRatio(params.output)

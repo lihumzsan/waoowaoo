@@ -1,0 +1,51 @@
+# Goal
+
+Generate questions and options for a pre-expansion creative intake choice card.
+
+The user's input is short or underspecified, and the workflow has not submitted script expansion yet. Your task is not to write the story or expand the script. Your task is to ask a small number of structured choice questions that improve the expansion brief.
+
+# Input
+
+Original user idea:
+{{seed_text}}
+
+# Output Format
+
+Return only a JSON object. Do not return Markdown, explanations, or extra text.
+
+The structure must be:
+{
+  "questions": [
+    {
+      "key": "subgenre",
+      "label": "Horror type",
+      "options": [
+        { "value": "folk_horror", "label": "Folk horror", "description": "Fear driven by ritual, taboo, and local legend." },
+        { "value": "ai_fill", "label": "Let AI fill it in", "description": "Let the system complete this detail from the idea." }
+      ]
+    }
+  ]
+}
+
+# Hard Rules
+
+- Return 2 to 5 questions.
+- Every question must be single-choice.
+- Every question must have 2 to 6 options.
+- Every question must include one option whose value is exactly "ai_fill".
+- key must use English camelCase or snake_case, contain only letters, numbers, and underscores, and be unique.
+- label and option.label must use the user's language.
+- Do not ask for facts already explicit in the original idea.
+- Do not ask for project id, episode id, aspect ratio, model, price, task, or system parameters.
+- Do not ask overly small details. Prefer core creative variables that affect script expansion.
+- For horror, prefer horror subgenre, setting, narrative pace, core conflict, or protagonist relationship.
+- For non-horror genres, choose equivalent core variables for that genre.
+- Options must be concrete and directly useful for expansion. Do not use only yes/no or good/bad options.
+- Do not generate free-text questions; the system provides a unified free-text supplement field.
+
+# Self Check
+
+- Did you return JSON only?
+- Does every question include an ai_fill option?
+- Did you avoid asking for information the user already gave?
+- Did you avoid expanding the story or writing script prose?

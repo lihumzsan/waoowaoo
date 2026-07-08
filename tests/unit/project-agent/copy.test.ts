@@ -147,6 +147,8 @@ describe('project agent prompt copy', () => {
     expect(prompt).not.toContain('choiceType="next_step_confirmation"')
 
     expect(prompt).toContain('Episode-plan generation or revision is async')
+    expect(prompt).toContain('choiceType=script_intake')
+    expect(prompt).toContain('normalizedBrief')
     expect(prompt).toContain('read the current full global Bible, chapter split, and key planning summary from context and output the confirmable content completely in chat')
     expect(prompt).toContain('call the episode-plan revision tool now; do not defer to the visual style stage')
     expect(prompt).toContain('Current permission mode: auto')
@@ -165,13 +167,20 @@ describe('project agent prompt copy', () => {
     expect(zhDescription).toContain('剧本输入')
     expect(zhDescription).toContain('sourceKind=paste')
     expect(zhDescription).toContain('sourceKind=prompt_generated_outline')
-    expect(zhDescription).toContain('只传用户本轮提供的 text')
+    expect(zhDescription).toContain('过于稀疏的创意应先走扩写前创作问诊')
     expect(zhDescription).toContain('不要传 projectId、episodeId')
     expect(enDescription).toContain('episode script input')
     expect(enDescription).toContain('sourceKind=paste')
     expect(enDescription).toContain('sourceKind=prompt_generated_outline')
-    expect(enDescription).toContain('Pass only text and sourceKind from this turn')
+    expect(enDescription).toContain('Sparse ideas should first use pre-expansion creative intake')
     expect(enDescription).toContain('do not pass projectId, episodeId')
+
+    const zhIntakeDescription = localizeSelectableToolDescription('request_script_intake_choice', 'fallback', 'zh')
+    const enIntakeDescription = localizeSelectableToolDescription('request_script_intake_choice', 'fallback', 'en')
+    expect(zhIntakeDescription).toContain('扩写前创作问诊')
+    expect(zhIntakeDescription).toContain('seedText')
+    expect(enIntakeDescription).toContain('pre-expansion creative intake')
+    expect(enIntakeDescription).toContain('seedText')
   })
 
   it('describes project context reads as concrete-detail only', () => {
@@ -206,6 +215,8 @@ describe('project agent prompt copy', () => {
 
     expect(localizeProjectAgentOperationTitle('ingest_script', 'zh')).toBe('准备剧本蓝图')
     expect(localizeProjectAgentOperationTitle('ingest_script', 'en')).toBe('Prepare script plan')
+    expect(localizeProjectAgentOperationTitle('request_script_intake_choice', 'zh')).toBe('补充创作方向')
+    expect(localizeProjectAgentOperationTitle('request_script_intake_choice', 'en')).toBe('Refine story brief')
     expect(localizeProjectAgentOperationTitle('generate_edit_shot_execution_plan', 'zh')).toBe('生成镜头执行计划')
     expect(localizeProjectAgentOperationTitle('generate_edit_shot_execution_plan', 'en')).toBe('Generate shot execution plan')
     expect(localizeProjectAgentOperationTitle('generate_edit_script_storyboard', 'zh')).toBe('生成分镜面板')

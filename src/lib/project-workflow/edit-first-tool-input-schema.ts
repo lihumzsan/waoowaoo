@@ -69,6 +69,10 @@ function nullableObjectProperty(description: string): JsonValue {
 
 export const EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({})
 
+export const EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  seedText: stringProperty('The exact sparse user creative request that needs one structured intake choice before script expansion. Do not include projectId, episodeId, or system-derived parameters.'),
+})
+
 export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
 })

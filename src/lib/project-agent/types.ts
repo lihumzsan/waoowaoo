@@ -47,7 +47,7 @@ export interface ProjectAgentActivityPartData {
   operationId?: string | null
   sourceOperationId?: string | null
   toolCallId?: string | null
-  choiceType?: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation' | null
+  choiceType?: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation' | null
 }
 
 export interface ProjectContextPartData {
@@ -111,7 +111,7 @@ export interface ProjectAgentInterruptionResolvedPartData {
 export interface ProjectAgentChoiceResolvedPartData {
   runId?: string | null
   interruptionId?: string | null
-  choiceType: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+  choiceType: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
   toolCallId?: string | null
   cardId?: string | null
 }
@@ -186,7 +186,7 @@ export interface ProjectAgentChoiceCardPartData {
   runId?: string | null
   interruptionId?: string | null
   toolCallId: string
-  choiceType: 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+  choiceType: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
   variant?: ProjectAgentChoiceCardVariant
   autoSubmitOnReady?: boolean
   title: string

@@ -38,6 +38,7 @@ function readString(value: unknown): string | null {
 function readChoiceType(value: unknown): EditFirstChoiceType | null {
   if (
     value === 'bible_review'
+    || value === 'script_intake'
     || value === 'style'
     || value === 'asset_review'
     || value === 'budget_confirmation'

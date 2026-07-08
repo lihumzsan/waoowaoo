@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import { buildEditFirstAssistantChoiceCard } from './choice-card'
+import { readPersistedScriptIntakeChoiceCard } from './script-intake'
 import type {
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
@@ -123,6 +124,7 @@ function readOperationPlanView(value: Prisma.JsonValue | undefined): OperationPl
 function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
   if (
     value === 'bible_review'
+    || value === 'script_intake'
     || value === 'style'
     || value === 'asset_review'
     || value === 'budget_confirmation'
@@ -141,15 +143,18 @@ async function buildPendingChoiceInteraction(params: {
   if (!toolCallId) throw new Error('PROJECT_AGENT_PENDING_CHOICE_TOOL_CALL_ID_MISSING')
   const payload = readRecord(params.interruption.payload)
   const choiceType = readChoiceType(payload.choiceType)
-  const choiceCard = await buildEditFirstAssistantChoiceCard({
-    projectId: params.scope.projectId,
-    userId: params.scope.userId,
-    episodeId: params.scope.episodeId,
-    locale: params.scope.locale,
-    workflow: params.workflow,
-    choiceType,
-    toolCallId,
-  })
+  const choiceCard = choiceType === 'script_intake'
+    ? readPersistedScriptIntakeChoiceCard(payload.card)
+    : await buildEditFirstAssistantChoiceCard({
+        projectId: params.scope.projectId,
+        userId: params.scope.userId,
+        episodeId: params.scope.episodeId,
+        locale: params.scope.locale,
+        workflow: params.workflow,
+        choiceType,
+        toolCallId,
+      })
+  if (!choiceCard) throw new Error('PROJECT_AGENT_PENDING_SCRIPT_INTAKE_CARD_INVALID')
   return {
     kind: 'choice',
     runId: params.interruption.runId,

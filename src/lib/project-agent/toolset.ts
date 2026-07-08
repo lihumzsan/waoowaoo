@@ -163,6 +163,9 @@ function isEditFirstChoiceOperationEnabled(params: {
   workflow: EditFirstWorkflowState
   operationId: string
 }): boolean {
+  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.script_intake) {
+    return params.workflow.stage === 'ready_to_ingest_script'
+  }
   if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.bible_review) {
     return params.workflow.stage === 'bible_ready_for_review'
   }

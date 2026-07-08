@@ -146,6 +146,9 @@ describe('tool input schema compatibility', () => {
       'sourceKind',
       'text',
     ])
+    expect(Object.keys(registry.request_script_intake_choice.toolInputSchema.properties)).toEqual([
+      'seedText',
+    ])
     expect(Object.keys(registry.revise_bible.toolInputSchema.properties)).toEqual([
       'bible',
       'beatSheet',
@@ -173,6 +176,7 @@ describe('tool input schema compatibility', () => {
 
     for (const operationId of [
       'ingest_script',
+      'request_script_intake_choice',
       'revise_bible',
       'generate_edit_style_previews',
       'generate_edit_script',
@@ -200,7 +204,6 @@ describe('tool input schema compatibility', () => {
     const registry = createProjectAgentOperationRegistry()
     const emptyOperationIds = [
       'get_episode_overview',
-      'request_edit_bible_review_choice',
       'request_edit_bible_review_choice',
       'request_edit_style_choice',
       'request_edit_asset_review_choice',

@@ -41,6 +41,7 @@ function readNonEmptyString(value: unknown): string | null {
 
 function isEditFirstChoiceType(value: unknown): value is EditFirstChoiceType {
   return value === 'bible_review'
+    || value === 'script_intake'
     || value === 'style'
     || value === 'asset_review'
     || value === 'budget_confirmation'

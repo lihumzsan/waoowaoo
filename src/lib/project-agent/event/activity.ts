@@ -13,6 +13,7 @@ function normalizeChoiceType(value: string | null): ProjectAgentActivitySnapshot
   if (value === null) return null
   if (
     value === 'bible_review'
+    || value === 'script_intake'
     || value === 'style'
     || value === 'asset_review'
     || value === 'budget_confirmation'

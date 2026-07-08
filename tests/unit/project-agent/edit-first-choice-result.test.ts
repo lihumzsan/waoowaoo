@@ -53,6 +53,37 @@ describe('buildEditFirstChoiceResult', () => {
     prismaMock.project.updateMany.mockResolvedValue({ count: 1 })
   })
 
+  it('serializes script intake answers as a normalized brief without selecting the next operation', () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'script_intake',
+      toolCallId: 'tool-call-1',
+      latestUserText: '恐怖故事',
+      output: {
+        ok: true,
+        decision: 'approve',
+        selections: {
+          subgenre: 'folk_horror',
+          setting: 'ai_fill',
+        },
+        labels: {
+          subgenreLabel: '民俗恐怖',
+          settingLabel: '交给 AI 发挥',
+        },
+        freeText: '主角是返乡参加葬礼的姐姐。',
+      },
+    })
+
+    const { name, parsed } = readSyntheticToolResult(choiceResult)
+    expect(name).toBe('request_script_intake_choice')
+    expect(parsed.decision).toBe('submit')
+    expect(parsed.normalizedBrief).toBe([
+      '恐怖故事',
+      '- 民俗恐怖',
+      '主角是返乡参加葬礼的姐姐。',
+    ].join('\n'))
+    expect(parsed.nextOperationId).toBeUndefined()
+  })
+
   it('serializes bible approval with the selected aspect ratio without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',

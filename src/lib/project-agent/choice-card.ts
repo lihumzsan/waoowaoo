@@ -326,6 +326,10 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceCardPartData> {
+  if (params.choiceType === 'script_intake') {
+    throw new Error('SCRIPT_INTAKE_CHOICE_CARD_REQUIRES_PERSISTED_PAYLOAD')
+  }
+
   if (params.choiceType === 'bible_review') {
     return buildBibleReviewChoiceCard({
       locale: params.locale,

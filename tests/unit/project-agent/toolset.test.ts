@@ -215,10 +215,21 @@ describe('project agent live operation enablement', () => {
     })
     const review = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
     const styleChoice = workflow('needs_style_choice', ['generate_edit_style_previews'])
+    const intake = workflow('ready_to_ingest_script', ['ingest_script'])
 
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_context')).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_snapshot')).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: intake,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.script_intake,
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.script_intake,
+    })).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,

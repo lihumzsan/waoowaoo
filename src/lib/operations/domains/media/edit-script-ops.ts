@@ -22,6 +22,10 @@ import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 import {
   buildEditFirstAssistantChoiceCard,
 } from '@/lib/project-agent/choice-card'
+import {
+  buildScriptIntakeChoiceCard,
+  planScriptIntakeQuestions,
+} from '@/lib/project-agent/script-intake'
 import type {
   EditFirstChoiceType,
 } from '@/lib/project-agent/edit-first-choice-tools'
@@ -40,6 +44,7 @@ import {
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
@@ -66,6 +71,11 @@ const generateEditStylePreviewsInputSchema = z.object({
 
 const requestEditChoiceInputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
+}).passthrough()
+
+const requestScriptIntakeChoiceInputSchema = z.object({
+  episodeId: z.string().trim().min(1).optional(),
+  seedText: z.string().trim().min(1).max(2000),
 }).passthrough()
 
 const generateEditScriptInputSchema = z.object({
@@ -116,6 +126,7 @@ const generateEditScriptStoryboardInputSchema = z.object({
 
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
 type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
+type RequestScriptIntakeChoiceInput = z.infer<typeof requestScriptIntakeChoiceInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
 type ReplanChapterInput = z.infer<typeof replanChapterInputSchema>
 type PlanChaptersInput = z.infer<typeof planChaptersInputSchema>
@@ -126,7 +137,7 @@ type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryb
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['bible_review', 'style', 'asset_review', 'budget_confirmation']),
+  choiceType: z.enum(['script_intake', 'bible_review', 'style', 'asset_review', 'budget_confirmation']),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -355,6 +366,7 @@ async function resolvePlanChaptersTargets(input: {
 }
 
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
+  script_intake: 'Request one structured creative intake choice before script expansion when the user prompt is too sparse. Pass only the exact user seed text.',
   bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
@@ -363,19 +375,20 @@ const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
 
 function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
   const operationId = EDIT_FIRST_CHOICE_TOOL_IDS[choiceType]
+  const isScriptIntake = choiceType === 'script_intake'
   return defineOperation({
     id: operationId,
     summary: REQUEST_EDIT_CHOICE_SUMMARIES[choiceType],
     intent: 'query',
     prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_NONE,
-      agentFlow: {
-        interruptsFor: 'choice',
-      },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
-      inputSchema: requestEditChoiceInputSchema,
+    effects: EFFECTS_NONE,
+    agentFlow: {
+      interruptsFor: 'choice',
+    },
+    toolInputSchema: isScriptIntake ? EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA : EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+    inputSchema: isScriptIntake ? requestScriptIntakeChoiceInputSchema : requestEditChoiceInputSchema,
     outputSchema: requestEditFirstChoiceOutputSchema,
-    execute: async (ctx, input: RequestEditChoiceInput) => {
+    execute: async (ctx, input: RequestEditChoiceInput | RequestScriptIntakeChoiceInput) => {
       const toolCallId = ctx.toolCallId?.trim() || ''
       if (!toolCallId) {
         throw new Error('REQUEST_EDIT_CHOICE_TOOL_CALL_ID_REQUIRED')
@@ -391,15 +404,28 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
       if (!runId) {
         throw new Error('REQUEST_EDIT_CHOICE_RUN_ID_REQUIRED')
       }
-      const card = await buildEditFirstAssistantChoiceCard({
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        episodeId,
-        locale,
-        workflow,
-        choiceType,
-        toolCallId,
-      })
+      const card = isScriptIntake
+        ? buildScriptIntakeChoiceCard({
+            locale,
+            workflow,
+            toolCallId,
+            seedText: (input as RequestScriptIntakeChoiceInput).seedText,
+            plan: await planScriptIntakeQuestions({
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+              locale,
+              seedText: (input as RequestScriptIntakeChoiceInput).seedText,
+            }),
+          })
+        : await buildEditFirstAssistantChoiceCard({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+            locale,
+            workflow,
+            choiceType,
+            toolCallId,
+          })
       const interruptionId = await createProjectAgentChoiceInterruption({
         runId,
         projectId: ctx.projectId,
@@ -507,6 +533,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         return editStylePreviewsTaskSubmitOutputSchema.parse(result)
       },
     }),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.script_intake]: buildRequestEditChoiceOperation('script_intake'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review]: buildRequestEditChoiceOperation('bible_review'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.style]: buildRequestEditChoiceOperation('style'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.asset_review]: buildRequestEditChoiceOperation('asset_review'),
