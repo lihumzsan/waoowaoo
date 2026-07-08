@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { editSourceAnchorSchema, editSourcePointAnchorSchema, editSourceRangeSchema } from '@/lib/edit-source-document'
 import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger'
 import { EDIT_BIBLE_STATUS } from './constraints'
+import { editBibleCharacterVoiceProfileSchema } from './voice-profile'
 
 export const editBibleStatusSchema = z.enum([
   EDIT_BIBLE_STATUS.PENDING,
@@ -22,7 +23,7 @@ export const editBibleEntityBaseSchema = z.object({
 export const editBibleEntitySchema = editBibleEntityBaseSchema
 
 export const editBibleCharacterSchema = editBibleEntityBaseSchema.extend({
-  voiceProfile: z.string().trim().min(1),
+  voiceProfile: editBibleCharacterVoiceProfileSchema,
 })
 
 export const rawEditBibleEntitySchema = editBibleEntityBaseSchema

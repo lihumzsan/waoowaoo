@@ -1,10 +1,16 @@
 import { z } from 'zod'
+import {
+  editBibleCharacterVoiceProfileSchema,
+  formatEditBibleCharacterVoiceProfile,
+  type EditBibleCharacterVoiceProfile,
+} from '@/lib/edit-bible/voice-profile'
 import type { EditScriptShot } from './types'
 
 export interface EditScriptCharacterVoiceProfile {
   readonly characterId: string
   readonly name: string
-  readonly voiceProfile: string
+  readonly voiceProfile: EditBibleCharacterVoiceProfile
+  readonly voiceSignature: string
 }
 
 export interface EditScriptDialogueVoiceLine extends EditScriptCharacterVoiceProfile {
@@ -30,20 +36,20 @@ const voiceProfileBibleSchema = z.object({
   characters: z.array(z.object({
     name: z.string().trim().min(1),
     aliases: z.array(z.string().trim().min(1)).default([]),
-    voiceProfile: z.string().trim().min(1),
+    voiceProfile: editBibleCharacterVoiceProfileSchema,
   }).passthrough()).default([]),
 }).passthrough()
 
-function buildVoiceProfileLookup(storyBibleJson: unknown): ReadonlyMap<string, string> {
+function buildVoiceProfileLookup(storyBibleJson: unknown): ReadonlyMap<string, EditBibleCharacterVoiceProfile> {
   const bible = voiceProfileBibleSchema.parse(storyBibleJson)
-  const lookup = new Map<string, string>()
+  const lookup = new Map<string, EditBibleCharacterVoiceProfile>()
   for (const character of bible.characters) {
     const names = Array.from(new Set([character.name, ...character.aliases].map(voiceKey).filter(Boolean)))
     for (const name of names) {
       if (lookup.has(name)) {
         throw new Error(`EDIT_SCRIPT_VOICE_PROFILE_NAME_DUPLICATE:${name}`)
       }
-      lookup.set(name, character.voiceProfile.trim())
+      lookup.set(name, character.voiceProfile)
     }
   }
   return lookup
@@ -71,6 +77,7 @@ export function resolveEditScriptDialogueVoiceContext(input: {
           characterId: character.characterId,
           name: character.name,
           voiceProfile,
+          voiceSignature: formatEditBibleCharacterVoiceProfile(voiceProfile),
         }
         charactersById.set(character.characterId, voiceCharacter)
         return {

@@ -116,7 +116,14 @@ describe('edit bible source-anchor normalization', () => {
           name: '老李',
           aliases: [],
           summary: '启动机器的民间科学家。',
-          voiceProfile: '偏低略沙哑的中年男声，语速急促但吐字清楚。',
+          voiceProfile: {
+            ageImpression: '中年男性声感',
+            pitchRange: '中低音区',
+            timbre: '偏暗，略带沙质颗粒',
+            resonance: '胸腔共鸣明显，喉腔色彩偏厚',
+            vocalWeight: '中重声线，声音密度较高',
+            texture: '干燥沙粒感，非气声',
+          },
           firstEvidence: { blockId: 'p0001', quote: '老李' },
         }],
         locations: [{
@@ -132,7 +139,14 @@ describe('edit bible source-anchor normalization', () => {
     })
 
     expect(bible.characters[0]?.firstSourceStart).toBe(sourceText.indexOf('老李'))
-    expect(bible.characters[0]?.voiceProfile).toBe('偏低略沙哑的中年男声，语速急促但吐字清楚。')
+    expect(bible.characters[0]?.voiceProfile).toEqual({
+      ageImpression: '中年男性声感',
+      pitchRange: '中低音区',
+      timbre: '偏暗，略带沙质颗粒',
+      resonance: '胸腔共鸣明显，喉腔色彩偏厚',
+      vocalWeight: '中重声线，声音密度较高',
+      texture: '干燥沙粒感，非气声',
+    })
     expect(bible.locations[0]?.firstSourceStart).toBe(sourceText.indexOf('地下室'))
   })
 })

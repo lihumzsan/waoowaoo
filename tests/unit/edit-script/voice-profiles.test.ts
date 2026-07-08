@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { resolveEditScriptDialogueVoiceContext } from '@/lib/edit-script/voice-profiles'
 import type { EditScriptShot } from '@/lib/edit-script/types'
 
+const linXiaoVoiceProfile = {
+  ageImpression: '青年女性声感',
+  pitchRange: '中低音区',
+  timbre: '清冷透明，边缘不尖',
+  resonance: '口腔前部共鸣清晰，鼻腔色彩很轻',
+  vocalWeight: '偏轻到中等声线',
+  texture: '细微气声边缘，表面干净',
+} as const
+
 const baseBible = {
   synopsis: '林晓和阿澈在黑暗走廊里听见脚步声。',
   characters: [
@@ -10,7 +19,7 @@ const baseBible = {
       name: '林晓',
       aliases: [],
       summary: '在走廊里提醒同伴保持安静的人。',
-      voiceProfile: '清冷偏低的青年女声，音量压得很轻，语速短促。',
+      voiceProfile: linXiaoVoiceProfile,
     },
   ],
   locations: [],
@@ -53,12 +62,14 @@ describe('edit script dialogue voice context', () => {
     expect(context.characters).toEqual([{
       characterId: 'project-character-lin-xiao',
       name: '林晓',
-      voiceProfile: '清冷偏低的青年女声，音量压得很轻，语速短促。',
+      voiceProfile: linXiaoVoiceProfile,
+      voiceSignature: 'ageImpression=青年女性声感; pitchRange=中低音区; timbre=清冷透明，边缘不尖; resonance=口腔前部共鸣清晰，鼻腔色彩很轻; vocalWeight=偏轻到中等声线; texture=细微气声边缘，表面干净',
     }])
     expect(context.shots[0]?.dialogue).toEqual([{
       characterId: 'project-character-lin-xiao',
       name: '林晓',
-      voiceProfile: '清冷偏低的青年女声，音量压得很轻，语速短促。',
+      voiceProfile: linXiaoVoiceProfile,
+      voiceSignature: 'ageImpression=青年女性声感; pitchRange=中低音区; timbre=清冷透明，边缘不尖; resonance=口腔前部共鸣清晰，鼻腔色彩很轻; vocalWeight=偏轻到中等声线; texture=细微气声边缘，表面干净',
       line: '别开灯。',
     }])
   })
@@ -76,5 +87,18 @@ describe('edit script dialogue voice context', () => {
       storyBibleJson: baseBible,
       shots: [shot],
     })).toThrow('EDIT_SCRIPT_DIALOGUE_VOICE_PROFILE_MISSING:1:阿澈')
+  })
+
+  it('rejects legacy free-text voice profiles instead of accepting delivery state as timbre', () => {
+    expect(() => resolveEditScriptDialogueVoiceContext({
+      storyBibleJson: {
+        ...baseBible,
+        characters: [{
+          ...baseBible.characters[0],
+          voiceProfile: '清冷偏低的青年女声，音量压得很轻，语速短促。',
+        }],
+      },
+      shots: [shotWithDialogue()],
+    })).toThrow()
   })
 })
