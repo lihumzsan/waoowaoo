@@ -160,6 +160,9 @@ describe('workspace assistant renderers', () => {
     expect(taskBatchSubmittedCardSource).not.toContain('mutationBatchId')
     expect(taskSubmittedCardSource).not.toContain('undoCurrentChange')
     expect(taskBatchSubmittedCardSource).not.toContain('undoCurrentBatch')
+    expect(taskSubmittedCardSource).not.toContain('data.operationId')
+    expect(taskSubmittedCardSource).not.toContain('data.taskId')
+    expect(taskSubmittedCardSource).not.toContain('liveStatus')
   })
 
   it('renders required choice groups for confirm-or-reply choice cards', () => {

@@ -36,6 +36,7 @@ import {
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
 import {
+  collectAssistantAsyncTaskSubmissions,
   resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
 import {
@@ -59,7 +60,10 @@ import {
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import type { ProjectAgentSessionActivity, ProjectAgentSessionState } from '@/lib/project-agent/session-state'
-import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistant-focus'
+import type {
+  WorkspaceAssistantActiveFocusRequest,
+  WorkspaceAssistantActiveTaskTarget,
+} from '../workspace-assistant-focus'
 
 const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
 
@@ -174,6 +178,47 @@ export function resolveWorkspaceAssistantExternalTaskOperationId(
   if (currentActivity?.type !== 'waiting_task') return null
   if (currentActivity.status !== 'running' && currentActivity.status !== 'waiting') return null
   return currentActivity.operationId ?? currentActivity.sourceOperationId
+}
+
+function isWorkspaceAssistantTaskRunningStatus(status: string | null | undefined): boolean {
+  return status === 'queued' || status === 'processing'
+}
+
+function buildWorkspaceAssistantActiveTaskTarget(input: {
+  readonly operationId: string | null
+  readonly taskType: string | null | undefined
+  readonly targetType: string | null | undefined
+  readonly targetId: string | null | undefined
+  readonly sourceKind?: string | null
+}): WorkspaceAssistantActiveTaskTarget | null {
+  const targetType = input.targetType?.trim()
+  const targetId = input.targetId?.trim()
+  if (!targetType || !targetId) return null
+  const taskType = input.taskType?.trim()
+  const operationId = input.operationId?.trim() || null
+  return {
+    targetType,
+    targetId,
+    ...(taskType ? { types: [taskType] } : {}),
+    ...(operationId ? { operationId } : {}),
+    ...(input.sourceKind !== undefined ? { sourceKind: input.sourceKind } : {}),
+  }
+}
+
+function dedupeWorkspaceAssistantActiveTaskTargets(
+  targets: readonly WorkspaceAssistantActiveTaskTarget[],
+): readonly WorkspaceAssistantActiveTaskTarget[] {
+  const byKey = new Map<string, WorkspaceAssistantActiveTaskTarget>()
+  targets.forEach((target) => {
+    byKey.set([
+      target.operationId ?? '',
+      target.targetType,
+      target.targetId,
+      (target.types ?? []).join(','),
+      target.sourceKind ?? '',
+    ].join(':'), target)
+  })
+  return Array.from(byKey.values())
 }
 
 export function shouldShowWorkspaceAssistantReplyLoading(params: {
@@ -595,6 +640,48 @@ export default function WorkspaceAssistantPanel({
   }, [stylePreviewDockCardKey])
   const currentActivity = assistantRuntime.sessionState?.currentActivity ?? null
   const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
+  const taskSubmissions = useMemo(
+    () => collectAssistantAsyncTaskSubmissions(assistantRuntime.messages),
+    [assistantRuntime.messages],
+  )
+  const activeAssistantTaskTargets = useMemo(() => {
+    const operationId = activeExternalTaskOperationId ?? assistantRuntime.pendingOperationId ?? null
+    const fromActiveTasks = (assistantRuntime.sessionState?.activeTasks ?? []).flatMap((task) => {
+      const submission = taskSubmissions.get(task.taskId)
+      const taskOperationId = task.operationId ?? submission?.operationId ?? null
+      if (operationId && taskOperationId !== operationId) return []
+      const target = buildWorkspaceAssistantActiveTaskTarget({
+        operationId: taskOperationId,
+        taskType: task.taskType,
+        targetType: task.targetType,
+        targetId: task.targetId,
+        sourceKind: submission?.kind === 'single' ? submission.data.sourceKind ?? null : null,
+      })
+      return target ? [target] : []
+    })
+    const fromSubmittedParts = assistantRuntime.pending
+      ? Array.from(taskSubmissions.values()).flatMap((submission) => {
+          if (submission.kind !== 'single') return []
+          if (operationId && submission.operationId !== operationId) return []
+          if (!isWorkspaceAssistantTaskRunningStatus(submission.data.status)) return []
+          const target = buildWorkspaceAssistantActiveTaskTarget({
+            operationId: submission.operationId,
+            taskType: submission.data.taskType,
+            targetType: submission.data.targetType,
+            targetId: submission.data.targetId,
+            sourceKind: submission.data.sourceKind ?? null,
+          })
+          return target ? [target] : []
+        })
+      : []
+    return dedupeWorkspaceAssistantActiveTaskTargets([...fromActiveTasks, ...fromSubmittedParts])
+  }, [
+    activeExternalTaskOperationId,
+    assistantRuntime.pending,
+    assistantRuntime.pendingOperationId,
+    assistantRuntime.sessionState?.activeTasks,
+    taskSubmissions,
+  ])
   const activeExternalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
     activeExternalTaskOperationId && currentActivity
       ? {
@@ -603,10 +690,19 @@ export default function WorkspaceAssistantPanel({
         }
       : null
   ), [activeExternalTaskOperationId, currentActivity])
-  const activeAssistantFocusRequest = useMemo(
-    () => assistantRuntime.activeFocusRequest ?? activeExternalTaskFocusRequest,
-    [activeExternalTaskFocusRequest, assistantRuntime.activeFocusRequest],
-  )
+  const activeAssistantFocusRequest = useMemo(() => {
+    const baseFocusRequest = assistantRuntime.activeFocusRequest ?? activeExternalTaskFocusRequest
+    if (!baseFocusRequest) return null
+    if (activeAssistantTaskTargets.length === 0) return baseFocusRequest
+    return {
+      ...baseFocusRequest,
+      taskTargets: activeAssistantTaskTargets,
+    }
+  }, [
+    activeAssistantTaskTargets,
+    activeExternalTaskFocusRequest,
+    assistantRuntime.activeFocusRequest,
+  ])
   useEffect(() => {
     onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantFocusRequest)
     return () => onActiveOperationChange?.(null)

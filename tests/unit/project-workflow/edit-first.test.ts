@@ -56,12 +56,12 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
 }
 
 describe('edit-first workflow state', () => {
-  it('ingests source script first with explicit confirmation', () => {
+  it('ingests source script first without generic execution confirmation', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot())
 
     expect(state.stage).toBe('ready_to_ingest_script')
     expect(state.nextAction?.operationId).toBe('ingest_script')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['ingest_script'])
   })
 

@@ -685,6 +685,13 @@
           "pendingBody": "AI 正在解析源剧本，生成全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。",
           "pendingMeta": "生成完成后由 assistant 发起确认"
         },
+        "editScriptSource": {
+          "title": "扩写剧本",
+          "eyebrow": "源剧本",
+          "pendingTitle": "剧本生成中",
+          "pendingBody": "AI 正在根据创作问诊结果扩写完整可拍剧本。",
+          "pendingMeta": "生成完成后由 assistant 发起剧本审核"
+        },
         "editStylePreview": {
           "eyebrow": "风格候选",
           "body": "根据剧本生成的九宫格影片基调预览。",

@@ -47,6 +47,7 @@ const editBibleMock = vi.hoisted(() => ({
     taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
     targetType: 'ProjectEditBible',
     targetId: 'bible-1',
+    sourceKind: 'paste',
   })),
   readEpisodeEditBible: vi.fn(async () => ({
     id: 'bible-1',

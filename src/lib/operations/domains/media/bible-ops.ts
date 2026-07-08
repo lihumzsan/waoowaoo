@@ -70,6 +70,7 @@ const editBibleTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     taskType: z.literal(TASK_TYPE.EDIT_BIBLE_GENERATE),
     targetType: z.literal('ProjectEditBible'),
     targetId: z.string().min(1),
+    sourceKind: z.string().min(1),
   }).passthrough(),
 )
 
@@ -269,8 +270,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,
       confirmation: {
-        required: true,
-        summary: '将保存本集源文本并调用文本模型处理（可能消耗额度/产生计费）。完整可拍剧本会生成剧集规划、台账、情绪曲线和章节切分；创作简报会先扩写成完整剧本并等待用户审核。确认继续后请重新调用并传入 confirmed=true。',
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
       inputSchema: ingestScriptOperationInputSchema,
@@ -286,7 +286,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           text: input.text,
           ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
           source: ctx.source,
-          confirmed: input.confirmed === true,
+          confirmed: true,
           locale: resolveLocale(ctx.context.locale),
         })
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -300,6 +300,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
           targetType: 'ProjectEditBible',
           targetId: result.editBibleId,
+          sourceKind: input.sourceKind,
         })
         return editBibleTaskSubmitOutputSchema.parse(result)
       },
@@ -339,6 +340,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
           targetType: 'ProjectEditBible',
           targetId: result.editBibleId,
+          sourceKind: 'prompt_generated_outline',
         })
         return editBibleTaskSubmitOutputSchema.parse(result)
       },
@@ -377,6 +379,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
           targetType: 'ProjectEditBible',
           targetId: result.editBibleId,
+          sourceKind: 'prompt_generated_script',
         })
         return editBibleTaskSubmitOutputSchema.parse(result)
       },

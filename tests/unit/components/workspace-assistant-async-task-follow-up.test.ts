@@ -152,6 +152,35 @@ describe('workspace assistant async task follow-up', () => {
     })
   })
 
+  it('preserves edit-bible source kind in task submission data', () => {
+    const data = createTaskSubmittedDataFromOperationPayload({
+      operationId: 'ingest_script',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      payload: {
+        result: {
+          success: true,
+          async: true,
+          taskId: 'task-1',
+          status: 'queued',
+          runId: null,
+          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: 'bible-1',
+          sourceKind: 'prompt_generated_outline',
+        },
+      },
+    })
+
+    expect(data).toMatchObject({
+      operationId: 'ingest_script',
+      taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+      targetType: 'ProjectEditBible',
+      targetId: 'bible-1',
+      sourceKind: 'prompt_generated_outline',
+    })
+  })
+
   it('creates batch task submission data from confirmed operation payload', () => {
     const data = createTaskBatchSubmittedDataFromOperationPayload({
       operationId: 'generate_edit_script_storyboard_images',

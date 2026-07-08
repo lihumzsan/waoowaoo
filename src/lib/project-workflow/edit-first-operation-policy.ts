@@ -21,6 +21,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
 export type EditFirstWorkflowOperationId = (typeof EDIT_FIRST_WORKFLOW_OPERATION_IDS)[number]
 
 export const EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS = [
+  'ingest_script',
   'revise_script',
   'generate_bible_from_script',
   'generate_edit_style_previews',

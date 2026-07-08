@@ -66,6 +66,7 @@ function readTaskSubmittedPartData(value: unknown): TaskSubmittedPartData | null
   const taskType = readNonEmptyString(value.taskType)
   const targetType = readNonEmptyString(value.targetType)
   const targetId = readNonEmptyString(value.targetId)
+  const sourceKind = readOptionalString(value.sourceKind)
   return {
     operationId,
     taskId,
@@ -78,6 +79,7 @@ function readTaskSubmittedPartData(value: unknown): TaskSubmittedPartData | null
     ...(taskType ? { taskType } : {}),
     ...(targetType ? { targetType } : {}),
     ...(targetId ? { targetId } : {}),
+    ...(sourceKind !== undefined ? { sourceKind } : {}),
   }
 }
 
@@ -255,6 +257,7 @@ export function createTaskSubmittedDataFromOperationPayload(params: {
   const taskType = readNonEmptyString(result.taskType)
   const targetType = readNonEmptyString(result.targetType)
   const targetId = readNonEmptyString(result.targetId)
+  const sourceKind = readOptionalString(result.sourceKind)
   const inferredEditScriptTarget = params.operationId === 'generate_edit_script' && episodeId
     ? {
         taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
@@ -274,6 +277,7 @@ export function createTaskSubmittedDataFromOperationPayload(params: {
     taskType: taskType ?? inferredEditScriptTarget?.taskType,
     targetType: targetType ?? inferredEditScriptTarget?.targetType,
     targetId: targetId ?? inferredEditScriptTarget?.targetId,
+    ...(sourceKind !== undefined ? { sourceKind } : {}),
   }
 }
 

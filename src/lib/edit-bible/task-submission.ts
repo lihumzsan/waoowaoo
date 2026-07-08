@@ -26,6 +26,7 @@ export type EditBibleGenerationTaskSubmitResult = OperationTaskSubmitResult & {
   readonly taskType: typeof TASK_TYPE.EDIT_BIBLE_GENERATE
   readonly targetType: 'ProjectEditBible'
   readonly targetId: string
+  readonly sourceKind: EditSourceDocumentKind
 }
 
 type PreparedEditBibleGenerationTarget = Awaited<ReturnType<typeof prepareEditBibleGenerationTarget>>
@@ -106,6 +107,7 @@ async function submitPreparedEditBibleGenerationTask(input: {
     taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
     targetType: 'ProjectEditBible',
     targetId: input.editBibleId,
+    sourceKind: input.sourceKind,
   }
 }
 

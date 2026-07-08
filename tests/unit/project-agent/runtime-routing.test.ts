@@ -604,7 +604,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedToolNames).not.toContain('get_project_data')
     expect(streamState.capturedEnabledToolNames).toContain('ingest_script')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script')
-    expect(streamState.capturedTools.ingest_script.needsApproval).toEqual(expect.any(Function))
+    expect(streamState.capturedTools.ingest_script.needsApproval).toBeUndefined()
     expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.bible_review].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('[project_state_snapshot]')
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({

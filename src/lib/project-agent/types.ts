@@ -215,6 +215,7 @@ export interface TaskSubmittedPartData {
   taskType?: string
   targetType?: string
   targetId?: string
+  sourceKind?: string | null
 }
 
 export interface TaskBatchSubmittedPartData {

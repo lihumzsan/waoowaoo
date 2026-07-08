@@ -692,89 +692,13 @@ export function AssistantChoiceCardView(props: {
 }
 
 function TaskSubmittedDataCard({ data }: DataMessagePartProps<TaskSubmittedPartData>) {
-  const t = useTranslations('assistantAgent')
-  const progressT = useTranslations('progress')
-  const taskTargets = useMemo(() => (
-    data.targetType && data.targetId
-      ? [{
-          targetType: data.targetType,
-          targetId: data.targetId,
-          ...(data.taskType ? { types: [data.taskType] } : {}),
-        }]
-      : []
-  ), [data.targetId, data.targetType, data.taskType])
-  const taskState = useTaskTargetStateMap(data.projectId ?? null, taskTargets, {
-    enabled: Boolean(data.projectId && taskTargets.length > 0),
-  }).byKey.get(data.targetType && data.targetId ? `${data.targetType}:${data.targetId}` : '')
-  const liveProgress = typeof taskState?.progress === 'number' ? Math.max(0, Math.min(100, taskState.progress)) : null
-  const liveStatus = taskState && taskState.phase !== 'idle' ? taskState.phase : data.status
-  const liveStageLabel = useMemo(() => {
-    const raw = taskState?.stageLabel || taskState?.stage || null
-    return resolveProgressStageLabel(raw, progressT)
-  }, [progressT, taskState?.stage, taskState?.stageLabel])
-  const receiptText = data.billingReceipt?.billable === true
-    ? data.billingReceipt.showCredits && typeof data.billingReceipt.maxFrozenCost === 'number'
-      ? t('cards.billingReceiptWithCredits', { cost: data.billingReceipt.maxFrozenCost })
-      : t('cards.billingReceiptWithoutCredits')
-    : null
-
-  return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
-      <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name="play" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t('cards.taskSubmitted')} · {data.operationId} · {liveStatus}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="ml-5 mt-1 space-y-0.5 text-[11px]">
-        <div>{t('cards.taskIdLabel')}: {data.taskId}</div>
-        {liveStageLabel ? <div>{t('cards.stageLabel')}: {liveStageLabel}</div> : null}
-        {liveProgress !== null ? (
-          <div className="pt-1">
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200/70">
-              <div
-                className="h-full rounded-full bg-slate-500 transition-[width] duration-300"
-                style={{ width: `${liveProgress}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
-        {data.runId ? <div>{t('cards.runIdLabel')}: {data.runId}</div> : null}
-        {typeof data.deduped === 'boolean' ? <div>{t('cards.dedupedLabel')}: {String(data.deduped)}</div> : null}
-        {receiptText ? <div>{receiptText}</div> : null}
-      </div>
-    </details>
-  )
+  void data
+  return null
 }
 
 function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubmittedPartData>) {
-  const t = useTranslations('assistantAgent')
-  const taskTotal = data.taskTotal ?? data.taskIds.length
-  const targetTotal = data.targetTotal
-  const countLabel = typeof targetTotal === 'number' && targetTotal !== taskTotal
-    ? t('cards.batchTaskAndTargetTotals', { tasks: taskTotal, targets: targetTotal })
-    : t('cards.totalLabelWithCount', { count: data.total })
-  const receiptText = data.billingReceipt?.billable === true
-    ? data.billingReceipt.showCredits && typeof data.billingReceipt.maxFrozenCost === 'number'
-      ? t('cards.billingReceiptWithCredits', { cost: data.billingReceipt.maxFrozenCost })
-      : t('cards.billingReceiptWithoutCredits')
-    : null
-
-  return (
-    <details className="group text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
-      <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name="play" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{t('cards.batchTaskSubmitted')} · {data.operationId} · {countLabel}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="ml-5 mt-1 space-y-0.5 font-mono text-[11px]">
-        {(data.taskIds || []).slice(0, 8).map((taskId: string) => (
-          <div key={taskId}>{taskId}</div>
-        ))}
-        {(data.taskIds || []).length > 8 ? <div>…</div> : null}
-        {receiptText ? <div className="font-sans text-[var(--glass-text-secondary)]">{receiptText}</div> : null}
-      </div>
-    </details>
-  )
+  void data
+  return null
 }
 
 function isEditStylePreviewChoiceReady(preview: ProjectEditStylePreview | null): preview is ProjectEditStylePreview {

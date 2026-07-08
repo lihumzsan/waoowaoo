@@ -91,6 +91,7 @@ import {
 } from './structured-stream/useWorkspaceStructuredStreamRuntime'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
+const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
 const OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS = 15000
 const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
@@ -316,6 +317,7 @@ function ProjectWorkspaceCanvasContent({
     edges: WorkspaceCanvasFlowEdge[]
   } | null>(null)
   const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
+  const activeAssistantTaskTargets = activeAssistantFocusRequest?.taskTargets ?? EMPTY_ACTIVE_TASK_TARGETS
 
   const {
     layout,
@@ -649,6 +651,7 @@ function ProjectWorkspaceCanvasContent({
     editScripts: projectedEditScripts,
     editShotExecutionPlan: scopedEditShotExecutionPlan,
     activeAssistantOperationId,
+    activeTaskTargets: activeAssistantTaskTargets,
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,
     finalVideo,
@@ -936,6 +939,7 @@ function ProjectWorkspaceCanvasContent({
       editScripts: projectedEditScripts,
       editShotExecutionPlan: scopedEditShotExecutionPlan,
       activeAssistantOperationId,
+      activeTaskTargets: activeAssistantTaskTargets,
       editScriptPending: effectiveEditScriptPending,
       finalVideo,
       videoGroups: scopedVideoGroups,
@@ -949,7 +953,7 @@ function ProjectWorkspaceCanvasContent({
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, projectedEditScripts, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
+  }, [activeAssistantOperationId, activeAssistantTaskTargets, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, projectedEditScripts, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()

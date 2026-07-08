@@ -90,6 +90,7 @@ export const TASK_RUNTIME_TARGETS = {
   },
   projectEditBible(bibleId: string | null | undefined) {
     return target('ProjectEditBible', bibleId, [
+      TASK_TYPE.EDIT_BIBLE_GENERATE,
       TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
     ])
   },

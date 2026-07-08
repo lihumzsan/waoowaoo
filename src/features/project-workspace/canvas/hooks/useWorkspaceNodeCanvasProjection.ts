@@ -6,6 +6,7 @@ import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import { TASK_TYPE } from '@/lib/task/types'
 import type {
   ProjectEditAssetRequirement,
   ProjectEditBible,
@@ -60,6 +61,11 @@ interface TranslateValues {
 
 type Translate = (key: string, values?: TranslateValues) => string
 
+interface WorkspaceCanvasActiveTaskTarget extends TaskRuntimeTarget {
+  readonly operationId?: string | null
+  readonly sourceKind?: string | null
+}
+
 export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly projectId?: string
   readonly episodeId: string
@@ -71,6 +77,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly editScripts?: readonly ProjectEditScript[]
   readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
   readonly activeAssistantOperationId?: string | null
+  readonly activeTaskTargets?: readonly WorkspaceCanvasActiveTaskTarget[]
   readonly editScriptPending?: boolean
   readonly streamTargets?: readonly WorkspaceCanvasStreamTarget[]
   readonly finalVideo?: ProjectFinalVideo | null
@@ -174,6 +181,33 @@ function hasStreamTarget(
   targetId: string,
 ): boolean {
   return targets.some((target) => target.streamKind === streamKind && target.targetId === targetId)
+}
+
+function findStreamTarget(
+  targets: readonly WorkspaceCanvasStreamTarget[],
+  streamKind: WorkspaceCanvasStreamTarget['streamKind'],
+  episodeId: string,
+): WorkspaceCanvasStreamTarget | null {
+  return targets.find((target) => (
+    target.streamKind === streamKind
+    && (target.episodeId === null || target.episodeId === episodeId)
+  )) ?? null
+}
+
+function taskTargetIncludesType(
+  target: WorkspaceCanvasActiveTaskTarget,
+  taskType: string,
+): boolean {
+  return target.types?.includes(taskType) ?? false
+}
+
+function findEditBibleActiveTaskTarget(
+  targets: readonly WorkspaceCanvasActiveTaskTarget[],
+): WorkspaceCanvasActiveTaskTarget | null {
+  return targets.find((target) => (
+    target.targetType === 'ProjectEditBible'
+    && taskTargetIncludesType(target, TASK_TYPE.EDIT_BIBLE_GENERATE)
+  )) ?? null
 }
 
 function artifactPhaseLabels(translate: Translate): WorkspaceCanvasArtifactPhaseLabels {
@@ -380,6 +414,20 @@ function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): s
     if (typeof synopsis === 'string' && synopsis.trim()) return synopsis.trim()
   }
   return ''
+}
+
+function isScriptEditBiblePresentation(input: {
+  readonly editBible: ProjectEditBible | null
+  readonly editFirstWorkflow: EditFirstWorkflowState
+  readonly activeAssistantOperationId: string | null
+  readonly activeTaskTarget: WorkspaceCanvasActiveTaskTarget | null
+}): boolean {
+  if (input.editBible?.status === 'script_ready_for_review') return true
+  if (input.editBible?.status === 'script_approved') return true
+  if (input.editFirstWorkflow.stage === 'script_generating') return true
+  if (input.editBible?.status === 'generating' && input.editBible.sourceKind === 'prompt_generated_outline') return true
+  if (input.activeTaskTarget?.sourceKind === 'prompt_generated_outline') return true
+  return input.activeAssistantOperationId === 'revise_script'
 }
 
 function assetPreviewUrl(requirement: ProjectEditAssetRequirement): string | null {
@@ -606,6 +654,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     editScripts = [],
     editShotExecutionPlan = null,
     activeAssistantOperationId = null,
+    activeTaskTargets = [],
     editScriptPending = false,
     streamTargets = [],
     finalVideo = null,
@@ -624,14 +673,24 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
-  const bibleRunning = activeAssistantOperationId === 'ingest_script'
-    || activeAssistantOperationId === 'revise_script'
-    || activeAssistantOperationId === 'generate_bible_from_script'
+  const activeEditBibleTaskTarget = findEditBibleActiveTaskTarget(activeTaskTargets)
+  const editBibleStreamTarget = findStreamTarget(streamTargets, 'editBible', episodeId)
+  const editBibleRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editBibleStreamTarget?.targetId ?? null
+  const bibleRunning = Boolean(activeEditBibleTaskTarget)
+    || Boolean(editBibleStreamTarget)
+    || editFirstWorkflow.stage === 'script_generating'
+    || editFirstWorkflow.stage === 'bible_generating'
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
+  const scriptBiblePresentation = isScriptEditBiblePresentation({
+    editBible,
+    editFirstWorkflow,
+    activeAssistantOperationId,
+    activeTaskTarget: activeEditBibleTaskTarget,
+  })
   const phaseLabels = artifactPhaseLabels(translate)
 
   let bibleNodeId: string | null = null
-  if (editBible || editScriptPending || bibleRunning) {
+  if (editBible || editScriptPending || bibleRunning || editBibleRuntimeTargetId) {
     const biblePresentation = bibleRunning || !editBible
       ? workspaceCanvasRunningPresentation(phaseLabels)
       : artifactPresentationFromTaskBackedStatus(editBible.status, phaseLabels)
@@ -650,13 +709,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         kind: 'editBible',
         layoutNodeType: 'editBible',
         targetType: 'editBible',
-        targetId: editBible?.id ?? episodeId,
-        title: translate('nodes.editBible.title'),
-        eyebrow: translate('nodes.editBible.eyebrow'),
-        body: editBiblePreviewText(editBible) || translate('nodes.editBible.pendingBody'),
+        targetId: editBibleRuntimeTargetId ?? episodeId,
+        title: scriptBiblePresentation
+          ? translate(bibleRunning || !editBible ? 'nodes.editScriptSource.pendingTitle' : 'nodes.editScriptSource.title')
+          : translate('nodes.editBible.title'),
+        eyebrow: scriptBiblePresentation ? translate('nodes.editScriptSource.eyebrow') : translate('nodes.editBible.eyebrow'),
+        body: editBiblePreviewText(editBible) || translate(scriptBiblePresentation ? 'nodes.editScriptSource.pendingBody' : 'nodes.editBible.pendingBody'),
         meta: '',
         ...biblePresentation,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(editBible?.id ?? null)),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(editBibleRuntimeTargetId)),
         editBibleDetails: editBible
           ? {
               bibleText: editBiblePreviewText(editBible),
@@ -1279,6 +1340,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
+    activeTaskTargets,
     editScriptPending,
     streamTargets,
     finalVideo,
@@ -1301,6 +1363,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
+    activeTaskTargets,
     editScriptPending,
     streamTargets,
     finalVideo,
@@ -1321,6 +1384,7 @@ export function useWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanvas
     editScripts,
     editShotExecutionPlan,
     activeAssistantOperationId,
+    activeTaskTargets,
     editScriptPending,
     streamTargets,
     finalVideo,

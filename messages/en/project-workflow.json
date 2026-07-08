@@ -685,6 +685,13 @@
           "pendingBody": "AI is parsing the source script into the global Bible, beat sheet, event ledger, emotional curve, and chapter split.",
           "pendingMeta": "The assistant will request confirmation when it is ready"
         },
+        "editScriptSource": {
+          "title": "Expanded Script",
+          "eyebrow": "Source Script",
+          "pendingTitle": "Generating Script",
+          "pendingBody": "AI is expanding the creative intake into a complete filmable script.",
+          "pendingMeta": "The assistant will request script review when it is ready"
+        },
         "editStylePreview": {
           "eyebrow": "Style Candidate",
           "body": "A 3x3 film tone preview generated from the bible.",

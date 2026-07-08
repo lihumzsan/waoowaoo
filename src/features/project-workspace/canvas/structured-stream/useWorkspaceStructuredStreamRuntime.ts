@@ -467,6 +467,7 @@ function buildEditBibleRuntimeEntries(
       .filter(Boolean)
       .join('\n\n')
     if (!bibleText) return []
+    const scriptExpansionStream = group.some((snapshot) => snapshot.stepId === AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT)
     const nodeId = workspaceNodeId.editBible(firstSnapshot.episodeId ?? firstSnapshot.targetId)
     return [createStreamRuntimeEntry({
       nodeId,
@@ -478,7 +479,7 @@ function buildEditBibleRuntimeEntries(
       episodeId: firstSnapshot.episodeId,
       data: {
         body: bibleText,
-        meta: translate('nodes.editBible.pendingMeta'),
+        meta: translate(scriptExpansionStream ? 'nodes.editScriptSource.pendingMeta' : 'nodes.editBible.pendingMeta'),
         artifactPhase: 'running',
         statusLabel: translate('status.processing'),
         isRunning: true,
