@@ -4,6 +4,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
+import AccountSecurityTab from './components/AccountSecurityTab'
 import ApiConfigTab from './components/ApiConfigTab'
 import ProfileTransactionsTable, { type ProfileTransactionItem } from './components/ProfileTransactionsTable'
 import { BrandPageLoading } from '@/components/ui/BrandLoading'
@@ -92,10 +93,11 @@ const RECHARGE_PRESETS = [50, 100, 200, 500] as const
 function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
   if (features.showBilling) return 'overview'
   if (features.showApiConfig) return 'apiConfig'
-  return 'overview'
+  return 'security'
 }
 
 function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
+  if (section === 'security') return true
   if (section === 'apiConfig') return features.showApiConfig
   return features.showBilling
 }
@@ -257,6 +259,7 @@ export default function ProfilePage() {
     ...(deploymentFeatures?.showBilling === true
       ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
       : []),
+    { section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') },
     ...(deploymentFeatures?.showApiConfig === true
       ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
       : []),
@@ -330,6 +333,8 @@ export default function ProfilePage() {
                 <div className="flex h-full items-center justify-center text-sm text-[var(--glass-text-secondary)]">
                   {tc('loading')}
                 </div>
+              ) : activeSection === 'security' ? (
+                <AccountSecurityTab />
               ) : activeSection === 'apiConfig' && deploymentFeatures.showApiConfig ? (
                 <ApiConfigTab />
               ) : activeSection === 'overview' && showBilling ? (
