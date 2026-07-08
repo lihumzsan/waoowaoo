@@ -24,16 +24,19 @@ function t(key: string, values?: Record<string, string | number>): string {
   return `${key}:${JSON.stringify(values)}`
 }
 
-function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
+function workflow(
+  stage: EditFirstWorkflowState['stage'],
+  allowedOperationIds: EditFirstWorkflowState['allowedOperationIds'] = [],
+): EditFirstWorkflowState {
   return {
     active: true,
     stage,
     blocking: {
-      kind: 'none',
-      reason: null,
+      kind: stage === 'failed' ? 'failed' : 'none',
+      reason: stage === 'failed' ? 'workflow failed' : null,
     },
     nextAction: null,
-    allowedOperationIds: [],
+    allowedOperationIds,
   }
 }
 
@@ -448,5 +451,34 @@ describe('project canvas edit-first visibility', () => {
     expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(true)
     expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(true)
+  })
+
+  it('keeps existing assets, storyboards, and video groups visible when chapter render fails', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [storyboard()],
+      editFirstWorkflow: workflow('failed', ['render_chapters']),
+      editScript: editScript({
+        status: 'ready',
+        requirements: [requirement()],
+        generationSegments: [{ shotIds: ['shot-1'], continuity: 'first segment' }],
+      }),
+      editShotExecutionPlan: shotExecutionPlan(),
+      videoGroups: [videoGroup()],
+      finalVideo: finalVideo(),
+      savedLayouts: [],
+      translate: t,
+    })
+
+    expect(projection.nodes.some((node) => node.data.kind === 'editAssetGroup')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'editShotExecutionPlan')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'shot')).toBe(true)
+    expect(projection.nodes.some((node) => (
+      node.data.kind === 'videoPlan'
+      && node.data.videoPlanDetails?.outputUrl === '/videos/group-1.mp4'
+    ))).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(true)
   })
 })
