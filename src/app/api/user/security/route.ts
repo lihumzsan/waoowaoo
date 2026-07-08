@@ -4,7 +4,7 @@ import { requireUserAuth, isErrorResponse } from '@/lib/api-auth'
 import {
   ACCOUNT_SECURITY_RESULT_CODES,
   getAccountSecurity,
-  setInitialPassword,
+  setAccountPassword,
 } from '@/lib/auth/account-security'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig } from '@/lib/deployment/config'
@@ -12,6 +12,7 @@ import { getDeploymentFeatures } from '@/lib/deployment/features'
 
 const setPasswordSchema = z.object({
   password: z.string().min(1),
+  currentPassword: z.string().optional(),
 })
 
 function requireAccountSecurityFeature(): void {
@@ -60,9 +61,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     })
   }
 
-  const security = await setInitialPassword({
+  const security = await setAccountPassword({
     userId: authResult.session.user.id,
     password: parsed.data.password,
+    currentPassword: parsed.data.currentPassword,
   })
 
   return NextResponse.json({

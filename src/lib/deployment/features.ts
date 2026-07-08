@@ -10,6 +10,7 @@ export interface DeploymentFeatures {
   showApiConfig: boolean
   showAccountSecurity: boolean
   showGoogleOAuth: boolean
+  showDownloadLogs: boolean
   showUpdateCheck: boolean
   requireInviteCodeOnSignup: boolean
   usePlatformProviderConfig: boolean
@@ -25,6 +26,7 @@ const SELF_HOSTED_DEPLOYMENT_FEATURES: DeploymentFeatures = {
   showApiConfig: true,
   showAccountSecurity: false,
   showGoogleOAuth: false,
+  showDownloadLogs: true,
   showUpdateCheck: true,
   requireInviteCodeOnSignup: false,
   usePlatformProviderConfig: false,
@@ -40,6 +42,7 @@ const CLOUD_DEPLOYMENT_FEATURES: DeploymentFeatures = {
   showApiConfig: false,
   showAccountSecurity: true,
   showGoogleOAuth: true,
+  showDownloadLogs: false,
   showUpdateCheck: false,
   requireInviteCodeOnSignup: false,
   usePlatformProviderConfig: true,

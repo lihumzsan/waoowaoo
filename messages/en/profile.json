@@ -134,6 +134,11 @@
     "passwordBound": "Password login is enabled",
     "passwordNotSet": "Password is not set",
     "setPasswordTitle": "Set Login Password",
+    "changePasswordTitle": "Change Login Password",
+    "setLoginPassword": "Set login password",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "currentPasswordPlaceholder": "Enter current password",
     "newPassword": "New password",
     "newPasswordPlaceholder": "Enter at least 6 characters",
     "confirmPassword": "Confirm password",
@@ -141,8 +146,10 @@
     "setPassword": "Set password",
     "savingPassword": "Saving",
     "passwordSet": "Password set",
+    "passwordChanged": "Password changed",
     "passwordSetFailed": "Failed to set password",
     "passwordTooShort": "Password must be at least 6 characters",
+    "currentPasswordRequired": "Enter current password",
     "passwordMismatch": "Passwords do not match"
   },
   "apiTypes": {

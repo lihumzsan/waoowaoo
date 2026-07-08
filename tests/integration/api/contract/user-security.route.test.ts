@@ -8,7 +8,7 @@ const authState = vi.hoisted(() => ({
 
 const accountSecurityMock = vi.hoisted(() => ({
   getAccountSecurity: vi.fn(),
-  setInitialPassword: vi.fn(),
+  setAccountPassword: vi.fn(),
 }))
 
 vi.mock('@/lib/api-auth', () => {
@@ -39,7 +39,7 @@ vi.mock('@/lib/auth/account-security', async () => {
   return {
     ...actual,
     getAccountSecurity: accountSecurityMock.getAccountSecurity,
-    setInitialPassword: accountSecurityMock.setInitialPassword,
+    setAccountPassword: accountSecurityMock.setAccountPassword,
   }
 })
 
@@ -78,7 +78,7 @@ describe('/api/user/security', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     authState.authenticated = true
     accountSecurityMock.getAccountSecurity.mockResolvedValue(securitySnapshot)
-    accountSecurityMock.setInitialPassword.mockResolvedValue({
+    accountSecurityMock.setAccountPassword.mockResolvedValue({
       ...securitySnapshot,
       hasPassword: true,
     })
@@ -145,7 +145,7 @@ describe('/api/user/security', () => {
 
     expect(response.status).toBe(400)
     expect(body.error.details.code).toBe(ACCOUNT_SECURITY_RESULT_CODES.bodyParseFailed)
-    expect(accountSecurityMock.setInitialPassword.mock.calls).toEqual([])
+    expect(accountSecurityMock.setAccountPassword.mock.calls).toEqual([])
   })
 
   it('POST validates password payload before writing password', async () => {
@@ -160,11 +160,14 @@ describe('/api/user/security', () => {
 
     expect(response.status).toBe(400)
     expect(body.error.details.code).toBe(ACCOUNT_SECURITY_RESULT_CODES.passwordPayloadInvalid)
-    expect(accountSecurityMock.setInitialPassword.mock.calls).toEqual([])
+    expect(accountSecurityMock.setAccountPassword.mock.calls).toEqual([])
   })
 
-  it('POST sets the current user initial password', async () => {
-    const response = await POST(buildRequest('POST', JSON.stringify({ password: 'secret1' })), routeContext)
+  it('POST saves the current user login password with optional current password', async () => {
+    const response = await POST(buildRequest('POST', JSON.stringify({
+      currentPassword: 'old-secret',
+      password: 'secret1',
+    })), routeContext)
     const body = await response.json() as {
       success: boolean
       security: {
@@ -180,8 +183,9 @@ describe('/api/user/security', () => {
         hasPassword: true,
       },
     })
-    expect(accountSecurityMock.setInitialPassword).toHaveBeenCalledWith({
+    expect(accountSecurityMock.setAccountPassword).toHaveBeenCalledWith({
       userId: 'user-1',
+      currentPassword: 'old-secret',
       password: 'secret1',
     })
   })

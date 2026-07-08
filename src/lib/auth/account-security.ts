@@ -9,6 +9,8 @@ export const ACCOUNT_SECURITY_RESULT_CODES = {
   passwordPayloadInvalid: 'ACCOUNT_SECURITY_PASSWORD_PAYLOAD_INVALID',
   passwordTooShort: 'ACCOUNT_SECURITY_PASSWORD_TOO_SHORT',
   passwordAlreadySet: 'ACCOUNT_SECURITY_PASSWORD_ALREADY_SET',
+  currentPasswordRequired: 'ACCOUNT_SECURITY_CURRENT_PASSWORD_REQUIRED',
+  currentPasswordInvalid: 'ACCOUNT_SECURITY_CURRENT_PASSWORD_INVALID',
   userNotFound: 'ACCOUNT_SECURITY_USER_NOT_FOUND',
 } as const
 
@@ -120,6 +122,54 @@ export async function setInitialPassword(input: {
   if (updated.count !== 1) {
     throwConflict(ACCOUNT_SECURITY_RESULT_CODES.passwordAlreadySet)
   }
+
+  return await getAccountSecurity(input.userId)
+}
+
+export async function setAccountPassword(input: {
+  userId: string
+  password: string
+  currentPassword?: string
+}): Promise<AccountSecuritySnapshot> {
+  validateInitialPassword(input.password)
+
+  const user = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: {
+      id: true,
+      password: true,
+    },
+  })
+
+  if (!user) {
+    throwNotFound(ACCOUNT_SECURITY_RESULT_CODES.userNotFound)
+  }
+
+  if (user.password === null) {
+    return await setInitialPassword({
+      userId: input.userId,
+      password: input.password,
+    })
+  }
+
+  if (!input.currentPassword) {
+    throwInvalidParams(ACCOUNT_SECURITY_RESULT_CODES.currentPasswordRequired)
+  }
+
+  const currentPasswordValid = await bcrypt.compare(input.currentPassword, user.password)
+  if (!currentPasswordValid) {
+    throwInvalidParams(ACCOUNT_SECURITY_RESULT_CODES.currentPasswordInvalid)
+  }
+
+  const hashedPassword = await bcrypt.hash(input.password, 12)
+  await prisma.user.update({
+    where: {
+      id: input.userId,
+    },
+    data: {
+      password: hashedPassword,
+    },
+  })
 
   return await getAccountSecurity(input.userId)
 }

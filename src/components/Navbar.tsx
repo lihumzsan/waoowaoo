@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api-fetch'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -30,7 +30,7 @@ interface NavbarProps {
 
 interface NavbarSettingsLabels {
   apiConfig: string
-  billingRecords: string
+  personalCenter: string
 }
 
 export interface NavbarSettingsMenuItem {
@@ -88,7 +88,7 @@ export function buildNavbarSettingsMenuItems(
       ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: labels.apiConfig }]
       : []),
     ...(features?.showBilling === true
-      ? [{ section: 'billing' as const, icon: 'receipt' as const, label: labels.billingRecords }]
+      ? [{ section: 'overview' as const, icon: 'user' as const, label: labels.personalCenter }]
       : []),
   ]
 }
@@ -136,11 +136,12 @@ export default function Navbar({
   const showPricingLink = deploymentFeatures?.showPricingPage === true
   const showRecharge = deploymentFeatures?.showRecharge === true
   const showBilling = deploymentFeatures?.showBilling === true
+  const showDownloadLogs = deploymentFeatures?.showDownloadLogs === true
   const userName = session?.user?.name ?? t('profile')
   const creditsUnit = t('account.creditsUnit')
   const settingsMenuItems = buildNavbarSettingsMenuItems(deploymentFeatures, {
     apiConfig: t('settingsMenu.apiConfig'),
-    billingRecords: t('settingsMenu.billingRecords'),
+    personalCenter: t('settingsMenu.personalCenter'),
   })
 
   const handleCheckUpdate = async () => {
@@ -311,20 +312,21 @@ export default function Navbar({
           <span>{item.label}</span>
         </Link>
       ))}
-      <div className="my-2 h-px bg-[var(--glass-stroke-base)]" />
-      <div className="rounded-lg px-1 py-1">
-        <LanguageSwitcher />
-      </div>
-      <a
-        href={downloadLogsHref}
-        download
-        role="menuitem"
-        className="glass-selection-control group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
-        title={t('downloadLogs')}
-      >
-        <AppIcon name="download" className="h-4 w-4 transition-transform group-hover:scale-110" />
-        <span>{t('downloadLogs')}</span>
-      </a>
+      {showDownloadLogs ? (
+        <>
+          <div className="my-2 h-px bg-[var(--glass-stroke-base)]" />
+          <a
+            href={downloadLogsHref}
+            download
+            role="menuitem"
+            className="glass-selection-control group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium"
+            title={t('downloadLogs')}
+          >
+            <AppIcon name="download" className="h-4 w-4 transition-transform group-hover:scale-110" />
+            <span>{t('downloadLogs')}</span>
+          </a>
+        </>
+      ) : null}
       {showUpdateCheck ? (
         <button
           type="button"
@@ -337,16 +339,6 @@ export default function Navbar({
           <span>{tc('updateNotice.checkUpdate')}</span>
         </button>
       ) : null}
-      <div className="my-2 h-px bg-[var(--glass-stroke-base)]" />
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => { setSettingsOpen(false); void signOut({ callbackUrl: '/' }) }}
-        className="glass-selection-control group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--glass-tone-danger-fg)]"
-      >
-        <AppIcon name="logout" className="h-4 w-4 transition-transform group-hover:scale-110" />
-        <span>{t('logout')}</span>
-      </button>
     </div>
   )
 
@@ -442,6 +434,7 @@ export default function Navbar({
                     <AppIcon name="chevronDown" className={`h-3.5 w-3.5 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
+                <LanguageSwitcher />
                 {!mounted ? (
                   <div className="hidden" aria-hidden="true">
                     {settingsMenuItems.map(item => (
@@ -454,7 +447,7 @@ export default function Navbar({
                         {item.label}
                       </Link>
                     ))}
-                    <a href={downloadLogsHref} download>{t('downloadLogs')}</a>
+                    {showDownloadLogs ? <a href={downloadLogsHref} download>{t('downloadLogs')}</a> : null}
                     {showUpdateCheck ? <span>{tc('updateNotice.checkUpdate')}</span> : null}
                   </div>
                 ) : null}

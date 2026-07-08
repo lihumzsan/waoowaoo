@@ -65,7 +65,7 @@ const messages = {
     pricing: '价格',
     settingsMenu: {
       apiConfig: 'API 配置',
-      billingRecords: '扣费记录',
+      personalCenter: '个人中心',
     },
     account: {
       balance: '可用余额',
@@ -110,20 +110,36 @@ describe('Navbar compact split navigation', () => {
     useSessionMock.mockReset()
   })
 
-  it('keeps download logs available inside the signed-in settings surface', () => {
+  it('keeps self-hosted download logs available while placing language beside the account trigger', () => {
     Reflect.set(globalThis, 'React', React)
     useSessionMock.mockReturnValue({
       data: { user: { name: 'Earth' } },
       status: 'authenticated',
     })
 
-    const html = renderWithIntl(createElement(Navbar))
+    const features: PublicDeploymentFeatures = {
+      showOfficialPublicPages: false,
+      showPricingPage: false,
+      showLegalPages: false,
+      showRecharge: false,
+      showInviteCode: false,
+      showBilling: false,
+      showApiConfig: true,
+      showAccountSecurity: false,
+      showGoogleOAuth: false,
+      showDownloadLogs: true,
+      showUpdateCheck: true,
+      requireInviteCodeOnSignup: false,
+      usePlatformProviderConfig: false,
+    }
+
+    const html = renderWithIntl(createElement(Navbar, { initialDeploymentFeatures: features }))
 
     expect(html).toContain('下载日志')
     expect(html).toContain('href="/home"')
     expect(html).toContain('href="/api/admin/download-logs"')
     expect(html).toContain('download=""')
-    expect(html).not.toContain('LanguageSwitcher')
+    expect(html).toContain('LanguageSwitcher')
     expect(html).toContain('pointer-events-none fixed')
     expect(html).toContain('glass-surface-nav')
     expect(html).not.toContain('glass-nav sticky')
@@ -190,6 +206,7 @@ describe('Navbar compact split navigation', () => {
       showApiConfig: true,
       showAccountSecurity: false,
       showGoogleOAuth: false,
+      showDownloadLogs: true,
       showUpdateCheck: true,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: false,
@@ -197,13 +214,13 @@ describe('Navbar compact split navigation', () => {
 
     expect(buildNavbarSettingsMenuItems(features, {
       apiConfig: 'API 配置',
-      billingRecords: '扣费记录',
+      personalCenter: '个人中心',
     })).toEqual([
       { section: 'apiConfig', icon: 'settingsHexAlt', label: 'API 配置' },
     ])
   })
 
-  it('builds cloud settings with billing only', () => {
+  it('builds cloud settings with one personal center entry', () => {
     const features: PublicDeploymentFeatures = {
       showOfficialPublicPages: true,
       showPricingPage: true,
@@ -214,6 +231,7 @@ describe('Navbar compact split navigation', () => {
       showApiConfig: false,
       showAccountSecurity: true,
       showGoogleOAuth: true,
+      showDownloadLogs: false,
       showUpdateCheck: false,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
@@ -221,9 +239,9 @@ describe('Navbar compact split navigation', () => {
 
     expect(buildNavbarSettingsMenuItems(features, {
       apiConfig: 'API 配置',
-      billingRecords: '扣费记录',
+      personalCenter: '个人中心',
     })).toEqual([
-      { section: 'billing', icon: 'receipt', label: '扣费记录' },
+      { section: 'overview', icon: 'user', label: '个人中心' },
     ])
   })
 
@@ -244,6 +262,7 @@ describe('Navbar compact split navigation', () => {
       showApiConfig: false,
       showAccountSecurity: true,
       showGoogleOAuth: true,
+      showDownloadLogs: false,
       showUpdateCheck: false,
       requireInviteCodeOnSignup: false,
       usePlatformProviderConfig: true,
@@ -253,6 +272,38 @@ describe('Navbar compact split navigation', () => {
 
     expect(html).not.toContain('检查更新')
     expect(html).not.toContain('更新')
+  })
+
+  it('hides download logs and logout from the cloud account surface', () => {
+    Reflect.set(globalThis, 'React', React)
+    useSessionMock.mockReturnValue({
+      data: { user: { name: 'Earth' } },
+      status: 'authenticated',
+    })
+
+    const features: PublicDeploymentFeatures = {
+      showOfficialPublicPages: true,
+      showPricingPage: true,
+      showLegalPages: true,
+      showRecharge: true,
+      showInviteCode: true,
+      showBilling: true,
+      showApiConfig: false,
+      showAccountSecurity: true,
+      showGoogleOAuth: true,
+      showDownloadLogs: false,
+      showUpdateCheck: false,
+      requireInviteCodeOnSignup: false,
+      usePlatformProviderConfig: true,
+    }
+
+    const html = renderWithIntl(createElement(Navbar, { initialDeploymentFeatures: features }))
+
+    expect(html).toContain('个人中心')
+    expect(html).toContain('LanguageSwitcher')
+    expect(html).not.toContain('下载日志')
+    expect(html).not.toContain('/api/admin/download-logs')
+    expect(html).not.toContain('退出登录')
   })
 
   it('does not keep a persistent selected state on the current navbar route', () => {

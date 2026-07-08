@@ -134,6 +134,11 @@
     "passwordBound": "已可使用密码登录",
     "passwordNotSet": "尚未设置密码",
     "setPasswordTitle": "设置登录密码",
+    "changePasswordTitle": "更改登录密码",
+    "setLoginPassword": "设置登录密码",
+    "changePassword": "更改密码",
+    "currentPassword": "当前密码",
+    "currentPasswordPlaceholder": "请输入当前密码",
     "newPassword": "新密码",
     "newPasswordPlaceholder": "请输入至少 6 位密码",
     "confirmPassword": "确认密码",
@@ -141,8 +146,10 @@
     "setPassword": "设置密码",
     "savingPassword": "保存中",
     "passwordSet": "密码已设置",
+    "passwordChanged": "密码已更改",
     "passwordSetFailed": "设置密码失败",
     "passwordTooShort": "密码长度至少 6 位",
+    "currentPasswordRequired": "请输入当前密码",
     "passwordMismatch": "两次输入的密码不一致"
   },
   "apiTypes": {

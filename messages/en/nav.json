@@ -5,7 +5,7 @@
     "profile": "Settings",
     "settingsMenu": {
         "apiConfig": "API Configuration",
-        "billingRecords": "Billing Records"
+        "personalCenter": "Profile"
     },
     "account": {
         "balance": "Balance",

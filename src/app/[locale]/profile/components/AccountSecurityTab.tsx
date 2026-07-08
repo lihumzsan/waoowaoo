@@ -60,8 +60,10 @@ export default function AccountSecurityTab() {
   const [security, setSecurity] = useState<AccountSecuritySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [currentPassword, setCurrentPassword] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [passwordFormOpen, setPasswordFormOpen] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordStatus, setPasswordStatus] = useState<string | null>(null)
   const [bindingGoogle, setBindingGoogle] = useState(false)
@@ -87,10 +89,21 @@ export default function AccountSecurityTab() {
     void loadSecurity()
   }, [loadSecurity])
 
-  const handleSetPassword = async (event: FormEvent<HTMLFormElement>) => {
+  const resetPasswordForm = () => {
+    setCurrentPassword('')
+    setPassword('')
+    setPasswordConfirm('')
+    setPasswordStatus(null)
+  }
+
+  const handleSavePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setPasswordStatus(null)
 
+    if (security?.hasPassword && !currentPassword) {
+      setPasswordStatus(t('currentPasswordRequired'))
+      return
+    }
     if (password.length < 6) {
       setPasswordStatus(t('passwordTooShort'))
       return
@@ -105,16 +118,19 @@ export default function AccountSecurityTab() {
       const response = await apiFetch('/api/user/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          password,
+          ...(security?.hasPassword ? { currentPassword } : {}),
+        }),
       })
       const payload: unknown = await response.json().catch(() => null)
       if (!response.ok || !isAccountSecurityPayload(payload) || !payload.security) {
         throw new Error(readApiFailureReason(payload, `HTTP_${response.status}`))
       }
       setSecurity(payload.security)
-      setPassword('')
-      setPasswordConfirm('')
-      setPasswordStatus(t('passwordSet'))
+      resetPasswordForm()
+      setPasswordFormOpen(false)
+      setPasswordStatus(security?.hasPassword ? t('passwordChanged') : t('passwordSet'))
     } catch (error: unknown) {
       setPasswordStatus(error instanceof Error ? error.message : t('passwordSetFailed'))
     } finally {
@@ -227,14 +243,43 @@ export default function AccountSecurityTab() {
             <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${security.hasPassword ? 'bg-[var(--glass-tone-success-bg)] text-[var(--glass-tone-success-fg)]' : 'bg-[var(--glass-tone-warning-bg)] text-[var(--glass-tone-warning-fg)]'}`}>
               {security.hasPassword ? t('set') : t('notSet')}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                resetPasswordForm()
+                setPasswordFormOpen((open) => !open)
+              }}
+              className="glass-btn-secondary mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
+            >
+              <AppIcon name="lock" className="h-4 w-4" />
+              {security.hasPassword ? t('changePassword') : t('setLoginPassword')}
+            </button>
           </div>
         </div>
       </section>
 
-      {!security.hasPassword ? (
+      {passwordFormOpen ? (
         <section className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-6">
-          <h3 className="mb-4 text-base font-semibold text-[var(--glass-text-primary)]">{t('setPasswordTitle')}</h3>
-          <form className="grid gap-4 md:max-w-xl" onSubmit={handleSetPassword}>
+          <h3 className="mb-4 text-base font-semibold text-[var(--glass-text-primary)]">
+            {security.hasPassword ? t('changePasswordTitle') : t('setPasswordTitle')}
+          </h3>
+          <form className="grid gap-4 md:max-w-xl" onSubmit={handleSavePassword}>
+            {security.hasPassword ? (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('currentPassword')}</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => {
+                    setCurrentPassword(event.target.value)
+                    setPasswordStatus(null)
+                  }}
+                  className="w-full rounded-xl border border-[var(--glass-stroke-base)] bg-white px-4 py-3 text-sm text-[var(--glass-text-primary)] outline-none transition focus:border-slate-400"
+                  placeholder={t('currentPasswordPlaceholder')}
+                />
+              </label>
+            ) : null}
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('newPassword')}</span>
               <input
@@ -265,11 +310,11 @@ export default function AccountSecurityTab() {
             </label>
             <button
               type="submit"
-              disabled={savingPassword || !password || !passwordConfirm}
+              disabled={savingPassword || !password || !passwordConfirm || (security.hasPassword && !currentPassword)}
               className="glass-btn-base glass-btn-primary inline-flex w-fit items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <AppIcon name="lock" className="h-4 w-4" />
-              {savingPassword ? t('savingPassword') : t('setPassword')}
+              {savingPassword ? t('savingPassword') : security.hasPassword ? t('changePassword') : t('setPassword')}
             </button>
             {passwordStatus ? (
               <p className="text-sm text-[var(--glass-text-secondary)]">{passwordStatus}</p>
