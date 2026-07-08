@@ -47,6 +47,8 @@ export function workspaceCanvasArtifactPhaseFromTerminalStatus(
   if (status === 'failed') return 'failed'
   if (
     status === 'ready'
+    || status === 'script_ready_for_review'
+    || status === 'script_approved'
     || status === 'ready_for_review'
     || status === 'completed'
     || status === 'confirmed'

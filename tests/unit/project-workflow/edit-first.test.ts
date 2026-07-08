@@ -10,6 +10,7 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     hasEpisode: true,
     hasBible: false,
     bibleStatus: null,
+    sourceDocumentKind: null,
     stylePreviewCount: 0,
     completedStylePreviewCount: 0,
     confirmedStylePreviewCount: 0,
@@ -62,6 +63,44 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.operationId).toBe('ingest_script')
     expect(state.nextAction?.requiresUserConfirmation).toBe(true)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['ingest_script'])
+  })
+
+  it('separates prompt script expansion from episode plan generation', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'generating',
+      sourceDocumentKind: 'prompt_generated_outline',
+    }))
+
+    expect(state.stage).toBe('script_generating')
+    expect(state.blocking.kind).toBe('processing')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('requires script review before generating the episode plan from an expanded prompt script', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'script_ready_for_review',
+      sourceDocumentKind: 'prompt_generated_script',
+    }))
+
+    expect(state.stage).toBe('script_ready_for_review')
+    expect(state.blocking.kind).toBe('needs_user_choice')
+    expect(state.allowedOperationIds).toEqual(['revise_script'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['revise_script'])
+  })
+
+  it('generates the episode plan only after the expanded script is approved', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'script_approved',
+      sourceDocumentKind: 'prompt_generated_script',
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_bible')
+    expect(state.nextAction?.operationId).toBe('generate_bible_from_script')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_bible_from_script'])
   })
 
   it('goes from confirmed style bible to chapter planning', () => {

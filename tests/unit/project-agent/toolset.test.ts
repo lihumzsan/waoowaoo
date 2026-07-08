@@ -216,6 +216,7 @@ describe('project agent live operation enablement', () => {
     const review = workflow('bible_ready_for_review', ['generate_edit_style_previews'])
     const styleChoice = workflow('needs_style_choice', ['generate_edit_style_previews'])
     const intake = workflow('ready_to_ingest_script', ['ingest_script'])
+    const scriptReview = workflow('script_ready_for_review', ['revise_script'])
 
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_context')).toBe(true)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'get_project_snapshot')).toBe(true)
@@ -232,6 +233,16 @@ describe('project agent live operation enablement', () => {
     })).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
+      workflow: scriptReview,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.script_review,
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: review,
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.script_review,
+    })).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
       workflow: review,
       operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
     })).toBe(true)
@@ -241,6 +252,31 @@ describe('project agent live operation enablement', () => {
       operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
     })).toBe(false)
     expect(isProjectAgentOperationAlwaysEnabled(toolset, 'generate_edit_script')).toBe(false)
+  })
+
+  it('enables script revision during review and bible generation after script approval', () => {
+    const toolset = resolveProjectAgentToolset({
+      registry: registry(),
+      context: { episodeId: 'episode-1' },
+    })
+    const scriptReview = workflow('script_ready_for_review', ['revise_script'])
+    const approved = workflow('ready_to_generate_bible', ['generate_bible_from_script'])
+
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: scriptReview,
+      operationId: 'revise_script',
+    })).toBe(true)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: scriptReview,
+      operationId: 'generate_bible_from_script',
+    })).toBe(false)
+    expect(isProjectAgentOperationEnabled({
+      toolset,
+      workflow: approved,
+      operationId: 'generate_bible_from_script',
+    })).toBe(true)
   })
 
   it('enables budget confirmation only for production stages with a next action', () => {

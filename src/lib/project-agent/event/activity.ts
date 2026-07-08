@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { buildProjectAssistantScopeRef } from '../persistence'
 import type { ProjectAssistantId } from '../types'
+import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
   normalizeProjectAgentActivityStatus,
@@ -11,13 +12,7 @@ const OPEN_ACTIVITY_STATUSES = ['running', 'waiting'] as const
 
 function normalizeChoiceType(value: string | null): ProjectAgentActivitySnapshot['choiceType'] {
   if (value === null) return null
-  if (
-    value === 'bible_review'
-    || value === 'script_intake'
-    || value === 'style'
-    || value === 'asset_review'
-    || value === 'budget_confirmation'
-  ) return value
+  if (isEditFirstChoiceType(value)) return value
   throw new Error(`PROJECT_AGENT_ACTIVITY_CHOICE_TYPE_INVALID:${value}`)
 }
 

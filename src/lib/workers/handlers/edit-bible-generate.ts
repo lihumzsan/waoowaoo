@@ -6,6 +6,7 @@ import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
 import {
   generateEditBibleArtifacts,
+  markEditBibleScriptReadyForReview,
   markEditBibleGenerationFailed,
   persistGeneratedEditBibleBundle,
   readEditBibleExtractionDiagnostics,
@@ -38,12 +39,24 @@ async function expandPromptGeneratedSource(input: {
   readonly model: string
   readonly locale: Locale
   readonly prompt: string
+  readonly previousScript?: string | null
 }): Promise<string> {
+  const userPrompt = input.previousScript
+    ? [
+        '当前完整剧本：',
+        input.previousScript,
+        '',
+        '用户修改要求：',
+        input.prompt,
+        '',
+        '请根据修改要求输出新版完整可拍摄剧本正文。只输出剧本正文。',
+      ].join('\n')
+    : input.prompt
   const finalPromptContent = buildAiPromptContent({
     promptId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
     locale: input.locale,
     variables: {
-      user_prompt: input.prompt,
+      user_prompt: userPrompt,
     },
   })
   const finalPrompt = flattenChatMessageContent(finalPromptContent)
@@ -85,6 +98,7 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
   const payload = job.data.payload || {}
   const episodeId = readText(payload.episodeId) || readText(job.data.episodeId)
   const sourceDocumentId = readText(payload.sourceDocumentId)
+  const previousSourceDocumentId = readText(payload.previousSourceDocumentId)
   const editBibleId = readText(payload.editBibleId) || readText(job.data.targetId)
   const model = readModel(payload)
   if (!episodeId) throw new Error('episodeId is required')
@@ -117,29 +131,53 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
     const bundle = await withInternalLLMStreamCallbacks(
       streamCallbacks,
       async () => {
-        const effectiveSourceDocument = sourceDocument.sourceKind === 'prompt_generated_outline'
-          ? await materializePromptGeneratedSourceDocument({
-              projectId: job.data.projectId,
-              episodeId,
-              sourceDocumentId,
-              text: await expandPromptGeneratedSource({
-                userId: job.data.userId,
+        if (sourceDocument.sourceKind === 'prompt_generated_outline') {
+          const previousSourceDocument = previousSourceDocumentId
+            ? await readEpisodeSourceDocumentById({
                 projectId: job.data.projectId,
-                model,
-                locale: job.data.locale,
-                prompt: sourceDocument.normalizedText,
-              }),
-            })
-          : sourceDocument
+                episodeId,
+                sourceDocumentId: previousSourceDocumentId,
+              })
+            : null
+          const effectiveSourceDocument = await materializePromptGeneratedSourceDocument({
+            projectId: job.data.projectId,
+            episodeId,
+            sourceDocumentId,
+            text: await expandPromptGeneratedSource({
+              userId: job.data.userId,
+              projectId: job.data.projectId,
+              model,
+              locale: job.data.locale,
+              prompt: sourceDocument.normalizedText,
+              previousScript: previousSourceDocument?.normalizedText ?? null,
+            }),
+          })
+          await markEditBibleScriptReadyForReview({
+            editBibleId,
+            sourceDocumentId: effectiveSourceDocument.id,
+          })
+          return null
+        }
         return await generateEditBibleArtifacts({
           userId: job.data.userId,
           projectId: job.data.projectId,
           model,
           locale: job.data.locale,
-          sourceDocument: effectiveSourceDocument.normalizedText,
+          sourceDocument: sourceDocument.normalizedText,
         })
       },
     )
+
+    if (!bundle) {
+      return {
+        editBibleId,
+        episodeId,
+        sourceDocumentId,
+        status: 'script_ready_for_review',
+        chapterCount: 0,
+        version: null,
+      }
+    }
 
     await reportTaskProgress(job, 90, {
       stage: 'edit_bible_persist',

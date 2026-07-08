@@ -48,6 +48,8 @@ type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
 
 const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceCanvasFocusNodeKind[]>> = {
   ingest_script: ['editBible'],
+  revise_script: ['editBible'],
+  generate_bible_from_script: ['editBible'],
   revise_bible: ['editBible'],
   generate_edit_style_previews: ['editBible', 'editStyleBible'],
   plan_chapters: ['editScript'],

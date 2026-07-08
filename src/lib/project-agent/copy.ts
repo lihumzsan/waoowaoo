@@ -51,6 +51,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '把生成好的剧集规划展示给用户审核：全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。用户可以确认锁定，也可以提交修改意见。它只用于剧集规划这一步的确认，不要拿它当“是否继续执行”的通用许可，也不要向用户描述它背后的卡片机制。',
     en: 'Show the finished episode plan to the user for review: the global Bible, beat sheet, event ledger, emotional curve, and chapter split. The user can confirm and lock it, or submit revision notes. Use it only to confirm the episode plan — do not use it as a generic "may I continue?" gate, and do not describe the underlying card mechanism to the user.',
   },
+  request_edit_script_review_choice: {
+    zh: '把扩写后的完整剧本展示给用户审核。用户可以确认剧本进入剧集规划，也可以提交剧本修改意见。它只用于 prompt 扩写后的剧本审核，不能用来替代扩写前问诊、剧集规划审核或预算确认。',
+    en: 'Show the expanded full script to the user for review. The user can approve it before episode planning, or submit script revision notes. Use it only for post-expansion script review, not as a replacement for intake, episode-plan review, or budget confirmation.',
+  },
   request_edit_style_choice: {
     zh: '把生成好的视觉风格候选展示给用户，让用户选定其中一个作为整片风格。它只用于选风格这一步，不要拿它当通用的执行许可，也不要向用户描述背后的卡片机制。',
     en: 'Show the generated visual style candidates to the user and let them pick one as the film\'s style. Use it only to choose the style — do not use it as a generic execution gate, and do not describe the underlying card mechanism to the user.',
@@ -68,8 +72,16 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Use this for pre-expansion creative intake whenever the user\'s input lacks the basic structural information of a script (era and setting, protagonist and character motivation, core conflict, key relationships, genre and tone, ending direction — the standard script elements). Have the user fill in that basic structure before expansion. In the vast majority of cases you should run intake first; skip it only when the user has directly provided a complete, filmable script.',
   },
   ingest_script: {
-    zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报，并提交任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。用户贴的是完整可拍剧本时，sourceKind=paste；只有问诊后的 normalizedBrief，或用户原始输入已经详细到不需要追问时，sourceKind=prompt_generated_outline。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',
-    en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough, and submit the task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. When the user pasted a complete filmable script, set sourceKind=paste. Set sourceKind=prompt_generated_outline only for a post-intake normalizedBrief, or for original user input that is already detailed enough to need no follow-up. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
+    zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报。用户贴完整可拍剧本时，sourceKind=paste，任务会生成剧集规划；问诊后的 normalizedBrief 使用 sourceKind=prompt_generated_outline，任务只扩写出完整剧本并等待用户审核。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',
+    en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough. When the user pasted a complete filmable script, set sourceKind=paste and the task generates the episode plan. For a post-intake normalizedBrief, set sourceKind=prompt_generated_outline; the task only expands a full script and then waits for user script review. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
+  },
+  revise_script: {
+    zh: '根据用户在剧本审核卡片中的修改意见，基于当前扩写出的完整剧本重新扩写一版完整源剧本。只在 script_review 的用户选择返回 decision=revise 时调用。',
+    en: 'Revise the current expanded full source script using the user\'s notes from the script review card. Call this only after a script_review choice result returns decision=revise.',
+  },
+  generate_bible_from_script: {
+    zh: '在用户已经确认扩写剧本后，从这份剧本生成剧集规划、节拍表、事件台账、情绪曲线和章节切分。不要在 request_edit_script_review_choice 之前调用。',
+    en: 'After the user has approved the expanded script, generate the episode plan, beat sheet, event ledger, emotional curve, and chapter split from that script. Do not call it before request_edit_script_review_choice.',
   },
   revise_bible: {
     zh: '根据用户的审核意见，修改当前的 Bible、节拍表、台账或情绪曲线。当用户对剧集规划提出了具体改动、需要覆盖现有全局规划时用它。',
@@ -130,6 +142,10 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '确认剧集规划',
     en: 'Confirm episode plan',
   },
+  request_edit_script_review_choice: {
+    zh: '审核扩写剧本',
+    en: 'Review expanded script',
+  },
   request_edit_style_choice: {
     zh: '选择视觉风格',
     en: 'Choose visual style',
@@ -154,8 +170,16 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
 
 const EDIT_FIRST_OPERATION_TITLE_COPY = {
   ingest_script: {
-    zh: '生成剧本与剧集规划',
-    en: 'Generate script and episode plan',
+    zh: '提交剧本需求',
+    en: 'Submit script request',
+  },
+  revise_script: {
+    zh: '修改扩写剧本',
+    en: 'Revise expanded script',
+  },
+  generate_bible_from_script: {
+    zh: '生成剧集规划',
+    en: 'Generate episode plan',
   },
   revise_bible: {
     zh: '修改剧集规划',

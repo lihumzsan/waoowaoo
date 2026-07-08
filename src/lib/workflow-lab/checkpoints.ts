@@ -1,6 +1,10 @@
 import type { UIMessage } from 'ai'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
+import {
+  EDIT_FIRST_CHOICE_TOOL_IDS,
+  isEditFirstChoiceType,
+  type EditFirstChoiceType,
+} from '@/lib/project-agent/edit-first-choice-tools'
 import type {
   ProjectAgentChoiceCardPartData,
   ProjectAgentInterruptionPartData,
@@ -8,6 +12,7 @@ import type {
 import type { WorkflowLabCheckpointSummary } from './types'
 
 const FIXED_CHOICE_STAGE_BY_TYPE: Partial<Record<EditFirstChoiceType, EditFirstWorkflowStage>> = {
+  script_review: 'script_ready_for_review',
   bible_review: 'bible_ready_for_review',
   style: 'needs_style_choice',
   asset_review: 'assets_ready_for_review',
@@ -15,6 +20,8 @@ const FIXED_CHOICE_STAGE_BY_TYPE: Partial<Record<EditFirstChoiceType, EditFirstW
 
 const OPERATION_STAGE_BY_ID: Readonly<Record<string, EditFirstWorkflowStage>> = {
   ingest_script: 'ready_to_ingest_script',
+  revise_script: 'script_ready_for_review',
+  generate_bible_from_script: 'ready_to_generate_bible',
   revise_bible: 'bible_ready_for_review',
   generate_edit_style_previews: 'bible_ready_for_review',
   generate_edit_script: 'ready_to_generate_edit_script',
@@ -36,13 +43,7 @@ function readString(value: unknown): string | null {
 }
 
 function readChoiceType(value: unknown): EditFirstChoiceType | null {
-  if (
-    value === 'bible_review'
-    || value === 'script_intake'
-    || value === 'style'
-    || value === 'asset_review'
-    || value === 'budget_confirmation'
-  ) return value
+  if (isEditFirstChoiceType(value)) return value
   return null
 }
 

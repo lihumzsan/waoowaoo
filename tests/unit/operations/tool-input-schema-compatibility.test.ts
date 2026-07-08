@@ -154,6 +154,9 @@ describe('tool input schema compatibility', () => {
     expect(Object.keys(registry.request_script_intake_choice.toolInputSchema.properties)).toEqual([
       'seedText',
     ])
+    expect(Object.keys(registry.revise_script.toolInputSchema.properties)).toEqual([
+      'revisionNotes',
+    ])
     expect(Object.keys(registry.revise_bible.toolInputSchema.properties)).toEqual([
       'bible',
       'beatSheet',
@@ -182,6 +185,8 @@ describe('tool input schema compatibility', () => {
     for (const operationId of [
       'ingest_script',
       'request_script_intake_choice',
+      'revise_script',
+      'generate_bible_from_script',
       'revise_bible',
       'generate_edit_style_previews',
       'generate_edit_script',
@@ -209,10 +214,12 @@ describe('tool input schema compatibility', () => {
     const registry = createProjectAgentOperationRegistry()
     const emptyOperationIds = [
       'get_episode_overview',
+      'request_edit_script_review_choice',
       'request_edit_bible_review_choice',
       'request_edit_style_choice',
       'request_edit_asset_review_choice',
       'request_edit_budget_confirmation_choice',
+      'generate_bible_from_script',
       'generate_edit_script_storyboard_images',
       'generate_episode_bgm_score',
       'render_final_video',

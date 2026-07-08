@@ -53,7 +53,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).not.toContain('最多自动重试 2 次')
 
     expect(prompt).toContain('剪辑先行工作流')
-    expect(prompt).toContain('源剧本摄入 -> 剧集规划（全局 Bible、节拍、台账、情绪曲线、章节切分）-> 用户确认剧集规划')
+    expect(prompt).toContain('源剧本摄入/扩写 -> 用户审核扩写剧本（仅 prompt 扩写时）-> 剧集规划')
     expect(prompt).toContain('核心剪辑计划 -> 角色/场景资产与空间档案')
     expect(prompt).toContain('这是依赖顺序，不是固定话术流程')
     expect(prompt).toContain('修复/重新生成用户正在反馈的当前阶段产物')
@@ -73,6 +73,8 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('剧集规划生成或修改是异步任务')
     expect(prompt).toContain('从上下文读取当前完整全局 Bible、章节切分和关键规划摘要，并在对话中完整输出可确认内容')
     expect(prompt).toContain('在绝大部分情况下都要先调用扩写前创作问诊选择工具')
+    expect(prompt).toContain('剧本审核')
+    expect(prompt).toContain('generate_bible_from_script')
     expect(prompt).toContain('时代与背景、主角身份与人物动机、核心冲突')
     expect(prompt).toContain('除了用户直接给出完整可拍剧本，否则都要先调用扩写前创作问诊选择工具')
     expect(prompt).toContain('立刻调用剧集规划修改工具；不要推迟到视觉风格阶段')
@@ -133,7 +135,7 @@ describe('project agent prompt copy', () => {
     expect(prompt).not.toContain('Retry automatically at most twice')
 
     expect(prompt).toContain('Edit-first workflow')
-    expect(prompt).toContain('source script ingestion -> episode plan (global Bible, beat sheet, ledger, emotional curve, chapter split) -> user episode-plan confirmation')
+    expect(prompt).toContain('source script ingestion/expansion -> user expanded-script review (prompt-expansion path only) -> episode plan')
     expect(prompt).toContain('chapter core edit plans -> character/location assets & spatial profiles')
     expect(prompt).toContain('This is a dependency order, not a fixed script')
     expect(prompt).toContain('repair/regenerate the current-stage artifact the user is responding to')
@@ -160,6 +162,8 @@ describe('project agent prompt copy', () => {
     expect(prompt).toContain('Current permission mode: auto')
     expect(prompt).toContain('Never skip the current stage to run a later one')
     expect(prompt).toContain('never batch-advance multiple future stages')
+    expect(prompt).toContain('Script review:')
+    expect(prompt).toContain('generate_bible_from_script')
     expect(prompt).toContain('If the user submits revision notes, treat the review as not approved')
     expect(prompt).toContain('the main-flow asset generation/revision scope is resolved by the system')
     expect(prompt).toContain('Do not call read-only tools to look up or submit requirementId')
@@ -194,6 +198,13 @@ describe('project agent prompt copy', () => {
     expect(enIntakeDescription).toContain('pre-expansion creative intake')
     expect(enIntakeDescription).toContain('lacks the basic structural information of a script')
     expect(enIntakeDescription).toContain('In the vast majority of cases you should run intake first')
+
+    const zhScriptReviewDescription = localizeSelectableToolDescription('request_edit_script_review_choice', 'fallback', 'zh')
+    const enScriptReviewDescription = localizeSelectableToolDescription('request_edit_script_review_choice', 'fallback', 'en')
+    expect(zhScriptReviewDescription).toContain('扩写后的完整剧本')
+    expect(zhScriptReviewDescription).toContain('不能用来替代扩写前问诊')
+    expect(enScriptReviewDescription).toContain('expanded full script')
+    expect(enScriptReviewDescription).toContain('post-expansion script review')
   })
 
   it('describes project context reads as concrete-detail only', () => {
@@ -226,8 +237,14 @@ describe('project agent prompt copy', () => {
       expect(localizeProjectAgentOperationTitle(operationId, 'en')).not.toBe('Project operation')
     }
 
-    expect(localizeProjectAgentOperationTitle('ingest_script', 'zh')).toBe('生成剧本与剧集规划')
-    expect(localizeProjectAgentOperationTitle('ingest_script', 'en')).toBe('Generate script and episode plan')
+    expect(localizeProjectAgentOperationTitle('ingest_script', 'zh')).toBe('提交剧本需求')
+    expect(localizeProjectAgentOperationTitle('ingest_script', 'en')).toBe('Submit script request')
+    expect(localizeProjectAgentOperationTitle('revise_script', 'zh')).toBe('修改扩写剧本')
+    expect(localizeProjectAgentOperationTitle('revise_script', 'en')).toBe('Revise expanded script')
+    expect(localizeProjectAgentOperationTitle('generate_bible_from_script', 'zh')).toBe('生成剧集规划')
+    expect(localizeProjectAgentOperationTitle('generate_bible_from_script', 'en')).toBe('Generate episode plan')
+    expect(localizeProjectAgentOperationTitle('request_edit_script_review_choice', 'zh')).toBe('审核扩写剧本')
+    expect(localizeProjectAgentOperationTitle('request_edit_script_review_choice', 'en')).toBe('Review expanded script')
     expect(localizeProjectAgentOperationTitle('request_script_intake_choice', 'zh')).toBe('补充创作方向')
     expect(localizeProjectAgentOperationTitle('request_script_intake_choice', 'en')).toBe('Refine story brief')
     expect(localizeProjectAgentOperationTitle('generate_edit_shot_execution_plan', 'zh')).toBe('生成镜头执行计划')

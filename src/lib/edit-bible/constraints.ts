@@ -1,6 +1,8 @@
 export const EDIT_BIBLE_STATUS = {
   PENDING: 'pending',
   GENERATING: 'generating',
+  SCRIPT_READY_FOR_REVIEW: 'script_ready_for_review',
+  SCRIPT_APPROVED: 'script_approved',
   READY_FOR_REVIEW: 'ready_for_review',
   CONFIRMED: 'confirmed',
   FAILED: 'failed',

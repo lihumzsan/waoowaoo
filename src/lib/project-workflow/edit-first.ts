@@ -19,6 +19,9 @@ export {
 export type EditFirstWorkflowStage =
   | 'not_started'
   | 'ready_to_ingest_script'
+  | 'script_generating'
+  | 'script_ready_for_review'
+  | 'ready_to_generate_bible'
   | 'bible_generating'
   | 'bible_ready_for_review'
   | 'style_preview_generating'
@@ -73,6 +76,7 @@ export interface EditFirstWorkflowSnapshot {
   hasEpisode: boolean
   hasBible: boolean
   bibleStatus: string | null
+  sourceDocumentKind: string | null
   stylePreviewCount: number
   completedStylePreviewCount: number
   confirmedStylePreviewCount: number
@@ -294,9 +298,32 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.bibleStatus === 'pending' || snapshot.bibleStatus === 'generating') {
+    if (snapshot.sourceDocumentKind === 'prompt_generated_outline') {
+      return state({
+        stage: 'script_generating',
+        blocking: { kind: 'processing', reason: 'source script expansion is still running' },
+      })
+    }
     return state({
       stage: 'bible_generating',
       blocking: { kind: 'processing', reason: 'edit bible generation is still running' },
+    })
+  }
+
+  if (snapshot.bibleStatus === 'script_ready_for_review') {
+    return state({
+      stage: 'script_ready_for_review',
+      blocking: { kind: 'needs_user_choice', reason: 'review the expanded script before episode planning' },
+      allowedOperationIds: ['revise_script'],
+    })
+  }
+
+  if (snapshot.bibleStatus === 'script_approved') {
+    const nextAction = workflowAction('generate_bible_from_script', 'Generate episode plan')
+    return state({
+      stage: 'ready_to_generate_bible',
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
     })
   }
 
@@ -628,6 +655,12 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
   switch (workflow.stage) {
     case 'ready_to_ingest_script':
       return ['ingest_script']
+    case 'script_generating':
+      return []
+    case 'script_ready_for_review':
+      return ['revise_script']
+    case 'ready_to_generate_bible':
+      return ['generate_bible_from_script']
     case 'bible_generating':
       return []
     case 'bible_ready_for_review':
@@ -723,6 +756,11 @@ export async function resolveEditFirstWorkflowState(params: {
       select: {
         id: true,
         status: true,
+        sourceDocument: {
+          select: {
+            sourceKind: true,
+          },
+        },
         stylePreviews: {
           select: {
             status: true,
@@ -1011,6 +1049,7 @@ export async function resolveEditFirstWorkflowState(params: {
     hasEpisode: true,
     hasBible: Boolean(editBible),
     bibleStatus: editBible?.status ?? null,
+    sourceDocumentKind: editBible?.sourceDocument?.sourceKind ?? null,
     stylePreviewCount: editBible?.stylePreviews.length ?? 0,
     completedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
     confirmedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,

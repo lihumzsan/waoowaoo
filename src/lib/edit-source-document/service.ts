@@ -236,6 +236,7 @@ export async function materializePromptGeneratedSourceDocument(input: {
     data: {
       normalizedText,
       checksum: checksumNormalizedText(normalizedText),
+      sourceKind: 'prompt_generated_script',
       version: { increment: 1 },
     },
     select: editSourceDocumentSelect,

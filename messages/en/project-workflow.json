@@ -54,7 +54,10 @@
   },
   "workflowStages": {
     "not_started": "Not Started",
-    "ready_to_ingest_script": "Ready To Generate Script And Episode Plan",
+    "ready_to_ingest_script": "Ready To Submit Script Request",
+    "script_generating": "Generating Script",
+    "script_ready_for_review": "Awaiting Script Review",
+    "ready_to_generate_bible": "Ready To Generate Episode Plan",
     "bible_generating": "Generating Episode Plan",
     "bible_ready_for_review": "Awaiting Episode Plan Confirmation",
     "style_preview_generating": "Generating Style Options",

@@ -152,6 +152,8 @@ export interface PersistedEditBibleBundle {
   readonly projectId: string
   readonly episodeId: string
   readonly sourceDocumentId: string
+  readonly sourceKind: string
+  readonly sourceText: string
   readonly version: number
   readonly status: EditBibleStatus
   readonly lockedAt: Date | null
@@ -184,6 +186,12 @@ const persistedBibleSelect = {
   version: true,
   status: true,
   lockedAt: true,
+  sourceDocument: {
+    select: {
+      sourceKind: true,
+      normalizedText: true,
+    },
+  },
   stylePreviews: {
     orderBy: { createdAt: 'asc' },
     select: {
@@ -217,6 +225,8 @@ function normalizeBibleStatus(value: string): EditBibleStatus {
   if (
     value === EDIT_BIBLE_STATUS.PENDING
     || value === EDIT_BIBLE_STATUS.GENERATING
+    || value === EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW
+    || value === EDIT_BIBLE_STATUS.SCRIPT_APPROVED
     || value === EDIT_BIBLE_STATUS.READY_FOR_REVIEW
     || value === EDIT_BIBLE_STATUS.CONFIRMED
     || value === EDIT_BIBLE_STATUS.FAILED
@@ -296,6 +306,10 @@ function mapPersistedBible(record: {
   readonly version: number
   readonly status: string
   readonly lockedAt: Date | null
+  readonly sourceDocument: {
+    readonly sourceKind: string
+    readonly normalizedText: string
+  }
   readonly stylePreviews?: readonly PersistedBibleStylePreview[]
 }, projectId: string): PersistedEditBibleBundle {
   const diagnostics = record.diagnosticsJson && typeof record.diagnosticsJson === 'object'
@@ -306,6 +320,8 @@ function mapPersistedBible(record: {
     projectId,
     episodeId: record.episodeId,
     sourceDocumentId: record.sourceDocumentId,
+    sourceKind: record.sourceDocument.sourceKind,
+    sourceText: record.sourceDocument.normalizedText,
     version: record.version,
     status: normalizeBibleStatus(record.status),
     lockedAt: record.lockedAt,
@@ -621,6 +637,56 @@ export async function persistGeneratedEditBibleBundle(input: {
       chapters,
     }
   })
+}
+
+export async function markEditBibleScriptReadyForReview(input: {
+  readonly editBibleId: string
+  readonly sourceDocumentId: string
+}) {
+  const result = await prisma.projectEditBible.updateMany({
+    where: {
+      id: input.editBibleId,
+      sourceDocumentId: input.sourceDocumentId,
+      status: EDIT_BIBLE_STATUS.GENERATING,
+    },
+    data: {
+      status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
+      diagnosticsJson: Prisma.JsonNull,
+    },
+  })
+  if (result.count !== 1) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_READY_TRANSITION_NOT_ALLOWED',
+      message: 'Expanded script can only be marked ready from the current generating edit bible.',
+    })
+  }
+}
+
+export async function approveEpisodePromptGeneratedScript(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}) {
+  const result = await prisma.projectEditBible.updateMany({
+    where: {
+      episodeId: input.episodeId,
+      status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
+      episode: {
+        projectId: input.projectId,
+        project: { userId: input.userId },
+      },
+    },
+    data: {
+      status: EDIT_BIBLE_STATUS.SCRIPT_APPROVED,
+      diagnosticsJson: Prisma.JsonNull,
+    },
+  })
+  if (result.count !== 1) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_APPROVAL_NOT_ALLOWED',
+      message: 'Expanded script can only be approved while it is ready for review.',
+    })
+  }
 }
 
 export async function markEditBibleGenerationFailed(input: {

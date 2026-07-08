@@ -25,6 +25,7 @@ const editBibleMock = vi.hoisted(() => ({
     ledger: { events: [] },
     emotionalCurve: { cues: [] },
   })),
+  markEditBibleScriptReadyForReview: vi.fn(async () => undefined),
   persistGeneratedEditBibleBundle: vi.fn(async () => ({
     editBible: {
       id: 'bible-1',
@@ -56,7 +57,7 @@ const sourceDocumentMock = vi.hoisted(() => ({
     episodeId: 'episode-1',
     normalizedText: '扩写后的完整剧本',
     checksum: 'checksum-expanded',
-    sourceKind: 'prompt_generated_outline',
+    sourceKind: 'prompt_generated_script',
     rawFileMediaId: null,
     version: 2,
     createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -88,7 +89,7 @@ const promptMock = vi.hoisted(() => ({
   AI_PROMPT_IDS: {
     EDIT_BIBLE_OUTLINE_SCRIPT: 'outline-script',
   },
-  buildAiPromptContent: vi.fn(() => '请扩写用户创意。'),
+  buildAiPromptContent: vi.fn((input: { variables?: { user_prompt?: string } }) => input.variables?.user_prompt ?? '请扩写用户创意。'),
   flattenChatMessageContent: vi.fn((value: unknown) => String(value)),
 }))
 
@@ -160,7 +161,7 @@ describe('worker edit-bible-generate behavior', () => {
       episodeId: 'episode-1',
       normalizedText: '扩写后的完整剧本',
       checksum: 'checksum-expanded',
-      sourceKind: 'prompt_generated_outline',
+      sourceKind: 'prompt_generated_script',
       rawFileMediaId: null,
       version: 2,
       createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -243,7 +244,7 @@ describe('worker edit-bible-generate behavior', () => {
     })
   })
 
-  it('expands prompt_generated_outline inside the worker before bible generation', async () => {
+  it('expands prompt_generated_outline into a reviewable script without generating the bible', async () => {
     sourceDocumentMock.readEpisodeSourceDocumentById.mockResolvedValueOnce({
       id: 'source-1',
       episodeId: 'episode-1',
@@ -256,7 +257,7 @@ describe('worker edit-bible-generate behavior', () => {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     })
 
-    await handleEditBibleGenerateTask(buildJob({
+    const result = await handleEditBibleGenerateTask(buildJob({
       episodeId: 'episode-1',
       sourceDocumentId: 'source-1',
       editBibleId: 'bible-1',
@@ -278,9 +279,71 @@ describe('worker edit-bible-generate behavior', () => {
       sourceDocumentId: 'source-1',
       text: '扩写后的完整剧本',
     })
-    expect(editBibleMock.generateEditBibleArtifacts).toHaveBeenCalledWith(expect.objectContaining({
-      sourceDocument: '扩写后的完整剧本',
+    expect(editBibleMock.markEditBibleScriptReadyForReview).toHaveBeenCalledWith({
+      editBibleId: 'bible-1',
+      sourceDocumentId: 'source-1',
+    })
+    expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
+    expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      editBibleId: 'bible-1',
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-1',
+      status: 'script_ready_for_review',
+      chapterCount: 0,
+      version: null,
+    })
+  })
+
+  it('revises a prompt-generated script using the previous full script as context', async () => {
+    sourceDocumentMock.readEpisodeSourceDocumentById
+      .mockResolvedValueOnce({
+        id: 'source-revision',
+        episodeId: 'episode-1',
+        normalizedText: '把结尾改成更冷峻',
+        checksum: 'checksum-revision',
+        sourceKind: 'prompt_generated_outline',
+        rawFileMediaId: null,
+        version: 1,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'source-previous',
+        episodeId: 'episode-1',
+        normalizedText: '上一版完整剧本',
+        checksum: 'checksum-previous',
+        sourceKind: 'prompt_generated_script',
+        rawFileMediaId: null,
+        version: 2,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:01:00Z'),
+      })
+
+    await handleEditBibleGenerateTask(buildJob({
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-revision',
+      previousSourceDocumentId: 'source-previous',
+      editBibleId: 'bible-1',
+      analysisModel: 'analysis-model',
     }))
+
+    expect(sourceDocumentMock.readEpisodeSourceDocumentById).toHaveBeenNthCalledWith(2, {
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-previous',
+    })
+    expect(promptMock.buildAiPromptContent).toHaveBeenCalledWith(expect.objectContaining({
+      variables: {
+        user_prompt: expect.stringContaining('上一版完整剧本'),
+      },
+    }))
+    expect(promptMock.buildAiPromptContent).toHaveBeenCalledWith(expect.objectContaining({
+      variables: {
+        user_prompt: expect.stringContaining('把结尾改成更冷峻'),
+      },
+    }))
+    expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
   })
 
   it('marks the bible failed when generation throws', async () => {

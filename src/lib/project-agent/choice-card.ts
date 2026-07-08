@@ -144,6 +144,84 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 }
 
+async function buildScriptReviewChoiceCard(params: {
+  projectId: string
+  userId: string
+  episodeId: string
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+  toolCallId: string
+}): Promise<ProjectAgentChoiceCardPartData> {
+  if (params.workflow.stage !== 'script_ready_for_review') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:stage=${params.workflow.stage}`)
+  }
+  const editBible = await prisma.projectEditBible.findFirst({
+    where: {
+      episodeId: params.episodeId,
+      episode: {
+        projectId: params.projectId,
+        project: { userId: params.userId },
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      sourceDocument: {
+        select: {
+          id: true,
+          sourceKind: true,
+          checksum: true,
+          version: true,
+          normalizedText: true,
+        },
+      },
+    },
+  })
+  if (!editBible) {
+    throw new Error('EDIT_FIRST_CHOICE_SCRIPT_NOT_FOUND')
+  }
+  if (editBible.status !== 'script_ready_for_review') {
+    throw new Error(`EDIT_FIRST_SCRIPT_REVIEW_NOT_READY:${editBible.status}`)
+  }
+  if (editBible.sourceDocument.sourceKind !== 'prompt_generated_script') {
+    throw new Error(`EDIT_FIRST_SCRIPT_REVIEW_SOURCE_INVALID:${editBible.sourceDocument.sourceKind}`)
+  }
+  const isEnglish = params.locale === 'en'
+  const scriptLength = editBible.sourceDocument.normalizedText.length
+  const cardVersion = createHash('sha256')
+    .update([
+      editBible.id,
+      String(editBible.version),
+      editBible.sourceDocument.id,
+      editBible.sourceDocument.checksum,
+      String(editBible.sourceDocument.version),
+    ].join('|'))
+    .digest('hex')
+    .slice(0, 12)
+  return {
+    cardId: `edit-first-script-review:${params.episodeId}:${cardVersion}`,
+    toolCallId: params.toolCallId,
+    choiceType: 'script_review',
+    variant: 'confirm_or_reply',
+    title: isEnglish ? 'Review Expanded Script' : '审核扩写剧本',
+    description: isEnglish
+      ? `Review the expanded source script before episode planning. Current script length: ${String(scriptLength)} characters.`
+      : `请先审核扩写后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
+    groups: [],
+    submitLabel: isEnglish ? 'Approve Script and Plan Episode' : '确认剧本，生成剧集规划',
+    submit: {
+      kind: 'submit_tool_output',
+    },
+    replyLabel: isEnglish ? 'Request changes' : '需要修改',
+    replyPlaceholder: isEnglish
+      ? 'Describe what should change in the expanded script...'
+      : '输入你希望调整的剧情、人物、结构、风格或结局...',
+    replySubmitLabel: isEnglish ? 'Submit script changes' : '提交剧本修改意见',
+    replyToolOutputKey: 'revisionNotes',
+  }
+}
+
 function buildBibleReviewChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
@@ -332,6 +410,17 @@ export async function buildEditFirstAssistantChoiceCard(params: {
 
   if (params.choiceType === 'bible_review') {
     return buildBibleReviewChoiceCard({
+      locale: params.locale,
+      workflow: params.workflow,
+      toolCallId: params.toolCallId,
+    })
+  }
+
+  if (params.choiceType === 'script_review') {
+    return await buildScriptReviewChoiceCard({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

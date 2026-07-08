@@ -13,17 +13,19 @@ import {
   buildEditFirstChoiceResult,
 } from '@/lib/project-agent/edit-first-choice-result'
 import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
-import { confirmEpisodeEditBible } from '@/lib/edit-bible'
+import { approveEpisodePromptGeneratedScript, confirmEpisodeEditBible } from '@/lib/edit-bible'
 
 vi.mock('@/lib/edit-script/service', () => ({
   approveProjectEpisodeEditScriptAssets: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/edit-bible', () => ({
+  approveEpisodePromptGeneratedScript: vi.fn(async () => undefined),
   confirmEpisodeEditBible: vi.fn(async () => undefined),
 }))
 
 const approveProjectEpisodeEditScriptAssetsMock = vi.mocked(approveProjectEpisodeEditScriptAssets)
+const approveEpisodePromptGeneratedScriptMock = vi.mocked(approveEpisodePromptGeneratedScript)
 const confirmEpisodeEditBibleMock = vi.mocked(confirmEpisodeEditBible)
 
 function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstChoiceResult>): {
@@ -48,6 +50,7 @@ function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstC
 describe('buildEditFirstChoiceResult', () => {
   beforeEach(() => {
     approveProjectEpisodeEditScriptAssetsMock.mockClear()
+    approveEpisodePromptGeneratedScriptMock.mockClear()
     confirmEpisodeEditBibleMock.mockClear()
     prismaMock.project.updateMany.mockClear()
     prismaMock.project.updateMany.mockResolvedValue({ count: 1 })
@@ -120,6 +123,41 @@ describe('buildEditFirstChoiceResult', () => {
     const { parsed } = readSyntheticToolResult(choiceResult)
     expect(parsed.nextOperationId).toBeUndefined()
     expect(parsed.revisionNotes).toBe('更克苏鲁一些')
+  })
+
+  it('serializes script approval without selecting the next operation', () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'script_review',
+      toolCallId: 'tool-call-script',
+      latestUserText: '确认剧本',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+    })
+
+    const { name, parsed } = readSyntheticToolResult(choiceResult)
+    expect(name).toBe('request_edit_script_review_choice')
+    expect(parsed.decision).toBe('approve')
+    expect(parsed.nextOperationId).toBeUndefined()
+  })
+
+  it('serializes script revision notes without selecting the next operation', () => {
+    const choiceResult = buildEditFirstChoiceResult({
+      choiceType: 'script_review',
+      toolCallId: 'tool-call-script',
+      latestUserText: '结尾太暖',
+      output: {
+        ok: true,
+        decision: 'revise',
+        revisionNotes: '结尾更冷峻，不要解释因果悖论',
+      },
+    })
+
+    const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(parsed.decision).toBe('revise')
+    expect(parsed.revisionNotes).toBe('结尾更冷峻，不要解释因果悖论')
+    expect(parsed.nextOperationId).toBeUndefined()
   })
 
   it('serializes style selection without selecting the next operation', () => {
@@ -219,6 +257,41 @@ describe('buildEditFirstChoiceResult', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
     })
+  })
+
+  it('persists approved script review as an explicit script approval edge', async () => {
+    await applyEditFirstChoiceResultSideEffects({
+      choiceType: 'script_review',
+      output: {
+        ok: true,
+        decision: 'approve',
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(approveEpisodePromptGeneratedScriptMock).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+  })
+
+  it('does not approve script review when the user requests revision', async () => {
+    await applyEditFirstChoiceResultSideEffects({
+      choiceType: 'script_review',
+      output: {
+        ok: true,
+        decision: 'revise',
+        revisionNotes: '换一个结局',
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+    })
+
+    expect(approveEpisodePromptGeneratedScriptMock).not.toHaveBeenCalled()
   })
 
   it('rejects bible approval without a selected aspect ratio', () => {

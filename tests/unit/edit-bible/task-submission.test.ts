@@ -18,6 +18,27 @@ const sourceDocumentMock = vi.hoisted(() => ({
   })),
   deleteEpisodeSourceDocumentForRollback: vi.fn(async () => undefined),
   estimateEditSourceDocumentInputTokens: vi.fn((text: string) => text.length),
+  readEpisodeSourceDocumentById: vi.fn(async () => ({
+    id: 'source-script',
+    episodeId: 'episode-1',
+    normalizedText: '扩写后的完整剧本',
+    checksum: 'checksum-script',
+    sourceKind: 'prompt_generated_script',
+    rawFileMediaId: null,
+    version: 2,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:01:00Z'),
+  })),
+}))
+
+const prismaMock = vi.hoisted(() => ({
+  projectEditBible: {
+    findFirst: vi.fn(async () => ({
+      id: 'bible-1',
+      sourceDocumentId: 'source-script',
+      status: 'script_approved',
+    })),
+  },
 }))
 
 const configMock = vi.hoisted(() => ({
@@ -72,14 +93,20 @@ vi.mock('@/lib/edit-source-document', async (importOriginal) => ({
   createEpisodeSourceDocument: sourceDocumentMock.createEpisodeSourceDocument,
   deleteEpisodeSourceDocumentForRollback: sourceDocumentMock.deleteEpisodeSourceDocumentForRollback,
   estimateEditSourceDocumentInputTokens: sourceDocumentMock.estimateEditSourceDocumentInputTokens,
+  readEpisodeSourceDocumentById: sourceDocumentMock.readEpisodeSourceDocumentById,
 }))
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/config-service', () => configMock)
 vi.mock('@/lib/ai-exec/engine', () => aiMock)
 vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/operations/submit-operation-task', () => submitMock)
 vi.mock('@/lib/edit-bible/service', () => serviceMock)
 
-import { submitProjectEditBibleGenerationTask } from '@/lib/edit-bible/task-submission'
+import {
+  submitApprovedScriptEditBibleGenerationTask,
+  submitProjectEditBibleGenerationTask,
+  submitProjectEditScriptRevisionTask,
+} from '@/lib/edit-bible/task-submission'
 
 function request(): NextRequest {
   return new Request('http://localhost/api/projects/project-1/bible', {
@@ -90,6 +117,34 @@ function request(): NextRequest {
 describe('edit bible task submission', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.projectEditBible.findFirst.mockResolvedValue({
+      id: 'bible-1',
+      sourceDocumentId: 'source-script',
+      status: 'script_approved',
+    })
+    sourceDocumentMock.createEpisodeSourceDocument.mockResolvedValue({
+      id: 'source-1',
+      episodeId: 'episode-1',
+      normalizedText: '一个车站悬疑故事',
+      checksum: 'checksum-1',
+      sourceKind: 'prompt_generated_outline',
+      rawFileMediaId: null,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      estimatedInputTokens: 120,
+    })
+    sourceDocumentMock.readEpisodeSourceDocumentById.mockResolvedValue({
+      id: 'source-script',
+      episodeId: 'episode-1',
+      normalizedText: '扩写后的完整剧本',
+      checksum: 'checksum-script',
+      sourceKind: 'prompt_generated_script',
+      rawFileMediaId: null,
+      version: 2,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:01:00Z'),
+    })
   })
 
   it('stores prompt_generated_outline as the raw source and leaves expansion to the worker', async () => {
@@ -140,6 +195,106 @@ describe('edit bible task submission', () => {
     expect(sourceDocumentMock.createEpisodeSourceDocument).toHaveBeenCalledWith(expect.objectContaining({
       sourceKind: 'paste',
       text: '完整剧本文本',
+    }))
+  })
+
+  it('submits episode-plan generation only from an approved expanded script', async () => {
+    const result = await submitApprovedScriptEditBibleGenerationTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+    })
+
+    expect(prismaMock.projectEditBible.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        episodeId: 'episode-1',
+      }),
+    }))
+    expect(sourceDocumentMock.readEpisodeSourceDocumentById).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-script',
+    })
+    expect(submitMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'generate_bible_from_script',
+      targetType: 'ProjectEditBible',
+      targetId: 'bible-1',
+      payload: expect.objectContaining({
+        sourceKind: 'prompt_generated_script',
+      }),
+    }))
+    expect(result.taskType).toBe(TASK_TYPE.EDIT_BIBLE_GENERATE)
+  })
+
+  it('rejects episode-plan generation before the expanded script is approved', async () => {
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      sourceDocumentId: 'source-script',
+      status: 'script_ready_for_review',
+    })
+
+    await expect(submitApprovedScriptEditBibleGenerationTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+    })).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'EDIT_SCRIPT_REVIEW_NOT_READY',
+      }),
+    })
+
+    expect(submitMock.submitOperationTask).not.toHaveBeenCalled()
+  })
+
+  it('submits script revision with previous full script source context', async () => {
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      sourceDocumentId: 'source-previous',
+      status: 'script_ready_for_review',
+    })
+    sourceDocumentMock.createEpisodeSourceDocument.mockResolvedValueOnce({
+      id: 'source-revision',
+      episodeId: 'episode-1',
+      normalizedText: '把结尾改成更冷峻',
+      checksum: 'checksum-revision',
+      sourceKind: 'prompt_generated_outline',
+      rawFileMediaId: null,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      estimatedInputTokens: 48,
+    })
+
+    await submitProjectEditScriptRevisionTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      revisionNotes: '把结尾改成更冷峻',
+      source: 'project-ui',
+      confirmed: true,
+      locale: 'zh',
+    })
+
+    expect(sourceDocumentMock.createEpisodeSourceDocument).toHaveBeenCalledWith(expect.objectContaining({
+      sourceKind: 'prompt_generated_outline',
+      text: '把结尾改成更冷峻',
+    }))
+    expect(submitMock.submitOperationTask).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'revise_script',
+      payload: expect.objectContaining({
+        sourceDocumentId: 'source-revision',
+        previousSourceDocumentId: 'source-previous',
+        sourceKind: 'prompt_generated_outline',
+      }),
     }))
   })
 })

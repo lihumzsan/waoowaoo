@@ -33,8 +33,10 @@ export {
   type EditBibleEmotionalCurve,
 } from './schemas'
 export {
+  approveEpisodePromptGeneratedScript,
   confirmEpisodeEditBible,
   markEditBibleGenerationFailed,
+  markEditBibleScriptReadyForReview,
   persistGeneratedEditBibleBundle,
   prepareEditBibleGenerationTarget,
   readEpisodeEditBible,
@@ -45,6 +47,8 @@ export {
   type PersistedEditChapterPlan,
 } from './service'
 export {
+  submitApprovedScriptEditBibleGenerationTask,
   submitProjectEditBibleGenerationTask,
+  submitProjectEditScriptRevisionTask,
   type EditBibleGenerationTaskSubmitResult,
 } from './task-submission'

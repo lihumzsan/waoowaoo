@@ -60,6 +60,8 @@ describe('project agent operation registry', () => {
 
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])
     expect(registry.ingest_script?.groupPath).toEqual(['edit-bible'])
+    expect(registry.revise_script?.groupPath).toEqual(['edit-bible'])
+    expect(registry.generate_bible_from_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.generate_edit_style_previews?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])

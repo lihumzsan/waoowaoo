@@ -4,7 +4,7 @@ import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { prisma } from '@/lib/prisma'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
-import { confirmEpisodeEditBible } from '@/lib/edit-bible'
+import { approveEpisodePromptGeneratedScript, confirmEpisodeEditBible } from '@/lib/edit-bible'
 import { normalizeScriptIntakeChoiceBrief } from './script-intake'
 
 interface UnknownRecord {
@@ -125,6 +125,29 @@ export function buildEditFirstChoiceResult(params: {
     return null
   }
 
+  if (params.choiceType === 'script_review') {
+    const decision = readString(params.output.decision)
+    if (decision === 'revise') {
+      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
+      if (!revisionNotes) return null
+      return {
+        inputItems: buildChoiceInputItems({
+          toolCallId: params.toolCallId,
+          choiceType: params.choiceType,
+          result: { decision: 'revise', revisionNotes },
+        }),
+      }
+    }
+    if (decision !== 'approve') return null
+    return {
+      inputItems: buildChoiceInputItems({
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        result: { decision: 'approve' },
+      }),
+    }
+  }
+
   if (params.choiceType === 'asset_review') {
     const decision = readString(params.output.decision)
     if (decision === 'revise') {
@@ -182,6 +205,18 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
   if (params.output.ok !== true && params.output.ok !== undefined) return
   const decision = readString(params.output.decision)
   if (params.choiceType === 'script_intake') return
+  if (params.choiceType === 'script_review') {
+    if (decision !== 'approve') return
+    if (!params.episodeId) {
+      throw new Error('PROJECT_AGENT_SCRIPT_REVIEW_EPISODE_ID_REQUIRED')
+    }
+    await approveEpisodePromptGeneratedScript({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+    })
+    return
+  }
   if (params.choiceType === 'bible_review') {
     if (decision !== 'approve') return
     const aspectRatio = readChoiceAspectRatio(params.output)

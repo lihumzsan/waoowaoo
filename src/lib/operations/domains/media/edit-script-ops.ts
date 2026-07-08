@@ -30,6 +30,7 @@ import type {
   EditFirstChoiceType,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import {
+  EDIT_FIRST_CHOICE_TYPES,
   EDIT_FIRST_CHOICE_TOOL_IDS,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
@@ -138,7 +139,7 @@ type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryb
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
-  choiceType: z.enum(['script_intake', 'bible_review', 'style', 'asset_review', 'budget_confirmation']),
+  choiceType: z.enum(EDIT_FIRST_CHOICE_TYPES),
   cardId: z.string().min(1),
   workflowStage: z.string().min(1),
 }).passthrough()
@@ -368,6 +369,7 @@ async function resolvePlanChaptersTargets(input: {
 
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
   script_intake: 'Request one structured creative intake choice before script expansion when the user has not provided a complete script and the brief lacks the basic conditions needed for direct expansion. Pass only the exact user seed text.',
+  script_review: 'Request expanded script confirmation before generating the global episode plan. This tool has a fixed choice type; do not pass a choiceType argument.',
   bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
@@ -535,6 +537,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       },
     }),
     [EDIT_FIRST_CHOICE_TOOL_IDS.script_intake]: buildRequestEditChoiceOperation('script_intake'),
+    [EDIT_FIRST_CHOICE_TOOL_IDS.script_review]: buildRequestEditChoiceOperation('script_review'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review]: buildRequestEditChoiceOperation('bible_review'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.style]: buildRequestEditChoiceOperation('style'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.asset_review]: buildRequestEditChoiceOperation('asset_review'),

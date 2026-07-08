@@ -242,6 +242,8 @@ export interface ProjectEditBible {
   projectId: string
   episodeId: string
   sourceDocumentId?: string
+  sourceKind?: string
+  sourceText?: string | null
   version?: number
   status: string
   lockedAt?: string | Date | null

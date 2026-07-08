@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import { isEditFirstChoiceType, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { buildEditFirstAssistantChoiceCard } from './choice-card'
 import { readPersistedScriptIntakeChoiceCard } from './script-intake'
 import type {
@@ -122,13 +122,7 @@ function readOperationPlanView(value: Prisma.JsonValue | undefined): OperationPl
 }
 
 function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
-  if (
-    value === 'bible_review'
-    || value === 'script_intake'
-    || value === 'style'
-    || value === 'asset_review'
-    || value === 'budget_confirmation'
-  ) return value
+  if (isEditFirstChoiceType(value)) return value
   throw new Error('PROJECT_AGENT_PENDING_CHOICE_TYPE_INVALID')
 }
 

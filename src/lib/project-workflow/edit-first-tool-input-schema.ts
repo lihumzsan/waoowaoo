@@ -75,7 +75,7 @@ export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
   sourceKind: {
     type: 'string',
     enum: ['paste', 'prompt_generated_outline'],
-    description: 'Classify the user input. Use paste only for a complete filmable script provided by the user. Use prompt_generated_outline only for a post-intake normalizedBrief, or for original user input already detailed enough to need no follow-up before expansion. Titles, theme directions, one-line ideas, short loglines, and briefs missing basic script conditions must use request_script_intake_choice first.',
+    description: 'Classify the user input. Use paste only for a complete filmable script provided by the user; it can generate the episode plan directly. Use prompt_generated_outline only for a post-intake normalizedBrief; it expands a full script and then waits for user script review before episode planning. Titles, theme directions, one-line ideas, short loglines, and briefs missing basic script conditions must use request_script_intake_choice first.',
   },
   text: stringProperty('The complete source script text, pasted script, or sufficiently detailed creative brief to expand after the intake rule has been satisfied. Do not include projectId or episodeId.'),
 })
@@ -86,6 +86,10 @@ export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputS
 
 export const EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   revisionNotes: stringProperty('Concrete user asset review notes to apply to the current required assets. Do not include system ids.'),
+})
+
+export const EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  revisionNotes: stringProperty('Concrete user script review notes to apply to the current expanded source script. Do not include projectId, episodeId, or system ids.'),
 })
 
 export const EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({

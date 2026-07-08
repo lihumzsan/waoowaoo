@@ -1,4 +1,4 @@
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import { isEditFirstChoiceType, type EditFirstChoiceType } from './edit-first-choice-tools'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -37,14 +37,6 @@ function readNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed || null
-}
-
-function isEditFirstChoiceType(value: unknown): value is EditFirstChoiceType {
-  return value === 'bible_review'
-    || value === 'script_intake'
-    || value === 'style'
-    || value === 'asset_review'
-    || value === 'budget_confirmation'
 }
 
 export function parseProjectAgentControlAction(value: unknown): ProjectAgentControlAction | null {

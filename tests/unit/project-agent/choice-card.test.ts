@@ -108,6 +108,58 @@ describe('edit-first assistant choice cards', () => {
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=ready_to_ingest_script')
   })
 
+  it('builds a script review card after prompt script expansion', async () => {
+    prismaState.bibleFindFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      status: 'script_ready_for_review',
+      version: 2,
+      sourceDocument: {
+        id: 'source-script',
+        sourceKind: 'prompt_generated_script',
+        checksum: 'checksum-script',
+        version: 3,
+        normalizedText: '扩写后的完整剧本正文',
+      },
+    })
+
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('script_ready_for_review'),
+      choiceType: 'script_review',
+      toolCallId: 'tool-call-script',
+    })
+
+    expect(card).toMatchObject({
+      cardId: expect.stringMatching(/^edit-first-script-review:episode-1:[a-f0-9]{12}$/),
+      toolCallId: 'tool-call-script',
+      choiceType: 'script_review',
+      variant: 'confirm_or_reply',
+      title: '审核扩写剧本',
+      groups: [],
+      submitLabel: '确认剧本，生成剧集规划',
+      submit: {
+        kind: 'submit_tool_output',
+      },
+      replyLabel: '需要修改',
+      replyToolOutputKey: 'revisionNotes',
+    })
+  })
+
+  it('rejects script review cards outside the script review stage', async () => {
+    await expect(buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('ready_to_generate_bible'),
+      choiceType: 'script_review',
+      toolCallId: 'tool-call-script',
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:stage=ready_to_generate_bible')
+  })
+
   it('builds a style card from the available completed style previews', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
       videoRatio: '16:9',

@@ -49,7 +49,7 @@ describe('edit source document service', () => {
           episodeId: 'episode-1',
           normalizedText: '扩写后的完整剧本',
           checksum: 'checksum-expanded',
-          sourceKind: 'prompt_generated_outline',
+          sourceKind: 'prompt_generated_script',
           rawFileMediaId: null,
           version: 2,
           createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -70,9 +70,11 @@ describe('edit source document service', () => {
       where: { id: 'source-1' },
       data: expect.objectContaining({
         normalizedText: '扩写后的完整剧本',
+        sourceKind: 'prompt_generated_script',
         version: { increment: 1 },
       }),
     }))
     expect(result.version).toBe(2)
+    expect(result.sourceKind).toBe('prompt_generated_script')
   })
 })

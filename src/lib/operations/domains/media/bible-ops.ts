@@ -10,7 +10,9 @@ import {
   readEpisodeEditChapters,
   reviseEditBibleInputSchema,
   reviseEpisodeEditBible,
+  submitApprovedScriptEditBibleGenerationTask,
   submitProjectEditBibleGenerationTask,
+  submitProjectEditScriptRevisionTask,
 } from '@/lib/edit-bible'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
@@ -26,6 +28,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import {
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 
 const optionalEpisodeIdField = {
@@ -41,6 +44,15 @@ const reviseBibleOperationInputSchema = reviseEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
   confirmed: z.boolean().optional(),
 })
+const reviseScriptOperationInputSchema = z.object({
+  ...optionalEpisodeIdField,
+  revisionNotes: z.string().trim().min(1).max(4000),
+  confirmed: z.boolean().optional(),
+}).passthrough()
+const generateBibleFromScriptOperationInputSchema = z.object({
+  ...optionalEpisodeIdField,
+  confirmed: z.boolean().optional(),
+}).passthrough()
 const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
   operationId: 'revise_bible',
   inputSchema: reviseBibleOperationInputSchema,
@@ -258,7 +270,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       effects: EFFECTS_BIBLE_GENERATE,
       confirmation: {
         required: true,
-        summary: '将上传/保存本集源剧本，并调用文本模型生成长视频 Bible、台账、情绪曲线和章节切分（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将保存本集源文本并调用文本模型处理（可能消耗额度/产生计费）。完整可拍剧本会生成剧集规划、台账、情绪曲线和章节切分；创作简报会先扩写成完整剧本并等待用户审核。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
       inputSchema: ingestScriptOperationInputSchema,
@@ -279,6 +291,83 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
         })
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
           operationId: 'ingest_script',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: result.editBibleId,
+        })
+        return editBibleTaskSubmitOutputSchema.parse(result)
+      },
+    }),
+    revise_script: defineOperation({
+      id: 'revise_script',
+      summary: 'Revise the expanded source script from user review notes and submit a new async script expansion task.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BIBLE_GENERATE,
+      confirmation: {
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA,
+      inputSchema: reviseScriptOperationInputSchema,
+      outputSchema: editBibleTaskSubmitOutputSchema,
+      execute: async (ctx, input) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitProjectEditScriptRevisionTask({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          revisionNotes: input.revisionNotes,
+          source: ctx.source,
+          confirmed: true,
+          locale: resolveLocale(ctx.context.locale),
+        })
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'revise_script',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: result.editBibleId,
+        })
+        return editBibleTaskSubmitOutputSchema.parse(result)
+      },
+    }),
+    generate_bible_from_script: defineOperation({
+      id: 'generate_bible_from_script',
+      summary: 'Submit episode planning generation from the user-approved expanded source script.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BIBLE_GENERATE,
+      confirmation: {
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: generateBibleFromScriptOperationInputSchema,
+      outputSchema: editBibleTaskSubmitOutputSchema,
+      execute: async (ctx, input) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const result = await submitApprovedScriptEditBibleGenerationTask({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          source: ctx.source,
+          confirmed: true,
+          locale: resolveLocale(ctx.context.locale),
+        })
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_bible_from_script',
           taskId: result.taskId,
           status: result.status,
           runId: result.runId || null,

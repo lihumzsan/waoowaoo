@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import type { ProjectAgentRunStatus } from '../runs'
+import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
   type ProjectAgentActivityStatus,
@@ -42,14 +43,7 @@ function toActivitySnapshot(record: {
   choiceType: string | null
 }): ProjectAgentActivitySnapshot {
   const choiceType = record.choiceType
-  if (
-    choiceType !== null
-    && choiceType !== 'bible_review'
-    && choiceType !== 'script_intake'
-    && choiceType !== 'style'
-    && choiceType !== 'asset_review'
-    && choiceType !== 'budget_confirmation'
-  ) {
+  if (choiceType !== null && !isEditFirstChoiceType(choiceType)) {
     throw new Error(`PROJECT_AGENT_ACTIVITY_CHOICE_TYPE_INVALID:${choiceType}`)
   }
   return {

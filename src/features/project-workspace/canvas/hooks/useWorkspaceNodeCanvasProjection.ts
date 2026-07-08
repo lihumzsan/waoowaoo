@@ -368,6 +368,11 @@ function confirmedStylePreviewImageUrl(bible: ProjectEditBible | null | undefine
 
 function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): string {
   if (!editBible) return ''
+  if (
+    (editBible.status === 'script_ready_for_review' || editBible.status === 'script_approved')
+    && typeof editBible.sourceText === 'string'
+    && editBible.sourceText.trim()
+  ) return editBible.sourceText.trim()
   if (typeof editBible.textPreview === 'string' && editBible.textPreview.trim()) return editBible.textPreview.trim()
   const bible = editBible.bible
   if (bible && typeof bible === 'object') {
@@ -620,6 +625,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
   const bibleRunning = activeAssistantOperationId === 'ingest_script'
+    || activeAssistantOperationId === 'revise_script'
+    || activeAssistantOperationId === 'generate_bible_from_script'
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const phaseLabels = artifactPhaseLabels(translate)
 

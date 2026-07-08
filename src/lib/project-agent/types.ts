@@ -9,6 +9,7 @@ import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { AssistantPermissionMode } from './permission-mode'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { OperationPlanView } from '@/lib/operations/planning'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -47,7 +48,7 @@ export interface ProjectAgentActivityPartData {
   operationId?: string | null
   sourceOperationId?: string | null
   toolCallId?: string | null
-  choiceType?: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation' | null
+  choiceType?: EditFirstChoiceType | null
 }
 
 export interface ProjectContextPartData {
@@ -111,7 +112,7 @@ export interface ProjectAgentInterruptionResolvedPartData {
 export interface ProjectAgentChoiceResolvedPartData {
   runId?: string | null
   interruptionId?: string | null
-  choiceType: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+  choiceType: EditFirstChoiceType
   toolCallId?: string | null
   cardId?: string | null
 }
@@ -186,7 +187,7 @@ export interface ProjectAgentChoiceCardPartData {
   runId?: string | null
   interruptionId?: string | null
   toolCallId: string
-  choiceType: 'script_intake' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+  choiceType: EditFirstChoiceType
   variant?: ProjectAgentChoiceCardVariant
   autoSubmitOnReady?: boolean
   title: string

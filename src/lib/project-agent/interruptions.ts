@@ -5,6 +5,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { appendProjectAgentEvents } from './event'
+import { isEditFirstChoiceType } from './edit-first-choice-tools'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
 export type ProjectAgentInterruptionStatus = 'pending' | 'consumed' | 'superseded'
@@ -209,13 +210,7 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
           choiceType: (() => {
             if (typeof params.payload === 'object' && params.payload && !Array.isArray(params.payload)) {
               const choiceType = (params.payload as Record<string, unknown>).choiceType
-              if (
-                choiceType === 'bible_review'
-                || choiceType === 'script_intake'
-                || choiceType === 'style'
-                || choiceType === 'asset_review'
-                || choiceType === 'budget_confirmation'
-              ) return choiceType
+              if (isEditFirstChoiceType(choiceType)) return choiceType
             }
             return null
           })(),
