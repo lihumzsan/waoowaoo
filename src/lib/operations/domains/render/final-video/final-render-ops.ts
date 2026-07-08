@@ -181,7 +181,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
     }),
     render_final_video: defineOperation({
       id: 'render_final_video',
-      summary: 'Render the final linear edited video with FFmpeg. If an episode music mix exists it is mixed in; otherwise the export preserves source audio or silence.',
+      summary: 'Render the final linear edited video with FFmpeg and the completed episode music mix.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -195,7 +195,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       },
       confirmation: {
         required: true,
-        summary: '将导出最终成片；如已生成 episode 配乐则自动混入，否则保留视频原声或静音。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用已完成的 episode 配乐导出最终成片。若配乐尚未完成，请先生成配乐。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: finalRenderInputSchema,

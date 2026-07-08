@@ -90,7 +90,9 @@ function assertMusicScoreReadyForFinalRender(input: {
   } | null
   readonly hasMix: boolean
 }): void {
-  if (!input.musicScore) return
+  if (!input.musicScore) {
+    throw new Error('FINAL_VIDEO_RENDER_BGM_REQUIRED')
+  }
   if (input.musicScore.status !== 'completed') {
     throw new Error(`FINAL_VIDEO_RENDER_BGM_NOT_READY:${input.musicScore.status ?? 'unknown'}`)
   }

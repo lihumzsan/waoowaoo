@@ -617,14 +617,20 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
+  if (!bgmReady) {
+    const nextAction = workflowAction('generate_episode_bgm_score', 'Generate BGM score')
+    return state({
+      stage: 'ready_to_generate_bgm_score',
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
   const finalRenderAction = workflowAction('render_final_video', 'Render final video')
-  const optionalBgmOperationIds: readonly EditFirstWorkflowOperationId[] = !bgmReady
-    ? ['generate_episode_bgm_score']
-    : []
   return state({
     stage: 'ready_to_render_final',
     nextAction: finalRenderAction,
-    allowedOperationIds: [finalRenderAction.operationId, ...optionalBgmOperationIds],
+    allowedOperationIds: [finalRenderAction.operationId],
   })
 }
 
