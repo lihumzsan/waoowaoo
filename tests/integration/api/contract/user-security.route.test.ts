@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { ACCOUNT_SECURITY_RESULT_CODES } from '@/lib/auth/account-security'
 
@@ -71,14 +71,25 @@ const securitySnapshot = {
 }
 
 describe('/api/user/security', () => {
+  const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
+
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.DEPLOYMENT_EDITION = 'cloud'
     authState.authenticated = true
     accountSecurityMock.getAccountSecurity.mockResolvedValue(securitySnapshot)
     accountSecurityMock.setInitialPassword.mockResolvedValue({
       ...securitySnapshot,
       hasPassword: true,
     })
+  })
+
+  afterEach(() => {
+    if (originalDeploymentEdition === undefined) {
+      delete process.env.DEPLOYMENT_EDITION
+    } else {
+      process.env.DEPLOYMENT_EDITION = originalDeploymentEdition
+    }
   })
 
   it('GET rejects unauthenticated requests', async () => {
@@ -103,6 +114,23 @@ describe('/api/user/security', () => {
       security: securitySnapshot,
     })
     expect(accountSecurityMock.getAccountSecurity).toHaveBeenCalledWith('user-1')
+  })
+
+  it('GET rejects self-hosted deployments before exposing account security', async () => {
+    process.env.DEPLOYMENT_EDITION = 'self-hosted'
+
+    const response = await GET(buildRequest('GET'), routeContext)
+    const body = await response.json() as {
+      error: {
+        details: {
+          code: string
+        }
+      }
+    }
+
+    expect(response.status).toBe(404)
+    expect(body.error.details.code).toBe('ACCOUNT_SECURITY_FEATURE_DISABLED')
+    expect(accountSecurityMock.getAccountSecurity.mock.calls).toEqual([])
   })
 
   it('POST rejects invalid JSON before writing password', async () => {

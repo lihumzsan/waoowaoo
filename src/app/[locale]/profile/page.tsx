@@ -92,12 +92,13 @@ const RECHARGE_PRESETS = [50, 100, 200, 500] as const
 
 function getDefaultProfileSection(features: PublicDeploymentFeatures): ProfileSection {
   if (features.showBilling) return 'overview'
+  if (features.showAccountSecurity) return 'security'
   if (features.showApiConfig) return 'apiConfig'
-  return 'security'
+  return 'overview'
 }
 
 function isProfileSectionEnabled(section: ProfileSection, features: PublicDeploymentFeatures): boolean {
-  if (section === 'security') return true
+  if (section === 'security') return features.showAccountSecurity
   if (section === 'apiConfig') return features.showApiConfig
   return features.showBilling
 }
@@ -259,7 +260,9 @@ export default function ProfilePage() {
     ...(deploymentFeatures?.showBilling === true
       ? [{ section: 'overview' as const, icon: 'user' as const, label: t('accountOverview') }]
       : []),
-    { section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') },
+    ...(deploymentFeatures?.showAccountSecurity === true
+      ? [{ section: 'security' as const, icon: 'lock' as const, label: t('accountSecurity.title') }]
+      : []),
     ...(deploymentFeatures?.showApiConfig === true
       ? [{ section: 'apiConfig' as const, icon: 'settingsHexAlt' as const, label: t('apiConfig') }]
       : []),

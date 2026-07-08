@@ -10,6 +10,7 @@ const DEPLOYMENT_FEATURE_KEYS: Array<keyof PublicDeploymentFeatures> = [
   'showInviteCode',
   'showBilling',
   'showApiConfig',
+  'showAccountSecurity',
   'showUpdateCheck',
   'requireInviteCodeOnSignup',
   'usePlatformProviderConfig',

@@ -206,6 +206,7 @@ describe('api contract - infra routes (behavior)', () => {
         showInviteCode: boolean
         showBilling: boolean
         showApiConfig: boolean
+        showAccountSecurity: boolean
         showUpdateCheck: boolean
         requireInviteCodeOnSignup: boolean
         usePlatformProviderConfig: boolean
@@ -230,6 +231,7 @@ describe('api contract - infra routes (behavior)', () => {
         showInviteCode: true,
         showBilling: true,
         showApiConfig: false,
+        showAccountSecurity: true,
         showUpdateCheck: false,
         requireInviteCodeOnSignup: false,
         usePlatformProviderConfig: true,
