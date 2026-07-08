@@ -54,9 +54,9 @@
   },
   "workflowStages": {
     "not_started": "未开始",
-    "ready_to_ingest_script": "等待提交剧本需求",
-    "script_generating": "剧本生成中",
-    "script_ready_for_review": "等待审核剧本",
+    "ready_to_ingest_script": "等待创作剧本",
+    "script_generating": "剧本创作中",
+    "script_ready_for_review": "等待确认剧本",
     "ready_to_generate_bible": "等待生成剧集规划",
     "bible_generating": "剧集规划生成中",
     "bible_ready_for_review": "等待确认剧集规划",
@@ -679,10 +679,10 @@
         },
         "editBible": {
           "title": "剧集规划",
-          "eyebrow": "全局制作蓝图",
-          "meta": "确认后作为各章节制作的全局基线",
+          "eyebrow": "剧集规划",
+          "meta": "确认后作为各章节制作基线",
           "pendingTitle": "剧集规划生成中",
-          "pendingBody": "AI 正在解析源剧本，生成全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。",
+          "pendingBody": "AI 正在解析源剧本，生成剧集规划、剧情节拍、事件台账、情绪曲线和章节切分。",
           "pendingMeta": "生成完成后由 assistant 发起确认"
         },
         "editScriptSource": {
@@ -690,7 +690,7 @@
           "eyebrow": "源剧本",
           "pendingTitle": "剧本扩写中",
           "pendingBody": "AI 正在根据创作问诊结果扩写完整可拍摄剧本。",
-          "pendingMeta": "生成完成后由 assistant 发起剧本审核"
+          "pendingMeta": "生成完成后由 assistant 发起剧本确认"
         },
         "editStylePreview": {
           "eyebrow": "风格候选",

@@ -26,7 +26,7 @@ function editBible(chapterIds: readonly string[] = []): ProjectEditBible {
     projectId: 'project-1',
     episodeId: 'episode-1',
     status: 'ready',
-    textPreview: '全局蓝图',
+    textPreview: '剧集规划',
     chapters: chapterIds.map((chapterId, index) => ({
       id: chapterId,
       chapterIndex: index,

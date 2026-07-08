@@ -127,7 +127,7 @@ describe('project canvas artifact phase', () => {
     expect(node?.data.artifactPhase).toBe('running')
   })
 
-  it('labels a prompt-expanded script review node as script instead of global blueprint', () => {
+  it('labels a prompt-expanded script review node as script instead of episode plan', () => {
     const node = editBibleNode({
       status: 'script_ready_for_review',
       workflowStage: 'script_ready_for_review',

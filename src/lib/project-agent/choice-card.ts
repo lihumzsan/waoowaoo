@@ -204,10 +204,10 @@ async function buildScriptReviewChoiceCard(params: {
     toolCallId: params.toolCallId,
     choiceType: 'script_review',
     variant: 'confirm_or_reply',
-    title: isEnglish ? 'Review Expanded Script' : '审核扩写剧本',
+    title: isEnglish ? 'Confirm Script' : '确认剧本',
     description: isEnglish
-      ? `Review the expanded source script before episode planning. Current script length: ${String(scriptLength)} characters.`
-      : `请先审核扩写后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
+      ? `Confirm the expanded source script before episode planning. Current script length: ${String(scriptLength)} characters.`
+      : `请先确认扩写后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
     groups: [],
     submitLabel: isEnglish ? 'Approve Script and Plan Episode' : '确认剧本，生成剧集规划',
     submit: {
@@ -238,8 +238,8 @@ function buildBibleReviewChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
     description: isEnglish
-      ? 'Review the global story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this blueprint can drive chapter production.'
-      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份全局蓝图将作为各章节制作的基线。',
+      ? 'Review the story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this episode plan can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份剧集规划将作为各章节制作的基线。',
     groups: [
       {
         key: 'aspectRatio',

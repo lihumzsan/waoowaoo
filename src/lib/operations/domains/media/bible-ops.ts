@@ -464,7 +464,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
         required: true,
-        summary: '将覆盖当前剧集规划基线（全局 Bible、节拍、台账、情绪曲线和章节切分）。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将覆盖当前剧集规划基线（剧情节拍、事件台账、情绪曲线和章节切分）。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: reviseBibleToolInputSchema,
       inputSchema: reviseBibleOperationInputSchema,

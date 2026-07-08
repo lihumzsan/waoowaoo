@@ -54,9 +54,9 @@
   },
   "workflowStages": {
     "not_started": "Not Started",
-    "ready_to_ingest_script": "Ready To Submit Script Request",
-    "script_generating": "Generating Script",
-    "script_ready_for_review": "Awaiting Script Review",
+    "ready_to_ingest_script": "Ready To Create Script",
+    "script_generating": "Creating Script",
+    "script_ready_for_review": "Awaiting Script Confirmation",
     "ready_to_generate_bible": "Ready To Generate Episode Plan",
     "bible_generating": "Generating Episode Plan",
     "bible_ready_for_review": "Awaiting Episode Plan Confirmation",
@@ -679,10 +679,10 @@
         },
         "editBible": {
           "title": "Episode Plan",
-          "eyebrow": "Global Production Blueprint",
+          "eyebrow": "Episode Plan",
           "meta": "Confirmed once as the baseline for every chapter",
           "pendingTitle": "Generating Episode Plan",
-          "pendingBody": "AI is parsing the source script into the global Bible, beat sheet, event ledger, emotional curve, and chapter split.",
+          "pendingBody": "AI is parsing the source script into the episode plan, beat sheet, event ledger, emotional curve, and chapter split.",
           "pendingMeta": "The assistant will request confirmation when it is ready"
         },
         "editScriptSource": {
@@ -690,7 +690,7 @@
           "eyebrow": "Source Script",
           "pendingTitle": "Expanding Script",
           "pendingBody": "AI is expanding the creative intake into a complete production-ready script.",
-          "pendingMeta": "The assistant will request script review when it is ready"
+          "pendingMeta": "The assistant will request script confirmation when it is ready"
         },
         "editStylePreview": {
           "eyebrow": "Style Candidate",

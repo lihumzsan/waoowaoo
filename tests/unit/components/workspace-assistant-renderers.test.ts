@@ -202,6 +202,10 @@ describe('workspace assistant renderers', () => {
     expect(html).toContain('16:9')
     expect(html).toContain('21:9')
     expect(html).toContain('确认剧集规划')
+    expect(html).toContain('absolute bottom-2 right-2')
+    expect(html).toContain('pr-12')
+    expect(html).not.toContain('min-h-20 w-full resize-none')
+    expect(html).not.toContain('提交修改意见</button>')
   })
 
   it('renders script intake question labels at readable body size', () => {
