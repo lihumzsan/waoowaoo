@@ -13,8 +13,10 @@ This event list is later used to keep the story consistent, so record only event
 
 - Record only events that affect later consistency: changes to persistent facts, character state, relationships, locations, props, world rules, or emotional state.
 - Do not record ordinary walking, glancing, brief pauses, ambience, or other momentary actions that do not persist.
-- One event may cover multiple sentences, but sourceStart/sourceEnd must fit the evidence precisely and must not span unrelated plot.
-- sourceStart/sourceEnd is the half-open range `[sourceStart, sourceEnd)` of the event evidence in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- One event may cover multiple sentences, but sourceAnchor must fit the evidence precisely and must not span unrelated plot.
+- Do not output character offsets, sourceStart, or sourceEnd. Output sourceAnchor only; the system computes exact offsets from block IDs and verbatim quotes.
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId must use block IDs from the input, such as `[p0001]`.
+- sourceAnchor.startQuote/sourceAnchor.endQuote must be short verbatim source snippets inside those blocks. Do not paraphrase, summarize, or add ellipses. Prefer 6-30 characters/letters that are unique inside that block.
 - eventId uses stable increasing IDs, for example `event_001`, `event_002`.
 - kind must be one of `appearance`, `relationship`, `location`, `prop`, `plot`, `rule`, `emotion`. Do not create new types.
 - entities should include only entities directly involved in the event. entityType must be `character`, `location`, `prop`, or `world`.
@@ -23,7 +25,7 @@ This event list is later used to keep the story consistent, so record only event
 
 # Input
 
-Script text:
+Numbered script text blocks:
 {{source_document}}
 
 # Output Schema
@@ -36,8 +38,12 @@ Return JSON only. Do not use markdown or explanations.
       "eventId": "event_001",
       "kind": "appearance",
       "summary": "persistent story fact or state change",
-      "sourceStart": 0,
-      "sourceEnd": 10,
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "verbatim source snippet at the evidence start",
+        "endBlockId": "p0001",
+        "endQuote": "verbatim source snippet at the evidence end"
+      },
       "entities": [
         {
           "entityType": "character",
@@ -56,6 +62,6 @@ Return JSON only. Do not use markdown or explanations.
 - Did you record only events that keep affecting the story?
 - Did you avoid momentary actions, shot descriptions, and ordinary ambience?
 - Do kind and entityType use only the allowed enum values?
-- Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Does every sourceAnchor use an input block ID, and does each quote appear verbatim inside that block?
 - Does persistentFacts contain only facts that remain true after the event?
 - Is the response strict JSON only?

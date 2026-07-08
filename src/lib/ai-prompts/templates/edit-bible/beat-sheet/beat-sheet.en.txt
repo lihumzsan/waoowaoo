@@ -11,19 +11,21 @@ Your job is only to split and describe these beats. Do not organize them into ch
 
 # Rules
 
-- beats must be ordered by sourceStart and must not overlap.
-- sourceStart/sourceEnd is the half-open range `[sourceStart, sourceEnd)` of this beat in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- beats must be ordered by their appearance in the source text and must not overlap.
+- Do not output character offsets, sourceStart, or sourceEnd. Output sourceAnchor only; the system computes exact offsets from block IDs and verbatim quotes.
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId must use block IDs from the input, such as `[p0001]`.
+- sourceAnchor.startQuote/sourceAnchor.endQuote must be short verbatim source snippets inside those blocks. Do not paraphrase, summarize, or add ellipses. Prefer 6-30 characters/letters that are unique inside that block.
 - Beat ranges should cover all story-bearing text. Skip only pure formatting, whitespace, or decorative text with no story function.
 - Prefer natural story turning points: a new action starts, information is revealed, emotion shifts, a relationship changes, the scene changes, a goal changes, or risk escalates.
 - Do not split mechanically by fixed character count, and do not pack a long story passage into one beat.
 - estimatedDurationSec is a reasonable screen-duration estimate for this beat as video. A typical beat is 15-45 seconds. Keep complex action or long dialogue within 60 seconds when possible; if it exceeds 60 seconds, split at a natural turn.
-- No single beat may exceed 120 seconds, and its text range may not exceed 3,600 UTF-16 code units.
+- No single beat may exceed 120 seconds. If a source passage is clearly long, split it into multiple beats at natural story turns.
 - Merge very short sentences without an independent story change into a neighboring beat.
 - persistentFactsIntroduced should include only facts that remain true after this beat and must be remembered later. Do not include momentary actions, atmosphere adjectives, or camera language.
 
 # Input
 
-Script text:
+Numbered script text blocks:
 {{source_document}}
 
 # Output Schema
@@ -36,8 +38,12 @@ Return JSON only. Do not use markdown or explanations.
       "beatId": "beat_001",
       "title": "short title",
       "summary": "story progression or state change in this beat",
-      "sourceStart": 0,
-      "sourceEnd": 10,
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "verbatim source snippet at the beat start",
+        "endBlockId": "p0001",
+        "endQuote": "verbatim source snippet at the beat end"
+      },
       "estimatedDurationSec": 30,
       "persistentFactsIntroduced": [
         "fact that remains true after this beat; use an empty array if none"
@@ -48,8 +54,8 @@ Return JSON only. Do not use markdown or explanations.
 
 # Self-check
 
-- Are beats ordered by sourceStart and non-overlapping?
-- Is every sourceEnd greater than sourceStart, and are the offsets UTF-16 code units?
+- Are beats ordered by their source appearance and non-overlapping?
+- Does every sourceAnchor use an input block ID, and does each quote appear verbatim inside that block?
 - Did the beat ranges cover all story-bearing text?
 - Did you split on natural story turns instead of fixed character counts?
 - Is every estimatedDurationSec reasonable, with no beat above 120 seconds?

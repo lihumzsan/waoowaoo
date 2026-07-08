@@ -14,6 +14,17 @@ export {
 } from './errors'
 export { normalizeEditSourceDocumentText } from './normalize'
 export {
+  buildEditSourceBlocks,
+  editSourceAnchorSchema,
+  editSourcePointAnchorSchema,
+  formatEditSourceBlocksForPrompt,
+  resolveEditSourceAnchor,
+  resolveEditSourcePointAnchor,
+  type EditSourceAnchor,
+  type EditSourceBlock,
+  type EditSourcePointAnchor,
+} from './anchors'
+export {
   assertEditSourceRange,
   assertOrderedNonOverlappingSourceRanges,
   sliceEditSourceText,

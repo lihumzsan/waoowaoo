@@ -13,8 +13,10 @@
 
 - 只记录影响后文连贯性的事件：长期事实、人物状态、关系、场景、道具、世界规则或情绪状态的变化。
 - 普通走路、看向某处、短暂停顿、环境氛围等不会持续影响后文的瞬时动作，不要记录。
-- 一个事件可以覆盖多句原文，但 sourceStart/sourceEnd 必须精准贴合证据，不要跨进无关剧情。
-- sourceStart/sourceEnd 是事件证据对应原文的半开区间 `[sourceStart, sourceEnd)`，按 UTF-16 code unit 计数（即 JavaScript 字符串下标，中文一字一位）。
+- 一个事件可以覆盖多句原文，但 sourceAnchor 必须精准贴合证据，不要跨进无关剧情。
+- 不要输出字符下标、sourceStart 或 sourceEnd。你只需要输出 sourceAnchor，由系统根据 blockId 与原文 quote 计算精确位置。
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId 必须使用输入中的 `[p0001]` 这类块编号。
+- sourceAnchor.startQuote/sourceAnchor.endQuote 必须是对应块中逐字存在的原文短句；不要改写、概括或加入省略号。优先选择 6-30 个字且在该块内唯一的片段。
 - eventId 用稳定递增的编号，例如 `event_001`、`event_002`。
 - kind 只能使用 `appearance`、`relationship`、`location`、`prop`、`plot`、`rule`、`emotion`，不得创造新类型。
 - entities 只写事件直接涉及的对象；entityType 只能是 `character`、`location`、`prop`、`world`。
@@ -23,7 +25,7 @@
 
 # 输入
 
-剧本原文：
+带编号的剧本原文块：
 {{source_document}}
 
 # 输出 Schema
@@ -36,8 +38,12 @@
       "eventId": "event_001",
       "kind": "appearance",
       "summary": "持续影响剧情的事实或状态变化",
-      "sourceStart": 0,
-      "sourceEnd": 10,
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "事件证据开始处的原文短句",
+        "endBlockId": "p0001",
+        "endQuote": "事件证据结束处的原文短句"
+      },
       "entities": [
         {
           "entityType": "character",
@@ -56,6 +62,6 @@
 - 是否只记录了会持续影响后文的事件。
 - 是否没有把瞬时动作、镜头描述或普通气氛写成事件。
 - kind 和 entityType 是否只使用允许的枚举值。
-- sourceStart/sourceEnd 是否按 UTF-16 code unit 计数的半开区间，且 sourceEnd 大于 sourceStart。
+- 每个 sourceAnchor 的 blockId 是否来自输入块编号，quote 是否逐字存在于对应块中。
 - persistentFacts 是否都是事件之后仍然成立的事实。
 - 是否严格只输出 JSON。

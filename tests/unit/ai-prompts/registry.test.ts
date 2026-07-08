@@ -57,9 +57,10 @@ describe('ai prompt registry', () => {
       },
     })
 
-    expect(prompt).toContain('剧本原文')
+    expect(prompt).toContain('带编号的剧本原文块')
     expect(prompt).toContain('标题：《旧钟》')
-    expect(prompt).toContain('firstSourceStart')
+    expect(prompt).toContain('firstEvidence')
+    expect(prompt).not.toContain('"firstSourceStart":')
   })
 
   it('keeps edit bible extraction prompts aligned with the structured template style', () => {
@@ -124,14 +125,14 @@ describe('ai prompt registry', () => {
     expect(zhTemplate).toContain('不要把它们组织成章节')
     expect(zhTemplate).toContain('15-45 秒')
     expect(zhTemplate).toContain('120 秒')
-    expect(zhTemplate).toContain('3,600')
+    expect(zhTemplate).toContain('自然剧情转折')
     expect(zhTemplate).not.toContain('切分算法')
     expect(zhTemplate).not.toContain('系统代码')
 
     expect(enTemplate).toContain('Do not organize them into chapters')
     expect(enTemplate).toContain('15-45 seconds')
     expect(enTemplate).toContain('120 seconds')
-    expect(enTemplate).toContain('3,600')
+    expect(enTemplate).toContain('natural story turns')
     expect(enTemplate).not.toContain('algorithm')
     expect(enTemplate).not.toContain('System code')
   })

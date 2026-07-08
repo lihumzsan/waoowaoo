@@ -11,9 +11,11 @@
 
 # 工作规则
 
-- cues 必须按 sourceStart 从小到大排列。
+- cues 必须按原文出现顺序排列。
 - 每个 cue 对应一段情绪或节奏相对稳定的原文，不要为每个句子单独建 cue。
-- sourceStart/sourceEnd 是该情绪段对应原文的半开区间 `[sourceStart, sourceEnd)`，按 UTF-16 code unit 计数（即 JavaScript 字符串下标，中文一字一位）。
+- 不要输出字符下标、sourceStart 或 sourceEnd。你只需要输出 sourceAnchor，由系统根据 blockId 与原文 quote 计算精确位置。
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId 必须使用输入中的 `[p0001]` 这类块编号。
+- sourceAnchor.startQuote/sourceAnchor.endQuote 必须是对应块中逐字存在的原文短句；不要改写、概括或加入省略号。优先选择 6-30 个字且在该块内唯一的片段。
 - mood 写简短的情绪标签，例如“压抑怀疑”“短暂释然”“危险逼近”。
 - intensity 是 0 到 1 的强度数值：0 表示几乎没有情绪压力，1 表示最高强度。强度必须与原文的风险、冲突、情绪压力和动作强度匹配，不要全都写成高强度。
 - musicPolicy 只能使用四个值：`none` 表示这段不适合铺乐（例如大段对白、信息交代或安静观察）；`underscore` 表示低存在感的氛围铺底；`theme` 表示主题性或人物/概念动机式的音乐；`transition` 表示段落切换、情绪转折处的衔接。
@@ -22,7 +24,7 @@
 
 # 输入
 
-剧本原文：
+带编号的剧本原文块：
 {{source_document}}
 
 # 输出 Schema
@@ -37,16 +39,20 @@
       "intensity": 0.6,
       "musicPolicy": "underscore",
       "note": "可选原因",
-      "sourceStart": 0,
-      "sourceEnd": 10
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "情绪段开始处的原文短句",
+        "endBlockId": "p0001",
+        "endQuote": "情绪段结束处的原文短句"
+      }
     }
   ]
 }
 
 # 自检
 
-- cues 是否按 sourceStart 递增。
-- sourceStart/sourceEnd 是否按 UTF-16 code unit 计数的半开区间，且 sourceEnd 大于 sourceStart。
+- cues 是否按原文顺序排列。
+- 每个 sourceAnchor 的 blockId 是否来自输入块编号，quote 是否逐字存在于对应块中。
 - musicPolicy 是否只使用 `none`、`underscore`、`theme`、`transition`。
 - intensity 是否在 0 到 1 之间，并且与原文情绪强度相符。
 - 是否在不适合配乐的位置使用了 `none`。

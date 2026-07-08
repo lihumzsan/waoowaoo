@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { editSourceRangeSchema } from '@/lib/edit-source-document'
-import { ledgerSchema } from '@/lib/edit-ledger'
+import { editSourceAnchorSchema, editSourcePointAnchorSchema, editSourceRangeSchema } from '@/lib/edit-source-document'
+import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger'
 import { EDIT_BIBLE_STATUS } from './constraints'
 
 export const editBibleStatusSchema = z.enum([
@@ -18,6 +18,12 @@ export const editBibleEntitySchema = z.object({
   summary: z.string().trim().min(1),
   firstSourceStart: z.number().int().min(0).optional(),
 })
+
+export const rawEditBibleEntitySchema = editBibleEntitySchema
+  .omit({ firstSourceStart: true })
+  .extend({
+    firstEvidence: editSourcePointAnchorSchema.optional(),
+  })
 
 export const editBibleStyleGuideSchema = z.object({
   visualTone: z.string().trim().min(1),
@@ -38,13 +44,22 @@ export const editBibleSchema = z.object({
 
 export type EditBible = z.infer<typeof editBibleSchema>
 
-export const editBibleBeatSchema = editSourceRangeSchema.extend({
+export const rawEditBibleSchema = editBibleSchema.extend({
+  characters: z.array(rawEditBibleEntitySchema).default([]),
+  locations: z.array(rawEditBibleEntitySchema).default([]),
+})
+
+export type RawEditBible = z.infer<typeof rawEditBibleSchema>
+
+export const editBibleBeatBaseSchema = z.object({
   beatId: z.string().trim().min(1),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   estimatedDurationSec: z.number().int().positive(),
   persistentFactsIntroduced: z.array(z.string().trim().min(1)).default([]),
 })
+
+export const editBibleBeatSchema = editSourceRangeSchema.safeExtend(editBibleBeatBaseSchema.shape)
 
 export const editBibleBeatSheetSchema = z.object({
   beats: z.array(editBibleBeatSchema).min(1),
@@ -53,7 +68,17 @@ export const editBibleBeatSheetSchema = z.object({
 export type EditBibleBeat = z.infer<typeof editBibleBeatSchema>
 export type EditBibleBeatSheet = z.infer<typeof editBibleBeatSheetSchema>
 
-export const editBibleEmotionalCueSchema = editSourceRangeSchema.extend({
+export const rawEditBibleBeatSchema = editBibleBeatBaseSchema.extend({
+  sourceAnchor: editSourceAnchorSchema,
+})
+
+export const rawEditBibleBeatSheetSchema = z.object({
+  beats: z.array(rawEditBibleBeatSchema).min(1),
+})
+
+export type RawEditBibleBeatSheet = z.infer<typeof rawEditBibleBeatSheetSchema>
+
+export const editBibleEmotionalCueBaseSchema = z.object({
   cueId: z.string().trim().min(1),
   mood: z.string().trim().min(1),
   intensity: z.number().min(0).max(1),
@@ -61,11 +86,33 @@ export const editBibleEmotionalCueSchema = editSourceRangeSchema.extend({
   note: z.string().trim().min(1).optional(),
 })
 
+export const editBibleEmotionalCueSchema = editSourceRangeSchema.safeExtend(editBibleEmotionalCueBaseSchema.shape)
+
 export const editBibleEmotionalCurveSchema = z.object({
   cues: z.array(editBibleEmotionalCueSchema),
 })
 
 export type EditBibleEmotionalCurve = z.infer<typeof editBibleEmotionalCurveSchema>
+
+export const rawEditBibleEmotionalCueSchema = editBibleEmotionalCueBaseSchema.extend({
+  sourceAnchor: editSourceAnchorSchema,
+})
+
+export const rawEditBibleEmotionalCurveSchema = z.object({
+  cues: z.array(rawEditBibleEmotionalCueSchema),
+})
+
+export type RawEditBibleEmotionalCurve = z.infer<typeof rawEditBibleEmotionalCurveSchema>
+
+export const rawEditBibleLedgerEventSchema = ledgerEventBaseSchema.extend({
+  sourceAnchor: editSourceAnchorSchema,
+})
+
+export const rawEditBibleLedgerSchema = z.object({
+  events: z.array(rawEditBibleLedgerEventSchema),
+})
+
+export type RawEditBibleLedger = z.infer<typeof rawEditBibleLedgerSchema>
 
 export const editBibleBundleSchema = z.object({
   bible: editBibleSchema,

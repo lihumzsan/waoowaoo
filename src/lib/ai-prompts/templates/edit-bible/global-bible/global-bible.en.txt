@@ -17,14 +17,15 @@ Include only facts the script states or clearly implies. Do not add your own inv
 - characters should include only people who recur or affect story understanding. Do not turn one-off generic mentions, background extras, or environmental descriptions into characters.
 - locations should include only places that matter for spatial continuity, atmosphere, or story progression. Do not turn ordinary objects or one-off directions into locations.
 - entityId must be stable, short, and readable, preferably lowercase words with underscores, for example `character_lin_xiaoyu` or `location_old_house`. Do not duplicate one entity.
-- firstSourceStart is the position of the first evidence for that entity in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- Do not output character offsets or firstSourceStart. Characters and locations may output firstEvidence; the system computes first occurrence positions from block IDs and verbatim quotes.
+- firstEvidence.blockId must use a block ID from the input, such as `[p0001]`; firstEvidence.quote must be a verbatim source snippet inside that block. Do not paraphrase, summarize, or add ellipses.
 - worldRules should contain only persistent world rules, background facts, constraints, or relationship facts, not one-time actions.
 - styleGuide must be inferred from the genre, mood, rhythm, and spatial descriptions in the text. Do not write generic cinematic filler.
 - Output only fields listed in the schema below. Do not output anything else.
 
 # Input
 
-Script text:
+Numbered script text blocks:
 {{source_document}}
 
 # Output Schema
@@ -41,7 +42,10 @@ Return JSON only. Do not use markdown or explanations.
       "name": "display name",
       "aliases": ["alias or other name"],
       "summary": "persistent identity, relationship, desire, state, or story role",
-      "firstSourceStart": 0
+      "firstEvidence": {
+        "blockId": "p0001",
+        "quote": "verbatim source snippet where the character first appears"
+      }
     }
   ],
   "locations": [
@@ -50,7 +54,10 @@ Return JSON only. Do not use markdown or explanations.
       "name": "display name",
       "aliases": ["alias or other name"],
       "summary": "persistent spatial traits, atmosphere, function, or story role",
-      "firstSourceStart": 0
+      "firstEvidence": {
+        "blockId": "p0001",
+        "quote": "verbatim source snippet where the location first appears"
+      }
     }
   ],
   "worldRules": [
@@ -69,6 +76,6 @@ Return JSON only. Do not use markdown or explanations.
 - Is every piece of information grounded in the script text?
 - Are characters and locations deduplicated, with aliases merged into one entry?
 - Are entityId values stable, short, readable, and unique?
-- Is firstSourceStart counted in UTF-16 code units?
+- Does firstEvidence use an input block ID, and does the quote appear verbatim inside that block?
 - Is styleGuide inferred from the text instead of generic cinematic filler?
 - Is the response strictly limited to the schema fields, and JSON only?

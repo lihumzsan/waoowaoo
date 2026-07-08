@@ -4,27 +4,32 @@ import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
+import {
+  buildEditSourceBlocks,
+  formatEditSourceBlocksForPrompt,
+} from '@/lib/edit-source-document'
 import { EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS } from './constraints'
 import { validateEditBibleBundle } from './cross-check'
 import {
-  editBibleBeatSheetSchema,
-  editBibleEmotionalCurveSchema,
-  editBibleSchema,
   type EditBibleBeatSheet,
   type EditBibleBundle,
   type EditBibleDiagnostics,
   type EditBibleEmotionalCurve,
   type EditBible,
 } from './schemas'
-import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
+import type { Ledger } from '@/lib/edit-ledger'
+import {
+  normalizeRawBeatSheet,
+  normalizeRawEditBible,
+  normalizeRawEmotionalCurve,
+  normalizeRawLedger,
+} from './source-anchor-normalization'
 
 type EditBiblePromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_LEDGER
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE
-
-type EditBibleArtifactKey = 'bible' | 'beatSheet' | 'ledger' | 'emotionalCurve'
 
 class EditBibleExtractionError extends Error {
   readonly diagnostics: EditBibleDiagnostics
@@ -109,38 +114,60 @@ export async function generateEditBibleArtifacts(input: {
   readonly locale: Locale
   readonly sourceDocument: string
 }): Promise<EditBibleBundle> {
+  const sourceBlocks = buildEditSourceBlocks(input.sourceDocument)
+  const sourceDocumentForPrompt = formatEditSourceBlocksForPrompt(sourceBlocks)
   const entries = [
     ['bible', runEditBibleStructuredStep<EditBible>({
       ...input,
+      sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
       stepTitle: 'Edit bible global facts',
       stepIndex: 1,
       stepTotal: 4,
-      validate: (raw) => editBibleSchema.parse(raw),
+      validate: (raw) => normalizeRawEditBible({
+        raw,
+        sourceText: input.sourceDocument,
+        blocks: sourceBlocks,
+      }),
     })],
     ['beatSheet', runEditBibleStructuredStep<EditBibleBeatSheet>({
       ...input,
+      sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
       stepTitle: 'Edit bible beat sheet',
       stepIndex: 2,
       stepTotal: 4,
-      validate: (raw) => editBibleBeatSheetSchema.parse(raw),
+      validate: (raw) => normalizeRawBeatSheet({
+        raw,
+        sourceText: input.sourceDocument,
+        blocks: sourceBlocks,
+      }),
     })],
     ['ledger', runEditBibleStructuredStep<Ledger>({
       ...input,
+      sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
       stepTitle: 'Edit bible ledger',
       stepIndex: 3,
       stepTotal: 4,
-      validate: (raw) => ledgerSchema.parse(raw),
+      validate: (raw) => normalizeRawLedger({
+        raw,
+        sourceText: input.sourceDocument,
+        blocks: sourceBlocks,
+      }),
     })],
     ['emotionalCurve', runEditBibleStructuredStep<EditBibleEmotionalCurve>({
       ...input,
+      sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
       stepTitle: 'Edit bible emotional curve',
       stepIndex: 4,
       stepTotal: 4,
-      validate: (raw) => editBibleEmotionalCurveSchema.parse(raw),
+      validate: (raw) => normalizeRawEmotionalCurve({
+        raw,
+        sourceText: input.sourceDocument,
+        blocks: sourceBlocks,
+      }),
     })],
   ] as const
   const settled = await Promise.allSettled(entries.map((entry) => entry[1]))

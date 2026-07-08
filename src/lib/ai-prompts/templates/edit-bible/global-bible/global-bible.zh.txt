@@ -17,14 +17,15 @@
 - characters 只收录会反复出现或影响故事理解的人物；一次性提到的泛称、路人和纯环境描写不要立为人物。
 - locations 只收录对空间连续、气氛或剧情推进有意义的地点；不要把普通物件或一次性的方位描述写成地点。
 - entityId 要稳定、简短、可读，优先用英文小写加下划线，例如 `character_lin_xiaoyu`、`location_old_house`；同一实体不得重复出现。
-- firstSourceStart 填该实体第一次出现的证据在原文中的位置，按 UTF-16 code unit 计数（即 JavaScript 字符串下标，中文一字一位）。
+- 不要输出字符下标或 firstSourceStart。人物和地点可输出 firstEvidence，由系统根据 blockId 与原文 quote 计算首次出现位置。
+- firstEvidence.blockId 必须使用输入中的 `[p0001]` 这类块编号；firstEvidence.quote 必须是对应块中逐字存在的原文短句，不要改写、概括或加入省略号。
 - worldRules 只写长期成立的世界规则、背景事实、限制条件或关系事实，不写一次性动作。
 - styleGuide 必须从原文的题材、情绪、节奏和空间描写中归纳，不要写放之四海皆准的通用影像套话。
 - 只输出下方 Schema 列出的字段，不要输出任何其他内容。
 
 # 输入
 
-剧本原文：
+带编号的剧本原文块：
 {{source_document}}
 
 # 输出 Schema
@@ -41,7 +42,10 @@
       "name": "显示名称",
       "aliases": ["别名或其他称呼"],
       "summary": "长期身份、关系、欲望、状态或叙事作用",
-      "firstSourceStart": 0
+      "firstEvidence": {
+        "blockId": "p0001",
+        "quote": "该人物首次出现处的原文短句"
+      }
     }
   ],
   "locations": [
@@ -50,7 +54,10 @@
       "name": "显示名称",
       "aliases": ["别名或其他称呼"],
       "summary": "长期空间特征、氛围、功能或叙事作用",
-      "firstSourceStart": 0
+      "firstEvidence": {
+        "blockId": "p0001",
+        "quote": "该地点首次出现处的原文短句"
+      }
     }
   ],
   "worldRules": [
@@ -69,6 +76,6 @@
 - 每一条信息在剧本原文中是否都有依据。
 - 人物和地点是否去重，别名是否合并到同一条目。
 - entityId 是否稳定、简短、可读且没有重复。
-- firstSourceStart 是否按 UTF-16 code unit 计数。
+- firstEvidence 的 blockId 是否来自输入块编号，quote 是否逐字存在于对应块中。
 - styleGuide 是否来自原文归纳，而不是通用影像模板。
 - 是否严格只输出了 Schema 列出的字段，且只有 JSON。

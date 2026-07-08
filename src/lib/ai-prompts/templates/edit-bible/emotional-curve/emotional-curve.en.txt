@@ -11,9 +11,11 @@ These labels are later used as music and pacing reference. You do not design the
 
 # Rules
 
-- cues must be ordered by sourceStart.
+- cues must be ordered by their appearance in the source text.
 - Each cue covers a span of text with relatively stable emotion or pacing. Do not create one cue for every sentence.
-- sourceStart/sourceEnd is the half-open range `[sourceStart, sourceEnd)` of the span in the text, counted in UTF-16 code units (that is, JavaScript string indices).
+- Do not output character offsets, sourceStart, or sourceEnd. Output sourceAnchor only; the system computes exact offsets from block IDs and verbatim quotes.
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId must use block IDs from the input, such as `[p0001]`.
+- sourceAnchor.startQuote/sourceAnchor.endQuote must be short verbatim source snippets inside those blocks. Do not paraphrase, summarize, or add ellipses. Prefer 6-30 characters/letters that are unique inside that block.
 - mood is a short emotional label, such as "suppressed doubt", "brief relief", or "danger approaching".
 - intensity is a number from 0 to 1: 0 means almost no emotional pressure, 1 means maximum intensity. It must match the risk, conflict, emotional pressure, and action intensity in the text. Do not make every cue high intensity.
 - musicPolicy must be one of four values: `none` means the span should likely have no music (for example long dialogue, information delivery, or quiet observation); `underscore` means low-presence atmospheric support; `theme` means thematic or character/concept motif music; `transition` means a bridge at a section shift or emotional turn.
@@ -22,7 +24,7 @@ These labels are later used as music and pacing reference. You do not design the
 
 # Input
 
-Script text:
+Numbered script text blocks:
 {{source_document}}
 
 # Output Schema
@@ -37,16 +39,20 @@ Return JSON only. Do not use markdown or explanations.
       "intensity": 0.6,
       "musicPolicy": "underscore",
       "note": "optional reason",
-      "sourceStart": 0,
-      "sourceEnd": 10
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "verbatim source snippet at the cue start",
+        "endBlockId": "p0001",
+        "endQuote": "verbatim source snippet at the cue end"
+      }
     }
   ]
 }
 
 # Self-check
 
-- Are cues ordered by sourceStart?
-- Are sourceStart/sourceEnd UTF-16 code-unit half-open ranges, with sourceEnd greater than sourceStart?
+- Are cues ordered by their source appearance?
+- Does every sourceAnchor use an input block ID, and does each quote appear verbatim inside that block?
 - Does musicPolicy use only `none`, `underscore`, `theme`, or `transition`?
 - Is intensity between 0 and 1 and grounded in the text's emotion?
 - Did you use `none` where music should likely be absent?

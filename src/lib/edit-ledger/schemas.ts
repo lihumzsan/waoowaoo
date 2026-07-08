@@ -8,13 +8,17 @@ export const ledgerEntityRefSchema = z.object({
 
 export type LedgerEntityRef = z.infer<typeof ledgerEntityRefSchema>
 
-export const ledgerEventSchema = editSourceRangeSchema.extend({
+export const ledgerEventBaseSchema = z.object({
   eventId: z.string().trim().min(1),
   kind: z.enum(['appearance', 'relationship', 'location', 'prop', 'plot', 'rule', 'emotion']),
   summary: z.string().trim().min(1),
   entities: z.array(ledgerEntityRefSchema).default([]),
   persistentFacts: z.array(z.string().trim().min(1)).default([]),
 })
+
+export type LedgerEventBase = z.infer<typeof ledgerEventBaseSchema>
+
+export const ledgerEventSchema = editSourceRangeSchema.safeExtend(ledgerEventBaseSchema.shape)
 
 export type LedgerEvent = z.infer<typeof ledgerEventSchema>
 

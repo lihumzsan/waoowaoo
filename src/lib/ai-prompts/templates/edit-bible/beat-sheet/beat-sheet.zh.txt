@@ -11,19 +11,21 @@
 
 # 工作规则
 
-- beats 必须按 sourceStart 从小到大排列，范围不得重叠。
-- sourceStart/sourceEnd 是该 beat 对应原文的半开区间 `[sourceStart, sourceEnd)`，按 UTF-16 code unit 计数（即 JavaScript 字符串下标，中文一字一位）。
+- beats 必须按原文出现顺序排列，范围不得重叠。
+- 不要输出字符下标、sourceStart 或 sourceEnd。你只需要输出 sourceAnchor，由系统根据 blockId 与原文 quote 计算精确位置。
+- sourceAnchor.startBlockId/sourceAnchor.endBlockId 必须使用输入中的 `[p0001]` 这类块编号。
+- sourceAnchor.startQuote/sourceAnchor.endQuote 必须是对应块中逐字存在的原文短句；不要改写、概括或加入省略号。优先选择 6-30 个字且在该块内唯一的片段。
 - beat 范围要覆盖所有有剧情意义的原文；只允许跳过纯格式、空白或与剧情无关的装饰性文字。
 - 优先在自然的剧情转折点切分：新行动开始、信息被揭示、情绪改变、关系改变、场景切换、目标改变或风险升级。
 - 不要按固定字数机械切分，也不要把一大段剧情塞进一个 beat。
 - estimatedDurationSec 是这段剧情拍成视频后合理的屏幕时长估计。通常每个 beat 在 15-45 秒之间；复杂动作或长对白尽量控制在 60 秒以内，超过 60 秒就在自然转折处拆成多个 beat。
-- 任何一个 beat 都不得超过 120 秒，对应的原文范围不得超过 3,600 个 UTF-16 code unit。
+- 任何一个 beat 都不得超过 120 秒；如果一段原文明显过长，必须在自然剧情转折处拆成多个 beat。
 - 太短且没有独立剧情变化的句子，并入相邻 beat。
 - persistentFactsIntroduced 只写这个 beat 结束后仍然成立、后文需要记住的事实；瞬时动作、气氛形容和镜头语言不要写。
 
 # 输入
 
-剧本原文：
+带编号的剧本原文块：
 {{source_document}}
 
 # 输出 Schema
@@ -36,8 +38,12 @@
       "beatId": "beat_001",
       "title": "短标题",
       "summary": "这个 beat 中发生的剧情推进或状态变化",
-      "sourceStart": 0,
-      "sourceEnd": 10,
+      "sourceAnchor": {
+        "startBlockId": "p0001",
+        "startQuote": "该 beat 开始处的原文短句",
+        "endBlockId": "p0001",
+        "endQuote": "该 beat 结束处的原文短句"
+      },
       "estimatedDurationSec": 30,
       "persistentFactsIntroduced": [
         "这个 beat 结束后仍然成立的事实；没有则输出空数组"
@@ -48,8 +54,8 @@
 
 # 自检
 
-- beats 是否按 sourceStart 递增且互不重叠。
-- 每个 sourceEnd 是否大于 sourceStart，且都按 UTF-16 code unit 计数。
+- beats 是否按原文顺序排列且互不重叠。
+- 每个 sourceAnchor 的 blockId 是否来自输入块编号，quote 是否逐字存在于对应块中。
 - 是否覆盖了所有有剧情意义的原文。
 - 是否在自然剧情转折点切分，而不是按固定字数机械切分。
 - 每个 beat 的 estimatedDurationSec 是否合理，是否没有超过 120 秒。
