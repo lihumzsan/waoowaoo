@@ -24,7 +24,7 @@ const scriptIntakeQuestionSchema = z.object({
 }).strict()
 
 export const scriptIntakePlannerOutputSchema = z.object({
-  questions: z.array(scriptIntakeQuestionSchema).min(2).max(5),
+  questions: z.array(scriptIntakeQuestionSchema).min(2).max(7),
 }).strict()
 
 export type ScriptIntakePlannerOutput = z.infer<typeof scriptIntakePlannerOutputSchema>
