@@ -444,7 +444,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_chapters'])
   })
 
-  it('allows rendering ready chapters while later episode video segments are still missing', () => {
+  it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -466,10 +466,10 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.stage).toBe('ready_to_generate_videos')
-    expect(state.nextAction?.operationId).toBe('generate_episode_videos')
+    expect(state.nextAction?.operationId).toBe('render_chapters')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
-      'generate_episode_videos',
       'render_chapters',
+      'generate_episode_videos',
     ])
   })
 

@@ -566,8 +566,11 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
 
   if (!videoReady) {
     const videoAction = workflowAction('generate_episode_videos', 'Generate videos')
-    const allowedOperationIds: EditFirstWorkflowOperationId[] = snapshot.renderableChapterCount > snapshot.completedChapterRenderCount
-      ? [videoAction.operationId, 'render_chapters']
+    const chapterAction = workflowAction('render_chapters', 'Render chapter videos')
+    const hasRenderableUnrenderedChapter = snapshot.renderableChapterCount > snapshot.completedChapterRenderCount
+    const nextAction = hasRenderableUnrenderedChapter ? chapterAction : videoAction
+    const allowedOperationIds: EditFirstWorkflowOperationId[] = hasRenderableUnrenderedChapter
+      ? [chapterAction.operationId, videoAction.operationId]
       : [videoAction.operationId]
     if (snapshot.activeVideoTaskCount > 0) {
       return state({
@@ -578,7 +581,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     }
     return state({
       stage: 'ready_to_generate_videos',
-      nextAction: videoAction,
+      nextAction,
       allowedOperationIds,
     })
   }
