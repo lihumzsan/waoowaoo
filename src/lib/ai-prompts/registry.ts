@@ -90,6 +90,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     variableKeys: [
       'style_bible_json',
       'structure_json',
+      'character_voice_profiles_json',
+      'dialogue_voice_context_json',
       'asset_context_json',
       'spatial_profiles_json',
     ],
