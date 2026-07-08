@@ -44,7 +44,7 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
     const result = await queryFalStatus(parsed.endpoint, parsed.requestId, apiKey)
     return {
-      status: result.completed ? (result.failed ? 'failed' : 'completed') : 'pending',
+      status: result.failed ? 'failed' : result.completed ? 'completed' : 'pending',
       resultUrl: result.resultUrl,
       imageUrl: result.resultUrl,
       videoUrl: result.resultUrl,
@@ -52,4 +52,3 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     }
   },
 }
-

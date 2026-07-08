@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { queryFalStatus, submitFalTask } from '@/lib/ai-providers/fal/queue'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 
@@ -155,6 +156,47 @@ describe('provider contract - fal queue', () => {
       completed: false,
       failed: true,
       error: 'content moderation failed',
+    })
+  })
+
+  it('maps a FAL failed status to an async provider failed result instead of pending', async () => {
+    server!.defineScenario({
+      method: 'GET',
+      path: '/fal/openai/gpt-image-2/requests/req_no_balance/status',
+      mode: 'fatal_error',
+      submitResponse: {
+        status: 200,
+        body: {
+          status: 'FAILED',
+          error: 'insufficient balance',
+        },
+      },
+    })
+
+    const parsed = falAsyncTaskProvider.parseExternalId('FAL:IMAGE:openai/gpt-image-2:req_no_balance')
+    const result = await falAsyncTaskProvider.poll({
+      parsed,
+      context: {
+        userId: 'user-1',
+        getProviderConfig: async () => ({
+          id: 'fal',
+          name: 'fal',
+          provider: 'fal',
+          apiKey: 'fal-key-no-balance',
+          baseUrl: undefined,
+          enabled: true,
+          models: [],
+        }),
+        getUserModels: async () => [],
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'failed',
+      resultUrl: undefined,
+      imageUrl: undefined,
+      videoUrl: undefined,
+      error: 'insufficient balance',
     })
   })
 
