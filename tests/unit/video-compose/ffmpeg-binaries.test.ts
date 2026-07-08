@@ -6,16 +6,29 @@ import { resolveFfmpegBinary } from '@/lib/video-compose/ffmpeg-binaries'
 
 const originalFfmpegPath = process.env.FFMPEG_PATH
 const originalFfprobePath = process.env.FFPROBE_PATH
+const temporaryDirectories: string[] = []
 
 afterEach(() => {
-  process.env.FFMPEG_PATH = originalFfmpegPath
-  process.env.FFPROBE_PATH = originalFfprobePath
+  restoreEnv('FFMPEG_PATH', originalFfmpegPath)
+  restoreEnv('FFPROBE_PATH', originalFfprobePath)
+  for (const directoryPath of temporaryDirectories.splice(0)) {
+    rmSync(directoryPath, { recursive: true, force: true })
+  }
 })
 
-function createExecutable(name: string): string {
+function restoreEnv(name: 'FFMPEG_PATH' | 'FFPROBE_PATH', value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+  process.env[name] = value
+}
+
+function createExecutable(name: string, exitCode: number = 0): string {
   const directoryPath = mkdtempSync(path.join(tmpdir(), 'waoowaoo-ffmpeg-bin-'))
+  temporaryDirectories.push(directoryPath)
   const executablePath = path.join(directoryPath, name)
-  writeFileSync(executablePath, '#!/bin/sh\nexit 0\n', 'utf8')
+  writeFileSync(executablePath, `#!/bin/sh\nexit ${exitCode}\n`, 'utf8')
   chmodSync(executablePath, 0o755)
   return executablePath
 }
@@ -26,8 +39,6 @@ describe('ffmpeg binary resolver', () => {
     process.env.FFMPEG_PATH = executablePath
 
     expect(resolveFfmpegBinary('ffmpeg')).toBe(executablePath)
-
-    rmSync(path.dirname(executablePath), { recursive: true, force: true })
   })
 
   it('fails explicitly when an explicit executable path is invalid', () => {
@@ -36,17 +47,36 @@ describe('ffmpeg binary resolver', () => {
     expect(() => resolveFfmpegBinary('ffmpeg')).toThrow('FFMPEG_BINARY_ENV_PATH_INVALID:ffmpeg')
   })
 
-  it('resolves Remotion compositor ffmpeg when no explicit path is configured', () => {
+  it('resolves runnable Remotion compositor ffmpeg candidates before PATH candidates', () => {
     delete process.env.FFMPEG_PATH
+    const remotionCandidate = createExecutable('remotion-ffmpeg')
+    const pathCandidate = createExecutable('path-ffmpeg')
 
-    expect(resolveFfmpegBinary('ffmpeg')).toContain('@remotion')
-    expect(resolveFfmpegBinary('ffmpeg')).toContain('ffmpeg')
+    expect(resolveFfmpegBinary('ffmpeg', {
+      remotionCandidates: [remotionCandidate],
+      pathCandidates: [pathCandidate],
+    })).toBe(remotionCandidate)
   })
 
-  it('resolves Remotion compositor ffprobe when no explicit path is configured', () => {
-    delete process.env.FFPROBE_PATH
+  it('skips broken bundled candidates and uses a runnable PATH candidate', () => {
+    delete process.env.FFMPEG_PATH
+    const brokenRemotionCandidate = createExecutable('broken-remotion-ffmpeg', 23)
+    const pathCandidate = createExecutable('system-ffmpeg')
 
-    expect(resolveFfmpegBinary('ffprobe')).toContain('@remotion')
-    expect(resolveFfmpegBinary('ffprobe')).toContain('ffprobe')
+    expect(resolveFfmpegBinary('ffmpeg', {
+      remotionCandidates: [brokenRemotionCandidate],
+      pathCandidates: [pathCandidate],
+    })).toBe(pathCandidate)
+  })
+
+  it('fails explicitly when every discovered candidate exists but cannot run', () => {
+    delete process.env.FFPROBE_PATH
+    const brokenRemotionCandidate = createExecutable('broken-remotion-ffprobe', 23)
+    const brokenPathCandidate = createExecutable('broken-path-ffprobe', 24)
+
+    expect(() => resolveFfmpegBinary('ffprobe', {
+      remotionCandidates: [brokenRemotionCandidate],
+      pathCandidates: [brokenPathCandidate],
+    })).toThrow('FFMPEG_BINARY_NOT_FOUND:ffprobe')
   })
 })
