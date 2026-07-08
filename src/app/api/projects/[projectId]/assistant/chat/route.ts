@@ -58,10 +58,15 @@ type RequestBody = {
 function mapProjectAgentError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
   if (error instanceof Error) {
-    if (error.message === 'PROJECT_AGENT_MODEL_NOT_CONFIGURED') {
+    if (
+      error.message === 'PROJECT_AGENT_MODEL_NOT_CONFIGURED'
+      || error.message.startsWith('PROJECT_AGENT_ASSISTANT_MODEL_INVALID:')
+    ) {
       return new ApiError('MISSING_CONFIG', {
-        code: error.message,
-        message: 'analysisModel is required before using project assistant',
+        code: error.message.startsWith('PROJECT_AGENT_ASSISTANT_MODEL_INVALID:')
+          ? 'PROJECT_AGENT_ASSISTANT_MODEL_INVALID'
+          : error.message,
+        message: 'assistant model is required before using project assistant',
       })
     }
     if (

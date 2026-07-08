@@ -284,6 +284,7 @@ vi.mock('@/lib/config-service', () => ({
 }))
 
 vi.mock('@/lib/project-agent/model', () => ({
+  resolveProjectAgentAssistantModelKey: vi.fn(() => 'openrouter::openai/gpt-5.5'),
   resolveProjectAgentLanguageModel: vi.fn(async () => ({ languageModel: {} as never })),
 }))
 
@@ -519,6 +520,15 @@ function expectLastPersistedRunStatus(status: string, stopReason: string): void 
   })
 }
 
+function readLastPersistedRuntimeContext(): Record<string, unknown> {
+  const message = readLastPersistedAssistantMessage()
+  const runtimePart = message.parts.find((part) => part.type === 'data-agent-runtime-context')
+  if (!runtimePart || !runtimePart.data || typeof runtimePart.data !== 'object' || Array.isArray(runtimePart.data)) {
+    throw new Error('TEST_PERSISTED_RUNTIME_CONTEXT_MISSING')
+  }
+  return runtimePart.data as Record<string, unknown>
+}
+
 async function runAssistant(params: {
   context?: Record<string, unknown>
   text?: string
@@ -604,6 +614,9 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(readLastPersistedAssistantMessage()).toEqual(expect.objectContaining({
       id: 'workspace-assistant-run:user_turn:run-user_turn:req-1',
       role: 'assistant',
+    }))
+    expect(readLastPersistedRuntimeContext()).toEqual(expect.objectContaining({
+      modelKey: 'openrouter::openai/gpt-5.5',
     }))
     expectLastPersistedRunStatus('completed', 'completed')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({

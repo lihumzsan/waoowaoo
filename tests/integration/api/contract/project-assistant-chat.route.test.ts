@@ -1086,8 +1086,10 @@ describe('project assistant chat route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/assistant/chat -> maps runtime errors into API error payloads', async () => {
-    projectAgentMock.createProjectAgentChatResponse.mockRejectedValueOnce(new Error('PROJECT_AGENT_MODEL_NOT_CONFIGURED'))
+  it('POST /api/projects/[projectId]/assistant/chat -> maps assistant model config errors into API error payloads', async () => {
+    projectAgentMock.createProjectAgentChatResponse.mockRejectedValueOnce(
+      new Error('PROJECT_AGENT_ASSISTANT_MODEL_INVALID:openai/gpt-5.5'),
+    )
 
     const response = await chatPost(
       buildMockRequest({
@@ -1105,7 +1107,7 @@ describe('project assistant chat route', () => {
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       error: expect.objectContaining({
         code: 'MISSING_CONFIG',
-        details: expect.objectContaining({ code: 'PROJECT_AGENT_MODEL_NOT_CONFIGURED' }),
+        details: expect.objectContaining({ code: 'PROJECT_AGENT_ASSISTANT_MODEL_INVALID' }),
       }),
     }))
   })

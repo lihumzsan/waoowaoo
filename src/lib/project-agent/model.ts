@@ -1,17 +1,32 @@
 import type { LanguageModel } from 'ai'
+import { getProviderKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
+import {
+  OPENROUTER_GPT_5_5_MODEL_ID,
+} from '@/lib/ai-providers/openrouter/models'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { getProviderKey } from '@/lib/ai-registry/selection'
 import { resolveLlmRuntimeModel } from '@/lib/ai-exec/llm-runtime'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 
+export const DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY = `openrouter::${OPENROUTER_GPT_5_5_MODEL_ID}`
+
+export function resolveProjectAgentAssistantModelKey(): string {
+  const rawModelKey = process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL?.trim()
+    || DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY
+  const parsed = parseModelKeyStrict(rawModelKey)
+  if (!parsed) {
+    throw new Error(`PROJECT_AGENT_ASSISTANT_MODEL_INVALID:${rawModelKey}`)
+  }
+  return parsed.modelKey
+}
+
 export async function resolveProjectAgentLanguageModel(input: {
   userId: string
-  analysisModelKey: string
+  assistantModelKey: string
   openRouterSessionId?: string
 }): Promise<{
   languageModel: LanguageModel
 }> {
-  const selection = await resolveLlmRuntimeModel(input.userId, input.analysisModelKey)
+  const selection = await resolveLlmRuntimeModel(input.userId, input.assistantModelKey)
   const providerConfig = await getProviderConfig(input.userId, selection.provider)
   const providerKey = getProviderKey(selection.provider)
   return {

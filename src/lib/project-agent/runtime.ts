@@ -19,7 +19,6 @@ import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
-import { getProjectModelConfig } from '@/lib/config-service'
 import { getRequestId } from '@/lib/api-errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import type {
@@ -41,7 +40,10 @@ import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
 import { compressMessages } from './message-compression'
-import { resolveProjectAgentLanguageModel } from './model'
+import {
+  resolveProjectAgentAssistantModelKey,
+  resolveProjectAgentLanguageModel,
+} from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
   createProjectAgentWait,
@@ -671,11 +673,7 @@ export async function createProjectAgentChatResponse(input: {
     throw new Error('PROJECT_AGENT_EMPTY_MESSAGES')
   }
 
-  const projectConfig = await getProjectModelConfig(input.projectId, input.userId)
-  const analysisModelKey = projectConfig.analysisModel?.trim() || ''
-  if (!analysisModelKey) {
-    throw new Error('PROJECT_AGENT_MODEL_NOT_CONFIGURED')
-  }
+  const assistantModelKey = resolveProjectAgentAssistantModelKey()
 
   const control = input.control
   const contextBase = normalizeProjectAgentContext(input.context)
@@ -701,11 +699,11 @@ export async function createProjectAgentChatResponse(input: {
     projectId: input.projectId,
     episodeId: context.episodeId || null,
     assistantId: 'workspace-command',
-    modelKey: analysisModelKey,
+    modelKey: assistantModelKey,
   })
   const resolved = await resolveProjectAgentLanguageModel({
     userId: input.userId,
-    analysisModelKey,
+    assistantModelKey,
     openRouterSessionId,
   })
   const locale = normalizeProjectAgentLocale(context.locale)
@@ -798,7 +796,7 @@ export async function createProjectAgentChatResponse(input: {
     createDataChunk('data-agent-runtime-context', {
       runtime: 'openai-agents-sdk',
       requestId,
-      modelKey: analysisModelKey,
+      modelKey: assistantModelKey,
       locale,
       assistantPermissionMode: input.assistantPermissionMode,
       projectId: input.projectId,
