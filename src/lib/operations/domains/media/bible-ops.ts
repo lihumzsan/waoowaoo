@@ -20,12 +20,12 @@ import {
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import type { ProjectAgentToolInputSchema } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
+import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import {
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
-  EDIT_FIRST_REVISE_BIBLE_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 
 const optionalEpisodeIdField = {
@@ -40,6 +40,10 @@ const ingestScriptOperationInputSchema = ingestEditBibleScriptInputSchema.extend
 const reviseBibleOperationInputSchema = reviseEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
   confirmed: z.boolean().optional(),
+})
+const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
+  operationId: 'revise_bible',
+  inputSchema: reviseBibleOperationInputSchema,
 })
 const confirmBibleOperationInputSchema = confirmEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
@@ -370,7 +374,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
         required: true,
         summary: '将覆盖当前剧集规划基线（全局 Bible、节拍、台账、情绪曲线和章节切分）。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_REVISE_BIBLE_TOOL_INPUT_SCHEMA,
+      toolInputSchema: reviseBibleToolInputSchema,
       inputSchema: reviseBibleOperationInputSchema,
       outputSchema: editBibleMutationOutputSchema,
       execute: async (ctx, input) => {

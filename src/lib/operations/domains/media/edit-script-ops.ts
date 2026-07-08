@@ -43,6 +43,7 @@ import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
@@ -593,7 +594,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         required: true,
         summary: '将重新生成并覆盖指定章节的核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
-      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA,
       inputSchema: replanChapterInputSchema,
       outputSchema: editScriptTaskSubmitOutputSchema,
       execute: async (ctx, input: ReplanChapterInput) => {

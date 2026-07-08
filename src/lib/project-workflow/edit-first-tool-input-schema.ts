@@ -53,20 +53,6 @@ function nullableStringArrayProperty(description: string): JsonValue {
   }
 }
 
-function nullableObjectProperty(description: string): JsonValue {
-  return {
-    anyOf: [
-      {
-        type: 'object',
-      },
-      {
-        type: 'null',
-      },
-    ],
-    description,
-  }
-}
-
 export const EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({})
 
 export const EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
@@ -75,6 +61,10 @@ export const EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
 
 export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
+})
+
+export const EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  chapterId: stringProperty('Exact chapterId to replan. This operation cannot infer a default chapter and must not receive null.'),
 })
 
 export const EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
@@ -88,13 +78,6 @@ export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
     description: 'Classify the user input. Use paste only for a complete script provided by the user. Use prompt_generated_outline for a creative instruction, title, logline, or short natural-language request that needs the system to expand it before planning.',
   },
   text: stringProperty('The source script text, pasted script, or user prompt to turn into a prompt-generated outline. Do not include projectId or episodeId.'),
-})
-
-export const EDIT_FIRST_REVISE_BIBLE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
-  bible: nullableObjectProperty('Structured EditBible patch. Pass null when unchanged.'),
-  beatSheet: nullableObjectProperty('Structured beat sheet patch. Pass null when unchanged.'),
-  ledger: nullableObjectProperty('Structured ledger patch. Pass null when unchanged.'),
-  emotionalCurve: nullableObjectProperty('Structured emotional curve patch. Pass null when unchanged.'),
 })
 
 export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
