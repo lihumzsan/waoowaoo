@@ -64,12 +64,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Request explicit user budget and continuation confirmation before starting the current batch or billable long-form production stage. Use only when the workflow exposes this tool; do not use it as a substitute for Bible, asset, or style review.',
   },
   request_script_intake_choice: {
-    zh: '当用户给的是过于稀疏的一句话创意、标题或主题方向，并且尚不足以稳定扩写剧本时，请求一次扩写前创作问诊。只传用户原始 seedText；不要传 projectId、episodeId 或系统可推导参数。用户明确要求直接生成/自由发挥时不要调用。',
-    en: 'Request one pre-expansion creative intake choice when the user provides a sparse one-line idea, title, or theme direction that is not yet enough for stable script expansion. Pass only the original user seedText; do not pass projectId, episodeId, or system-derived parameters. Do not call when the user explicitly asks to generate directly or let AI decide.',
+    zh: '当用户给的是过于稀疏的一句话创意、标题或主题方向，并且尚不足以稳定扩写剧本时，必须请求一次扩写前创作问诊。只传用户原始 seedText；不要传 projectId、episodeId 或系统可推导参数。',
+    en: 'Request one pre-expansion creative intake choice when the user provides a sparse one-line idea, title, or theme direction that is not yet enough for stable script expansion. Pass only the original user seedText; do not pass projectId, episodeId, or system-derived parameters.',
   },
   ingest_script: {
-    zh: '准备本集剧本输入，并提交异步任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。完整剧本传 sourceKind=paste；足够明确的创作需求、标题、梗概或问诊后 normalizedBrief 传 sourceKind=prompt_generated_outline。过于稀疏的创意应先走扩写前创作问诊，除非用户明确要求直接生成/自由发挥。只传 text 和 sourceKind，不要传 projectId、episodeId、画幅、时长档位或系统可推导参数。',
-    en: 'Prepare this episode script input and submit the async task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. Use sourceKind=paste for a complete script; use sourceKind=prompt_generated_outline for a sufficiently specific creative request, title, logline, or post-intake normalizedBrief. Sparse ideas should first use pre-expansion creative intake unless the user explicitly asks to generate directly or let AI decide. Pass only text and sourceKind; do not pass projectId, episodeId, aspect ratio, duration tier, or system-derived parameters.',
+    zh: '准备本集剧本输入，并提交异步任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。完整剧本传 sourceKind=paste；足够明确的创作需求、标题、梗概或问诊后 normalizedBrief 传 sourceKind=prompt_generated_outline。过于稀疏的创意必须先走扩写前创作问诊。只传 text 和 sourceKind，不要传 projectId、episodeId、画幅、时长档位或系统可推导参数。',
+    en: 'Prepare this episode script input and submit the async task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. Use sourceKind=paste for a complete script; use sourceKind=prompt_generated_outline for a sufficiently specific creative request, title, logline, or post-intake normalizedBrief. Sparse ideas must first use pre-expansion creative intake. Pass only text and sourceKind; do not pass projectId, episodeId, aspect ratio, duration tier, or system-derived parameters.',
   },
   revise_bible: {
     zh: '按用户审核意见修改当前结构化 Bible/节拍表/台账/情绪曲线。仅在 Bible 未锁定且确实需要覆盖全局规划时使用；不要传 projectId、episodeId 或系统可推导参数。',

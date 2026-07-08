@@ -111,7 +111,7 @@ Before the bible:
 - If the user supplied a sufficiently specific creative request, title, logline, theme direction, or natural-language request that needs expansion, call `ingest_script` with `sourceKind: "prompt_generated_outline"` and text.
 - If the user input is too sparse to expand into a high-quality script reliably, such as only "horror story", "sci-fi short", or "campus romance", first call the pre-expansion creative intake choice tool and pass only the original user seedText. Do not invent the questions yourself and do not ask only in plain text.
 - Pre-expansion creative intake asks at most one round. After receiving a `choiceType=script_intake` user-choice return, read normalizedBrief from the tool result and immediately call `ingest_script` with `sourceKind: "prompt_generated_outline"` and that normalizedBrief.
-- If the user explicitly says to generate directly, freestyle, or let AI decide, do not request intake even when the input is short; call `ingest_script` directly while preserving the user's authorization for AI to fill missing details.
+- A user request to generate immediately does not override the insufficiency check; if the input is too sparse, you must first call the pre-expansion creative intake choice tool.
 - Do not classify sourceKind by word count. Classify by meaning: a complete producible script versus a creative instruction that needs expansion.
 - If the user is giving revision feedback on the current plan, do not call `ingest_script`; use the current-stage revision tool.
 - When calling `ingest_script`, do not pass projectId, episodeId, duration, aspect ratio, or system-derived parameters.

@@ -21,7 +21,7 @@ The structure must be:
       "label": "Horror type",
       "options": [
         { "value": "folk_horror", "label": "Folk horror", "description": "Fear driven by ritual, taboo, and local legend." },
-        { "value": "ai_fill", "label": "Let AI fill it in", "description": "Let the system complete this detail from the idea." }
+        { "value": "psychological_horror", "label": "Psychological horror", "description": "Fear driven by perception, pressure, and unreliable reality." }
       ]
     }
   ]
@@ -32,7 +32,8 @@ The structure must be:
 - Return 2 to 5 questions.
 - Every question must be single-choice.
 - Every question must have 2 to 6 options.
-- Every question must include one option whose value is exactly "ai_fill".
+- Do not generate non-direction options such as "let AI decide", "anything", "default", or "other".
+- Do not use value="ai_fill".
 - key must use English camelCase or snake_case, contain only letters, numbers, and underscores, and be unique.
 - label and option.label must use the user's language.
 - Do not ask for facts already explicit in the original idea.
@@ -46,6 +47,6 @@ The structure must be:
 # Self Check
 
 - Did you return JSON only?
-- Does every question include an ai_fill option?
+- Are all options real creative directions rather than non-direction options?
 - Did you avoid asking for information the user already gave?
 - Did you avoid expanding the story or writing script prose?

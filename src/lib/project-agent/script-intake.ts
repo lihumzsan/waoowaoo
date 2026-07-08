@@ -90,8 +90,8 @@ export function validateScriptIntakePlannerOutput(output: ScriptIntakePlannerOut
   assertUnique(output.questions.map((question) => question.key), 'SCRIPT_INTAKE_QUESTION_KEY_DUPLICATE')
   for (const question of output.questions) {
     assertUnique(question.options.map((option) => option.value), `SCRIPT_INTAKE_OPTION_VALUE_DUPLICATE:${question.key}`)
-    if (!question.options.some((option) => option.value === SCRIPT_INTAKE_AI_FILL_VALUE)) {
-      throw new Error(`SCRIPT_INTAKE_AI_FILL_OPTION_REQUIRED:${question.key}`)
+    if (question.options.some((option) => option.value === SCRIPT_INTAKE_AI_FILL_VALUE)) {
+      throw new Error(`SCRIPT_INTAKE_AI_FILL_OPTION_FORBIDDEN:${question.key}`)
     }
   }
   return output
@@ -143,8 +143,8 @@ export function buildScriptIntakeChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Refine the story brief' : '补充创作方向',
     description: isEnglish
-      ? 'Choose a few directions before the system expands this idea into a full script. You can leave details to AI.'
-      : '在系统扩写完整剧本前，先选择几个创作方向。也可以把细节交给 AI 补全。',
+      ? 'Choose a few directions before the system expands this idea into a full script.'
+      : '在系统扩写完整剧本前，先选择几个创作方向。',
     groups: buildScriptIntakeGroups(plan),
     submitLabel: isEnglish ? 'Use these choices' : '使用这些选择',
     submit: {
@@ -152,8 +152,8 @@ export function buildScriptIntakeChoiceCard(params: {
     },
     replyLabel: isEnglish ? 'Or write your own brief' : '或直接补充你的想法',
     replyPlaceholder: isEnglish
-      ? 'Add any story details, or say to let AI decide and start...'
-      : '补充故事设定，或说明其余交给 AI 直接开始...',
+      ? 'Add story details, tone, characters, location, or anything the choices do not cover...'
+      : '补充故事设定、氛围、人物、地点，或选项没有覆盖的内容...',
     replySubmitLabel: isEnglish ? 'Use this brief' : '使用这段补充',
     replyToolOutputKey: 'freeText',
   }
@@ -211,8 +211,7 @@ export async function planScriptIntakeQuestions(input: {
 function readSelectedChoiceLabels(output: Record<string, unknown>): string[] {
   const selections = readStringRecord(output.selections)
   const labels = readStringRecord(output.labels)
-  return Object.entries(selections).flatMap(([key, value]) => {
-    if (value === SCRIPT_INTAKE_AI_FILL_VALUE) return []
+  return Object.entries(selections).flatMap(([key]) => {
     const label = labels[`${key}Label`]
     return label ? [label] : []
   })

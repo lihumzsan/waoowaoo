@@ -111,7 +111,7 @@ Bible 前：
 - 如果用户提供的是足够明确的创作需求、标题、梗概、主题方向或需要系统扩写的自然语言需求，调用 `ingest_script`，传 `sourceKind: "prompt_generated_outline"` 和 text。
 - 如果用户输入过于稀疏，无法稳定扩写成高质量剧本，例如只有“恐怖故事”“科幻短片”“校园爱情”这类题材词，先调用扩写前创作问诊选择工具，并只传用户原始 seedText。不要自己临场编问题，也不要直接用纯文本追问。
 - 扩写前创作问诊只问一轮。收到 `choiceType=script_intake` 的用户选择返回后，读取工具结果里的 normalizedBrief，立刻调用 `ingest_script`，传 `sourceKind: "prompt_generated_outline"` 和该 normalizedBrief。
-- 如果用户明确说“直接生成”“自由发挥”“都交给 AI”，即使输入很短，也不要发起问诊，直接调用 `ingest_script` 并保留用户授权 AI 补全的意图。
+- 用户要求马上生成不能覆盖信息不足判断；只要输入过于稀疏，就必须先调用扩写前创作问诊选择工具。
 - 不要用字数长短判断 sourceKind；根据语义判断“这是完整可制作剧本”还是“这是需要扩写的创作指令”。
 - 如果用户只是对当前规划提出修改意见，不要调用 `ingest_script`，改用当前阶段的 revise 类工具。
 - 调用 `ingest_script` 时不要传 projectId、episodeId、时长、画面比例或系统可推导参数。

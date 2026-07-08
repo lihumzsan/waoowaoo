@@ -63,11 +63,11 @@ describe('buildEditFirstChoiceResult', () => {
         decision: 'approve',
         selections: {
           subgenre: 'folk_horror',
-          setting: 'ai_fill',
+          setting: 'old_village',
         },
         labels: {
           subgenreLabel: '民俗恐怖',
-          settingLabel: '交给 AI 发挥',
+          settingLabel: '偏远旧村',
         },
         freeText: '主角是返乡参加葬礼的姐姐。',
       },
@@ -79,6 +79,7 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.normalizedBrief).toBe([
       '恐怖故事',
       '- 民俗恐怖',
+      '- 偏远旧村',
       '主角是返乡参加葬礼的姐姐。',
     ].join('\n'))
     expect(parsed.nextOperationId).toBeUndefined()
