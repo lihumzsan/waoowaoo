@@ -77,16 +77,25 @@ const messages = {
           keyObjects: '关键物体',
           lens: '焦段',
           lighting: '光线',
-          locationAsset: '需求场景',
           listSeparator: '、',
+          location: '地点',
+          locationAsset: '需求场景',
           linkedShots: '关联镜头',
           locations: '场景',
           movement: '摄影运动',
           noCharacters: '无角色',
+          acts: '幕',
+          beats: '节拍',
+          episodes: '集',
+          sceneBody: '场景正文',
+          scenes: '场景',
+          scriptOverview: '剧本结构',
+          scriptText: '剧本正文',
           scene: '场景',
           shotIndex: '镜头 {index}',
           shotScale: '景别',
           sound: '声音',
+          timeOfDay: '时间',
           previewLarge: '查看大图',
           viewVideoPreview: '查看视频预览',
           focus: '焦点',
@@ -170,6 +179,69 @@ function editScriptNodeData(input?: {
           videoUrl: null,
         },
       ],
+    },
+  }
+}
+
+function editBibleNodeData(input?: {
+  readonly expanded?: boolean
+}): WorkspaceCanvasNodeData {
+  const disclosure = disclosureFor({
+    kind: 'editBible',
+    expanded: input?.expanded,
+  })
+  return {
+    nodeId: 'edit-bible:episode-1',
+    projectId: 'project-1',
+    episodeName: 'Episode 1',
+    kind: 'editBible',
+    layoutNodeType: 'editBible',
+    targetType: 'editBible',
+    targetId: 'bible-1',
+    title: '剧本创作',
+    eyebrow: '源剧本',
+    body: '完整剧本文本',
+    meta: '',
+    artifactPhase: 'succeeded',
+    statusLabel: '成功',
+    isRunning: false,
+    width: 760,
+    height: 360,
+    disclosure,
+    expanded: disclosure.effectiveExpanded,
+    onToggleExpanded: () => undefined,
+    editBibleDetails: {
+      bibleText: '完整剧本文本。这里是全文，不应该在结构卡片展开态直接铺开。',
+      scriptStructure: {
+        version: 1,
+        title: '地下实验',
+        summary: '林在深夜启动装置，并发现实验代价。',
+        episodes: [{
+          episodeIndex: 0,
+          title: '第一集：启动',
+          summary: '林进入地下实验室，启动装置后听见未知回声。',
+          acts: [{
+            actIndex: 0,
+            title: '第一幕：进入',
+            summary: '林抵达实验室并确认实验目标。',
+            scenes: [{
+              sceneIndex: 0,
+              title: '场景一：地下实验室',
+              location: '地下实验室',
+              timeOfDay: '夜',
+              characters: ['林'],
+              summary: '林启动装置，空间开始扭曲。',
+              body: '场景一：地下实验室。林启动装置，空间开始扭曲。',
+              beats: [{
+                beatIndex: 0,
+                title: '启动装置',
+                summary: '林按下开关，实验进入不可逆状态。',
+              }],
+            }],
+          }],
+        }],
+      },
+      chapters: [],
     },
   }
 }
@@ -343,6 +415,18 @@ describe('edit script compact canvas card', () => {
     expect(html).toContain('展开')
     expect(html).not.toContain('手机屏幕特写')
     expect(html).not.toContain('远景')
+  })
+
+  it('renders a structured source script as layered preview cards without the original request block', async () => {
+    const html = await renderWorkspaceNode(editBibleNodeData({ expanded: true }))
+
+    expect(html).toContain('剧本结构')
+    expect(html).toContain('地下实验')
+    expect(html).toContain('第一集：启动')
+    expect(html).toContain('1 幕 · 1 场景')
+    expect(html).toContain('剧本正文')
+    expect(html).not.toContain('原始需求')
+    expect(html).not.toContain('完整剧本文本。这里是全文，不应该在结构卡片展开态直接铺开。')
   })
 
   it('shows compact shot cards and the streamed active detail while streaming', async () => {

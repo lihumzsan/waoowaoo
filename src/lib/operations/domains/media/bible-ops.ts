@@ -307,7 +307,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
     }),
     revise_script: defineOperation({
       id: 'revise_script',
-      summary: 'Revise the expanded source script from user review notes and submit a new async script expansion task.',
+      summary: 'Revise the generated source script from user review notes and submit a new async script creation task.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,
@@ -347,7 +347,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
     }),
     generate_bible_from_script: defineOperation({
       id: 'generate_bible_from_script',
-      summary: 'Submit episode planning generation from the user-approved expanded source script.',
+      summary: 'Submit episode planning generation from the user-approved generated source script.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,

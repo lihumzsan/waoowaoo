@@ -721,7 +721,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         editBibleDetails: editBible
           ? {
               bibleText: editBiblePreviewText(editBible),
-              userPrompt: editBible.sourceDocumentId,
+              scriptStructure: editBible.scriptStructure ?? null,
               chapters: (editBible.chapters ?? []).map((chapter) => ({
                 id: chapter.id,
                 chapterIndex: chapter.chapterIndex,

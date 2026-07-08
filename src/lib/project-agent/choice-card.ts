@@ -206,8 +206,8 @@ async function buildScriptReviewChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Script' : '确认剧本',
     description: isEnglish
-      ? `Confirm the expanded source script before episode planning. Current script length: ${String(scriptLength)} characters.`
-      : `请先确认扩写后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
+      ? `Confirm the generated source script before episode planning. Current script length: ${String(scriptLength)} characters.`
+      : `请先确认生成后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
     groups: [],
     submitLabel: isEnglish ? 'Approve Script and Plan Episode' : '确认剧本，生成剧集规划',
     submit: {
@@ -215,7 +215,7 @@ async function buildScriptReviewChoiceCard(params: {
     },
     replyLabel: isEnglish ? 'Request changes' : '需要修改',
     replyPlaceholder: isEnglish
-      ? 'Describe what should change in the expanded script...'
+      ? 'Describe what should change in the generated script...'
       : '输入你希望调整的剧情、人物、结构、风格或结局...',
     replySubmitLabel: isEnglish ? 'Submit script changes' : '提交剧本修改意见',
     replyToolOutputKey: 'revisionNotes',

@@ -118,8 +118,8 @@ Before the bible:
 - If no source text or usable prompt exists, ask the user to paste or upload the script instead of inventing one.
 
 Script confirmation:
-- When the current stage is `script_ready_for_review`, first call `get_episode_overview` to read editBible.sourceText, then output the expanded script body completely in chat before calling the script confirmation choice tool. Do not just say "generated" or send the user to the canvas.
-- After the user approves the expanded script, call `generate_bible_from_script` to generate the episode plan. Do not call it before `request_edit_script_review_choice`.
+- When the current stage is `script_ready_for_review`, first call `get_episode_overview` to read editBible.sourceText, then output the generated script body completely in chat before calling the script confirmation choice tool. Do not just say "generated" or send the user to the canvas.
+- After the user approves the generated script, call `generate_bible_from_script` to generate the episode plan. Do not call it before `request_edit_script_review_choice`.
 - If the user submits script revision notes, call `revise_script` with revisionNotes only. After the new script is generated, output the new full script and request script confirmation again.
 
 Episode-plan confirmation:

@@ -27,12 +27,14 @@ import {
   editBibleBundleSchema,
   editBibleEmotionalCurveSchema,
   editBibleSchema,
+  editSourceScriptStructureSchema,
   type EditBible,
   type EditBibleBeatSheet,
   type EditBibleBundle,
   type EditBibleChapterPlan,
   type EditBibleDiagnostics,
   type EditBibleEmotionalCurve,
+  type EditSourceScriptStructure,
 } from './schemas'
 import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
 
@@ -164,6 +166,7 @@ export interface PersistedEditBibleBundle {
   readonly styleBible: EditScriptStyleBible | null
   readonly stylePreviews: readonly EditStylePreviewPayload[]
   readonly diagnostics: EditBibleDiagnostics | null
+  readonly scriptStructure: EditSourceScriptStructure | null
 }
 
 export interface PersistedEditChapterPlan extends EditBibleChapterPlan {
@@ -315,6 +318,9 @@ function mapPersistedBible(record: {
   const diagnostics = record.diagnosticsJson && typeof record.diagnosticsJson === 'object'
     ? record.diagnosticsJson as EditBibleDiagnostics
     : null
+  const scriptStructure = diagnostics?.scriptStructure
+    ? editSourceScriptStructureSchema.parse(diagnostics.scriptStructure)
+    : null
   return {
     id: record.id,
     projectId,
@@ -332,6 +338,7 @@ function mapPersistedBible(record: {
     styleBible: parseOptionalStyleBibleJson(record.styleBibleJson),
     stylePreviews: (record.stylePreviews ?? []).map(mapPersistedStylePreview),
     diagnostics,
+    scriptStructure,
   }
 }
 
@@ -642,6 +649,7 @@ export async function persistGeneratedEditBibleBundle(input: {
 export async function markEditBibleScriptReadyForReview(input: {
   readonly editBibleId: string
   readonly sourceDocumentId: string
+  readonly scriptStructure?: EditSourceScriptStructure | null
 }) {
   const result = await prisma.projectEditBible.updateMany({
     where: {
@@ -651,7 +659,9 @@ export async function markEditBibleScriptReadyForReview(input: {
     },
     data: {
       status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
-      diagnosticsJson: Prisma.JsonNull,
+      diagnosticsJson: input.scriptStructure
+        ? toInputJsonValue({ scriptStructure: input.scriptStructure })
+        : Prisma.JsonNull,
     },
   })
   if (result.count !== 1) {

@@ -52,8 +52,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Show the finished episode plan to the user for confirmation: beat sheet, event ledger, emotional curve, and chapter split. The user can confirm and lock it, or submit revision notes. Use it only to confirm the episode plan — do not use it as a generic "may I continue?" gate, and do not describe the underlying card mechanism to the user.',
   },
   request_edit_script_review_choice: {
-    zh: '把扩写后的完整剧本展示给用户确认。用户可以确认剧本进入剧集规划，也可以提交剧本修改意见。它只用于 prompt 扩写后的剧本确认，不能用来替代扩写前问诊、剧集规划确认或预算确认。',
-    en: 'Show the expanded full script to the user for confirmation. The user can approve it before episode planning, or submit script revision notes. Use it only for post-expansion script confirmation, not as a replacement for intake, episode-plan confirmation, or budget confirmation.',
+    zh: '把生成后的完整剧本展示给用户确认。用户可以确认剧本进入剧集规划，也可以提交剧本修改意见。它只用于 prompt 创作后的剧本确认，不能用来替代创作前问诊、剧集规划确认或预算确认。',
+    en: 'Show the generated full script to the user for confirmation. The user can approve it before episode planning, or submit script revision notes. Use it only for post-creation script confirmation, not as a replacement for intake, episode-plan confirmation, or budget confirmation.',
   },
   request_edit_style_choice: {
     zh: '把生成好的视觉风格候选展示给用户，让用户选定其中一个作为整片风格。它只用于选风格这一步，不要拿它当通用的执行许可，也不要向用户描述背后的卡片机制。',
@@ -76,12 +76,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough. When the user pasted a complete filmable script, set sourceKind=paste and the task generates the episode plan. For a post-intake normalizedBrief, set sourceKind=prompt_generated_outline; the task only expands a full script and then waits for user script confirmation. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
   },
   revise_script: {
-    zh: '根据用户在剧本确认卡片中的修改意见，基于当前扩写出的完整剧本重新扩写一版完整源剧本。只在 script_review 的用户选择返回 decision=revise 时调用。',
-    en: 'Revise the current expanded full source script using the user\'s notes from the script confirmation card. Call this only after a script_review choice result returns decision=revise.',
+    zh: '根据用户在剧本确认卡片中的修改意见，基于当前生成出的完整剧本重新创作一版完整源剧本。只在 script_review 的用户选择返回 decision=revise 时调用。',
+    en: 'Revise the current generated full source script using the user\'s notes from the script confirmation card. Call this only after a script_review choice result returns decision=revise.',
   },
   generate_bible_from_script: {
-    zh: '在用户已经确认扩写剧本后，从这份剧本生成剧集规划、节拍表、事件台账、情绪曲线和章节切分。不要在 request_edit_script_review_choice 之前调用。',
-    en: 'After the user has approved the expanded script, generate the episode plan, beat sheet, event ledger, emotional curve, and chapter split from that script. Do not call it before request_edit_script_review_choice.',
+    zh: '在用户已经确认生成剧本后，从这份剧本生成剧集规划、节拍表、事件台账、情绪曲线和章节切分。不要在 request_edit_script_review_choice 之前调用。',
+    en: 'After the user has approved the generated script, generate the episode plan, beat sheet, event ledger, emotional curve, and chapter split from that script. Do not call it before request_edit_script_review_choice.',
   },
   revise_bible: {
     zh: '根据用户在剧集规划确认中的修改意见，修改当前的剧集规划、节拍表、台账或情绪曲线。当用户对剧集规划提出了具体改动、需要覆盖现有规划时用它。',

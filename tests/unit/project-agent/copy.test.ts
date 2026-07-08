@@ -201,10 +201,10 @@ describe('project agent prompt copy', () => {
 
     const zhScriptReviewDescription = localizeSelectableToolDescription('request_edit_script_review_choice', 'fallback', 'zh')
     const enScriptReviewDescription = localizeSelectableToolDescription('request_edit_script_review_choice', 'fallback', 'en')
-    expect(zhScriptReviewDescription).toContain('扩写后的完整剧本')
-    expect(zhScriptReviewDescription).toContain('不能用来替代扩写前问诊')
-    expect(enScriptReviewDescription).toContain('expanded full script')
-    expect(enScriptReviewDescription).toContain('post-expansion script confirmation')
+    expect(zhScriptReviewDescription).toContain('生成后的完整剧本')
+    expect(zhScriptReviewDescription).toContain('不能用来替代创作前问诊')
+    expect(enScriptReviewDescription).toContain('generated full script')
+    expect(enScriptReviewDescription).toContain('post-creation script confirmation')
   })
 
   it('describes project context reads as concrete-detail only', () => {

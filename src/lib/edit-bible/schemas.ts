@@ -138,11 +138,61 @@ export const editBibleBundleSchema = z.object({
 
 export type EditBibleBundle = z.infer<typeof editBibleBundleSchema>
 
+const scriptStructureText = z.string().trim().min(1)
+
+export const editSourceScriptBeatSchema = z.object({
+  beatIndex: z.number().int().min(0),
+  title: scriptStructureText.max(120),
+  summary: scriptStructureText.max(500),
+}).strict()
+
+export const editSourceScriptSceneSchema = z.object({
+  sceneIndex: z.number().int().min(0),
+  title: scriptStructureText.max(160),
+  location: scriptStructureText.max(120),
+  timeOfDay: z.string().trim().max(80).optional().nullable(),
+  characters: z.array(scriptStructureText.max(80)).default([]),
+  summary: scriptStructureText.max(800),
+  body: scriptStructureText.max(10000),
+  beats: z.array(editSourceScriptBeatSchema).min(1).max(24),
+}).strict()
+
+export const editSourceScriptActSchema = z.object({
+  actIndex: z.number().int().min(0),
+  title: scriptStructureText.max(160),
+  summary: scriptStructureText.max(800),
+  scenes: z.array(editSourceScriptSceneSchema).min(1).max(40),
+}).strict()
+
+export const editSourceScriptEpisodeSchema = z.object({
+  episodeIndex: z.number().int().min(0),
+  title: scriptStructureText.max(160),
+  summary: scriptStructureText.max(1000),
+  acts: z.array(editSourceScriptActSchema).min(1).max(8),
+}).strict()
+
+export const editSourceScriptStructureSchema = z.object({
+  version: z.literal(1),
+  title: scriptStructureText.max(160),
+  summary: scriptStructureText.max(1200),
+  episodes: z.array(editSourceScriptEpisodeSchema).min(1).max(12),
+}).strict()
+
+export type EditSourceScriptStructure = z.infer<typeof editSourceScriptStructureSchema>
+
+export const expandedSourceScriptOutputSchema = z.object({
+  scriptText: scriptStructureText.max(10000),
+  structure: editSourceScriptStructureSchema,
+}).strict()
+
+export type ExpandedSourceScriptOutput = z.infer<typeof expandedSourceScriptOutputSchema>
+
 export const editBibleDiagnosticsSchema = z.object({
   bible: z.unknown().optional(),
   beatSheet: z.unknown().optional(),
   ledger: z.unknown().optional(),
   emotionalCurve: z.unknown().optional(),
+  scriptStructure: editSourceScriptStructureSchema.optional(),
   error: z.string().optional(),
 }).passthrough()
 

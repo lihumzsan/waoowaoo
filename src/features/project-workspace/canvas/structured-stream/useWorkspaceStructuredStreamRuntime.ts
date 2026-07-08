@@ -486,7 +486,6 @@ function buildEditBibleRuntimeEntries(
         streamPresentation: textStreamPresentation(),
         editBibleDetails: {
           bibleText,
-          userPrompt: '',
           chapters: [],
         },
       },

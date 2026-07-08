@@ -226,7 +226,7 @@ export interface WorkspaceCanvasEditProcessGroupDetails {
 
 export interface WorkspaceCanvasEditBibleDetails {
   readonly bibleText: string
-  readonly userPrompt: string
+  readonly scriptStructure?: unknown | null
   readonly chapters: readonly {
     readonly id: string
     readonly chapterIndex: number

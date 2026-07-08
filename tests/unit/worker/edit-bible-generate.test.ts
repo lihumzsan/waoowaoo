@@ -67,11 +67,76 @@ const sourceDocumentMock = vi.hoisted(() => ({
 }))
 
 const aiMock = vi.hoisted(() => ({
-  executeAiTextStep: vi.fn(async () => ({
+  expandedScriptOutput: {
+    scriptText: '扩写后的完整剧本',
+    structure: {
+      version: 1 as const,
+      title: '民科超光速',
+      summary: '民间科学家试图证明超光速，最终面对代价。',
+      episodes: [{
+        episodeIndex: 0,
+        title: '第 1 集',
+        summary: '主角启动实验并付出代价。',
+        acts: [{
+          actIndex: 0,
+          title: '实验启动',
+          summary: '主角进入实验室并开启装置。',
+          scenes: [{
+            sceneIndex: 0,
+            title: '地下实验室',
+            location: '地下实验室',
+            timeOfDay: '夜',
+            characters: ['林'],
+            summary: '林启动超光速装置。',
+            body: '场景一：地下实验室。林启动超光速装置。',
+            beats: [{
+              beatIndex: 0,
+              title: '启动',
+              summary: '林按下开关。',
+            }],
+          }],
+        }],
+      }],
+    },
+  },
+  executeAiStructuredTextStep: vi.fn(async () => ({
     text: '扩写后的完整剧本',
+    data: {
+      scriptText: '扩写后的完整剧本',
+      structure: {
+        version: 1 as const,
+        title: '民科超光速',
+        summary: '民间科学家试图证明超光速，最终面对代价。',
+        episodes: [{
+          episodeIndex: 0,
+          title: '第 1 集',
+          summary: '主角启动实验并付出代价。',
+          acts: [{
+            actIndex: 0,
+            title: '实验启动',
+            summary: '主角进入实验室并开启装置。',
+            scenes: [{
+              sceneIndex: 0,
+              title: '地下实验室',
+              location: '地下实验室',
+              timeOfDay: '夜',
+              characters: ['林'],
+              summary: '林启动超光速装置。',
+              body: '场景一：地下实验室。林启动超光速装置。',
+              beats: [{
+                beatIndex: 0,
+                title: '启动',
+                summary: '林按下开关。',
+              }],
+            }],
+          }],
+        }],
+      },
+    },
     reasoning: '',
     usage: null,
     completion: null,
+    repairRounds: 0,
   })),
 }))
 
@@ -103,8 +168,24 @@ const streamMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/edit-bible', () => editBibleMock)
-vi.mock('@/lib/edit-source-document', () => sourceDocumentMock)
-vi.mock('@/lib/ai-exec/engine', () => aiMock)
+vi.mock('@/lib/edit-source-document', async () => {
+  const { z } = await import('zod')
+  const editSourcePointAnchorSchema = z.object({
+    sourceOffset: z.number().int().min(0),
+    text: z.string().optional(),
+  }).passthrough()
+  const editSourceRangeSchema = z.object({
+    sourceStart: z.number().int().min(0),
+    sourceEnd: z.number().int().min(0),
+  }).passthrough()
+  return {
+    ...sourceDocumentMock,
+    editSourcePointAnchorSchema,
+    editSourceRangeSchema,
+    editSourceAnchorSchema: editSourceRangeSchema,
+  }
+})
+vi.mock('@/lib/ai-exec/structured-step', () => aiMock)
 vi.mock('@/lib/billing', () => billingMock)
 vi.mock('@/lib/ai-prompts', () => ({
   AI_PROMPT_IDS: promptMock.AI_PROMPT_IDS,
@@ -168,11 +249,13 @@ describe('worker edit-bible-generate behavior', () => {
       updatedAt: new Date('2026-01-01T00:01:00Z'),
       estimatedInputTokens: 120,
     })
-    aiMock.executeAiTextStep.mockResolvedValue({
+    aiMock.executeAiStructuredTextStep.mockResolvedValue({
       text: '扩写后的完整剧本',
+      data: aiMock.expandedScriptOutput,
       reasoning: '',
       usage: null,
       completion: null,
+      repairRounds: 0,
     })
     editBibleMock.generateEditBibleArtifacts.mockResolvedValue({
       bible: {
@@ -226,7 +309,7 @@ describe('worker edit-bible-generate behavior', () => {
       locale: 'zh',
       sourceDocument: '0123456789',
     })
-    expect(aiMock.executeAiTextStep).not.toHaveBeenCalled()
+    expect(aiMock.executeAiStructuredTextStep).not.toHaveBeenCalled()
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledTimes(1)
     expect(editBibleMock.persistGeneratedEditBibleBundle).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1',
@@ -264,7 +347,7 @@ describe('worker edit-bible-generate behavior', () => {
       analysisModel: 'analysis-model',
     }))
 
-    expect(aiMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
+    expect(aiMock.executeAiStructuredTextStep).toHaveBeenCalledWith(expect.objectContaining({
       action: 'outline-script',
       model: 'analysis-model',
       projectId: 'project-1',
@@ -277,11 +360,12 @@ describe('worker edit-bible-generate behavior', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       sourceDocumentId: 'source-1',
-      text: '扩写后的完整剧本',
+      text: aiMock.expandedScriptOutput.scriptText,
     })
     expect(editBibleMock.markEditBibleScriptReadyForReview).toHaveBeenCalledWith({
       editBibleId: 'bible-1',
       sourceDocumentId: 'source-1',
+      scriptStructure: aiMock.expandedScriptOutput.structure,
     })
     expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
     expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()

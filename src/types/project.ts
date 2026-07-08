@@ -252,6 +252,7 @@ export interface ProjectEditBible {
   ledger?: unknown | null
   emotionalCurve?: unknown | null
   diagnostics?: unknown | null
+  scriptStructure?: unknown | null
   styleBible?: unknown
   stylePreviews?: ProjectEditStylePreview[]
   textPreview?: string | null

@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import type { Locale } from '@/i18n/routing'
-import { executeAiTextStep } from '@/lib/ai-exec/engine'
+import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
@@ -11,6 +11,7 @@ import {
   persistGeneratedEditBibleBundle,
   readEditBibleExtractionDiagnostics,
 } from '@/lib/edit-bible'
+import { expandedSourceScriptOutputSchema, type ExpandedSourceScriptOutput } from '@/lib/edit-bible/schemas'
 import {
   EDIT_SOURCE_DOCUMENT_OUTPUT_TOKEN_RESERVE,
   estimateEditSourceDocumentInputTokens,
@@ -40,7 +41,7 @@ async function expandPromptGeneratedSource(input: {
   readonly locale: Locale
   readonly prompt: string
   readonly previousScript?: string | null
-}): Promise<string> {
+}): Promise<ExpandedSourceScriptOutput> {
   const userPrompt = input.previousScript
     ? [
         '当前完整剧本：',
@@ -49,7 +50,7 @@ async function expandPromptGeneratedSource(input: {
         '用户修改要求：',
         input.prompt,
         '',
-        '请根据修改要求输出新版完整可拍摄剧本正文。只输出剧本正文。',
+        '请根据修改要求输出新版完整可拍摄剧本，并同步输出结构化剧本视图。',
       ].join('\n')
     : input.prompt
   const finalPromptContent = buildAiPromptContent({
@@ -64,7 +65,7 @@ async function expandPromptGeneratedSource(input: {
     1200,
     estimateEditSourceDocumentInputTokens(finalPrompt) + EDIT_SOURCE_DOCUMENT_OUTPUT_TOKEN_RESERVE,
   )
-  const runCompletion = async () => executeAiTextStep({
+  const runCompletion = async () => executeAiStructuredTextStep({
     userId: input.userId,
     model: input.model,
     messages: [{ role: 'user', content: finalPromptContent }],
@@ -77,6 +78,9 @@ async function expandPromptGeneratedSource(input: {
       stepIndex: 1,
       stepTotal: 5,
     },
+    locale: input.locale,
+    schema: expandedSourceScriptOutputSchema,
+    parse: { kind: 'object' },
   })
   const result = await withTextBilling(
     input.userId,
@@ -89,9 +93,8 @@ async function expandPromptGeneratedSource(input: {
     },
     runCompletion,
   )
-  const text = result.text.trim()
-  if (!text) throw new Error('EDIT_BIBLE_PROMPT_SOURCE_GENERATION_EMPTY')
-  return text
+  if (!result.data.scriptText.trim()) throw new Error('EDIT_BIBLE_PROMPT_SOURCE_GENERATION_EMPTY')
+  return result.data
 }
 
 export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
@@ -139,22 +142,24 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
                 sourceDocumentId: previousSourceDocumentId,
               })
             : null
+          const expandedSource = await expandPromptGeneratedSource({
+            userId: job.data.userId,
+            projectId: job.data.projectId,
+            model,
+            locale: job.data.locale,
+            prompt: sourceDocument.normalizedText,
+            previousScript: previousSourceDocument?.normalizedText ?? null,
+          })
           const effectiveSourceDocument = await materializePromptGeneratedSourceDocument({
             projectId: job.data.projectId,
             episodeId,
             sourceDocumentId,
-            text: await expandPromptGeneratedSource({
-              userId: job.data.userId,
-              projectId: job.data.projectId,
-              model,
-              locale: job.data.locale,
-              prompt: sourceDocument.normalizedText,
-              previousScript: previousSourceDocument?.normalizedText ?? null,
-            }),
+            text: expandedSource.scriptText,
           })
           await markEditBibleScriptReadyForReview({
             editBibleId,
             sourceDocumentId: effectiveSourceDocument.id,
+            scriptStructure: expandedSource.structure,
           })
           return null
         }

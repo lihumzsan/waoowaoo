@@ -20,6 +20,8 @@ export {
   editBibleEntitySchema,
   editBibleSchema,
   editBibleStatusSchema,
+  editSourceScriptStructureSchema,
+  expandedSourceScriptOutputSchema,
   getEditBibleInputSchema,
   getEditChaptersInputSchema,
   ingestEditBibleScriptInputSchema,
@@ -31,6 +33,8 @@ export {
   type EditBibleChapterPlan,
   type EditBibleDiagnostics,
   type EditBibleEmotionalCurve,
+  type EditSourceScriptStructure,
+  type ExpandedSourceScriptOutput,
 } from './schemas'
 export {
   approveEpisodePromptGeneratedScript,

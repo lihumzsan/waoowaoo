@@ -89,7 +89,7 @@ export const EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
 })
 
 export const EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
-  revisionNotes: stringProperty('Concrete user script confirmation notes to apply to the current expanded source script. Do not include projectId, episodeId, or system ids.'),
+  revisionNotes: stringProperty('Concrete user script confirmation notes to apply to the current generated source script. Do not include projectId, episodeId, or system ids.'),
 })
 
 export const EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({

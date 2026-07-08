@@ -313,7 +313,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (snapshot.bibleStatus === 'script_ready_for_review') {
     return state({
       stage: 'script_ready_for_review',
-      blocking: { kind: 'needs_user_choice', reason: 'review the expanded script before episode planning' },
+      blocking: { kind: 'needs_user_choice', reason: 'review the generated script before episode planning' },
       allowedOperationIds: ['revise_script'],
     })
   }

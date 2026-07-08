@@ -118,8 +118,8 @@ Bible 前：
 - 如果没有源文本或可用提示，先请用户粘贴或上传剧本，不要自行编造。
 
 剧本确认：
-- 当当前阶段是 `script_ready_for_review` 时，先调用 `get_episode_overview` 读取 editBible.sourceText，然后在对话中完整输出扩写后的剧本正文，再调用剧本确认选择工具。不要只说“已生成”或让用户去画布查看。
-- 用户确认扩写剧本后，调用 `generate_bible_from_script` 生成剧集规划。不要在 `request_edit_script_review_choice` 之前调用它。
+- 当当前阶段是 `script_ready_for_review` 时，先调用 `get_episode_overview` 读取 editBible.sourceText，然后在对话中完整输出生成后的剧本正文，再调用剧本确认选择工具。不要只说“已生成”或让用户去画布查看。
+- 用户确认生成剧本后，调用 `generate_bible_from_script` 生成剧集规划。不要在 `request_edit_script_review_choice` 之前调用它。
 - 用户提交剧本修改意见时，调用 `revise_script`，只传 revisionNotes。新版剧本生成完成后，仍然要完整输出新版剧本并再次请求剧本确认。
 
 剧集规划确认：

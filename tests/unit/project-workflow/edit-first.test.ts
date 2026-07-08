@@ -77,7 +77,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
-  it('requires script review before generating the episode plan from an expanded prompt script', () => {
+  it('requires script review before generating the episode plan from a generated prompt script', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'script_ready_for_review',
@@ -90,7 +90,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['revise_script'])
   })
 
-  it('generates the episode plan only after the expanded script is approved', () => {
+  it('generates the episode plan only after the generated script is approved', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'script_approved',

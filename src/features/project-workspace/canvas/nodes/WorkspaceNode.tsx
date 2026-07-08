@@ -15,6 +15,8 @@ import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { getWorkspaceCanvasNodePresentationProfile } from '../node-presentation-profiles'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
+import { SourceScriptStructureView } from './SourceScriptStructureView'
+import { readSourceScriptStructure } from './source-script-structure'
 import {
   WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS,
   WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR,
@@ -1894,21 +1896,32 @@ function EditBibleContent({
 }) {
   const details = data.editBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const scriptStructure = readSourceScriptStructure(details.scriptStructure)
+  if (scriptStructure) {
+    return (
+      <SourceScriptStructureView
+        structure={scriptStructure}
+        scriptText={details.bibleText}
+        labels={labels}
+        expanded={expanded}
+        expandedClassName={nodeContentInteractionClass(data, 'space-y-3')}
+      />
+    )
+  }
   const parsed = parseBibleOutline(details.bibleText)
-  const streamClassName = data.streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''
 
   const collapsedContent = (
-    <div className={`space-y-2 ${streamClassName}`}>
+    <div className="space-y-2">
       {parsed.summary
         ? renderSection(labels('summary'), renderSummaryText(parsed.summary, 4))
-        : renderSection(labels('bible'), renderSummaryText(details.bibleText, 6))}
+        : renderSection(labels('scriptText'), renderSummaryText(details.bibleText, 6))}
     </div>
   )
 
   return (
     <>
       {!expanded ? collapsedContent : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, `space-y-3 ${streamClassName}`)}>
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
         {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
         {parsed.characters.length > 0 ? (
           <div className="space-y-1.5">
@@ -1922,7 +1935,7 @@ function EditBibleContent({
             <BibleAccordion items={parsed.scenes.map((s, i) => ({ key: `sc${i}`, badge: String(i + 1), title: s.header, body: s.actions.join('\n') }))} />
           </div>
         ) : (
-          renderSection(labels('bible'), renderTextBlock(details.bibleText))
+          renderSection(labels('scriptText'), renderTextBlock(details.bibleText))
         )}
         {details.chapters.length > 0 ? renderSection(labels('chapters'), (
           <div className="space-y-2">
@@ -1943,7 +1956,6 @@ function EditBibleContent({
             ))}
           </div>
         )) : null}
-        {renderSection(labels('originalRequest'), renderTextBlock(details.userPrompt))}
       </WorkspaceCanvasMotionPresence>
     </>
   )
