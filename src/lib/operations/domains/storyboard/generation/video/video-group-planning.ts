@@ -19,6 +19,15 @@ export function parseShotIdsJson(value: unknown): string[] {
     .filter((item) => item.length > 0)
 }
 
+function parseShotNumbersJson(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is number => Number.isInteger(item) && item > 0)
+}
+
+function shotNumbersForShots(shots: readonly VideoGroupShot[]): number[] {
+  return shots.map((shot) => shot.shotNumber)
+}
+
 function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   return left.every((value, index) => value === right[index])
@@ -62,6 +71,7 @@ async function findExistingVideoGroup(params: {
       videoUrl: true,
       videoMediaId: true,
       shotIds: true,
+      shotNumbers: true,
     },
   })
   return candidates.find((candidate) => sameShotIds(parseShotIdsJson(candidate.shotIds), params.shotIds)) ?? null
@@ -216,10 +226,6 @@ function validateAssetReferenceShotIds(shotIds: readonly string[], shots: readon
   return normalized
 }
 
-function durationForShotIds(shots: readonly VideoGroupShot[], shotIds: readonly string[]): number {
-  return totalVideoGroupDuration(resolveVideoGroupShots(shots, shotIds))
-}
-
 function gridModeForAssetReferenceItem(item: GenerationSegmentVideoPlanItem): string {
   return item.gridMode ?? inferVideoGridModeForShotCount(item.shotIds.length)
 }
@@ -238,6 +244,7 @@ export type PlannedVideoGroupTaskMetadata = {
   chapterId: string
   gridMode: string
   shotIds: string[]
+  shotNumbers: number[]
   durationSec: number
   previous: ExistingVideoGroupRecord | null
   sourceMode?: 'asset_reference' | null
@@ -260,8 +267,9 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
   const chapterId = normalizeString(value.chapterId)
   const gridMode = normalizeString(value.gridMode)
   const shotIds = parseShotIdsJson(value.shotIds)
+  const shotNumbers = parseShotNumbersJson(value.shotNumbers)
   const durationSec = Number(value.durationSec)
-  if (!planTaskId || !projectId || !groupId || !episodeId || !chapterId || !gridMode || shotIds.length === 0 || !Number.isInteger(durationSec) || durationSec <= 0) {
+  if (!planTaskId || !projectId || !groupId || !episodeId || !chapterId || !gridMode || shotIds.length === 0 || shotNumbers.length !== shotIds.length || !Number.isInteger(durationSec) || durationSec <= 0) {
     throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
   }
   const prompt = Object.prototype.hasOwnProperty.call(value, 'prompt')
@@ -279,6 +287,7 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
     chapterId,
     gridMode,
     shotIds,
+    shotNumbers,
     durationSec,
     previous: isRecord(value.previous) ? value.previous as ExistingVideoGroupRecord : null,
     sourceMode,
@@ -305,6 +314,8 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
       where: { id: metadata.groupId },
       data: {
         durationSec: metadata.durationSec,
+        shotIds: metadata.shotIds as unknown as Prisma.InputJsonValue,
+        shotNumbers: metadata.shotNumbers as unknown as Prisma.InputJsonValue,
         status: 'queued',
         taskId: null,
         errorCode: null,
@@ -327,6 +338,7 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
       chapterId: metadata.chapterId,
       gridMode: metadata.gridMode,
       shotIds: metadata.shotIds as unknown as Prisma.InputJsonValue,
+      shotNumbers: metadata.shotNumbers as unknown as Prisma.InputJsonValue,
       durationSec: metadata.durationSec,
       prompt: metadata.prompt ?? null,
       status: 'queued',
@@ -351,6 +363,8 @@ async function rollbackVideoGroupTaskRecord(params: {
         errorCode: params.previous.errorCode,
         errorMessage: params.previous.errorMessage,
         durationSec: params.previous.durationSec,
+        shotIds: params.previous.shotIds as Prisma.InputJsonValue,
+        shotNumbers: params.previous.shotNumbers as Prisma.InputJsonValue,
         prompt: params.previous.prompt,
         referenceImageUrl: params.previous.referenceImageUrl,
         referenceImageMediaId: params.previous.referenceImageMediaId,
@@ -401,7 +415,8 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
   }
   const chapterId = await resolveEditChapterId(params.episodeId, params.chapterId)
   const shotIds = validateAssetReferenceShotIds(params.item.shotIds, params.shots)
-  const durationSec = durationForShotIds(params.shots, shotIds)
+  const selectedShots = resolveVideoGroupShots(params.shots, shotIds)
+  const durationSec = totalVideoGroupDuration(selectedShots)
   if (durationSec < 1 || durationSec > 15) {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_DURATION_UNSUPPORTED:${durationSec}`)
   }
@@ -464,6 +479,7 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
       chapterId,
       gridMode,
       shotIds,
+      shotNumbers: shotNumbersForShots(selectedShots),
       durationSec,
       previous,
       sourceMode: 'asset_reference',
@@ -548,6 +564,7 @@ export async function planVideoGroupTask(params: {
       chapterId: resolved.chapterId,
       gridMode: params.gridMode,
       shotIds: resolved.shotIds,
+      shotNumbers: shotNumbersForShots(resolved.selectedShots),
       durationSec,
       previous,
       prompt,

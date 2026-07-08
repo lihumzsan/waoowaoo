@@ -379,6 +379,7 @@ model ProjectVideoGroup {
   chapterId             String
   gridMode              String
   shotIds               Json
+  shotNumbers           Json
   durationSec           Int
   prompt                String?         @db.LongText
   status                String          @default("pending")

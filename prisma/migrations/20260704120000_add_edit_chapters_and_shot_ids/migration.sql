@@ -59,7 +59,6 @@ ALTER TABLE `project_edit_asset_requirements`
   ADD COLUMN `requiredForShotIds` JSON NOT NULL;
 
 ALTER TABLE `project_video_groups`
-  DROP COLUMN `shotNumbers`,
   ADD COLUMN `chapterId` VARCHAR(191) NOT NULL,
   ADD COLUMN `shotIds` JSON NOT NULL;
 
