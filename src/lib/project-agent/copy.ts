@@ -64,12 +64,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Before starting a batch of production tasks that will consume credits or incur billing, confirm the budget and the intent to continue with the user. Use it only as a pre-billing/pre-batch confirmation — it does not replace Bible, asset, or style content review.',
   },
   request_script_intake_choice: {
-    zh: '当用户给的只是一句话创意、一个标题或一个主题方向，信息太少、还不足以稳定扩写成剧本时，用它发起一次扩写前创作问诊，让用户先补齐几个关键创作方向。如果用户给的已经是完整剧本、或已经足够具体可以直接扩写，就不要用它，直接用 ingest_script。',
-    en: 'When the user gives only a one-line idea, a title, or a theme direction — too little to expand into a stable script — use this to run a pre-expansion creative intake so the user first fills in a few key creative directions. If the user already gave a complete script, or something specific enough to expand directly, do not use this — use ingest_script instead.',
+    zh: '当用户给的不是完整可拍剧本，且还没有足够详细到可以直接扩写的创作简报时，用它发起扩写前创作问诊，让用户先补齐会改变剧本走向的关键变量。只有用户已经贴出完整剧本，或已经给出详细到不需要追问的创作简报时，才不要用它。',
+    en: 'Use this for pre-expansion creative intake when the user has not provided a complete filmable script and the brief is not detailed enough to expand directly. Ask the user to fill the key variables that would change the script direction. Skip it only when the user already pasted a complete script, or provided a brief detailed enough that no follow-up is needed.',
   },
   ingest_script: {
-    zh: '接收本集的剧本输入并提交扩写任务，生成全局 Bible、节拍表、台账、情绪曲线和章节切分。用户贴的是完整剧本时，sourceKind=paste；用户给的是已经足够具体的创作需求、标题、梗概，或问诊后整理出的 normalizedBrief 时，sourceKind=prompt_generated_outline。如果用户只给了太稀疏的一句话创意，先用 request_script_intake_choice 做问诊，不要直接扩写。',
-    en: 'Take this episode\'s script input and submit the expansion task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. When the user pasted a complete script, set sourceKind=paste; when the user gave a sufficiently specific creative request, title, or logline, or a post-intake normalizedBrief, set sourceKind=prompt_generated_outline. If the user only gave a too-sparse one-line idea, run request_script_intake_choice first instead of expanding directly.',
+    zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报，并提交任务生成全局 Bible、节拍表、台账、情绪曲线和章节切分。用户贴的是完整可拍剧本时，sourceKind=paste；只有问诊后的 normalizedBrief，或用户原始输入已经详细到不需要追问时，sourceKind=prompt_generated_outline。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',
+    en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough, and submit the task that generates the global Bible, beat sheet, ledger, emotional curve, and chapter split. When the user pasted a complete filmable script, set sourceKind=paste. Set sourceKind=prompt_generated_outline only for a post-intake normalizedBrief, or for original user input that is already detailed enough to need no follow-up. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
   },
   revise_bible: {
     zh: '根据用户的审核意见，修改当前的 Bible、节拍表、台账或情绪曲线。当用户对剧集规划提出了具体改动、需要覆盖现有全局规划时用它。',
@@ -154,8 +154,8 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
 
 const EDIT_FIRST_OPERATION_TITLE_COPY = {
   ingest_script: {
-    zh: '准备剧本蓝图',
-    en: 'Prepare script plan',
+    zh: '生成剧本与剧集规划',
+    en: 'Generate script and episode plan',
   },
   revise_bible: {
     zh: '修改剧集规划',

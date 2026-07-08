@@ -54,7 +54,7 @@
   },
   "workflowStages": {
     "not_started": "未开始",
-    "ready_to_ingest_script": "等待准备剧本蓝图",
+    "ready_to_ingest_script": "等待生成剧本与剧集规划",
     "bible_generating": "剧集规划生成中",
     "bible_ready_for_review": "等待确认剧集规划",
     "style_preview_generating": "风格候选生成中",

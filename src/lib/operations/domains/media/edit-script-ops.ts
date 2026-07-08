@@ -367,7 +367,7 @@ async function resolvePlanChaptersTargets(input: {
 }
 
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
-  script_intake: 'Request one structured creative intake choice before script expansion when the user prompt is too sparse. Pass only the exact user seed text.',
+  script_intake: 'Request one structured creative intake choice before script expansion when the user has not provided a complete script and the brief lacks the basic conditions needed for direct expansion. Pass only the exact user seed text.',
   bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',

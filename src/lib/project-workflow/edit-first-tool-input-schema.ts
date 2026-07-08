@@ -56,7 +56,7 @@ function nullableStringArrayProperty(description: string): JsonValue {
 export const EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({})
 
 export const EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
-  seedText: stringProperty('The exact sparse user creative request that needs one structured intake choice before script expansion. Do not include projectId, episodeId, or system-derived parameters.'),
+  seedText: stringProperty('The exact user creative request that lacks the basic conditions for a complete script or directly expandable detailed brief and needs one structured intake choice before script expansion. Do not include projectId, episodeId, or system-derived parameters.'),
 })
 
 export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
@@ -75,9 +75,9 @@ export const EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
   sourceKind: {
     type: 'string',
     enum: ['paste', 'prompt_generated_outline'],
-    description: 'Classify the user input. Use paste only for a complete script provided by the user. Use prompt_generated_outline for a creative instruction, title, logline, or short natural-language request that needs the system to expand it before planning.',
+    description: 'Classify the user input. Use paste only for a complete filmable script provided by the user. Use prompt_generated_outline only for a post-intake normalizedBrief, or for original user input already detailed enough to need no follow-up before expansion. Titles, theme directions, one-line ideas, short loglines, and briefs missing basic script conditions must use request_script_intake_choice first.',
   },
-  text: stringProperty('The source script text, pasted script, or user prompt to turn into a prompt-generated outline. Do not include projectId or episodeId.'),
+  text: stringProperty('The complete source script text, pasted script, or sufficiently detailed creative brief to expand after the intake rule has been satisfied. Do not include projectId or episodeId.'),
 })
 
 export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
