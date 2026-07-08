@@ -90,6 +90,7 @@ function corePlan() {
       {
         shotId: 'shot-1',
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 4,
         scene: {
           locationId: 'location-1',

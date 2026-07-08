@@ -203,6 +203,7 @@ function buildCorePlan(
     shots: shots.map((shot) => ({
       shotId: shot.shotId ?? `shot-${shot.shotNumber}`,
       shotNumber: shot.shotNumber,
+      shotPurpose: 'action' as const,
       durationSec: shot.durationSec,
       scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: shot.action,

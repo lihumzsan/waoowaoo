@@ -120,6 +120,7 @@ function buildCorePlan() {
       {
         shotId: 'shot-1',
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 3,
         scene: {
           locationId: 'location-1',

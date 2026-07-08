@@ -3,7 +3,7 @@ import { AppError } from '@/lib/errors/app-error'
 import { editScriptCoreSchema } from '@/lib/edit-script/types'
 import { ledgerEventSchema, ledgerSnapshotSchema } from '@/lib/edit-ledger/schemas'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
-import { EDIT_CHARACTER_ROLES, EDIT_CHARACTER_VISIBILITIES } from '@/lib/edit-script/types'
+import { EDIT_CHARACTER_ROLES, EDIT_CHARACTER_VISIBILITIES, EDIT_SHOT_PURPOSES } from '@/lib/edit-script/types'
 
 const assetMenuItemSchema = z.object({
   id: z.string().trim().min(1),
@@ -69,6 +69,7 @@ export function buildChapterPlanOutputSchema(assetMenu: ChapterPlanAssetMenu) {
   const dynamicShotSchema = z.object({
     shotId: z.string().trim().min(1),
     shotNumber: z.number().int().positive(),
+    shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
     durationSec: z.number().int().min(1).max(5),
     scene: z.object({
       locationId: z.enum(locationIds),

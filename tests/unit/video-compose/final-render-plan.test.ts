@@ -17,6 +17,7 @@ const editScript: FinalRenderEditScriptInput = {
     {
       shotId: 'shot-1',
       shotNumber: 1,
+      shotPurpose: 'action',
       durationSec: 3,
       scene: { locationId: 'location-1', name: 'Neon rooftop', subScene: 'Neon rooftop' },
       action: 'Runner looks over the roof edge',
@@ -35,6 +36,7 @@ const editScript: FinalRenderEditScriptInput = {
     {
       shotId: 'shot-2',
       shotNumber: 2,
+      shotPurpose: 'action',
       durationSec: 5,
       scene: { locationId: 'location-1', name: 'Neon rooftop', subScene: 'Neon rooftop' },
       action: 'Runner sprints and jumps',

@@ -192,6 +192,7 @@ export type ProjectEditAssetStatus = 'pending' | 'generating' | 'completed' | 'f
 export interface ProjectEditScriptShot {
   shotId: string
   shotNumber: number
+  shotPurpose: 'establishing' | 'action' | 'reaction' | 'insert' | 'atmosphere' | 'transition'
   durationSec: number
   scene: {
     locationId: string

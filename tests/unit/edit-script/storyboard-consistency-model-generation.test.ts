@@ -22,6 +22,7 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
       {
         shotId: 'shot-1',
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 3,
         scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
         action: 'Anna approaches the high-backed chair.',

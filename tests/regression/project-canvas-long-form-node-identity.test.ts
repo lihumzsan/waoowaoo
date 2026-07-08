@@ -59,6 +59,7 @@ function editScript(chapterId: string, shotId: string): ProjectEditScript {
     shots: [{
       shotId,
       shotNumber: 1,
+      shotPurpose: 'action',
       durationSec: 6,
       scene: {
         locationId: 'location-1',

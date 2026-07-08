@@ -47,6 +47,7 @@ function scriptRow(id: string, chapterId: string, requirementStatus: string) {
       shots: [{
         shotId: `shot-${chapterId}`,
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 4,
         scene: {
           locationId: 'location-1',

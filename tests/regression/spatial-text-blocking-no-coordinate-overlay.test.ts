@@ -6,6 +6,7 @@ import { buildZenStyleBibleFixture } from '../fixtures/edit-script-style-bible'
 const shot: EditScriptShot = {
   shotId: 'shot-1',
   shotNumber: 1,
+  shotPurpose: 'action',
   durationSec: 3,
   scene: { locationId: 'location-1', name: '老店室内', subScene: '老店室内' },
   action: '人物从门口走到柜台前停下。',

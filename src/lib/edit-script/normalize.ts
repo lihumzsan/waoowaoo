@@ -40,6 +40,7 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
     .map((shot): EditScriptShot => ({
       shotId: shot.shotId.trim(),
       shotNumber: shot.shotNumber,
+      shotPurpose: shot.shotPurpose,
       durationSec: shot.durationSec,
       scene: {
         locationId: shot.scene.locationId.trim(),

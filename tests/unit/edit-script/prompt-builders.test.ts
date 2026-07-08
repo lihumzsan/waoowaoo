@@ -39,6 +39,7 @@ const styleBible: EditScriptStyleBible = {
 const shot11: EditScriptShot = {
   shotId: 'shot-11',
   shotNumber: 11,
+  shotPurpose: 'action',
   durationSec: 3,
   scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
   action: 'A high-backed chair stands in the center of the room.',
@@ -60,6 +61,7 @@ const shot11: EditScriptShot = {
 const shot12: EditScriptShot = {
   shotId: 'shot-12',
   shotNumber: 12,
+  shotPurpose: 'action',
   durationSec: 3,
   scene: { locationId: 'location-1', name: 'Cabin living room', subScene: 'Cabin living room' },
   action: 'Anna steps toward the chair.',

@@ -30,6 +30,7 @@ Objects:
 
 Camera and space:
 - Every shot must include camera.lighting and blocking.axis.
+- Use each shot's shotPurpose to shape the camera language: `establishing`/`atmosphere` lean toward wider scale and slower movement to convey space and mood; `insert` uses a close-up to emphasize a key object; `reaction` focuses on a character's expression; `action` serves the action and events; `transition` serves a space or time bridge. shotPurpose is only a reference — the shot content and Style Bible still govern, and it must not change the core edit plan's narrative facts.
 - Write lighting as shot-level execution facts, for example who is lit, who is in shadow, and where the light comes from.
 - position is the real-space position of a character or object; screenPosition is its position inside the image frame.
 - camera.composition describes only in-frame subject arrangement, foreground/midground/background, occlusion relation, negative space, and visual center. Do not rename real-space camera position into composition.

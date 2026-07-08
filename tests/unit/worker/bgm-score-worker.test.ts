@@ -112,6 +112,7 @@ function buildCorePlan(sound: string = 'native video sound only') {
       {
         shotId: 'shot-1',
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 3,
         scene: { locationId: 'location-room', name: 'A room', subScene: 'center of the room' },
         action: 'A shot',

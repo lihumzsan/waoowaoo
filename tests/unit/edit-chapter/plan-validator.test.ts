@@ -10,6 +10,7 @@ function planWithFacts(facts: readonly string[]): NormalizedChapterPlanOutput {
     shots: [{
       shotId: 'shot-001',
       shotNumber: 1,
+      shotPurpose: 'action',
       durationSec: 3,
       scene: { locationId: 'location-1', name: 'Room', subScene: 'Room' },
       action: 'A character opens the door.',

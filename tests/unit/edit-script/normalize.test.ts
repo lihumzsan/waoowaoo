@@ -11,6 +11,7 @@ function corePlan() {
       {
         shotId: 'shot-1',
         shotNumber: 1,
+        shotPurpose: 'establishing',
         durationSec: 3,
         scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'chair corner' },
         action: 'Anna studies the high-backed chair.',
@@ -38,6 +39,7 @@ function corePlan() {
       {
         shotId: 'shot-2',
         shotNumber: 2,
+        shotPurpose: 'action',
         durationSec: 3,
         scene: { locationId: 'location-cabin', name: 'Cabin', subScene: 'beside the chair' },
         action: 'Anna reaches the chair.',
@@ -200,6 +202,7 @@ describe('edit-first core plan normalization', () => {
       role: 'hidden_subject',
       performance: 'sits silently inside the high-backed chair',
     })
+    expect(normalized.shots.map((shot) => shot.shotPurpose)).toEqual(['establishing', 'action'])
   })
 
   it('rejects non-continuous shot numbers and unordered generation segment coverage', () => {
@@ -231,6 +234,7 @@ describe('edit-first core plan normalization', () => {
           ...plan.shots[1],
           shotId: 'shot-3',
           shotNumber: 3,
+          shotPurpose: 'action',
           durationSec: 4,
           action: 'Anna turns the chair.',
         },
@@ -238,6 +242,7 @@ describe('edit-first core plan normalization', () => {
           ...plan.shots[1],
           shotId: 'shot-4',
           shotNumber: 4,
+          shotPurpose: 'action',
           durationSec: 3,
           action: 'The hidden subject starts to move.',
         },

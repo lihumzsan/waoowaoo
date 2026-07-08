@@ -30,6 +30,7 @@
 
 摄影与空间：
 - 每个镜头必须有 camera.lighting 和 blocking.axis。
+- 参考每个镜头的 shotPurpose 调整摄影语言：`establishing`/`atmosphere` 倾向更大景别与更慢的运镜交代空间与氛围；`insert` 用特写强调关键物体；`reaction` 聚焦人物表情；`action` 服务动作与事件；`transition` 服务空间或时间过渡。shotPurpose 只是参考，最终仍以镜头内容和 Style Bible 为准，且不得改变核心剪辑计划的叙事事实。
 - 灯光写成镜头级的执行事实，例如谁被照亮、谁在阴影中、光从哪里来。
 - position 写人物或物体在真实空间中的位置；screenPosition 写它在画面中的位置。
 - camera.composition 只写画面内主体排列、前中后景、遮挡关系、留白和视觉中心；不得把机位在真实空间中的位置换名塞进 composition。

@@ -4,6 +4,7 @@ import {
   editShotExecutionPlanSchema,
   EDIT_CHARACTER_ROLES,
   EDIT_CHARACTER_VISIBILITIES,
+  EDIT_SHOT_PURPOSES,
   type EditShotExecution,
   type EditScriptShot,
 } from '@/lib/edit-script/types'
@@ -21,6 +22,7 @@ const editShotExecutionPlanShotSchema = editShotExecutionPlanSchema.shape.shots.
 const editScriptStreamShotSchema = z.object({
   shotId: z.string().trim().min(1),
   shotNumber: z.number().int().positive(),
+  shotPurpose: z.enum(EDIT_SHOT_PURPOSES).optional(),
   durationSec: z.number().int().min(1).max(5),
   scene: z.object({
     locationId: z.string().trim().min(1),
@@ -46,6 +48,7 @@ function parseEditScriptStreamShot(value: unknown): EditScriptShot {
   const shot = editScriptStreamShotSchema.parse(value)
   return {
     ...shot,
+    shotPurpose: shot.shotPurpose ?? 'action',
     scene: {
       locationId: shot.scene.locationId,
       name: shot.scene.name ?? shot.scene.locationId,

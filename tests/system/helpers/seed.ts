@@ -74,6 +74,7 @@ export async function seedMinimalDomainState() {
           {
             shotId: 'shot-1',
             shotNumber: 1,
+            shotPurpose: 'action',
             durationSec: 3,
             scene: { name: 'Office' },
             action: 'seed panel',

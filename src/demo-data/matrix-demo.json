@@ -243,6 +243,7 @@
     "shots": [
       {
         "shotNumber": 1,
+        "shotPurpose": "action",
         "durationSec": 3,
         "scene": { "name": "木屋客厅" },
         "action": "高背椅背对门口立在客厅中央，安娜停在门口观察。",

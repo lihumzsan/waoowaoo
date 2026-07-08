@@ -24,6 +24,7 @@ function validOutput() {
     shots: [{
       shotNumber: 1,
       shotId: 'shot-1',
+      shotPurpose: 'action',
       durationSec: 3,
       scene: {
         locationId: 'location-1',
@@ -88,6 +89,42 @@ describe('chapter plan output schema', () => {
       characterId: 'character-1',
       name: '民科',
     })
+  })
+
+  it('rejects a shot that omits shotPurpose so the shot type is always explicit', () => {
+    const schema = buildChapterPlanOutputSchema(assetMenu)
+    const output = validOutput()
+    delete (output.shots[0] as { shotPurpose?: string }).shotPurpose
+
+    expect(schema.safeParse(output).success).toBe(false)
+  })
+
+  it('rejects a shotPurpose value outside the allowed cinematic vocabulary', () => {
+    const schema = buildChapterPlanOutputSchema(assetMenu)
+    const output = validOutput()
+    ;(output.shots[0] as { shotPurpose: string }).shotPurpose = 'montage'
+
+    expect(schema.safeParse(output).success).toBe(false)
+  })
+
+  it('preserves shotPurpose through asset-name enrichment', () => {
+    const output = validOutput()
+    ;(output.shots[0] as { shotPurpose: string }).shotPurpose = 'establishing'
+
+    const enriched = enrichChapterPlanOutputWithAssetNames(output, assetMenu)
+
+    expect(enriched.shots[0]?.shotPurpose).toBe('establishing')
+  })
+
+  it('accepts a character-free atmosphere shot that still names its location', () => {
+    const schema = buildChapterPlanOutputSchema(assetMenu)
+    const output = validOutput()
+    const atmosphereShot = output.shots[0]!
+    ;(atmosphereShot as { shotPurpose: string }).shotPurpose = 'atmosphere'
+    ;(atmosphereShot as { characters: unknown[] }).characters = []
+
+    const result = schema.safeParse(output)
+    expect(result.success).toBe(true)
   })
 
   it('fails explicitly before LLM execution when the confirmed asset menu is empty', () => {

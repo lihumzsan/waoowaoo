@@ -109,6 +109,7 @@ function buildShots(): readonly EditScriptShot[] {
     {
       shotId: 'shot-1',
       shotNumber: 1,
+      shotPurpose: 'action',
       durationSec: 2,
       scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: 'Hero stands beside the chair.',
@@ -129,6 +130,7 @@ function buildShots(): readonly EditScriptShot[] {
     {
       shotId: 'shot-2',
       shotNumber: 2,
+      shotPurpose: 'action',
       durationSec: 3,
       scene: { locationId: 'location-1', name: 'Test Room', subScene: 'Test Room' },
       action: 'Hero steps closer to the chair.',

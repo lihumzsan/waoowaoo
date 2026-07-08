@@ -76,6 +76,9 @@ export type EditCharacterVisibility = (typeof EDIT_CHARACTER_VISIBILITIES)[numbe
 export const EDIT_CHARACTER_ROLES = ['focus', 'supporting', 'listener', 'hidden_subject', 'background'] as const
 export type EditCharacterRole = (typeof EDIT_CHARACTER_ROLES)[number]
 
+export const EDIT_SHOT_PURPOSES = ['establishing', 'action', 'reaction', 'insert', 'atmosphere', 'transition'] as const
+export type EditShotPurpose = (typeof EDIT_SHOT_PURPOSES)[number]
+
 export interface EditScriptCharacter {
   readonly characterId: string
   readonly name: string
@@ -92,6 +95,7 @@ export interface EditScriptKeyObject {
 export interface EditScriptShot {
   readonly shotId: string
   readonly shotNumber: number
+  readonly shotPurpose: EditShotPurpose
   readonly durationSec: number
   readonly scene: {
     readonly locationId: string
@@ -286,6 +290,7 @@ export const editScriptKeyObjectSchema = z.object({
 export const editScriptShotSchema = z.object({
   shotId: z.string().trim().min(1),
   shotNumber: z.number().int().positive(),
+  shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
   durationSec: z.number().int().min(1).max(5),
   scene: z.object({
     locationId: z.string().trim().min(1),

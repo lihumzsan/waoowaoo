@@ -34,6 +34,7 @@ describe('workspace structured stream adapters', () => {
       shot: {
         shotId: 'shot-stable-id',
         shotNumber: 1,
+        shotPurpose: 'action',
         durationSec: 4,
         scene: {
           locationId: 'location-1',
@@ -63,6 +64,7 @@ describe('workspace structured stream adapters', () => {
     const parsed = adapter?.parseItem({
       shotId: 'shot-stream-id',
       shotNumber: 1,
+      shotPurpose: 'action',
       durationSec: 4,
       scene: {
         locationId: 'location-1',
