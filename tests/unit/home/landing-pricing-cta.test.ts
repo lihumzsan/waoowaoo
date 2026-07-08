@@ -66,6 +66,7 @@ const cloudFeatures: PublicDeploymentFeatures = {
   showBilling: true,
   showApiConfig: false,
   showAccountSecurity: true,
+  showGoogleOAuth: true,
   showUpdateCheck: false,
   requireInviteCodeOnSignup: false,
   usePlatformProviderConfig: true,

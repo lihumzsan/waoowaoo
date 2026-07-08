@@ -31,6 +31,7 @@ export default function SignUp() {
   const [inviteCode, setInviteCode] = useState("")
   const [showInviteCodeInput, setShowInviteCodeInput] = useState(false)
   const [inviteCodeRequired, setInviteCodeRequired] = useState(false)
+  const [showGoogleOAuth, setShowGoogleOAuth] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -54,6 +55,7 @@ export default function SignUp() {
         if (isPublicDeploymentFeatures(features)) {
           setShowInviteCodeInput(features.showInviteCode || features.requireInviteCodeOnSignup)
           setInviteCodeRequired(features.requireInviteCodeOnSignup)
+          setShowGoogleOAuth(features.showGoogleOAuth)
         }
       }
     }
@@ -274,17 +276,21 @@ export default function SignUp() {
               </button>
             </form>
 
-            <div className="my-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
-              <span className="text-xs text-[var(--glass-text-tertiary)]">{t('orContinueWith')}</span>
-              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
-            </div>
+            {showGoogleOAuth ? (
+              <>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+                  <span className="text-xs text-[var(--glass-text-tertiary)]">{t('orContinueWith')}</span>
+                  <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+                </div>
 
-            <GoogleSignInButton
-              label={t('continueWithGoogle')}
-              loadingLabel={t('googleButtonLoading')}
-              onError={() => setError(t('googleLoginError'))}
-            />
+                <GoogleSignInButton
+                  label={t('continueWithGoogle')}
+                  loadingLabel={t('googleButtonLoading')}
+                  onError={() => setError(t('googleLoginError'))}
+                />
+              </>
+            ) : null}
 
             <div className="mt-6 text-center">
               <p className="text-[var(--glass-text-secondary)]">

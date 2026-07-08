@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { signIn } from "next-auth/react"
 import { useTranslations } from 'next-intl'
 import Navbar from "@/components/Navbar"
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton"
 import PasswordInput from "@/components/auth/PasswordInput"
+import { apiFetch } from '@/lib/api-fetch'
+import { isPublicDeploymentFeatures } from '@/lib/deployment/public-client'
 import { Link, useRouter } from '@/i18n/navigation'
 import { buildAuthenticatedHomeTarget } from '@/lib/home/default-route'
 
@@ -14,8 +16,35 @@ export default function SignIn() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showGoogleOAuth, setShowGoogleOAuth] = useState(false)
   const router = useRouter()
   const t = useTranslations('auth')
+
+  useEffect(() => {
+    let canceled = false
+
+    const loadDeployment = async () => {
+      const response = await apiFetch('/api/deployment')
+      if (!response.ok) return
+      const payload: unknown = await response.json()
+      if (
+        !canceled
+        && payload
+        && typeof payload === 'object'
+        && !Array.isArray(payload)
+      ) {
+        const features = Reflect.get(payload, 'features')
+        if (isPublicDeploymentFeatures(features)) {
+          setShowGoogleOAuth(features.showGoogleOAuth)
+        }
+      }
+    }
+
+    void loadDeployment()
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,17 +136,21 @@ export default function SignIn() {
               </button>
             </form>
 
-            <div className="my-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
-              <span className="text-xs text-[var(--glass-text-tertiary)]">{t('orContinueWith')}</span>
-              <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
-            </div>
+            {showGoogleOAuth ? (
+              <>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+                  <span className="text-xs text-[var(--glass-text-tertiary)]">{t('orContinueWith')}</span>
+                  <div className="h-px flex-1 bg-[var(--glass-border-subtle)]" />
+                </div>
 
-            <GoogleSignInButton
-              label={t('continueWithGoogle')}
-              loadingLabel={t('googleButtonLoading')}
-              onError={() => setError(t('googleLoginError'))}
-            />
+                <GoogleSignInButton
+                  label={t('continueWithGoogle')}
+                  loadingLabel={t('googleButtonLoading')}
+                  onError={() => setError(t('googleLoginError'))}
+                />
+              </>
+            ) : null}
 
             <div className="mt-6 text-center">
               <p className="text-[var(--glass-text-secondary)]">
