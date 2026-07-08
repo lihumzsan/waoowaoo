@@ -141,6 +141,7 @@ export function buildScriptIntakeChoiceCard(params: {
     toolCallId: params.toolCallId,
     choiceType: 'script_intake',
     variant: 'confirm_or_reply',
+    autoSubmitOnReady: true,
     title: isEnglish ? 'Refine the story brief' : '补充创作方向',
     description: isEnglish
       ? 'Choose a few directions before the system expands this idea into a full script.'

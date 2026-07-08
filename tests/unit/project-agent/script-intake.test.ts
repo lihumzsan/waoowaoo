@@ -51,6 +51,7 @@ describe('script intake choice', () => {
 
     expect(card.choiceType).toBe('script_intake')
     expect(card.variant).toBe('confirm_or_reply')
+    expect(card.autoSubmitOnReady).toBe(true)
     expect(card.groups).toHaveLength(2)
     expect(card.groups[0]?.options.some((option) => option.value === 'ai_fill')).toBe(false)
     expect(readPersistedScriptIntakeChoiceCard(card)?.cardId).toBe(card.cardId)

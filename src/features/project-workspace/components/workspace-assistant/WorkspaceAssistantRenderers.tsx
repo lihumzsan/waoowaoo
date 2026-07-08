@@ -389,11 +389,13 @@ export function AssistantChoiceCardView(props: {
   const [selections, setSelections] = useState<ChoiceCardSelections>({})
   const [activeGroupIndex, setActiveGroupIndex] = useState(0)
   const [replyText, setReplyText] = useState('')
+  const [replyFocused, setReplyFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isConfirmOnly = card.variant === 'confirm'
   const isConfirmOrReply = card.variant === 'confirm_or_reply'
   const shouldAutoSubmitOnReady = card.autoSubmitOnReady === true
+  const isAutoSelectionCard = shouldAutoSubmitOnReady || card.choiceType === 'script_intake'
   const showManualSubmit = shouldShowChoiceCardManualSubmit(card)
   const ready = isChoiceCardSubmitReady(card.groups, selections)
   const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
@@ -497,10 +499,15 @@ export function AssistantChoiceCardView(props: {
 
   const renderActiveGroup = () => {
     if (!activeGroup) return null
+    const optionGridClass = isAspectRatioGroup
+      ? 'grid grid-cols-3 gap-2'
+      : isStylePreviewGroup || isAutoSelectionCard
+        ? 'grid grid-cols-1 gap-2'
+        : 'grid grid-cols-2 gap-2'
     return (
       <div className="mt-2 space-y-2">
         <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">{activeGroup.label}</div>
-        <div className={isAspectRatioGroup ? 'grid grid-cols-3 gap-2' : isStylePreviewGroup ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
+        <div className={optionGridClass}>
           {activeGroup.options.map((option) => {
             const selected = selections[activeGroup.key] === option.value
             return (
@@ -534,14 +541,14 @@ export function AssistantChoiceCardView(props: {
                     className="h-28 w-full object-cover"
                   />
                 ) : null}
-                <div className={`p-2 ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-0.5'}`}>
+                <div className={`${isAutoSelectionCard ? 'p-3' : 'p-2'} ${isAspectRatioGroup ? 'flex flex-col items-center gap-1.5 text-center' : 'space-y-1'}`}>
                   {isAspectRatioGroup ? <RatioChoiceShape ratio={option.value} selected={selected} /> : null}
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
+                    <span className={`min-w-0 flex-1 ${isAutoSelectionCard ? 'text-[13px] leading-5' : 'truncate text-sm'} font-semibold ${selected ? 'text-neutral-900' : 'text-[var(--glass-text-primary)]'}`}>{option.label}</span>
                     {selected ? <AppIcon name="check" className="h-3.5 w-3.5 shrink-0 text-neutral-900" /> : null}
                   </div>
                   {!isAspectRatioGroup && option.description ? (
-                    <div className="line-clamp-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]">{option.description}</div>
+                    <div className={`${isAutoSelectionCard ? 'text-xs leading-5' : 'line-clamp-1 text-[11px] leading-5'} text-[var(--glass-text-secondary)]`}>{option.description}</div>
                   ) : null}
                   {!isAspectRatioGroup && option.meta ? (
                     <div className="truncate text-[10px] text-[var(--glass-text-tertiary)]">{option.meta}</div>
@@ -594,40 +601,73 @@ export function AssistantChoiceCardView(props: {
         </div>
       ) : isConfirmOrReply ? (
         <div className="mt-3 space-y-2">
-          <button
-            type="button"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-            onClick={() => { void handleSubmit() }}
-            disabled={!ready || submitting}
-          >
-            {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
-          </button>
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
-              {card.replyLabel || t('cards.choiceReplyLabel')}
-            </div>
-            <textarea
-              value={replyText}
-              onChange={(event) => {
-                setReplyText(event.target.value)
-                setError(null)
-              }}
-              onKeyDown={(event) => {
-                submitFromEnterKey(event, () => { void handleReplySubmit() })
-              }}
-              placeholder={card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
-              className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white"
-              disabled={submitting}
-            />
+          {!isAutoSelectionCard ? (
             <button
               type="button"
-              className="inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-[var(--glass-text-tertiary)] disabled:opacity-70"
-              onClick={() => { void handleReplySubmit() }}
-              disabled={submitting || !replyText.trim()}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              onClick={() => { void handleSubmit() }}
+              disabled={!ready || submitting}
             >
-              {submitting ? t('cards.choiceSubmitting') : card.replySubmitLabel || t('cards.choiceReplySubmit')}
+              {submitting ? t('cards.choiceSubmitting') : card.submitLabel}
             </button>
-          </div>
+          ) : null}
+          {isAutoSelectionCard ? (
+            <div className="relative">
+              <textarea
+                value={replyText}
+                rows={1}
+                aria-label={card.replyLabel || t('cards.choiceReplyLabel')}
+                onFocus={() => setReplyFocused(true)}
+                onBlur={() => setReplyFocused(false)}
+                onChange={(event) => {
+                  setReplyText(event.target.value)
+                  setError(null)
+                }}
+                onKeyDown={(event) => {
+                  submitFromEnterKey(event, () => { void handleReplySubmit() })
+                }}
+                placeholder={replyFocused ? '' : card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
+                className="min-h-11 max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2.5 pr-12 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting}
+              />
+              <button
+                type="button"
+                aria-label={card.replySubmitLabel || t('cards.choiceReplySubmit')}
+                className="absolute bottom-2 right-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
+                onClick={() => { void handleReplySubmit() }}
+                disabled={submitting || !replyText.trim()}
+              >
+                <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
+                {card.replyLabel || t('cards.choiceReplyLabel')}
+              </div>
+              <textarea
+                value={replyText}
+                onChange={(event) => {
+                  setReplyText(event.target.value)
+                  setError(null)
+                }}
+                onKeyDown={(event) => {
+                  submitFromEnterKey(event, () => { void handleReplySubmit() })
+                }}
+                placeholder={card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
+                className="min-h-20 w-full resize-none rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white"
+                disabled={submitting}
+              />
+              <button
+                type="button"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2 text-sm font-medium text-[var(--glass-text-primary)] transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-[var(--glass-text-tertiary)] disabled:opacity-70"
+                onClick={() => { void handleReplySubmit() }}
+                disabled={submitting || !replyText.trim()}
+              >
+                {submitting ? t('cards.choiceSubmitting') : card.replySubmitLabel || t('cards.choiceReplySubmit')}
+              </button>
+            </div>
+          )}
         </div>
       ) : activeGroup ? renderActiveGroup() : null}
       {error ? <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">{t('cards.choiceSubmitFailed', { error })}</div> : null}
