@@ -35,6 +35,15 @@ function assertContinuousShotNumbers(shots: readonly { readonly shotNumber: numb
   })
 }
 
+function assertDialogueSpeakersInShot(shot: EditScriptShot): void {
+  const characterIds = new Set(shot.characters.map((character) => character.characterId.trim()))
+  shot.dialogue.forEach((line) => {
+    if (!characterIds.has(line.characterId.trim())) {
+      throw new Error(`EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:${shot.shotNumber}:${line.characterId}`)
+    }
+  })
+}
+
 function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptShot[] {
   const normalized = shots
     .map((shot): EditScriptShot => ({
@@ -59,6 +68,10 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
         name: object.name.trim(),
         role: object.role.trim(),
       })),
+      dialogue: shot.dialogue.map((line) => ({
+        characterId: line.characterId.trim(),
+        line: line.line.trim(),
+      })),
       sound: shot.sound.trim(),
     }))
     .sort((left, right) => left.shotNumber - right.shotNumber)
@@ -66,6 +79,7 @@ function normalizeShots(shots: readonly EditScriptShot[]): readonly EditScriptSh
   const shotIds = new Set<string>()
   normalized.forEach((shot) => {
     if (shotIds.has(shot.shotId)) throw new Error(`EDIT_SCRIPT_SHOT_ID_DUPLICATE:${shot.shotId}`)
+    assertDialogueSpeakersInShot(shot)
     shotIds.add(shot.shotId)
   })
   return normalized
@@ -128,6 +142,30 @@ export const normalizeEditScriptStructure = normalizeEditScriptCore
 
 function names(values: readonly { readonly name: string }[]): Set<string> {
   return new Set(values.map((value) => value.name.trim().toLocaleLowerCase()))
+}
+
+function assertPromptContainsDialogueLines(input: {
+  readonly coreShotById: ReadonlyMap<string, EditScriptShot>
+  readonly executionShots: readonly EditShotExecution[]
+  readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
+}): void {
+  for (const shot of input.executionShots) {
+    const coreShot = input.coreShotById.get(shot.shotId)
+    if (!coreShot) continue
+    for (const dialogue of coreShot.dialogue) {
+      if (!shot.videoPrompt.includes(dialogue.line)) {
+        throw new Error(`EDIT_SHOT_EXECUTION_DIALOGUE_MISSING:${shot.shotNumber}:${dialogue.characterId}`)
+      }
+    }
+  }
+  for (const segment of input.generationSegmentExecutions) {
+    const dialogueLines = segment.shotIds.flatMap((shotId) => input.coreShotById.get(shotId)?.dialogue ?? [])
+    for (const dialogue of dialogueLines) {
+      if (!segment.continuousVideoPrompt.includes(dialogue.line)) {
+        throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_DIALOGUE_MISSING:${segment.shotIds.join(',')}:${dialogue.characterId}`)
+      }
+    }
+  }
 }
 
 export function normalizeEditShotExecutionPlan(
@@ -214,6 +252,11 @@ export function normalizeEditShotExecutionPlan(
     ) {
       throw new Error(`EDIT_SHOT_EXECUTION_SEGMENT_SHOTS_MISMATCH:${index}:${segmentExecution.shotIds.join(',')}:${coreSegment.shotIds.join(',')}`)
     }
+  })
+  assertPromptContainsDialogueLines({
+    coreShotById: new Map(coreShots.map((shot) => [shot.shotId, shot])),
+    executionShots: shots,
+    generationSegmentExecutions,
   })
   return { shots, generationSegmentExecutions }
 }

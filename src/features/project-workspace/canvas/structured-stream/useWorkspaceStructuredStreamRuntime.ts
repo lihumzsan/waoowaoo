@@ -545,6 +545,10 @@ function buildEditScriptRuntimeEntries(
               characters: shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`),
               keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
               imagePrompt: null,
+              dialogue: shot.dialogue.map((line) => {
+                const speaker = shot.characters.find((character) => character.characterId === line.characterId)?.name ?? line.characterId
+                return `${speaker}: ${line.line}`
+              }),
               sound: shot.sound,
               imageUrl: null,
               videoUrl: null,

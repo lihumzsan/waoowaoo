@@ -58,7 +58,7 @@ function platformImageOptions(): Record<string, CapabilityValue> {
 export function getPlatformVideoGenerationOptions(): Record<string, CapabilityValue> {
   const options: Record<string, CapabilityValue> = {
     resolution: readEnvString('PLATFORM_VIDEO_RESOLUTION') || '720p',
-    generateAudio: readEnvBoolean('PLATFORM_VIDEO_GENERATE_AUDIO') ?? false,
+    generateAudio: readEnvBoolean('PLATFORM_VIDEO_GENERATE_AUDIO') ?? true,
   }
   return options
 }

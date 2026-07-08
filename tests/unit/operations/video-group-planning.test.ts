@@ -6,7 +6,7 @@ import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildZenStyleBibleFixture } from '../../fixtures/edit-script-style-bible'
 
-const CONTINUOUS_PROMPT = 'ShotExecutionPlan continuous segment prompt. 16:9, same room and same screen direction. [00:00-00:02] Shot 1: Hero remains screen left of Chair. <room tone continues> [00:02-00:05] Shot 2: Hero moves closer while Chair stays screen center. <floor creak continues>'
+const CONTINUOUS_PROMPT = 'ShotExecutionPlan continuous segment prompt. 16:9, same room and same screen direction. [00:00-00:02] Shot 1: Hero remains screen left of Chair and says "Hold the line." <room tone continues> [00:02-00:05] Shot 2: Hero moves closer while Chair stays screen center. <floor creak continues>'
 
 const prismaMock = vi.hoisted(() => ({
   projectEpisode: {
@@ -125,6 +125,9 @@ function buildShots(): readonly EditScriptShot[] {
       keyObjects: [
         { name: 'Chair', role: 'blocking_anchor' },
       ],
+      dialogue: [
+        { characterId: 'character-1', line: 'Hold the line.' },
+      ],
       sound: 'room tone',
     },
     {
@@ -146,12 +149,14 @@ function buildShots(): readonly EditScriptShot[] {
       keyObjects: [
         { name: 'Chair', role: 'blocking_anchor' },
       ],
+      dialogue: [],
       sound: 'floor creak',
     },
   ]
 }
 
 function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
+  const dialogueText = shot.dialogue.map((line) => line.line).join(' ')
   return {
     shotId: shot.shotId,
     shotNumber: shot.shotNumber,
@@ -190,7 +195,7 @@ function buildExecutionShot(shot: EditScriptShot): EditShotExecution {
       ],
       spatialNote: 'Hero and Chair preserve the same axis.',
     },
-    videoPrompt: `Single-shot video prompt for shot ${shot.shotNumber}: Hero stays screen left of Chair and preserves the same room axis.`,
+    videoPrompt: `Single-shot video prompt for shot ${shot.shotNumber}: Hero stays screen left of Chair and preserves the same room axis.${dialogueText ? ` Hero says "${dialogueText}".` : ''}`,
   }
 }
 

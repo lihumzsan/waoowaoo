@@ -25,6 +25,7 @@ function planWithFacts(facts: readonly string[]): NormalizedChapterPlanOutput {
         name: 'Door',
         role: 'reveal',
       }],
+      dialogue: [],
       sound: 'door opens',
     }],
     generationSegments: [{

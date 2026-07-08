@@ -76,6 +76,10 @@ export function parseEditScriptShots(value: unknown): VideoGroupShot[] {
     action: shot.action,
     sceneName: shot.scene.name,
     characters: shot.characters.map((character) => character.name),
+    dialogue: shot.dialogue.map((line) => {
+      const speaker = shot.characters.find((character) => character.characterId === line.characterId)?.name ?? line.characterId
+      return `${speaker}: ${line.line}`
+    }),
     sound: shot.sound,
   }))
 }

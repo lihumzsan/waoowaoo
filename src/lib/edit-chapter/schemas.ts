@@ -86,6 +86,10 @@ export function buildChapterPlanOutputSchema(assetMenu: ChapterPlanAssetMenu) {
       name: z.string().trim().min(1),
       role: z.string().trim().min(1),
     }).strict()).min(0).max(20),
+    dialogue: z.array(z.object({
+      characterId: z.enum(characterIds),
+      line: z.string().trim().min(1),
+    }).strict()).min(0).max(20),
     sound: z.string().trim().min(1),
   }).strict()
   return z.object({

@@ -43,6 +43,7 @@ export function FieldGlyph({ name, className = 'h-3.5 w-3.5' }: { readonly name:
 
 export function glyphForField(label: string): string {
   const l = label
+  const lower = label.toLocaleLowerCase()
   if (l.includes('时长')) return 'clock'
   if (l.includes('戏剧') || l.includes('目的')) return 'target'
   if (l.includes('可见') || l.includes('动作')) return 'motion'
@@ -52,7 +53,8 @@ export function glyphForField(label: string): string {
   if (l.includes('节拍') || l.includes('节奏')) return 'pulse'
   if (l.includes('衔接')) return 'link'
   if (l.includes('人物') || l.includes('表演') || l.includes('角色')) return 'people'
-  if (l.includes('声音') || l.includes('音')) return 'sound'
+  if (l.includes('对白') || lower.includes('dialogue')) return 'sound'
+  if (l.includes('声音') || l.includes('音') || lower.includes('sound')) return 'sound'
   if (l.includes('景别')) return 'frame'
   if (l.includes('焦段')) return 'lens'
   if (l.includes('景深')) return 'layers'

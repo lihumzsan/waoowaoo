@@ -31,6 +31,10 @@
 - 多人对话、中景、过肩、空间交代镜头中，非焦点人物只要仍在画面空间或镜头空间内，就必须出现在 characters。
 - role 只能使用 `focus`、`supporting`、`listener`、`hidden_subject`、`background`；`hidden_subject` 用于高背椅后、门后、阴影中等“在场但被隐藏、等待揭示”的人物。
 - keyObjects 必须包含影响动作、遮挡、揭示或空间关系的关键物体，例如高背椅、桌子、门、武器、篮子。
+- dialogue 是对白的唯一结构化承载字段；sound 只写环境声、动作声、音乐、声音桥接等非对白声音。
+- dialogue[].line 必须是本章剧本中真实存在的逐字台词；不得改写、概括、补写、扩写或凭空创作台词。
+- dialogue[].characterId 必须从本镜头 characters[].characterId 中选择；说话人即使画外或不可见，也必须保留在 characters，并用 visibility 表达 offscreen/hidden/occluded。
+- 一个镜头没有对白时 dialogue 输出空数组；不要把台词塞进 sound，也不要为了让视频有声音而发明对白。
 
 镜头语言与节奏（让镜头有电影感，但一切服从剧本）：
 - 段落开场优先用 `establishing` 或 `atmosphere` 镜头交代空间、时间和氛围，不要默认一上来就贴人物特写；除非“突然贴脸”本身服务于冲击或悬念。
@@ -111,7 +115,13 @@ Style Bible：
           "role": "物体在叙事、遮挡、揭示或空间连续中的作用"
         }
       ],
-      "sound": "声音事件、对白/旁白/画外音和声音桥接"
+      "dialogue": [
+        {
+          "characterId": "本镜头 characters[].characterId 中的说话人",
+          "line": "逐字台词；无对白时 dialogue 为 []"
+        }
+      ],
+      "sound": "非对白声音事件、环境声、动作声、音乐和声音桥接"
     }
   ],
   "generationSegments": [
@@ -141,6 +151,10 @@ Style Bible：
 
 关键：这 6 个镜头没有新增任何人物、对白或道具，只是把同一段事实用建立、插入、反应、空镜等镜头语言组织得更有节奏。
 
+对白正例：如果本章剧本片段是“林晓低声说：‘别开灯。’ 阿澈回答：‘我听见脚步了。’”，对应镜头必须把逐字台词写入 dialogue，例如：
+- action 镜头：characters 同时包含林晓和阿澈；dialogue = [{ characterId=林晓的资产 ID, line="别开灯。" }, { characterId=阿澈的资产 ID, line="我听见脚步了。" }]；sound 只写“远处脚步声和压低的室内底噪”。
+- reaction 镜头：如果只拍阿澈听到林晓说话，林晓画外说“别开灯。”，characters 仍包含林晓并标为 offscreen，dialogue 仍归到林晓；sound 不重复写台词。
+
 克制反例：如果剧本片段本身是“两人快速争吵、互相打断”，就应以 `action` 与 `reaction` 的正反打为主，不要硬塞 establishing 或 atmosphere 空镜。
 
 # 自检
@@ -156,6 +170,8 @@ Style Bible：
 - 每个镜头是否保留所有在场人物，包括隐藏、遮挡、非焦点和听者。
 - visibility 和 role 是否只使用允许的枚举值。
 - 高背椅、门、桌子、武器等影响遮挡/揭示的物体是否进入 keyObjects。
+- 每个镜头是否都有 dialogue 数组，且逐字对白只在 dialogue 中，sound 不再承载台词。
+- 每条 dialogue[].characterId 是否属于同一镜头 characters，且 line 是否来自本章剧本文本。
 - generationSegments 是否顺序覆盖所有 shots，且只包含 shotIds 和 continuity。
 - 是否逐段累加 durationSec，并确认每个 generationSegment 总时长不得超过 {{generation_segment_max_duration_seconds}} 秒。
 - persistentFactsIntroduced 是否只包含入章事实或本章事件记录允许的事实。

@@ -6,6 +6,7 @@ import {
 import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
 import {
   editBibleBeatSheetSchema,
+  editBibleCharacterSchema,
   editBibleEmotionalCurveSchema,
   editBibleEntitySchema,
   editBibleSchema,
@@ -36,16 +37,31 @@ export function normalizeRawEditBible(input: {
   readonly blocks: readonly EditSourceBlock[]
 }): EditBible {
   const raw = rawEditBibleSchema.parse(input.raw)
-  const normalizeEntity = (
+  const sourceStartFromEvidence = (entity: { readonly firstEvidence?: RawEditBible['characters'][number]['firstEvidence'] }): number | undefined => {
+    if (!entity.firstEvidence) return undefined
+    return resolveEditSourcePointAnchor({
+      sourceText: input.sourceText,
+      blocks: input.blocks,
+      anchor: entity.firstEvidence,
+    })
+  }
+  const normalizeCharacter = (
     entity: RawEditBible['characters'][number],
   ): EditBible['characters'][number] => {
-    const firstSourceStart = entity.firstEvidence
-      ? resolveEditSourcePointAnchor({
-          sourceText: input.sourceText,
-          blocks: input.blocks,
-          anchor: entity.firstEvidence,
-        })
-      : undefined
+    const firstSourceStart = sourceStartFromEvidence(entity)
+    return editBibleCharacterSchema.parse({
+      entityId: entity.entityId,
+      name: entity.name,
+      aliases: entity.aliases,
+      summary: entity.summary,
+      voiceProfile: entity.voiceProfile,
+      ...(firstSourceStart !== undefined ? { firstSourceStart } : {}),
+    })
+  }
+  const normalizeLocation = (
+    entity: RawEditBible['locations'][number],
+  ): EditBible['locations'][number] => {
+    const firstSourceStart = sourceStartFromEvidence(entity)
     return editBibleEntitySchema.parse({
       entityId: entity.entityId,
       name: entity.name,
@@ -56,8 +72,8 @@ export function normalizeRawEditBible(input: {
   }
   return editBibleSchema.parse({
     ...raw,
-    characters: raw.characters.map(normalizeEntity),
-    locations: raw.locations.map(normalizeEntity),
+    characters: raw.characters.map(normalizeCharacter),
+    locations: raw.locations.map(normalizeLocation),
   })
 }
 

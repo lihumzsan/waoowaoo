@@ -119,6 +119,14 @@ function buildStoryboardTextJson(snapshot: StoryboardConsistencySourceSnapshot):
   })
 }
 
+function dialogueLinesForShot(shot: StoryboardConsistencySourceSnapshot['shots'][number]): string[] {
+  const characterNameById = new Map(shot.characters.map((character) => [character.characterId, character.name]))
+  return shot.dialogue.map((line) => {
+    const speaker = characterNameById.get(line.characterId) ?? line.characterId
+    return `${speaker}: ${line.line}`
+  })
+}
+
 export async function upsertEditScriptStoryboard(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
 }) {
@@ -211,7 +219,7 @@ function buildPanelDrafts(input: {
       location: location?.name ?? shot.scene.name,
       characters: characters.length > 0 ? JSON.stringify(characters) : null,
       props: props.length > 0 ? JSON.stringify(props) : null,
-      srtSegment: [shot.action, shot.sound].filter(Boolean).join('\n'),
+      srtSegment: [...dialogueLinesForShot(shot), shot.sound].filter(Boolean).join('\n'),
       srtStart,
       srtEnd,
       duration: shot.durationSec,

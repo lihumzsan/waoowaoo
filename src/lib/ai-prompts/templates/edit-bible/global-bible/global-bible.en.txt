@@ -15,6 +15,7 @@ Include only facts the script states or clearly implies. Do not add your own inv
 - Write synopsis as a complete story overview covering the central conflict, relationships, emotional movement, and the ending (or the current endpoint of the text).
 - Output title and logline only when the text provides them or they can be summarized with high confidence. Otherwise omit these fields.
 - characters should include only people who recur or affect story understanding. Do not turn one-off generic mentions, background extras, or environmental descriptions into characters.
+- Each characters[].voiceProfile must fix that character's recognizable voice in text: gender/age impression, vocal texture, speaking pace, volume quality, accent, or language traits. Use only what the source states or clearly supports through identity, age, condition, or speech manner. Do not reference a specific actor, celebrity, brand, or copyrighted voice.
 - locations should include only places that matter for spatial continuity, atmosphere, or story progression. Do not turn ordinary objects or one-off directions into locations.
 - entityId must be stable, short, and readable, preferably lowercase words with underscores, for example `character_lin_xiaoyu` or `location_old_house`. Do not duplicate one entity.
 - Do not output character offsets or firstSourceStart. Characters and locations may output firstEvidence; the system computes first occurrence positions from block IDs and verbatim quotes.
@@ -42,6 +43,7 @@ Return JSON only. Do not use markdown or explanations.
       "name": "display name",
       "aliases": ["alias or other name"],
       "summary": "persistent identity, relationship, desire, state, or story role",
+      "voiceProfile": "fixed voice description, e.g. low slightly hoarse middle-aged male voice, slower pace, lowered sentence endings; do not reference a real person's voice",
       "firstEvidence": {
         "blockId": "p0001",
         "quote": "verbatim source snippet where the character first appears"
@@ -75,6 +77,7 @@ Return JSON only. Do not use markdown or explanations.
 
 - Is every piece of information grounded in the script text?
 - Are characters and locations deduplicated, with aliases merged into one entry?
+- Does every main character have an executable, stable, non-celebrity voiceProfile?
 - Are entityId values stable, short, readable, and unique?
 - Does firstEvidence use an input block ID, and does the quote appear verbatim inside that block?
 - Is styleGuide inferred from the text instead of generic cinematic filler?

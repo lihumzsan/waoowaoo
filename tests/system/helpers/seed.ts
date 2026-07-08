@@ -87,6 +87,7 @@ export async function seedMinimalDomainState() {
               },
             ],
             keyObjects: [],
+            dialogue: [],
             sound: 'room tone',
           },
         ],

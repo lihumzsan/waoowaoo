@@ -63,6 +63,7 @@ function scriptRow(id: string, chapterId: string, requirementStatus: string) {
           performance: '检查设备',
         }],
         keyObjects: [],
+        dialogue: [],
         sound: 'room tone',
       }],
       generationSegments: [{

@@ -92,6 +92,11 @@ export interface EditScriptKeyObject {
   readonly role: string
 }
 
+export interface EditScriptDialogueLine {
+  readonly characterId: string
+  readonly line: string
+}
+
 export interface EditScriptShot {
   readonly shotId: string
   readonly shotNumber: number
@@ -105,6 +110,7 @@ export interface EditScriptShot {
   readonly action: string
   readonly characters: readonly EditScriptCharacter[]
   readonly keyObjects: readonly EditScriptKeyObject[]
+  readonly dialogue: readonly EditScriptDialogueLine[]
   readonly sound: string
 }
 
@@ -287,6 +293,11 @@ export const editScriptKeyObjectSchema = z.object({
   role: z.string().trim().min(1),
 }).strict()
 
+export const editScriptDialogueLineSchema = z.object({
+  characterId: z.string().trim().min(1),
+  line: z.string().trim().min(1),
+}).strict()
+
 export const editScriptShotSchema = z.object({
   shotId: z.string().trim().min(1),
   shotNumber: z.number().int().positive(),
@@ -300,6 +311,7 @@ export const editScriptShotSchema = z.object({
   action: z.string().trim().min(1),
   characters: z.array(editScriptCharacterSchema).min(0).max(20),
   keyObjects: z.array(editScriptKeyObjectSchema).min(0).max(20),
+  dialogue: z.array(editScriptDialogueLineSchema).min(0).max(20),
   sound: z.string().trim().min(1),
 }).strict()
 

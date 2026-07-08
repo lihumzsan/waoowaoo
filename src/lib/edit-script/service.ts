@@ -39,6 +39,7 @@ import {
   normalizeEditScriptStructure,
   normalizeEditShotExecutionPlan,
 } from './normalize'
+import { resolveEditScriptDialogueVoiceContext } from './voice-profiles'
 import type {
   EditScriptAssetGenerationPayload,
   EditScriptAssetGenerationTask,
@@ -1849,6 +1850,15 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
       message: 'Style Bible is required before shot execution plan generation',
     })
   }
+  const editBible = await prisma.projectEditBible.findUnique({
+    where: { episodeId: input.episodeId },
+    select: { bibleJson: true },
+  })
+  if (!editBible?.bibleJson) throw new Error('EDIT_SCRIPT_STORY_BIBLE_REQUIRED')
+  const dialogueVoiceContext = resolveEditScriptDialogueVoiceContext({
+    storyBibleJson: editBible.bibleJson,
+    shots: mappedEditScript.shots,
+  })
   const assets = await buildAssetSnapshots(mappedEditScript.requirements)
   const model = resolveTextModel(config)
   const parsed = await runStructuredPromptStep({
@@ -1867,6 +1877,8 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
         shots: mappedEditScript.shots,
         generationSegments: mappedEditScript.generationSegments,
       }),
+      character_voice_profiles_json: stringifyForPrompt(dialogueVoiceContext.characters),
+      dialogue_voice_context_json: stringifyForPrompt(dialogueVoiceContext.shots),
       asset_context_json: stringifyForPrompt(assets),
       spatial_profiles_json: stringifyForPrompt(assets
         .filter((asset) => asset.kind === 'location')

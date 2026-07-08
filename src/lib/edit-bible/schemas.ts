@@ -11,7 +11,7 @@ export const editBibleStatusSchema = z.enum([
   EDIT_BIBLE_STATUS.FAILED,
 ])
 
-export const editBibleEntitySchema = z.object({
+export const editBibleEntityBaseSchema = z.object({
   entityId: z.string().trim().min(1),
   name: z.string().trim().min(1),
   aliases: z.array(z.string().trim().min(1)).default([]),
@@ -19,7 +19,19 @@ export const editBibleEntitySchema = z.object({
   firstSourceStart: z.number().int().min(0).optional(),
 })
 
-export const rawEditBibleEntitySchema = editBibleEntitySchema
+export const editBibleEntitySchema = editBibleEntityBaseSchema
+
+export const editBibleCharacterSchema = editBibleEntityBaseSchema.extend({
+  voiceProfile: z.string().trim().min(1),
+})
+
+export const rawEditBibleEntitySchema = editBibleEntityBaseSchema
+  .omit({ firstSourceStart: true })
+  .extend({
+    firstEvidence: editSourcePointAnchorSchema.optional(),
+  })
+
+export const rawEditBibleCharacterSchema = editBibleCharacterSchema
   .omit({ firstSourceStart: true })
   .extend({
     firstEvidence: editSourcePointAnchorSchema.optional(),
@@ -36,7 +48,7 @@ export const editBibleSchema = z.object({
   title: z.string().trim().min(1).optional(),
   logline: z.string().trim().min(1).optional(),
   synopsis: z.string().trim().min(1),
-  characters: z.array(editBibleEntitySchema).default([]),
+  characters: z.array(editBibleCharacterSchema).default([]),
   locations: z.array(editBibleEntitySchema).default([]),
   worldRules: z.array(z.string().trim().min(1)).default([]),
   styleGuide: editBibleStyleGuideSchema,
@@ -45,7 +57,7 @@ export const editBibleSchema = z.object({
 export type EditBible = z.infer<typeof editBibleSchema>
 
 export const rawEditBibleSchema = editBibleSchema.extend({
-  characters: z.array(rawEditBibleEntitySchema).default([]),
+  characters: z.array(rawEditBibleCharacterSchema).default([]),
   locations: z.array(rawEditBibleEntitySchema).default([]),
 })
 

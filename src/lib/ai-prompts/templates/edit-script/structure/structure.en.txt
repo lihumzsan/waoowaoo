@@ -31,6 +31,10 @@ You decide story-level content only. Do not write camera parameters, camera posi
 - In dialogue, medium shots, over-the-shoulder shots, and spatial establishing shots, non-focus characters must remain in characters as long as they are still within the image or shot space.
 - role must be one of `focus`, `supporting`, `listener`, `hidden_subject`, `background`. Use `hidden_subject` for characters present but hidden for a reveal, such as behind a high-backed chair, behind a door, or in shadow.
 - keyObjects must include objects that affect action, occlusion, reveal, or spatial relation, such as a high-backed chair, table, door, weapon, or basket.
+- dialogue is the only structured field for spoken lines. sound is only for non-dialogue audio such as ambience, action sounds, music, and sound bridges.
+- dialogue[].line must be a verbatim spoken line that truly exists in this chapter script. Do not rewrite, summarize, add, expand, or invent dialogue.
+- dialogue[].characterId must be selected from the same shot's characters[].characterId. If the speaker is offscreen or hidden, keep that speaker in characters and express the state with visibility.
+- When a shot has no dialogue, output an empty dialogue array. Do not put spoken lines in sound, and do not invent dialogue just so the video has audio.
 
 Shot language and rhythm (make shots cinematic, but always serve the script):
 - Prefer opening a beat with an `establishing` or `atmosphere` shot to set space, time, and mood; do not default to a character close-up as the first shot, unless a sudden close-up itself serves shock or suspense.
@@ -111,7 +115,13 @@ Return JSON only. Do not use markdown or explanations.
           "role": "object role in the narrative, occlusion, reveal, or spatial continuity"
         }
       ],
-      "sound": "sound event, dialogue, narration, offscreen audio, or sound bridge"
+      "dialogue": [
+        {
+          "characterId": "speaker id from this shot's characters[].characterId",
+          "line": "verbatim spoken line; use [] when there is no dialogue"
+        }
+      ],
+      "sound": "non-dialogue audio event, ambience, action sound, music, or sound bridge"
     }
   ],
   "generationSegments": [
@@ -141,6 +151,10 @@ Good version (organized into 6 shots using only existing assets and facts, addin
 
 Key point: these 6 shots add no new characters, dialogue, or props; they only organize the same facts with more rhythm using establishing, insert, reaction, and empty shots.
 
+Dialogue example: if the chapter script slice is "Lin Xiao whispers, 'Don't turn on the light.' A Che replies, 'I hear footsteps.'", the relevant shot must put the exact lines in dialogue:
+- action shot: characters includes both Lin Xiao and A Che; dialogue = [{ characterId=Lin Xiao's asset id, line="Don't turn on the light." }, { characterId=A Che's asset id, line="I hear footsteps." }]; sound only states "distant footsteps and low room tone".
+- reaction shot: if the image only shows A Che reacting while Lin Xiao says "Don't turn on the light." offscreen, characters still includes Lin Xiao with visibility offscreen, dialogue still belongs to Lin Xiao, and sound does not repeat the line.
+
 Restraint counter-example: if the script slice is itself "two people argue fast and interrupt each other," keep it mostly `action` and `reaction` shot/reverse-shot; do not force in establishing or atmosphere empty shots.
 
 # Self-check
@@ -156,6 +170,8 @@ Restraint counter-example: if the script slice is itself "two people argue fast 
 - Does every shot keep all present characters, including hidden, occluded, non-focus, and listener characters?
 - Do visibility and role use only the allowed enum values?
 - Are high-backed chairs, doors, tables, weapons, and other occlusion/reveal objects included in keyObjects when relevant?
+- Does every shot include a dialogue array, with verbatim spoken lines only in dialogue and not in sound?
+- Does every dialogue[].characterId belong to the same shot's characters, and does every line come from the chapter script text?
 - Do generationSegments cover every shot in order, and contain only shotIds and continuity?
 - Did you sum durationSec for every generationSegment and confirm each total is at most {{generation_segment_max_duration_seconds}} seconds?
 - Does persistentFactsIntroduced contain only facts allowed by the entry facts or chapter events?

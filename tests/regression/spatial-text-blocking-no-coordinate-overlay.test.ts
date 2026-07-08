@@ -22,6 +22,7 @@ const shot: EditScriptShot = {
   keyObjects: [
     { name: '木质柜台', role: 'spatial_anchor' },
   ],
+  dialogue: [],
   sound: '室内安静，远处传来街声。',
 }
 

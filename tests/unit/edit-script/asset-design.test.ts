@@ -32,6 +32,7 @@ const shots: readonly EditScriptShot[] = [
     keyObjects: [
       { name: '环形中控台', role: 'operation_surface' },
     ],
+    dialogue: [],
     sound: '低频舱体嗡鸣',
   },
 ]

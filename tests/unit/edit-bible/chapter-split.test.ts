@@ -9,7 +9,13 @@ function buildBundle(): EditBibleBundle {
       title: '旧车站',
       synopsis: '林秋在旧车站追查断电事件。',
       characters: [
-        { entityId: 'character_lin_qiu', name: '林秋', aliases: [], summary: '追查断电事件的主角' },
+        {
+          entityId: 'character_lin_qiu',
+          name: '林秋',
+          aliases: [],
+          summary: '追查断电事件的主角',
+          voiceProfile: '冷静清亮的青年女声，语速中等，句尾收得很稳。',
+        },
       ],
       locations: [
         { entityId: 'location_station', name: '旧车站', aliases: [], summary: '核心事件发生地点' },

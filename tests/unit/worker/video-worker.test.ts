@@ -189,7 +189,14 @@ function buildPanel(overrides?: Partial<PanelRow>): PanelRow {
 }
 
 function buildCorePlan(
-  shots: readonly { readonly shotId?: string; readonly shotNumber: number; readonly durationSec: number; readonly action: string; readonly sound: string }[] = [
+  shots: readonly {
+    readonly shotId?: string
+    readonly shotNumber: number
+    readonly durationSec: number
+    readonly action: string
+    readonly sound: string
+    readonly dialogue?: readonly { readonly characterId: string; readonly line: string }[]
+  }[] = [
     { shotId: 'shot-1', shotNumber: 1, durationSec: 2, action: 'Shot one', sound: 'tone' },
     { shotId: 'shot-2', shotNumber: 2, durationSec: 3, action: 'Shot two', sound: 'pulse' },
     { shotId: 'shot-3', shotNumber: 3, durationSec: 4, action: 'Shot three', sound: 'rise' },
@@ -219,6 +226,7 @@ function buildCorePlan(
       keyObjects: [
         { name: 'Chair', role: 'blocking_anchor' },
       ],
+      dialogue: shot.dialogue ?? [],
       sound: shot.sound,
     })),
     generationSegments,

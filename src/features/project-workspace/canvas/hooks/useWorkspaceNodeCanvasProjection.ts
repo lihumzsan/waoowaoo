@@ -389,6 +389,14 @@ function shotKeyObjects(shot: ProjectEditScriptShot): string[] {
   return shot.keyObjects.map((object) => `${object.name} / ${object.role}`)
 }
 
+function shotDialogue(shot: ProjectEditScriptShot): string[] {
+  const characterNameById = new Map(shot.characters.map((character) => [character.characterId, character.name]))
+  return shot.dialogue.map((line) => {
+    const speaker = characterNameById.get(line.characterId) ?? line.characterId
+    return `${speaker}: ${line.line}`
+  })
+}
+
 function shotAssetRefs(panel: ProjectPanel): WorkspaceCanvasAssetRef[] {
   return parseStringList(panel.characters).map((name) => ({ name }))
 }
@@ -724,6 +732,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
               characters: shotCharacters(shot),
               keyObjects: shotKeyObjects(shot),
               imagePrompt: panel?.imagePrompt ?? null,
+              dialogue: shotDialogue(shot),
               sound: shot.sound,
               imageUrl: primaryPanelImageUrl(panel),
               videoUrl: panel?.videoMedia?.url ?? panel?.videoUrl ?? null,

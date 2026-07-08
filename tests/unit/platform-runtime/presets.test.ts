@@ -41,14 +41,22 @@ describe('platform runtime presets', () => {
 
     expect(getPlatformVideoGenerationOptions()).toEqual({
       resolution: '720p',
-      generateAudio: false,
+      generateAudio: true,
     })
     expect(getPlatformRuntimePlan('video')).toMatchObject({
       modelKey: 'openrouter::bytedance/seedance-2.0-fast',
       generationOptions: {
         resolution: '720p',
-        generateAudio: false,
+        generateAudio: true,
       },
+    })
+  })
+
+  it('allows the platform video audio default to be explicitly disabled', () => {
+    process.env.PLATFORM_VIDEO_GENERATE_AUDIO = 'false'
+
+    expect(getPlatformVideoGenerationOptions()).toMatchObject({
+      generateAudio: false,
     })
   })
 

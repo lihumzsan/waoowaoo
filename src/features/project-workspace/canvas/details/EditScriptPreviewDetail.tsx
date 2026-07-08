@@ -25,6 +25,7 @@ interface PreviewShot {
   readonly characters: readonly string[]
   readonly keyObjects: readonly string[]
   readonly imagePrompt: string | null
+  readonly dialogue: readonly string[]
   readonly sound: string
   readonly imageUrl: string | null
   readonly videoUrl: string | null
@@ -86,6 +87,7 @@ function buildPreviewShots(details: WorkspaceCanvasEditScriptDetails): readonly 
       characters: shot.characters,
       keyObjects: shot.keyObjects,
       imagePrompt: shot.imagePrompt ?? null,
+      dialogue: shot.dialogue,
       sound: shot.sound,
       imageUrl: shot.imageUrl ?? null,
       videoUrl: shot.videoUrl ?? null,
@@ -297,6 +299,7 @@ export default function EditScriptPreviewDetail({
                           <PromptBlock title={t('fields.keyObjects')} value={activeShot.keyObjects.join('\n')} emptyText={t('empty.noPreviewShot')} />
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
+                          <PromptBlock title={t('fields.dialogue')} value={activeShot.dialogue.join('\n')} emptyText={t('empty.noPreviewShot')} />
                           <PromptBlock title={t('fields.sound')} value={activeShot.sound} emptyText={t('empty.noPreviewShot')} />
                         </div>
                       </div>

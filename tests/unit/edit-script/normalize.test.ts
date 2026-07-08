@@ -34,6 +34,7 @@ function corePlan() {
         keyObjects: [
           { name: 'High-backed chair', role: 'reveal_device' },
         ],
+        dialogue: [],
         sound: 'Soft floor creak.',
       },
       {
@@ -61,6 +62,9 @@ function corePlan() {
         ],
         keyObjects: [
           { name: 'High-backed chair', role: 'reveal_device' },
+        ],
+        dialogue: [
+          { characterId: 'character-anna', line: 'Who is sitting there?' },
         ],
         sound: 'Chair hinge starts to groan.',
       },
@@ -171,13 +175,13 @@ function executionPlan() {
           ],
           spatialNote: 'The hidden subject remains physically in the chair.',
         },
-        videoPrompt: 'Single-shot video prompt: Anna stays screen left beside the high-backed chair, the hidden subject remains physically seated behind the chair back, floor creak continues.',
+        videoPrompt: 'Single-shot video prompt: Anna stays screen left beside the high-backed chair and says "Who is sitting there?", the hidden subject remains physically seated behind the chair back, floor creak continues.',
       },
     ],
     generationSegmentExecutions: [
       {
         shotIds: ['shot-1', 'shot-2'],
-        continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and the hidden subject stays physically present. <chair hinge begins>',
+        continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and says "Who is sitting there?", while the hidden subject stays physically present. <chair hinge begins>',
       },
     ],
   } as const
@@ -202,7 +206,27 @@ describe('edit-first core plan normalization', () => {
       role: 'hidden_subject',
       performance: 'sits silently inside the high-backed chair',
     })
+    expect(normalized.shots[1]?.dialogue).toEqual([
+      { characterId: 'character-anna', line: 'Who is sitting there?' },
+    ])
     expect(normalized.shots.map((shot) => shot.shotPurpose)).toEqual(['establishing', 'action'])
+  })
+
+  it('fails explicitly when dialogue references a speaker outside the same shot', () => {
+    const plan = corePlan()
+    const invalid = {
+      ...plan,
+      shots: [
+        {
+          ...plan.shots[0],
+          dialogue: [{ characterId: 'character-outside', line: 'I should not be here.' }],
+        },
+        plan.shots[1],
+      ],
+    }
+
+    expect(() => normalizeEditScriptCore(invalid))
+      .toThrow('EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:1:character-outside')
   })
 
   it('rejects non-continuous shot numbers and unordered generation segment coverage', () => {
@@ -346,5 +370,27 @@ describe('shot execution plan normalization', () => {
       normalizedCore.generationSegments,
     ))
       .toThrow('EDIT_SHOT_EXECUTION_OBJECT_MISSING')
+  })
+
+  it('rejects execution plans that omit verbatim dialogue from video prompts', () => {
+    const normalizedCore = normalizeEditScriptCore(corePlan())
+    const plan = executionPlan()
+    const missingDialogue = {
+      ...plan,
+      shots: [
+        plan.shots[0],
+        {
+          ...plan.shots[1],
+          videoPrompt: 'Single-shot video prompt: Anna reaches the chair without quoting the line.',
+        },
+      ],
+    }
+
+    expect(() => normalizeEditShotExecutionPlan(
+      missingDialogue,
+      normalizedCore.shots as readonly EditScriptShot[],
+      normalizedCore.generationSegments,
+    ))
+      .toThrow('EDIT_SHOT_EXECUTION_DIALOGUE_MISSING:2:character-anna')
   })
 })

@@ -75,6 +75,7 @@ function editScript(chapterId: string, shotId: string): ProjectEditScript {
         performance: '操作设备',
       }],
       keyObjects: [],
+      dialogue: [],
       sound: 'room tone',
     }],
     generationSegments: [],

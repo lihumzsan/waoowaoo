@@ -41,6 +41,10 @@ function validOutput() {
         name: '钟表盘面',
         role: 'plot_device',
       }],
+      dialogue: [{
+        characterId: 'character-1',
+        line: '快看，时间真的倒回去了。',
+      }],
       sound: '机械滴答声',
     }],
     generationSegments: [{
@@ -73,6 +77,14 @@ describe('chapter plan output schema', () => {
     const schema = buildChapterPlanOutputSchema(assetMenu)
     const output = validOutput()
     output.shots[0]!.characters[0]!.characterId = 'invented-character'
+
+    expect(schema.safeParse(output).success).toBe(false)
+  })
+
+  it('rejects dialogue speakers outside the confirmed same asset menu', () => {
+    const schema = buildChapterPlanOutputSchema(assetMenu)
+    const output = validOutput()
+    output.shots[0]!.dialogue[0]!.characterId = 'invented-character'
 
     expect(schema.safeParse(output).success).toBe(false)
   })

@@ -45,6 +45,7 @@ function buildSnapshot(): StoryboardConsistencySourceSnapshot {
         keyObjects: [
           { name: 'High-backed chair', role: 'reveal_device' },
         ],
+        dialogue: [],
         sound: 'floorboards creak',
       },
     ],

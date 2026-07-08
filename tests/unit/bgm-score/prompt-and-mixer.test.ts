@@ -25,6 +25,7 @@ describe('bgm score prompt builder', () => {
             },
           ],
           keyObjects: [],
+          dialogue: [],
           sound: 'room tone and footsteps only, no BGM',
         }],
         generationSegments: [{

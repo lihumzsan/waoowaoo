@@ -1443,6 +1443,7 @@ function EditScriptContent({
             { label: labels('action'), value: shot.action },
             { label: labels('characters'), value: compactList(characterNames, '\n') },
             { label: labels('keyObjects'), value: compactList(keyObjectNames, '\n') },
+            { label: labels('dialogue'), value: compactList(shot.dialogue, '\n') },
             { label: labels('duration'), value: `${shot.durationSec}s` },
             { label: labels('sound'), value: shot.sound },
           ])}

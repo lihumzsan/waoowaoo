@@ -41,6 +41,10 @@ const editScriptStreamShotSchema = z.object({
     name: z.string().trim().min(1),
     role: z.string().trim().min(1),
   }).strict()).min(0).max(20),
+  dialogue: z.array(z.object({
+    characterId: z.string().trim().min(1),
+    line: z.string().trim().min(1),
+  }).strict()).min(0).max(20),
   sound: z.string().trim().min(1),
 }).strict()
 

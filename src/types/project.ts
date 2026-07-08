@@ -211,6 +211,10 @@ export interface ProjectEditScriptShot {
     name: string
     role: string
   }>
+  dialogue: Array<{
+    characterId: string
+    line: string
+  }>
   sound: string
 }
 

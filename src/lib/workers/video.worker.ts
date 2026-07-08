@@ -253,17 +253,33 @@ function parseEditScriptShots(value: unknown): VideoGroupShot[] {
     if (!shotId) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_ID_INVALID')
     if (!Number.isInteger(shotNumber) || shotNumber <= 0) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_NUMBER_INVALID')
     if (!Number.isInteger(durationSec) || durationSec < 1 || durationSec > 5) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DURATION_INVALID')
+    if (!Array.isArray(record.dialogue)) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DIALOGUE_INVALID')
+    const characters = Array.isArray(record.characters)
+      ? record.characters.map((character) => (
+          isJsonRecord(character)
+            ? {
+                id: normalizeString(character.characterId),
+                name: normalizeString(character.name),
+              }
+            : null
+        )).filter((character): character is { readonly id: string; readonly name: string } => Boolean(character?.name))
+      : []
+    const characterNameById = new Map(characters.map((character) => [character.id, character.name]))
     return {
       shotId,
       shotNumber,
       durationSec,
       action: normalizeString(record.action),
       sceneName: isJsonRecord(record.scene) ? normalizeString(record.scene.name) : '',
-      characters: Array.isArray(record.characters)
-        ? record.characters.map((character) => (
-            isJsonRecord(character) ? normalizeString(character.name) : ''
-          )).filter(Boolean)
-        : [],
+      characters: characters.map((character) => character.name),
+      dialogue: record.dialogue.map((line) => {
+        if (!isJsonRecord(line)) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DIALOGUE_LINE_INVALID')
+        const characterId = normalizeString(line.characterId)
+        const dialogueLine = normalizeString(line.line)
+        if (!characterId || !dialogueLine) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DIALOGUE_LINE_INVALID')
+        const speaker = characterNameById.get(characterId) ?? characterId
+        return `${speaker}: ${dialogueLine}`
+      }),
       sound: normalizeString(record.sound),
     }
   })

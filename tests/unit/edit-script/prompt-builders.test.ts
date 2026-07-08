@@ -55,6 +55,7 @@ const shot11: EditScriptShot = {
   keyObjects: [
     { name: 'High-backed chair', role: 'reveal_device' },
   ],
+  dialogue: [],
   sound: 'The room is quiet.',
 }
 
@@ -84,6 +85,7 @@ const shot12: EditScriptShot = {
   keyObjects: [
     { name: 'High-backed chair', role: 'reveal_device' },
   ],
+  dialogue: [],
   sound: 'Floorboards creak.',
 }
 

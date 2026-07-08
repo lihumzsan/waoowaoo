@@ -8,6 +8,7 @@ export interface VideoGroupShot {
   readonly action: string
   readonly sceneName: string
   readonly characters: readonly string[]
+  readonly dialogue: readonly string[]
   readonly sound: string
 }
 

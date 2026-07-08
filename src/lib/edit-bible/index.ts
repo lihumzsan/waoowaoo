@@ -12,6 +12,7 @@ export {
   editBibleBeatSchema,
   editBibleBeatSheetSchema,
   editBibleBundleSchema,
+  editBibleCharacterSchema,
   editBibleChapterPlanSchema,
   editBibleDiagnosticsSchema,
   editBibleEmotionalCueSchema,

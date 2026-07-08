@@ -110,6 +110,7 @@ function corePlan() {
         keyObjects: [
           { name: 'Timeline', role: 'planning_reference' },
         ],
+        dialogue: [],
         sound: 'Quiet room tone.',
       },
     ],

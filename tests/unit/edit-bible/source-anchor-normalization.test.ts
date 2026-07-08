@@ -116,6 +116,7 @@ describe('edit bible source-anchor normalization', () => {
           name: '老李',
           aliases: [],
           summary: '启动机器的民间科学家。',
+          voiceProfile: '偏低略沙哑的中年男声，语速急促但吐字清楚。',
           firstEvidence: { blockId: 'p0001', quote: '老李' },
         }],
         locations: [{
@@ -131,6 +132,7 @@ describe('edit bible source-anchor normalization', () => {
     })
 
     expect(bible.characters[0]?.firstSourceStart).toBe(sourceText.indexOf('老李'))
+    expect(bible.characters[0]?.voiceProfile).toBe('偏低略沙哑的中年男声，语速急促但吐字清楚。')
     expect(bible.locations[0]?.firstSourceStart).toBe(sourceText.indexOf('地下室'))
   })
 })

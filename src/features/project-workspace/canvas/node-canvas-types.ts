@@ -191,6 +191,7 @@ export interface WorkspaceCanvasEditScriptDetails {
     readonly characters: readonly string[]
     readonly keyObjects: readonly string[]
     readonly imagePrompt?: string | null
+    readonly dialogue: readonly string[]
     readonly sound: string
     readonly imageUrl?: string | null
     readonly videoUrl?: string | null

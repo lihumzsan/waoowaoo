@@ -50,6 +50,10 @@ describe('workspace structured stream adapters', () => {
           performance: '检查设备',
         }],
         keyObjects: [],
+        dialogue: [{
+          characterId: 'character-1',
+          line: '设备开始倒转了。',
+        }],
         sound: 'room tone',
       },
     }, 0)).toBe('shot-stable-id')
@@ -78,6 +82,10 @@ describe('workspace structured stream adapters', () => {
         performance: '检查设备',
       }],
       keyObjects: [],
+      dialogue: [{
+        characterId: 'character-1',
+        line: '设备开始倒转了。',
+      }],
       sound: 'room tone',
     })
 
@@ -93,6 +101,10 @@ describe('workspace structured stream adapters', () => {
         characters: [{
           characterId: 'character-1',
           name: 'character-1',
+        }],
+        dialogue: [{
+          characterId: 'character-1',
+          line: '设备开始倒转了。',
         }],
       },
     })

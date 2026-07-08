@@ -31,6 +31,7 @@ const editScript: FinalRenderEditScriptInput = {
         },
       ],
       keyObjects: [],
+      dialogue: [],
       sound: 'quiet suspense, sparse piano, low synth pulse',
     },
     {
@@ -50,6 +51,7 @@ const editScript: FinalRenderEditScriptInput = {
         },
       ],
       keyObjects: [],
+      dialogue: [],
       sound: 'urgent percussion, rising strings, faster rhythm',
     },
   ],
