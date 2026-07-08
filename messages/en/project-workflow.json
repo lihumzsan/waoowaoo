@@ -688,8 +688,8 @@
         "editScriptSource": {
           "title": "Expanded Script",
           "eyebrow": "Source Script",
-          "pendingTitle": "Generating Script",
-          "pendingBody": "AI is expanding the creative intake into a complete filmable script.",
+          "pendingTitle": "Expanding Script",
+          "pendingBody": "AI is expanding the creative intake into a complete production-ready script.",
           "pendingMeta": "The assistant will request script review when it is ready"
         },
         "editStylePreview": {

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 type JsonRecord = Record<string, unknown>
@@ -74,9 +75,39 @@ function readStaticProjectWorkflowMessageCalls(): readonly StaticProjectWorkflow
 
 function readWorkspaceProjectionTranslationKeys(): readonly string[] {
   const source = readFileSync(WORKSPACE_NODE_CANVAS_PROJECTION_PATH, 'utf8')
-  return Array.from(source.matchAll(/translate\(\s*['"]([^'"]+)['"]/g), (match) => match[1])
-    .filter((key): key is string => typeof key === 'string')
-    .filter((key, index, keys) => keys.indexOf(key) === index)
+  const sourceFile = ts.createSourceFile(
+    WORKSPACE_NODE_CANVAS_PROJECTION_PATH,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  )
+  const keys: string[] = []
+
+  const collectStringLiterals = (node: ts.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      keys.push(node.text)
+      return
+    }
+    node.forEachChild(collectStringLiterals)
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'translate'
+      && node.arguments[0]
+    ) {
+      collectStringLiterals(node.arguments[0])
+    }
+    node.forEachChild(visit)
+  }
+
+  visit(sourceFile)
+
+  return keys
+    .filter((key, index, allKeys) => allKeys.indexOf(key) === index)
     .sort()
 }
 
@@ -137,6 +168,8 @@ describe('WorkspaceNode i18n messages', () => {
 
   it('defines every workspace canvas key used by the projection builder', () => {
     const usedKeys = readWorkspaceProjectionTranslationKeys()
+    expect(usedKeys).toContain('nodes.editScriptSource.pendingTitle')
+    expect(usedKeys).toContain('nodes.editScriptSource.pendingBody')
 
     for (const locale of ['en', 'zh'] as const) {
       const messages = readProjectWorkflowMessages(locale)

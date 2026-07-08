@@ -688,8 +688,8 @@
         "editScriptSource": {
           "title": "扩写剧本",
           "eyebrow": "源剧本",
-          "pendingTitle": "剧本生成中",
-          "pendingBody": "AI 正在根据创作问诊结果扩写完整可拍剧本。",
+          "pendingTitle": "剧本扩写中",
+          "pendingBody": "AI 正在根据创作问诊结果扩写完整可拍摄剧本。",
           "pendingMeta": "生成完成后由 assistant 发起剧本审核"
         },
         "editStylePreview": {
