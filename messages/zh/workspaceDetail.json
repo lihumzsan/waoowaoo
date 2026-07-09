@@ -5,6 +5,7 @@
   "renameFailed": "重命名失败",
   "refreshFailed": "刷新失败",
   "projectNotFound": "项目不存在",
+  "episodeNotFound": "剧集不存在或加载失败",
   "backToWorkspace": "返回工作区",
   "episode": "剧集",
   "modelSetup": {

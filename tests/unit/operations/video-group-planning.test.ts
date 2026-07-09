@@ -26,6 +26,9 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectVideoGroup: {
     findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
   },
 }))
 
@@ -34,6 +37,13 @@ const storyboardSourceMock = vi.hoisted(() => ({
 }))
 
 const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => 'google::veo-test'))
+const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
+  taskId: 'task-video-group-1',
+  status: 'queued',
+  runId: null,
+  deduped: false,
+  billingReceiptView: null,
+})))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/edit-script/storyboard-consistency/source-snapshot', () => ({
@@ -41,6 +51,9 @@ vi.mock('@/lib/edit-script/storyboard-consistency/source-snapshot', () => ({
 }))
 vi.mock('@/lib/model-access/system-model-resolver', () => ({
   resolveSystemModelKey: resolveSystemModelKeyMock,
+}))
+vi.mock('@/lib/operations/submit-operation-task', () => ({
+  submitOperationTask: submitOperationTaskMock,
 }))
 vi.mock('@/lib/deployment/config', () => ({
   getDeploymentConfig: vi.fn(() => ({ edition: 'self-hosted' })),
@@ -386,7 +399,49 @@ describe('video group planning', () => {
     expect(plan?.metadata).toEqual(expect.objectContaining({
       chapterIds: ['chapter-1'],
       groupVideoModel: 'google::veo-test',
+      videoGroups: [
+        expect.objectContaining({
+          shotIds: ['shot-1', 'shot-2'],
+          shotNumbers: [1, 2],
+        }),
+      ],
     }))
+  })
+
+  it('commits continuous video group records with shot numbers from the edit script', async () => {
+    const operation = createVideoGenerationOperations().generate_episode_videos
+    const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })
+
+    expect(plan).toBeDefined()
+    const result = plan
+      ? await operation.commit?.(buildContext(), { episodeId: 'episode-1', confirmed: true }, plan)
+      : null
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      async: true,
+      total: 1,
+      taskIds: ['task-video-group-1'],
+    }))
+    expect(prismaMock.projectVideoGroup.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        chapterId: 'chapter-1',
+        gridMode: '2x2',
+        shotIds: ['shot-1', 'shot-2'],
+        shotNumbers: [1, 2],
+        durationSec: 5,
+        status: 'queued',
+      }),
+    })
+    expect(prismaMock.projectVideoGroup.update).toHaveBeenCalledWith({
+      where: { id: expect.any(String) },
+      data: expect.objectContaining({
+        taskId: 'task-video-group-1',
+        status: 'queued',
+      }),
+    })
   })
 
   it('plans the main episode video operation for every chapter when no chapterId is provided', async () => {
@@ -449,6 +504,7 @@ describe('video group planning', () => {
       videoUrl: 'videos/existing.mp4',
       videoMediaId: null,
       shotIds: ['shot-1', 'shot-2'],
+      shotNumbers: [1, 2],
     }])
     const operation = createVideoGenerationOperations().generate_episode_videos
     const plan = await operation.plan?.(buildContext(), { episodeId: 'episode-1' })

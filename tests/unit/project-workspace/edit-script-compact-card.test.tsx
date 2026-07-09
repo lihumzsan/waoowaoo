@@ -98,7 +98,21 @@ const messages = {
           timeOfDay: '时间',
           previewLarge: '查看大图',
           viewVideoPreview: '查看视频预览',
+          assetReferenceVideoMode: '全部参考生成',
+          assetReferenceImagesMissing: '缺少参考资产图',
           focus: '焦点',
+          generateAssetReferenceVideo: '全能参考生视频',
+          generateStoryboardReferenceVideo: '用分镜图生成视频',
+          generationMode: '生成模式',
+          storyboardReferenceVideoMode: '分镜图生成',
+          storyboardReferenceImagesMissing: '缺少分镜参考图',
+          videoPlanGroup: '连续片段',
+          videoPlanMeta: '片段信息',
+          videoPlanModelMissing: '请先在项目设置中选择视频片段生成模型。',
+          videoPlanOutput: '视频',
+          videoPlanPrompt: '最终视频提示词',
+          videoPlanReference: '图片',
+          videoPlanShotAlt: '镜头 {shot}',
         },
       },
     },
@@ -391,6 +405,59 @@ function editAssetGroupNodeData(input?: {
   }
 }
 
+function videoPlanNodeData(input: {
+  readonly outputUrl?: string | null
+  readonly assetReferenceVideoModel?: string | null
+}): WorkspaceCanvasNodeData {
+  return {
+    nodeId: 'video-plan:edit-script-1:1',
+    projectId: 'project-1',
+    episodeName: 'Episode 1',
+    kind: 'videoPlan',
+    layoutNodeType: 'videoPlan',
+    targetType: 'videoGroup',
+    targetId: 'video-group-1',
+    title: '视频片段 1',
+    eyebrow: '视频生成片段',
+    body: '连续视频片段',
+    meta: '连续片段',
+    artifactPhase: input.outputUrl ? 'succeeded' : undefined,
+    statusLabel: input.outputUrl ? '成功' : '',
+    isRunning: false,
+    width: 320,
+    height: 420,
+    onAction: () => undefined,
+    videoPlanDetails: {
+      editScriptId: 'edit-script-1',
+      segmentIndex: 0,
+      kind: 'group',
+      videoGroupId: 'video-group-1',
+      shotIds: ['shot-1'],
+      shotNumbers: [1],
+      durationSec: 14,
+      gridMode: '2x2',
+      continuity: '连续视频片段',
+      prompt: '视频提示词',
+      assetReferenceVideoModel: input.assetReferenceVideoModel ?? null,
+      outputUrl: input.outputUrl ?? null,
+      outputAspectRatio: 16 / 9,
+      errorMessage: null,
+      sourceImages: [
+        {
+          panelId: 'panel-1',
+          storyboardId: 'storyboard-1',
+          panelIndex: 0,
+          shotNumber: 1,
+          imageUrl: '/images/panel-1.png',
+          aspectRatio: 16 / 9,
+        },
+      ],
+      assetReferences: [],
+      validationMessage: null,
+    },
+  }
+}
+
 async function renderWorkspaceNode(data: WorkspaceCanvasNodeData): Promise<string> {
   Reflect.set(globalThis, 'React', React)
   const { default: WorkspaceNode } = await import('@/features/project-workspace/canvas/nodes/WorkspaceNode')
@@ -502,5 +569,20 @@ describe('edit script compact canvas card', () => {
     expect(html).toContain('data-icon="chevronDown"')
     expect(html).not.toContain('林晓 / character')
     expect(html).not.toContain('>展开</button>')
+  })
+
+  it('keeps the sequence video model hint only on unfinished video plan nodes', async () => {
+    const pendingHtml = await renderWorkspaceNode(videoPlanNodeData({
+      outputUrl: null,
+      assetReferenceVideoModel: null,
+    }))
+    const completedHtml = await renderWorkspaceNode(videoPlanNodeData({
+      outputUrl: '/videos/group-1.mp4',
+      assetReferenceVideoModel: null,
+    }))
+
+    expect(pendingHtml).toContain('请先在项目设置中选择视频片段生成模型。')
+    expect(completedHtml).toContain('/videos/group-1.mp4')
+    expect(completedHtml).not.toContain('请先在项目设置中选择视频片段生成模型。')
   })
 })

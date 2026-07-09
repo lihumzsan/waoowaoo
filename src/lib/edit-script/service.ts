@@ -68,6 +68,7 @@ import {
 } from './types'
 import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
 import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
+import { buildShotExecutionPlanPromptStructure } from './shot-execution-plan-prompt'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -227,6 +228,13 @@ function normalizeStylePreviewStatus(value: string): EditStylePreviewStatus {
 
 function normalizeAssetReviewStatus(value: string): 'pending' | 'approved' {
   return value === EDIT_SCRIPT_ASSET_REVIEW_APPROVED ? 'approved' : 'pending'
+}
+
+function editScriptRequirementOrderBy(): Prisma.ProjectEditAssetRequirementOrderByWithRelationInput[] {
+  return [
+    { kind: 'asc' },
+    { name: 'asc' },
+  ]
 }
 
 let shotCuidCounter = 0
@@ -871,6 +879,55 @@ async function getPersistedEditScript(projectId: string, episodeId: string, edit
   })
 }
 
+async function getPersistedEditScriptsForAssetGeneration(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly editScriptId?: string
+  readonly chapterId?: string
+  readonly requirementId?: string
+}): Promise<readonly PersistedEditScript[]> {
+  if (input.editScriptId || input.chapterId) {
+    const script = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId, input.chapterId)
+    return script ? [script] : []
+  }
+
+  if (input.requirementId) {
+    const requirement = await prisma.projectEditAssetRequirement.findFirst({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        id: input.requirementId,
+      },
+      select: {
+        editScriptId: true,
+        chapterId: true,
+      },
+    })
+    if (!requirement) return []
+    const script = await getPersistedEditScript(input.projectId, input.episodeId, requirement.editScriptId, requirement.chapterId)
+    return script ? [script] : []
+  }
+
+  return await prisma.projectEditScript.findMany({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      status: 'ready',
+    },
+    include: {
+      requirements: {
+        orderBy: [
+          { kind: 'asc' },
+          { name: 'asc' },
+        ],
+      },
+    },
+    orderBy: [
+      { createdAt: 'asc' },
+    ],
+  })
+}
+
 async function getPersistedEditShotExecutionPlan(projectId: string, episodeId: string, editScriptId?: string, chapterId?: string): Promise<PersistedEditShotExecutionPlan | null> {
   const resolvedChapterId = await resolveEditChapterId(episodeId, chapterId)
   return await prisma.projectEditShotExecutionPlan.findFirst({
@@ -1069,51 +1126,77 @@ export async function approveProjectEditScriptAssets(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
-  readonly chapterId: string
+  readonly chapterId?: string
 }): Promise<EditScriptPayload> {
-  const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
-  const script = await prisma.projectEditScript.findFirst({
+  const scripts = input.chapterId
+    ? [await (async () => {
+        const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
+        return await prisma.projectEditScript.findFirst({
+          where: {
+            projectId: input.projectId,
+            episodeId: input.episodeId,
+            chapterId,
+            project: {
+              userId: input.userId,
+            },
+          },
+          include: {
+            requirements: {
+              orderBy: editScriptRequirementOrderBy(),
+            },
+          },
+        })
+      })()]
+    : await prisma.projectEditScript.findMany({
+        where: {
+          projectId: input.projectId,
+          episodeId: input.episodeId,
+          project: {
+            userId: input.userId,
+          },
+        },
+        orderBy: [
+          { createdAt: 'asc' },
+          { id: 'asc' },
+        ],
+        include: {
+          requirements: {
+            orderBy: editScriptRequirementOrderBy(),
+          },
+        },
+      })
+  const readyScripts: PersistedEditScript[] = scripts
+    .filter((script): script is NonNullable<(typeof scripts)[number]> => Boolean(script))
+  if (readyScripts.length === 0) throw new ApiError('NOT_FOUND')
+  const mappedScripts = await Promise.all(readyScripts.map((script) => mapPersistedEditScript(script)))
+  const notReady = mappedScripts.flatMap((script) =>
+    script.requirements
+      .filter((requirement) => requirement.status !== 'completed')
+      .map((requirement) => requirement.name))
+  if (notReady.length > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
+      message: `Edit script assets are not ready: ${notReady.join(', ')}`,
+    })
+  }
+  const scriptIds = readyScripts.map((script) => script.id)
+  await prisma.projectEditScript.updateMany({
     where: {
+      id: { in: scriptIds },
       projectId: input.projectId,
       episodeId: input.episodeId,
-      chapterId,
       project: {
         userId: input.userId,
       },
     },
-    include: {
-      requirements: {
-        orderBy: [
-          { kind: 'asc' },
-          { name: 'asc' },
-        ],
-      },
-    },
-  })
-  if (!script) throw new ApiError('NOT_FOUND')
-  const mapped = await mapPersistedEditScript(script)
-  const notReady = mapped.requirements.filter((requirement) => requirement.status !== 'completed')
-  if (notReady.length > 0) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
-      message: `Edit script assets are not ready: ${notReady.map((requirement) => requirement.name).join(', ')}`,
-    })
-  }
-  const updated = await prisma.projectEditScript.update({
-    where: { id: script.id },
     data: {
       assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_APPROVED,
     },
-    include: {
-      requirements: {
-        orderBy: [
-          { kind: 'asc' },
-          { name: 'asc' },
-        ],
-      },
-    },
   })
-  return await mapPersistedEditScript(updated)
+  return {
+    ...mappedScripts[0],
+    assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_APPROVED,
+  }
 }
 
 export interface EpisodeEditScriptAssetApprovalResult {
@@ -1850,6 +1933,10 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
       message: 'Style Bible is required before shot execution plan generation',
     })
   }
+  const editScriptId = mappedEditScript.id
+  if (!editScriptId) {
+    throw new Error(`EDIT_SCRIPT_ID_REQUIRED:${editScript.id}`)
+  }
   const editBible = await prisma.projectEditBible.findUnique({
     where: { episodeId: input.episodeId },
     select: { bibleJson: true },
@@ -1869,14 +1956,14 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     promptId: AI_PROMPT_IDS.EDIT_SCRIPT_SHOT_EXECUTION_PLAN,
     variables: {
       style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
-      structure_json: stringifyForPrompt({
-        id: mappedEditScript.id,
+      structure_json: stringifyForPrompt(buildShotExecutionPlanPromptStructure({
+        id: editScriptId,
         durationSec: mappedEditScript.durationSec,
         shotCount: mappedEditScript.shotCount,
-        sourceText: mappedEditScript.sourceText,
+        sourceText: mappedEditScript.sourceText ?? null,
         shots: mappedEditScript.shots,
         generationSegments: mappedEditScript.generationSegments,
-      }),
+      })),
       character_voice_profiles_json: stringifyForPrompt(dialogueVoiceContext.characters),
       dialogue_voice_context_json: stringifyForPrompt(dialogueVoiceContext.shots),
       asset_context_json: stringifyForPrompt(assets),
@@ -2145,15 +2232,25 @@ async function submitRequirementImageTask(input: {
 }
 
 export async function generateProjectEditScriptAssets(input: GenerateEditScriptAssetsInput): Promise<EditScriptAssetGenerationPayload> {
-  const script = await getPersistedEditScript(input.projectId, input.episodeId, input.editScriptId, input.chapterId)
-  if (!script) throw new ApiError('NOT_FOUND')
+  const scripts = await getPersistedEditScriptsForAssetGeneration({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    editScriptId: input.editScriptId,
+    chapterId: input.chapterId,
+    requirementId: input.requirementId,
+  })
+  if (scripts.length === 0) throw new ApiError('NOT_FOUND')
 
-  const requirements = input.requirementId
-    ? script.requirements.filter((requirement) => requirement.id === input.requirementId)
-    : script.requirements
+  const requirements = scripts.flatMap((script) => (
+    input.requirementId
+      ? script.requirements.filter((requirement) => requirement.id === input.requirementId)
+      : script.requirements
+  ))
   if (input.requirementId && requirements.length === 0) throw new ApiError('NOT_FOUND')
+  const processedRequirementCount = requirements.length
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
+  const submittedByAssetKey = new Map<string, EditScriptAssetGenerationTask>()
   const failedRequirements: Array<{
     readonly requirementId: string
     readonly kind: string
@@ -2208,6 +2305,12 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
       data: { targetId: asset.id, status: 'generating', errorMessage: null },
     })
 
+    const assetKey = `${requirement.kind}:${asset.id}`
+    const submittedForAsset = submittedByAssetKey.get(assetKey)
+    if (submittedForAsset) {
+      continue
+    }
+
     try {
       const submittedTask = await submitRequirementImageTask({
         request: input.request,
@@ -2218,12 +2321,14 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
         kind: requirement.kind,
         assetId: asset.id,
       })
-      submittedTasks.push({
+      const task: EditScriptAssetGenerationTask = {
         requirementId: requirement.id,
         kind: requirement.kind,
         name: requirement.name,
         ...submittedTask,
-      })
+      }
+      submittedByAssetKey.set(assetKey, task)
+      submittedTasks.push(task)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       if (createdAssetId) {
@@ -2246,9 +2351,22 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
     }
   }
 
-  const updated = await getPersistedEditScript(input.projectId, input.episodeId, script.id, script.chapterId)
+  const representativeScript = scripts[0]
+  if (!representativeScript) throw new ApiError('NOT_FOUND')
+  const updated = await getPersistedEditScript(
+    input.projectId,
+    input.episodeId,
+    representativeScript.id,
+    representativeScript.chapterId,
+  )
   if (!updated) throw new ApiError('NOT_FOUND')
   const editScript = await mapPersistedEditScript(updated)
+  const remainingRequirementCount = await prisma.projectEditAssetRequirement.count({
+    where: {
+      editScriptId: { in: scripts.map((script) => script.id) },
+      status: { not: 'completed' },
+    },
+  })
   if (submittedTasks.length === 0 && failedRequirements.length > 0) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCRIPT_ASSET_GENERATION_FAILED',
@@ -2256,10 +2374,20 @@ export async function generateProjectEditScriptAssets(input: GenerateEditScriptA
       failedRequirements,
     })
   }
+  if (submittedTasks.length === 0 && remainingRequirementCount > 0) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_ASSET_GENERATION_STALLED',
+      message: 'No edit script asset generation tasks were submitted while asset requirements remain unfinished.',
+      remainingRequirementCount,
+      processedRequirementCount,
+    })
+  }
   return {
     success: true,
     async: submittedTasks.length > 0,
     total: submittedTasks.length,
+    processedRequirementCount,
+    remainingRequirementCount,
     taskIds: submittedTasks.map((task) => task.taskId),
     results: submittedTasks.map((task) => ({
       refId: task.requirementId,

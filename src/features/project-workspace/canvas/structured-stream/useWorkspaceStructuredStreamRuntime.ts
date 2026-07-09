@@ -760,6 +760,10 @@ export function applyWorkspaceStructuredStreamPatches(
   patches.forEach((patch) => {
     if (usedPatchNodeIds.has(patch.nodeId)) return
     if (hasPersistedStreamContentForPatch(baseNodes, patch)) return
+    // Batch edit-first tasks can stream updates for chapters that are not part
+    // of the current canvas projection. Keep those patches in runtime state and
+    // apply them when their canonical node becomes visible after a refresh or
+    // scope change; crashing here would make off-screen progress break the page.
   })
   return merged
 }

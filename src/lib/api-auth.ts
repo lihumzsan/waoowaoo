@@ -25,6 +25,12 @@ export interface AuthSession {
     }
 }
 
+type ExistingAuthUser = {
+    id: string
+    name: string
+    email: string | null
+}
+
 function bindAuthLogContext(session: AuthSession, projectId?: string) {
     const context = getLogContext()
     if (!context.requestId) return
@@ -54,6 +60,55 @@ async function getInternalTaskSession(): Promise<AuthSession | null> {
             email: null,
         }
     }
+}
+
+function withCanonicalSessionUser(session: AuthSession, user: ExistingAuthUser): AuthSession {
+    return {
+        user: {
+            id: user.id,
+            name: user.name,
+            email: user.email ?? session.user.email ?? null,
+        },
+    }
+}
+
+function getSessionUserNameCandidates(session: AuthSession): string[] {
+    const candidates = [session.user.name, session.user.email]
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    return Array.from(new Set(candidates))
+}
+
+async function resolveExistingSession(session: AuthSession): Promise<AuthSession | null> {
+    const userById = await withRetry({
+        scope: 'prisma:requireUserAuth',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { id: true, name: true, email: true },
+        }),
+    })
+    if (userById) return withCanonicalSessionUser(session, userById)
+
+    const nameCandidates = getSessionUserNameCandidates(session)
+    if (nameCandidates.length === 0) return null
+
+    const userByName = await withRetry({
+        scope: 'prisma:requireUserAuthByName',
+        policy: RETRY_POLICY.prisma,
+        run: async () => await prisma.user.findFirst({
+            where: { name: { in: nameCandidates } },
+            select: { id: true, name: true, email: true },
+        }),
+    })
+    return userByName ? withCanonicalSessionUser(session, userByName) : null
+}
+
+async function requireExistingSession(): Promise<AuthSession | null> {
+    const session = await getAuthSession()
+    if (!session?.user?.id) return null
+    return await resolveExistingSession(session)
 }
 
 /**
@@ -182,8 +237,8 @@ export async function getAuthSession(): Promise<AuthSession | null> {
  * @throws 返回 401 响应
  */
 export async function requireAuth(): Promise<AuthSession> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         throw { response: unauthorized() }
     }
     bindAuthLogContext(session)
@@ -216,8 +271,8 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
     options?: { include?: T }
 ): Promise<ProjectAuthContextWithIncludes<T> | NextResponse> {
     // 1. 验证 Session
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session, projectId)
@@ -307,8 +362,8 @@ export async function requireProjectAuth<T extends ProjectAuthIncludes = Project
  * ```
  */
 export async function requireUserAuth(): Promise<{ session: AuthSession } | NextResponse> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session)
@@ -322,8 +377,8 @@ export async function requireUserAuth(): Promise<{ session: AuthSession } | Next
 export async function requireProjectAuthLight(
     projectId: string
 ): Promise<{ session: AuthSession; project: { id: string; userId: string; name: string; [key: string]: unknown } } | NextResponse> {
-    const session = await getAuthSession()
-    if (!session?.user?.id) {
+    const session = await requireExistingSession()
+    if (!session) {
         return unauthorized()
     }
     bindAuthLogContext(session, projectId)

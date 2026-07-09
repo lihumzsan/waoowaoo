@@ -1026,15 +1026,15 @@ export async function createProjectAgentChatResponse(input: {
     : agentInput
 
   try {
+    heartbeatController = startProjectAgentRunHeartbeat({
+      runId: input.run.id,
+      runLock: input.runLock,
+    })
     const result = await run(agent, runInput, {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
       toolNotFoundBehavior: 'raise_error',
-    })
-    heartbeatController = startProjectAgentRunHeartbeat({
-      runId: input.run.id,
-      runLock: input.runLock,
     })
     let runStatusFinalized = false
     let assistantMessagePersisted = false

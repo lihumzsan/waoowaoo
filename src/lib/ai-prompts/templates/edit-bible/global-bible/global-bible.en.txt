@@ -31,6 +31,8 @@ Include only facts the script states or clearly implies. Do not add your own inv
 Numbered script text blocks:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.

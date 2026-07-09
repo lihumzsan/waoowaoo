@@ -223,6 +223,47 @@ describe('createProjectAgentUiMessageStream', () => {
     expect(onError).toHaveBeenCalledWith(expect.any(Error))
   })
 
+  it('fails the stream when model text attempts to emit raw tool-call protocol', async () => {
+    streamState.chunks = [
+      { type: 'text-start', id: 'text-1' } as UIMessageChunk,
+      { type: 'text-delta', id: 'text-1', delta: '<call:default_api:generate_episode_videos{}' } as UIMessageChunk,
+      { type: 'finish' } as UIMessageChunk,
+    ]
+    const onError = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish: async () => [],
+      onError,
+      onSettled: async () => undefined,
+    })
+
+    await expect(readChunks(stream)).rejects.toThrow('PROJECT_AGENT_OUTPUT_TOOL_CALL_PROTOCOL_LEAK')
+    expect(onError).toHaveBeenCalledWith(expect.any(Error))
+  })
+
+  it('fails the stream when raw tool-call protocol is split across text chunks', async () => {
+    streamState.chunks = [
+      { type: 'text-start', id: 'text-1' } as UIMessageChunk,
+      { type: 'text-delta', id: 'text-1', delta: '<ca' } as UIMessageChunk,
+      { type: 'text-delta', id: 'text-1', delta: 'll:default_api:generate_episode_videos{}' } as UIMessageChunk,
+      { type: 'finish' } as UIMessageChunk,
+    ]
+    const onError = vi.fn(async () => undefined)
+
+    const stream = createProjectAgentUiMessageStream({
+      source: {} as Parameters<typeof createProjectAgentUiMessageStream>[0]['source'],
+      initialChunks: [],
+      beforeFinish: async () => [],
+      onError,
+      onSettled: async () => undefined,
+    })
+
+    await expect(readChunks(stream)).rejects.toThrow('PROJECT_AGENT_OUTPUT_TOOL_CALL_PROTOCOL_LEAK')
+    expect(onError).toHaveBeenCalledWith(expect.any(Error))
+  })
+
   it('marks the stream cancelled and settles once when the reader disconnects before finish', async () => {
     streamState.keepOpen = true
     const beforeFinish = vi.fn(async () => [])

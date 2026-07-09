@@ -68,6 +68,7 @@ async function runEditBibleStructuredStep<TData>(input: {
     locale: input.locale,
     variables: {
       source_document: input.sourceDocument,
+      source_length: String(input.sourceDocument.length),
     },
     cacheVariableKeys: ['source_document'],
     minCacheChars: EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS,

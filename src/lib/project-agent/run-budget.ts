@@ -72,7 +72,8 @@ export async function enforceProjectAgentOperationRunBudget(input: {
     },
   })
 
-  let sameTargetAttempts = 0
+  const unresolvedSameTargetAttempts = new Set<string>()
+  let anonymousSameTargetAttempts = 0
   let consecutiveFailures = 0
   const operationActivitiesById = new Map<string, OperationActivityIdentity>()
   for (const event of events) {
@@ -89,7 +90,11 @@ export async function enforceProjectAgentOperationRunBudget(input: {
         })
       }
       if (operationId === input.operationId && targetKey === input.targetKey) {
-        sameTargetAttempts += 1
+        if (activityId) {
+          unresolvedSameTargetAttempts.add(activityId)
+        } else {
+          anonymousSameTargetAttempts += 1
+        }
       }
       continue
     }
@@ -99,6 +104,9 @@ export async function enforceProjectAgentOperationRunBudget(input: {
       continue
     }
     if (event.kind === 'activity.completed') {
+      if (activityId && activity.targetKey === input.targetKey) {
+        unresolvedSameTargetAttempts.delete(activityId)
+      }
       consecutiveFailures = 0
       continue
     }
@@ -107,6 +115,7 @@ export async function enforceProjectAgentOperationRunBudget(input: {
     }
   }
 
+  const sameTargetAttempts = anonymousSameTargetAttempts + unresolvedSameTargetAttempts.size
   if (sameTargetAttempts >= OPERATION_TARGET_ATTEMPT_LIMIT) {
     return {
       ok: false,

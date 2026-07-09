@@ -34,6 +34,7 @@ async function createProcessingVideoGroup() {
       chapterId: chapter.id,
       gridMode: '2x2',
       shotIds: ['shot-1', 'shot-2'],
+      shotNumbers: [1, 2],
       durationSec: 6,
       status: 'processing',
     },

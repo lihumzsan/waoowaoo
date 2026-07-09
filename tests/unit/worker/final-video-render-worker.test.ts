@@ -97,6 +97,10 @@ vi.mock('@/lib/storage', () => ({
   uploadObject: storageMock.uploadObject,
 }))
 
+vi.mock('@/lib/video-compose/ffmpeg-binaries', () => ({
+  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => binaryName),
+}))
+
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     queueName: 'waoowaoo-video',
@@ -378,26 +382,21 @@ describe('final video render worker', () => {
     }))
   })
 
-  it('renders final video without BGM when no completed mix exists', async () => {
+  it('fails explicitly when no completed BGM mix exists', async () => {
     prismaMock.projectEditMusicScore.findUnique.mockResolvedValue(null)
     const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
 
-    const result = await handleFinalVideoRenderTask(buildJob({
+    await expect(handleFinalVideoRenderTask(buildJob({
       episodeId: 'episode-1',
-    }))
+    }))).rejects.toThrow('FINAL_VIDEO_RENDER_BGM_REQUIRED')
 
-    expect(result).toMatchObject({
-      videoMediaId: 'media-final',
-      outputUrl: '/m/final-video',
-      storageKey: 'final-video/asset.mp4',
-    })
     expect(generateMusicMock).not.toHaveBeenCalled()
     expect(storageMock.getObjectBuffer).not.toHaveBeenCalledWith('music/bgm-score.m4a')
-    const ffmpegCalls = execFileMock.mock.calls
-      .filter((call) => call[0] === 'ffmpeg')
-      .map((call) => (call[1] as readonly string[]).join(' '))
-    expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-16.000'))).toBe(true)
-    expect(ffmpegCalls.some((args) => args.includes('sidechaincompress'))).toBe(false)
+    expect(storageMock.uploadObject).not.toHaveBeenCalled()
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { episodeId: 'episode-1' },
+      update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
+    }))
   })
 
   it('fails explicitly when chapter edit script structure is invalid', async () => {

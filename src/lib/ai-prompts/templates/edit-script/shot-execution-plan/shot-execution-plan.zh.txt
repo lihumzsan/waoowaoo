@@ -37,6 +37,7 @@
 - position 写人物或物体在真实空间中的位置；screenPosition 写它在画面中的位置。
 - camera.composition 只写画面内主体排列、前中后景、遮挡关系、留白和视觉中心；不得把机位在真实空间中的位置换名塞进 composition。
 - blocking.axis 用于防止越轴和左右关系跳变；axis.screenDirection 必须写清主要主体或物体的屏幕方向、左右关系或中心关系。
+- blocking.axis.subjects 必须是非空字符串数组，至少包含 1 个主体；优先使用该镜头 characters 的人物名称，没有人物时使用 keyObjects 中最重要的物体名称，不允许输出空数组。
 
 单镜头视频提示词：
 - 每个镜头必须输出 videoPrompt，只描述当前这一个镜头的视频，不写相邻镜头，也不写连续分段。
@@ -47,8 +48,10 @@
 - videoPrompt 不得新增剧情、角色、道具、对白或声音事件，也不得机械复制图片提示词。
 
 连续视频提示词：
-- generationSegmentExecutions 必须按核心剪辑计划中 generationSegments 的顺序输出，shotIds 必须完全一致。
+- generationSegmentExecutions 必须按核心剪辑计划中 videoGenerationSegments 的顺序输出，shotIds 必须完全一致。
 - 每一项只输出 shotIds 和 continuousVideoPrompt 两个字段。
+- 输入里的 videoGenerationSegments[].continuityReference 只是写 continuousVideoPrompt 的素材；输出字段名必须改写为 continuousVideoPrompt，绝不能复制 continuity 这个字段名。
+- 每一项必须输出 continuousVideoPrompt 非空字符串；不要输出 continuity、description、summary 或任何其他字段。
 - continuousVideoPrompt 写成一个完整的连续视频片段，不是把单镜头 videoPrompt 机械拼起来。
 - continuousVideoPrompt 只使用各输入中已有的事实，不新增剧情、角色、道具、对白或声音事件。
 - continuousVideoPrompt 聚焦该分段的人物/物体运动、镜头运动或切换、动作节奏、表情和姿态变化、声音延续和镜头衔接。
@@ -102,6 +105,8 @@ Spatial Profiles：
 字段严格性：
 - characters[] 只能有六个字段：name、visibility、position、screenPosition、facing、eyeline，且六个字段全必填、全为非空字符串。
 - objects[] 只能有三个字段：name、position、screenPosition，且三个字段全必填、全为非空字符串。
+- axis.subjects 必须至少包含一个非空字符串，禁止空数组。
+- generationSegmentExecutions[] 只能有两个字段：shotIds、continuousVideoPrompt；禁止输出 continuity。
 - 不允许额外字段；不允许缺字段；不要用 null、空字符串或省略代替不可见信息。
 
 {
@@ -164,8 +169,10 @@ Spatial Profiles：
 - 对应镜头的每个 keyObjects 是否进入 blocking.objects。
 - 每个 blocking.objects[] 项是否只包含 name、position、screenPosition 三个字段，没有 facing、eyeline 或其他额外字段。
 - 每个镜头是否有 camera.lighting 和 blocking.axis。
+- 每个 blocking.axis.subjects 是否至少包含一个人物或关键物体名称，且不是空数组。
 - 每个镜头是否有 videoPrompt，且只写当前单镜头视频。
 - 每个有 dialogue 的镜头，videoPrompt 是否逐字包含所有台词，并写明说话人和固定声线短语。
+- generationSegmentExecutions 的每一项是否只包含 shotIds 和 continuousVideoPrompt，没有 continuity。
 - generationSegmentExecutions 是否覆盖所有生成分段，且 shotIds 完全一致。
 - generationSegmentExecutions 是否只输出 shotIds 和 continuousVideoPrompt。
 - continuousVideoPrompt 是否是完整连续片段，而不是单镜头提示词拼接。

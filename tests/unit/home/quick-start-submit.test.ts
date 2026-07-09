@@ -13,13 +13,7 @@ function buildLaunchResult(): CreateHomeProjectLaunchResult {
   return {
     projectId: 'project-1',
     episodeId: 'episode-1',
-    target: {
-      pathname: '/workspace/project-1',
-      query: {
-        episode: 'episode-1',
-        [HOME_ASSISTANT_AUTOSTART_QUERY]: HOME_ASSISTANT_AUTOSTART_VALUE,
-      },
-    },
+    target: `/workspace/project-1?episode=episode-1&${HOME_ASSISTANT_AUTOSTART_QUERY}=${HOME_ASSISTANT_AUTOSTART_VALUE}`,
   }
 }
 

@@ -95,6 +95,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'render_chapters',
       'generate_episode_bgm_score',
       'render_final_video',
     ])
@@ -105,6 +106,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'render_chapters',
       'generate_episode_bgm_score',
       'render_final_video',
     ])
@@ -113,6 +115,7 @@ export function resolveEditFirstCanvasVisibility(
     || canRunAnyOperation(operations, [
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
+      'render_chapters',
       'generate_episode_bgm_score',
       'render_final_video',
     ])
@@ -120,6 +123,7 @@ export function resolveEditFirstCanvasVisibility(
   const videoPlan = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
     || canRunAnyOperation(operations, [
       'generate_episode_videos',
+      'render_chapters',
       'generate_episode_bgm_score',
       'render_final_video',
     ])
@@ -132,6 +136,7 @@ export function resolveEditFirstCanvasVisibility(
 
   const finalTimeline = stageAtLeast(workflow.stage, 'ready_to_render_final')
     || canRunAnyOperation(operations, [
+      'render_chapters',
       'render_final_video',
     ])
 

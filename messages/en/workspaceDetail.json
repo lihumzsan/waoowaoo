@@ -5,6 +5,7 @@
   "renameFailed": "Rename failed",
   "refreshFailed": "Refresh failed",
   "projectNotFound": "Project not found",
+  "episodeNotFound": "Episode not found or failed to load",
   "backToWorkspace": "Back to Workspace",
   "episode": "Episode",
   "modelSetup": {

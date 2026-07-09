@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import { FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY } from '@/lib/ai-providers/fal/models'
+import { OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY } from '@/lib/ai-providers/openrouter/models'
 
 const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
   taskId: 'task-1',
@@ -22,6 +24,8 @@ const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
   'PROVIDER_CREDENTIAL_MODE',
   'BILLING_MODE',
+  'PLATFORM_DEFAULT_ANALYSIS_MODEL',
+  'PLATFORM_DEFAULT_MUSIC_MODEL',
   'PLATFORM_MUSIC_OUTPUT_FORMAT',
 ] as const
 
@@ -61,6 +65,8 @@ describe('cloud music generation runtime options', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     process.env.BILLING_MODE = 'ENFORCE'
+    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY
+    process.env.PLATFORM_DEFAULT_MUSIC_MODEL = FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY
     process.env.PLATFORM_MUSIC_OUTPUT_FORMAT = 'mp3'
   })
 

@@ -193,6 +193,8 @@ export interface EditScriptAssetGenerationPayload {
   readonly success: true
   readonly async: boolean
   readonly total: number
+  readonly processedRequirementCount: number
+  readonly remainingRequirementCount: number
   readonly taskIds: readonly string[]
   readonly results: ReadonlyArray<{
     readonly refId: string

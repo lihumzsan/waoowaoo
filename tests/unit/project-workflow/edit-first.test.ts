@@ -42,6 +42,7 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     failedVideoSegmentCount: 0,
     activeVideoTaskCount: 0,
     chapterCount: 0,
+    renderableChapterCount: 0,
     completedChapterRenderCount: 0,
     failedChapterRenderCount: 0,
     activeChapterRenderTaskCount: 0,
@@ -482,7 +483,36 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_chapters'])
   })
 
-  it('allows final render after all chapter renders are ready and keeps BGM optional', () => {
+  it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 2,
+      panelCount: 6,
+      storyboardPanelImageReadyCount: 6,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 4,
+      completedVideoSegmentCount: 2,
+      chapterCount: 2,
+      renderableChapterCount: 1,
+      completedChapterRenderCount: 0,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_videos')
+    expect(state.nextAction?.operationId).toBe('render_chapters')
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+      'render_chapters',
+      'generate_episode_videos',
+    ])
+  })
+
+  it('requires BGM score generation after all chapter renders are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -502,16 +532,13 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 1,
     }))
 
-    expect(state.stage).toBe('ready_to_render_final')
-    expect(state.nextAction?.operationId).toBe('render_final_video')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
-      'render_final_video',
-      'generate_episode_bgm_score',
-    ])
+    expect(state.stage).toBe('ready_to_generate_bgm_score')
+    expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
   })
 
-  it('blocks final render while optional BGM is generating', () => {
+  it('blocks final render while required BGM is generating', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -565,7 +592,7 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
   })
 
-  it('allows final render after videos, chapters, and optional BGM are ready', () => {
+  it('allows final render after videos, chapters, and required BGM are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',

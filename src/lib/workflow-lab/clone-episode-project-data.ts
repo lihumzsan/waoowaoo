@@ -87,6 +87,7 @@ export async function cloneEpisodeProjectData(params: {
           chapterId: targetChapter.id,
           gridMode: group.gridMode,
           shotIds: toInputJson(group.shotIds),
+          shotNumbers: toInputJson(group.shotNumbers),
           durationSec: group.durationSec,
           prompt: group.prompt,
           status: group.status,

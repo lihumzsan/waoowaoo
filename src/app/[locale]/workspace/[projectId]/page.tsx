@@ -13,6 +13,7 @@ import ProjectWorkspace from '@/features/project-workspace/ProjectWorkspace'
 import { resolveSelectedEpisodeId } from './episode-selection'
 import { useRouter } from '@/i18n/navigation'
 import { readApiErrorMessage } from '@/lib/api/read-error-message'
+import { resolveWorkspacePageState } from './workspace-page-state'
 import {
   HOME_ASSISTANT_AUTOSTART_QUERY,
   HOME_ASSISTANT_AUTOSTART_VALUE,
@@ -108,7 +109,7 @@ export default function ProjectDetailPage() {
   )
 
   // 🔥 使用 React Query 获取剧集数据
-  const { data: currentEpisode } = useEpisodeData(
+  const { data: currentEpisode, isLoading: episodeLoading, error: episodeError } = useEpisodeData(
     projectId,
     !isGlobalAssetsView ? selectedEpisodeId : null
   )
@@ -254,12 +255,21 @@ export default function ProjectDetailPage() {
     })
   }, [queryClient, router])
 
-  // Loading状态：等待项目数据和剧集数据都准备好
-  // 条件：正在加载 或 (有剧集但episode数据未准备好)
-  const isInitializing = loading ||
-    (!isGlobalAssetsView && episodes.length > 0 && (!selectedEpisodeId || !currentEpisode))
+  const pageState = resolveWorkspacePageState({
+    projectLoading: loading,
+    projectError: error,
+    hasProject: Boolean(project),
+    isGlobalAssetsView,
+    episodeCount: episodes.length,
+    selectedEpisodeId,
+    hasCurrentEpisode: Boolean(currentEpisode),
+    episodeLoading,
+    episodeError: episodeError?.message || null,
+    projectMissingMessage: t('projectNotFound'),
+    episodeMissingMessage: t('episodeNotFound'),
+  })
   const isEpisodeWorkspaceReady = !isGlobalAssetsView && Boolean(selectedEpisodeId && currentEpisode)
-  if (isInitializing) {
+  if (pageState.kind === 'loading') {
     return (
       <div className="glass-page min-h-screen">
         <Navbar />
@@ -271,13 +281,15 @@ export default function ProjectDetailPage() {
   }
 
   // Error状态
-  if (error || !project) {
+  if (pageState.kind === 'error' || !project) {
     return (
       <div className="glass-page min-h-screen">
         <Navbar />
         <main className="container mx-auto px-4 py-8">
           <div className="glass-surface p-6 text-center">
-            <p className="text-[var(--glass-tone-danger-fg)] mb-4">{error || t('projectNotFound')}</p>
+            <p className="text-[var(--glass-tone-danger-fg)] mb-4">
+              {pageState.kind === 'error' ? pageState.message : t('projectNotFound')}
+            </p>
             <button
               onClick={() => router.push({ pathname: '/workspace' })}
               className="glass-btn-base glass-btn-primary px-6 py-2"

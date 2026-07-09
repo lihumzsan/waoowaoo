@@ -2165,7 +2165,9 @@ function VideoPlanContent({
     )
   const canGenerateAssetReference = assetReferenceImageUrls.length > 0 && assetReferenceVideoModel.length > 0 && !running && canUseNodeActions
   const canGenerateSelectedMode = generationMode === 'storyboard' ? canGenerateStoryboard : canGenerateAssetReference
-  const shouldShowVideoModelHint = (storyboardReferenceImageUrls.length > 0 || assetReferenceImageUrls.length > 0) && assetReferenceVideoModel.length === 0
+  const shouldShowVideoModelHint = !displayOutputUrl
+    && (storyboardReferenceImageUrls.length > 0 || assetReferenceImageUrls.length > 0)
+    && assetReferenceVideoModel.length === 0
   const shouldShowAssetReferences = previewMode === 'reference' && generationMode === 'asset-reference'
   const missingReferenceLabel = shouldShowAssetReferences ? labels('assetReferenceImagesMissing') : labels('storyboardReferenceImagesMissing')
   const generateLabel = generationMode === 'storyboard'

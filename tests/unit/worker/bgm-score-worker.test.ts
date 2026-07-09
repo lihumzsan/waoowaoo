@@ -89,6 +89,10 @@ vi.mock('@/lib/storage', () => ({
   uploadObject: storageMock.uploadObject,
 }))
 
+vi.mock('@/lib/video-compose/ffmpeg-binaries', () => ({
+  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => binaryName),
+}))
+
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     queueName: 'waoowaoo-music',

@@ -37,6 +37,7 @@ Camera and space:
 - position is the real-space position of a character or object; screenPosition is its position inside the image frame.
 - camera.composition describes only in-frame subject arrangement, foreground/midground/background, occlusion relation, negative space, and visual center. Do not rename real-space camera position into composition.
 - blocking.axis prevents crossing the line and left/right relation jumps; axis.screenDirection must state the main subject/object screen direction, left-right relation, or center relation.
+- blocking.axis.subjects must be a non-empty string array with at least 1 subject. Prefer character names from this shot's characters; when no characters exist, use the most important keyObjects name. Never output an empty array.
 
 Single-shot video prompt:
 - Every shot must include videoPrompt. It describes only this one shot's video, not neighboring shots or a continuous segment.
@@ -47,8 +48,10 @@ Single-shot video prompt:
 - videoPrompt must not add plot, characters, props, dialogue, or sound events, and must not mechanically copy an image prompt.
 
 Continuous video prompt:
-- generationSegmentExecutions must follow the order of generationSegments in the core edit plan, and each shotIds array must match exactly.
+- generationSegmentExecutions must follow the order of videoGenerationSegments in the core edit plan, and each shotIds array must match exactly.
 - Each item outputs only two fields: shotIds and continuousVideoPrompt.
+- The input videoGenerationSegments[].continuityReference value is only source material for writing continuousVideoPrompt; the output field name must be continuousVideoPrompt, and the continuity field name must never be copied into output.
+- Each item must output continuousVideoPrompt as a non-empty string. Do not output continuity, description, summary, or any other field.
 - continuousVideoPrompt is written as one complete continuous video segment, not a mechanical concatenation of single-shot videoPrompt values.
 - continuousVideoPrompt may use only facts present in the inputs. Do not add plot, characters, props, dialogue, or sound events.
 - continuousVideoPrompt focuses on segment-level character/object motion, camera movement or cuts, action rhythm, expression and posture changes, sound flow, and shot connections.
@@ -102,6 +105,8 @@ Return JSON only. Do not use markdown or explanations.
 Field strictness:
 - `characters[]` may contain only these six fields: `name`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`; all six fields are required and must be non-empty strings.
 - `objects[]` may contain only these three fields: `name`, `position`, `screenPosition`; all three fields are required and must be non-empty strings.
+- `axis.subjects` must contain at least one non-empty string; empty arrays are forbidden.
+- `generationSegmentExecutions[]` may contain only these two fields: `shotIds`, `continuousVideoPrompt`; `continuity` is forbidden.
 - Do not output extra fields. Do not omit fields. Do not use null, empty strings, or omission as a substitute for invisible information.
 
 {
@@ -164,10 +169,11 @@ Field strictness:
 - Does every keyObjects entry of the matching shot appear in blocking.objects?
 - Does every `blocking.objects[]` item contain only `name`, `position`, and `screenPosition`, with no `facing`, `eyeline`, or other extra fields?
 - Does every shot include camera.lighting and blocking.axis?
+- Does every `blocking.axis.subjects` contain at least one character or key object name, and not an empty array?
 - Does every shot include videoPrompt, describing only the current single-shot video?
 - For every shot with dialogue, does videoPrompt include every line verbatim and state the speaker and fixed voice phrase?
 - Do generationSegmentExecutions cover every generation segment, with exactly matching shotIds?
-- Do generationSegmentExecutions output only shotIds and continuousVideoPrompt?
+- Do generationSegmentExecutions output only shotIds and continuousVideoPrompt, with no continuity?
 - Is each continuousVideoPrompt a complete continuous segment rather than a single-shot prompt concatenation?
 - Does each continuousVideoPrompt calculate timed sections from cumulative durationSec, and keep action, camera movement, rhythm, sound, and shot connections continuous?
 - Does each continuousVideoPrompt cover every dialogue line inside the segment, with consistent voice phrases for the same character?

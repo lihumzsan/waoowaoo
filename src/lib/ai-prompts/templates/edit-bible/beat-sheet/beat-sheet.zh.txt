@@ -28,6 +28,8 @@
 带编号的剧本原文块：
 {{source_document}}
 
+原文长度（UTF-16 code unit）：{{source_length}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。

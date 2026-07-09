@@ -28,6 +28,8 @@ Your job is only to split and describe these beats. Do not organize them into ch
 Numbered script text blocks:
 {{source_document}}
 
+Script length (UTF-16 code units): {{source_length}}
+
 # Output Schema
 
 Return JSON only. Do not use markdown or explanations.

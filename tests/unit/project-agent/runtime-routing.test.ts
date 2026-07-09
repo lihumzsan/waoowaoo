@@ -28,6 +28,7 @@ const streamState = vi.hoisted(() => ({
   startMessageId: null as string | null,
   simulateSecondTurnAfterFirstWorkflowTool: false,
   executedToolNames: [] as string[],
+  heartbeatStartedDuringRunBootstrap: false,
 }))
 
 const registryState = vi.hoisted(() => ({
@@ -217,6 +218,7 @@ vi.mock('@openai/agents', () => {
   }
 
   const run = vi.fn(async (agent: Agent, runInput: unknown) => {
+    streamState.heartbeatStartedDuringRunBootstrap = runHeartbeatState.startProjectAgentRunHeartbeat.mock.calls.length > 0
     streamState.capturedToolNames = agent.tools.map((tool) => tool.name)
     streamState.capturedEnabledToolNames = await collectEnabledToolNames(agent.tools)
     if (streamState.simulateSecondTurnAfterFirstWorkflowTool) {
@@ -566,6 +568,7 @@ describe('project agent runtime deterministic tool injection', () => {
     streamState.startMessageId = null
     streamState.simulateSecondTurnAfterFirstWorkflowTool = false
     streamState.executedToolNames = []
+    streamState.heartbeatStartedDuringRunBootstrap = false
     loggerState.info.mockReset()
     loggerState.error.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
@@ -630,6 +633,21 @@ describe('project agent runtime deterministic tool injection', () => {
         }),
       }),
     }))
+  })
+
+  it('starts the run heartbeat before agent stream bootstrap can block and become stale', async () => {
+    const response = await runAssistant({ text: '继续下一步，生成分镜图片' })
+    await drainCapturedResponseStream()
+    await vi.waitFor(() => {
+      expect(persistenceState.appendProjectAssistantThreadMessages.mock.calls.length).toBeGreaterThan(0)
+    })
+
+    expect(response.status).toBe(200)
+    expect(streamState.heartbeatStartedDuringRunBootstrap).toBe(true)
+    expect(runHeartbeatState.startProjectAgentRunHeartbeat).toHaveBeenCalledWith({
+      runId: 'run-user_turn',
+      runLock: undefined,
+    })
   })
 
   it('persists the assistant message id emitted by the stream start chunk', async () => {
@@ -1071,6 +1089,30 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.capturedEnabledToolNames).toContain('generate_episode_videos')
     expect(streamState.capturedEnabledToolNames).not.toContain('generate_edit_script_storyboard_images')
+  })
+
+  it('exposes chapter render as the callable next action when ready chapters exist before all videos finish', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_videos', [
+      'render_chapters',
+      'generate_episode_videos',
+    ])
+
+    await runAssistant({ text: '渲染第 1 章章节成片' })
+
+    expect(streamState.capturedEnabledToolNames).toContain('render_chapters')
+    expect(streamState.capturedEnabledToolNames).toContain('generate_episode_videos')
+    const runInputItems = streamState.capturedRunInput as Array<Record<string, unknown>>
+    const snapshotItem = runInputItems.find((item) => (
+      item.role === 'system'
+      && typeof item.content === 'string'
+      && item.content.includes('[project_state_snapshot]')
+    ))
+    const content = snapshotItem?.content
+    if (typeof content !== 'string') throw new Error('PROJECT_STATE_SNAPSHOT_TEST_CONTENT_MISSING')
+    expect(content).toContain('workflowStage=ready_to_generate_videos')
+    expect(content).toContain('workflowNextAction=render_chapters')
+    expect(content).toContain('enabledOperationIds=')
+    expect(content).toContain('render_chapters')
   })
 
   it('projects a declined approval into the model input before the user message', async () => {
