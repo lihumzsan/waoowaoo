@@ -106,6 +106,12 @@ export const TASK_RUNTIME_TARGETS = {
   projectEpisodeBgmScore(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.MUSIC_SCORE_PLAN])
   },
+  projectEpisodeSoundscape(episodeId: string | null | undefined) {
+    return target('ProjectEpisode', episodeId, [
+      TASK_TYPE.SOUNDSCAPE_PLAN,
+      TASK_TYPE.SOUNDSCAPE_GENERATE,
+    ])
+  },
   projectEditChapterRender(chapterId: string | null | undefined) {
     return target('ProjectEditChapter', chapterId, [TASK_TYPE.CHAPTER_RENDER])
   },

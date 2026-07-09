@@ -14,21 +14,22 @@ interface EnabledModelOption extends CustomModel {
 }
 
 const ALWAYS_SHOW_PROVIDERS: string[] = []
-const ALLOWED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google'])
-const PROVIDER_MODEL_TYPES: Array<'llm' | 'image' | 'video' | 'music'> = ['llm', 'image', 'video', 'music']
+const ALLOWED_PROVIDER_KEYS = new Set(['ark', 'openrouter', 'fal', 'google', 'elevenlabs'])
+const PROVIDER_MODEL_TYPES: Array<'llm' | 'image' | 'video' | 'music' | 'soundEffect'> = ['llm', 'image', 'video', 'music', 'soundEffect']
 const MODEL_PROVIDER_KEYS = [
   'ark',
   'google',
   'openrouter',
   'fal',
+  'elevenlabs',
 ]
 
-function isProviderModelType(type: CustomModel['type']): type is 'llm' | 'image' | 'video' | 'music' {
-  return PROVIDER_MODEL_TYPES.includes(type as 'llm' | 'image' | 'video' | 'music')
+function isProviderModelType(type: CustomModel['type']): type is 'llm' | 'image' | 'video' | 'music' | 'soundEffect' {
+  return PROVIDER_MODEL_TYPES.includes(type as 'llm' | 'image' | 'video' | 'music' | 'soundEffect')
 }
 
-function isDefaultModelType(type: CustomModel['type']): type is 'llm' | 'image' | 'video' | 'music' {
-  return type === 'llm' || type === 'image' || type === 'video' || type === 'music'
+function isDefaultModelType(type: CustomModel['type']): type is 'llm' | 'image' | 'video' | 'music' | 'soundEffect' {
+  return type === 'llm' || type === 'image' || type === 'video' || type === 'music' || type === 'soundEffect'
 }
 
 function hasProviderApiKey(provider: Provider | undefined): boolean {
@@ -76,11 +77,12 @@ export function useApiConfigFilters({
   }, [modelProviderKeys, providers])
 
   const enabledModelsByType = useMemo(() => {
-    const grouped: Record<'llm' | 'image' | 'video' | 'music', EnabledModelOption[]> = {
+    const grouped: Record<'llm' | 'image' | 'video' | 'music' | 'soundEffect', EnabledModelOption[]> = {
       llm: [],
       image: [],
       video: [],
       music: [],
+      soundEffect: [],
     }
 
     const providersById = new Map(providers.map((provider) => [provider.id, provider] as const))
@@ -109,6 +111,6 @@ export function useApiConfigFilters({
     modelProviders,
     getModelsForProvider: (providerId: string) =>
       models.filter((model) => model.provider === providerId && shouldExposeModelForProvider(providersById.get(providerId), model)),
-    getEnabledModelsByType: (type: 'llm' | 'image' | 'video' | 'music') => enabledModelsByType[type],
+    getEnabledModelsByType: (type: 'llm' | 'image' | 'video' | 'music' | 'soundEffect') => enabledModelsByType[type],
   }
 }

@@ -49,6 +49,7 @@ export interface WorkspaceRuntimeValue {
   ) => Promise<void>
   onGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
   onGenerateBgmScore: () => Promise<void>
+  onGenerateSoundscape: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
   onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>

@@ -3,7 +3,7 @@ import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-strea
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
 
-export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music'
+export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'soundEffect'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
 export type AiVariantSubKind = 'official' | 'user-template'
 
@@ -202,7 +202,7 @@ export type AiLlmExecutionResult = {
   successDetails?: AiUnknownObject
 }
 
-export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music'
+export type UnifiedModelType = 'llm' | 'image' | 'video' | 'music' | 'soundEffect'
 export type CapabilityValue = string | number | boolean
 export type CapabilityOptionValue = CapabilityValue
 export type CapabilitySelections = Record<string, Record<string, CapabilityValue>>
@@ -258,11 +258,20 @@ export interface MusicCapabilities {
   fieldI18n?: CapabilityFieldI18nMap
 }
 
+export interface SoundEffectCapabilities {
+  durationSecondsOptions?: number[]
+  loopOptions?: boolean[]
+  promptInfluenceOptions?: number[]
+  outputFormatOptions?: string[]
+  fieldI18n?: CapabilityFieldI18nMap
+}
+
 export interface ModelCapabilities {
   llm?: LLMCapabilities
   image?: ImageCapabilities
   video?: VideoCapabilities
   music?: MusicCapabilities
+  soundEffect?: SoundEffectCapabilities
 }
 
 const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
@@ -270,6 +279,7 @@ const CAPABILITY_NAMESPACES = new Set<keyof ModelCapabilities>([
   'image',
   'video',
   'music',
+  'soundEffect',
 ])
 
 const LLM_ALLOWED_FIELDS = new Set<keyof LLMCapabilities>([
@@ -299,6 +309,14 @@ const MUSIC_ALLOWED_FIELDS = new Set<keyof MusicCapabilities>([
   'vocalModeOptions',
   'outputFormatOptions',
   'bpmOptions',
+  'fieldI18n',
+])
+
+const SOUND_EFFECT_ALLOWED_FIELDS = new Set<keyof SoundEffectCapabilities>([
+  'durationSecondsOptions',
+  'loopOptions',
+  'promptInfluenceOptions',
+  'outputFormatOptions',
   'fieldI18n',
 ])
 
@@ -615,6 +633,53 @@ function validateMusicCapabilities(issues: CapabilityValidationIssue[], raw: unk
   })
 }
 
+function validateSoundEffectCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
+  if (!isRecord(raw)) return
+
+  const durationSecondsOptions = raw.durationSecondsOptions
+  if (durationSecondsOptions !== undefined && !isNumberArray(durationSecondsOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.soundEffect.durationSecondsOptions',
+      message: 'durationSecondsOptions must be a finite number array',
+    })
+  }
+
+  const loopOptions = raw.loopOptions
+  if (loopOptions !== undefined && !isBooleanArray(loopOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.soundEffect.loopOptions',
+      message: 'loopOptions must be a boolean array',
+    })
+  }
+
+  const promptInfluenceOptions = raw.promptInfluenceOptions
+  if (promptInfluenceOptions !== undefined && !isNumberArray(promptInfluenceOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.soundEffect.promptInfluenceOptions',
+      message: 'promptInfluenceOptions must be a finite number array',
+    })
+  }
+
+  const outputFormatOptions = raw.outputFormatOptions
+  if (outputFormatOptions !== undefined && !isStringArray(outputFormatOptions)) {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.soundEffect.outputFormatOptions',
+      message: 'outputFormatOptions must be a non-empty string array',
+    })
+  }
+
+  validateFieldI18nMap(issues, 'soundEffect', raw.fieldI18n, {
+    durationSeconds: isNumberArray(durationSecondsOptions) ? durationSecondsOptions : undefined,
+    loop: isBooleanArray(loopOptions) ? loopOptions : undefined,
+    promptInfluence: isNumberArray(promptInfluenceOptions) ? promptInfluenceOptions : undefined,
+    outputFormat: isStringArray(outputFormatOptions) ? outputFormatOptions : undefined,
+  })
+}
+
 function validateOptionFieldValue(
   fieldPath: string,
   value: unknown,
@@ -676,16 +741,19 @@ export function validateModelCapabilities(
   validateNamespaceShape(issues, 'image', (capabilities as ModelCapabilities).image)
   validateNamespaceShape(issues, 'video', (capabilities as ModelCapabilities).video)
   validateNamespaceShape(issues, 'music', (capabilities as ModelCapabilities).music)
+  validateNamespaceShape(issues, 'soundEffect', (capabilities as ModelCapabilities).soundEffect)
 
   validateNamespaceAllowedFields(issues, 'llm', (capabilities as ModelCapabilities).llm, LLM_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'image', (capabilities as ModelCapabilities).image, IMAGE_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'video', (capabilities as ModelCapabilities).video, VIDEO_ALLOWED_FIELDS)
   validateNamespaceAllowedFields(issues, 'music', (capabilities as ModelCapabilities).music, MUSIC_ALLOWED_FIELDS)
+  validateNamespaceAllowedFields(issues, 'soundEffect', (capabilities as ModelCapabilities).soundEffect, SOUND_EFFECT_ALLOWED_FIELDS)
 
   validateLLMCapabilities(issues, (capabilities as ModelCapabilities).llm)
   validateImageCapabilities(issues, (capabilities as ModelCapabilities).image)
   validateVideoCapabilities(issues, (capabilities as ModelCapabilities).video)
   validateMusicCapabilities(issues, (capabilities as ModelCapabilities).music)
+  validateSoundEffectCapabilities(issues, (capabilities as ModelCapabilities).soundEffect)
 
   return issues
 }

@@ -48,10 +48,10 @@ export interface BillingQuoteItemView {
   taskType: TaskType
   targetType: string
   targetId: string
-  apiType: 'image' | 'video' | 'music'
+  apiType: 'image' | 'video' | 'music' | 'sound_effect'
   model: string
   quantity: number
-  unit: 'image' | 'video' | 'music' | 'second' | 'call'
+  unit: 'image' | 'video' | 'music' | 'sound_effect' | 'second' | 'call'
   maxFrozenCost?: number
 }
 
@@ -84,7 +84,7 @@ function shouldExposeCredits(): boolean {
 }
 
 type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
-type QuoteVisibleMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'music'>
+type QuoteVisibleMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'music' | 'sound_effect'>
 type ConfirmedCostMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video'>
 
 function isQuoteVisibleMediaBillingInfo(
@@ -94,6 +94,7 @@ function isQuoteVisibleMediaBillingInfo(
     info.apiType === 'image'
     || info.apiType === 'video'
     || info.apiType === 'music'
+    || info.apiType === 'sound_effect'
   )
 }
 

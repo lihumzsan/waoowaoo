@@ -14,6 +14,9 @@ const prismaMock = vi.hoisted(() => ({
   projectEditMusicScore: {
     findUnique: vi.fn(),
   },
+  projectEditSoundscape: {
+    findUnique: vi.fn(),
+  },
   project: {
     findUnique: vi.fn(),
   },
@@ -302,6 +305,17 @@ describe('final video render worker', () => {
         durationMs: 3000,
       },
     })
+    prismaMock.projectEditSoundscape.findUnique.mockResolvedValue({
+      status: 'completed',
+      timelineSignature: buildDefaultChapterTimelineSignature(),
+      planJson: {
+        schemaVersion: 1,
+        decision: 'none_needed',
+        sources: [],
+        sections: [],
+      },
+      mixJson: null,
+    })
   })
 
   afterEach(() => {
@@ -401,6 +415,38 @@ describe('final video render worker', () => {
       where: { episodeId: 'episode-1' },
       update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
     }))
+  })
+
+  it('fails explicitly when soundscape state is missing before final render', async () => {
+    prismaMock.projectEditSoundscape.findUnique.mockResolvedValue(null)
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    await expect(handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))).rejects.toThrow('FINAL_VIDEO_RENDER_SOUNDSCAPE_REQUIRED')
+
+    expect(storageMock.uploadObject).not.toHaveBeenCalled()
+  })
+
+  it('fails explicitly when soundscape generation failed', async () => {
+    prismaMock.projectEditSoundscape.findUnique.mockResolvedValue({
+      status: 'failed',
+      timelineSignature: buildDefaultChapterTimelineSignature(),
+      planJson: {
+        schemaVersion: 1,
+        decision: 'soundscape',
+        sources: [],
+        sections: [],
+      },
+      mixJson: null,
+    })
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    await expect(handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))).rejects.toThrow('FINAL_VIDEO_RENDER_SOUNDSCAPE_NOT_READY:failed')
+
+    expect(storageMock.uploadObject).not.toHaveBeenCalled()
   })
 
   it('fails explicitly when chapter edit script structure is invalid', async () => {
@@ -507,5 +553,52 @@ describe('final video render worker', () => {
         outputUrl: '/m/final-video',
       }),
     }))
+  })
+
+  it('mixes completed soundscape as a third audio layer without sidechain ducking it', async () => {
+    prismaMock.projectEditSoundscape.findUnique.mockResolvedValue({
+      status: 'completed',
+      timelineSignature: buildDefaultChapterTimelineSignature(),
+      planJson: {
+        schemaVersion: 1,
+        decision: 'soundscape',
+        sources: [{
+          sourceId: 'city_wind',
+          environmentFingerprint: 'night_city_wind',
+          prompt: 'Seamless loop of steady city wind, no music, no voices.',
+          loopDurationSeconds: 30,
+          promptInfluence: 0.55,
+        }],
+        sections: [{
+          sourceId: 'city_wind',
+          fromShotId: 'shot-1',
+          toShotId: 'shot-1',
+          perspective: 'exterior_near',
+          intensity: 'medium',
+          transitionIn: 'fade',
+          transitionOut: 'fade',
+        }],
+      },
+      mixJson: {
+        mediaId: 'media-soundscape',
+        url: '/m/soundscape',
+        storageKey: 'soundscape/mix.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 3000,
+      },
+    })
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    await handleFinalVideoRenderTask(buildJob({
+      episodeId: 'episode-1',
+    }))
+
+    expect(storageMock.getObjectBuffer).toHaveBeenCalledWith('soundscape/mix.m4a')
+    const ffmpegCalls = execFileMock.mock.calls
+      .filter((call) => call[0] === 'ffmpeg')
+      .map((call) => (call[1] as readonly string[]).join(' '))
+    expect(ffmpegCalls.some((args) => args.includes('loudnorm=I=-24.000'))).toBe(true)
+    expect(ffmpegCalls.some((args) => args.includes('[main_mix][soundscape_norm][ducked_bgm]amix=inputs=3'))).toBe(true)
+    expect(ffmpegCalls.some((args) => args.includes('[soundscape_norm]asplit'))).toBe(false)
   })
 })

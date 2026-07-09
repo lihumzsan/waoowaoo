@@ -17,6 +17,7 @@ function pricingApiTypeToModelType(apiType: PricingApiType): UnifiedModelType | 
   if (apiType === 'image') return 'image'
   if (apiType === 'video') return 'video'
   if (apiType === 'music') return 'music'
+  if (apiType === 'sound_effect') return 'soundEffect'
   return null
 }
 

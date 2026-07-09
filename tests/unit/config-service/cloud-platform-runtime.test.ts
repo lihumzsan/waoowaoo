@@ -94,6 +94,7 @@ describe('cloud platform runtime project config', () => {
       singleShotVideoModel: 'openrouter::bytedance/seedance-2.0-fast',
       sequenceVideoModel: 'openrouter::bytedance/seedance-2.0-fast',
       musicModel: 'fal::fal-ai/lyria3/pro',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
       videoRatio: '21:9',
       capabilityDefaults: {
         'openrouter::bytedance/seedance-2.0-fast': {

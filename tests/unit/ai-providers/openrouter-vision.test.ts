@@ -70,10 +70,10 @@ describe('OpenRouter vision adapter', () => {
       reasoning: true,
     })
 
-    expect(openAiConstructorMock).toHaveBeenCalledWith({
+    expect(openAiConstructorMock).toHaveBeenCalledWith(expect.objectContaining({
       baseURL: 'https://openrouter.example/v1',
       apiKey: 'sk-openrouter',
-    })
+    }))
     expect(completionCreateMock).toHaveBeenCalledWith(
       {
         model: 'anthropic/claude-sonnet-4',

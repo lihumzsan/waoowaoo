@@ -17,6 +17,8 @@ const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.IMAGE_LOCATION]: 'tests/unit/worker/location-image-task-handler.test.ts',
   [TASK_TYPE.MUSIC_GENERATE]: 'tests/unit/worker/music-worker.test.ts',
   [TASK_TYPE.MUSIC_SCORE_PLAN]: 'tests/unit/worker/bgm-score-worker.test.ts',
+  [TASK_TYPE.SOUNDSCAPE_PLAN]: 'tests/unit/worker/soundscape-worker.test.ts',
+  [TASK_TYPE.SOUNDSCAPE_GENERATE]: 'tests/unit/worker/soundscape-worker.test.ts',
   [TASK_TYPE.FINAL_VIDEO_RENDER]: 'tests/unit/worker/final-video-render-worker.test.ts',
   [TASK_TYPE.CHAPTER_RENDER]: 'tests/unit/worker/chapter-render-worker.test.ts',
   [TASK_TYPE.VIDEO_PANEL]: 'tests/unit/worker/video-worker.test.ts',

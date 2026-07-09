@@ -353,6 +353,61 @@ export function useGenerateBgmScore(projectId: string | null, episodeId: string 
 }
 
 /**
+ * 生成连续环境音效层
+ */
+export function useGenerateSoundscape(projectId: string | null, episodeId: string | null) {
+    const queryClient = useQueryClient()
+    const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId, episodeId)
+
+    return useMutation({
+        mutationFn: async () => {
+            if (!projectId) throw new Error('Project ID is required')
+            if (!episodeId) throw new Error('Episode ID is required')
+
+            const requestBody = { episodeId }
+            const confirmedMaxCost = await mediaOperationBillingPlan('generate_episode_soundscape', requestBody)
+            const res = await apiFetch(`/api/projects/${projectId}/generate-soundscape`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    confirmed: true,
+                    ...requestBody,
+                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                }),
+            })
+            await checkApiResponse(res)
+            return res.json()
+        },
+        onMutate: async () => {
+            if (!projectId || !episodeId) return
+            upsertTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+                runningTaskType: 'soundscape_plan',
+                intent: 'generate',
+                stage: 'soundscape_prepare',
+            })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+        },
+        onError: () => {
+            if (!projectId || !episodeId) return
+            clearTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+            })
+        },
+        onSettled: () => {
+            if (episodeId && projectId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+            }
+        },
+    })
+}
+
+/**
  * 选择分镜候选图
  */
 export function useSelectPanelCandidate(projectId: string | null, episodeId: string | null) {

@@ -9,6 +9,7 @@ export const workspaceNodeId = {
   shot: (panelId: string): string => `shot:${panelId}`,
   videoPlan: (editScriptId: string, blockNumber: number): string => `video-plan:${editScriptId}:${blockNumber}`,
   bgmScore: (episodeId: string): string => `bgm-score:${episodeId}`,
+  soundscape: (episodeId: string): string => `soundscape:${episodeId}`,
   finalTimeline: (episodeId: string): string => `final:${episodeId}`,
 } as const
 

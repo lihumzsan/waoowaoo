@@ -65,6 +65,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'clapperboard'
     case 'bgmScore':
       return 'audioWave'
+    case 'soundscape':
+      return 'audioWave'
     case 'editRequiredAsset':
       return 'package'
     case 'editAssetGroup':
@@ -81,7 +83,7 @@ function nodeContentInteractionClass(data: WorkspaceCanvasFlowNode['data'], clas
 }
 
 function nodeUsesInlineTaskProgress(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
-  return kind === 'videoPlan' || kind === 'bgmScore' || kind === 'finalTimeline'
+  return kind === 'videoPlan' || kind === 'bgmScore' || kind === 'soundscape' || kind === 'finalTimeline'
 }
 
 export function videoElementAspectRatio(video: Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>): number | null {
@@ -439,6 +441,7 @@ function nodeActionIconName(action: WorkspaceCanvasNodeAction): AppIconName {
     case 'generate_asset_reference_video':
       return 'video'
     case 'generate_bgm_score':
+    case 'generate_soundscape':
       return 'audioWave'
     case 'render_final_video':
       return 'film'
@@ -1070,6 +1073,52 @@ function BgmScoreContent({
         {wideContent}
       </WorkspaceCanvasMotionPresence>
     </>
+  )
+}
+
+function SoundscapeContent({
+  data,
+  labels,
+  expanded,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
+}) {
+  const details = data.soundscapeDetails
+  if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const displayMixUrl = toDisplayImageUrl(details.mixUrl) ?? details.mixUrl ?? null
+  const mixSection = displayMixUrl ? (
+    <div className="nodrag nowheel space-y-1.5 rounded-[14px] border border-slate-200 bg-white p-2">
+      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
+        {labels('soundscapeMix')}
+      </p>
+      <audio src={displayMixUrl} controls preload="metadata" className="w-full" />
+    </div>
+  ) : null
+  const statsSection = renderSection(labels('soundscapeStats'), (
+    <div className="space-y-1">
+      {renderValue(labels('status'), details.status)}
+      {renderValue(labels('soundscapeDecision'), details.decision)}
+      {renderValue(labels('soundscapeSourceCount'), details.sourceCount)}
+      {renderValue(labels('soundscapeSectionCount'), details.sectionCount)}
+      {renderValue(labels('soundEffectModel'), details.soundEffectModel)}
+    </div>
+  ))
+  const noneNeededSection = details.decision === 'none_needed'
+    ? renderTextSection(labels('soundscapeNoneNeeded'), labels('soundscapeNoneNeededDescription'))
+    : null
+  const errorSection = renderTextSection(labels('error'), details.errorMessage)
+
+  return (
+    <div className={`space-y-2 rounded-[18px] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
+      {mixSection}
+      {statsSection}
+      <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
+        {noneNeededSection}
+      </WorkspaceCanvasMotionPresence>
+      {errorSection}
+    </div>
   )
 }
 
@@ -2396,6 +2445,8 @@ function NodeContent({
       return <FinalContent data={data} labels={labels} expanded={expanded} />
     case 'bgmScore':
       return <BgmScoreContent data={data} labels={labels} expanded={expanded} />
+    case 'soundscape':
+      return <SoundscapeContent data={data} labels={labels} expanded={expanded} />
     case 'editSourceScript':
       return <SourceScriptContent data={data} labels={labels} expanded={expanded} />
     case 'editBible':
@@ -2514,7 +2565,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
       observer.disconnect()
       clearDeferredMeasure()
     }
-  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.sourceScriptDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.soundscapeDetails, data.sourceScriptDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>

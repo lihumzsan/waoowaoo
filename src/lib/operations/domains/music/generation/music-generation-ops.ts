@@ -56,6 +56,15 @@ const bgmScoreGenerationInputSchema = z.object({
 
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
 
+const soundscapeGenerationInputSchema = z.object({
+  confirmed: z.boolean().optional(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
+  episodeId: z.string().min(1).optional(),
+  soundEffectModel: z.string().min(1).optional(),
+}).passthrough()
+
+type SoundscapeGenerationInput = z.infer<typeof soundscapeGenerationInputSchema>
+
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -71,6 +80,14 @@ function assertPlatformMusicModelInput(requested: string, systemModel: string): 
   throw new ApiError('FORBIDDEN', {
     code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
     field: 'musicModel',
+  })
+}
+
+function assertPlatformSoundEffectModelInput(requested: string, systemModel: string): void {
+  if (!requested || requested === systemModel) return
+  throw new ApiError('FORBIDDEN', {
+    code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
+    field: 'soundEffectModel',
   })
 }
 
@@ -141,6 +158,21 @@ async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, project
   return requireModelKey(configured)
 }
 
+async function resolveSoundscapeSoundEffectModel(input: SoundscapeGenerationInput, projectId: string, userId: string): Promise<string> {
+  const requested = normalizeString(input.soundEffectModel)
+  if (isPlatformProviderCredentialMode()) {
+    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'sound-effect' })
+    assertPlatformSoundEffectModelInput(requested, systemModel)
+    return systemModel
+  }
+  if (requested) return requireModelKey(requested)
+
+  const projectModelConfig = await getProjectModelConfig(projectId, userId)
+  const configured = normalizeString(projectModelConfig.soundEffectModel)
+  if (!configured) throw new Error('PROJECT_AGENT_SOUNDSCAPE_SOUND_EFFECT_MODEL_REQUIRED')
+  return requireModelKey(configured)
+}
+
 async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectId: string): Promise<number> {
   const episode = await prisma.projectEpisode.findFirst({
     where: { id: episodeId, projectId },
@@ -154,6 +186,16 @@ async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectI
   const duration = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('PROJECT_AGENT_MUSIC_SCORE_TIMELINE_REQUIRED')
   return Math.max(1, Math.ceil(duration))
+}
+
+async function resolveAnalysisModel(projectId: string, userId: string): Promise<string> {
+  if (isPlatformProviderCredentialMode()) {
+    return await resolveSystemModelKey({ userId, projectId, purpose: 'analysis' })
+  }
+  const projectModelConfig = await getProjectModelConfig(projectId, userId)
+  const analysisModel = normalizeString(projectModelConfig.analysisModel)
+  if (!analysisModel) throw new Error('PROJECT_AGENT_ANALYSIS_MODEL_REQUIRED')
+  return requireModelKey(analysisModel)
 }
 
 async function planGenerateProjectMusicOperation(
@@ -299,6 +341,52 @@ async function planGenerateEpisodeBgmScoreOperation(
   }
 }
 
+async function planGenerateEpisodeSoundscapeOperation(
+  ctx: ProjectAgentOperationContext,
+  input: SoundscapeGenerationInput,
+): Promise<OperationPlan> {
+  const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const soundEffectModel = await resolveSoundscapeSoundEffectModel(input, ctx.projectId, ctx.userId)
+  const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
+  const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
+  const payload: Record<string, unknown> = {
+    episodeId,
+    durationSeconds,
+    soundEffectModel,
+    analysisModel,
+    maxInputTokens: 5000,
+  }
+
+  return {
+    kind: 'task_submission',
+    operationId: 'generate_episode_soundscape',
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    tasks: [
+      createPlannedTask({
+        id: `generate_episode_soundscape:${episodeId}`,
+        taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+        targetType: 'ProjectEpisode',
+        targetId: episodeId,
+        payload,
+        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        episodeId,
+        dedupeKey: `soundscape_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+          payload,
+          allowedApiTypes: ['text'],
+        }),
+      }),
+    ],
+    metadata: {
+      episodeId,
+      soundEffectModel,
+    },
+  }
+}
+
 async function commitGenerateEpisodeBgmScoreOperation(
   ctx: ProjectAgentOperationContext,
   input: BgmScoreGenerationInput,
@@ -343,10 +431,59 @@ async function commitGenerateEpisodeBgmScoreOperation(
   }
 }
 
+async function commitGenerateEpisodeSoundscapeOperation(
+  ctx: ProjectAgentOperationContext,
+  input: SoundscapeGenerationInput,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string'
+    ? plan.metadata.soundEffectModel
+    : ''
+  const episodeId = (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
+    || normalizeString(input.episodeId)
+    || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const result = await submitPlannedOperationTask({
+    ctx,
+    task,
+    operationId: 'generate_episode_soundscape',
+    confirmed: input.confirmed === true,
+  })
+
+  writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+    operationId: 'generate_episode_soundscape',
+    taskId: result.taskId,
+    status: result.status,
+    runId: result.runId || null,
+    deduped: result.deduped,
+    billingReceipt: result.billingReceiptView,
+    projectId: ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  })
+
+  return {
+    ...result,
+    soundEffectModel,
+    taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  }
+}
+
 export function createMusicGenerationOperations(): ProjectAgentOperationRegistryDraft {
-  const taskSubmitOutput = refineTaskSubmitOperationOutputSchema(
+  const musicTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
     taskSubmitOperationOutputSchemaBase.extend({
       musicModel: z.string().min(1),
+    }).passthrough(),
+  )
+  const soundscapeTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
+    taskSubmitOperationOutputSchemaBase.extend({
+      soundEffectModel: z.string().min(1),
     }).passthrough(),
   )
 
@@ -368,7 +505,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         required: false,
       },
       inputSchema: musicGenerationInputSchema,
-      outputSchema: taskSubmitOutput,
+      outputSchema: musicTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateProjectMusicOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateProjectMusicOperation(ctx, input, plan),
       execute: async (ctx, input) => {
@@ -399,7 +536,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: bgmScoreGenerationInputSchema,
-      outputSchema: taskSubmitOutput,
+      outputSchema: musicTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateEpisodeBgmScoreOperation(ctx, input, plan),
       execute: async (ctx, input) => {
@@ -409,6 +546,37 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
           confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
         })
         return await commitGenerateEpisodeBgmScoreOperation(ctx, input, plan)
+      },
+    }),
+    generate_episode_soundscape: defineOperation({
+      id: 'generate_episode_soundscape',
+      summary: 'Generate the episode soundscape ambience layer from rendered chapter outputs.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: {
+        writes: true,
+        billable: true,
+        destructive: false,
+        overwrite: true,
+        bulk: true,
+        externalSideEffects: true,
+        longRunning: true,
+      },
+      confirmation: {
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: soundscapeGenerationInputSchema,
+      outputSchema: soundscapeTaskSubmitOutput,
+      plan: async (ctx, input) => planGenerateEpisodeSoundscapeOperation(ctx, input),
+      commit: async (ctx, input, plan) => commitGenerateEpisodeSoundscapeOperation(ctx, input, plan),
+      execute: async (ctx, input) => {
+        const plan = await planGenerateEpisodeSoundscapeOperation(ctx, input)
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
+        })
+        return await commitGenerateEpisodeSoundscapeOperation(ctx, input, plan)
       },
     }),
   }

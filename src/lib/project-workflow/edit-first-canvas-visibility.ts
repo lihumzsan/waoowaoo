@@ -11,6 +11,7 @@ export interface EditFirstCanvasVisibility {
   readonly storyboardPanels: boolean
   readonly videoPlan: boolean
   readonly bgmScore: boolean
+  readonly soundscape: boolean
   readonly finalTimeline: boolean
 }
 
@@ -53,9 +54,11 @@ const EDIT_FIRST_STAGE_RANK = {
   chapters_rendering: 22,
   ready_to_generate_bgm_score: 23,
   bgm_score_generating: 24,
-  ready_to_render_final: 25,
-  final_rendering: 26,
-  completed: 27,
+  ready_to_generate_audio_layers: 25,
+  audio_layers_generating: 26,
+  ready_to_render_final: 27,
+  final_rendering: 28,
+  completed: 29,
 } as const satisfies Record<OrderedEditFirstWorkflowStage, number>
 
 function stageRank(stage: EditFirstWorkflowStage): number {
@@ -97,6 +100,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_episode_videos',
       'render_chapters',
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'render_final_video',
     ])
 
@@ -108,6 +112,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_episode_videos',
       'render_chapters',
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'render_final_video',
     ])
 
@@ -117,6 +122,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_episode_videos',
       'render_chapters',
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'render_final_video',
     ])
 
@@ -125,12 +131,21 @@ export function resolveEditFirstCanvasVisibility(
       'generate_episode_videos',
       'render_chapters',
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'render_final_video',
     ])
 
   const bgmScore = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
     || canRunAnyOperation(operations, [
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
+      'render_final_video',
+    ])
+
+  const soundscape = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
+    || canRunAnyOperation(operations, [
+      'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'render_final_video',
     ])
 
@@ -147,6 +162,7 @@ export function resolveEditFirstCanvasVisibility(
     storyboardPanels,
     videoPlan,
     bgmScore,
+    soundscape,
     finalTimeline,
   }
 }

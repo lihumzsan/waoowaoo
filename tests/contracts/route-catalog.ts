@@ -88,6 +88,7 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/episodes/route.ts',
   'src/app/api/projects/[projectId]/final-video-render/route.ts',
   'src/app/api/projects/[projectId]/generate-bgm/route.ts',
+  'src/app/api/projects/[projectId]/generate-soundscape/route.ts',
   'src/app/api/projects/[projectId]/generate-video/route.ts',
   'src/app/api/projects/[projectId]/location/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/location/route.ts',
@@ -167,6 +168,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   }
   if (
     routeFile.endsWith('/generate-bgm/route.ts')
+    || routeFile.endsWith('/generate-soundscape/route.ts')
     || routeFile.endsWith('/generate-video/route.ts')
     || routeFile.endsWith('/final-video-render/route.ts')
     || routeFile.endsWith('/generate/route.ts')

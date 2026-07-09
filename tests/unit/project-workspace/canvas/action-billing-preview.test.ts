@@ -24,6 +24,14 @@ describe('workspace canvas action billing previews', () => {
     expect(request.context).toEqual({ episodeId: 'episode-1' })
   })
 
+  it('maps soundscape generation to the soundscape operation plan without requiring confirmation UI state', () => {
+    const request = resolve({ type: 'generate_soundscape' })
+
+    expect(request.operationId).toBe('generate_episode_soundscape')
+    expect(request.input).toEqual({ episodeId: 'episode-1' })
+    expect(request.context).toEqual({ episodeId: 'episode-1' })
+  })
+
   it('maps grouped video actions to the same operation input used by submission', () => {
     const request = resolve({
       type: 'generate_video_group',

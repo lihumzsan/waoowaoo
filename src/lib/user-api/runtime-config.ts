@@ -47,7 +47,7 @@ type PlatformProviderEnv = {
   baseUrl?: string
 }
 
-const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google'])
+const SUPPORTED_PROVIDER_IDS = new Set(['ark', 'openrouter', 'fal', 'google', 'elevenlabs'])
 
 function isPlainObject(value: unknown): value is object {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -79,6 +79,8 @@ function resolvePlatformProviderEnv(providerId: string): PlatformProviderEnv {
         return 'PLATFORM_ARK'
       case 'openrouter':
         return 'PLATFORM_OPENROUTER'
+      case 'elevenlabs':
+        return 'PLATFORM_ELEVENLABS'
       default:
         throw new Error(`PLATFORM_PROVIDER_UNSUPPORTED: ${providerId}`)
     }
@@ -105,6 +107,7 @@ function isUnifiedModelType(value: unknown): value is UnifiedModelType {
     || value === 'image'
     || value === 'video'
     || value === 'music'
+    || value === 'soundEffect'
   )
 }
 

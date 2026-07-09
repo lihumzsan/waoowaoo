@@ -427,6 +427,38 @@ export interface ProjectMusicScore {
   errorMessage?: string | null
 }
 
+export type ProjectSoundscapeStatus =
+  | 'pending'
+  | 'planning'
+  | 'planned'
+  | 'generating'
+  | 'completed'
+  | 'failed'
+  | string
+
+export interface ProjectSoundscape {
+  id?: string | null
+  status: ProjectSoundscapeStatus
+  version?: number | null
+  taskId?: string | null
+  timelineSignature?: string | null
+  soundEffectModel?: string | null
+  decision?: 'soundscape' | 'none_needed' | null
+  sourceCount: number
+  sectionCount: number
+  plan?: unknown
+  sources?: unknown
+  mix?: {
+    mediaId: string
+    url: string
+    storageKey: string
+    mimeType: string
+    durationMs: number
+  } | null
+  diagnostics?: unknown
+  errorMessage?: string | null
+}
+
 export interface ProjectFinalVideo {
   id: string
   episodeId: string
@@ -435,6 +467,7 @@ export interface ProjectFinalVideo {
   outputUrl: string | null
   updatedAt: string | null
   musicScore?: ProjectMusicScore | null
+  soundscape?: ProjectSoundscape | null
 }
 
 export interface ProjectVideoGroup {
@@ -484,6 +517,7 @@ export interface ProjectWorkflowData {
   singleShotVideoModel: string | null
   sequenceVideoModel: string | null
   musicModel: string | null
+  soundEffectModel: string | null
   videoRatio: string | null
   capabilityOverrides?: CapabilitySelections | string | null
   videoResolution?: string | null

@@ -37,6 +37,7 @@ function isToolConfirmationExemptOperationId(operationId: string): boolean {
     isEditFirstAutoApprovedOperationId(operationId)
     || operationId === 'generate_project_music'
     || operationId === 'generate_episode_bgm_score'
+    || operationId === 'generate_episode_soundscape'
   )
 }
 

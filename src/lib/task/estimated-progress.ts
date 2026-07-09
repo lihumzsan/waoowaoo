@@ -48,6 +48,8 @@ const VIDEO_PROGRESS_TASK_TYPES = new Set<string>([
 const MUSIC_PROGRESS_TASK_TYPES = new Set<string>([
   TASK_TYPE.MUSIC_GENERATE,
   TASK_TYPE.MUSIC_SCORE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_GENERATE,
 ])
 
 function normalizePhase(phase: string | null | undefined): EstimatedTaskProgressPhase {

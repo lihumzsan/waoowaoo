@@ -155,7 +155,8 @@
   "apiTypes": {
     "image": "Image Generation",
     "video": "Video Generation",
-    "text": "Text Analysis"
+    "text": "Text Analysis",
+    "sound_effect": "Sound Effect Generation"
   },
   "actionTypes": {
     "image_panel": "Storyboard Image",
@@ -166,6 +167,8 @@
     "image_location": "Location Image",
     "music_generate": "Music Generation",
     "music_score_plan": "Music Score Plan",
+    "soundscape_plan": "Soundscape Plan",
+    "soundscape_generate": "Soundscape Generation",
     "final_video_render": "Final Video Render",
     "chapter_render": "Chapter Render",
     "video_panel": "Video Generation",

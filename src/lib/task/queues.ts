@@ -81,6 +81,8 @@ const VIDEO_TYPES = new Set<TaskType>([
 const MUSIC_TYPES = new Set<TaskType>([
   TASK_TYPE.MUSIC_GENERATE,
   TASK_TYPE.MUSIC_SCORE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_GENERATE,
 ])
 
 export function getQueueTypeByTaskType(type: TaskType): QueueType {

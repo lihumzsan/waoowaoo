@@ -47,4 +47,38 @@ describe('final render audio mix', () => {
     expect(filterGraph).not.toContain('[bgm][main]sidechaincompress')
     expect(filterGraph).not.toContain('[main][ducked_bgm]amix')
   })
+
+  it('adds soundscape as a third mix layer without routing it through sidechain ducking', async () => {
+    const runCommandMock = vi.fn<FinalRenderAudioCommandRunner>(async (command) => {
+      if (command === 'ffmpeg') return { stdout: '', stderr: loudnormJson() }
+      return { stdout: '', stderr: '' }
+    })
+
+    await muxFinalRenderAudio({
+      runCommand: runCommandMock,
+      stitchedPath: '/tmp/stitched.mp4',
+      mainAudioPath: '/tmp/main-audio.m4a',
+      hasSourceAudio: true,
+      musicPath: '/tmp/bgm.mp3',
+      soundscapePath: '/tmp/soundscape.m4a',
+      outputPath: '/tmp/final.mp4',
+      durationSeconds: 57,
+      volume: 0.42,
+    })
+
+    const finalFfmpegCall = runCommandMock.mock.calls.find((call) => {
+      const args = call[1]
+      return call[0] === 'ffmpeg' && args.includes('-filter_complex') && args.includes('/tmp/final.mp4')
+    })
+    expect(finalFfmpegCall).toBeTruthy()
+    const args = finalFfmpegCall?.[1] ?? []
+    const filterComplexIndex = args.indexOf('-filter_complex')
+    expect(filterComplexIndex).toBeGreaterThanOrEqual(0)
+    const filterGraph = args[filterComplexIndex + 1]
+    expect(filterGraph).toContain('[3:a]atrim=0:57.000,asetpts=PTS-STARTPTS,loudnorm=I=-24.000')
+    expect(filterGraph).toContain('[main_mix][soundscape_norm][ducked_bgm]amix=inputs=3')
+    expect(filterGraph).toContain('[bgm_norm][main_sidechain]sidechaincompress=')
+    expect(filterGraph).not.toContain('[soundscape_norm][main_sidechain]sidechaincompress')
+    expect(filterGraph).not.toContain('[soundscape_norm]asplit')
+  })
 })

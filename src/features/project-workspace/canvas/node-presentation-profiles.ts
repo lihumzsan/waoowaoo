@@ -211,6 +211,16 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
+  soundscape: {
+    collapsed: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
+    expanded: {
+      width: 720,
+      height: 420,
+    },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
+  },
   editRequiredAsset: {
     collapsed: WORKSPACE_CANVAS_EDIT_ASSET_NODE_SIZE,
     expandedLayout: 'stack',

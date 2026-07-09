@@ -25,6 +25,9 @@ vi.mock('@/lib/query/hooks/useStoryboards', () => ({
   useGenerateBgmScore: () => ({
     mutateAsync: vi.fn(),
   }),
+  useGenerateSoundscape: () => ({
+    mutateAsync: vi.fn(),
+  }),
   useRenderFinalVideo: () => ({
     mutateAsync: vi.fn(),
   }),

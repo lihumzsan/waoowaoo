@@ -26,6 +26,7 @@ export type FinalRenderAudioMixResult = {
   readonly hasSourceAudio: boolean
   readonly mainAudio?: AudioLoudnessMeasurement
   readonly bgm: AudioLoudnessMeasurement
+  readonly soundscape?: AudioLoudnessMeasurement
 }
 
 export const MAIN_AUDIO_TARGET: AudioLoudnessTarget = {
@@ -37,6 +38,12 @@ export const MAIN_AUDIO_TARGET: AudioLoudnessTarget = {
 export const BGM_AUDIO_TARGET: AudioLoudnessTarget = {
   integratedLufs: -6,
   truePeakDb: -1.5,
+  loudnessRange: 11,
+}
+
+export const SOUNDSCAPE_AUDIO_TARGET: AudioLoudnessTarget = {
+  integratedLufs: -24,
+  truePeakDb: -2,
   loudnessRange: 11,
 }
 
@@ -222,6 +229,7 @@ export async function muxFinalRenderAudio(input: {
   readonly mainAudioPath: string
   readonly hasSourceAudio: boolean
   readonly musicPath: string
+  readonly soundscapePath?: string | null
   readonly outputPath: string
   readonly durationSeconds: number
   readonly volume: number
@@ -229,8 +237,49 @@ export async function muxFinalRenderAudio(input: {
   const fadeDuration = Math.min(2, Math.max(0.4, input.durationSeconds / 8))
   const fadeOutStart = Math.max(0, input.durationSeconds - fadeDuration)
   const bgmMeasurement = await analyzeAudioLoudness(input.runCommand, input.musicPath, BGM_AUDIO_TARGET)
+  const soundscapePath = input.soundscapePath?.trim() || null
+  const soundscapeMeasurement = soundscapePath
+    ? await analyzeAudioLoudness(input.runCommand, soundscapePath, SOUNDSCAPE_AUDIO_TARGET)
+    : null
 
   if (!input.hasSourceAudio) {
+    if (soundscapePath && soundscapeMeasurement) {
+      await input.runCommand('ffmpeg', [
+        '-y',
+        '-i',
+        input.stitchedPath,
+        '-i',
+        input.musicPath,
+        '-i',
+        soundscapePath,
+        '-filter_complex',
+        [
+          `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
+          `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(SOUNDSCAPE_AUDIO_TARGET, soundscapeMeasurement)}[soundscape_norm]`,
+          '[soundscape_norm][bgm_norm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
+        ].join(';'),
+        '-map',
+        '0:v:0',
+        '-map',
+        '[aout]',
+        '-c:v',
+        'copy',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        '-shortest',
+        input.outputPath,
+      ])
+      return {
+        hasSourceAudio: false,
+        bgm: bgmMeasurement,
+        soundscape: soundscapeMeasurement,
+      }
+    }
+
     await input.runCommand('ffmpeg', [
       '-y',
       '-i',
@@ -261,6 +310,49 @@ export async function muxFinalRenderAudio(input: {
   }
 
   const mainMeasurement = await analyzeAudioLoudness(input.runCommand, input.mainAudioPath, MAIN_AUDIO_TARGET)
+  if (soundscapePath && soundscapeMeasurement) {
+    await input.runCommand('ffmpeg', [
+      '-y',
+      '-i',
+      input.stitchedPath,
+      '-i',
+      input.mainAudioPath,
+      '-i',
+      input.musicPath,
+      '-i',
+      soundscapePath,
+      '-filter_complex',
+      [
+        `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[main_norm]`,
+        `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
+        `[3:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(SOUNDSCAPE_AUDIO_TARGET, soundscapeMeasurement)}[soundscape_norm]`,
+        '[main_norm]asplit=2[main_mix][main_sidechain]',
+        `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
+        '[main_mix][soundscape_norm][ducked_bgm]amix=inputs=3:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
+      ].join(';'),
+      '-map',
+      '0:v:0',
+      '-map',
+      '[aout]',
+      '-c:v',
+      'copy',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-movflags',
+      '+faststart',
+      '-shortest',
+      input.outputPath,
+    ])
+    return {
+      hasSourceAudio: true,
+      mainAudio: mainMeasurement,
+      bgm: bgmMeasurement,
+      soundscape: soundscapeMeasurement,
+    }
+  }
+
   await input.runCommand('ffmpeg', [
       '-y',
       '-i',

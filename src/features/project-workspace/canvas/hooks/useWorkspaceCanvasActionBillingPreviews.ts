@@ -169,6 +169,21 @@ export function resolveWorkspaceCanvasActionPlanRequest(params: {
       context,
     }
   }
+  if (params.action.type === 'generate_soundscape' && params.episodeId) {
+    const input = { episodeId: params.episodeId }
+    return {
+      cacheKey: buildCacheKey({
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        operationId: 'generate_episode_soundscape',
+        input,
+        context,
+      }),
+      operationId: 'generate_episode_soundscape',
+      input,
+      context,
+    }
+  }
   return null
 }
 

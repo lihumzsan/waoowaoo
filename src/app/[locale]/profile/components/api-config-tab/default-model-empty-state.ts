@@ -3,6 +3,7 @@ export type DefaultModelEmptyStateType =
   | 'image'
   | 'video'
   | 'music'
+  | 'soundEffect'
 
 type Translator = (key: string) => string
 
@@ -21,6 +22,9 @@ const EMPTY_STATE_TRANSLATION_KEYS: Record<
   },
   music: {
     description: 'defaultModelEmptyState.musicDescription',
+  },
+  soundEffect: {
+    description: 'defaultModelEmptyState.soundEffectDescription',
   },
 }
 

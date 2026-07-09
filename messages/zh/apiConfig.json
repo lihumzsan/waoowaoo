@@ -48,7 +48,8 @@
     "locationModel": "根据剧本描述生成场景环境与空间参考图",
     "storyboardModel": "根据分镜脚本生成对应的镜头画面参考图",
     "editModel": "对已有图片进行局部修改、风格调整与精修",
-    "musicModel": "为剪辑生成背景音乐与配乐素材"
+    "musicModel": "为剪辑生成背景音乐与配乐素材",
+    "soundEffectModel": "为剪辑生成无缝循环氛围音与音效素材"
   },
   "defaultModelSection": {
     "coreFoundation": "Assistant、文本分析与视频能力",
@@ -66,6 +67,7 @@
     "pipelineStoryboard": "镜头生成",
     "pipelineEdit": "编辑图片",
     "extMusic": "音乐/配乐",
+    "extSoundEffect": "音效/氛围音",
     "corePlaceholder": "必选配置",
     "extPlaceholder": "暂不启用"
   },
@@ -79,7 +81,9 @@
     "videoTitle": "暂无可选视频模型",
     "videoDescription": "请先去下方厂商资源池配置视频模型并开启模型。",
     "musicTitle": "暂无可选音乐模型",
-    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。"
+    "musicDescription": "请先去下方厂商资源池配置音乐/配乐模型并开启模型。",
+    "soundEffectTitle": "暂无可选音效模型",
+    "soundEffectDescription": "请先去下方厂商资源池配置音效模型并开启模型。"
   },
   "providerPool": "厂商资源池",
   "dragToSort": "拖拽排序",
@@ -104,6 +108,7 @@
   "typeImage": "图像",
   "typeVideo": "视频",
   "typeMusic": "音乐/配乐",
+  "typeSoundEffect": "音效",
   "audioSubMusic": "音乐",
   "apiKeyLabel": "API Key",
   "apiType": "API 类型",

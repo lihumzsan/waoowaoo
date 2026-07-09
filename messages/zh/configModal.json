@@ -16,6 +16,7 @@
   "singleShotVideoModel": "单镜头视频模型",
   "sequenceVideoModel": "视频片段生成模型",
   "musicModel": "音乐模型",
+  "soundEffectModel": "音效模型",
   "videoResolution": "视频分辨率",
   "fetchModelsFailed": "获取用户模型列表失败",
   "placeholder": "请输入...",

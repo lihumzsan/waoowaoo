@@ -188,6 +188,7 @@ function isEditFirstChoiceOperationEnabled(params: {
       || params.workflow.stage === 'ready_to_generate_videos'
       || params.workflow.stage === 'ready_to_render_chapters'
       || params.workflow.stage === 'ready_to_generate_bgm_score'
+      || params.workflow.stage === 'ready_to_generate_audio_layers'
       || params.workflow.stage === 'ready_to_render_final'
     )
   }

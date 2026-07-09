@@ -20,6 +20,7 @@ export type WorkspaceCanvasNodeKind =
   | 'editShotExecutionPlan'
   | 'videoPlan'
   | 'bgmScore'
+  | 'soundscape'
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
@@ -84,6 +85,7 @@ export type WorkspaceCanvasNodeAction =
     }
   | { readonly type: 'render_final_video' }
   | { readonly type: 'generate_bgm_score' }
+  | { readonly type: 'generate_soundscape' }
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
@@ -168,6 +170,16 @@ export interface WorkspaceCanvasBgmScoreDetails {
     readonly content: string
   }[]
   readonly finalPrompt?: string | null
+}
+
+export interface WorkspaceCanvasSoundscapeDetails {
+  readonly status?: string | null
+  readonly decision?: 'soundscape' | 'none_needed' | null
+  readonly soundEffectModel?: string | null
+  readonly sourceCount: number
+  readonly sectionCount: number
+  readonly mixUrl?: string | null
+  readonly errorMessage?: string | null
 }
 
 export interface WorkspaceCanvasBgmScoreTimedTextSection {
@@ -422,6 +434,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly videoDetails?: WorkspaceCanvasVideoDetails
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
+  readonly soundscapeDetails?: WorkspaceCanvasSoundscapeDetails
   readonly sourceScriptDetails?: WorkspaceCanvasSourceScriptDetails
   readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails

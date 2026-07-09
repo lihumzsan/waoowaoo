@@ -1,7 +1,7 @@
 'use client'
 
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import { useGenerateVideo, useBatchGenerateVideos, useGenerateBgmScore, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
+import { useGenerateVideo, useBatchGenerateVideos, useGenerateBgmScore, useGenerateSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
 import { useUpdateProjectPanelVideoPrompt, useUpdateProjectConfig } from '@/lib/query/hooks'
 import type {
   WorkspaceBatchVideoGenerationParams,
@@ -36,6 +36,7 @@ export function useWorkspaceVideoActions({
   const generateVideoMutation = useGenerateVideo(projectId, episodeId || null)
   const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
   const generateBgmScoreMutation = useGenerateBgmScore(projectId, episodeId || null)
+  const generateSoundscapeMutation = useGenerateSoundscape(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId, episodeId || null)
   const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
@@ -128,6 +129,23 @@ export function useWorkspaceVideoActions({
     }
   }
 
+  const handleGenerateSoundscape = async () => {
+    if (!episodeId) {
+      alert(t('execution.selectEpisode'))
+      return
+    }
+    try {
+      await generateSoundscapeMutation.mutateAsync()
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        _ulogInfo(t('execution.requestAborted'))
+        return
+      }
+      alert(`${t('execution.soundscapeFailed')}: ${getErrorMessage(err)}`)
+      throw err
+    }
+  }
+
   const handleUpdateVideoPrompt = async (
     storyboardId: string,
     panelIndex: number,
@@ -154,6 +172,7 @@ export function useWorkspaceVideoActions({
     handleGenerateVideo,
     handleGenerateAllVideos,
     handleGenerateBgmScore,
+    handleGenerateSoundscape,
     handleRenderFinalVideo,
     handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel,

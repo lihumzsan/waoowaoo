@@ -135,14 +135,33 @@ export type AiProviderMusicExecutionContext = {
   }
 }
 
-export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music'> = {
+export type AiProviderSoundEffectExecutionContext = {
+  userId: string
+  selection: AiResolvedSelection & {
+    provider: string
+    modelId: string
+    modelKey: string
+  }
+  prompt: string
+  options?: {
+    durationSeconds?: number
+    loop?: boolean
+    promptInfluence?: number
+    outputFormat?: string
+    [key: string]: unknown
+  }
+}
+
+export type AiProviderMediaModalityAdapter<M extends 'image' | 'video' | 'music' | 'soundEffect'> = {
   describe: (selection: AiResolvedSelection) => AiVariantDescriptor
   execute: (
     input: M extends 'image'
       ? AiProviderImageExecutionContext
       : M extends 'video'
         ? AiProviderVideoExecutionContext
-        : AiProviderMusicExecutionContext,
+        : M extends 'music'
+          ? AiProviderMusicExecutionContext
+          : AiProviderSoundEffectExecutionContext,
   ) => Promise<GenerateResult>
 }
 
@@ -155,6 +174,7 @@ export interface AiProviderAdapter {
   image?: AiProviderMediaModalityAdapter<'image'>
   video?: AiProviderMediaModalityAdapter<'video'>
   music?: AiProviderMediaModalityAdapter<'music'>
+  soundEffect?: AiProviderMediaModalityAdapter<'soundEffect'>
   languageModel?: AiProviderLanguageModelAdapter
   completeLlm?: (input: AiLlmExecutionInput) => Promise<AiProviderLlmResult>
   streamLlm?: (input: AiProviderLlmStreamContext) => Promise<AiProviderLlmResult>

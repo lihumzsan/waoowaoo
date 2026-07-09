@@ -28,6 +28,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
   'editModel',
   'videoModel',
   'musicModel',
+  'soundEffectModel',
   'videoRatio',
 ]
 
@@ -40,6 +41,7 @@ const MODEL_FIELDS = new Set([
   'editModel',
   'videoModel',
   'musicModel',
+  'soundEffectModel',
 ])
 
 export function createUserPreferenceOperations(): ProjectAgentOperationRegistryDraft {

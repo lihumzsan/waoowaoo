@@ -103,6 +103,12 @@ function inferTaskContractFromOperation(params: {
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
+    case 'generate_episode_soundscape':
+      return {
+        type: TASK_TYPE.SOUNDSCAPE_PLAN,
+        targetType: 'ProjectEpisode',
+        targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
+      }
     case 'regenerate_group':
       return {
         type: TASK_TYPE.REGENERATE_GROUP,
@@ -133,6 +139,7 @@ export const configServiceMock = {
     locationModel: 'img::location',
     storyboardModel: 'img::storyboard',
     editModel: 'img::edit',
+    soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
   })),
   buildImageBillingPayloadFromUserConfig: vi.fn((input: {
     imageModel: string | null
@@ -148,6 +155,7 @@ export const configServiceMock = {
     editModel: 'img::edit',
     storyboardModel: 'img::storyboard',
     analysisModel: 'llm::analysis',
+    soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
   })),
   buildImageBillingPayload: vi.fn(async (input: { basePayload: Record<string, unknown> }) => ({
     ...input.basePayload,
@@ -174,6 +182,7 @@ export const prismaMock = {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
       musicModel: 'google::lyria-3-pro-preview',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
       artStyle: 'american-comic',
       visualStylePresetSource: 'system',
       visualStylePresetId: 'american-comic',
@@ -181,7 +190,10 @@ export const prismaMock = {
     })),
   },
   userPreference: {
-    findUnique: vi.fn(async () => ({ musicModel: 'google::lyria-3-pro-preview' })),
+    findUnique: vi.fn(async () => ({
+      musicModel: 'google::lyria-3-pro-preview',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    })),
   },
   projectStoryboard: {
     findFirst: vi.fn(async () => ({ id: 'storyboard-1' })),
@@ -418,6 +430,22 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       episodeId: 'episode-1',
       musicModel: 'google::lyria-3-pro-preview',
       outputFormat: 'mp3',
+    },
+  },
+  {
+    routeFile: 'src/app/api/projects/[projectId]/generate-soundscape/route.ts',
+    body: {
+      confirmed: true,
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    },
+    params: { projectId: 'project-1' },
+    expectedTaskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    expectedTargetType: 'ProjectEpisode',
+    expectedProjectId: 'project-1',
+    expectedPayloadSubset: {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
     },
   },
   {

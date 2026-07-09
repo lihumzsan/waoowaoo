@@ -66,6 +66,7 @@ function readSafeUrl(result: Record<string, unknown> | null, keys: string[]): st
 
 function inferMediaType(taskType: string, result: Record<string, unknown> | null): RecentOperationMediaType | null {
   if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.MUSIC_SCORE_PLAN) return 'music'
+  if (taskType === TASK_TYPE.SOUNDSCAPE_GENERATE) return 'audio'
   if (
     taskType === TASK_TYPE.VIDEO_PANEL
     || taskType === TASK_TYPE.VIDEO_GROUP
@@ -111,10 +112,12 @@ function readModel(payload: Record<string, unknown> | null, result: Record<strin
   return readString(result, 'model')
     || readString(result, 'modelKey')
     || readString(result, 'musicModel')
+    || readString(result, 'soundEffectModel')
     || readString(payload, 'model')
     || readString(payload, 'imageModel')
     || readString(payload, 'videoModel')
     || readString(payload, 'musicModel')
+    || readString(payload, 'soundEffectModel')
     || readString(payload, 'analysisModel')
 }
 

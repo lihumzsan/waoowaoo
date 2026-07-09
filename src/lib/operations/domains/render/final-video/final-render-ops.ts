@@ -181,7 +181,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
     }),
     render_final_video: defineOperation({
       id: 'render_final_video',
-      summary: 'Render the final linear edited video with FFmpeg and the completed episode music mix.',
+      summary: 'Render the final linear edited video with FFmpeg and completed episode music and soundscape layers.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -195,7 +195,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       },
       confirmation: {
         required: true,
-        summary: '将使用已完成的 episode 配乐导出最终成片。若配乐尚未完成，请先生成配乐。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用已完成的 episode 配乐与环境音层导出最终成片。若音频层尚未完成，请先生成配乐与环境音。确认继续后请重新调用并传入 confirmed=true。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: finalRenderInputSchema,

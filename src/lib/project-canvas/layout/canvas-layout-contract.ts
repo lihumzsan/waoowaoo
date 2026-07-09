@@ -18,6 +18,7 @@ export const projectCanvasNodeTypeSchema = z.enum([
   'editShotExecutionPlan',
   'videoPlan',
   'bgmScore',
+  'soundscape',
   'editRequiredAsset',
   'editAssetGroup',
 ])

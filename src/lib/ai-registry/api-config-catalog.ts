@@ -50,6 +50,7 @@ export const API_CONFIG_CATALOG_PROVIDERS: ApiConfigCatalogProvider[] = [
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
   { id: 'fal', name: 'FAL' },
   { id: 'google', name: 'Google AI Studio' },
+  { id: 'elevenlabs', name: 'ElevenLabs' },
 ]
 
 const CATALOG_PROVIDER_ORDER = new Map(API_CONFIG_CATALOG_PROVIDERS.map((provider, index) => [provider.id, index]))
@@ -58,6 +59,7 @@ const CATALOG_TYPE_ORDER: Readonly<Record<UnifiedModelType, number>> = {
   image: 1,
   video: 2,
   music: 3,
+  soundEffect: 4,
 }
 
 function normalizeApiConfigCatalogModel(raw: unknown, index: number): ApiConfigCatalogModel {

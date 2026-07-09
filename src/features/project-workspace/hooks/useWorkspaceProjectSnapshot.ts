@@ -41,6 +41,7 @@ export function useWorkspaceProjectSnapshot({
       singleShotVideoModel: project.singleShotVideoModel ?? project.videoModel ?? undefined,
       sequenceVideoModel: project.sequenceVideoModel ?? project.videoModel ?? undefined,
       musicModel: project.musicModel ?? undefined,
+      soundEffectModel: project.soundEffectModel ?? undefined,
       videoRatio: project.videoRatio ?? undefined,
       capabilityOverrides,
     }

@@ -16,6 +16,7 @@
   "singleShotVideoModel": "Single-shot Video Model",
   "sequenceVideoModel": "Video Segment Generation Model",
   "musicModel": "Music Model",
+  "soundEffectModel": "Sound Effect Model",
   "videoResolution": "Video Resolution",
   "fetchModelsFailed": "Failed to fetch user model list",
   "placeholder": "Please enter...",

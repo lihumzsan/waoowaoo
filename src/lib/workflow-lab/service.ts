@@ -436,6 +436,7 @@ export async function forkWorkflowLabCheckpointProject(params: {
         singleShotVideoModel: sourceProject.singleShotVideoModel,
         sequenceVideoModel: sourceProject.sequenceVideoModel,
         musicModel: sourceProject.musicModel,
+        soundEffectModel: sourceProject.soundEffectModel,
         videoRatio: sourceProject.videoRatio,
         globalAssetText: sourceProject.globalAssetText,
         characterModel: sourceProject.characterModel,

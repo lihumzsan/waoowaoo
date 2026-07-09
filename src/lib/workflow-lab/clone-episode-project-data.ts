@@ -74,6 +74,25 @@ export async function cloneEpisodeProjectData(params: {
         },
       })
     }
+    const soundscape = await params.tx.projectEditSoundscape.findUnique({
+      where: { episodeId: params.sourceEpisodeId },
+    })
+    if (soundscape) {
+      await params.tx.projectEditSoundscape.create({
+        data: {
+          episodeId: params.targetEpisodeId,
+          ...(soundscape.planJson !== null ? { planJson: soundscape.planJson as Prisma.InputJsonValue } : {}),
+          ...(soundscape.sourcesJson !== null ? { sourcesJson: soundscape.sourcesJson as Prisma.InputJsonValue } : {}),
+          ...(soundscape.mixJson !== null ? { mixJson: soundscape.mixJson as Prisma.InputJsonValue } : {}),
+          ...(soundscape.diagnosticsJson !== null ? { diagnosticsJson: soundscape.diagnosticsJson as Prisma.InputJsonValue } : {}),
+          version: soundscape.version,
+          status: soundscape.status,
+          taskId: null,
+          timelineSignature: soundscape.timelineSignature,
+          soundEffectModel: soundscape.soundEffectModel,
+        },
+      })
+    }
 
     const videoGroups = await params.tx.projectVideoGroup.findMany({
       where: { episodeId: params.sourceEpisodeId },

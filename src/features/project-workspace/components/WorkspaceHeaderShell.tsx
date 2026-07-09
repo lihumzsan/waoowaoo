@@ -51,6 +51,7 @@ interface UserModelsPayload {
   image: UserModelOption[]
   video: UserModelOption[]
   music: UserModelOption[]
+  soundEffect: UserModelOption[]
 }
 
 interface WorkspaceHeaderShellProps {
@@ -69,6 +70,7 @@ interface WorkspaceHeaderShellProps {
   singleShotVideoModel: string | null | undefined
   sequenceVideoModel: string | null | undefined
   musicModel: string | null | undefined
+  soundEffectModel: string | null | undefined
   capabilityOverrides: CapabilitySelections
   videoRatio: string | null | undefined
   onUpdateConfig: (key: string, value: unknown) => Promise<void>
@@ -151,6 +153,7 @@ export default function WorkspaceHeaderShell({
   singleShotVideoModel,
   sequenceVideoModel,
   musicModel,
+  soundEffectModel,
   capabilityOverrides,
   videoRatio,
   onUpdateConfig,
@@ -256,6 +259,7 @@ export default function WorkspaceHeaderShell({
           singleShotVideoModel={singleShotVideoModel ?? videoModel ?? undefined}
           sequenceVideoModel={sequenceVideoModel ?? undefined}
           musicModel={musicModel ?? undefined}
+          soundEffectModel={soundEffectModel ?? undefined}
           videoRatio={videoRatio ?? undefined}
           capabilityOverrides={capabilityOverrides}
           onAnalysisModelChange={(value) => { onUpdateConfig('analysisModel', value) }}
@@ -267,6 +271,7 @@ export default function WorkspaceHeaderShell({
           onSingleShotVideoModelChange={(value) => { onUpdateConfig('singleShotVideoModel', value) }}
           onSequenceVideoModelChange={(value) => { onUpdateConfig('sequenceVideoModel', value) }}
           onMusicModelChange={(value) => { onUpdateConfig('musicModel', value) }}
+          onSoundEffectModelChange={(value) => { onUpdateConfig('soundEffectModel', value) }}
           onVideoRatioChange={(value) => { onUpdateConfig('videoRatio', value) }}
           onCapabilityOverridesChange={handleCapabilityOverridesChange}
           onConfigPatch={handleConfigPatch}

@@ -55,7 +55,13 @@ describe('billing/task-policy', () => {
   it('builds TaskBillingInfo for every billable task type', () => {
     for (const taskType of Object.values(TASK_TYPE)) {
       if (!isBillableTaskType(taskType)) continue
-      if (taskType === TASK_TYPE.MUSIC_GENERATE || taskType === TASK_TYPE.MUSIC_SCORE_PLAN) continue
+      if (
+        taskType === TASK_TYPE.MUSIC_GENERATE
+        || taskType === TASK_TYPE.MUSIC_SCORE_PLAN
+        || taskType === TASK_TYPE.SOUNDSCAPE_GENERATE
+      ) {
+        continue
+      }
       const payload = imageTaskTypes.has(taskType)
         ? imageBillingPayload
         : videoTaskTypes.has(taskType)
@@ -99,6 +105,7 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, {})).toBeNull()
   })
 
   it('builds music billing info for built-in Lyria models', () => {
@@ -190,5 +197,29 @@ describe('billing/task-policy', () => {
     expect(info.model).toBe('google::lyria-3-pro-preview')
     expect(info.quantity).toBe(1)
     expect(info.unit).toBe('call')
+  })
+
+  it('builds sound effect billing info from explicit sound effect model and source count', () => {
+    const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+      durationSeconds: 30,
+      sourceCount: 3,
+      loop: true,
+      outputFormat: 'mp3_44100_128',
+      promptInfluence: 0.55,
+    }))
+
+    expect(info.apiType).toBe('sound_effect')
+    expect(info.model).toBe('elevenlabs::eleven_text_to_sound_v2')
+    expect(info.quantity).toBe(3)
+    expect(info.unit).toBe('call')
+    expect(info.maxFrozenCost).toBeCloseTo(0.36, 8)
+    expect(info.metadata).toEqual({
+      durationSeconds: 30,
+      outputFormat: 'mp3_44100_128',
+      promptInfluence: 0.55,
+      loop: true,
+      sourceCount: 3,
+    })
   })
 })

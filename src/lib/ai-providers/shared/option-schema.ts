@@ -5,7 +5,7 @@ import type {
   AiOptionValidator,
 } from '@/lib/ai-registry/types'
 
-export type MediaModality = 'image' | 'video' | 'music'
+export type MediaModality = 'image' | 'video' | 'music' | 'soundEffect'
 
 export function enumValidator(values: readonly string[]): AiOptionValidator {
   const allowedValues = new Set(values)
@@ -118,15 +118,26 @@ function buildAllowedKeys(modality: MediaModality): ReadonlySet<string> {
       'watermark',
     ])
   }
+  if (modality === 'music') {
+    return new Set([
+      'provider',
+      'modelId',
+      'modelKey',
+      'durationSeconds',
+      'vocalMode',
+      'genre',
+      'mood',
+      'bpm',
+      'outputFormat',
+    ])
+  }
   return new Set([
     'provider',
     'modelId',
     'modelKey',
     'durationSeconds',
-    'vocalMode',
-    'genre',
-    'mood',
-    'bpm',
+    'loop',
+    'promptInfluence',
     'outputFormat',
   ])
 }

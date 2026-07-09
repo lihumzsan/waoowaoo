@@ -49,6 +49,10 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     bgmScoreStatus: null,
     bgmScoreHasMix: false,
     activeBgmScoreTaskCount: 0,
+    soundscapeStatus: null,
+    soundscapeHasMix: false,
+    soundscapeDecision: null,
+    activeSoundscapeTaskCount: 0,
     finalRenderStatus: null,
     finalRenderHasOutput: false,
     activeFinalRenderTaskCount: 0,
@@ -512,7 +516,7 @@ describe('edit-first workflow state', () => {
     ])
   })
 
-  it('requires BGM score generation after all chapter renders are ready', () => {
+  it('requires audio layer generation after all chapter renders are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -532,10 +536,13 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 1,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_bgm_score')
+    expect(state.stage).toBe('ready_to_generate_audio_layers')
     expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
     expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+      'generate_episode_bgm_score',
+      'generate_episode_soundscape',
+    ])
   })
 
   it('blocks final render while required BGM is generating', () => {
@@ -563,7 +570,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('bgm_score_generating')
     expect(state.nextAction).toBeNull()
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_soundscape'])
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {
@@ -612,6 +619,8 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 1,
       bgmScoreStatus: 'completed',
       bgmScoreHasMix: true,
+      soundscapeStatus: 'completed',
+      soundscapeDecision: 'none_needed',
     }))
 
     expect(state.stage).toBe('ready_to_render_final')

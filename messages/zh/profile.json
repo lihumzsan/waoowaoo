@@ -155,7 +155,8 @@
   "apiTypes": {
     "image": "图片生成",
     "video": "视频生成",
-    "text": "文本分析"
+    "text": "文本分析",
+    "sound_effect": "音效生成"
   },
   "actionTypes": {
     "image_panel": "分镜生图",
@@ -166,6 +167,8 @@
     "image_location": "场景生图",
     "music_generate": "音乐生成",
     "music_score_plan": "音乐总谱规划",
+    "soundscape_plan": "氛围音规划",
+    "soundscape_generate": "氛围音生成",
     "final_video_render": "成片渲染",
     "chapter_render": "章节渲染",
     "video_panel": "视频生成",

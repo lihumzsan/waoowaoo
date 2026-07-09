@@ -28,11 +28,11 @@ describe('BGM score cue windows', () => {
       clip({ panelId: 'chapter-3', order: 3, durationSeconds: 320, shotIds: ['shot-3'], shotNumbers: [3] }),
     ])
 
-    expect(cues.map((cue) => cue.durationSeconds)).toEqual([150, 150, 150, 150, 20])
-    expect(cues.every((cue) => cue.durationSeconds <= 150)).toBe(true)
+    expect(cues.map((cue) => cue.durationSeconds)).toEqual([180, 180, 180, 80])
+    expect(cues.every((cue) => cue.durationSeconds <= 180)).toBe(true)
     expect(cues.at(-1)?.endSeconds).toBe(620)
     expect(cues[0]?.shotIds).toEqual(['shot-1', 'shot-2'])
-    expect(cues[4]?.shotIds).toEqual(['shot-3'])
+    expect(cues[3]?.shotIds).toEqual(['shot-3'])
   })
 
   it('uses a smaller cue window for clip music models', () => {

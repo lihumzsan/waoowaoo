@@ -92,10 +92,10 @@ describe('OpenRouter session and cache accounting', () => {
       openRouterSessionId: 'project:assistant session',
     })
 
-    expect(openAiConstructorMock).toHaveBeenCalledWith({
+    expect(openAiConstructorMock).toHaveBeenCalledWith(expect.objectContaining({
       baseURL: 'https://openrouter.example/v1',
       apiKey: 'sk-openrouter',
-    })
+    }))
     expect(completionCreateMock).toHaveBeenCalledWith(
       {
         model: 'anthropic/claude-sonnet-4',

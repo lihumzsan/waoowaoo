@@ -115,6 +115,7 @@ export interface ProjectModelConfig {
   singleShotVideoModel: string | null
   sequenceVideoModel: string | null
   musicModel: string | null
+  soundEffectModel: string | null
   videoRatio: string | null
   capabilityDefaults: CapabilitySelections
   capabilityOverrides: CapabilitySelections
@@ -129,6 +130,7 @@ export interface UserModelConfig {
   editModel: string | null
   videoModel: string | null
   musicModel: string | null
+  soundEffectModel: string | null
   capabilityDefaults: CapabilitySelections
 }
 
@@ -177,6 +179,7 @@ export async function getProjectModelConfig(
       singleShotVideoModel: platformDefaults.videoModel,
       sequenceVideoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
+      soundEffectModel: platformDefaults.soundEffectModel,
       videoRatio: projectData?.videoRatio || '9:16',
       capabilityDefaults: getPlatformCapabilityDefaults(),
       capabilityOverrides: {},
@@ -206,6 +209,7 @@ export async function getProjectModelConfig(
       || extractModelKey(userPref?.videoModel)
       || null,
     musicModel: extractModelKey(projectData?.musicModel) || extractModelKey(userPref?.musicModel) || null,
+    soundEffectModel: extractModelKey(projectData?.soundEffectModel) || extractModelKey(userPref?.soundEffectModel) || null,
     videoRatio: projectData?.videoRatio || '9:16',
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
     capabilityOverrides: parseCapabilitySelections(projectData?.capabilityOverrides),
@@ -229,6 +233,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
       editModel: platformDefaults.editModel,
       videoModel: platformDefaults.videoModel,
       musicModel: platformDefaults.musicModel,
+      soundEffectModel: platformDefaults.soundEffectModel,
       capabilityDefaults: getPlatformCapabilityDefaults(),
     }
   }
@@ -246,6 +251,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     editModel: extractModelKey(userPref?.editModel) || null,
     videoModel: extractModelKey(userPref?.videoModel) || null,
     musicModel: extractModelKey(userPref?.musicModel) || null,
+    soundEffectModel: extractModelKey(userPref?.soundEffectModel) || null,
     capabilityDefaults: parseCapabilitySelections(userPref?.capabilityDefaults),
   }
 }

@@ -225,6 +225,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成配乐规划',
     en: 'Generate music plan',
   },
+  generate_episode_soundscape: {
+    zh: '生成环境音层',
+    en: 'Generate soundscape layer',
+  },
   generate_episode_videos: {
     zh: '生成视频片段',
     en: 'Generate video clips',

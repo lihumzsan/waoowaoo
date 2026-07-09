@@ -4,9 +4,16 @@ import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const generateMusicMock = vi.hoisted(() => vi.fn())
 const handleBgmScoreGenerateTaskMock = vi.hoisted(() => vi.fn())
+const handleSoundscapePlanTaskMock = vi.hoisted(() => vi.fn())
+const handleSoundscapeGenerateTaskMock = vi.hoisted(() => vi.fn())
 const uploadObjectMock = vi.hoisted(() => vi.fn())
 const ensureMediaObjectFromStorageKeyMock = vi.hoisted(() => vi.fn())
 const reportTaskProgressMock = vi.hoisted(() => vi.fn())
+const WorkerMock = vi.hoisted(() => vi.fn())
+
+vi.mock('bullmq', () => ({
+  Worker: WorkerMock,
+}))
 
 vi.mock('@/lib/ai-exec/engine', () => ({
   executeAiTextStep: vi.fn(),
@@ -15,6 +22,11 @@ vi.mock('@/lib/ai-exec/engine', () => ({
 
 vi.mock('@/lib/bgm-score/generate', () => ({
   handleBgmScoreGenerateTask: handleBgmScoreGenerateTaskMock,
+}))
+
+vi.mock('@/lib/soundscape/generate', () => ({
+  handleSoundscapePlanTask: handleSoundscapePlanTaskMock,
+  handleSoundscapeGenerateTask: handleSoundscapeGenerateTaskMock,
 }))
 
 vi.mock('@/lib/storage', () => ({
@@ -29,7 +41,7 @@ vi.mock('@/lib/media/service', () => ({
 
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: reportTaskProgressMock,
-  withTaskLifecycle: vi.fn(),
+  withTaskLifecycle: vi.fn(async (job: Job<TaskJobData>, fn: (innerJob: Job<TaskJobData>) => Promise<unknown>) => await fn(job)),
 }))
 
 vi.mock('@/lib/redis', () => ({
@@ -46,6 +58,23 @@ function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
       projectId: 'project-1',
       targetType: 'Project',
       targetId: 'project-1',
+      payload,
+      userId: 'user-1',
+    } satisfies TaskJobData,
+  } as unknown as Job<TaskJobData>
+}
+
+function buildTypedJob(type: TaskJobData['type'], payload: Record<string, unknown>): Job<TaskJobData> {
+  return {
+    queueName: 'waoowaoo-music',
+    data: {
+      taskId: `task-${type}`,
+      type,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectEpisode',
+      targetId: 'episode-1',
       payload,
       userId: 'user-1',
     } satisfies TaskJobData,
@@ -101,5 +130,30 @@ describe('music worker', () => {
       provider: 'google',
       metadata: { text: 'adapter notes' },
     })
+  })
+
+  it('routes soundscape plan and generation task types to their explicit handlers', async () => {
+    const { createMusicWorker } = await import('@/lib/workers/music.worker')
+    handleSoundscapePlanTaskMock.mockResolvedValue({ decision: 'soundscape' })
+    handleSoundscapeGenerateTaskMock.mockResolvedValue({ mediaId: 'media-soundscape' })
+
+    createMusicWorker()
+    const processor = WorkerMock.mock.calls[0]?.[1] as ((job: Job<TaskJobData>) => Promise<unknown>) | undefined
+    if (!processor) throw new Error('WORKER_PROCESSOR_NOT_REGISTERED')
+
+    const planJob = buildTypedJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    })
+    const generateJob = buildTypedJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    })
+
+    await processor(planJob)
+    await processor(generateJob)
+
+    expect(handleSoundscapePlanTaskMock).toHaveBeenCalledWith(planJob)
+    expect(handleSoundscapeGenerateTaskMock).toHaveBeenCalledWith(generateJob)
   })
 })

@@ -228,6 +228,7 @@ export function buildFinalBgmMusicPrompt(plan: BgmScorePlan, options: { readonly
       '',
       '请精确渲染一条连贯的纯器乐背景音乐，不要输出分轨，也不要做孤立乐器片段演示。',
       '让配乐贯穿完整时间线，同时为视频对白、原生声音和事件音频留出空间。',
+      '只生成音乐；不得生成雨声、风声、人群声、城市底噪、机械声、脚步、打斗、对白、拟音或任何连续环境声。',
       '避免字面音效，避免拥挤的全频编曲，除非设计明确要求密集度。',
     ].filter(Boolean).join('\n')
   }
@@ -243,6 +244,7 @@ export function buildFinalBgmMusicPrompt(plan: BgmScorePlan, options: { readonly
     '',
     'Render exactly one coherent instrumental BGM track, not separate stems, not a demo of isolated parts.',
     'Keep the score continuous across the full timeline while leaving space for video dialogue, native sound, and event audio.',
+    'Generate music only; do not generate rain, wind, crowd noise, city hum, machinery, footsteps, impacts, dialogue, Foley, or any continuous ambience.',
     'Avoid literal sound effects and avoid cluttered full-range arrangement unless the design explicitly calls for density.',
   ].filter(Boolean).join('\n')
 }

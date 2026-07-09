@@ -30,6 +30,7 @@ const BUDGET_CONFIRMATION_ALLOWED_STAGES = new Set<string>([
   'ready_to_generate_videos',
   'ready_to_render_chapters',
   'ready_to_generate_bgm_score',
+  'ready_to_generate_audio_layers',
   'ready_to_render_final',
 ])
 

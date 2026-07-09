@@ -1,6 +1,7 @@
 import {
   calcImage,
   calcMusic,
+  calcSoundEffect,
   calcText,
   calcVideo,
 } from './cost'
@@ -21,6 +22,8 @@ const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.IMAGE_LOCATION,
   TASK_TYPE.MUSIC_GENERATE,
   TASK_TYPE.MUSIC_SCORE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_PLAN,
+  TASK_TYPE.SOUNDSCAPE_GENERATE,
   TASK_TYPE.VIDEO_PANEL,
   TASK_TYPE.VIDEO_GROUP,
   TASK_TYPE.MODIFY_ASSET_IMAGE,
@@ -203,6 +206,40 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   }
 }
 
+function buildSoundEffectTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
+  const model = pickFirstString([payload?.soundEffectModel, payload?.modelId, payload?.model])
+  if (!model) return null
+  const durationSeconds = readNumber(payload?.durationSeconds)
+  if (durationSeconds === null || durationSeconds <= 0) return null
+  const outputFormat = readString(payload?.outputFormat)
+  const promptInfluence = readNumber(payload?.promptInfluence)
+  const loop = typeof payload?.loop === 'boolean' ? payload.loop : undefined
+  const sourceCount = Math.max(1, Math.floor(toNumber(payload?.sourceCount, 1)))
+  const metadata = {
+    durationSeconds,
+    ...(outputFormat ? { outputFormat } : {}),
+    ...(typeof promptInfluence === 'number' ? { promptInfluence } : {}),
+    ...(typeof loop === 'boolean' ? { loop } : {}),
+  }
+  return {
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'sound_effect',
+    model,
+    quantity: sourceCount,
+    unit: 'call',
+    maxFrozenCost: calcSoundEffect(model, sourceCount, metadata),
+    pricingVersion: BUILTIN_PRICING_VERSION,
+    action: String(taskType),
+    metadata: {
+      ...metadata,
+      sourceCount,
+    },
+    status: 'quoted',
+  }
+}
+
 export function isBillableTaskType(taskType: TaskType) {
   return BILLABLE_TASK_TYPES.has(taskType)
 }
@@ -226,6 +263,10 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
     case TASK_TYPE.MUSIC_GENERATE:
     case TASK_TYPE.MUSIC_SCORE_PLAN:
       return buildMusicTaskInfo(taskType, payload)
+    case TASK_TYPE.SOUNDSCAPE_GENERATE:
+      return buildSoundEffectTaskInfo(taskType, payload)
+    case TASK_TYPE.SOUNDSCAPE_PLAN:
+      return buildTextTaskInfo(taskType, payload)
     case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
     case TASK_TYPE.EDIT_BIBLE_GENERATE:

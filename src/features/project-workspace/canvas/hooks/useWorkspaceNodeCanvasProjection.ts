@@ -29,6 +29,7 @@ import type {
   WorkspaceCanvasNodeData,
   WorkspaceCanvasProjection,
   WorkspaceCanvasShotDetails,
+  WorkspaceCanvasSoundscapeDetails,
   WorkspaceCanvasStyleBibleDetails,
   WorkspaceCanvasVideoPlanDetails,
 } from '../node-canvas-types'
@@ -550,6 +551,20 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
     promptSections: bgmScore.plan?.promptSections ?? [],
     virtualLayers: bgmScore.plan?.virtualLayers ?? [],
     finalPrompt: bgmScore.plan?.finalPrompt ?? null,
+  }
+}
+
+function soundscapeDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasSoundscapeDetails | undefined {
+  const soundscape = finalVideo?.soundscape
+  if (!soundscape) return undefined
+  return {
+    status: soundscape.status,
+    decision: soundscape.decision ?? null,
+    soundEffectModel: soundscape.soundEffectModel ?? null,
+    sourceCount: soundscape.sourceCount,
+    sectionCount: soundscape.sectionCount,
+    mixUrl: soundscape.mix?.url ?? null,
+    errorMessage: soundscape.errorMessage ?? null,
   }
 }
 
@@ -1320,8 +1335,48 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       },
     }))
   }
-  const bgmStageBottomY = maxNodeBottomY(nodes, 'bgmScore')
-    ?? (bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height)
+  let soundscapeNodeId: string | null = null
+  if (editFirstCanvasVisibility.soundscape) {
+    soundscapeNodeId = workspaceNodeId.soundscape(episodeId)
+    const details = soundscapeDetails(finalVideo)
+    const soundscapePresentation = details
+      ? artifactPresentationFromTaskBackedStatus(details.status, phaseLabels)
+        ?? workspaceCanvasFailedPresentation(phaseLabels)
+      : null
+    nodes.push(createNode({
+      id: soundscapeNodeId,
+      position: layoutPosition(savedLayouts, soundscapeNodeId, {
+        x: SHOT_GRID_START_X + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width + SHOT_GRID_GAP_X,
+        y: bgmScoreDefaultY,
+      }),
+      width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'soundscape',
+        layoutNodeType: 'soundscape',
+        targetType: 'episode',
+        targetId: episodeId,
+        title: translate('nodes.soundscape.title'),
+        eyebrow: translate('nodes.soundscape.eyebrow'),
+        body: details?.decision === 'none_needed'
+          ? translate('nodes.soundscape.noneNeededBody')
+          : translate('nodes.soundscape.body', { videos: videoGroups.length }),
+        meta: details?.soundEffectModel ?? '',
+        ...(soundscapePresentation ?? { statusLabel: '', isRunning: false }),
+        actionLabel: translate('actions.generateSoundscape'),
+        action: { type: 'generate_soundscape' },
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeSoundscape(episodeId)),
+        soundscapeDetails: details,
+        onAction,
+      },
+    }))
+  }
+  const bgmStageBottomY = Math.max(
+    maxNodeBottomY(nodes, 'bgmScore') ?? (bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height),
+    maxNodeBottomY(nodes, 'soundscape') ?? (bgmScoreDefaultY + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height),
+  )
 
   let finalNodeId: string | null = null
   if (editFirstCanvasVisibility.finalTimeline) {
@@ -1378,6 +1433,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
   if (bgmNodeId && finalNodeId) {
     edges.push(createEdge(`edge:bgm-final:${episodeId}`, bgmNodeId, finalNodeId))
+  }
+  if (soundscapeNodeId && finalNodeId) {
+    edges.push(createEdge(`edge:soundscape-final:${episodeId}`, soundscapeNodeId, finalNodeId))
   }
 
   return { nodes, edges }

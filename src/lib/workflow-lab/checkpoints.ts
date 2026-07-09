@@ -31,6 +31,7 @@ const OPERATION_STAGE_BY_ID: Readonly<Record<string, EditFirstWorkflowStage>> = 
   generate_edit_script_storyboard_images: 'ready_to_generate_storyboard_images',
   generate_episode_videos: 'ready_to_generate_videos',
   generate_episode_bgm_score: 'ready_to_generate_videos',
+  generate_episode_soundscape: 'ready_to_generate_videos',
   render_final_video: 'ready_to_render_final',
 }
 
@@ -56,6 +57,7 @@ function isBudgetConfirmationWorkflowStage(value: string): value is EditFirstWor
     || value === 'ready_to_generate_videos'
     || value === 'ready_to_render_chapters'
     || value === 'ready_to_generate_bgm_score'
+    || value === 'ready_to_generate_audio_layers'
     || value === 'ready_to_render_final'
 }
 

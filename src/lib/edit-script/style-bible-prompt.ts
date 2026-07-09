@@ -147,10 +147,12 @@ function renderSoundLines(styleBible: EditScriptStyleBible, locale: Locale): str
   if (locale === 'en') {
     return [
       `Sound filter: ${sound.soundFilterPrompt}`,
+      'Sound boundary: apply this only to dialogue and short synchronized on-screen sounds; do not generate continuous ambience beds, room tone, white noise, city hum, wind, rain, crowd bed, machinery hum, or music.',
     ]
   }
   return [
     `声音滤镜：${sound.soundFilterPrompt}`,
+    '声音边界：此滤镜只作用于对白和画面同步短声音；不得生成连续氛围底噪、room tone、白噪音、城市底噪、风声、雨声、人群底噪、机械低鸣或音乐。',
   ]
 }
 

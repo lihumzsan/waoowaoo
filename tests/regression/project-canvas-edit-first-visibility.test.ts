@@ -221,6 +221,22 @@ function finalVideo(overrides: Partial<ProjectFinalVideo> = {}): ProjectFinalVid
         durationMs: 30_000,
       },
     },
+    soundscape: {
+      status: 'completed',
+      taskId: 'task-soundscape-1',
+      timelineSignature: 'timeline-signature',
+      soundEffectModel: 'sound-effect-model',
+      decision: 'soundscape',
+      sourceCount: 1,
+      sectionCount: 2,
+      mix: {
+        mediaId: 'media-soundscape-1',
+        url: '/soundscape/mix.m4a',
+        storageKey: 'soundscape/mix.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 30_000,
+      },
+    },
     ...overrides,
   }
 }
@@ -342,7 +358,7 @@ describe('project canvas edit-first visibility', () => {
     expect(projection.nodes.some((node) => node.data.kind === 'imageAsset')).toBe(false)
   })
 
-  it('renders BGM from the video plan stage without rendering the final timeline', () => {
+  it('renders BGM and soundscape from the video plan stage without rendering the final timeline', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
       episodeId: 'episode-1',
@@ -359,8 +375,10 @@ describe('project canvas edit-first visibility', () => {
 
     expect(projection.nodes.some((node) => node.data.kind === 'videoPlan')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'soundscape')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
     expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(false)
+    expect(projection.edges.some((edge) => edge.id.startsWith('edge:soundscape-final:'))).toBe(false)
   })
 
   it('renders shot cards directly after execution plan without a storyboard structure node', () => {
@@ -428,6 +446,7 @@ describe('project canvas edit-first visibility', () => {
     })
 
     expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'soundscape')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(false)
   })
 
@@ -449,8 +468,10 @@ describe('project canvas edit-first visibility', () => {
     })
 
     expect(projection.nodes.some((node) => node.data.kind === 'bgmScore')).toBe(true)
+    expect(projection.nodes.some((node) => node.data.kind === 'soundscape')).toBe(true)
     expect(projection.nodes.some((node) => node.data.kind === 'finalTimeline')).toBe(true)
     expect(projection.edges.some((edge) => edge.id.startsWith('edge:bgm-final:'))).toBe(true)
+    expect(projection.edges.some((edge) => edge.id.startsWith('edge:soundscape-final:'))).toBe(true)
   })
 
   it('keeps existing assets, storyboards, and video groups visible when chapter render fails', () => {

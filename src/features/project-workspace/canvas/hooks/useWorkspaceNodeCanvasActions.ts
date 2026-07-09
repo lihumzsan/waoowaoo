@@ -119,6 +119,11 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'generate_soundscape') {
+      await runtime.onGenerateSoundscape()
+      return
+    }
+
     if (action.type === 'generate_edit_assets') {
       await runtime.onGenerateEditAssets(action.editScriptId)
       return

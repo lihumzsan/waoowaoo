@@ -23,7 +23,7 @@ import {
 import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
 import { toAppError } from '@/lib/errors/app-error'
 
-export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music'>
+export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'soundEffect'>
 
 export type AiImageExecutionOptions = {
   referenceImages?: string[]
@@ -58,6 +58,13 @@ export type AiMusicExecutionOptions = {
   mood?: string
   bpm?: number
   outputFormat?: 'mp3' | 'wav'
+}
+
+export type AiSoundEffectExecutionOptions = {
+  durationSeconds?: number
+  loop?: boolean
+  promptInfluence?: number
+  outputFormat?: string
 }
 
 export type AiLlmExecutionInput = {
@@ -106,7 +113,14 @@ export type AiMediaExecutionInput =
     modelKey: string
     prompt: string
     options?: AiMusicExecutionOptions
-}
+  }
+  | {
+    modality: 'soundEffect'
+    userId: string
+    modelKey: string
+    prompt: string
+    options?: AiSoundEffectExecutionOptions
+  }
 
 export async function executeMediaGeneration(input: AiMediaExecutionInput): Promise<GenerateResult> {
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
@@ -150,6 +164,24 @@ export async function executeMediaGeneration(input: AiMediaExecutionInput): Prom
       })
     }
     case 'music': {
+      const modalityAdapter = adapter[input.modality]
+      if (!modalityAdapter) {
+        throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
+      }
+      const descriptor = modalityAdapter.describe(selection)
+      validateAiOptions({
+        schema: descriptor.optionSchema,
+        options: input.options,
+        context: `${input.modality}:${selection.modelKey}`,
+      })
+      return await modalityAdapter.execute({
+        userId: input.userId,
+        selection,
+        prompt: input.prompt,
+        options: input.options,
+      })
+    }
+    case 'soundEffect': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
         throw new Error(`AI_PROVIDER_MODALITY_UNSUPPORTED:${selection.provider}:${input.modality}`)
@@ -277,6 +309,21 @@ export async function generateMusic(
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'music',
+    userId,
+    modelKey,
+    prompt,
+    options,
+  })
+}
+
+export async function generateSoundEffect(
+  userId: string,
+  modelKey: string,
+  prompt: string,
+  options?: AiSoundEffectExecutionOptions,
+): Promise<GenerateResult> {
+  return await executeMediaGeneration({
+    modality: 'soundEffect',
     userId,
     modelKey,
     prompt,

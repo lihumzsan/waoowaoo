@@ -249,6 +249,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               singleShotVideoModel: platformDefaults.videoModel,
               sequenceVideoModel: platformDefaults.videoModel,
               musicModel: platformDefaults.musicModel,
+              soundEffectModel: platformDefaults.soundEffectModel,
             }),
             ...(!platformDefaults && userPreference && {
               analysisModel: userPreference.analysisModel,
@@ -260,6 +261,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
               singleShotVideoModel: userPreference.videoModel,
               sequenceVideoModel: userPreference.videoModel,
               musicModel: userPreference.musicModel,
+              soundEffectModel: userPreference.soundEffectModel,
               videoRatio: userPreference.videoRatio,
               videoResolution: userPreference.videoResolution,
               imageResolution: userPreference.imageResolution,

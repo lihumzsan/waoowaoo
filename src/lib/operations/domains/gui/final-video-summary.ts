@@ -12,6 +12,10 @@ function normalizeNullableString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0
+}
+
 export function normalizeMusicScoreSummary(value: unknown) {
   const score = toObject(value)
   const status = normalizeString(score.status)
@@ -37,7 +41,37 @@ export function normalizeMusicScoreSummary(value: unknown) {
   }
 }
 
-export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown) {
+export function normalizeSoundscapeSummary(value: unknown) {
+  const soundscape = toObject(value)
+  const status = normalizeString(soundscape.status)
+  if (!status) return null
+  const plan = toObject(soundscape.planJson)
+  const diagnostics = toObject(soundscape.diagnosticsJson)
+  const decision = plan.decision === 'soundscape' || plan.decision === 'none_needed'
+    ? plan.decision
+    : null
+  return {
+    id: normalizeNullableString(soundscape.id),
+    status,
+    version: typeof soundscape.version === 'number' ? soundscape.version : null,
+    taskId: normalizeNullableString(soundscape.taskId),
+    timelineSignature: normalizeNullableString(soundscape.timelineSignature),
+    soundEffectModel: normalizeNullableString(soundscape.soundEffectModel),
+    decision,
+    sourceCount: arrayLength(plan.sources),
+    sectionCount: arrayLength(plan.sections),
+    plan: soundscape.planJson ?? null,
+    sources: soundscape.sourcesJson ?? null,
+    mix: soundscape.mixJson ?? null,
+    diagnostics: soundscape.diagnosticsJson ?? null,
+    errorMessage: normalizeNullableString(diagnostics.errorMessage),
+    updatedAt: soundscape.updatedAt instanceof Date
+      ? soundscape.updatedAt.toISOString()
+      : normalizeNullableString(soundscape.updatedAt),
+  }
+}
+
+export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown, soundscape?: unknown) {
   const record = toObject(value)
   const id = normalizeString(record.id)
   const episodeId = normalizeString(record.episodeId)
@@ -50,6 +84,7 @@ export function normalizeFinalVideoSummary(value: unknown, musicScore?: unknown)
     renderTaskId: normalizeNullableString(record.renderTaskId),
     outputUrl: normalizeNullableString(record.outputUrl),
     musicScore: normalizeMusicScoreSummary(musicScore),
+    soundscape: normalizeSoundscapeSummary(soundscape),
     updatedAt: record.updatedAt instanceof Date
       ? record.updatedAt.toISOString()
       : normalizeNullableString(record.updatedAt),

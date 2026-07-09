@@ -10,6 +10,7 @@ import { falAdapter } from '@/lib/ai-providers/fal/adapter'
 import { falAsyncTaskProvider } from '@/lib/ai-providers/fal/async-task'
 import { googleAdapter } from '@/lib/ai-providers/google/adapter'
 import { geminiBatchAsyncTaskProvider, googleVideoAsyncTaskProvider } from '@/lib/ai-providers/google/async-task'
+import { elevenLabsAdapter } from '@/lib/ai-providers/elevenlabs/adapter'
 import { openRouterAdapter } from '@/lib/ai-providers/openrouter/adapter'
 import { openRouterAsyncTaskProvider } from '@/lib/ai-providers/openrouter/async-task'
 import type { AiProviderAdapter, AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-types'
@@ -19,6 +20,7 @@ const runtimeProviderRegistry = new AiRegistry<AiProviderAdapter>([
   arkAdapter,
   falAdapter,
   googleAdapter,
+  elevenLabsAdapter,
   openRouterAdapter,
 ])
 

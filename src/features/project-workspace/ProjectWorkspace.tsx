@@ -115,6 +115,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         singleShotVideoModel={vm.project.singleShotVideoModel}
         sequenceVideoModel={vm.project.sequenceVideoModel}
         musicModel={vm.project.musicModel}
+        soundEffectModel={vm.project.soundEffectModel}
         capabilityOverrides={vm.project.capabilityOverrides}
         videoRatio={vm.project.videoRatio}
         onUpdateConfig={vm.actions.handleUpdateConfig}

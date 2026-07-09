@@ -15,6 +15,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'generate_episode_videos',
   'render_chapters',
   'generate_episode_bgm_score',
+  'generate_episode_soundscape',
   'render_final_video',
 ] as const
 
@@ -33,6 +34,7 @@ export const EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS = [
   'generate_edit_shot_execution_plan',
   'generate_edit_script_storyboard',
   'generate_episode_bgm_score',
+  'generate_episode_soundscape',
   'render_chapters',
 ] as const satisfies readonly EditFirstWorkflowOperationId[]
 

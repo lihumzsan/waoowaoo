@@ -175,6 +175,17 @@ function withRuntimeErrorMessage(
     }
   }
 
+  if (node.data.kind === 'soundscape' && node.data.soundscapeDetails) {
+    return {
+      ...patch,
+      meta: errorMessage,
+      soundscapeDetails: {
+        ...node.data.soundscapeDetails,
+        errorMessage,
+      },
+    }
+  }
+
   if (node.data.kind === 'finalTimeline') {
     return {
       ...patch,
