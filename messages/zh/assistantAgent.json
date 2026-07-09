@@ -204,7 +204,7 @@
     "operationExecutionFailedFallback": "操作执行失败",
     "confirmedOperation": "已确认并执行操作 {operation}。",
     "confirmedOperationWithResult": "已确认并执行操作 {operation}。结果：{result}",
-    "confirmedBibleReady": "剧集规划已生成，请确认全局故事理解和章节切分；确认后将生成视觉风格候选图。",
+    "confirmedBibleReady": "制作规划已生成，请确认全局故事理解和章节切分；确认后将生成视觉风格候选图。",
     "confirmedStylePreviewGenerationStarted": "已开始生成视觉风格候选图，请稍候。",
     "confirmedOperationFailed": "操作 {operation} 执行失败：{error}",
     "cancelledOperation": "已拒绝执行操作 {operation}，系统不会继续执行该操作。"

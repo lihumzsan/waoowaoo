@@ -174,7 +174,7 @@ describe('workspace assistant renderers', () => {
         toolCallId: 'tool-call-1',
         choiceType: 'bible_review',
         variant: 'confirm_or_reply',
-        title: '确认剧集规划',
+        title: '确认制作规划',
         description: '选择比例后确认',
         groups: [{
           key: 'aspectRatio',
@@ -186,7 +186,7 @@ describe('workspace assistant renderers', () => {
             { value: '21:9', label: '21:9' },
           ],
         }],
-        submitLabel: '确认剧集规划',
+        submitLabel: '确认制作规划',
         submit: { kind: 'submit_tool_output' },
         replyLabel: '需要修改',
         replyPlaceholder: '输入修改意见',
@@ -201,7 +201,7 @@ describe('workspace assistant renderers', () => {
     expect(html).toContain('9:16')
     expect(html).toContain('16:9')
     expect(html).toContain('21:9')
-    expect(html).toContain('确认剧集规划')
+    expect(html).toContain('确认制作规划')
     expect(html).toContain('absolute bottom-2 right-2')
     expect(html).toContain('pr-12')
     expect(html).not.toContain('min-h-20 w-full resize-none')

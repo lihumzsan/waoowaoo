@@ -15,6 +15,8 @@ import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { getWorkspaceCanvasNodePresentationProfile } from '../node-presentation-profiles'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { FieldGlyph, glyphForField } from './field-glyphs'
+import { ProductionPlanningView } from './ProductionPlanningView'
+import { hasProductionPlanningDetails } from './production-planning-details'
 import { SourceScriptStructureView } from './SourceScriptStructureView'
 import { readSourceScriptStructure } from './source-script-structure'
 import {
@@ -1905,6 +1907,16 @@ function EditBibleContent({
         labels={labels}
         expanded={expanded}
         expandedClassName={nodeContentInteractionClass(data, 'space-y-3')}
+      />
+    )
+  }
+  if (hasProductionPlanningDetails(details)) {
+    return (
+      <ProductionPlanningView
+        details={details}
+        labels={labels}
+        expanded={expanded}
+        className={nodeContentInteractionClass(data, 'space-y-3')}
       />
     )
   }

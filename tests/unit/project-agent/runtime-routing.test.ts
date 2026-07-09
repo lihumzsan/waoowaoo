@@ -788,7 +788,7 @@ describe('project agent runtime deterministic tool injection', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
-      latestUserText: '确认剧集规划',
+      latestUserText: '确认制作规划',
       output: {
         ok: true,
         decision: 'approve',
@@ -819,7 +819,7 @@ describe('project agent runtime deterministic tool injection', () => {
         choiceResult: choiceResult!,
       },
       messages: [
-        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '确认剧集规划' }] },
+        { id: 'u1', role: 'user', parts: [{ type: 'text', text: '确认制作规划' }] },
       ],
     })
     await flushAsyncWork()

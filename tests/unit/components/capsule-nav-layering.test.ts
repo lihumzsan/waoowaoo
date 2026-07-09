@@ -65,7 +65,7 @@ describe('EpisodeSelector layout', () => {
       createElement(EpisodeOverviewPanel, {
         overview: {
           title: '剧集状态 · 雨城',
-          stageLabel: '等待确认剧集规划',
+          stageLabel: '等待确认制作规划',
           statusTone: 'warning' as const,
           metrics: [
             { label: '章节', value: '3' },
@@ -91,7 +91,7 @@ describe('EpisodeSelector layout', () => {
     )
 
     expect(html).toContain('剧集状态 · 雨城')
-    expect(html).toContain('等待确认剧集规划')
+    expect(html).toContain('等待确认制作规划')
     expect(html).toContain('目标时长')
     expect(html).toContain('台账事件 4')
     expect(html).toContain('第 1 章')

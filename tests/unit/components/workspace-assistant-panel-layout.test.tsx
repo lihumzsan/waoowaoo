@@ -229,9 +229,9 @@ describe('workspace assistant panel layout', () => {
       },
     })
 
-    expect(html).toContain('失败 · 确认剧集规划')
+    expect(html).toContain('失败 · 确认制作规划')
     expect(html).toContain('PROJECT_AGENT_ACTIVITY_OVERLAP')
-    expect(html).not.toContain('成功 · 确认剧集规划')
+    expect(html).not.toContain('成功 · 确认制作规划')
   })
 
   it('uses server-side pending approval state instead of reviving persisted approval cards', () => {

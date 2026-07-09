@@ -226,6 +226,10 @@ export interface WorkspaceCanvasEditProcessGroupDetails {
 
 export interface WorkspaceCanvasEditBibleDetails {
   readonly bibleText: string
+  readonly bible?: unknown | null
+  readonly beatSheet?: unknown | null
+  readonly ledger?: unknown | null
+  readonly emotionalCurve?: unknown | null
   readonly scriptStructure?: unknown | null
   readonly chapters: readonly {
     readonly id: string

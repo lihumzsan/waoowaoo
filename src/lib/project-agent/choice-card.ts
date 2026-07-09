@@ -206,10 +206,10 @@ async function buildScriptReviewChoiceCard(params: {
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Script' : '确认剧本',
     description: isEnglish
-      ? `Confirm the generated source script before episode planning. Current script length: ${String(scriptLength)} characters.`
-      : `请先确认生成后的完整源剧本，再进入剧集规划。当前剧本文本约 ${String(scriptLength)} 字。`,
+      ? `Confirm the generated source script before production planning. Current script length: ${String(scriptLength)} characters.`
+      : `请先确认生成后的完整源剧本，再进入制作规划。当前剧本文本约 ${String(scriptLength)} 字。`,
     groups: [],
-    submitLabel: isEnglish ? 'Approve Script and Plan Episode' : '确认剧本，生成剧集规划',
+    submitLabel: isEnglish ? 'Approve Script and Generate Production Plan' : '确认剧本，生成制作规划',
     submit: {
       kind: 'submit_tool_output',
     },
@@ -236,10 +236,10 @@ function buildBibleReviewChoiceCard(params: {
     toolCallId: params.toolCallId,
     choiceType: 'bible_review',
     variant: 'confirm_or_reply',
-    title: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
+    title: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     description: isEnglish
-      ? 'Review the story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this episode plan can drive chapter production.'
-      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份剧集规划将作为各章节制作的基线。',
+      ? 'Review the story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this production plan can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份制作规划将作为各章节制作的基线。',
     groups: [
       {
         key: 'aspectRatio',
@@ -248,7 +248,7 @@ function buildBibleReviewChoiceCard(params: {
         options: buildAspectRatioOptions(isEnglish),
       },
     ],
-    submitLabel: isEnglish ? 'Confirm Episode Plan' : '确认剧集规划',
+    submitLabel: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     submit: {
       kind: 'submit_tool_output',
     },

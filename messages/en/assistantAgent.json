@@ -204,7 +204,7 @@
     "operationExecutionFailedFallback": "Operation execution failed",
     "confirmedOperation": "Confirmed and executed operation {operation}.",
     "confirmedOperationWithResult": "Confirmed and executed operation {operation}. Result: {result}",
-    "confirmedBibleReady": "The episode plan is ready. Confirm the global story understanding and chapter split to generate visual style candidates.",
+    "confirmedBibleReady": "The production plan is ready. Confirm the global story understanding and chapter split to generate visual style candidates.",
     "confirmedStylePreviewGenerationStarted": "Visual style candidates are now generating. Please wait.",
     "confirmedOperationFailed": "Operation {operation} failed: {error}",
     "cancelledOperation": "Rejected operation {operation}. The system will not continue executing it."
