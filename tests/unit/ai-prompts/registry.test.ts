@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import { buildAiPrompt, getAiPromptTemplate } from '@/lib/ai-prompts'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 
@@ -46,6 +49,25 @@ describe('ai prompt registry', () => {
     })
 
     expect(prompt).toContain('创建一个阴郁的老管家')
+  })
+
+  it('reloads prompt template file changes within the same process', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'ai-prompt-template-'))
+    const templateDir = join(tempRoot, 'src', 'lib', 'ai-prompts', 'templates', 'character', 'create')
+    const templatePath = join(templateDir, 'character-create.zh.txt')
+    mkdirSync(templateDir, { recursive: true })
+
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempRoot)
+    try {
+      writeFileSync(templatePath, 'template before edit', 'utf-8')
+      expect(getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_CREATE, 'zh')).toBe('template before edit')
+
+      writeFileSync(templatePath, 'template after edit', 'utf-8')
+      expect(getAiPromptTemplate(AI_PROMPT_IDS.CHARACTER_CREATE, 'zh')).toBe('template after edit')
+    } finally {
+      cwdSpy.mockRestore()
+      rmSync(tempRoot, { recursive: true, force: true })
+    }
   })
 
   it('loads the edit bible global template', () => {
