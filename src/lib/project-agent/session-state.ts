@@ -46,6 +46,8 @@ export interface ProjectAgentSessionRun {
   runId: string
   status: ProjectAgentRunStatus
   controlKind: ProjectAgentRunRecord['controlKind']
+  errorCode: string | null
+  errorMessage: string | null
 }
 
 export type ProjectAgentSessionActivity = ProjectAgentActivitySnapshot
@@ -393,6 +395,8 @@ export async function getProjectAgentSessionState(
       runId: run.id,
       status: run.status,
       controlKind: run.controlKind,
+      errorCode: run.errorCode ?? null,
+      errorMessage: run.errorMessage ?? null,
     }
     : null
   const activeStylePreviewGeneration = pendingInteraction?.kind === 'choice' && pendingInteraction.choiceType === 'style'

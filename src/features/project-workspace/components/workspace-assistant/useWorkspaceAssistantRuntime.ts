@@ -384,6 +384,7 @@ export function useWorkspaceAssistantRuntime({
     key: string
     promise: Promise<ProjectAgentSessionState | null>
   } | null>(null)
+  const refreshSessionStateRef = useRef<(() => Promise<ProjectAgentSessionState | null>) | null>(null)
   const replyActivitySequenceRef = useRef(0)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [controlError, setControlError] = useState<Error | null>(null)
@@ -465,6 +466,7 @@ export function useWorkspaceAssistantRuntime({
       })
       markReplyActivityRequestSettled(activitySequence)
     } catch (error) {
+      await refreshSessionStateRef.current?.().catch(() => null)
       clearReplyActivity(activitySequence)
       throw error
     }
@@ -485,6 +487,7 @@ export function useWorkspaceAssistantRuntime({
       })
       markReplyActivityRequestSettled(activitySequence)
     } catch (error) {
+      await refreshSessionStateRef.current?.().catch(() => null)
       clearReplyActivity(activitySequence)
       throw error
     }
@@ -557,6 +560,7 @@ export function useWorkspaceAssistantRuntime({
     }
     return promise
   }, [applySessionState, episodeId, locale, projectId])
+  refreshSessionStateRef.current = refreshSessionState
 
   const sessionStatePollingControlPending = Boolean(
     activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status),

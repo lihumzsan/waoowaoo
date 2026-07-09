@@ -48,6 +48,8 @@ export interface ProjectAgentRunRecord {
   status: ProjectAgentRunStatus
   controlKind: ProjectAgentRunControlKind
   stopReason?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
   heartbeatAt: Date | null
 }
 
@@ -106,6 +108,8 @@ function toProjectAgentRunRecord(run: {
   status: string
   controlKind: string
   stopReason?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
   heartbeatAt: Date | null
 }): ProjectAgentRunRecord {
   return {
@@ -150,6 +154,8 @@ const projectAgentRunRecordSelect = {
   status: true,
   controlKind: true,
   stopReason: true,
+  errorCode: true,
+  errorMessage: true,
   heartbeatAt: true,
 } satisfies Prisma.ProjectAgentRunSelect
 

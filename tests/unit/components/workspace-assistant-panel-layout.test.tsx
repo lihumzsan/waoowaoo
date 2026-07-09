@@ -8,6 +8,7 @@ import type { AbstractIntlMessages } from 'next-intl'
 import { createTranslator } from 'use-intl/core'
 import {
   resolveWorkspaceAssistantExternalTaskOperationId,
+  resolveWorkspaceAssistantRunFailureDetail,
   shouldSuppressWorkspaceAssistantOperationRunCard,
   shouldShowWorkspaceAssistantExternalTaskRunCard,
   shouldShowWorkspaceAssistantRunFailureNotice,
@@ -535,6 +536,14 @@ describe('workspace assistant panel layout', () => {
   })
 
   it('shows failed run feedback only from session-state terminal failure', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain('const composerError = showRunFailureNotice')
+    expect(panelSource).toContain('? null')
+    expect(panelSource).toContain('<WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />')
     expect(shouldShowWorkspaceAssistantRunFailureNotice({
       storageLoading: false,
       replyInFlight: false,
@@ -558,6 +567,26 @@ describe('workspace assistant panel layout', () => {
       replyInFlight: true,
       currentRunStatus: 'failed',
     })).toBe(false)
+  })
+
+  it('shows authoritative failed run details from session-state error fields', () => {
+    expect(resolveWorkspaceAssistantRunFailureDetail({
+      errorMessage: 'This model is not available in your region.',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      fallback: 'fallback',
+    })).toBe('This model is not available in your region.')
+
+    expect(resolveWorkspaceAssistantRunFailureDetail({
+      errorMessage: ' ',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      fallback: 'fallback',
+    })).toBe('PROJECT_AGENT_STREAM_FAILED')
+
+    expect(resolveWorkspaceAssistantRunFailureDetail({
+      errorMessage: null,
+      errorCode: null,
+      fallback: 'fallback',
+    })).toBe('fallback')
   })
 
   it('keeps style preview loading label scoped to the card namespace in supported locales', () => {

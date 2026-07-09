@@ -24,6 +24,21 @@ type MockInterruption = {
   payload: Record<string, unknown>
 }
 
+type MockRun = {
+  id: string
+  projectId: string
+  userId: string
+  assistantId: string
+  scopeRef: string
+  episodeId: string | null
+  requestId: string
+  status: string
+  controlKind: string
+  stopReason?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
+}
+
 const prismaMock = vi.hoisted(() => ({
   task: {
     findMany: vi.fn(async () => [
@@ -48,7 +63,7 @@ const workflowMock = vi.hoisted(() => ({
 
 const runsMock = vi.hoisted(() => ({
   cancelStaleRunningProjectAgentRunsForScope: vi.fn(async () => [] as string[]),
-  listRecentProjectAgentRunsForScope: vi.fn(async () => [
+  listRecentProjectAgentRunsForScope: vi.fn(async (): Promise<MockRun[]> => [
     {
       id: 'run-1',
       projectId: 'project-1',
@@ -249,6 +264,8 @@ describe('project agent session-state', () => {
       runId: 'run-1',
       status: 'awaiting_task',
       controlKind: 'approval_response',
+      errorCode: null,
+      errorMessage: null,
     })
     expect(state.currentActivity).toEqual(expect.objectContaining({
       runId: 'run-1',
@@ -390,6 +407,8 @@ describe('project agent session-state', () => {
       runId: 'run-style-1',
       status: 'awaiting_choice',
       controlKind: 'user_turn',
+      errorCode: null,
+      errorMessage: null,
     })
     expect(state.activeStylePreviewGeneration?.data).toEqual(expect.objectContaining({
       operationId: 'generate_edit_style_previews',
@@ -405,6 +424,46 @@ describe('project agent session-state', () => {
         }),
       ],
     }))
+  })
+
+  it('returns failed run error details for assistant runtime failures', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
+      {
+        id: 'run-failed-1',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantId: 'workspace-command',
+        scopeRef: 'episode:episode-1',
+        episodeId: 'episode-1',
+        requestId: 'request-failed-1',
+        status: 'failed',
+        controlKind: 'user_turn',
+        stopReason: 'stream_error',
+        errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+        errorMessage: 'This model is not available in your region.',
+      },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce(null)
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.currentRun).toEqual({
+      runId: 'run-failed-1',
+      status: 'failed',
+      controlKind: 'user_turn',
+      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      errorMessage: 'This model is not available in your region.',
+    })
+    expect(state.pendingInteraction).toBeNull()
+    expect(state.currentActivity).toBeNull()
   })
 
   it('does not revive a consumed approval as the current operation after a stale run is cancelled', async () => {
@@ -456,6 +515,8 @@ describe('project agent session-state', () => {
       runId: 'run-stale-1',
       status: 'cancelled',
       controlKind: 'user_turn',
+      errorCode: null,
+      errorMessage: null,
     })
     expect(state.currentActivity).toBeNull()
   })
@@ -511,6 +572,8 @@ describe('project agent session-state', () => {
       runId: 'run-active-1',
       status: 'running',
       controlKind: 'user_turn',
+      errorCode: null,
+      errorMessage: null,
     })
     expect(state.currentActivity).toEqual(expect.objectContaining({
       runId: 'run-active-1',

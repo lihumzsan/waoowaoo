@@ -243,6 +243,18 @@ export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
     && params.currentRunStatus === 'failed'
 }
 
+export function resolveWorkspaceAssistantRunFailureDetail(params: {
+  errorMessage?: string | null
+  errorCode?: string | null
+  fallback: string
+}): string {
+  const errorMessage = params.errorMessage?.trim()
+  if (errorMessage) return errorMessage
+  const errorCode = params.errorCode?.trim()
+  if (errorCode) return errorCode
+  return params.fallback
+}
+
 export function resolveWorkspaceAssistantAwaitingUserInput(params: {
   replyInFlight: boolean
   hasPendingInteraction: boolean
@@ -261,8 +273,17 @@ export function resolveWorkspaceAssistantAwaitingExternalTask(params: {
   )
 }
 
-function WorkspaceAssistantRunFailureNotice() {
+function WorkspaceAssistantRunFailureNotice({
+  run,
+}: {
+  run: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'errorCode' | 'errorMessage'> | null
+}) {
   const t = useTranslations('assistantAgent')
+  const detail = resolveWorkspaceAssistantRunFailureDetail({
+    errorMessage: run?.errorMessage ?? null,
+    errorCode: run?.errorCode ?? null,
+    fallback: t('panel.runFailedDetail'),
+  })
   return (
     <div
       role="alert"
@@ -271,7 +292,7 @@ function WorkspaceAssistantRunFailureNotice() {
       <AppIcon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div className="min-w-0">
         <div className="font-semibold">{t('panel.runFailedTitle')}</div>
-        <div className="text-[11px] leading-4 opacity-80">{t('panel.runFailedDetail')}</div>
+        <div className="break-words text-[11px] leading-4 opacity-80">{detail}</div>
       </div>
     </div>
   )
@@ -749,6 +770,9 @@ export default function WorkspaceAssistantPanel({
     replyInFlight: assistantRuntime.replyInFlight,
     currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
   })
+  const composerError = showRunFailureNotice
+    ? null
+    : assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
     resizeStateRef.current = {
@@ -839,7 +863,7 @@ export default function WorkspaceAssistantPanel({
                       <WorkspaceAssistantPendingTurnPlaceholder />
                     ) : null}
                     {showRunFailureNotice ? (
-                      <WorkspaceAssistantRunFailureNotice />
+                      <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />
                     ) : null}
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
                       <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />
@@ -902,7 +926,7 @@ export default function WorkspaceAssistantPanel({
                 <div>
                   <WorkspaceAssistantComposer
                     value={composerText}
-                    error={assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null}
+                    error={composerError}
                     pending={assistantRuntime.pending || assistantRuntime.storageLoading}
                     attachments={composerAttachments}
                     attachDisabled={composerAttachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
