@@ -1,6 +1,22 @@
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { z } from 'zod'
 import {
+  editBibleBeatSchema,
+  editBibleEmotionalCueSchema,
+  editBibleSchema,
+  editSourceScriptEpisodeSchema,
+  editSourceScriptStructureSchema,
+  type EditBible,
+  type EditBibleBeat,
+  type EditBibleEmotionalCue,
+  type EditSourceScriptEpisode,
+  type EditSourceScriptStructure,
+} from '@/lib/edit-bible/schemas'
+import {
+  ledgerEventSchema,
+  type LedgerEvent,
+} from '@/lib/edit-ledger/schemas'
+import {
   editShotExecutionPlanSchema,
   EDIT_CHARACTER_ROLES,
   EDIT_CHARACTER_VISIBILITIES,
@@ -71,6 +87,12 @@ export interface StructuredStreamTaskEventMeta {
 }
 
 export type StructuredStreamAdapterKey =
+  | 'sourceScript.structure'
+  | 'sourceScript.episodes'
+  | 'productionPlanning.globalBible'
+  | 'productionPlanning.beats'
+  | 'productionPlanning.ledgerEvents'
+  | 'productionPlanning.emotionalCues'
   | 'editScript.shots'
   | 'shotExecutionPlan.shots'
   | 'bgm.scoreDesign.sections'
@@ -78,9 +100,33 @@ export type StructuredStreamAdapterKey =
   | 'bgm.virtualLayers'
 
 export type TextStreamAdapterKey =
-  | 'editBible.text'
+  | 'disabled.text'
 
 export type StructuredStreamParsedItem =
+  | {
+    readonly kind: 'sourceScriptStructure'
+    readonly structure: EditSourceScriptStructure
+  }
+  | {
+    readonly kind: 'sourceScriptEpisode'
+    readonly episode: EditSourceScriptEpisode
+  }
+  | {
+    readonly kind: 'productionPlanningGlobalBible'
+    readonly bible: EditBible
+  }
+  | {
+    readonly kind: 'productionPlanningBeat'
+    readonly beat: EditBibleBeat
+  }
+  | {
+    readonly kind: 'productionPlanningLedgerEvent'
+    readonly event: LedgerEvent
+  }
+  | {
+    readonly kind: 'productionPlanningEmotionalCue'
+    readonly cue: EditBibleEmotionalCue
+  }
   | {
     readonly kind: 'editScriptShot'
     readonly shot: EditScriptShot
@@ -132,6 +178,86 @@ function numberKey(value: number | null | undefined, fallbackIndex: number): str
 }
 
 export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
+  {
+    key: 'sourceScript.structure',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
+    mode: 'object',
+    path: ['structure'],
+    parseItem: (value) => ({
+      kind: 'sourceScriptStructure',
+      structure: editSourceScriptStructureSchema.parse(value),
+    }),
+    itemKey: () => 'structure',
+  },
+  {
+    key: 'sourceScript.episodes',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
+    mode: 'array',
+    path: ['structure', 'episodes'],
+    parseItem: (value) => ({
+      kind: 'sourceScriptEpisode',
+      episode: editSourceScriptEpisodeSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'sourceScriptEpisode'
+      ? numberKey(item.episode.episodeIndex, fallbackIndex)
+      : String(fallbackIndex + 1),
+  },
+  {
+    key: 'productionPlanning.globalBible',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL],
+    mode: 'object',
+    path: [],
+    parseItem: (value) => ({
+      kind: 'productionPlanningGlobalBible',
+      bible: editBibleSchema.parse(value),
+    }),
+    itemKey: () => 'globalBible',
+  },
+  {
+    key: 'productionPlanning.beats',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET],
+    mode: 'array',
+    path: ['beats'],
+    parseItem: (value) => ({
+      kind: 'productionPlanningBeat',
+      beat: editBibleBeatSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningBeat'
+      ? item.beat.beatId
+      : String(fallbackIndex + 1),
+  },
+  {
+    key: 'productionPlanning.ledgerEvents',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER],
+    mode: 'array',
+    path: ['events'],
+    parseItem: (value) => ({
+      kind: 'productionPlanningLedgerEvent',
+      event: ledgerEventSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningLedgerEvent'
+      ? item.event.eventId
+      : String(fallbackIndex + 1),
+  },
+  {
+    key: 'productionPlanning.emotionalCues',
+    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE],
+    mode: 'array',
+    path: ['cues'],
+    parseItem: (value) => ({
+      kind: 'productionPlanningEmotionalCue',
+      cue: editBibleEmotionalCueSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningEmotionalCue'
+      ? item.cue.cueId
+      : String(fallbackIndex + 1),
+  },
   {
     key: 'editScript.shots',
     taskTypes: [TASK_TYPE.EDIT_SCRIPT_GENERATE],
@@ -204,19 +330,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
 ]
 
-export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = [
-  {
-    key: 'editBible.text',
-    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
-    stepIds: [
-      AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-      AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
-      AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
-      AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
-      AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
-    ],
-  },
-]
+export const TEXT_STREAM_ADAPTERS: readonly TextStreamAdapter[] = []
 
 export function findStructuredStreamAdapters(meta: StructuredStreamTaskEventMeta): readonly StructuredStreamAdapter[] {
   if (!meta.taskType || !meta.stepId) return []

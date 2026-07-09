@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
-import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import {
   appendStructuredJsonChunk,
   createStructuredStreamObjectParseState,
@@ -16,14 +15,11 @@ import type {
 } from '../node-canvas-types'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
 import {
-  findTextStreamAdapters,
   findStructuredStreamAdapters,
   type StructuredStreamAdapter,
   type StructuredStreamAdapterKey,
   type StructuredStreamItem,
   type StructuredStreamParsedItem,
-  type TextStreamAdapter,
-  type TextStreamAdapterKey,
 } from './structured-stream-adapters'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
 import type {
@@ -72,30 +68,6 @@ interface StructuredStreamSnapshot {
   readonly errorMessage: string | null
 }
 
-interface TextStreamAccumulator {
-  readonly taskId: string
-  readonly taskType: string | null
-  readonly targetType: string | null
-  readonly targetId: string | null
-  readonly episodeId: string | null
-  readonly stepId: string | null
-  readonly streamRunId: string
-  readonly lane: string
-  readonly adapter: TextStreamAdapter
-  readonly text: string
-}
-
-interface TextStreamSnapshot {
-  readonly taskId: string
-  readonly taskType: string | null
-  readonly targetType: string | null
-  readonly targetId: string | null
-  readonly episodeId: string | null
-  readonly stepId: string | null
-  readonly adapterKey: TextStreamAdapterKey
-  readonly text: string
-}
-
 const STREAM_RUNTIME_RETIRE_MS = 8000
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -106,32 +78,12 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function readRawString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null
-}
-
 function createAccumulatorKey(input: {
   readonly taskId: string
   readonly streamRunId: string
   readonly stepId: string | null
   readonly lane: string
   readonly adapterKey: StructuredStreamAdapterKey
-}): string {
-  return [
-    input.taskId,
-    input.streamRunId,
-    input.stepId ?? '__step',
-    input.lane,
-    input.adapterKey,
-  ].join('|')
-}
-
-function createTextAccumulatorKey(input: {
-  readonly taskId: string
-  readonly streamRunId: string
-  readonly stepId: string | null
-  readonly lane: string
-  readonly adapterKey: TextStreamAdapterKey
 }): string {
   return [
     input.taskId,
@@ -248,55 +200,6 @@ function processStreamEvent(
   return next
 }
 
-function processTextStreamEvent(
-  current: ReadonlyMap<string, TextStreamAccumulator>,
-  event: SSEEvent,
-): ReadonlyMap<string, TextStreamAccumulator> {
-  if (event.type !== TASK_SSE_EVENT_TYPE.STREAM) return current
-  const payload = readRecord(event.payload)
-  const stream = readRecord(payload.stream)
-  const delta = readRawString(stream.delta)
-  const kind = readString(stream.kind)
-  if (!delta || kind !== 'text') return current
-
-  const stepId = readString(payload.stepId)
-  const streamRunId = readString(payload.streamRunId) ?? `run:${event.taskId}`
-  const lane = readString(stream.lane) ?? 'main'
-  if (lane !== 'main') return current
-
-  const adapters = findTextStreamAdapters({
-    taskType: event.taskType ?? null,
-    stepId,
-  })
-  if (adapters.length === 0) return current
-
-  const next = new Map(current)
-  adapters.forEach((adapter) => {
-    const key = createTextAccumulatorKey({
-      taskId: event.taskId,
-      streamRunId,
-      stepId,
-      lane,
-      adapterKey: adapter.key,
-    })
-    const previous = next.get(key)
-    next.set(key, {
-      taskId: event.taskId,
-      taskType: event.taskType ?? null,
-      targetType: event.targetType ?? null,
-      targetId: event.targetId ?? null,
-      episodeId: event.episodeId ?? null,
-      stepId,
-      streamRunId,
-      lane,
-      adapter,
-      text: `${previous?.text ?? ''}${delta}`,
-    })
-  })
-
-  return next
-}
-
 function snapshotsFromAccumulators(
   accumulators: ReadonlyMap<string, StreamAccumulator>,
 ): readonly StructuredStreamSnapshot[] {
@@ -311,23 +214,6 @@ function snapshotsFromAccumulators(
       adapterKey: accumulator.adapter.key,
       items: accumulator.items,
       errorMessage: accumulator.errorMessage,
-    }))
-}
-
-function textSnapshotsFromAccumulators(
-  accumulators: ReadonlyMap<string, TextStreamAccumulator>,
-): readonly TextStreamSnapshot[] {
-  return [...accumulators.values()]
-    .filter((accumulator) => accumulator.text.trim().length > 0)
-    .map((accumulator) => ({
-      taskId: accumulator.taskId,
-      taskType: accumulator.taskType,
-      targetType: accumulator.targetType,
-      targetId: accumulator.targetId,
-      episodeId: accumulator.episodeId,
-      stepId: accumulator.stepId,
-      adapterKey: accumulator.adapter.key,
-      text: accumulator.text,
     }))
 }
 
@@ -357,16 +243,6 @@ function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCa
     displayedItemKeys: items.map((item) => item.itemKey),
     pinnedItemKeys: [],
     revealedFieldCountByKey: Object.fromEntries(items.map((item) => [item.itemKey, Number.MAX_SAFE_INTEGER])),
-  }
-}
-
-function textStreamPresentation(): WorkspaceCanvasStreamPresentation {
-  return {
-    isStreaming: true,
-    activeItemKey: 'bible',
-    displayedItemKeys: ['bible'],
-    pinnedItemKeys: [],
-    revealedFieldCountByKey: { bible: Number.MAX_SAFE_INTEGER },
   }
 }
 
@@ -440,18 +316,40 @@ function createStreamRuntimeEntry(input: {
   }
 }
 
-function buildEditBibleRuntimeEntries(
-  snapshots: readonly TextStreamSnapshot[],
+function firstItemOfKind<K extends StructuredStreamParsedItem['kind']>(
+  snapshots: readonly StructuredStreamSnapshot[],
+  adapterKey: StructuredStreamAdapterKey,
+  kind: K,
+): Extract<StructuredStreamParsedItem, { readonly kind: K }> | null {
+  return itemsOfKind(snapshots, adapterKey, kind).at(-1) ?? null
+}
+
+function productionPlanningBody(input: {
+  readonly bible: Extract<StructuredStreamParsedItem, { readonly kind: 'productionPlanningGlobalBible' }> | null
+  readonly beatCount: number
+  readonly eventCount: number
+  readonly cueCount: number
+  readonly translate: Translate
+}): string {
+  const bible = input.bible?.bible ?? null
+  if (bible?.synopsis?.trim()) return bible.synopsis.trim()
+  if (bible?.logline?.trim()) return bible.logline.trim()
+  if (bible?.title?.trim()) return bible.title.trim()
+  if (input.beatCount > 0) return input.translate('nodes.editBible.pendingBody')
+  if (input.eventCount > 0) return input.translate('nodes.editBible.pendingBody')
+  if (input.cueCount > 0) return input.translate('nodes.editBible.pendingBody')
+  return input.translate('nodes.editBible.pendingBody')
+}
+
+function buildSourceScriptRuntimeEntries(
+  snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
-  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editBible.text')
-  const stepOrder = [
-    AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
-    AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
-    AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
-    AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
-  ] as const
-  const grouped = new Map<string, TextStreamSnapshot[]>()
+  const matchingSnapshots = snapshots.filter((snapshot) => (
+    snapshot.adapterKey === 'sourceScript.structure'
+    || snapshot.adapterKey === 'sourceScript.episodes'
+  ))
+  const grouped = new Map<string, StructuredStreamSnapshot[]>()
   matchingSnapshots.forEach((snapshot) => {
     if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return
     const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
@@ -460,15 +358,73 @@ function buildEditBibleRuntimeEntries(
   return [...grouped.values()].flatMap((group) => {
     const firstSnapshot = group[0] ?? null
     if (!firstSnapshot?.targetId) return []
-    const bibleText = group
-      .slice()
-      .sort((left, right) => stepOrder.indexOf(left.stepId as (typeof stepOrder)[number]) - stepOrder.indexOf(right.stepId as (typeof stepOrder)[number]))
-      .map((snapshot) => snapshot.text.trim())
-      .filter(Boolean)
-      .join('\n\n')
-    if (!bibleText) return []
-    const scriptExpansionStream = group.some((snapshot) => snapshot.stepId === AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT)
+    const completeStructure = firstItemOfKind(group, 'sourceScript.structure', 'sourceScriptStructure')?.structure ?? null
+    const episodeItems = itemsOfKind(group, 'sourceScript.episodes', 'sourceScriptEpisode')
+    const structure = completeStructure ?? (episodeItems.length > 0
+      ? {
+          version: 1 as const,
+          title: episodeItems[0]?.episode.title ?? translate('nodes.editSourceScript.pendingTitle'),
+          summary: episodeItems[0]?.episode.summary ?? translate('nodes.editSourceScript.pendingBody'),
+          episodes: episodeItems.map((item) => item.episode),
+        }
+      : null)
+    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
+    if (!structure && !error) return []
+    const rawItems = group.flatMap((snapshot) => snapshot.items)
+    const nodeId = workspaceNodeId.editSourceScript(firstSnapshot.episodeId ?? firstSnapshot.targetId)
+    return [createStreamRuntimeEntry({
+      nodeId,
+      streamKind: 'editSourceScript',
+      taskId: firstSnapshot.taskId,
+      taskType: firstSnapshot.taskType,
+      targetType: firstSnapshot.targetType,
+      targetId: firstSnapshot.targetId,
+      episodeId: firstSnapshot.episodeId,
+      data: {
+        body: error ?? structure?.summary ?? translate('nodes.editSourceScript.pendingBody'),
+        meta: error ?? translate('nodes.editSourceScript.pendingMeta'),
+        artifactPhase: error ? 'failed' : 'running',
+        statusLabel: error ? translate('status.failed') : translate('status.processing'),
+        isRunning: !error,
+        streamPresentation: streamPresentation(rawItems),
+        sourceScriptDetails: {
+          sourceText: '',
+          scriptStructure: structure,
+        },
+      },
+    })]
+  })
+}
+
+function buildProductionPlanningRuntimeEntries(
+  snapshots: readonly StructuredStreamSnapshot[],
+  translate: Translate,
+): readonly WorkspaceCanvasStreamRuntimeEntry[] {
+  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('productionPlanning.'))
+  const grouped = new Map<string, StructuredStreamSnapshot[]>()
+  matchingSnapshots.forEach((snapshot) => {
+    if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return
+    const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
+    grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
+  })
+  return [...grouped.values()].flatMap((group) => {
+    const firstSnapshot = group[0] ?? null
+    if (!firstSnapshot?.targetId) return []
+    const globalBible = firstItemOfKind(group, 'productionPlanning.globalBible', 'productionPlanningGlobalBible')
+    const beatItems = itemsOfKind(group, 'productionPlanning.beats', 'productionPlanningBeat')
+    const ledgerItems = itemsOfKind(group, 'productionPlanning.ledgerEvents', 'productionPlanningLedgerEvent')
+    const emotionalCueItems = itemsOfKind(group, 'productionPlanning.emotionalCues', 'productionPlanningEmotionalCue')
+    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
+    if (!globalBible && beatItems.length === 0 && ledgerItems.length === 0 && emotionalCueItems.length === 0 && !error) return []
+    const rawItems = group.flatMap((snapshot) => snapshot.items)
     const nodeId = workspaceNodeId.editBible(firstSnapshot.episodeId ?? firstSnapshot.targetId)
+    const body = error ?? productionPlanningBody({
+      bible: globalBible,
+      beatCount: beatItems.length,
+      eventCount: ledgerItems.length,
+      cueCount: emotionalCueItems.length,
+      translate,
+    })
     return [createStreamRuntimeEntry({
       nodeId,
       streamKind: 'editBible',
@@ -478,14 +434,18 @@ function buildEditBibleRuntimeEntries(
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
       data: {
-        body: bibleText,
-        meta: translate(scriptExpansionStream ? 'nodes.editScriptSource.pendingMeta' : 'nodes.editBible.pendingMeta'),
-        artifactPhase: 'running',
-        statusLabel: translate('status.processing'),
-        isRunning: true,
-        streamPresentation: textStreamPresentation(),
+        body,
+        meta: error ?? translate('nodes.editBible.pendingMeta'),
+        artifactPhase: error ? 'failed' : 'running',
+        statusLabel: error ? translate('status.failed') : translate('status.processing'),
+        isRunning: !error,
+        streamPresentation: streamPresentation(rawItems),
         editBibleDetails: {
-          bibleText,
+          bibleText: body,
+          bible: globalBible?.bible ?? null,
+          beatSheet: beatItems.length > 0 ? { beats: beatItems.map((item) => item.beat) } : null,
+          ledger: ledgerItems.length > 0 ? { events: ledgerItems.map((item) => item.event) } : null,
+          emotionalCurve: emotionalCueItems.length > 0 ? { cues: emotionalCueItems.map((item) => item.cue) } : null,
           chapters: [],
         },
       },
@@ -667,12 +627,12 @@ function buildBgmRuntimeEntry(
 
 function buildStreamRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
-  textSnapshots: readonly TextStreamSnapshot[],
   episodeId: string,
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   return [
-    ...buildEditBibleRuntimeEntries(textSnapshots, translate),
+    ...buildSourceScriptRuntimeEntries(snapshots, translate),
+    ...buildProductionPlanningRuntimeEntries(snapshots, translate),
     ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
@@ -686,10 +646,24 @@ function hasPersistedStreamContentForPatch(
   const baseNode = baseNodes.find((node) => node.id === patch.nodeId) ?? null
   if (baseNode) {
     if (
+      patch.streamKind === 'editSourceScript'
+      && baseNode.data.kind === 'editSourceScript'
+      && baseNode.data.sourceScriptDetails?.scriptStructure
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+    if (
       patch.streamKind === 'editBible'
       && baseNode.data.kind === 'editBible'
       && baseNode.data.editBibleDetails
-      && baseNode.data.editBibleDetails.bibleText.trim().length > 0
+      && (
+        baseNode.data.editBibleDetails.bible
+        || baseNode.data.editBibleDetails.beatSheet
+        || baseNode.data.editBibleDetails.ledger
+        || baseNode.data.editBibleDetails.emotionalCurve
+        || baseNode.data.editBibleDetails.chapters.length > 0
+      )
       && baseNode.data.isRunning !== true
     ) {
       return true
@@ -774,7 +748,6 @@ export function useWorkspaceStructuredStreamRuntime({
 }: UseWorkspaceStructuredStreamRuntimeInput): UseWorkspaceStructuredStreamRuntimeResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
-  const [textAccumulators, setTextAccumulators] = useState<ReadonlyMap<string, TextStreamAccumulator>>(() => new Map())
   const retireTimersRef = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
@@ -782,7 +755,6 @@ export function useWorkspaceStructuredStreamRuntime({
       if ('episodeId' in event && event.episodeId && event.episodeId !== episodeId) return
       if (event.type === TASK_SSE_EVENT_TYPE.STREAM) {
         setAccumulators((current) => processStreamEvent(current, event))
-        setTextAccumulators((current) => processTextStreamEvent(current, event))
         return
       }
       if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return
@@ -793,7 +765,6 @@ export function useWorkspaceStructuredStreamRuntime({
         if (previousTimer !== undefined) window.clearTimeout(previousTimer)
         retireTimersRef.current.delete(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
-        setTextAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
         return
       }
       if (
@@ -807,7 +778,6 @@ export function useWorkspaceStructuredStreamRuntime({
       const timer = window.setTimeout(() => {
         retireTimersRef.current.delete(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
-        setTextAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
       }, STREAM_RUNTIME_RETIRE_MS)
       retireTimersRef.current.set(event.taskId, timer)
     })
@@ -821,11 +791,10 @@ export function useWorkspaceStructuredStreamRuntime({
   const entries = useMemo(
     () => buildStreamRuntimeEntries(
       snapshotsFromAccumulators(accumulators),
-      textSnapshotsFromAccumulators(textAccumulators),
       episodeId,
       translate,
     ),
-    [accumulators, textAccumulators, episodeId, translate],
+    [accumulators, episodeId, translate],
   )
 
   return useMemo(() => ({

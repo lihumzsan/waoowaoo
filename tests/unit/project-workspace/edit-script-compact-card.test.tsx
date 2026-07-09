@@ -197,20 +197,20 @@ function editScriptNodeData(input?: {
   }
 }
 
-function editBibleNodeData(input?: {
+function sourceScriptNodeData(input?: {
   readonly expanded?: boolean
 }): WorkspaceCanvasNodeData {
   const disclosure = disclosureFor({
-    kind: 'editBible',
+    kind: 'editSourceScript',
     expanded: input?.expanded,
   })
   return {
-    nodeId: 'edit-bible:episode-1',
+    nodeId: 'edit-source-script:episode:episode-1',
     projectId: 'project-1',
     episodeName: 'Episode 1',
-    kind: 'editBible',
-    layoutNodeType: 'editBible',
-    targetType: 'editBible',
+    kind: 'editSourceScript',
+    layoutNodeType: 'editSourceScript',
+    targetType: 'editSourceScript',
     targetId: 'bible-1',
     title: '剧本创作',
     eyebrow: '源剧本',
@@ -224,8 +224,8 @@ function editBibleNodeData(input?: {
     disclosure,
     expanded: disclosure.effectiveExpanded,
     onToggleExpanded: () => undefined,
-    editBibleDetails: {
-      bibleText: '完整剧本文本。这里是全文，不应该在结构卡片展开态直接铺开。',
+    sourceScriptDetails: {
+      sourceText: '完整剧本文本。这里是全文，不应该在结构卡片展开态直接铺开。',
       scriptStructure: {
         version: 1,
         title: '地下实验',
@@ -255,7 +255,6 @@ function editBibleNodeData(input?: {
           }],
         }],
       },
-      chapters: [],
     },
   }
 }
@@ -485,7 +484,7 @@ describe('edit script compact canvas card', () => {
   })
 
   it('renders a structured source script as layered preview cards without the original request block', async () => {
-    const html = await renderWorkspaceNode(editBibleNodeData({ expanded: true }))
+    const html = await renderWorkspaceNode(sourceScriptNodeData({ expanded: true }))
 
     expect(html).toContain('剧本结构')
     expect(html).toContain('地下实验')

@@ -77,6 +77,18 @@ describe('workspace canvas focus follow', () => {
       .toEqual(['shot:panel-1'])
   })
 
+  it('focuses script creation operations on the source script card', () => {
+    const nodes = [
+      workspaceNode('edit-source-script:episode:episode-1', 'editSourceScript', true),
+      workspaceNode('edit-bible:episode:episode-1', 'editBible', true),
+    ]
+
+    expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'ingest_script'))
+      .toEqual(['edit-source-script:episode:episode-1'])
+    expect(resolveWorkspaceCanvasFocusNodeIds(nodes, 'revise_script'))
+      .toEqual(['edit-source-script:episode:episode-1'])
+  })
+
   it('resolves confirmed style bible focus requests to the style bible card', () => {
     const nodes = [
       workspaceNode('edit-bible:bible-1', 'editBible', false),

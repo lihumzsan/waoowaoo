@@ -7,7 +7,6 @@ import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import {
-  readProjectEditScript,
   readProjectEditScripts,
   readProjectEditShotExecutionPlans,
 } from '@/lib/edit-script/service'
@@ -941,12 +940,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           data: { lastEpisodeId: input.episodeId },
         }).catch((error: unknown) => logError('update lastEpisodeId failed', error))
 
-        const [episodeWithSignedUrls, editScript, editScripts, editShotExecutionPlans] = await Promise.all([
+        const [episodeWithSignedUrls, editScripts, editShotExecutionPlans] = await Promise.all([
           attachMediaFieldsToProject(episode),
-          readProjectEditScript({
-            projectId: ctx.projectId,
-            episodeId: input.episodeId,
-          }),
           readProjectEditScripts({
             projectId: ctx.projectId,
             episodeId: input.episodeId,
@@ -959,7 +954,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         return {
           episode: {
             ...episodeWithSignedUrls,
-            editScript,
+            editScript: editScripts.length === 1 ? editScripts[0] : null,
             editScripts,
             editShotExecutionPlans,
             finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore),

@@ -66,7 +66,7 @@ function editBible(overrides: Partial<ProjectEditBible> = {}): ProjectEditBible 
     episodeId: 'episode-1',
     userPrompt: 'story prompt',
     bibleText: 'bible text',
-    status: 'ready',
+    status: 'ready_for_review',
     ...overrides,
   }
 }

@@ -402,11 +402,6 @@ function confirmedStylePreviewImageUrl(bible: ProjectEditBible | null | undefine
 
 function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): string {
   if (!editBible) return ''
-  if (
-    (editBible.status === 'script_ready_for_review' || editBible.status === 'script_approved')
-    && typeof editBible.sourceText === 'string'
-    && editBible.sourceText.trim()
-  ) return editBible.sourceText.trim()
   if (typeof editBible.textPreview === 'string' && editBible.textPreview.trim()) return editBible.textPreview.trim()
   const bible = editBible.bible
   if (bible && typeof bible === 'object') {
@@ -414,20 +409,6 @@ function editBiblePreviewText(editBible: ProjectEditBible | null | undefined): s
     if (typeof synopsis === 'string' && synopsis.trim()) return synopsis.trim()
   }
   return ''
-}
-
-function isScriptEditBiblePresentation(input: {
-  readonly editBible: ProjectEditBible | null
-  readonly editFirstWorkflow: EditFirstWorkflowState
-  readonly activeAssistantOperationId: string | null
-  readonly activeTaskTarget: WorkspaceCanvasActiveTaskTarget | null
-}): boolean {
-  if (input.editBible?.status === 'script_ready_for_review') return true
-  if (input.editBible?.status === 'script_approved') return true
-  if (input.editFirstWorkflow.stage === 'script_generating') return true
-  if (input.editBible?.status === 'generating' && input.editBible.sourceKind === 'prompt_generated_outline') return true
-  if (input.activeTaskTarget?.sourceKind === 'prompt_generated_outline') return true
-  return input.activeAssistantOperationId === 'revise_script'
 }
 
 function assetPreviewUrl(requirement: ProjectEditAssetRequirement): string | null {
@@ -674,33 +655,102 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
   const activeEditBibleTaskTarget = findEditBibleActiveTaskTarget(activeTaskTargets)
+  const editSourceScriptStreamTarget = findStreamTarget(streamTargets, 'editSourceScript', episodeId)
   const editBibleStreamTarget = findStreamTarget(streamTargets, 'editBible', episodeId)
+  const sourceScriptRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
   const editBibleRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editBibleStreamTarget?.targetId ?? null
-  const bibleRunning = Boolean(activeEditBibleTaskTarget)
-    || Boolean(editBibleStreamTarget)
+  const sourceScriptMaterialized = Boolean(
+    editBible?.sourceKind === 'prompt_generated_script'
+    && (
+      (typeof editBible.sourceText === 'string' && editBible.sourceText.trim().length > 0)
+      || editBible.scriptStructure
+    ),
+  )
+  const sourceScriptRunning = !sourceScriptMaterialized && (
+    Boolean(activeEditBibleTaskTarget?.sourceKind === 'prompt_generated_outline')
+    || Boolean(editSourceScriptStreamTarget)
     || editFirstWorkflow.stage === 'script_generating'
+    || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
+  )
+  const sourceScriptFailed = Boolean(
+    editBible?.status === 'failed'
+    && editBible.sourceKind === 'prompt_generated_outline'
+    && !sourceScriptMaterialized,
+  )
+  const hasSourceScriptNode = sourceScriptRunning
+    || sourceScriptMaterialized
+    || sourceScriptFailed
+    || Boolean(editSourceScriptStreamTarget)
+  const bibleRunning = Boolean(activeEditBibleTaskTarget && activeEditBibleTaskTarget.sourceKind !== 'prompt_generated_outline')
+    || Boolean(editBibleStreamTarget)
     || editFirstWorkflow.stage === 'bible_generating'
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
-  const scriptBiblePresentation = isScriptEditBiblePresentation({
-    editBible,
-    editFirstWorkflow,
-    activeAssistantOperationId,
-    activeTaskTarget: activeEditBibleTaskTarget,
-  })
+  const hasProductionPlanningArtifact = Boolean(
+    editBible
+    && (
+      editBible.bible
+      || editBible.beatSheet
+      || editBible.ledger
+      || editBible.emotionalCurve
+      || (editBible.chapters?.length ?? 0) > 0
+      || editBible.status === 'ready_for_review'
+      || editBible.status === 'confirmed'
+      || (editBible.status === 'failed' && editBible.sourceKind !== 'prompt_generated_outline')
+    ),
+  )
+  const hasProductionPlanningNode = hasProductionPlanningArtifact || bibleRunning || Boolean(editBibleStreamTarget)
   const phaseLabels = artifactPhaseLabels(translate)
 
+  let sourceScriptNodeId: string | null = null
+  if (hasSourceScriptNode) {
+    sourceScriptNodeId = workspaceNodeId.editSourceScript(episodeId)
+    const sourceScriptPresentation = sourceScriptRunning || (!editBible && !sourceScriptFailed)
+      ? workspaceCanvasRunningPresentation(phaseLabels)
+      : sourceScriptFailed
+        ? workspaceCanvasFailedPresentation(phaseLabels)
+        : workspaceCanvasSucceededPresentation(phaseLabels)
+    const sourceText = typeof editBible?.sourceText === 'string' ? editBible.sourceText.trim() : ''
+    nodes.push(createNode({
+      id: sourceScriptNodeId,
+      position: layoutPosition(savedLayouts, sourceScriptNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
+      width: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editSourceScript',
+        layoutNodeType: 'editSourceScript',
+        targetType: 'editSourceScript',
+        targetId: sourceScriptRuntimeTargetId ?? episodeId,
+        title: translate(sourceScriptRunning || !sourceScriptMaterialized ? 'nodes.editSourceScript.pendingTitle' : 'nodes.editSourceScript.title'),
+        eyebrow: translate('nodes.editSourceScript.eyebrow'),
+        body: sourceText || translate('nodes.editSourceScript.pendingBody'),
+        meta: sourceScriptRunning ? translate('nodes.editSourceScript.pendingMeta') : '',
+        ...sourceScriptPresentation,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(sourceScriptRuntimeTargetId)),
+        sourceScriptDetails: {
+          sourceDocumentId: editBible?.sourceDocumentId ?? null,
+          sourceText,
+          scriptStructure: editBible?.scriptStructure ?? null,
+        },
+        onAction,
+      },
+    }))
+  }
+
   let bibleNodeId: string | null = null
-  if (editBible || editScriptPending || bibleRunning || editBibleRuntimeTargetId) {
+  if (hasProductionPlanningNode || editScriptPending || bibleRunning || (hasProductionPlanningArtifact && editBibleRuntimeTargetId)) {
     const biblePresentation = bibleRunning || !editBible
       ? workspaceCanvasRunningPresentation(phaseLabels)
       : artifactPresentationFromTaskBackedStatus(editBible.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
-    bibleNodeId = editBible
-      ? workspaceNodeId.editBible(episodeId)
-      : workspaceNodeId.editBible(episodeId)
+    bibleNodeId = workspaceNodeId.editBible(episodeId)
+    const productionNodeY = sourceScriptNodeId
+      ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96
+      : STAGE_START_Y
     nodes.push(createNode({
       id: bibleNodeId,
-      position: layoutPosition(savedLayouts, bibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y }),
+      position: layoutPosition(savedLayouts, bibleNodeId, { x: STORY_COLUMN_X, y: productionNodeY }),
       width: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height,
       data: {
@@ -710,11 +760,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         layoutNodeType: 'editBible',
         targetType: 'editBible',
         targetId: editBibleRuntimeTargetId ?? episodeId,
-        title: scriptBiblePresentation
-          ? translate(bibleRunning || !editBible ? 'nodes.editScriptSource.pendingTitle' : 'nodes.editScriptSource.title')
-          : translate('nodes.editBible.title'),
-        eyebrow: scriptBiblePresentation ? translate('nodes.editScriptSource.eyebrow') : translate('nodes.editBible.eyebrow'),
-        body: editBiblePreviewText(editBible) || translate(scriptBiblePresentation ? 'nodes.editScriptSource.pendingBody' : 'nodes.editBible.pendingBody'),
+        title: translate(bibleRunning || !editBible ? 'nodes.editBible.pendingTitle' : 'nodes.editBible.title'),
+        eyebrow: translate('nodes.editBible.eyebrow'),
+        body: editBiblePreviewText(editBible) || translate('nodes.editBible.pendingBody'),
         meta: '',
         ...biblePresentation,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(editBibleRuntimeTargetId)),
@@ -725,7 +773,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
               beatSheet: editBible.beatSheet ?? null,
               ledger: editBible.ledger ?? null,
               emotionalCurve: editBible.emotionalCurve ?? null,
-              scriptStructure: editBible.scriptStructure ?? null,
               chapters: (editBible.chapters ?? []).map((chapter) => ({
                 id: chapter.id,
                 chapterIndex: chapter.chapterIndex,
@@ -741,6 +788,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
+    if (sourceScriptNodeId) edges.push(createEdge(`edge:${sourceScriptNodeId}:${bibleNodeId}`, sourceScriptNodeId, bibleNodeId))
   }
 
   let styleBibleNodeId: string | null = null
@@ -748,7 +796,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     nodes.push(createNode({
       id: styleBibleNodeId,
-      position: layoutPosition(savedLayouts, styleBibleNodeId, { x: STORY_COLUMN_X, y: STAGE_START_Y + (ROW_GAP_Y + 80) * 2 }),
+      position: layoutPosition(savedLayouts, styleBibleNodeId, {
+        x: STORY_COLUMN_X,
+        y: (sourceScriptNodeId ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96 : STAGE_START_Y) + (ROW_GAP_Y + 80) * 2,
+      }),
       width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
       data: {

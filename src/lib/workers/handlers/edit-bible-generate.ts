@@ -155,11 +155,11 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
             episodeId,
             sourceDocumentId,
             text: expandedSource.scriptText,
+            scriptStructure: expandedSource.structure,
           })
           await markEditBibleScriptReadyForReview({
             editBibleId,
             sourceDocumentId: effectiveSourceDocument.id,
-            scriptStructure: expandedSource.structure,
           })
           return null
         }

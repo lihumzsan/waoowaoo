@@ -7,7 +7,28 @@ import {
 } from '@/features/project-workspace/canvas/structured-stream/structured-stream-adapters'
 
 describe('workspace structured stream adapters', () => {
-  it('registers every edit bible streaming prompt step as text for the canvas', () => {
+  it('routes edit bible streaming prompt steps through structured adapters instead of raw text', () => {
+    const expectedStructuredKeys = new Map([
+      [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT, ['sourceScript.structure', 'sourceScript.episodes']],
+      [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL, ['productionPlanning.globalBible']],
+      [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET, ['productionPlanning.beats']],
+      [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER, ['productionPlanning.ledgerEvents']],
+      [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE, ['productionPlanning.emotionalCues']],
+    ])
+
+    for (const stepId of expectedStructuredKeys.keys()) {
+      expect(findTextStreamAdapters({
+        taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        stepId,
+      })).toEqual([])
+      expect(findStructuredStreamAdapters({
+        taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        stepId,
+      }).map((adapter) => adapter.key)).toEqual(expectedStructuredKeys.get(stepId))
+    }
+  })
+
+  it('does not expose edit bible prompt steps through the legacy text adapter', () => {
     for (const stepId of [
       AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
       AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
@@ -18,7 +39,7 @@ describe('workspace structured stream adapters', () => {
       expect(findTextStreamAdapters({
         taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
         stepId,
-      }).map((adapter) => adapter.key)).toEqual(['editBible.text'])
+      })).toEqual([])
     }
   })
 

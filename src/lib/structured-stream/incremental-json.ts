@@ -32,9 +32,6 @@ export function createStructuredStreamParseState(path: readonly string[]): Struc
 }
 
 export function createStructuredStreamObjectParseState(path: readonly string[]): StructuredStreamParseState {
-  if (path.length === 0) {
-    throw new Error('STRUCTURED_STREAM_PATH_REQUIRED')
-  }
   return {
     mode: 'object',
     path,
@@ -178,6 +175,7 @@ function findArrayStartForPath(text: string, path: readonly string[]): number | 
 }
 
 function findValueStartForPath(text: string, path: readonly string[]): number | null {
+  if (path.length === 0) return nextNonWhitespaceIndex(text, 0)
   let searchFrom = 0
   for (let index = 0; index < path.length; index += 1) {
     const property = findJsonProperty(text, path[index] ?? '', searchFrom)

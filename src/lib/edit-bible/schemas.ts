@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { editSourceAnchorSchema, editSourcePointAnchorSchema, editSourceRangeSchema } from '@/lib/edit-source-document'
-import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger'
+import { editSourceAnchorSchema, editSourcePointAnchorSchema } from '@/lib/edit-source-document/anchors'
+import { editSourceRangeSchema } from '@/lib/edit-source-document/schemas'
+import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger/schemas'
 import { EDIT_BIBLE_STATUS } from './constraints'
 import { editBibleCharacterVoiceProfileSchema } from './voice-profile'
 
@@ -107,6 +108,7 @@ export const editBibleEmotionalCurveSchema = z.object({
   cues: z.array(editBibleEmotionalCueSchema),
 })
 
+export type EditBibleEmotionalCue = z.infer<typeof editBibleEmotionalCueSchema>
 export type EditBibleEmotionalCurve = z.infer<typeof editBibleEmotionalCurveSchema>
 
 export const rawEditBibleEmotionalCueSchema = editBibleEmotionalCueBaseSchema.extend({
@@ -178,6 +180,10 @@ export const editSourceScriptStructureSchema = z.object({
   episodes: z.array(editSourceScriptEpisodeSchema).min(1).max(12),
 }).strict()
 
+export type EditSourceScriptBeat = z.infer<typeof editSourceScriptBeatSchema>
+export type EditSourceScriptScene = z.infer<typeof editSourceScriptSceneSchema>
+export type EditSourceScriptAct = z.infer<typeof editSourceScriptActSchema>
+export type EditSourceScriptEpisode = z.infer<typeof editSourceScriptEpisodeSchema>
 export type EditSourceScriptStructure = z.infer<typeof editSourceScriptStructureSchema>
 
 export const expandedSourceScriptOutputSchema = z.object({
@@ -192,7 +198,6 @@ export const editBibleDiagnosticsSchema = z.object({
   beatSheet: z.unknown().optional(),
   ledger: z.unknown().optional(),
   emotionalCurve: z.unknown().optional(),
-  scriptStructure: editSourceScriptStructureSchema.optional(),
   error: z.string().optional(),
 }).passthrough()
 

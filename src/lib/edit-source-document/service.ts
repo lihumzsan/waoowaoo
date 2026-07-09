@@ -15,6 +15,7 @@ export interface EditSourceDocumentRecord {
   readonly normalizedText: string
   readonly checksum: string
   readonly sourceKind: EditSourceDocumentKind
+  readonly scriptStructureJson: Prisma.JsonValue | null
   readonly rawFileMediaId: string | null
   readonly version: number
   readonly createdAt: Date
@@ -31,6 +32,7 @@ const editSourceDocumentSelect = {
   normalizedText: true,
   checksum: true,
   sourceKind: true,
+  scriptStructureJson: true,
   rawFileMediaId: true,
   version: true,
   createdAt: true,
@@ -51,6 +53,7 @@ function mapSourceDocument(record: {
   readonly normalizedText: string
   readonly checksum: string
   readonly sourceKind: string
+  readonly scriptStructureJson: Prisma.JsonValue | null
   readonly rawFileMediaId: string | null
   readonly version: number
   readonly createdAt: Date
@@ -60,6 +63,10 @@ function mapSourceDocument(record: {
     ...record,
     sourceKind: parseSourceKind(record.sourceKind),
   }
+}
+
+function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
 async function assertEpisodeAccess(input: {
@@ -201,6 +208,7 @@ export async function materializePromptGeneratedSourceDocument(input: {
   readonly episodeId: string
   readonly sourceDocumentId: string
   readonly text: string
+  readonly scriptStructure: unknown
   readonly client?: PrismaClientLike
 }): Promise<CreatedEditSourceDocument> {
   const client = input.client ?? prisma
@@ -237,6 +245,7 @@ export async function materializePromptGeneratedSourceDocument(input: {
       normalizedText,
       checksum: checksumNormalizedText(normalizedText),
       sourceKind: 'prompt_generated_script',
+      scriptStructureJson: toInputJsonValue(input.scriptStructure),
       version: { increment: 1 },
     },
     select: editSourceDocumentSelect,

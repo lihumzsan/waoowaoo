@@ -47,6 +47,7 @@ const sourceDocumentMock = vi.hoisted(() => ({
     normalizedText: '0123456789',
     checksum: 'checksum-1',
     sourceKind: 'paste',
+    scriptStructureJson: null,
     rawFileMediaId: null,
     version: 1,
     createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -58,6 +59,7 @@ const sourceDocumentMock = vi.hoisted(() => ({
     normalizedText: '扩写后的完整剧本',
     checksum: 'checksum-expanded',
     sourceKind: 'prompt_generated_script',
+    scriptStructureJson: null,
     rawFileMediaId: null,
     version: 2,
     createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -232,6 +234,7 @@ describe('worker edit-bible-generate behavior', () => {
       normalizedText: '0123456789',
       checksum: 'checksum-1',
       sourceKind: 'paste',
+      scriptStructureJson: null,
       rawFileMediaId: null,
       version: 1,
       createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -243,6 +246,7 @@ describe('worker edit-bible-generate behavior', () => {
       normalizedText: '扩写后的完整剧本',
       checksum: 'checksum-expanded',
       sourceKind: 'prompt_generated_script',
+      scriptStructureJson: null,
       rawFileMediaId: null,
       version: 2,
       createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -334,6 +338,7 @@ describe('worker edit-bible-generate behavior', () => {
       normalizedText: '两分钟民科超光速短片',
       checksum: 'checksum-prompt',
       sourceKind: 'prompt_generated_outline',
+      scriptStructureJson: null,
       rawFileMediaId: null,
       version: 1,
       createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -361,11 +366,11 @@ describe('worker edit-bible-generate behavior', () => {
       episodeId: 'episode-1',
       sourceDocumentId: 'source-1',
       text: aiMock.expandedScriptOutput.scriptText,
+      scriptStructure: aiMock.expandedScriptOutput.structure,
     })
     expect(editBibleMock.markEditBibleScriptReadyForReview).toHaveBeenCalledWith({
       editBibleId: 'bible-1',
       sourceDocumentId: 'source-1',
-      scriptStructure: aiMock.expandedScriptOutput.structure,
     })
     expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
     expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()
@@ -387,6 +392,7 @@ describe('worker edit-bible-generate behavior', () => {
         normalizedText: '把结尾改成更冷峻',
         checksum: 'checksum-revision',
         sourceKind: 'prompt_generated_outline',
+        scriptStructureJson: null,
         rawFileMediaId: null,
         version: 1,
         createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -398,6 +404,7 @@ describe('worker edit-bible-generate behavior', () => {
         normalizedText: '上一版完整剧本',
         checksum: 'checksum-previous',
         sourceKind: 'prompt_generated_script',
+        scriptStructureJson: null,
         rawFileMediaId: null,
         version: 2,
         createdAt: new Date('2026-01-01T00:00:00Z'),

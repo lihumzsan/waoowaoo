@@ -120,6 +120,16 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
+  editSourceScript: {
+    collapsed: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
+    expanded: {
+      width: 620,
+      height: 720,
+    },
+    expandedLayout: 'stack',
+    defaultExpanded: false,
+    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
+  },
   editBible: {
     collapsed: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
     expandedLayout: 'stack',

@@ -47,8 +47,8 @@ export function buildWorkspaceCanvasFocusKey(
 type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
 
 const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceCanvasFocusNodeKind[]>> = {
-  ingest_script: ['editBible'],
-  revise_script: ['editBible'],
+  ingest_script: ['editSourceScript'],
+  revise_script: ['editSourceScript'],
   generate_bible_from_script: ['editBible'],
   revise_bible: ['editBible'],
   generate_edit_style_previews: ['editBible', 'editStyleBible'],
@@ -69,6 +69,7 @@ const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceC
 }
 
 const RUNNING_FOCUS_KIND_PRIORITY: readonly WorkspaceCanvasFocusNodeKind[] = [
+  'editSourceScript',
   'editBible',
   'editScript',
   'editAssetGroup',

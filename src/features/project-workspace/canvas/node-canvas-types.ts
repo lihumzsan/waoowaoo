@@ -10,6 +10,7 @@ export type WorkspaceCanvasNodeKind =
   | 'imageAsset'
   | 'videoClip'
   | 'finalTimeline'
+  | 'editSourceScript'
   | 'editBible'
   | 'editStylePreview'
   | 'editStyleBible'
@@ -22,7 +23,7 @@ export type WorkspaceCanvasNodeKind =
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
-export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editBible' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editSourceScript' | 'editBible' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {
@@ -230,7 +231,6 @@ export interface WorkspaceCanvasEditBibleDetails {
   readonly beatSheet?: unknown | null
   readonly ledger?: unknown | null
   readonly emotionalCurve?: unknown | null
-  readonly scriptStructure?: unknown | null
   readonly chapters: readonly {
     readonly id: string
     readonly chapterIndex: number
@@ -241,6 +241,12 @@ export interface WorkspaceCanvasEditBibleDetails {
     readonly renderStatus?: string | null
     readonly outputMediaId?: string | null
   }[]
+}
+
+export interface WorkspaceCanvasSourceScriptDetails {
+  readonly sourceDocumentId?: string | null
+  readonly sourceText: string
+  readonly scriptStructure?: unknown | null
 }
 
 export interface WorkspaceCanvasStyleBibleVisualPolicy {
@@ -416,6 +422,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly videoDetails?: WorkspaceCanvasVideoDetails
   readonly finalDetails?: WorkspaceCanvasFinalDetails
   readonly bgmScoreDetails?: WorkspaceCanvasBgmScoreDetails
+  readonly sourceScriptDetails?: WorkspaceCanvasSourceScriptDetails
   readonly editBibleDetails?: WorkspaceCanvasEditBibleDetails
   readonly styleBibleDetails?: WorkspaceCanvasStyleBibleDetails
   readonly editPipelineStepDetails?: WorkspaceCanvasEditPipelineStepDetails

@@ -716,7 +716,7 @@
           "pendingBody": "AI 正在解析源剧本，生成制作总览、全局 Bible、剧情节拍、事件台账、情绪曲线和章节切分。",
           "pendingMeta": "生成完成后由 assistant 发起确认"
         },
-        "editScriptSource": {
+        "editSourceScript": {
           "title": "剧本创作",
           "eyebrow": "源剧本",
           "pendingTitle": "剧本创作中",

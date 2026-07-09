@@ -1,4 +1,5 @@
 export const workspaceNodeId = {
+  editSourceScript: (episodeId: string): string => `edit-source-script:episode:${episodeId}`,
   editBible: (episodeId: string): string => `edit-bible:episode:${episodeId}`,
   editStyleBible: (sourceId: string): string => `edit-style-bible:${sourceId}`,
   editProcessGroup: (episodeId: string): string => `edit-process:${episodeId}`,

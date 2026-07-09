@@ -193,6 +193,7 @@ model ProjectEpisodeSourceDocument {
   normalizedText String         @db.LongText
   checksum       String         @db.VarChar(64)
   sourceKind     String         @db.VarChar(64)
+  scriptStructureJson Json?
   rawFileMediaId String?
   version        Int
   createdAt      DateTime       @default(now())

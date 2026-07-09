@@ -81,13 +81,17 @@ export function SourceScriptStructureView({
       {renderSection(labels('scriptOverview'), overview)}
       <div className="space-y-2">
         {collapsedEpisodes.map((episode) => (
-          <SourceScriptPreviewCard
+          <SourceScriptDisclosureCard
             key={episode.episodeIndex}
             badge={String(episode.episodeIndex + 1).padStart(2, '0')}
             title={episode.title}
             summary={episode.summary}
             meta={`${episode.acts.length} ${labels('acts')} · ${countSourceScriptScenes(episode)} ${labels('scenes')}`}
-          />
+          >
+            {episode.acts.map((act) => (
+              <SourceScriptActCard key={act.actIndex} act={act} labels={labels} />
+            ))}
+          </SourceScriptDisclosureCard>
         ))}
       </div>
     </div>
@@ -112,31 +116,6 @@ export function SourceScriptStructureView({
         ) : null}
       </WorkspaceCanvasMotionPresence>
     </>
-  )
-}
-
-function SourceScriptPreviewCard({
-  badge,
-  title,
-  summary,
-  meta,
-}: {
-  readonly badge: string
-  readonly title: string
-  readonly summary: string
-  readonly meta: string
-}) {
-  return (
-    <article className="rounded-[14px] border border-slate-200 bg-white p-3">
-      <div className="flex items-start gap-2.5">
-        <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[7px] bg-slate-900 px-1.5 text-[11px] font-bold text-white">{badge}</span>
-        <div className="min-w-0 flex-1">
-          <p className={`${SELECTABLE_TEXT_CLASS} truncate text-xs font-semibold leading-5 text-[var(--glass-text-primary)]`}>{title}</p>
-          <p className={`${SELECTABLE_TEXT_CLASS} line-clamp-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{summary}</p>
-          <p className={`${SELECTABLE_TEXT_CLASS} mt-1 text-[10px] leading-4 text-[var(--glass-text-tertiary)]`}>{meta}</p>
-        </div>
-      </div>
-    </article>
   )
 }
 

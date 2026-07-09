@@ -716,7 +716,7 @@
           "pendingBody": "AI is parsing the source script into the production overview, global Bible, beat sheet, event ledger, emotional curve, and chapter split.",
           "pendingMeta": "The assistant will request confirmation when it is ready"
         },
-        "editScriptSource": {
+        "editSourceScript": {
           "title": "Script Creation",
           "eyebrow": "Source Script",
           "pendingTitle": "Creating Script",

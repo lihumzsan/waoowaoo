@@ -173,7 +173,18 @@ describe('gui get_episode_detail operation', () => {
       id: 'bible-1',
       styleBibleJson: null,
     })
-    prismaMock.projectEditScript.findMany.mockResolvedValue([])
+    prismaMock.projectEditScript.findMany.mockResolvedValue([{
+      ...rawEditScriptRow(),
+      editBible: {
+        id: 'bible-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        userPrompt: 'Create an edit plan.',
+        styleBibleJson: null,
+        bibleText: 'Bible text',
+        status: 'completed',
+      },
+    }])
     prismaMock.projectEditShotExecutionPlan.findMany.mockResolvedValue([])
   })
 
@@ -191,11 +202,12 @@ describe('gui get_episode_detail operation', () => {
     ])
     expect(result.episode.editScript?.bibleId).toBe('bible-1')
     expect(result.episode.editScript).not.toHaveProperty('corePlanJson')
-    expect(prismaMock.projectEditScript.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaMock.projectEditScript.findFirst).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditChapter.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditScript.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         projectId: 'project-1',
         episodeId: 'episode-1',
-        chapterId: 'chapter-default',
       },
       include: expect.objectContaining({
         requirements: expect.any(Object),

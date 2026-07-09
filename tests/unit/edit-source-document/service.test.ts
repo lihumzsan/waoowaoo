@@ -50,6 +50,12 @@ describe('edit source document service', () => {
           normalizedText: '扩写后的完整剧本',
           checksum: 'checksum-expanded',
           sourceKind: 'prompt_generated_script',
+          scriptStructureJson: {
+            version: 1,
+            title: '扩写剧本',
+            summary: '扩写后的完整剧本结构。',
+            episodes: [],
+          },
           rawFileMediaId: null,
           version: 2,
           createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -63,6 +69,12 @@ describe('edit source document service', () => {
       episodeId: 'episode-1',
       sourceDocumentId: 'source-1',
       text: '扩写后的完整剧本',
+      scriptStructure: {
+        version: 1,
+        title: '扩写剧本',
+        summary: '扩写后的完整剧本结构。',
+        episodes: [],
+      },
       client: client as never,
     })
 
@@ -71,6 +83,12 @@ describe('edit source document service', () => {
       data: expect.objectContaining({
         normalizedText: '扩写后的完整剧本',
         sourceKind: 'prompt_generated_script',
+        scriptStructureJson: {
+          version: 1,
+          title: '扩写剧本',
+          summary: '扩写后的完整剧本结构。',
+          episodes: [],
+        },
         version: { increment: 1 },
       }),
     }))

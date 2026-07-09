@@ -59,6 +59,28 @@ function editBibleNode(input: {
   return node
 }
 
+function sourceScriptNode(input: {
+  readonly status: string
+  readonly activeAssistantOperationId?: string
+  readonly bibleOverrides?: Partial<ProjectEditBible>
+  readonly workflowStage?: EditFirstWorkflowState['stage']
+}): WorkspaceCanvasFlowNode {
+  const projection = buildWorkspaceNodeCanvasProjection({
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    episodeName: 'Episode 1',
+    storyboards: [],
+    editFirstWorkflow: workflow(input.workflowStage ?? 'script_ready_for_review'),
+    editBible: bible(input.status, input.bibleOverrides),
+    activeAssistantOperationId: input.activeAssistantOperationId,
+    savedLayouts: [],
+    translate: t,
+  })
+  const node = projection.nodes.find((candidate) => candidate.data.kind === 'editSourceScript')
+  if (!node) throw new Error('EDIT_SOURCE_SCRIPT_NODE_MISSING')
+  return node
+}
+
 describe('project canvas artifact phase', () => {
   it('does not render a placeholder node when the bible artifact does not exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
@@ -216,18 +238,18 @@ describe('project canvas artifact phase', () => {
       savedLayouts: [],
       translate: t,
     })
-    const node = projection.nodes.find((candidate) => candidate.data.kind === 'editBible')
+    const node = projection.nodes.find((candidate) => candidate.data.kind === 'editSourceScript')
 
-    expect(node?.id).toBe('edit-bible:episode:episode-1')
+    expect(node?.id).toBe('edit-source-script:episode:episode-1')
     expect(node?.data.targetId).toBe('bible-1')
-    expect(node?.data.title).toBe('nodes.editScriptSource.pendingTitle')
-    expect(node?.data.eyebrow).toBe('nodes.editScriptSource.eyebrow')
-    expect(node?.data.body).toBe('nodes.editScriptSource.pendingBody')
+    expect(node?.data.title).toBe('nodes.editSourceScript.pendingTitle')
+    expect(node?.data.eyebrow).toBe('nodes.editSourceScript.eyebrow')
+    expect(node?.data.body).toBe('nodes.editSourceScript.pendingBody')
     expect(node?.data.artifactPhase).toBe('running')
   })
 
-  it('labels a prompt-expanded script review node as script instead of episode plan', () => {
-    const node = editBibleNode({
+  it('labels a prompt-expanded script review node as source script instead of production plan', () => {
+    const node = sourceScriptNode({
       status: 'script_ready_for_review',
       workflowStage: 'script_ready_for_review',
       bibleOverrides: {
@@ -236,9 +258,10 @@ describe('project canvas artifact phase', () => {
       },
     })
 
-    expect(node.data.title).toBe('nodes.editScriptSource.title')
-    expect(node.data.eyebrow).toBe('nodes.editScriptSource.eyebrow')
+    expect(node.data.title).toBe('nodes.editSourceScript.title')
+    expect(node.data.eyebrow).toBe('nodes.editSourceScript.eyebrow')
     expect(node.data.body).toBe('完整扩写剧本')
+    expect(node.data.sourceScriptDetails?.sourceText).toBe('完整扩写剧本')
     expect(node.data.artifactPhase).toBe('succeeded')
   })
 })

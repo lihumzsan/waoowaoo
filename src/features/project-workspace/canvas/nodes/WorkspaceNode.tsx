@@ -45,6 +45,8 @@ function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): AppIconNam
       return 'video'
     case 'finalTimeline':
       return 'film'
+    case 'editSourceScript':
+      return 'clipboardCheck'
     case 'editBible':
       return 'bookOpen'
     case 'editStylePreview':
@@ -1898,18 +1900,6 @@ function EditBibleContent({
 }) {
   const details = data.editBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const scriptStructure = readSourceScriptStructure(details.scriptStructure)
-  if (scriptStructure) {
-    return (
-      <SourceScriptStructureView
-        structure={scriptStructure}
-        scriptText={details.bibleText}
-        labels={labels}
-        expanded={expanded}
-        expandedClassName={nodeContentInteractionClass(data, 'space-y-3')}
-      />
-    )
-  }
   if (hasProductionPlanningDetails(details)) {
     return (
       <ProductionPlanningView
@@ -1968,6 +1958,41 @@ function EditBibleContent({
             ))}
           </div>
         )) : null}
+      </WorkspaceCanvasMotionPresence>
+    </>
+  )
+}
+
+function SourceScriptContent({
+  data,
+  labels,
+  expanded,
+}: {
+  readonly data: WorkspaceCanvasFlowNode['data']
+  readonly labels: ReturnType<typeof useTranslations>
+  readonly expanded: boolean
+}) {
+  const details = data.sourceScriptDetails
+  if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
+  const scriptStructure = readSourceScriptStructure(details.scriptStructure)
+  if (scriptStructure) {
+    return (
+      <SourceScriptStructureView
+        structure={scriptStructure}
+        scriptText={details.sourceText}
+        labels={labels}
+        expanded={expanded}
+        expandedClassName={nodeContentInteractionClass(data, 'space-y-3')}
+      />
+    )
+  }
+
+  const collapsedContent = renderSection(labels('scriptText'), renderSummaryText(details.sourceText || data.body, 6))
+  return (
+    <>
+      {!expanded ? collapsedContent : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
+        {renderSection(labels('scriptText'), renderTextBlock(details.sourceText || data.body))}
       </WorkspaceCanvasMotionPresence>
     </>
   )
@@ -2371,6 +2396,8 @@ function NodeContent({
       return <FinalContent data={data} labels={labels} expanded={expanded} />
     case 'bgmScore':
       return <BgmScoreContent data={data} labels={labels} expanded={expanded} />
+    case 'editSourceScript':
+      return <SourceScriptContent data={data} labels={labels} expanded={expanded} />
     case 'editBible':
       return <EditBibleContent data={data} labels={labels} expanded={expanded} />
     case 'editStylePreview':
@@ -2487,7 +2514,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
       observer.disconnect()
       clearDeferredMeasure()
     }
-  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
+  }, [data.kind, data.expanded, data.isRunning, data.streamPresentation, data.bgmScoreDetails, data.sourceScriptDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>

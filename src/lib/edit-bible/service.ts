@@ -193,6 +193,7 @@ const persistedBibleSelect = {
     select: {
       sourceKind: true,
       normalizedText: true,
+      scriptStructureJson: true,
     },
   },
   stylePreviews: {
@@ -312,14 +313,15 @@ function mapPersistedBible(record: {
   readonly sourceDocument: {
     readonly sourceKind: string
     readonly normalizedText: string
+    readonly scriptStructureJson: Prisma.JsonValue | null
   }
   readonly stylePreviews?: readonly PersistedBibleStylePreview[]
 }, projectId: string): PersistedEditBibleBundle {
   const diagnostics = record.diagnosticsJson && typeof record.diagnosticsJson === 'object'
     ? record.diagnosticsJson as EditBibleDiagnostics
     : null
-  const scriptStructure = diagnostics?.scriptStructure
-    ? editSourceScriptStructureSchema.parse(diagnostics.scriptStructure)
+  const scriptStructure = record.sourceDocument.scriptStructureJson
+    ? editSourceScriptStructureSchema.parse(record.sourceDocument.scriptStructureJson)
     : null
   return {
     id: record.id,
@@ -649,7 +651,6 @@ export async function persistGeneratedEditBibleBundle(input: {
 export async function markEditBibleScriptReadyForReview(input: {
   readonly editBibleId: string
   readonly sourceDocumentId: string
-  readonly scriptStructure?: EditSourceScriptStructure | null
 }) {
   const result = await prisma.projectEditBible.updateMany({
     where: {
@@ -659,9 +660,7 @@ export async function markEditBibleScriptReadyForReview(input: {
     },
     data: {
       status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
-      diagnosticsJson: input.scriptStructure
-        ? toInputJsonValue({ scriptStructure: input.scriptStructure })
-        : Prisma.JsonNull,
+      diagnosticsJson: Prisma.JsonNull,
     },
   })
   if (result.count !== 1) {

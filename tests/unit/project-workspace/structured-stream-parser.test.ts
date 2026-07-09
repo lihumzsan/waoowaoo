@@ -63,4 +63,16 @@ describe('incremental structured JSON parser', () => {
     expect(result.items).toEqual([{ styleSummary: 'quiet noir' }])
     expect(result.state.complete).toBe(true)
   })
+
+  it('emits a root object when object mode uses an empty path', () => {
+    let state = createStructuredStreamObjectParseState([])
+    let result = appendStructuredJsonChunk(state, '{"synopsis":"循环开始",')
+    expect(result.items).toEqual([])
+
+    state = result.state
+    result = appendStructuredJsonChunk(state, '"characters":[]}')
+
+    expect(result.items).toEqual([{ synopsis: '循环开始', characters: [] }])
+    expect(result.state.complete).toBe(true)
+  })
 })

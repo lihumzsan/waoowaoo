@@ -30,7 +30,7 @@ import {
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectContext, useProjectEditBibleResponse, useProjectEditShotExecutionPlan } from '@/lib/query/hooks'
+import { useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -265,7 +265,6 @@ function ProjectWorkspaceCanvasContent({
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
   const editBible = editBibleResponse?.editBible ?? null
   const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
-  const { data: editShotExecutionPlan } = useProjectEditShotExecutionPlan(projectId, episodeId ?? null)
   const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
   const scopedStoryboards = useMemo(() => (
@@ -288,13 +287,12 @@ function ProjectWorkspaceCanvasContent({
   const scopedEditShotExecutionPlan = useMemo(() => {
     if (workspaceScope.kind === 'chapter') {
       return editShotExecutionPlans.find((plan) => plan.chapterId === workspaceScope.chapterId)
-        ?? (editShotExecutionPlan?.chapterId === workspaceScope.chapterId ? editShotExecutionPlan : null)
+        ?? null
     }
-    return editShotExecutionPlan
-      ?? editShotExecutionPlans.find((plan) => plan.editScriptId === scopedEditScript?.id)
+    return editShotExecutionPlans.find((plan) => plan.editScriptId === scopedEditScript?.id)
       ?? editShotExecutionPlans[0]
       ?? null
-  }, [editShotExecutionPlan, editShotExecutionPlans, scopedEditScript?.id, workspaceScope])
+  }, [editShotExecutionPlans, scopedEditScript?.id, workspaceScope])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)

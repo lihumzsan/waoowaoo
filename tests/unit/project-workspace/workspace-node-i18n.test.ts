@@ -168,8 +168,8 @@ describe('WorkspaceNode i18n messages', () => {
 
   it('defines every workspace canvas key used by the projection builder', () => {
     const usedKeys = readWorkspaceProjectionTranslationKeys()
-    expect(usedKeys).toContain('nodes.editScriptSource.pendingTitle')
-    expect(usedKeys).toContain('nodes.editScriptSource.pendingBody')
+    expect(usedKeys).toContain('nodes.editSourceScript.pendingTitle')
+    expect(usedKeys).toContain('nodes.editSourceScript.pendingBody')
 
     for (const locale of ['en', 'zh'] as const) {
       const messages = readProjectWorkflowMessages(locale)
