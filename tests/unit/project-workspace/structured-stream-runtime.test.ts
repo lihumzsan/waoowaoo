@@ -77,6 +77,61 @@ describe('workspace structured stream runtime', () => {
     expect(result[0]?.data.isRunning).toBe(true)
   })
 
+  it('applies soundscape stream patches to the matching soundscape node', () => {
+    const nodes = [
+      workspaceNode({
+        id: 'soundscape:episode-1',
+        kind: 'soundscape',
+        targetType: 'episode',
+        targetId: 'episode-1',
+      }),
+    ]
+    const patches: WorkspaceCanvasStreamPatch[] = [{
+      nodeId: 'soundscape:episode-1',
+      streamKind: 'soundscape',
+      taskId: 'task-soundscape',
+      data: {
+        body: 'stream soundscape',
+        isRunning: true,
+        soundscapeDetails: {
+          status: 'planning',
+          decision: null,
+          soundEffectModel: null,
+          sourceCount: 1,
+          sectionCount: 1,
+          sources: [{
+            sourceId: 'city_rooftop_wind',
+            environmentFingerprint: 'night_city_rooftop_wind',
+            prompt: 'Seamless loop of steady rooftop wind with distant city hum, no music, no voices.',
+            loopDurationSeconds: 30,
+            promptInfluence: 0.55,
+          }],
+          sections: [{
+            sourceId: 'city_rooftop_wind',
+            fromShotId: 'shot_012',
+            toShotId: 'shot_018',
+            perspective: 'exterior_near',
+            intensity: 'medium',
+            transitionIn: 'fade',
+            transitionOut: 'crossfade',
+          }],
+        },
+      },
+    }]
+
+    const result = applyWorkspaceStructuredStreamPatches(nodes, patches)
+
+    expect(result[0]?.data.body).toBe('stream soundscape')
+    expect(result[0]?.data.isRunning).toBe(true)
+    expect(result[0]?.data.soundscapeDetails).toMatchObject({
+      status: 'planning',
+      sourceCount: 1,
+      sectionCount: 1,
+      sources: [{ sourceId: 'city_rooftop_wind' }],
+      sections: [{ fromShotId: 'shot_012', toShotId: 'shot_018' }],
+    })
+  })
+
   it('leaves off-projection batch patches unapplied instead of crashing the canvas', () => {
     const nodes = [
       workspaceNode({
@@ -182,5 +237,80 @@ describe('workspace structured stream runtime', () => {
 
     expect(result[0]?.data.body).toBe('persisted plan')
     expect(result[0]?.data.isRunning).toBe(false)
+  })
+
+  it('does not let soundscape stream patches overwrite persisted soundscape planning details', () => {
+    const nodes = [
+      workspaceNode({
+        id: 'soundscape:episode-1',
+        kind: 'soundscape',
+        targetType: 'episode',
+        targetId: 'episode-1',
+        body: 'persisted soundscape',
+      }),
+    ].map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        isRunning: false,
+        soundscapeDetails: {
+          status: 'completed',
+          decision: 'soundscape' as const,
+          soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+          sourceCount: 1,
+          sectionCount: 1,
+          sources: [{
+            sourceId: 'persisted_wind',
+            environmentFingerprint: 'persisted_env',
+            prompt: 'Persisted seamless wind ambience prompt with no music or voices.',
+            loopDurationSeconds: 30,
+            promptInfluence: 0.55,
+          }],
+          sections: [{
+            sourceId: 'persisted_wind',
+            fromShotId: 'shot_001',
+            toShotId: 'shot_002',
+            perspective: 'exterior_near',
+            intensity: 'medium',
+            transitionIn: 'fade',
+            transitionOut: 'fade',
+          }],
+        },
+      },
+    }))
+    const patches: WorkspaceCanvasStreamPatch[] = [{
+      nodeId: 'soundscape:episode-1',
+      streamKind: 'soundscape',
+      taskId: 'task-soundscape',
+      data: {
+        body: 'stream soundscape',
+        isRunning: true,
+        soundscapeDetails: {
+          status: 'planning',
+          decision: null,
+          soundEffectModel: null,
+          sourceCount: 1,
+          sectionCount: 1,
+          sources: [{
+            sourceId: 'streamed_wind',
+            environmentFingerprint: 'streamed_env',
+            prompt: 'Streamed seamless wind ambience prompt with no music or voices.',
+            loopDurationSeconds: 30,
+            promptInfluence: 0.55,
+          }],
+          sections: [],
+        },
+      },
+    }]
+
+    const result = applyWorkspaceStructuredStreamPatches(nodes, patches)
+
+    expect(result[0]?.data.body).toBe('persisted soundscape')
+    expect(result[0]?.data.isRunning).toBe(false)
+    expect(result[0]?.data.soundscapeDetails).toMatchObject({
+      status: 'completed',
+      decision: 'soundscape',
+      sources: [{ sourceId: 'persisted_wind' }],
+    })
   })
 })

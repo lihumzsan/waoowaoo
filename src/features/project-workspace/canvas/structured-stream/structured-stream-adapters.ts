@@ -32,6 +32,12 @@ import {
   type BgmScorePromptSection,
   type BgmScoreVirtualLayer,
 } from '@/lib/bgm-score/types'
+import {
+  soundscapePlanSectionSchema,
+  soundscapePlanSourceSchema,
+  type SoundscapePlanSection,
+  type SoundscapePlanSource,
+} from '@/lib/soundscape/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
 const editShotExecutionPlanShotSchema = editShotExecutionPlanSchema.shape.shots.element
@@ -98,6 +104,8 @@ export type StructuredStreamAdapterKey =
   | 'bgm.scoreDesign.sections'
   | 'bgm.promptSections'
   | 'bgm.virtualLayers'
+  | 'soundscape.sources'
+  | 'soundscape.sections'
 
 export type TextStreamAdapterKey =
   | 'disabled.text'
@@ -146,6 +154,14 @@ export type StructuredStreamParsedItem =
   | {
     readonly kind: 'bgmVirtualLayer'
     readonly layer: BgmScoreVirtualLayer
+  }
+  | {
+    readonly kind: 'soundscapeSource'
+    readonly source: SoundscapePlanSource
+  }
+  | {
+    readonly kind: 'soundscapeSection'
+    readonly section: SoundscapePlanSection
   }
 
 export interface StructuredStreamItem {
@@ -326,6 +342,34 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'bgmVirtualLayer'
       ? `${item.layer.name}:${fallbackIndex}`
+      : String(fallbackIndex + 1),
+  },
+  {
+    key: 'soundscape.sources',
+    taskTypes: [TASK_TYPE.SOUNDSCAPE_PLAN],
+    stepIds: ['soundscape_plan'],
+    mode: 'array',
+    path: ['sources'],
+    parseItem: (value) => ({
+      kind: 'soundscapeSource',
+      source: soundscapePlanSourceSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'soundscapeSource'
+      ? item.source.sourceId
+      : String(fallbackIndex + 1),
+  },
+  {
+    key: 'soundscape.sections',
+    taskTypes: [TASK_TYPE.SOUNDSCAPE_PLAN],
+    stepIds: ['soundscape_plan'],
+    mode: 'array',
+    path: ['sections'],
+    parseItem: (value) => ({
+      kind: 'soundscapeSection',
+      section: soundscapePlanSectionSchema.parse(value),
+    }),
+    itemKey: (item, fallbackIndex) => item.kind === 'soundscapeSection'
+      ? `${item.section.sourceId}:${item.section.fromShotId}:${item.section.toShotId}:${fallbackIndex}`
       : String(fallbackIndex + 1),
   },
 ]

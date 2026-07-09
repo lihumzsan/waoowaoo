@@ -178,6 +178,22 @@ export interface WorkspaceCanvasSoundscapeDetails {
   readonly soundEffectModel?: string | null
   readonly sourceCount: number
   readonly sectionCount: number
+  readonly sources: readonly {
+    readonly sourceId: string
+    readonly environmentFingerprint: string
+    readonly prompt: string
+    readonly loopDurationSeconds: number
+    readonly promptInfluence: number
+  }[]
+  readonly sections: readonly {
+    readonly sourceId: string
+    readonly fromShotId: string
+    readonly toShotId: string
+    readonly perspective: string
+    readonly intensity: string
+    readonly transitionIn: string
+    readonly transitionOut: string
+  }[]
   readonly mixUrl?: string | null
   readonly errorMessage?: string | null
 }

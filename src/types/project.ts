@@ -436,6 +436,31 @@ export type ProjectSoundscapeStatus =
   | 'failed'
   | string
 
+export interface ProjectSoundscapePlanSource {
+  sourceId: string
+  environmentFingerprint: string
+  prompt: string
+  loopDurationSeconds: number
+  promptInfluence: number
+}
+
+export interface ProjectSoundscapePlanSection {
+  sourceId: string
+  fromShotId: string
+  toShotId: string
+  perspective: 'exterior_near' | 'exterior_far' | 'interior' | 'interior_behind_window'
+  intensity: 'low' | 'medium' | 'high'
+  transitionIn: 'cut' | 'fade' | 'crossfade'
+  transitionOut: 'cut' | 'fade' | 'crossfade'
+}
+
+export interface ProjectSoundscapePlan {
+  schemaVersion: 1
+  decision: 'soundscape' | 'none_needed'
+  sources: ProjectSoundscapePlanSource[]
+  sections: ProjectSoundscapePlanSection[]
+}
+
 export interface ProjectSoundscape {
   id?: string | null
   status: ProjectSoundscapeStatus
@@ -446,7 +471,7 @@ export interface ProjectSoundscape {
   decision?: 'soundscape' | 'none_needed' | null
   sourceCount: number
   sectionCount: number
-  plan?: unknown
+  plan?: ProjectSoundscapePlan | null
   sources?: unknown
   mix?: {
     mediaId: string

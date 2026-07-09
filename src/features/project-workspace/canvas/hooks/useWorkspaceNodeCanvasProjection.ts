@@ -563,6 +563,8 @@ function soundscapeDetails(finalVideo: ProjectFinalVideo | null | undefined): Wo
     soundEffectModel: soundscape.soundEffectModel ?? null,
     sourceCount: soundscape.sourceCount,
     sectionCount: soundscape.sectionCount,
+    sources: soundscape.plan?.sources ?? [],
+    sections: soundscape.plan?.sections ?? [],
     mixUrl: soundscape.mix?.url ?? null,
     errorMessage: soundscape.errorMessage ?? null,
   }

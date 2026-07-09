@@ -625,6 +625,51 @@ function buildBgmRuntimeEntry(
   })
 }
 
+function buildSoundscapeRuntimeEntry(
+  snapshots: readonly StructuredStreamSnapshot[],
+  episodeId: string,
+  translate: Translate,
+): WorkspaceCanvasStreamRuntimeEntry | null {
+  const sources = itemsOfKind(snapshots, 'soundscape.sources', 'soundscapeSource').map((item) => item.source)
+  const sections = itemsOfKind(snapshots, 'soundscape.sections', 'soundscapeSection').map((item) => item.section)
+  const rawItems = snapshots
+    .filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.'))
+    .flatMap((snapshot) => snapshot.items)
+  const error = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('soundscape.') && snapshot.errorMessage)?.errorMessage ?? null
+  if (sources.length === 0 && sections.length === 0 && !error) return null
+  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('soundscape.')) ?? null
+  if (!firstSnapshot) return null
+  const nodeId = workspaceNodeId.soundscape(episodeId)
+  return createStreamRuntimeEntry({
+    nodeId,
+    streamKind: 'soundscape',
+    taskId: firstSnapshot.taskId,
+    taskType: firstSnapshot.taskType,
+    targetType: firstSnapshot.targetType,
+    targetId: episodeId,
+    episodeId: firstSnapshot.episodeId ?? episodeId,
+    data: {
+      body: error ?? translate('nodes.soundscape.body', { videos: 0 }),
+      meta: error ? error : translate('nodes.soundscape.ready', { sources: sources.length, sections: sections.length }),
+      artifactPhase: error ? 'failed' : 'running',
+      statusLabel: error ? translate('status.failed') : translate('status.processing'),
+      isRunning: !error,
+      streamPresentation: streamPresentation(rawItems),
+      soundscapeDetails: {
+        status: error ? 'failed' : 'planning',
+        decision: null,
+        soundEffectModel: null,
+        sourceCount: sources.length,
+        sectionCount: sections.length,
+        sources,
+        sections,
+        mixUrl: null,
+        errorMessage: error,
+      },
+    },
+  })
+}
+
 function buildStreamRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
@@ -636,6 +681,7 @@ function buildStreamRuntimeEntries(
     ...buildEditScriptRuntimeEntries(snapshots, episodeId, translate),
     buildShotExecutionRuntimeEntry(snapshots, translate),
     buildBgmRuntimeEntry(snapshots, episodeId, translate),
+    buildSoundscapeRuntimeEntry(snapshots, episodeId, translate),
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 
@@ -688,6 +734,14 @@ function hasPersistedStreamContentForPatch(
       patch.streamKind === 'bgmScore'
       && baseNode.data.kind === 'bgmScore'
       && baseNode.data.bgmScoreDetails?.hasPromptDesign === true
+      && baseNode.data.isRunning !== true
+    ) {
+      return true
+    }
+    if (
+      patch.streamKind === 'soundscape'
+      && baseNode.data.kind === 'soundscape'
+      && baseNode.data.soundscapeDetails?.decision
       && baseNode.data.isRunning !== true
     ) {
       return true

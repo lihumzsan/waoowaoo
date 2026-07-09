@@ -130,4 +130,52 @@ describe('workspace structured stream adapters', () => {
       },
     })
   })
+
+  it('routes soundscape plan streams through source and section adapters', () => {
+    const adapters = findStructuredStreamAdapters({
+      taskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+      stepId: 'soundscape_plan',
+    })
+
+    expect(adapters.map((adapter) => adapter.key)).toEqual([
+      'soundscape.sources',
+      'soundscape.sections',
+    ])
+
+    const sourceAdapter = adapters.find((adapter) => adapter.key === 'soundscape.sources')
+    const sectionAdapter = adapters.find((adapter) => adapter.key === 'soundscape.sections')
+
+    const parsedSource = sourceAdapter?.parseItem({
+      sourceId: 'city_rooftop_wind',
+      environmentFingerprint: 'night_city_rooftop_wind',
+      prompt: 'Seamless loop of steady rooftop wind with distant city hum, no music, no voices.',
+      loopDurationSeconds: 30,
+      promptInfluence: 0.55,
+    })
+    const parsedSection = sectionAdapter?.parseItem({
+      sourceId: 'city_rooftop_wind',
+      fromShotId: 'shot_012',
+      toShotId: 'shot_018',
+      perspective: 'exterior_near',
+      intensity: 'medium',
+      transitionIn: 'fade',
+      transitionOut: 'crossfade',
+    })
+
+    expect(parsedSource).toMatchObject({
+      kind: 'soundscapeSource',
+      source: {
+        sourceId: 'city_rooftop_wind',
+        environmentFingerprint: 'night_city_rooftop_wind',
+      },
+    })
+    expect(parsedSection).toMatchObject({
+      kind: 'soundscapeSection',
+      section: {
+        sourceId: 'city_rooftop_wind',
+        fromShotId: 'shot_012',
+        toShotId: 'shot_018',
+      },
+    })
+  })
 })
