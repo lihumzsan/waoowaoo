@@ -40,7 +40,7 @@ describe('regression - enqueue compensation', () => {
         type: TASK_TYPE.MUSIC_GENERATE,
         targetType: 'Project',
         targetId: 'project-regression-enqueue',
-        payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 6 },
+        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 6 },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' })
 

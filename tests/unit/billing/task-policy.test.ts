@@ -102,15 +102,15 @@ describe('billing/task-policy', () => {
   })
 
   it('builds music billing info for built-in Lyria models', () => {
-    const clipInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+    const googleProInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 30,
     }))
-    expect(clipInfo.apiType).toBe('music')
-    expect(clipInfo.model).toBe('google::lyria-3-clip-preview')
-    expect(clipInfo.quantity).toBe(1)
-    expect(clipInfo.unit).toBe('call')
-    expect(clipInfo.maxFrozenCost).toBeGreaterThan(0)
+    expect(googleProInfo.apiType).toBe('music')
+    expect(googleProInfo.model).toBe('google::lyria-3-pro-preview')
+    expect(googleProInfo.quantity).toBe(1)
+    expect(googleProInfo.unit).toBe('call')
+    expect(googleProInfo.maxFrozenCost).toBeGreaterThan(0)
 
     const proInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {
       musicModel: 'google::lyria-3-pro-preview',
@@ -183,11 +183,11 @@ describe('billing/task-policy', () => {
 
   it('uses explicit music model from payload', () => {
     const info = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 30,
     }))
     expect(info.apiType).toBe('music')
-    expect(info.model).toBe('google::lyria-3-clip-preview')
+    expect(info.model).toBe('google::lyria-3-pro-preview')
     expect(info.quantity).toBe(1)
     expect(info.unit).toBe('call')
   })

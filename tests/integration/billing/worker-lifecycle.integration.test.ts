@@ -24,7 +24,7 @@ async function createPreparedMusicTask() {
 
   const taskId = randomUUID()
   const raw = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-    musicModel: 'google::lyria-3-clip-preview',
+    musicModel: 'google::lyria-3-pro-preview',
     durationSeconds: 5,
   })
   if (!raw || !raw.billable) {

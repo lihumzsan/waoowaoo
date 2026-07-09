@@ -25,18 +25,6 @@ export const GOOGLE_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
   {
     modelType: 'music',
     provider: 'google',
-    modelId: 'lyria-3-clip-preview',
-    capabilities: {
-      music: {
-        durationSecondsOptions: [30],
-        vocalModeOptions: ['instrumental', 'vocal'],
-        outputFormatOptions: ['mp3', 'wav'],
-      },
-    },
-  },
-  {
-    modelType: 'music',
-    provider: 'google',
     modelId: 'lyria-3-pro-preview',
     capabilities: {
       music: {
@@ -102,7 +90,6 @@ export const GOOGLE_API_CONFIG_CATALOG_MODELS = [
   { modelId: 'imagen-4.0-generate-001', name: 'Imagen 4', type: 'image', provider: 'google' },
   { modelId: 'imagen-4.0-ultra-generate-001', name: 'Imagen 4 Ultra', type: 'image', provider: 'google' },
   { modelId: 'imagen-4.0-fast-generate-001', name: 'Imagen 4 Fast', type: 'image', provider: 'google' },
-  { modelId: 'lyria-3-clip-preview', name: 'Lyria 3 Clip Preview', type: 'music', provider: 'google' },
   { modelId: 'lyria-3-pro-preview', name: 'Lyria 3 Pro Preview', type: 'music', provider: 'google' },
   { modelId: 'veo-3.1-generate-preview', name: 'Veo 3.1', type: 'video', provider: 'google' },
   { modelId: 'veo-3.1-fast-generate-preview', name: 'Veo 3.1 Fast', type: 'video', provider: 'google' },
@@ -164,7 +151,6 @@ export const GOOGLE_BUILTIN_PRICING_CATALOG_ENTRIES = [
   { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-generate-001', pricing: googleFlatPricing(0.288) },
   { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-ultra-generate-001', pricing: googleFlatPricing(0.432) },
   { apiType: 'image', provider: 'google', modelId: 'imagen-4.0-fast-generate-001', pricing: googleFlatPricing(0.144) },
-  { apiType: 'music', provider: 'google', modelId: 'lyria-3-clip-preview', pricing: googleFlatPricing(0.0096) },
   { apiType: 'music', provider: 'google', modelId: 'lyria-3-pro-preview', pricing: googleFlatPricing(0.0192) },
   {
     apiType: 'video',

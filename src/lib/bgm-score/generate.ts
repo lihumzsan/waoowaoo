@@ -465,7 +465,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     signature = buildBgmTimelineSignature(clips)
     const cueWindows = buildBgmScoreCueWindows(
       clips,
-      resolveMusicScoreMaxCueDurationSeconds(musicModel),
+      resolveMusicScoreMaxCueDurationSeconds(),
     )
     if (cueWindows.length === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
 
@@ -551,7 +551,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
       })
       const generated = await generateMusic(job.data.userId, musicModel, cuePrompt, {
         durationSeconds: resolveMusicScoreRequestDurationSeconds({
-          modelKey: musicModel,
           targetDurationSeconds: cue.durationSeconds,
         }),
         vocalMode: 'instrumental',

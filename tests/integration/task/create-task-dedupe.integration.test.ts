@@ -35,7 +35,7 @@ describe('task service dedupe + orphan recovery', () => {
         targetId: project.id,
         status: TASK_STATUS.QUEUED,
         payload: {
-          musicModel: 'google::lyria-3-clip-preview',
+          musicModel: 'google::lyria-3-pro-preview',
           durationSeconds: 10,
           meta: { locale: 'zh' },
         },
@@ -51,7 +51,7 @@ describe('task service dedupe + orphan recovery', () => {
       targetType: 'Project',
       targetId: project.id,
       payload: {
-        musicModel: 'google::lyria-3-clip-preview',
+        musicModel: 'google::lyria-3-pro-preview',
         durationSeconds: 10,
         meta: { locale: 'zh' },
       },

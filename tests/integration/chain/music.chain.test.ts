@@ -101,7 +101,7 @@ describe('chain contract - music queue behavior', () => {
       targetType: 'Project',
       targetId: 'project-1',
       payload: {
-        musicModel: 'google::lyria-3-clip-preview',
+        musicModel: 'google::lyria-3-pro-preview',
         prompt: 'tense chase cue',
         durationSeconds: 30,
       },
@@ -132,7 +132,7 @@ describe('chain contract - music queue behavior', () => {
       targetType: 'Project',
       targetId: 'project-1',
       payload: {
-        musicModel: 'google::lyria-3-clip-preview',
+        musicModel: 'google::lyria-3-pro-preview',
         prompt: 'tense chase cue',
         durationSeconds: 30,
         vocalMode: 'instrumental',
@@ -150,13 +150,13 @@ describe('chain contract - music queue behavior', () => {
       mediaId: 'media-1',
       audioUrl: '/m/media-1',
       storageKey: 'music/asset.mp3',
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       provider: 'google',
       metadata: { text: 'ok' },
     })
     expect(generateMusicMock).toHaveBeenCalledWith(
       'user-1',
-      'google::lyria-3-clip-preview',
+      'google::lyria-3-pro-preview',
       'tense chase cue',
       {
         durationSeconds: 30,

@@ -68,7 +68,7 @@ describe('music worker', () => {
     })
 
     const result = await handleMusicGenerateTask(buildJob({
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       prompt: 'tense chase cue',
       durationSeconds: 30,
       vocalMode: 'instrumental',
@@ -77,7 +77,7 @@ describe('music worker', () => {
 
     expect(generateMusicMock).toHaveBeenCalledWith(
       'user-1',
-      'google::lyria-3-clip-preview',
+      'google::lyria-3-pro-preview',
       'tense chase cue',
       {
         durationSeconds: 30,
@@ -97,7 +97,7 @@ describe('music worker', () => {
       mediaId: 'media-1',
       audioUrl: '/m/media-public-id',
       storageKey: 'music/asset.mp3',
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       provider: 'google',
       metadata: { text: 'adapter notes' },
     })

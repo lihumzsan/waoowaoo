@@ -29,7 +29,7 @@ describe('billing/service integration', () => {
     await seedBalance(user.id, 10)
 
     const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
     const result = await prepareTaskBilling({
@@ -50,7 +50,7 @@ describe('billing/service integration', () => {
     await seedBalance(user.id, 10)
 
     const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
     const taskId = randomUUID()
@@ -88,7 +88,7 @@ describe('billing/service integration', () => {
     await seedBalance(user.id, 10)
 
     const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
     const taskId = randomUUID()
@@ -112,10 +112,10 @@ describe('billing/service integration', () => {
     }))
 
     expect(settled.status).toBe('settled')
-    expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 1), 8)
+    expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-pro-preview', 1), 8)
 
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
-    expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-clip-preview', 1), 8)
+    expect(balance?.totalSpent).toBeCloseTo(calcMusic('google::lyria-3-pro-preview', 1), 8)
     expect(balance?.frozenAmount).toBeCloseTo(0, 8)
   })
 
@@ -130,7 +130,7 @@ describe('billing/service integration', () => {
       source: 'task',
       taskType: TASK_TYPE.MUSIC_GENERATE,
       apiType: 'music',
-      model: 'google::lyria-3-clip-preview',
+      model: 'google::lyria-3-pro-preview',
       quantity: 0,
       unit: 'call',
       maxFrozenCost: 0,
@@ -159,7 +159,7 @@ describe('billing/service integration', () => {
     await seedBalance(user.id, 10)
 
     const info = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
     const taskId = randomUUID()

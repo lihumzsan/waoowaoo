@@ -173,7 +173,7 @@ export const prismaMock = {
   project: {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       artStyle: 'american-comic',
       visualStylePresetSource: 'system',
       visualStylePresetId: 'american-comic',
@@ -181,7 +181,7 @@ export const prismaMock = {
     })),
   },
   userPreference: {
-    findUnique: vi.fn(async () => ({ musicModel: 'google::lyria-3-clip-preview' })),
+    findUnique: vi.fn(async () => ({ musicModel: 'google::lyria-3-pro-preview' })),
   },
   projectStoryboard: {
     findFirst: vi.fn(async () => ({ id: 'storyboard-1' })),
@@ -407,7 +407,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     body: {
       confirmed: true,
       episodeId: 'episode-1',
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       outputFormat: 'mp3',
     },
     params: { projectId: 'project-1' },
@@ -416,7 +416,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
     expectedPayloadSubset: {
       episodeId: 'episode-1',
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       outputFormat: 'mp3',
     },
   },

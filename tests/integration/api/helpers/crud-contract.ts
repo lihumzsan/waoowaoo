@@ -202,7 +202,7 @@ function buildGenericBody() {
     referenceImageUrl: 'https://example.com/ref.png',
     referenceImageUrls: ['https://example.com/ref.png'],
     lineId: 'line-1',
-    musicModel: 'google::lyria-3-clip-preview',
+    musicModel: 'google::lyria-3-pro-preview',
     videoModel: 'fal::video-model',
     insertAfterPanelId: 'panel-1',
     sourcePanelId: 'panel-2',

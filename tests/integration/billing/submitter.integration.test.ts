@@ -50,7 +50,7 @@ describe('billing/submitter integration', () => {
       type: TASK_TYPE.MUSIC_GENERATE,
       targetType: 'Project',
       targetId: 'project-a',
-      payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 5 },
+      payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 5 },
     })
 
     expect(result.success).toBe(true)
@@ -66,7 +66,7 @@ describe('billing/submitter integration', () => {
     await seedBalance(user.id, 0)
 
     const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-clip-preview',
+      musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 10,
     })
     expect(billingInfo?.billable).toBe(true)
@@ -79,7 +79,7 @@ describe('billing/submitter integration', () => {
         type: TASK_TYPE.MUSIC_GENERATE,
         targetType: 'Project',
         targetId: 'project-b',
-        payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 10 },
+        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 10 },
         billingInfo,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
@@ -163,7 +163,7 @@ describe('billing/submitter integration', () => {
         type: TASK_TYPE.MUSIC_GENERATE,
         targetType: 'Project',
         targetId: 'project-e',
-        payload: { musicModel: 'google::lyria-3-clip-preview', durationSeconds: 6 },
+        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 6 },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' } satisfies Pick<ApiError, 'code'>)
 
