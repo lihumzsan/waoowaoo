@@ -1,13 +1,17 @@
 let prisma
 
 const STRICT = process.argv.includes('--strict')
-const MODEL_FIELDS = [
+const PROJECT_MODEL_FIELDS = [
   'analysisModel',
   'characterModel',
   'locationModel',
   'storyboardModel',
   'editModel',
   'videoModel',
+]
+const USER_MODEL_FIELDS = [
+  'assistantModel',
+  ...PROJECT_MODEL_FIELDS,
 ]
 const MAX_SAMPLES = 200
 const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
@@ -311,6 +315,7 @@ async function main() {
     select: {
       id: true,
       customModels: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
@@ -322,7 +327,7 @@ async function main() {
 
   for (const pref of userPrefs) {
     summary.userPreference.total += 1
-    for (const field of MODEL_FIELDS) {
+    for (const field of USER_MODEL_FIELDS) {
       const rawValue = pref[field]
       if (!rawValue) continue
       if (!parseModelKeyStrict(rawValue)) {
@@ -416,7 +421,7 @@ async function main() {
 
   for (const project of projects) {
     summary.project.total += 1
-    for (const field of MODEL_FIELDS) {
+    for (const field of PROJECT_MODEL_FIELDS) {
       const rawValue = project[field]
       if (!rawValue) continue
       if (!parseModelKeyStrict(rawValue)) {

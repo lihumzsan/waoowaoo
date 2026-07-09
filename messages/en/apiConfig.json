@@ -41,6 +41,7 @@
   "musicDefault": "Music Model",
   "selectDefault": "Select",
   "defaultModelDesc": {
+    "assistantModel": "Handles project assistant chat, tool planning, and collaborative responses.",
     "analysisModel": "Handles script analysis, storyboard construction and full-pipeline text reasoning.",
     "videoModel": "Synthesizes images and instructions into final video clips.",
     "characterModel": "Generate character portraits and appearance references from script descriptions",
@@ -50,13 +51,14 @@
     "musicModel": "Generate background music and scoring assets for project edits"
   },
   "defaultModelSection": {
-    "coreFoundation": "Text Analysis & Video",
+    "coreFoundation": "Assistant, Text Analysis & Video",
     "creativePipeline": "Global Image Model Config",
     "unifiedOverride": "Batch Image Model Config",
     "unifiedOverrideHint": "Set the model responsible for image generation/editing across the entire system",
     "unifiedOverridePlaceholder": "Apply to all scenes...",
     "followUnified": "Follow global config",
     "extensions": "Extensions",
+    "coreAssistantTitle": "Assistant Chat Model",
     "coreTextTitle": "Text Analysis Model",
     "coreVideoTitle": "Video Generation Model",
     "pipelineCharacter": "Character Gen",

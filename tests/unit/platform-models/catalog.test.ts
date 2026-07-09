@@ -2,10 +2,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { getPlatformDefaultModels, getPlatformModels } from '@/lib/platform-models/catalog'
 
 const ORIGINAL_ENV = {
+  PLATFORM_DEFAULT_ASSISTANT_MODEL: process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL,
   PLATFORM_DEFAULT_ANALYSIS_MODEL: process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL,
 }
 
 function restoreEnv() {
+  if (ORIGINAL_ENV.PLATFORM_DEFAULT_ASSISTANT_MODEL === undefined) {
+    delete process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL
+  } else {
+    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = ORIGINAL_ENV.PLATFORM_DEFAULT_ASSISTANT_MODEL
+  }
   if (ORIGINAL_ENV.PLATFORM_DEFAULT_ANALYSIS_MODEL === undefined) {
     delete process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL
   } else {
@@ -31,6 +37,7 @@ describe('platform model catalog', () => {
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0-fast')
 
     expect(getPlatformDefaultModels()).toEqual({
+      assistantModel: 'openrouter::openai/gpt-5.5',
       analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
       characterModel: 'fal::gpt-image-2',
       locationModel: 'fal::gpt-image-2',
@@ -42,7 +49,7 @@ describe('platform model catalog', () => {
   })
 
   it('fails explicitly when a platform default model override is not in the catalog', () => {
-    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = 'google::missing-model'
+    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = 'google::missing-model'
 
     expect(() => getPlatformDefaultModels()).toThrow('PLATFORM_DEFAULT_MODEL_NOT_FOUND')
   })

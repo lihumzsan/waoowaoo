@@ -13,6 +13,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 import {
   getProjectModelConfig,
+  getUserModelConfig,
   getUserWorkflowConcurrencyConfig,
 } from '@/lib/config-service'
 
@@ -101,6 +102,16 @@ describe('cloud platform runtime project config', () => {
         },
       },
       capabilityOverrides: {},
+    })
+    expect(prismaMock.userPreference.findUnique.mock.calls).toEqual([])
+  })
+
+  it('uses platform-owned assistant and analysis defaults for user model config', async () => {
+    const config = await getUserModelConfig('user-1')
+
+    expect(config).toMatchObject({
+      assistantModel: 'openrouter::openai/gpt-5.5',
+      analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
     })
     expect(prismaMock.userPreference.findUnique.mock.calls).toEqual([])
   })

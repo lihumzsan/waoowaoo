@@ -8,6 +8,7 @@ const root = process.cwd()
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
 const scanRoots = ['src/app', 'src/lib']
 const modelFields = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',

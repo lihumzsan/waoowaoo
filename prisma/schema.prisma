@@ -894,6 +894,7 @@ model User {
 model UserPreference {
   id                  String   @id @default(uuid())
   userId              String   @unique
+  assistantModel      String? // 用户配置的 Assistant 对话模型（nullable，必须配置后才能使用）
   analysisModel       String? // 用户配置的分析模型（nullable，必须配置后才能使用）
   characterModel      String? // 用户配置的角色图片模型
   locationModel       String? // 用户配置的场景图片模型

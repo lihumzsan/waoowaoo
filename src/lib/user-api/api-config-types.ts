@@ -1,5 +1,6 @@
 import type { ModelCapabilities, UnifiedModelType } from '@/lib/ai-registry/types'
 export type DefaultModelField =
+  | 'assistantModel'
   | 'analysisModel'
   | 'characterModel'
   | 'locationModel'
@@ -43,6 +44,7 @@ export interface PricingDisplayItem {
 export type PricingDisplayMap = Record<string, PricingDisplayItem>
 
 export interface DefaultModelsPayload {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
@@ -67,6 +69,7 @@ export interface ApiConfigPutBody {
 }
 
 export const DEFAULT_MODEL_FIELDS: DefaultModelField[] = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',

@@ -70,6 +70,7 @@ export interface ApiConfig {
     providers: Provider[]
     catalog?: ApiConfigServerCatalog
     defaultModels?: {
+        assistantModel?: string
         analysisModel?: string
         characterModel?: string
         locationModel?: string

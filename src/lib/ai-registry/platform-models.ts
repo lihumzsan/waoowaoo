@@ -27,6 +27,7 @@ export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
 ]
 
 export const PLATFORM_DEFAULT_MODEL_KEYS: Record<PlatformDefaultModelField, string> = {
+  assistantModel: OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
   analysisModel: OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
   characterModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,
   locationModel: FAL_PLATFORM_DEFAULT_IMAGE_MODEL_KEY,

@@ -52,6 +52,7 @@ export async function getUserApiConfig(userId: string) {
     select: {
       customModels: true,
       customProviders: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
@@ -79,6 +80,7 @@ export async function getUserApiConfig(userId: string) {
   const pricedModels = models.map((model) => withDisplayPricing(model, pricingDisplay))
 
   const rawDefaults: DefaultModelsPayload = {
+    assistantModel: pref?.assistantModel || '',
     analysisModel: pref?.analysisModel || '',
     characterModel: pref?.characterModel || '',
     locationModel: pref?.locationModel || '',
@@ -147,6 +149,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     select: {
       customProviders: true,
       customModels: true,
+      assistantModel: true,
       analysisModel: true,
       characterModel: true,
       locationModel: true,
@@ -207,6 +210,9 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     if (billingMode !== 'OFF') {
       validateDefaultModelPricing(normalizedDefaults)
     }
+    if (normalizedDefaults.assistantModel !== undefined) {
+      updateData.assistantModel = normalizedDefaults.assistantModel || null
+    }
     if (normalizedDefaults.analysisModel !== undefined) {
       updateData.analysisModel = normalizedDefaults.analysisModel || null
     }
@@ -235,6 +241,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
       ? normalizedModels
       : sanitizeModelsForBilling(normalizedModels)
     const existingDefaults: DefaultModelsPayload = {
+      assistantModel: existingPref?.assistantModel || '',
       analysisModel: existingPref?.analysisModel || '',
       characterModel: existingPref?.characterModel || '',
       locationModel: existingPref?.locationModel || '',

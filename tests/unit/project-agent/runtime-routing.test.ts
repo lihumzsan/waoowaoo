@@ -286,7 +286,7 @@ vi.mock('@/lib/config-service', () => ({
 }))
 
 vi.mock('@/lib/project-agent/model', () => ({
-  resolveProjectAgentAssistantModelKey: vi.fn(() => 'openrouter::openai/gpt-5.5'),
+  resolveProjectAgentAssistantModelKey: vi.fn(async () => 'openrouter::openai/gpt-5.5'),
   resolveProjectAgentLanguageModel: vi.fn(async () => ({ languageModel: {} as never })),
 }))
 

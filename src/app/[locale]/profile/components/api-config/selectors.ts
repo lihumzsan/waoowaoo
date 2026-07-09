@@ -15,6 +15,7 @@ export interface WorkflowConcurrency {
 }
 
 export interface DefaultModels {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string
@@ -30,6 +31,7 @@ export interface CapabilityFieldDefaults {
 }
 
 export const DEFAULT_MODEL_FIELDS = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',

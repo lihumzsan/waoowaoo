@@ -20,6 +20,7 @@ function assertNoLegacyArtStyle(body: Record<string, unknown>) {
 }
 
 const ALLOWED_FIELDS: ReadonlyArray<string> = [
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',
@@ -31,6 +32,7 @@ const ALLOWED_FIELDS: ReadonlyArray<string> = [
 ]
 
 const MODEL_FIELDS = new Set([
+  'assistantModel',
   'analysisModel',
   'characterModel',
   'locationModel',

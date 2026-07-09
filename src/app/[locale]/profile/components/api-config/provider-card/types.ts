@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { CustomModel, Provider } from '../types'
 
 export interface ProviderCardDefaultModels {
+  assistantModel?: string
   analysisModel?: string
   characterModel?: string
   locationModel?: string

@@ -673,7 +673,7 @@ export async function createProjectAgentChatResponse(input: {
     throw new Error('PROJECT_AGENT_EMPTY_MESSAGES')
   }
 
-  const assistantModelKey = resolveProjectAgentAssistantModelKey()
+  const assistantModelKey = await resolveProjectAgentAssistantModelKey(input.userId)
 
   const control = input.control
   const contextBase = normalizeProjectAgentContext(input.context)

@@ -11,7 +11,7 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-import { getProjectModelConfig } from '@/lib/config-service'
+import { getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 
 const ENV_KEYS = [
   'DEPLOYMENT_EDITION',
@@ -84,6 +84,27 @@ describe('self-hosted project model config', () => {
       sequenceVideoModel: 'fal::user-video',
       musicModel: 'fal::user-music',
       videoRatio: '16:9',
+    })
+  })
+
+  it('reads the self-hosted assistant model from user preferences without using analysisModel', async () => {
+    prismaMock.userPreference.findUnique.mockResolvedValue({
+      assistantModel: 'openrouter::user-assistant',
+      analysisModel: 'openrouter::user-analysis',
+      characterModel: 'fal::user-character',
+      locationModel: 'fal::user-location',
+      storyboardModel: 'fal::user-storyboard',
+      editModel: 'fal::user-edit',
+      videoModel: 'fal::user-video',
+      musicModel: 'fal::user-music',
+      capabilityDefaults: null,
+    })
+
+    const config = await getUserModelConfig('user-1')
+
+    expect(config).toMatchObject({
+      assistantModel: 'openrouter::user-assistant',
+      analysisModel: 'openrouter::user-analysis',
     })
   })
 })

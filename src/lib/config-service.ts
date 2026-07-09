@@ -121,6 +121,7 @@ export interface ProjectModelConfig {
 }
 
 export interface UserModelConfig {
+  assistantModel: string | null
   analysisModel: string | null
   characterModel: string | null
   locationModel: string | null
@@ -220,6 +221,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
     const platformDefaults = getPlatformDefaultModels()
 
     return {
+      assistantModel: platformDefaults.assistantModel,
       analysisModel: platformDefaults.analysisModel,
       characterModel: platformDefaults.characterModel,
       locationModel: platformDefaults.locationModel,
@@ -236,6 +238,7 @@ export async function getUserModelConfig(userId: string): Promise<UserModelConfi
   })
 
   return {
+    assistantModel: extractModelKey(userPref?.assistantModel) || null,
     analysisModel: extractModelKey(userPref?.analysisModel) || null,
     characterModel: extractModelKey(userPref?.characterModel) || null,
     locationModel: extractModelKey(userPref?.locationModel) || null,
@@ -307,6 +310,7 @@ export function checkRequiredModels(
 
   const fieldNames: Record<string, string> = {
     analysisModel: 'AI分析模型',
+    assistantModel: 'Assistant 对话模型',
     characterModel: '角色图像模型',
     locationModel: '场景图像模型',
     storyboardModel: '分镜图像模型',

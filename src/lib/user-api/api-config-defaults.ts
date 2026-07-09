@@ -13,6 +13,7 @@ import { getProviderKey, isRecord, readTrimmedString } from './api-config-shared
 import { hasBuiltinPricingForModel } from './api-config-model-normalization'
 
 const DEFAULT_FIELD_TO_PRICING_API_TYPE: Readonly<Record<DefaultModelField, 'text' | 'image' | 'video' | 'music'>> = {
+  assistantModel: 'text',
   analysisModel: 'text',
   characterModel: 'image',
   locationModel: 'image',
@@ -30,6 +31,7 @@ const BILLABLE_MODEL_TYPE_TO_PRICING_API_TYPE: Readonly<Record<StoredModel['type
 }
 
 const DEFAULT_FIELD_TO_MODEL_TYPE: Readonly<Record<DefaultModelField, StoredModel['type']>> = {
+  assistantModel: 'llm',
   analysisModel: 'llm',
   characterModel: 'image',
   locationModel: 'image',

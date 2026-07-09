@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 export type UserPreferenceSnapshot = {
   customProviders: string | null
   customModels: string | null
+  assistantModel?: string | null
   analysisModel?: string | null
   characterModel?: string | null
   locationModel?: string | null
