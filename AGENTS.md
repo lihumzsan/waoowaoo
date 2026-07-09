@@ -82,7 +82,7 @@
 - Husky `pre-commit` 不运行测试，只运行 staged 敏感信息扫描；提交前需要的测试由执行者按改动风险主动运行，并在最终回复或 commit 正文中简要记录。
 - Husky `pre-push` 只运行仓库敏感信息扫描，防止密钥、私有 env、证书、公司敏感信息进入远端；完整验证由 GitHub CI 自动运行。
 - `npm run verify:push` 保留为手动完整验证命令；需要本地全量验证时可主动运行。该命令内部已使用 `npm run build:verify`，避免破坏正在运行的 dev server。
-- push 仍然必须获得用户单独明确授权；本地 commit 授权不等于 push 授权。
+- 自动 commit 成功后必须立即 push 当前分支；不再单独追问 push 授权。若用户明确要求“先别 push / 暂不 push / 只本地 commit / 只改文件”，必须尊重该要求并说明未推送状态。
 - 用户要求的临时功能测试页面修改时不需要提交
 
 ## 不掩盖任何问题
