@@ -32,6 +32,9 @@ const assistantMessages = {
       billingQuoteWithoutCredits: '将提交 {count} 个媒体生成任务',
       confirmContinue: '继续执行',
       cancelAction: '取消操作',
+      choiceCustomOptionLabel: '其他{label}',
+      choiceCustomOptionPlaceholder: '其他{label}',
+      choiceCustomOptionSubmit: '选择其他{label}',
     },
   },
 } as const
@@ -242,5 +245,6 @@ describe('workspace assistant renderers', () => {
 
     expect(html).toContain('故事整体呈现怎样的视觉与情感基调？')
     expect(html).toContain('text-sm font-semibold leading-6 text-[var(--glass-text-primary)]')
+    expect(html).toContain('placeholder="其他故事整体呈现怎样的视觉与情感基调？"')
   })
 })

@@ -1,6 +1,34 @@
-import type { ProjectAgentChoiceCardGroup, ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import type {
+  ProjectAgentChoiceCardGroup,
+  ProjectAgentChoiceCardOption,
+  ProjectAgentChoiceCardPartData,
+} from '@/lib/project-agent/types'
 
 export type ChoiceCardSelections = Record<string, string>
+export type ChoiceCardCustomOptions = Record<string, ProjectAgentChoiceCardOption>
+
+const CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX = 'custom_choice:'
+
+export function buildChoiceCardCustomOptionValue(groupKey: string): string {
+  return `${CHOICE_CARD_CUSTOM_OPTION_VALUE_PREFIX}${groupKey}`
+}
+
+export function mergeChoiceCardCustomOptions(
+  groups: readonly ProjectAgentChoiceCardGroup[],
+  customOptions: ChoiceCardCustomOptions,
+): ProjectAgentChoiceCardGroup[] {
+  return groups.map((group) => {
+    const customOption = customOptions[group.key]
+    if (!customOption) return group
+    const options = group.options.some((option) => option.value === customOption.value)
+      ? group.options
+      : [...group.options, customOption]
+    return {
+      ...group,
+      options,
+    }
+  })
+}
 
 export function isChoiceCardSubmitReady(
   groups: readonly ProjectAgentChoiceCardGroup[],

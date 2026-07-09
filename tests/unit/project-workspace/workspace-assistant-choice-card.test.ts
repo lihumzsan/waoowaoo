@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
 import type { ProjectAgentChoiceCardGroup } from '@/lib/project-agent/types'
 import {
+  buildChoiceCardCustomOptionValue,
   isChoiceCardSubmitReady,
+  mergeChoiceCardCustomOptions,
   resolveChoiceCardSelectionLabels,
   shouldShowChoiceCardManualSubmit,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
@@ -45,6 +47,30 @@ describe('workspace assistant choice card actions', () => {
       aspectRatio: '16:9',
     })).toEqual({
       stylePreviewIdLabel: 'A · 硬核写实科幻风格',
+      aspectRatioLabel: '16:9',
+    })
+  })
+
+  it('resolves per-question custom option labels as normal choice labels', () => {
+    const customValue = buildChoiceCardCustomOptionValue('stylePreviewId')
+    const mergedGroups = mergeChoiceCardCustomOptions(groups, {
+      stylePreviewId: {
+        value: customValue,
+        label: '复古录像带质感',
+        description: null,
+      },
+    })
+
+    expect(mergedGroups[0]?.options.map((option) => option.value)).toEqual([
+      'style-a',
+      'style-b',
+      customValue,
+    ])
+    expect(resolveChoiceCardSelectionLabels(mergedGroups, {
+      stylePreviewId: customValue,
+      aspectRatio: '16:9',
+    })).toEqual({
+      stylePreviewIdLabel: '复古录像带质感',
       aspectRatioLabel: '16:9',
     })
   })

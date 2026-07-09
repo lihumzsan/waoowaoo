@@ -37,9 +37,12 @@ import type { OperationPlanView } from '@/lib/operations/planning'
 import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
+  buildChoiceCardCustomOptionValue,
   isChoiceCardSubmitReady,
+  mergeChoiceCardCustomOptions,
   resolveChoiceCardSelectionLabels,
   shouldShowChoiceCardManualSubmit,
+  type ChoiceCardCustomOptions,
   type ChoiceCardSelections,
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
@@ -387,6 +390,7 @@ export function AssistantChoiceCardView(props: {
   const t = useTranslations('assistantAgent')
   const card = props.data
   const [selections, setSelections] = useState<ChoiceCardSelections>({})
+  const [customOptions, setCustomOptions] = useState<ChoiceCardCustomOptions>({})
   const [activeGroupIndex, setActiveGroupIndex] = useState(0)
   const [replyText, setReplyText] = useState('')
   const [replyFocused, setReplyFocused] = useState(false)
@@ -396,9 +400,14 @@ export function AssistantChoiceCardView(props: {
   const isConfirmOrReply = card.variant === 'confirm_or_reply'
   const shouldAutoSubmitOnReady = card.autoSubmitOnReady === true
   const isAutoSelectionCard = shouldAutoSubmitOnReady || card.choiceType === 'script_intake'
+  const usesPerQuestionReply = card.choiceType === 'script_intake'
   const showManualSubmit = shouldShowChoiceCardManualSubmit(card)
-  const ready = isChoiceCardSubmitReady(card.groups, selections)
-  const activeGroup = card.groups[activeGroupIndex] ?? card.groups[0] ?? null
+  const choiceGroups = useMemo(
+    () => mergeChoiceCardCustomOptions(card.groups, customOptions),
+    [card.groups, customOptions],
+  )
+  const ready = isChoiceCardSubmitReady(choiceGroups, selections)
+  const activeGroup = choiceGroups[activeGroupIndex] ?? choiceGroups[0] ?? null
   const progressLabel = card.groups.length > 1 ? `${String(activeGroupIndex + 1)}/${String(card.groups.length)}` : null
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
@@ -439,12 +448,15 @@ export function AssistantChoiceCardView(props: {
     }
   }
 
-  const handleSubmit = async (submitSelections: ChoiceCardSelections = selections) => {
-    if (!isChoiceCardSubmitReady(card.groups, submitSelections) || submitting) return
+  const handleSubmit = async (
+    submitSelections: ChoiceCardSelections = selections,
+    submitGroups = choiceGroups,
+  ) => {
+    if (!isChoiceCardSubmitReady(submitGroups, submitSelections) || submitting) return
     setSubmitting(true)
     setError(null)
     try {
-      const labels = resolveChoiceCardSelectionLabels(card.groups, submitSelections)
+      const labels = resolveChoiceCardSelectionLabels(submitGroups, submitSelections)
       if (card.submit.kind === 'submit_tool_output') {
         await props.onSubmitChoiceResponse({
           runId: readChoiceRunId(),
@@ -497,6 +509,36 @@ export function AssistantChoiceCardView(props: {
     }
   }
 
+  const handlePerQuestionReplySubmit = async () => {
+    const group = activeGroup
+    const trimmedReply = replyText.trim()
+    if (!group || !trimmedReply || submitting) return
+    const customOption = {
+      value: buildChoiceCardCustomOptionValue(group.key),
+      label: trimmedReply,
+      description: null,
+    }
+    const nextCustomOptions = {
+      ...customOptions,
+      [group.key]: customOption,
+    }
+    const nextSelections = {
+      ...selections,
+      [group.key]: customOption.value,
+    }
+    const nextGroups = mergeChoiceCardCustomOptions(card.groups, nextCustomOptions)
+    setCustomOptions(nextCustomOptions)
+    setSelections(nextSelections)
+    setReplyText('')
+    setError(null)
+    if (activeGroupIndex < card.groups.length - 1) {
+      setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
+    }
+    if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(nextGroups, nextSelections)) {
+      await handleSubmit(nextSelections, nextGroups)
+    }
+  }
+
   const renderActiveGroup = () => {
     if (!activeGroup) return null
     const optionGridClass = isAspectRatioGroup
@@ -524,11 +566,12 @@ export function AssistantChoiceCardView(props: {
                     [activeGroup.key]: option.value,
                   }
                   setSelections(nextSelections)
+                  setReplyText('')
                   setError(null)
                   if (activeGroupIndex < card.groups.length - 1) {
                     setActiveGroupIndex((current) => Math.min(current + 1, card.groups.length - 1))
                   }
-                  if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(card.groups, nextSelections)) {
+                  if (shouldAutoSubmitOnReady && isChoiceCardSubmitReady(choiceGroups, nextSelections)) {
                     void handleSubmit(nextSelections)
                   }
                 }}
@@ -565,36 +608,60 @@ export function AssistantChoiceCardView(props: {
     )
   }
 
-  const renderReplyInput = () => (
-    <div className="relative">
-      <textarea
-        value={replyText}
-        rows={1}
-        aria-label={card.replyLabel || t('cards.choiceReplyLabel')}
-        onFocus={() => setReplyFocused(true)}
-        onBlur={() => setReplyFocused(false)}
-        onChange={(event) => {
-          setReplyText(event.target.value)
-          setError(null)
-        }}
-        onKeyDown={(event) => {
-          submitFromEnterKey(event, () => { void handleReplySubmit() })
-        }}
-        placeholder={replyFocused ? '' : card.replyPlaceholder || t('cards.choiceReplyPlaceholder')}
-        className="min-h-11 max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2.5 pr-12 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={submitting}
-      />
-      <button
-        type="button"
-        aria-label={card.replySubmitLabel || t('cards.choiceReplySubmit')}
-        className="absolute bottom-2 right-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
-        onClick={() => { void handleReplySubmit() }}
-        disabled={submitting || !replyText.trim()}
-      >
-        <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-    </div>
-  )
+  const renderReplyInput = () => {
+    const perQuestionLabel = usesPerQuestionReply && activeGroup ? activeGroup.label : null
+    const replyAriaLabel = perQuestionLabel
+      ? t('cards.choiceCustomOptionLabel', { label: perQuestionLabel })
+      : card.replyLabel || t('cards.choiceReplyLabel')
+    const replyPlaceholder = perQuestionLabel
+      ? t('cards.choiceCustomOptionPlaceholder', { label: perQuestionLabel })
+      : card.replyPlaceholder || t('cards.choiceReplyPlaceholder')
+    const replySubmitLabel = perQuestionLabel
+      ? t('cards.choiceCustomOptionSubmit', { label: perQuestionLabel })
+      : card.replySubmitLabel || t('cards.choiceReplySubmit')
+    return (
+      <div className="relative">
+        <textarea
+          value={replyText}
+          rows={1}
+          aria-label={replyAriaLabel}
+          onFocus={() => setReplyFocused(true)}
+          onBlur={() => setReplyFocused(false)}
+          onChange={(event) => {
+            setReplyText(event.target.value)
+            setError(null)
+          }}
+          onKeyDown={(event) => {
+            submitFromEnterKey(event, () => {
+              if (usesPerQuestionReply) {
+                void handlePerQuestionReplySubmit()
+                return
+              }
+              void handleReplySubmit()
+            })
+          }}
+          placeholder={replyFocused ? '' : replyPlaceholder}
+          className="min-h-11 max-h-28 w-full resize-none overflow-y-auto rounded-xl border border-[var(--glass-stroke-base)] bg-white/85 px-3 py-2.5 pr-12 text-xs leading-5 text-[var(--glass-text-primary)] outline-none transition-colors [field-sizing:content] placeholder:text-[var(--glass-text-tertiary)] hover:bg-neutral-50 focus:border-neutral-400 focus:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={submitting}
+        />
+        <button
+          type="button"
+          aria-label={replySubmitLabel}
+          className="absolute bottom-2 right-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
+          onClick={() => {
+            if (usesPerQuestionReply) {
+              void handlePerQuestionReplySubmit()
+              return
+            }
+            void handleReplySubmit()
+          }}
+          disabled={submitting || !replyText.trim()}
+        >
+          <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
@@ -606,6 +673,7 @@ export function AssistantChoiceCardView(props: {
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--glass-stroke-base)] bg-white text-[var(--glass-text-secondary)] transition-colors hover:bg-neutral-100 hover:text-[var(--glass-text-primary)] disabled:opacity-60"
             onClick={() => {
               setActiveGroupIndex((current) => Math.max(0, current - 1))
+              setReplyText('')
               setError(null)
             }}
             disabled={submitting}
