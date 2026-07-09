@@ -112,7 +112,7 @@
     "lint:all": "npm run lint -- .",
     "security:secrets:staged": "node scripts/security/secret-scan.mjs --staged",
     "security:secrets:repo": "node scripts/security/secret-scan.mjs --repo",
-    "verify:commit": "echo \"verify:commit skipped; full verification runs on pre-push via npm run verify:push\"",
+    "verify:commit": "echo \"verify:commit skipped; full verification runs in GitHub CI. Run npm run verify:push manually when needed.\"",
     "test:services:prepare": "tsx scripts/test-services.ts prepare",
     "test:services:start": "tsx scripts/test-services.ts start",
     "test:services:stop": "tsx scripts/test-services.ts stop",

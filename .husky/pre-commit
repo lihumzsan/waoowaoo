@@ -3,4 +3,4 @@ set -e
 
 npm run security:secrets:staged
 
-echo "pre-commit: skipped. Full verification runs on pre-push via npm run verify:push."
+echo "pre-commit: full verification runs in GitHub CI; run npm run verify:push manually when needed."

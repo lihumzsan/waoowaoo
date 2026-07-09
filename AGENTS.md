@@ -79,8 +79,9 @@
 - commit 必须只包含本次任务相关文件，禁止混入用户已有改动、无关删除、格式化噪音或临时调试文件。
 - commit message 必须包含清晰标题和简洁正文。正文只需说明：变更摘要、关键验证结果、必要的风险或后续任务；不需要逐文件写详细流水账。
 - 提交前必须通过 `git status` 和 `git diff --cached` 核对提交范围；发现无关 staged 文件时必须先排除，不得直接提交。
-- Husky `pre-commit` 不运行测试；提交前需要的测试由执行者按改动风险主动运行，并在最终回复或 commit 正文中简要记录。
-- Husky `pre-push` 会在执行 `git push` 时自动运行完整 `npm run verify:push`，不得跳过；不要为了 push 合规在 push 前手动单独运行同一条命令，避免重复验证。`verify:push` 内部已使用 `npm run build:verify`，避免破坏正在运行的 dev server。
+- Husky `pre-commit` 不运行测试，只运行 staged 敏感信息扫描；提交前需要的测试由执行者按改动风险主动运行，并在最终回复或 commit 正文中简要记录。
+- Husky `pre-push` 只运行仓库敏感信息扫描，防止密钥、私有 env、证书、公司敏感信息进入远端；完整验证由 GitHub CI 自动运行。
+- `npm run verify:push` 保留为手动完整验证命令；需要本地全量验证时可主动运行。该命令内部已使用 `npm run build:verify`，避免破坏正在运行的 dev server。
 - push 仍然必须获得用户单独明确授权；本地 commit 授权不等于 push 授权。
 - 用户要求的临时功能测试页面修改时不需要提交
 
