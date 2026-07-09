@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
@@ -14,7 +14,8 @@ import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
 import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import { getWorkspaceCanvasNodePresentationProfile } from '../node-presentation-profiles'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
-import { FieldGlyph, glyphForField } from './field-glyphs'
+import { FieldGlyph } from './field-glyphs'
+import { ShotGrid, shotDetailIconGrid, type ShotField, type ShotGridCard } from './shot-grid'
 import { ProductionPlanningView } from './ProductionPlanningView'
 import { hasProductionPlanningDetails } from './production-planning-details'
 import { SourceScriptStructureView } from './SourceScriptStructureView'
@@ -30,7 +31,6 @@ import type {
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeAction,
   WorkspaceCanvasShotDetails,
-  WorkspaceCanvasStreamPresentation,
   WorkspaceCanvasTextLine,
 } from '../node-canvas-types'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
@@ -1308,29 +1308,6 @@ function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<Worksp
   )
 }
 
-interface ShotGridCard {
-  readonly key: string
-  readonly badge: ReactNode
-  readonly title: string
-  readonly subtitle?: string
-  readonly meta?: string
-  readonly characterCount: number
-  readonly detailTitle?: string
-  readonly detailMeta?: string
-  readonly detail: ReactNode
-}
-
-const SHOT_GRID_COLUMNS = 3
-
-function chunkShotCards(cards: readonly ShotGridCard[], size: number): ShotGridCard[][] {
-  const rows: ShotGridCard[][] = []
-  for (let index = 0; index < cards.length; index += size) {
-    rows.push(cards.slice(index, index + size))
-  }
-  return rows
-}
-
-type ShotField = { readonly label: string; readonly value: string | null | undefined }
 type EditScriptShotCardSource = NonNullable<WorkspaceCanvasFlowNode['data']['editScriptDetails']>['shots'][number]
 type EditPipelineStepCardSource = NonNullable<WorkspaceCanvasFlowNode['data']['editPipelineStepDetails']>['items'][number]
 
@@ -1380,115 +1357,6 @@ function executionPlanObjectNames(item: EditPipelineStepCardSource): readonly st
     const trimmed = chip.trim()
     return trimmed.length > 0 && !trimmed.includes('/') && !/^\d+$/.test(trimmed)
   }))
-}
-
-// 图标字段卡：图标 + 标签 + 值（可读性强的三级排版）
-function shotIconField(field: ShotField, options?: { readonly allowWideFields?: boolean }) {
-  if (!hasText(field.value)) return null
-  const span = options?.allowWideFields !== false && (field.value ?? '').length > 40
-  return (
-    <div
-      key={field.label}
-      data-stream-field="true"
-      className={`rounded-[12px] border border-slate-200 bg-white p-2.5 ${span ? 'sm:col-span-2' : ''}`}
-    >
-      <p className={`${SELECTABLE_TEXT_CLASS} mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>
-        <FieldGlyph name={glyphForField(field.label)} className="h-3 w-3" />{field.label}
-      </p>
-      <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{field.value}</p>
-    </div>
-  )
-}
-
-// 三级：图标字段网格（摄影指导）
-function shotDetailIconGrid(fields: readonly ShotField[], options?: { readonly fixedColumns?: boolean; readonly allowWideFields?: boolean }) {
-  const cells = fields.map((field) => shotIconField(field, { allowWideFields: options?.allowWideFields })).filter(Boolean)
-  if (cells.length === 0) return null
-  return <div className={`grid gap-2 ${options?.fixedColumns === true ? 'grid-cols-2' : 'sm:grid-cols-2'}`}>{cells}</div>
-}
-
-// 网格卡片 + 整行展开：点击任意镜头卡片，在其所在整行下方就地插入满宽详情，网格始终对齐
-function ShotGrid({
-  cards,
-  accent,
-  streamPresentation,
-}: {
-  readonly cards: readonly ShotGridCard[]
-  readonly accent: 'slate' | 'cyan'
-  readonly streamPresentation?: WorkspaceCanvasStreamPresentation
-}) {
-  const [pinnedKey, setPinnedKey] = useState<string | null>(null)
-  const streamActiveKey = streamPresentation?.activeItemKey ?? null
-  const activeKey = pinnedKey ?? streamActiveKey
-  const displayedStreamKeys = useMemo(
-    () => new Set(streamPresentation?.displayedItemKeys ?? []),
-    [streamPresentation?.displayedItemKeys],
-  )
-  useEffect(() => {
-    if (!pinnedKey) return
-    if (cards.some((card) => card.key === pinnedKey)) return
-    setPinnedKey(null)
-  }, [cards, pinnedKey])
-  const badgeClass = accent === 'cyan' ? 'bg-cyan-600' : 'bg-slate-900'
-  const activeRingClass = accent === 'cyan'
-    ? 'border-cyan-500 ring-1 ring-cyan-500'
-    : 'border-slate-900 ring-1 ring-slate-900'
-  return (
-    <div className="space-y-2.5">
-      {chunkShotCards(cards, SHOT_GRID_COLUMNS).map((row, rowIndex) => {
-        const activeCard = row.find((card) => card.key === activeKey) ?? null
-        return (
-          <div key={rowIndex} className="space-y-2.5">
-            <div className="grid grid-cols-3 gap-2.5">
-              {row.map((card) => {
-                const isActive = activeKey === card.key
-                const isStreamDisplayed = streamPresentation?.isStreaming === true && displayedStreamKeys.has(card.key)
-                return (
-                  <button
-                    key={card.key}
-                    type="button"
-                    className={`nodrag flex flex-col rounded-[14px] border bg-white p-3 text-left transition ${isActive ? activeRingClass : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'} ${isStreamDisplayed ? 'workspace-node-stream-soft-enter' : ''}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setPinnedKey((current) => current === card.key ? null : card.key)
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{card.badge}</span>
-                      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--glass-text-tertiary)]">
-                        <AppIcon name="usersRound" className="h-3 w-3" />
-                        {card.characterCount}
-                        <AppIcon name={isActive ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5" />
-                      </span>
-                    </div>
-                    <p className={`${SELECTABLE_TEXT_CLASS} mt-2 truncate text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{card.title}</p>
-                    {card.subtitle ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 line-clamp-2 text-[11px] leading-4 text-[var(--glass-text-secondary)]`}>{card.subtitle}</p> : null}
-                    {card.meta ? <p className={`${SELECTABLE_TEXT_CLASS} mt-1 truncate text-[10px] leading-4 text-[var(--glass-text-tertiary)]`}>{card.meta}</p> : null}
-                  </button>
-                )
-              })}
-            </div>
-            <WorkspaceCanvasMotionPresence
-              visible={Boolean(activeCard)}
-              motionKey={activeCard?.key ?? 'none'}
-              className={`space-y-2 rounded-[14px] border border-slate-200 bg-slate-50 p-4 ${streamPresentation?.isStreaming === true ? 'workspace-node-stream-soft-detail' : ''}`}
-            >
-              {activeCard ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ${badgeClass}`}>{activeCard.badge}</span>
-                    <span className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold text-[var(--glass-text-primary)]`}>{activeCard.detailTitle ?? activeCard.title}</span>
-                    {activeCard.detailMeta ?? activeCard.meta ? <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 truncate text-xs text-[var(--glass-text-tertiary)]`}>{activeCard.detailMeta ?? activeCard.meta}</span> : null}
-                  </div>
-                  {activeCard.detail}
-                </>
-              ) : null}
-            </WorkspaceCanvasMotionPresence>
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 function EditScriptContent({
@@ -2024,7 +1892,7 @@ function EditBibleContent({
   return (
     <>
       {!expanded ? collapsedContent : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
+      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className={nodeContentInteractionClass(data, 'space-y-3')}>
         {parsed.summary ? renderSection(labels('summary'), renderTextBlock(parsed.summary)) : null}
         {parsed.characters.length > 0 ? (
           <div className="space-y-1.5">
@@ -2092,7 +1960,7 @@ function SourceScriptContent({
   return (
     <>
       {!expanded ? collapsedContent : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} className={nodeContentInteractionClass(data, 'space-y-3')}>
+      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className={nodeContentInteractionClass(data, 'space-y-3')}>
         {renderSection(labels('scriptText'), renderTextBlock(details.sourceText || data.body))}
       </WorkspaceCanvasMotionPresence>
     </>
@@ -2546,7 +2414,9 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const showHeaderAction = Boolean(action && data.actionLabel && data.kind === 'editRequiredAsset')
   const showLargeTitle = data.kind !== 'shot'
   const fixedExpandedShell = expanded && Boolean(getWorkspaceCanvasNodePresentationProfile(data.kind).expanded)
-  const shellLayoutClass = data.kind === 'editScript'
+  // 「网格卡片 · 整行展开」横向节点随展开行动态增高，使用自适应高度外壳。
+  const usesGridAutoHeightShell = data.kind === 'editScript' || data.kind === 'editSourceScript' || data.kind === 'editBible'
+  const shellLayoutClass = usesGridAutoHeightShell
     ? 'overflow-hidden'
     : fixedExpandedShell
       ? 'min-h-full overflow-visible'
@@ -2621,7 +2491,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
 
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
-      <div className={`relative overflow-visible ${data.kind === 'editScript' ? 'h-auto' : 'h-full'}`}>
+      <div className={`relative overflow-visible ${usesGridAutoHeightShell ? 'h-auto' : 'h-full'}`}>
         <Handle type="target" position={Position.Left} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" />
         {hasSource ? <Handle type="source" position={Position.Right} className="!z-10 !h-3.5 !w-3.5 !border-2 !border-white !bg-slate-500 !shadow-sm" /> : null}
 

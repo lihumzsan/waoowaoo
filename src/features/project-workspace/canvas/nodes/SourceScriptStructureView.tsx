@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { AppIcon } from '@/components/ui/icons'
 import { FieldGlyph } from './field-glyphs'
+import { ShotGrid, shotDetailIconGrid, type ShotGridCard } from './shot-grid'
 import {
   countSourceScriptScenes,
   countSourceScriptStructureScenes,
-  type SourceScriptAct,
-  type SourceScriptEpisode,
   type SourceScriptScene,
   type SourceScriptStructure,
 } from './source-script-structure'
@@ -21,39 +20,63 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function renderSection(title: string, children: ReactNode) {
-  return (
-    <section className="space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100">
-      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{title}</p>
-      {children}
-    </section>
-  )
+function sceneMetaLine(scene: SourceScriptScene, labels: SourceScriptLabels): string {
+  return [
+    scene.location,
+    scene.timeOfDay ?? null,
+    scene.characters.length > 0 ? scene.characters.join(labels('listSeparator')) : null,
+  ].filter((part): part is string => Boolean(part)).join(' · ')
 }
 
-function renderSubsection(title: string, children: ReactNode) {
+function sceneDetail(scene: SourceScriptScene, labels: SourceScriptLabels): ReactNode {
   return (
-    <div className="space-y-1.5 border-t border-slate-200/70 pt-2">
-      <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{title}</p>
-      {children}
+    <div className="space-y-2.5">
+      {shotDetailIconGrid([
+        { label: labels('location'), value: scene.location },
+        { label: labels('timeOfDay'), value: scene.timeOfDay ?? null },
+        { label: labels('characters'), value: scene.characters.length > 0 ? scene.characters.join('\n') : null },
+      ])}
+      {scene.beats.length > 0 ? (
+        <div className="space-y-1.5 border-t border-slate-200/70 pt-2">
+          <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('beats')}</p>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {scene.beats.map((beat) => (
+              <div key={beat.beatIndex} className="rounded-[10px] border border-slate-200 bg-white px-2.5 py-2">
+                <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{beat.title}</p>
+                <p className={`${SELECTABLE_TEXT_CLASS} mt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{beat.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {shotDetailIconGrid([{ label: labels('sceneBody'), value: scene.body }])}
     </div>
   )
 }
 
-function renderValue(label: string, value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === '') return null
-  return (
-    <div className="grid grid-cols-[4.5rem_1fr] gap-2 text-xs leading-5">
-      <span className={`${SELECTABLE_TEXT_CLASS} text-[var(--glass-text-tertiary)]`}>{label}</span>
-      <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 break-words text-[var(--glass-text-secondary)]`}>{value}</span>
-    </div>
-  )
+function sceneCards(
+  episodeIndex: number,
+  actIndex: number,
+  scenes: readonly SourceScriptScene[],
+  labels: SourceScriptLabels,
+): ShotGridCard[] {
+  return scenes.map((scene) => {
+    const meta = sceneMetaLine(scene, labels)
+    return {
+      key: `${episodeIndex}-${actIndex}-${scene.sceneIndex}`,
+      badge: scene.sceneIndex + 1,
+      title: scene.title,
+      subtitle: scene.summary,
+      meta,
+      characterCount: scene.characters.length,
+      detailTitle: scene.title,
+      detailMeta: meta,
+      detail: sceneDetail(scene, labels),
+    }
+  })
 }
 
-function renderTextBlock(value: string | null | undefined) {
-  if (!hasText(value)) return null
-  return <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words text-xs leading-5 text-[var(--glass-text-secondary)]`}>{value}</p>
-}
-
+// 剧本创作 · 方案 A：场景网格 + 整行展开，与「核心剪辑表」共用 ShotGrid 权威实现。
 export function SourceScriptStructureView({
   structure,
   scriptText,
@@ -68,186 +91,79 @@ export function SourceScriptStructureView({
   readonly expandedClassName: string
 }) {
   const meta = `${structure.episodes.length} ${labels('episodes')} · ${countSourceScriptStructureScenes(structure)} ${labels('scenes')}`
-  const overview = (
-    <div className="space-y-1.5">
-      <p className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold leading-5 text-[var(--glass-text-primary)]`}>{structure.title}</p>
-      <p className={`${SELECTABLE_TEXT_CLASS} text-xs leading-5 text-[var(--glass-text-secondary)]`}>{structure.summary}</p>
-      <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] leading-4 text-[var(--glass-text-tertiary)]`}>{meta}</p>
+  const overviewBar = (
+    <div className="flex items-center justify-between gap-2 rounded-[14px] bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
+      <div className="min-w-0">
+        <p className={`${SELECTABLE_TEXT_CLASS} truncate text-sm font-semibold text-[var(--glass-text-primary)]`}>{structure.title}</p>
+        <p className={`${SELECTABLE_TEXT_CLASS} mt-0.5 line-clamp-1 text-xs text-[var(--glass-text-secondary)]`}>{structure.summary}</p>
+      </div>
+      <span className={`${SELECTABLE_TEXT_CLASS} shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--glass-text-tertiary)] ring-1 ring-slate-100`}>{meta}</span>
     </div>
   )
-  const collapsedEpisodes = structure.episodes.slice(0, 3)
   const collapsedContent = (
-    <div className="space-y-2">
-      {renderSection(labels('scriptOverview'), overview)}
-      <div className="space-y-2">
-        {collapsedEpisodes.map((episode) => (
-          <SourceScriptDisclosureCard
-            key={episode.episodeIndex}
-            badge={String(episode.episodeIndex + 1).padStart(2, '0')}
-            title={episode.title}
-            summary={episode.summary}
-            meta={`${episode.acts.length} ${labels('acts')} · ${countSourceScriptScenes(episode)} ${labels('scenes')}`}
-          >
-            {episode.acts.map((act) => (
-              <SourceScriptActCard key={act.actIndex} act={act} labels={labels} />
-            ))}
-          </SourceScriptDisclosureCard>
-        ))}
-      </div>
+    <div className="space-y-1.5">
+      <p className={`${SELECTABLE_TEXT_CLASS} text-sm font-semibold leading-5 text-[var(--glass-text-primary)]`}>{structure.title}</p>
+      <p className={`${SELECTABLE_TEXT_CLASS} line-clamp-3 text-xs leading-5 text-[var(--glass-text-secondary)]`}>{structure.summary}</p>
+      <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] leading-4 text-[var(--glass-text-tertiary)]`}>{meta}</p>
     </div>
   )
 
   return (
     <>
       {!expanded ? collapsedContent : null}
-      <WorkspaceCanvasMotionPresence visible={expanded} className={expandedClassName}>
-        {renderSection(labels('scriptOverview'), overview)}
-        <div className="space-y-2">
-          <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[11px] font-semibold text-[var(--glass-text-tertiary)]`}><FieldGlyph name="clapper" className="h-3.5 w-3.5" />{labels('episodes')}</p>
-          {structure.episodes.map((episode) => (
-            <SourceScriptEpisodeCard key={episode.episodeIndex} episode={episode} labels={labels} />
-          ))}
-        </div>
-        {hasText(scriptText) ? (
-          <div className="space-y-1.5">
-            <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-[11px] font-semibold text-[var(--glass-text-tertiary)]`}><FieldGlyph name="frame" className="h-3.5 w-3.5" />{labels('scriptText')}</p>
-            <SourceScriptAccordion items={[{ key: 'full-script', title: structure.title, body: scriptText }]} />
-          </div>
-        ) : null}
+      <WorkspaceCanvasMotionPresence visible={expanded} exit={false} className={expandedClassName}>
+        {overviewBar}
+        {structure.episodes.map((episode) => (
+          <section key={episode.episodeIndex} className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-[7px] bg-slate-900 px-1.5 text-[11px] font-bold text-white">
+                {String(episode.episodeIndex + 1).padStart(2, '0')}
+              </span>
+              <p className={`${SELECTABLE_TEXT_CLASS} flex items-center gap-1 text-xs font-semibold text-[var(--glass-text-primary)]`}>
+                <FieldGlyph name="clapper" className="h-3.5 w-3.5" />{episode.title}
+              </p>
+              <span className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>
+                {episode.acts.length} {labels('acts')} · {countSourceScriptScenes(episode)} {labels('scenes')}
+              </span>
+            </div>
+            {episode.acts.map((act) => (
+              <div key={act.actIndex} className="space-y-2 rounded-[14px] border border-slate-200 bg-white p-3">
+                <p className={`${SELECTABLE_TEXT_CLASS} flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[var(--glass-text-secondary)]`}>
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-[6px] bg-slate-100 px-1 text-[10px] font-bold text-[var(--glass-text-secondary)]">{act.actIndex + 1}</span>
+                  {act.title}
+                  <span className={`${SELECTABLE_TEXT_CLASS} font-normal text-[var(--glass-text-tertiary)]`}>· {act.scenes.length} {labels('scenes')}</span>
+                </p>
+                {hasText(act.summary) ? <p className={`${SELECTABLE_TEXT_CLASS} line-clamp-1 text-[11px] text-[var(--glass-text-tertiary)]`}>{act.summary}</p> : null}
+                <ShotGrid cards={sceneCards(episode.episodeIndex, act.actIndex, act.scenes, labels)} accent="slate" />
+              </div>
+            ))}
+          </section>
+        ))}
+        {hasText(scriptText) ? <SourceScriptFullText label={labels('scriptText')} text={scriptText} /> : null}
       </WorkspaceCanvasMotionPresence>
     </>
   )
 }
 
-function SourceScriptDisclosureCard({
-  badge,
-  title,
-  summary,
-  meta,
-  children,
-}: {
-  readonly badge: string
-  readonly title: string
-  readonly summary: string
-  readonly meta?: string
-  readonly children: ReactNode
-}) {
+function SourceScriptFullText({ label, text }: { readonly label: string; readonly text: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <article className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
       <button
         type="button"
-        className={`nodrag flex w-full items-start gap-2.5 p-3 text-left transition hover:bg-slate-50 ${open ? 'bg-slate-50' : ''}`}
+        className="nodrag flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50"
         onClick={(event) => {
           event.stopPropagation()
           setOpen((current) => !current)
         }}
       >
-        <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-[7px] bg-slate-900 px-1.5 text-[11px] font-bold text-white">{badge}</span>
-        <span className="min-w-0 flex-1">
-          <span className={`${SELECTABLE_TEXT_CLASS} block truncate text-xs font-semibold leading-5 text-[var(--glass-text-primary)]`}>{title}</span>
-          <span className={`${SELECTABLE_TEXT_CLASS} block text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{summary}</span>
-          {meta ? <span className={`${SELECTABLE_TEXT_CLASS} mt-1 block text-[10px] leading-4 text-[var(--glass-text-tertiary)]`}>{meta}</span> : null}
-        </span>
-        <AppIcon name={open ? 'chevronUp' : 'chevronDown'} className="mt-1 h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
+        <FieldGlyph name="frame" className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
+        <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{label}</span>
+        <AppIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
       </button>
-      <WorkspaceCanvasMotionPresence visible={open} motionKey={title}>
-        <div className="space-y-2 border-t border-slate-100 bg-slate-50/70 p-3">
-          {children}
-        </div>
+      <WorkspaceCanvasMotionPresence visible={open} motionKey={label}>
+        <p className={`nowheel ${SELECTABLE_TEXT_CLASS} max-h-[420px] overflow-y-auto whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-2 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{text}</p>
       </WorkspaceCanvasMotionPresence>
-    </article>
-  )
-}
-
-function SourceScriptEpisodeCard({ episode, labels }: { readonly episode: SourceScriptEpisode; readonly labels: SourceScriptLabels }) {
-  return (
-    <SourceScriptDisclosureCard
-      badge={String(episode.episodeIndex + 1).padStart(2, '0')}
-      title={episode.title}
-      summary={episode.summary}
-      meta={`${episode.acts.length} ${labels('acts')} · ${countSourceScriptScenes(episode)} ${labels('scenes')}`}
-    >
-      {episode.acts.map((act) => (
-        <SourceScriptActCard key={act.actIndex} act={act} labels={labels} />
-      ))}
-    </SourceScriptDisclosureCard>
-  )
-}
-
-function SourceScriptActCard({ act, labels }: { readonly act: SourceScriptAct; readonly labels: SourceScriptLabels }) {
-  return (
-    <SourceScriptDisclosureCard
-      badge={String(act.actIndex + 1)}
-      title={act.title}
-      summary={act.summary}
-      meta={`${act.scenes.length} ${labels('scenes')}`}
-    >
-      {act.scenes.map((scene) => (
-        <SourceScriptSceneCard key={scene.sceneIndex} scene={scene} labels={labels} />
-      ))}
-    </SourceScriptDisclosureCard>
-  )
-}
-
-function SourceScriptSceneCard({ scene, labels }: { readonly scene: SourceScriptScene; readonly labels: SourceScriptLabels }) {
-  const metaParts = [
-    scene.location,
-    scene.timeOfDay ?? null,
-    scene.characters.length > 0 ? scene.characters.join(labels('listSeparator')) : null,
-  ].filter((part): part is string => Boolean(part))
-  return (
-    <SourceScriptDisclosureCard
-      badge={String(scene.sceneIndex + 1)}
-      title={scene.title}
-      summary={scene.summary}
-      meta={metaParts.join(' · ')}
-    >
-      <div className="space-y-1.5">
-        {renderValue(labels('location'), scene.location)}
-        {renderValue(labels('timeOfDay'), scene.timeOfDay)}
-        {scene.characters.length > 0 ? renderValue(labels('characters'), scene.characters.join(labels('listSeparator'))) : null}
-      </div>
-      {renderSubsection(labels('beats'), (
-        <div className="space-y-1.5">
-          {scene.beats.map((beat) => (
-            <div key={beat.beatIndex} className="rounded-[10px] border border-slate-200 bg-white px-2.5 py-2">
-              <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] font-semibold leading-4 text-[var(--glass-text-primary)]`}>{beat.title}</p>
-              <p className={`${SELECTABLE_TEXT_CLASS} mt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{beat.summary}</p>
-            </div>
-          ))}
-        </div>
-      ))}
-      {renderSubsection(labels('sceneBody'), renderTextBlock(scene.body))}
-    </SourceScriptDisclosureCard>
-  )
-}
-
-function SourceScriptAccordion({ items }: { readonly items: readonly { readonly key: string; readonly title: string; readonly body: string }[] }) {
-  const [open, setOpen] = useState<string | null>(null)
-  return (
-    <div className="divide-y divide-slate-100 overflow-hidden rounded-[14px] border border-slate-200 bg-white">
-      {items.map((item) => {
-        const isOpen = open === item.key
-        return (
-          <div key={item.key}>
-            <button
-              type="button"
-              className={`nodrag flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50 ${isOpen ? 'bg-slate-50' : ''}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                setOpen(isOpen ? null : item.key)
-              }}
-            >
-              <span className={`${SELECTABLE_TEXT_CLASS} min-w-0 flex-1 truncate text-xs font-semibold text-[var(--glass-text-primary)]`}>{item.title}</span>
-              <AppIcon name={isOpen ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 shrink-0 text-[var(--glass-text-tertiary)]" />
-            </button>
-            <WorkspaceCanvasMotionPresence visible={isOpen} motionKey={item.key}>
-              <p className={`${SELECTABLE_TEXT_CLASS} whitespace-pre-wrap break-words bg-slate-50/70 px-3 pb-3 pt-1 text-[11px] leading-5 text-[var(--glass-text-secondary)]`}>{item.body}</p>
-            </WorkspaceCanvasMotionPresence>
-          </div>
-        )
-      })}
     </div>
   )
 }

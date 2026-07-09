@@ -84,7 +84,7 @@ export const WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE: Workspace
   height: 360,
 }
 
-// 核心剪辑表 / 摄影指导展开态使用「网格卡片 · 整行展开」宽度，折叠态使用上方紧凑尺寸。
+// 核心剪辑表 / 摄影指导 / 剧本创作 / 制作规划 展开态共用「网格卡片 · 整行展开」宽度，折叠态使用各自紧凑尺寸。
 export const WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH = 760
 export const WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_NODE_WIDTH = 760
 export const WORKSPACE_CANVAS_EDIT_SCRIPT_TO_ASSET_GAP_Y = 80
@@ -123,8 +123,8 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
   editSourceScript: {
     collapsed: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
     expanded: {
-      width: 620,
-      height: 720,
+      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+      height: 560,
     },
     expandedLayout: 'stack',
     defaultExpanded: false,
@@ -132,6 +132,10 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
   },
   editBible: {
     collapsed: WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE,
+    expanded: {
+      width: WORKSPACE_CANVAS_EDIT_SCRIPT_TABLE_NODE_WIDTH,
+      height: 560,
+    },
     expandedLayout: 'stack',
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,

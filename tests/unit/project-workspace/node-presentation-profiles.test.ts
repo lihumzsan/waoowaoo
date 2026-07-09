@@ -56,6 +56,24 @@ describe('workspace canvas node presentation profiles', () => {
     expect(executionProfile.expandedLayout).toBe('stack')
   })
 
+  it('expands 剧本创作 / 制作规划 to the shared horizontal grid width', () => {
+    const sourceScriptProfile = getWorkspaceCanvasNodePresentationProfile('editSourceScript')
+    const bibleProfile = getWorkspaceCanvasNodePresentationProfile('editBible')
+
+    expect(sourceScriptProfile.expanded).toEqual({ width: 760, height: 560 })
+    expect(bibleProfile.expanded).toEqual({ width: 760, height: 560 })
+    expect(resolveWorkspaceCanvasNodeSize({
+      kind: 'editBible',
+      expanded: true,
+      collapsedSize: bibleProfile.collapsed,
+    })).toEqual({ width: 760, height: 560 })
+    expect(resolveWorkspaceCanvasNodeSize({
+      kind: 'editBible',
+      expanded: false,
+      collapsedSize: bibleProfile.collapsed,
+    })).toEqual(bibleProfile.collapsed)
+  })
+
   it('allows measured video plan nodes to shrink to actual content height', () => {
     expect(resolveWorkspaceCanvasMeasuredNodeHeight({
       kind: 'videoPlan',

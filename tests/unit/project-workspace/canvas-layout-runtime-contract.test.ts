@@ -122,13 +122,15 @@ describe('workspace canvas layout runtime contract', () => {
 
   it('uses presence motion for clicked node details instead of animating the card shell', () => {
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    // ShotGrid（网格卡片 · 整行展开）已抽离为共享权威实现，供核心剪辑表 / 摄影指导 / 剧本创作 / 制作规划复用。
+    const shotGrid = readRepoFile('src/features/project-workspace/canvas/nodes/shot-grid.tsx')
 
-    expect(node).toContain('visible={Boolean(activeCard)}')
+    expect(shotGrid).toContain('visible={Boolean(activeCard)}')
     expect(node).toContain('visible={Boolean(current)}')
     expect(node).toContain('visible={isOpen && hasText(asset.description)}')
     expect(node).toContain('visible={on}')
     expect(node).toContain('visible={open}')
-    expect(node).toContain("motionKey={activeCard?.key ?? 'none'}")
+    expect(shotGrid).toContain("motionKey={activeCard?.key ?? 'none'}")
     expect(node).toContain("motionKey={current?.key ?? 'none'}")
     expect(node).toContain("motionKey={current?.name ?? 'none'}")
   })
@@ -227,16 +229,18 @@ describe('workspace canvas layout runtime contract', () => {
       'VideoContent',
       'FinalContent',
       'EditPipelineStepContent',
-      'EditBibleContent',
       'EditAssetContent',
       'VideoPlanContent',
     ]
+    // 剧本创作 / 制作规划 展开态改为 760 宽横向布局，折叠回 420，属于宽度变化节点，需跳过折叠退出动画。
     const widthChangingFunctions = [
       'BgmScoreContent',
       'ProcessGroupContent',
       'EditScriptContent',
       'EditShotExecutionPlanContent',
       'StyleBibleContent',
+      'SourceScriptContent',
+      'EditBibleContent',
     ]
 
     widthStableFunctions.forEach((name) => {
@@ -250,6 +254,7 @@ describe('workspace canvas layout runtime contract', () => {
   it('removes width-changing collapse exit motion while keeping local detail motion', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
     const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const shotGrid = readRepoFile('src/features/project-workspace/canvas/nodes/shot-grid.tsx')
     const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
     const types = readRepoFile('src/features/project-workspace/canvas/node-canvas-types.ts')
 
@@ -273,7 +278,7 @@ describe('workspace canvas layout runtime contract', () => {
     expect(node).not.toContain('deferCollapsedContent')
     expect(node).toContain('<WorkspaceCanvasMotionPresence visible={expanded} exit={false}')
     expect(node).toContain("data-expanded={expanded ? 'true' : 'false'}")
-    expect(node).toContain('visible={Boolean(activeCard)}')
+    expect(shotGrid).toContain('visible={Boolean(activeCard)}')
     expect(node).toContain('visible={isOpen && hasText(asset.description)}')
     expect(motion).toContain('if (!visible && !exit) return null')
   })

@@ -483,13 +483,16 @@ describe('edit script compact canvas card', () => {
     expect(html).not.toContain('远景')
   })
 
-  it('renders a structured source script as layered preview cards without the original request block', async () => {
+  it('renders a structured source script as a horizontal scene grid without the original request block', async () => {
     const html = await renderWorkspaceNode(sourceScriptNodeData({ expanded: true }))
 
-    expect(html).toContain('剧本结构')
+    // 方案 A：顶部概览条 + 集/幕分组 + 场景网格卡片（复用核心剪辑表 ShotGrid），不再有「剧本结构」小节标题。
     expect(html).toContain('地下实验')
+    expect(html).toContain('1 集 · 1 场景')
     expect(html).toContain('第一集：启动')
     expect(html).toContain('1 幕 · 1 场景')
+    expect(html).toContain('场景一：地下实验室')
+    expect(html).toContain('grid-cols-3')
     expect(html).toContain('剧本正文')
     expect(html).not.toContain('原始需求')
     expect(html).not.toContain('完整剧本文本。这里是全文，不应该在结构卡片展开态直接铺开。')
