@@ -1270,7 +1270,9 @@ function ProcessStepGrid({ steps, labels }: { readonly steps: NonNullable<Worksp
                 <FieldGlyph name={PROCESS_STEP_GLYPHS[step.key] ?? 'dot'} className="h-3.5 w-3.5 text-[var(--glass-text-tertiary)]" />
               </span>
               <p className={`${SELECTABLE_TEXT_CLASS} mt-1.5 text-xs font-semibold text-[var(--glass-text-primary)]`}>{step.title}</p>
-              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>{step.items.length} 项 · {step.statusLabel}</p>
+              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>
+                {labels('itemCount', { count: step.items.length })} · {step.statusLabel}
+              </p>
             </button>
           )
         })}
@@ -1949,14 +1951,20 @@ function StyleBibleContent({
         {shouldShowPreview ? <StyleBiblePreview data={data} /> : null}
         {renderTextSection(labels('styleSummary'), details.styleSummary)}
         {renderTextSection(labels('rawUserStyle'), details.rawUserStyle)}
-        <StyleBibleGroups groups={groups} />
+        <StyleBibleGroups groups={groups} labels={labels} />
       </WorkspaceCanvasMotionPresence>
     </>
   )
 }
 
 // 风格圣经：分组属性网格（点组看字段）
-function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[] }) {
+function StyleBibleGroups({
+  groups,
+  labels,
+}: {
+  readonly groups: readonly { readonly name: string; readonly glyph: string; readonly fields: readonly ShotField[] }[]
+  readonly labels: ReturnType<typeof useTranslations>
+}) {
   const visibleGroups = groups.filter((g) => g.fields.some((f) => hasText(f.value)))
   const [active, setActive] = useState<string | null>(visibleGroups[0]?.name ?? null)
   const current = visibleGroups.find((g) => g.name === active)
@@ -1970,7 +1978,7 @@ function StyleBibleGroups({ groups }: { readonly groups: readonly { readonly nam
             <button key={g.name} type="button" className={`nodrag flex flex-col items-start rounded-[14px] border bg-white p-3 text-left transition ${on ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'}`} onClick={(e) => { e.stopPropagation(); setActive(on ? null : g.name) }}>
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-slate-100 text-[var(--glass-text-secondary)]"><FieldGlyph name={g.glyph} className="h-4 w-4" /></span>
               <p className={`${SELECTABLE_TEXT_CLASS} mt-2 text-xs font-semibold text-[var(--glass-text-primary)]`}>{g.name}</p>
-              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>{count} 项</p>
+              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] text-[var(--glass-text-tertiary)]`}>{labels('itemCount', { count: count })}</p>
             </button>
           )
         })}

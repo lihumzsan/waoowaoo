@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyWorkspaceStructuredStreamPatches,
+  buildStreamRuntimeEntries,
+  type StructuredStreamSnapshot,
 } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime'
 import type {
   WorkspaceCanvasFlowNode,
@@ -38,6 +40,39 @@ function workspaceNode(input: {
 }
 
 describe('workspace structured stream runtime', () => {
+  it('surfaces shot execution stream parse errors as failed patches before any shot item is parsed', () => {
+    const snapshots: readonly StructuredStreamSnapshot[] = [{
+      taskId: 'task-shot-plan',
+      taskType: null,
+      targetType: 'ProjectEditScript',
+      targetId: 'edit-script-1',
+      episodeId: 'episode-1',
+      adapterKey: 'shotExecutionPlan.shots',
+      items: [],
+      errorMessage: 'Invalid shot execution stream JSON',
+    }]
+
+    const entries = buildStreamRuntimeEntries(snapshots, 'episode-1', (key, values) => {
+      if (key === 'nodes.editShotExecutionPlan.meta') return `shots:${values?.shots ?? 0}`
+      return key
+    })
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.target).toMatchObject({
+      nodeId: 'edit-shot-execution-plan:edit-script:edit-script-1',
+      streamKind: 'editShotExecutionPlan',
+      targetId: 'edit-script-1',
+    })
+    expect(entries[0]?.patch.data).toMatchObject({
+      body: 'Invalid shot execution stream JSON',
+      meta: 'Invalid shot execution stream JSON',
+      artifactPhase: 'failed',
+      statusLabel: 'status.failed',
+      isRunning: false,
+    })
+    expect(entries[0]?.patch.data.editPipelineStepDetails).toBeUndefined()
+  })
+
   it('keeps unmatched stream patches buffered instead of throwing during render', () => {
     const patch: WorkspaceCanvasStreamPatch = {
       streamKind: 'editScript',

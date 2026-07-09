@@ -57,7 +57,7 @@ interface StreamAccumulator {
   readonly errorMessage: string | null
 }
 
-interface StructuredStreamSnapshot {
+export interface StructuredStreamSnapshot {
   readonly taskId: string
   readonly taskType: string | null
   readonly targetType: string | null
@@ -523,12 +523,12 @@ function buildShotExecutionRuntimeEntry(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
 ): WorkspaceCanvasStreamRuntimeEntry | null {
-  const shotItems = itemsOfKind(snapshots, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
-  if (shotItems.length === 0) return null
-  const rawItems = snapshots
-    .filter((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots')
-    .flatMap((snapshot) => snapshot.items)
-  const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots') ?? null
+  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots')
+  const shotItems = itemsOfKind(matchingSnapshots, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
+  const error = matchingSnapshots.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
+  if (shotItems.length === 0 && !error) return null
+  const rawItems = matchingSnapshots.flatMap((snapshot) => snapshot.items)
+  const firstSnapshot = matchingSnapshots[0] ?? null
   if (!firstSnapshot) return null
   const editScriptId = firstSnapshot.targetId
   if (!editScriptId) return null
@@ -542,15 +542,15 @@ function buildShotExecutionRuntimeEntry(
     targetId: editScriptId,
     episodeId: firstSnapshot.episodeId,
     data: {
-      body: translate('nodes.editShotExecutionPlan.pendingBody'),
-      meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
-      artifactPhase: 'running',
-      statusLabel: translate('status.processing'),
-      isRunning: true,
+      body: error ?? translate('nodes.editShotExecutionPlan.pendingBody'),
+      meta: error ?? translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
+      artifactPhase: error ? 'failed' : 'running',
+      statusLabel: error ? translate('status.failed') : translate('status.processing'),
+      isRunning: !error,
       streamPresentation: streamPresentation(rawItems),
-      editPipelineStepDetails: {
+      editPipelineStepDetails: shotItems.length > 0 ? {
         items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
-      },
+      } : undefined,
     },
   })
 }
@@ -670,7 +670,7 @@ function buildSoundscapeRuntimeEntry(
   })
 }
 
-function buildStreamRuntimeEntries(
+export function buildStreamRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   episodeId: string,
   translate: Translate,

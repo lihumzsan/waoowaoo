@@ -298,6 +298,7 @@
         "planStatus": "计划状态",
         "renderStatus": "渲染状态",
         "styleSummary": "风格总结",
+        "itemCount": "{count} 项",
         "rawUserStyle": "用户风格",
         "visualPolicy": "画面策略",
         "negativePrompt": "负向提示词",

@@ -298,6 +298,7 @@
         "planStatus": "Plan Status",
         "renderStatus": "Render Status",
         "styleSummary": "Style Summary",
+        "itemCount": "{count} items",
         "rawUserStyle": "User Style",
         "visualPolicy": "Visual Policy",
         "negativePrompt": "Negative Prompt",
