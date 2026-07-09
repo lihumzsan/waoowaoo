@@ -4,6 +4,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 const ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
@@ -60,6 +61,7 @@ export async function arkImageGeneration(
     body: JSON.stringify(request),
     timeoutMs,
     scope: 'ark:image',
+    fetchFn: fetchWithProviderProxy,
   })
 
   const data = (await response.json()) as ArkImageGenerationResponse

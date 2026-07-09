@@ -4,6 +4,7 @@ import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selectio
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { FAL_LYRIA_3_PRO_MODEL_ID } from '@/lib/ai-providers/fal/models'
 import { RETRY_POLICY, fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 type FalMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
 
@@ -116,6 +117,7 @@ async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<
     body: JSON.stringify(payload),
     cache: 'no-store',
     scope: `fal:music:submit:${endpoint}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   const data = await response.json() as FalMusicSubmitResponse
@@ -141,6 +143,7 @@ async function fetchFalMusicResult(endpoint: string, requestId: string, apiKey: 
     },
     cache: 'no-store',
     scope: `fal:music:result:${endpoint}:${requestId}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   const data = await response.json() as FalMusicResultResponse
@@ -175,6 +178,7 @@ async function waitForFalMusicResult(endpoint: string, request: FalMusicRequest,
       cache: 'no-store',
       policy: RETRY_POLICY.mediaPoll,
       scope: `fal:music:status:${endpoint}:${request.requestId}`,
+      fetchFn: fetchWithProviderProxy,
     })
 
     const data = await statusResponse.json() as FalMusicStatusResponse

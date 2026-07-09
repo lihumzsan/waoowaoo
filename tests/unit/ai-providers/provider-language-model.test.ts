@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 const openAiState = vi.hoisted(() => ({
   createOpenAI: vi.fn((settings: {
@@ -49,6 +50,7 @@ describe('ai provider language model registry', () => {
     expect(openAiState.createOpenAI).toHaveBeenCalledWith({
       apiKey: 'sk-ark',
       name: 'ark',
+      fetch: fetchWithProviderProxy,
     })
   })
 

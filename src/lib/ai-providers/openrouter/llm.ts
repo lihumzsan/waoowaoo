@@ -7,6 +7,7 @@ import {
   buildOpenRouterRequestOptions,
   normalizeOpenRouterSessionId,
 } from '@/lib/ai-providers/openrouter/session'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import type {
   AiProviderLlmResult,
   AiProviderLlmStreamContext,
@@ -78,6 +79,7 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
   const client = new OpenAI({
     baseURL: input.providerConfig.baseUrl,
     apiKey: input.providerConfig.apiKey,
+    fetch: fetchWithProviderProxy,
   })
   const openRouterSessionId = normalizeOpenRouterSessionId(input.options?.openRouterSessionId)
   const completion = await client.chat.completions.create({

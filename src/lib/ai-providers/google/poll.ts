@@ -1,5 +1,7 @@
 import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-task-status'
 import { logInternal } from '@/lib/logging/semantic'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -37,7 +39,10 @@ export async function queryGeminiBatchStatus(batchName: string, apiKey: string):
     const { GoogleGenAI } = await import('@google/genai')
     const ai = new GoogleGenAI({ apiKey })
     const batchClient = ai as unknown as GeminiBatchClient
-    const batchJob = await batchClient.batches.get({ name: batchName })
+    const batchJob = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await batchClient.batches.get({ name: batchName }),
+    )
     const batchRecord = asRecord(batchJob) || {}
 
     const state = typeof batchRecord.state === 'string' ? batchRecord.state : 'UNKNOWN'
@@ -100,7 +105,10 @@ export async function queryGoogleVideoStatus(operationName: string, apiKey: stri
     const ai = new GoogleGenAI({ apiKey })
     const operation = new GenerateVideosOperation()
     operation.name = operationName
-    const op = await ai.operations.getVideosOperation({ operation })
+    const op = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.operations.getVideosOperation({ operation }),
+    )
 
     logInternal('Veo', 'INFO', `${logPrefix} 原始响应`, {
       operationName,

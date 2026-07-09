@@ -9,6 +9,7 @@ import {
   normalizeOpenRouterSessionId,
 } from '@/lib/ai-providers/openrouter/session'
 import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import {
   buildReasoningAwareContent,
   completionUsageSummary,
@@ -98,6 +99,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
       baseURL: input.baseUrl,
       apiKey: input.apiKey,
       name: input.providerName,
+      fetch: fetchWithProviderProxy,
     })
     const isNativeOpenAIReasoning = shouldUseOpenAIReasoningProviderOptions({
       providerKey: input.providerKey,
@@ -141,6 +143,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   const client = new OpenAI({
     baseURL: input.baseUrl,
     apiKey: input.apiKey,
+    fetch: fetchWithProviderProxy,
   })
   const openRouterSessionId = normalizeOpenRouterSessionId(input.openRouterSessionId)
   const extraParams: { [key: string]: unknown } = {}
@@ -188,6 +191,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
       baseURL: input.providerConfig.baseUrl,
       apiKey: input.providerConfig.apiKey,
       name: input.providerName,
+      fetch: fetchWithProviderProxy,
     })
     const isNativeOpenAIReasoning = shouldUseOpenAIReasoningProviderOptions({
       providerKey: input.providerKey,
@@ -266,6 +270,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
   const client = new OpenAI({
     baseURL: input.providerConfig.baseUrl,
     apiKey: input.providerConfig.apiKey,
+    fetch: fetchWithProviderProxy,
   })
   const openRouterSessionId = normalizeOpenRouterSessionId(input.options.openRouterSessionId)
   const extraParams: { [key: string]: unknown } = {}

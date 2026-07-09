@@ -3,6 +3,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
   FAL_IMAGE_RESOLUTIONS,
@@ -288,6 +289,7 @@ export async function executeFalImageGeneration(input: AiProviderImageExecutionC
     body: JSON.stringify(body),
     cache: 'no-store',
     scope: `fal:image:submit:${endpoint}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   const submitData = (await submitResponse.json()) as { request_id?: unknown }

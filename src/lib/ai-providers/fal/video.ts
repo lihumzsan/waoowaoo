@@ -3,6 +3,7 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
 import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
   FAL_HAPPY_HORSE_IMAGE_TO_VIDEO_MODEL_ID,
@@ -502,6 +503,7 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
     body: JSON.stringify(payload),
     cache: 'no-store',
     scope: `fal:video:submit:${endpoint}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   const submitData = (await submitResponse.json()) as { request_id?: unknown }

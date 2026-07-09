@@ -4,6 +4,7 @@ import type { AiProviderLanguageModelContext } from '@/lib/ai-providers/runtime-
 import { buildOpenRouterPromptCacheRequest } from '@/lib/ai-providers/openrouter/prompt-cache'
 import type { ProviderChatMessage, ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
 import { createScopedLogger } from '@/lib/logging/core'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 const openRouterLanguageModelLogger = createScopedLogger({
   module: 'ai-provider.openrouter.language-model',
@@ -128,7 +129,7 @@ function createOpenRouterLoggingFetch(input: {
       requestInit,
       modelId: input.modelId,
     })
-    const response = await fetch(prepared.requestInput, prepared.requestInit)
+    const response = await fetchWithProviderProxy(prepared.requestInput, prepared.requestInit)
     const responseClone = response.clone()
     void responseClone.text()
       .then((bodyText) => {
@@ -171,6 +172,12 @@ export function createOpenAiSdkLanguageModel(input: AiProviderLanguageModelConte
   if (isOpenRouter && !input.providerConfig.baseUrl) {
     throw new Error('PROVIDER_BASE_URL_MISSING: openrouter (language-model)')
   }
+  const providerFetch = isOpenRouter
+    ? createOpenRouterLoggingFetch({
+      sessionId: input.openRouterSessionId,
+      modelId: input.selection.modelId,
+    })
+    : fetchWithProviderProxy
   const openai = createOpenAI({
     apiKey: input.providerConfig.apiKey,
     ...(input.providerConfig.baseUrl ? { baseURL: input.providerConfig.baseUrl } : {}),
@@ -178,12 +185,7 @@ export function createOpenAiSdkLanguageModel(input: AiProviderLanguageModelConte
     ...(isOpenRouter && input.openRouterSessionId
       ? { headers: { 'x-session-id': input.openRouterSessionId } }
       : {}),
-    ...(isOpenRouter
-      ? { fetch: createOpenRouterLoggingFetch({
-        sessionId: input.openRouterSessionId,
-        modelId: input.selection.modelId,
-      }) }
-      : {}),
+    fetch: providerFetch,
   })
   return openai.chat(input.selection.modelId)
 }

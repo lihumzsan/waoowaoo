@@ -9,7 +9,8 @@ import {
   type GoogleContentPart,
 } from '@/lib/ai-providers/shared/google-image-helpers'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
-import { setProxy } from '../../../../lib/prompts/proxy'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 
 type GoogleImageOptions = NonNullable<AiProviderImageExecutionContext['options']>
 
@@ -26,7 +27,6 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   assertAllowedGoogleImageOptions(options)
 
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
-  await setProxy()
   const ai = new GoogleGenAI({ apiKey })
 
   const modelId = requireSelectedModelId(input.selection, 'google:image')
@@ -60,14 +60,17 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     const response = await withRetry({
       scope: `google:image:imagen:${modelId}`,
       policy: RETRY_POLICY.mediaFetch,
-      run: async () => await ai.models.generateImages({
-        model: modelId,
-        prompt: input.prompt,
-        config: {
-          numberOfImages: 1,
-          ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-        },
-      }),
+      run: async () => await withProviderProxyDispatcher(
+        GOOGLE_PROVIDER_PROXY_TARGET,
+        async () => await ai.models.generateImages({
+          model: modelId,
+          prompt: input.prompt,
+          config: {
+            numberOfImages: 1,
+            ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+          },
+        }),
+      ),
     })
 
     const generatedImages = (response as ImagenResponse).generatedImages
@@ -100,22 +103,25 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   const response = await withRetry({
     scope: `google:image:gemini:${modelId}`,
     policy: RETRY_POLICY.mediaFetch,
-    run: async () => await ai.models.generateContent({
-      model: modelId,
-      contents: [{ parts: contentParts }],
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-        safetySettings,
-        ...(options.aspectRatio || options.resolution
-          ? {
-            imageConfig: {
-              ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
-              ...(imageSize ? { imageSize } : {}),
-            },
-          }
-          : {}),
-      },
-    }),
+    run: async () => await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.models.generateContent({
+        model: modelId,
+        contents: [{ parts: contentParts }],
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+          safetySettings,
+          ...(options.aspectRatio || options.resolution
+            ? {
+              imageConfig: {
+                ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
+                ...(imageSize ? { imageSize } : {}),
+              },
+            }
+            : {}),
+        },
+      }),
+    ),
   })
 
   const candidate = response.candidates?.[0]

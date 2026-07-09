@@ -3,6 +3,7 @@ import {
   normalizeProviderContentParts,
   type ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 export interface ArkResponsesOptions {
   apiKey: string
@@ -124,7 +125,7 @@ function extractArkUsage(data: unknown): { promptTokens: number; completionToken
 
 export async function arkResponsesCompletion(options: ArkResponsesOptions): Promise<ArkResponsesResult> {
   if (!options.apiKey) throw new Error('请配置火山引擎 API Key')
-  const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+  const response = await fetchWithProviderProxy('https://ark.cn-beijing.volces.com/api/v3/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -228,7 +229,7 @@ export function arkResponsesStream(options: ArkResponsesOptions & { temperature?
   }
 
   async function* generateStream(): AsyncIterable<ArkStreamDelta> {
-    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+    const response = await fetchWithProviderProxy('https://ark.cn-beijing.volces.com/api/v3/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

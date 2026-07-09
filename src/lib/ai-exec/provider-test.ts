@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { ARK_PROVIDER_TEST_LLM_MODEL_ID } from '@/lib/ai-providers/ark/models'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 export type TestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
 export type TestStepStatus = 'pass' | 'fail' | 'skip'
@@ -51,6 +52,7 @@ function createOpenAiClient(input: { apiKey: string; baseURL?: string }): OpenAI
     apiKey: input.apiKey,
     ...(input.baseURL ? { baseURL: input.baseURL } : {}),
     timeout: 30000,
+    fetch: fetchWithProviderProxy,
   })
 }
 
@@ -96,7 +98,7 @@ async function testOpenAiStyleProvider(input: {
 async function testGoogleProvider(apiKey: string): Promise<TestProviderResult> {
   const steps: TestStep[] = []
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, {
+    const response = await fetchWithProviderProxy(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, {
       method: 'GET',
     })
     if (!response.ok) {
@@ -114,7 +116,7 @@ async function testGoogleProvider(apiKey: string): Promise<TestProviderResult> {
 async function testFalProvider(apiKey: string): Promise<TestProviderResult> {
   const steps: TestStep[] = []
   try {
-    const response = await fetch('https://fal.run/fal-ai/flux/dev', {
+    const response = await fetchWithProviderProxy('https://fal.run/fal-ai/flux/dev', {
       method: 'OPTIONS',
       headers: { Authorization: `Key ${apiKey}` },
     })

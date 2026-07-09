@@ -1,6 +1,7 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import type {
   AiProviderVideoExecutionContext,
   GenerateResult,
@@ -293,6 +294,7 @@ export async function submitOpenRouterVideoTask(input: {
     body: JSON.stringify(input.payload),
     cache: 'no-store',
     scope: `openrouter:video:submit:${input.payload.model}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   return readSubmitId(await readJson(response))
@@ -307,7 +309,7 @@ export async function queryOpenRouterVideoStatus(input: {
     throw new Error('请配置 OpenRouter API Key')
   }
 
-  const response = await fetch(
+  const response = await fetchWithProviderProxy(
     buildOpenRouterUrl(input.baseUrl, `${OPENROUTER_VIDEO_ENDPOINT_PATH}/${encodeURIComponent(input.requestId)}`),
     {
       method: 'GET',

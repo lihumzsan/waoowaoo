@@ -3,7 +3,8 @@ import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderMusicExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
-import { setProxy } from '../../../../lib/prompts/proxy'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import { GOOGLE_PROVIDER_PROXY_TARGET } from '@/lib/ai-providers/google/proxy-target'
 
 type GoogleMusicOptions = NonNullable<AiProviderMusicExecutionContext['options']>
 
@@ -98,17 +99,19 @@ export function extractGoogleMusicResult(response: unknown): {
 export async function executeGoogleMusicGeneration(input: AiProviderMusicExecutionContext): Promise<GenerateResult> {
   const options = input.options ?? {}
   const { apiKey } = await getProviderConfig(input.userId, input.selection.provider)
-  await setProxy()
   const ai = new GoogleGenAI({ apiKey })
   const modelId = requireSelectedModelId(input.selection, 'google:music')
 
   const response = await withRetry({
     scope: `google:music:generate:${modelId}`,
     policy: RETRY_POLICY.mediaFetch,
-    run: async () => await ai.models.generateContent({
-      model: modelId,
-      contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
-    }),
+    run: async () => await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await ai.models.generateContent({
+        model: modelId,
+        contents: [{ parts: [{ text: buildMusicPrompt(input.prompt, options) }] }],
+      }),
+    ),
   })
 
   const result = extractGoogleMusicResult(response)

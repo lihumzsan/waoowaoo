@@ -1,5 +1,6 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
 import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
 
 export interface FalQueueStatus {
@@ -27,6 +28,7 @@ export async function submitFalTask(endpoint: string, input: FalQueueInput, apiK
     },
     body: JSON.stringify(input),
     scope: `fal:submit:${endpoint}`,
+    fetchFn: fetchWithProviderProxy,
   })
 
   const data = await response.json() as { request_id?: unknown }
@@ -113,7 +115,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
   }
 
   const statusUrl = buildFalQueueUrl(`${baseEndpoint}/requests/${requestId}/status?logs=0`)
-  const response = await fetch(statusUrl, {
+  const response = await fetchWithProviderProxy(statusUrl, {
     method: 'GET',
     headers: {
       Authorization: `Key ${apiKey}`,
@@ -144,7 +146,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       : buildFalQueueUrl(`${endpoint}/requests/${requestId}`)
     _ulogInfo(`[FAL Status] 任务已完成，获取结果: ${resultUrl}`)
 
-    const resultResponse = await fetch(resultUrl, {
+    const resultResponse = await fetchWithProviderProxy(resultUrl, {
       method: 'GET',
       headers: {
         Authorization: `Key ${apiKey}`,

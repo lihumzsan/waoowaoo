@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { ApiError } from '@/lib/api-errors'
 import { ARK_PROVIDER_TEST_LLM_MODEL_ID } from '@/lib/ai-providers/ark/models'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 export type LlmConnectionTestProvider =
   | 'openrouter'
@@ -41,7 +42,7 @@ function isRegisteredLlmConnectionTestProvider(provider: string): provider is Ll
 }
 
 async function testGoogleAI(apiKey: string): Promise<LlmConnectionTestPartialResult> {
-  const response = await fetch(
+  const response = await fetchWithProviderProxy(
     `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
     { method: 'GET' },
   )
@@ -61,6 +62,7 @@ async function testOpenAIStyleConnection(input: {
     apiKey: input.apiKey,
     baseURL: input.baseURL,
     timeout: 30000,
+    fetch: fetchWithProviderProxy,
   })
 
   const response = await client.chat.completions.create({

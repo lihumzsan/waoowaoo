@@ -1,6 +1,7 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
 import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
@@ -292,6 +293,7 @@ export async function arkCreateVideoTask(
     body: JSON.stringify(request),
     timeoutMs,
     scope: 'ark:video:create',
+    fetchFn: fetchWithProviderProxy,
   })
 
   const data = (await response.json()) as { id?: unknown; [key: string]: unknown }
@@ -314,6 +316,7 @@ export async function arkQueryVideoTask(
     headers: { Authorization: `Bearer ${apiKey}` },
     timeoutMs,
     scope: 'ark:video:query',
+    fetchFn: fetchWithProviderProxy,
   })
 
   return (await response.json()) as ArkVideoTaskResponse

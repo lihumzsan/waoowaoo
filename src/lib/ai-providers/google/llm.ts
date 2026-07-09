@@ -13,6 +13,11 @@ import {
   type ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
 import { asUnknownObject, getErrorMessage, type UnknownObject } from '@/lib/ai-providers/shared/helpers'
+import { withProviderProxyDispatcher } from '@/lib/http/outbound-proxy'
+import {
+  GOOGLE_PROVIDER_PROXY_TARGET,
+  resolveGoogleProviderProxyTarget,
+} from '@/lib/ai-providers/google/proxy-target'
 import type {
   AiProviderLlmResult,
   AiProviderLlmStreamContext,
@@ -163,6 +168,7 @@ export async function runGoogleLlmCompletion(input: {
     ? { apiKey: input.apiKey, httpOptions: { baseUrl: input.baseUrl } }
     : { apiKey: input.apiKey }
   const ai = new GoogleGenAI(googleAiOptions)
+  const proxyTarget = resolveGoogleProviderProxyTarget(input.baseUrl)
 
   const systemParts = input.messages
     .filter((message) => message.role === 'system')
@@ -183,15 +189,18 @@ export async function runGoogleLlmCompletion(input: {
     ? { thinkingLevel: input.reasoningEffort, includeThoughts: true }
     : undefined
 
-  const response = await ai.models.generateContent({
-    model: input.modelId,
-    contents,
-    config: {
-      temperature: input.temperature,
-      ...(systemInstruction ? { systemInstruction } : {}),
-      ...(thinkingConfig ? { thinkingConfig } : {}),
-    },
-  } as never)
+  const response = await withProviderProxyDispatcher(
+    proxyTarget,
+    async () => await ai.models.generateContent({
+      model: input.modelId,
+      contents,
+      config: {
+        temperature: input.temperature,
+        ...(systemInstruction ? { systemInstruction } : {}),
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+      },
+    } as never),
+  )
 
   const googleParts = extractGoogleParts(response, true)
   const usage = extractGoogleUsage(response)
@@ -214,8 +223,10 @@ export async function runGoogleLlmStream(input: AiProviderLlmStreamContext): Pro
     ? { apiKey: input.providerConfig.apiKey, httpOptions: { baseUrl: input.providerConfig.baseUrl } }
     : { apiKey: input.providerConfig.apiKey }
   const ai = new GoogleGenAI(googleAiOptions)
+  const proxyTarget = resolveGoogleProviderProxyTarget(input.providerConfig.baseUrl)
   const modelClient = (ai as unknown as { models?: GoogleModelClient }).models
-  if (!modelClient || typeof modelClient.generateContentStream !== 'function') {
+  const generateContentStream = modelClient?.generateContentStream?.bind(modelClient)
+  if (!generateContentStream) {
     throw new Error('GOOGLE_STREAM_UNAVAILABLE: google provider does not expose generateContentStream')
   }
 
@@ -239,74 +250,76 @@ export async function runGoogleLlmStream(input: AiProviderLlmStreamContext): Pro
 
   const stepMeta = resolveStreamStepMeta(input.options)
   emitStreamStage(input.callbacks, stepMeta, 'streaming', input.selection.provider)
-  const stream = await modelClient.generateContentStream({
-    model: input.selection.modelId,
-    contents,
-    config: {
-      temperature: input.options.temperature ?? 0.7,
-      ...(systemInstruction ? { systemInstruction } : {}),
-      ...(thinkingConfig ? { thinkingConfig } : {}),
-    },
-  })
-  const streamChunk = stream as GoogleChunk
-  const streamIterable = streamChunk?.stream || (stream as AsyncIterable<unknown>)
+  return await withProviderProxyDispatcher(proxyTarget, async () => {
+    const stream = await generateContentStream({
+      model: input.selection.modelId,
+      contents,
+      config: {
+        temperature: input.options.temperature ?? 0.7,
+        ...(systemInstruction ? { systemInstruction } : {}),
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+      },
+    })
+    const streamChunk = stream as GoogleChunk
+    const streamIterable = streamChunk?.stream || (stream as AsyncIterable<unknown>)
 
-  let seq = 1
-  let text = ''
-  let reasoning = ''
-  let lastChunk: unknown = null
-  for await (const chunk of withStreamChunkTimeout(streamIterable)) {
-    lastChunk = chunk
-    const chunkParts = extractGoogleParts(chunk)
+    let seq = 1
+    let text = ''
+    let reasoning = ''
+    let lastChunk: unknown = null
+    for await (const chunk of withStreamChunkTimeout(streamIterable)) {
+      lastChunk = chunk
+      const chunkParts = extractGoogleParts(chunk)
 
-    let reasoningDelta = chunkParts.reasoning
-    if (reasoningDelta && reasoning && reasoningDelta.startsWith(reasoning)) {
-      reasoningDelta = reasoningDelta.slice(reasoning.length)
-    }
-    if (reasoningDelta) {
-      reasoning += reasoningDelta
-      emitStreamChunk(input.callbacks, stepMeta, {
-        kind: 'reasoning',
-        delta: reasoningDelta,
-        seq,
-        lane: 'reasoning',
-      })
-      seq += 1
+      let reasoningDelta = chunkParts.reasoning
+      if (reasoningDelta && reasoning && reasoningDelta.startsWith(reasoning)) {
+        reasoningDelta = reasoningDelta.slice(reasoning.length)
+      }
+      if (reasoningDelta) {
+        reasoning += reasoningDelta
+        emitStreamChunk(input.callbacks, stepMeta, {
+          kind: 'reasoning',
+          delta: reasoningDelta,
+          seq,
+          lane: 'reasoning',
+        })
+        seq += 1
+      }
+
+      let textDelta = chunkParts.text
+      if (textDelta && text && textDelta.startsWith(text)) {
+        textDelta = textDelta.slice(text.length)
+      }
+      if (textDelta) {
+        text += textDelta
+        emitStreamChunk(input.callbacks, stepMeta, {
+          kind: 'text',
+          delta: textDelta,
+          seq,
+          lane: 'main',
+        })
+        seq += 1
+      }
     }
 
-    let textDelta = chunkParts.text
-    if (textDelta && text && textDelta.startsWith(text)) {
-      textDelta = textDelta.slice(text.length)
+    const usage = extractGoogleUsage(lastChunk)
+    if (!text) {
+      throw new GoogleEmptyResponseError('stream_empty')
     }
-    if (textDelta) {
-      text += textDelta
-      emitStreamChunk(input.callbacks, stepMeta, {
-        kind: 'text',
-        delta: textDelta,
-        seq,
-        lane: 'main',
-      })
-      seq += 1
-    }
-  }
-
-  const usage = extractGoogleUsage(lastChunk)
-  if (!text) {
-    throw new GoogleEmptyResponseError('stream_empty')
-  }
-  const completion = buildOpenAIChatCompletion(
-    input.selection.modelId,
-    buildReasoningAwareContent(text, reasoning),
-    usage,
-  )
-  emitStreamStage(input.callbacks, stepMeta, 'completed', input.selection.provider)
-  input.callbacks?.onComplete?.(text, stepMeta)
-  return buildAiProviderLlmResult({
-    completion,
-    logProvider: input.selection.provider,
-    text,
-    reasoning,
-    usage,
+    const completion = buildOpenAIChatCompletion(
+      input.selection.modelId,
+      buildReasoningAwareContent(text, reasoning),
+      usage,
+    )
+    emitStreamStage(input.callbacks, stepMeta, 'completed', input.selection.provider)
+    input.callbacks?.onComplete?.(text, stepMeta)
+    return buildAiProviderLlmResult({
+      completion,
+      logProvider: input.selection.provider,
+      text,
+      reasoning,
+      usage,
+    })
   })
 }
 
@@ -316,6 +329,7 @@ export async function runGoogleVisionCompletion(input: AiProviderVisionExecution
       ? { apiKey: input.providerConfig.apiKey, httpOptions: { baseUrl: input.providerConfig.baseUrl } }
       : { apiKey: input.providerConfig.apiKey },
   )
+  const proxyTarget = resolveGoogleProviderProxyTarget(input.providerConfig.baseUrl)
   const { normalizeToBase64ForGeneration } = await import('@/lib/media/outbound-image')
 
   const parts: GoogleVisionPart[] = []
@@ -334,11 +348,14 @@ export async function runGoogleVisionCompletion(input: AiProviderVisionExecution
   }
   if (input.textPrompt) parts.push({ text: input.textPrompt })
 
-  const response = await ai.models.generateContent({
-    model: input.selection.modelId,
-    contents: [{ role: 'user', parts }],
-    config: { temperature: input.temperature },
-  })
+  const response = await withProviderProxyDispatcher(
+    proxyTarget,
+    async () => await ai.models.generateContent({
+      model: input.selection.modelId,
+      contents: [{ role: 'user', parts }],
+      config: { temperature: input.temperature },
+    }),
+  )
 
   const text = extractGoogleText(response)
   const usage = extractGoogleUsage(response)
@@ -424,11 +441,14 @@ export async function submitGeminiBatch(
     ]
 
     const batchClient = ai as unknown as GeminiBatchClient
-    const batchJob = await batchClient.batches.create({
-      model: 'gemini-3-pro-image-preview',
-      src: inlinedRequests,
-      config: { displayName: `image-gen-${Date.now()}` },
-    })
+    const batchJob = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await batchClient.batches.create({
+        model: 'gemini-3-pro-image-preview',
+        src: inlinedRequests,
+        config: { displayName: `image-gen-${Date.now()}` },
+      }),
+    )
 
     const batchRecord = asUnknownObject(batchJob)
     const batchName = batchRecord && typeof batchRecord.name === 'string' ? batchRecord.name : ''
@@ -452,7 +472,10 @@ export async function queryGeminiBatchStatus(
   try {
     const ai = new GoogleGenAI({ apiKey })
     const batchClient = ai as unknown as GeminiBatchClient
-    const batchJob = await batchClient.batches.get({ name: batchName })
+    const batchJob = await withProviderProxyDispatcher(
+      GOOGLE_PROVIDER_PROXY_TARGET,
+      async () => await batchClient.batches.get({ name: batchName }),
+    )
     const batchRecord = asUnknownObject(batchJob) || {}
 
     const state = typeof batchRecord.state === 'string' ? batchRecord.state : 'UNKNOWN'

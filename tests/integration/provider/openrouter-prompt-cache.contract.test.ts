@@ -1,6 +1,11 @@
 import type OpenAI from 'openai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
+
+type OpenAiClientOptions = {
+  fetch?: typeof fetch
+}
 
 const completionCreateMock = vi.hoisted(() => vi.fn())
 
@@ -80,6 +85,20 @@ describe('OpenRouter prompt cache provider contract', () => {
     expect(body.model).toBe('anthropic/claude-sonnet-4.6')
     expect(body.messages).toEqual([{ role: 'user', content: longPrompt }])
     expect(body.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
+  })
+
+  it('configures OpenRouter SDK clients with provider proxy fetch', async () => {
+    await runOpenRouterLlmCompletion({
+      modelId: 'anthropic/claude-sonnet-4.6',
+      providerConfig: { apiKey: 'sk-openrouter', baseUrl: 'https://openrouter.example/v1' },
+      messages: [{ role: 'user', content: 'hello' }],
+      temperature: 0.2,
+      reasoning: false,
+      reasoningEffort: 'high',
+    })
+
+    const [options] = openAiConstructorMock.mock.calls[0] as unknown as [OpenAiClientOptions]
+    expect(options.fetch).toBe(fetchWithProviderProxy)
   })
 
   it('sends Gemini explicit cache control only on cacheable content blocks', async () => {

@@ -1,6 +1,7 @@
 import type { ProviderAsyncTaskStatus } from '@/lib/ai-providers/shared/async-task-status'
 import { logInternal } from '@/lib/logging/semantic'
 import { FetchStatusError } from '@/lib/retry'
+import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -40,7 +41,7 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
   }
 
   try {
-    const queryResponse = await fetch(
+    const queryResponse = await fetchWithProviderProxy(
       `https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${taskId}`,
       {
         method: 'GET',

@@ -30,14 +30,19 @@ function resolveFetchUrl(url: string): string {
   return url
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+  fetchFn: typeof fetch,
+): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => {
     controller.abort(new FetchTimeoutError(timeoutMs))
   }, timeoutMs)
 
   try {
-    return await fetch(resolveFetchUrl(url), {
+    return await fetchFn(resolveFetchUrl(url), {
       ...options,
       signal: controller.signal,
     })
@@ -55,6 +60,7 @@ export type FetchWithRetryOptions = RequestInit & {
   readonly timeoutMs?: number
   readonly policy?: RetryPolicy
   readonly scope?: string
+  readonly fetchFn?: typeof fetch
 }
 
 export async function fetchWithRetry(url: string, options: FetchWithRetryOptions = {}): Promise<Response> {
@@ -62,6 +68,7 @@ export async function fetchWithRetry(url: string, options: FetchWithRetryOptions
     timeoutMs = 60_000,
     policy = RETRY_POLICY.mediaFetch,
     scope = `fetch:${url}`,
+    fetchFn = fetch,
     ...requestOptions
   } = options
 
@@ -69,7 +76,7 @@ export async function fetchWithRetry(url: string, options: FetchWithRetryOptions
     scope,
     policy,
     run: async () => {
-      const response = await fetchWithTimeout(url, requestOptions, timeoutMs)
+      const response = await fetchWithTimeout(url, requestOptions, timeoutMs, fetchFn)
       if (!response.ok) {
         const responseText = await response.text()
         throw new FetchStatusError(response.status, responseText)
