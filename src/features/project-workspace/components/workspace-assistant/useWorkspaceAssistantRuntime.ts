@@ -31,6 +31,13 @@ import {
   type ProjectAssistantTextAttachment,
 } from '@/lib/project-agent/text-attachments'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
+import {
+  areWorkspaceAssistantMessagesEqual,
+  mergeWorkspaceAssistantPersistedMessages,
+  shouldRefetchWorkspaceAssistantThreadForRunTransition,
+  type WorkspaceAssistantThreadSyncRun,
+  WORKSPACE_ASSISTANT_THREAD_CATCH_UP_DELAYS_MS,
+} from './thread-sync'
 
 export type WorkspaceAssistantChoiceType = 'script_intake' | 'script_review' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
@@ -378,12 +385,13 @@ export function useWorkspaceAssistantRuntime({
   })
   const runtime = useAISDKRuntime(chat)
   const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
-  const hydratedSessionKeyRef = useRef<string | null>(null)
   const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
+  const previousThreadSyncRunRef = useRef<WorkspaceAssistantThreadSyncRun | null>(null)
   const sessionStateRequestRef = useRef<{
     key: string
     promise: Promise<ProjectAgentSessionState | null>
   } | null>(null)
+  const refetchAssistantThreadRef = useRef<(() => Promise<void>) | null>(null)
   const refreshSessionStateRef = useRef<(() => Promise<ProjectAgentSessionState | null>) | null>(null)
   const replyActivitySequenceRef = useRef(0)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
@@ -449,6 +457,22 @@ export function useWorkspaceAssistantRuntime({
     latestMessagesRef.current = nextMessages
     chat.setMessages(nextMessages)
   }, [chat])
+
+  const syncPersistedThreadMessages = useCallback((messages: readonly UIMessage[]) => {
+    const nextMessages = mergeWorkspaceAssistantPersistedMessages(latestMessagesRef.current, messages)
+    if (areWorkspaceAssistantMessagesEqual(latestMessagesRef.current, nextMessages)) return
+    latestMessagesRef.current = nextMessages
+    chat.setMessages(nextMessages)
+  }, [chat])
+
+  const refetchAssistantThread = useCallback(async (): Promise<void> => {
+    const result = await assistantThread.refetch()
+    syncPersistedThreadMessages(result.data?.messages ?? [])
+  }, [assistantThread, syncPersistedThreadMessages])
+
+  useEffect(() => {
+    refetchAssistantThreadRef.current = refetchAssistantThread
+  }, [refetchAssistantThread])
 
   // The user's new message supersedes any pending approval server-side; the
   // stream answers with an interruption-resolved part so the card closes.
@@ -570,6 +594,8 @@ export function useWorkspaceAssistantRuntime({
     controlPending: sessionStatePollingControlPending,
     sessionState,
   })
+  const sessionCurrentRunId = sessionState?.currentRun?.runId ?? null
+  const sessionCurrentRunStatus = sessionState?.currentRun?.status ?? null
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
@@ -740,19 +766,43 @@ export function useWorkspaceAssistantRuntime({
 
   useEffect(() => {
     if (assistantThread.isLoading) return
-    if (hydratedSessionKeyRef.current === chatId) return
-    const persistedMessages = ensureUniqueUIMessages(assistantThread.data?.messages || [])
-    const persistedMessageIds = new Set(persistedMessages.map((message) => message.id))
-    const mergedMessages = ensureUniqueUIMessages(chat.messages.length > 0
-      ? [...persistedMessages, ...chat.messages.filter((message) => !persistedMessageIds.has(message.id))]
-      : persistedMessages)
-    replaceMessages(mergedMessages)
-    hydratedSessionKeyRef.current = chatId
-  }, [assistantThread.data, assistantThread.isLoading, chat.messages, chatId, replaceMessages])
+    syncPersistedThreadMessages(assistantThread.data?.messages || [])
+  }, [assistantThread.data, assistantThread.isLoading, chatId, syncPersistedThreadMessages])
+
+  useEffect(() => {
+    if (assistantThread.isLoading) return
+    const timers = WORKSPACE_ASSISTANT_THREAD_CATCH_UP_DELAYS_MS.map((delayMs) => window.setTimeout(() => {
+      void refetchAssistantThreadRef.current?.()
+    }, delayMs))
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [assistantThread.isLoading, chatId])
 
   useEffect(() => {
     void refreshSessionState()
   }, [chatId, refreshSessionState])
+
+  useEffect(() => {
+    const currentRun = sessionCurrentRunId && sessionCurrentRunStatus
+      ? {
+          runId: sessionCurrentRunId,
+          status: sessionCurrentRunStatus,
+        }
+      : null
+    const shouldRefetchThread = shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: previousThreadSyncRunRef.current,
+      currentRun,
+    })
+    previousThreadSyncRunRef.current = currentRun
+    if (!shouldRefetchThread) return
+    const timers = WORKSPACE_ASSISTANT_THREAD_CATCH_UP_DELAYS_MS.map((delayMs) => window.setTimeout(() => {
+      void refetchAssistantThreadRef.current?.()
+    }, delayMs))
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [sessionCurrentRunId, sessionCurrentRunStatus])
 
   useEffect(() => {
     if (!shouldPollSessionState) return

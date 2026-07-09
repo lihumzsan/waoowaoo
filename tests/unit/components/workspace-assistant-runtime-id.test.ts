@@ -11,6 +11,10 @@ import {
   shouldPollWorkspaceAssistantSessionState,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
+import {
+  mergeWorkspaceAssistantPersistedMessages,
+  shouldRefetchWorkspaceAssistantThreadForRunTransition,
+} from '@/features/project-workspace/components/workspace-assistant/thread-sync'
 
 describe('workspace assistant runtime chat id', () => {
   it('scopes chat sessions by project and episode only', () => {
@@ -190,6 +194,107 @@ describe('workspace assistant runtime chat id', () => {
         parts: [{ type: 'text', text: 'final chunk' }],
       },
     ])
+  })
+
+  it('keeps optimistic user messages when a reload recovery fetch returns an older thread snapshot', () => {
+    const merged = mergeWorkspaceAssistantPersistedMessages([
+      {
+        id: 'assistant-existing',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已有回复' }],
+      },
+      {
+        id: 'user-optimistic',
+        role: 'user',
+        parts: [{ type: 'text', text: '你好' }],
+      },
+    ], [
+      {
+        id: 'assistant-existing',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已有回复' }],
+      },
+    ])
+
+    expect(merged).toEqual([
+      {
+        id: 'assistant-existing',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已有回复' }],
+      },
+      {
+        id: 'user-optimistic',
+        role: 'user',
+        parts: [{ type: 'text', text: '你好' }],
+      },
+    ])
+  })
+
+  it('uses the persisted server message when reload recovery catches up to the committed id', () => {
+    const merged = mergeWorkspaceAssistantPersistedMessages([
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '本地文本' }],
+      },
+      {
+        id: 'assistant-local',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'streaming' }],
+      },
+    ], [
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '服务端文本' }],
+      },
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '最终回复' }],
+      },
+    ])
+
+    expect(merged).toEqual([
+      {
+        id: 'user-1',
+        role: 'user',
+        parts: [{ type: 'text', text: '服务端文本' }],
+      },
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '最终回复' }],
+      },
+      {
+        id: 'assistant-local',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'streaming' }],
+      },
+    ])
+  })
+
+  it('refetches the persisted thread when server run lifecycle edges can commit messages', () => {
+    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: null,
+      currentRun: { runId: 'run-1', status: 'running' },
+    })).toBe(true)
+    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: { runId: 'run-1', status: 'running' },
+      currentRun: { runId: 'run-1', status: 'completed' },
+    })).toBe(true)
+    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: { runId: 'run-1', status: 'running' },
+      currentRun: { runId: 'run-1', status: 'awaiting_choice' },
+    })).toBe(true)
+    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: { runId: 'run-1', status: 'awaiting_task' },
+      currentRun: null,
+    })).toBe(true)
+    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
+      previousRun: { runId: 'run-1', status: 'running' },
+      currentRun: { runId: 'run-1', status: 'running' },
+    })).toBe(false)
   })
 
 })
