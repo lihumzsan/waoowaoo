@@ -98,7 +98,11 @@ vi.mock('@/lib/storage', () => ({
 }))
 
 vi.mock('@/lib/video-compose/ffmpeg-binaries', () => ({
-  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => binaryName),
+  buildFfmpegExecFileOptions: vi.fn((
+    _execution: { readonly command: string },
+    options: Record<string, unknown> = {},
+  ) => options),
+  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => ({ command: binaryName })),
 }))
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {

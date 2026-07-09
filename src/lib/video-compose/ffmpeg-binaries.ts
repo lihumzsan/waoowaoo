@@ -1,39 +1,104 @@
-import { execFileSync } from 'node:child_process'
-import { accessSync, constants, existsSync, statSync } from 'node:fs'
+import { execFileSync, type ExecFileOptions } from 'node:child_process'
+import { accessSync, constants, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
 export type FfmpegBinaryName = 'ffmpeg' | 'ffprobe'
+export type FfmpegBinaryEnv = Readonly<Record<string, string>>
+
+export type FfmpegBinaryExecution = {
+  readonly command: string
+  readonly cwd?: string
+  readonly env?: FfmpegBinaryEnv
+}
+
+export type FfmpegBinaryCandidate = {
+  readonly command: string
+  readonly cwd?: string
+  readonly env?: FfmpegBinaryEnv
+}
 
 const requireFromCurrentModule = createRequire(import.meta.url)
 
-const REMOTION_COMPOSITOR_PACKAGES: Readonly<Record<string, readonly string[]>> = {
-  'darwin-arm64': ['@remotion/compositor-darwin-arm64'],
-  'darwin-x64': ['@remotion/compositor-darwin-x64'],
-  'linux-arm64': [
-    '@remotion/compositor-linux-arm64-gnu',
-    '@remotion/compositor-linux-arm64-musl',
-  ],
-  'linux-x64': [
-    '@remotion/compositor-linux-x64-gnu',
-    '@remotion/compositor-linux-x64-musl',
-  ],
-  'win32-x64': ['@remotion/compositor-win32-x64-msvc'],
-}
-
 export type FfmpegBinaryResolverOptions = {
-  readonly remotionCandidates?: readonly string[]
-  readonly pathCandidates?: readonly string[]
+  readonly remotionCandidates?: readonly FfmpegBinaryCandidate[]
 }
 
 const runnableBinaryCache = new Map<string, boolean>()
 
-function envVarName(binaryName: FfmpegBinaryName): 'FFMPEG_PATH' | 'FFPROBE_PATH' {
-  return binaryName === 'ffmpeg' ? 'FFMPEG_PATH' : 'FFPROBE_PATH'
-}
-
 function binaryFileName(binaryName: FfmpegBinaryName): string {
   return process.platform === 'win32' ? `${binaryName}.exe` : binaryName
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isLinuxMusl(): boolean {
+  if (process.platform !== 'linux') return false
+  const report = process.report?.getReport()
+  if (typeof report === 'string' || !isRecord(report)) return false
+  const header = isRecord(report.header) ? report.header : null
+  return typeof header?.glibcVersionRuntime !== 'string'
+}
+
+function remotionCompositorPackageName(): string {
+  switch (process.platform) {
+    case 'darwin':
+      if (process.arch === 'arm64') return '@remotion/compositor-darwin-arm64'
+      if (process.arch === 'x64') return '@remotion/compositor-darwin-x64'
+      break
+    case 'linux':
+      if (process.arch === 'arm64') {
+        return isLinuxMusl()
+          ? '@remotion/compositor-linux-arm64-musl'
+          : '@remotion/compositor-linux-arm64-gnu'
+      }
+      if (process.arch === 'x64') {
+        return isLinuxMusl()
+          ? '@remotion/compositor-linux-x64-musl'
+          : '@remotion/compositor-linux-x64-gnu'
+      }
+      break
+    case 'win32':
+      if (process.arch === 'x64') return '@remotion/compositor-win32-x64-msvc'
+      break
+  }
+  throw new Error(`FFMPEG_REMOTION_PLATFORM_UNSUPPORTED:${process.platform}-${process.arch}`)
+}
+
+function remotionBinaryEnv(directoryPath: string): FfmpegBinaryEnv | undefined {
+  if (process.platform !== 'darwin') return undefined
+  const existingLibraryPath = process.env.DYLD_LIBRARY_PATH?.trim()
+  return {
+    DYLD_LIBRARY_PATH: existingLibraryPath
+      ? `${directoryPath}${path.delimiter}${existingLibraryPath}`
+      : directoryPath,
+  }
+}
+
+function mergeExecutionEnv(
+  executionEnv: FfmpegBinaryEnv | undefined,
+  optionsEnv: ExecFileOptions['env'],
+): ExecFileOptions['env'] {
+  if (!executionEnv) return optionsEnv
+  return {
+    ...process.env,
+    ...(optionsEnv ?? {}),
+    ...executionEnv,
+  }
+}
+
+export function buildFfmpegExecFileOptions(
+  execution: FfmpegBinaryExecution,
+  options: ExecFileOptions = {},
+): ExecFileOptions {
+  const env = mergeExecutionEnv(execution.env, options.env)
+  return {
+    ...options,
+    cwd: execution.cwd ?? options.cwd,
+    ...(env ? { env } : {}),
+  }
 }
 
 function isUsableFile(filePath: string): boolean {
@@ -46,13 +111,27 @@ function isUsableFile(filePath: string): boolean {
   }
 }
 
-function isRunnableBinary(binaryName: FfmpegBinaryName, filePath: string): boolean {
-  if (!isUsableFile(filePath)) return false
-  const cacheKey = `${binaryName}:${filePath}`
+function executionCacheKey(binaryName: FfmpegBinaryName, execution: FfmpegBinaryExecution): string {
+  const envKey = execution.env
+    ? Object.entries(execution.env)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\0')
+    : ''
+  return [binaryName, execution.command, execution.cwd ?? '', envKey].join('\0')
+}
+
+function isRunnableBinary(binaryName: FfmpegBinaryName, execution: FfmpegBinaryExecution): boolean {
+  if (!isUsableFile(execution.command)) return false
+  const cacheKey = executionCacheKey(binaryName, execution)
   const cached = runnableBinaryCache.get(cacheKey)
   if (cached !== undefined) return cached
   try {
-    execFileSync(filePath, ['-version'], {
+    const options = buildFfmpegExecFileOptions(execution)
+    execFileSync(execution.command, ['-version'], {
+      cwd: options.cwd,
+      env: options.env,
       stdio: 'ignore',
       timeout: 5000,
     })
@@ -64,72 +143,58 @@ function isRunnableBinary(binaryName: FfmpegBinaryName, filePath: string): boole
   }
 }
 
-function resolveEnvPath(binaryName: FfmpegBinaryName): string | null {
-  const configuredPath = process.env[envVarName(binaryName)]?.trim()
-  if (!configuredPath) return null
-  if (isRunnableBinary(binaryName, configuredPath)) return configuredPath
-  throw new Error(`FFMPEG_BINARY_ENV_PATH_INVALID:${binaryName}:${configuredPath}`)
+function assertLegacyEnvPathUnset(binaryName: FfmpegBinaryName): void {
+  const legacyEnvName = binaryName === 'ffmpeg' ? 'FFMPEG_PATH' : 'FFPROBE_PATH'
+  const configuredPath = process.env[legacyEnvName]?.trim()
+  if (configuredPath) {
+    throw new Error(`FFMPEG_BINARY_ENV_PATH_UNSUPPORTED:${binaryName}:${legacyEnvName}`)
+  }
 }
 
-function resolveFirstRunnableBinary(binaryName: FfmpegBinaryName, candidates: readonly string[]): string | null {
-  for (const candidatePath of candidates) {
-    if (isRunnableBinary(binaryName, candidatePath)) return candidatePath
+function resolveFirstRunnableBinary(
+  binaryName: FfmpegBinaryName,
+  candidates: readonly FfmpegBinaryCandidate[],
+): FfmpegBinaryExecution | null {
+  for (const candidate of candidates) {
+    const execution: FfmpegBinaryExecution = {
+      ...candidate,
+    }
+    if (isRunnableBinary(binaryName, execution)) return execution
   }
   return null
 }
 
-function resolveRemotionPackageBinary(binaryName: FfmpegBinaryName, candidates?: readonly string[]): string | null {
-  if (candidates) return resolveFirstRunnableBinary(binaryName, candidates)
-  const packageNames = REMOTION_COMPOSITOR_PACKAGES[`${process.platform}-${process.arch}`] ?? []
-  const binaryPaths: string[] = []
-  for (const packageName of packageNames) {
-    try {
-      const packageJsonPath = requireFromCurrentModule.resolve(`${packageName}/package.json`)
-      const binaryPath = path.join(path.dirname(packageJsonPath), binaryFileName(binaryName))
-      binaryPaths.push(binaryPath)
-    } catch {
-      continue
-    }
+function resolveRemotionPackageBinary(
+  binaryName: FfmpegBinaryName,
+  candidates?: readonly FfmpegBinaryCandidate[],
+): FfmpegBinaryExecution {
+  if (candidates) {
+    const candidateExecution = resolveFirstRunnableBinary(binaryName, candidates)
+    if (candidateExecution) return candidateExecution
+    throw new Error(`FFMPEG_BINARY_NOT_FOUND:${binaryName}`)
   }
-  return resolveFirstRunnableBinary(binaryName, binaryPaths)
-}
 
-function pathExecutableNames(binaryName: FfmpegBinaryName): readonly string[] {
-  if (process.platform !== 'win32') return [binaryName]
-  const configuredExtensions = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM')
-    .split(';')
-    .map((extension) => extension.trim())
-    .filter(Boolean)
-  return configuredExtensions.map((extension) => `${binaryName}${extension.toLowerCase()}`)
-}
-
-function resolvePathBinary(binaryName: FfmpegBinaryName, candidates?: readonly string[]): string | null {
-  if (candidates) return resolveFirstRunnableBinary(binaryName, candidates)
-  const pathEntries = (process.env.PATH ?? '')
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-  for (const pathEntry of pathEntries) {
-    for (const executableName of pathExecutableNames(binaryName)) {
-      const candidatePath = path.join(pathEntry, executableName)
-      if (existsSync(candidatePath) && isRunnableBinary(binaryName, candidatePath)) return candidatePath
-    }
+  const packageName = remotionCompositorPackageName()
+  let packageJsonPath: string
+  try {
+    packageJsonPath = requireFromCurrentModule.resolve(`${packageName}/package.json`)
+  } catch {
+    throw new Error(`FFMPEG_REMOTION_PACKAGE_NOT_INSTALLED:${binaryName}:${packageName}`)
   }
-  return null
+  const packageDirectory = path.dirname(packageJsonPath)
+  const execution: FfmpegBinaryExecution = {
+    command: path.join(packageDirectory, binaryFileName(binaryName)),
+    cwd: packageDirectory,
+    env: remotionBinaryEnv(packageDirectory),
+  }
+  if (isRunnableBinary(binaryName, execution)) return execution
+  throw new Error(`FFMPEG_REMOTION_BINARY_UNUSABLE:${binaryName}:${execution.command}`)
 }
 
 export function resolveFfmpegBinary(
   binaryName: FfmpegBinaryName,
   options: FfmpegBinaryResolverOptions = {},
-): string {
-  const envPath = resolveEnvPath(binaryName)
-  if (envPath) return envPath
-
-  const remotionPath = resolveRemotionPackageBinary(binaryName, options.remotionCandidates)
-  if (remotionPath) return remotionPath
-
-  const pathBinary = resolvePathBinary(binaryName, options.pathCandidates)
-  if (pathBinary) return pathBinary
-
-  throw new Error(`FFMPEG_BINARY_NOT_FOUND:${binaryName}`)
+): FfmpegBinaryExecution {
+  assertLegacyEnvPathUnset(binaryName)
+  return resolveRemotionPackageBinary(binaryName, options.remotionCandidates)
 }

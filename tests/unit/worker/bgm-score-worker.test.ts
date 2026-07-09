@@ -90,7 +90,11 @@ vi.mock('@/lib/storage', () => ({
 }))
 
 vi.mock('@/lib/video-compose/ffmpeg-binaries', () => ({
-  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => binaryName),
+  buildFfmpegExecFileOptions: vi.fn((
+    _execution: { readonly command: string },
+    options: Record<string, unknown> = {},
+  ) => options),
+  resolveFfmpegBinary: vi.fn((binaryName: 'ffmpeg' | 'ffprobe') => ({ command: binaryName })),
 }))
 
 function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
@@ -273,15 +277,21 @@ function buildValidPlanText(): string {
 describe('bgm score worker', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    execFileMock.mockImplementation((command: string, args: readonly string[], maybeCallback: unknown) => {
-      if (typeof maybeCallback !== 'function') throw new Error('execFile callback missing')
+    execFileMock.mockImplementation((
+      command: string,
+      args: readonly string[],
+      optionsOrCallback: unknown,
+      maybeCallback?: unknown,
+    ) => {
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
+      if (typeof callback !== 'function') throw new Error('execFile callback missing')
       if (command === 'ffmpeg') {
         const outputPath = args[args.length - 1]
         if (typeof outputPath === 'string') {
           writeFileSync(outputPath, Buffer.from('mixed-bgm'))
         }
       }
-      maybeCallback(null, { stdout: '3.500\n', stderr: '' })
+      callback(null, { stdout: '3.500\n', stderr: '' })
     })
     storageMock.uploadObject.mockImplementation(async (_buffer: Buffer, key: string) => key)
     mediaServiceMock.ensureMediaObjectFromStorageKey.mockImplementation(async (storageKey: string) => ({
@@ -416,9 +426,15 @@ describe('bgm score worker', () => {
       audioBase64: Buffer.from('short-bgm').toString('base64'),
       audioMimeType: 'audio/mpeg',
     })
-    execFileMock.mockImplementation((_command: string, _args: readonly string[], maybeCallback: unknown) => {
-      if (typeof maybeCallback !== 'function') throw new Error('execFile callback missing')
-      maybeCallback(null, { stdout: '2.000\n', stderr: '' })
+    execFileMock.mockImplementation((
+      _command: string,
+      _args: readonly string[],
+      optionsOrCallback: unknown,
+      maybeCallback?: unknown,
+    ) => {
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback
+      if (typeof callback !== 'function') throw new Error('execFile callback missing')
+      callback(null, { stdout: '2.000\n', stderr: '' })
     })
 
     const { handleBgmScoreGenerateTask } = await import('@/lib/bgm-score/generate')

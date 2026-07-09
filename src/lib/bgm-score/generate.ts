@@ -24,7 +24,11 @@ import {
   type FinalRenderClipPlan,
 } from '@/lib/video-compose/final-render-plan'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
-import { resolveFfmpegBinary } from '@/lib/video-compose/ffmpeg-binaries'
+import {
+  buildFfmpegExecFileOptions,
+  resolveFfmpegBinary,
+  type FfmpegBinaryName,
+} from '@/lib/video-compose/ffmpeg-binaries'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { buildBgmScorePlanPrompt, buildFinalBgmMusicPrompt } from './prompt'
 import { buildBgmTimelineSignature } from './timeline'
@@ -56,6 +60,18 @@ type CommandResult = {
   readonly stderr: string | Buffer
 }
 
+async function runFfmpegCommand(
+  binaryName: FfmpegBinaryName,
+  args: readonly string[],
+): Promise<CommandResult> {
+  const execution = resolveFfmpegBinary(binaryName)
+  return await execFileAsync(
+    execution.command,
+    [...args],
+    buildFfmpegExecFileOptions(execution),
+  ) as CommandResult
+}
+
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -78,7 +94,7 @@ async function probeAudioDurationSeconds(input: GeneratedAudioBuffer): Promise<n
   const audioPath = path.join(workspaceDir, `generated.${extensionFromMimeType(input.mimeType)}`)
   try {
     await writeFile(audioPath, input.buffer)
-    const result = await execFileAsync(resolveFfmpegBinary('ffprobe'), [
+    const result = await runFfmpegCommand('ffprobe', [
       '-v',
       'error',
       '-show_entries',
@@ -86,7 +102,7 @@ async function probeAudioDurationSeconds(input: GeneratedAudioBuffer): Promise<n
       '-of',
       'default=noprint_wrappers=1:nokey=1',
       audioPath,
-    ]) as CommandResult
+    ])
     const duration = Number.parseFloat(String(result.stdout).trim())
     if (!Number.isFinite(duration) || duration <= 0) {
       throw new Error('BGM_SCORE_AUDIO_DURATION_PROBE_FAILED')
@@ -349,7 +365,7 @@ async function concatCueAudioBuffers(input: {
       const sourcePath = path.join(workspaceDir, `cue-source-${String(index + 1)}.${extensionFromMimeType(cue.audio.mimeType)}`)
       const trimmedPath = path.join(workspaceDir, `cue-trimmed-${String(index + 1)}.m4a`)
       await writeFile(sourcePath, cue.audio.buffer)
-      await execFileAsync(resolveFfmpegBinary('ffmpeg'), [
+      await runFfmpegCommand('ffmpeg', [
         '-y',
         '-i',
         sourcePath,
@@ -369,7 +385,7 @@ async function concatCueAudioBuffers(input: {
     const outputPath = path.join(workspaceDir, 'bgm-mix.m4a')
     const concatLines = trimmedPaths.map((clipPath) => `file '${escapeConcatPath(clipPath)}'`).join('\n')
     await writeFile(listPath, `${concatLines}\n`, 'utf8')
-    await execFileAsync(resolveFfmpegBinary('ffmpeg'), [
+    await runFfmpegCommand('ffmpeg', [
       '-y',
       '-f',
       'concat',
