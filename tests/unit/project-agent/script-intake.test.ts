@@ -54,6 +54,8 @@ describe('script intake choice', () => {
     })
 
     expect(zhPrompt).toContain('可以直接扩写的创作简报')
+    expect(zhPrompt).toContain('目标时长')
+    expect(zhPrompt).toContain('key 必须是 "targetRuntime"')
     expect(zhPrompt).toContain('时代与背景设定')
     expect(zhPrompt).toContain('主角的核心动机/欲望/目标')
     expect(zhPrompt).toContain('绝对不要超过 7 个问题')
@@ -61,6 +63,8 @@ describe('script intake choice', () => {
     expect(zhPrompt).toContain('不要询问完整剧本的所有信息')
 
     expect(enPrompt).toContain('directly expandable creative brief')
+    expect(enPrompt).toContain('Target runtime')
+    expect(enPrompt).toContain('key must be "targetRuntime"')
     expect(enPrompt).toContain('era and setting')
     expect(enPrompt).toContain("the protagonist's core motivation/desire/goal")
     expect(enPrompt).toContain('Never return more than 7 questions')
@@ -80,9 +84,88 @@ describe('script intake choice', () => {
     expect(card.choiceType).toBe('script_intake')
     expect(card.variant).toBe('confirm_or_reply')
     expect(card.autoSubmitOnReady).toBe(true)
-    expect(card.groups).toHaveLength(2)
+    expect(card.groups).toHaveLength(3)
+    expect(card.groups[0]?.key).toBe('targetRuntime')
+    expect(card.groups[0]?.label).toBe('目标时长')
+    expect(card.groups[0]?.options.map((option) => option.label)).toEqual(['1分钟', '3分钟', '5分钟', '10分钟'])
     expect(card.groups[0]?.options.some((option) => option.value === 'ai_fill')).toBe(false)
     expect(readPersistedScriptIntakeChoiceCard(card)?.cardId).toBe(card.cardId)
+  })
+
+  it('normalizes model-provided runtime questions to the fixed runtime options', () => {
+    const card = buildScriptIntakeChoiceCard({
+      locale: 'en',
+      workflow: workflow('ready_to_ingest_script'),
+      toolCallId: 'tool-call-1',
+      seedText: 'A haunted elevator story',
+      plan: {
+        questions: [
+          {
+            key: 'duration',
+            label: 'Length',
+            options: [
+              { value: 'short', label: 'Short', description: 'Short version.' },
+              { value: 'long', label: 'Long', description: 'Long version.' },
+            ],
+          },
+          plan.questions[0]!,
+        ],
+      },
+    })
+
+    expect(card.groups[0]?.key).toBe('targetRuntime')
+    expect(card.groups[0]?.label).toBe('Target runtime')
+    expect(card.groups[0]?.options.map((option) => option.label)).toEqual([
+      '1 minute',
+      '3 minutes',
+      '5 minutes',
+      '10 minutes',
+    ])
+  })
+
+  it('keeps the intake card within seven questions when adding missing runtime', () => {
+    const sevenQuestionPlan: ScriptIntakePlannerOutput = {
+      questions: Array.from({ length: 7 }, (_, index) => ({
+        key: `question${String(index + 1)}`,
+        label: `问题${String(index + 1)}`,
+        options: [
+          { value: `option_a_${String(index + 1)}`, label: '选项A', description: '第一种走向。' },
+          { value: `option_b_${String(index + 1)}`, label: '选项B', description: '第二种走向。' },
+        ],
+      })),
+    }
+
+    const card = buildScriptIntakeChoiceCard({
+      locale: 'zh',
+      workflow: workflow('ready_to_ingest_script'),
+      toolCallId: 'tool-call-1',
+      seedText: '恐怖故事',
+      plan: sevenQuestionPlan,
+    })
+
+    expect(card.groups).toHaveLength(7)
+    expect(card.groups[0]?.key).toBe('targetRuntime')
+    expect(card.groups.map((group) => group.key)).not.toContain('question7')
+  })
+
+  it('does not ask target runtime again when the seed already states one', () => {
+    const zhCard = buildScriptIntakeChoiceCard({
+      locale: 'zh',
+      workflow: workflow('ready_to_ingest_script'),
+      toolCallId: 'tool-call-1',
+      seedText: '两分钟科幻短片，民科发现超光速方法后看见过去。',
+      plan,
+    })
+    const enCard = buildScriptIntakeChoiceCard({
+      locale: 'en',
+      workflow: workflow('ready_to_ingest_script'),
+      toolCallId: 'tool-call-1',
+      seedText: 'A two-minute sci-fi short about faster-than-light travel revealing the past.',
+      plan,
+    })
+
+    expect(zhCard.groups.map((group) => group.key)).toEqual(['subgenre', 'pace'])
+    expect(enCard.groups.map((group) => group.key)).toEqual(['subgenre', 'pace'])
   })
 
   it('rejects planner questions that provide an ai_fill option', () => {
