@@ -9,6 +9,7 @@ import {
 } from '@/lib/ai-providers/google/models'
 import {
   OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
+  OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY,
   OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
   OPENROUTER_PLATFORM_MODEL_PRESETS,
 } from '@/lib/ai-providers/openrouter/models'
@@ -16,6 +17,7 @@ import type { DefaultModelsPayload } from '@/lib/user-api/api-config-types'
 import type { PlatformModelPreset } from '@/lib/platform-models/types'
 
 export type PlatformDefaultModelField = keyof Required<DefaultModelsPayload>
+export const PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY = OPENROUTER_PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
 
 export const PLATFORM_MODEL_INPUTS: readonly PlatformModelPreset[] = [
   ...GOOGLE_PLATFORM_MODEL_PRESETS,

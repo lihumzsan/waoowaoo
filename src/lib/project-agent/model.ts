@@ -1,13 +1,11 @@
 import type { LanguageModel } from 'ai'
 import { getProviderKey, parseModelKeyStrict } from '@/lib/ai-registry/selection'
-import {
-  OPENROUTER_GPT_5_5_MODEL_ID,
-} from '@/lib/ai-providers/openrouter/models'
+import { PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY } from '@/lib/ai-registry/platform-models'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { resolveLlmRuntimeModel } from '@/lib/ai-exec/llm-runtime'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
 
-export const DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY = `openrouter::${OPENROUTER_GPT_5_5_MODEL_ID}`
+export const DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY = PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
 
 export function resolveProjectAgentAssistantModelKey(): string {
   const rawModelKey = process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL?.trim()

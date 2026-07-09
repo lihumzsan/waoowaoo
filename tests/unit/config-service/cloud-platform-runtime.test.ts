@@ -97,7 +97,7 @@ describe('cloud platform runtime project config', () => {
       capabilityDefaults: {
         'openrouter::bytedance/seedance-2.0-fast': {
           resolution: '480p',
-          generateAudio: false,
+          generateAudio: true,
         },
       },
       capabilityOverrides: {},

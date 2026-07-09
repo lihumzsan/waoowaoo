@@ -126,6 +126,7 @@ function buildCorePlan(sound: string = 'native video sound only') {
           },
         ],
         keyObjects: [],
+        dialogue: [],
         sound,
       },
     ],

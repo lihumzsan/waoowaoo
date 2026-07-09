@@ -6,8 +6,8 @@ import {
 } from '@/lib/profile/sections'
 
 describe('profile section routing', () => {
-  it('exposes account overview, api config and billing as the settings center sections', () => {
-    expect(PROFILE_SECTIONS).toEqual(['overview', 'apiConfig', 'billing'])
+  it('exposes account overview, security, api config and billing as the settings center sections', () => {
+    expect(PROFILE_SECTIONS).toEqual(['overview', 'security', 'apiConfig', 'billing'])
   })
 
   it('uses account overview when the section query is absent', () => {

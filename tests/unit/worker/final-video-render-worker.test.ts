@@ -138,6 +138,7 @@ function buildCorePlan() {
           },
         ],
         keyObjects: [],
+        dialogue: [],
         sound: 'tense pulse, sparse piano',
       },
     ],
