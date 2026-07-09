@@ -56,22 +56,22 @@ describe('ffmpeg binary resolver', () => {
     expect(() => resolveFfmpegBinary('ffprobe')).toThrow('FFMPEG_BINARY_ENV_PATH_UNSUPPORTED:ffprobe:FFPROBE_PATH')
   })
 
-  it('resolves Remotion compositor candidates with their execution environment', () => {
+  it('resolves bundled static candidates with their execution environment', () => {
     delete process.env.FFMPEG_PATH
-    const directoryPath = mkdtempSync(path.join(tmpdir(), 'waoowaoo-remotion-ffmpeg-bin-'))
+    const directoryPath = mkdtempSync(path.join(tmpdir(), 'waoowaoo-static-ffmpeg-bin-'))
     temporaryDirectories.push(directoryPath)
-    writeFileSync(path.join(directoryPath, 'remotion-marker'), 'ok', 'utf8')
-    const remotionCandidate = createExecutableAt(
+    writeFileSync(path.join(directoryPath, 'static-marker'), 'ok', 'utf8')
+    const bundledCandidate = createExecutableAt(
       directoryPath,
-      'remotion-ffmpeg',
-      '#!/bin/sh\n[ -f "./remotion-marker" ] || exit 31\n[ "$REMOTION_TEST_LIBRARY_PATH" = "enabled" ] || exit 32\nexit 0\n',
+      'bundled-ffmpeg',
+      '#!/bin/sh\n[ -f "./static-marker" ] || exit 31\n[ "$STATIC_TEST_LIBRARY_PATH" = "enabled" ] || exit 32\nexit 0\n',
     )
 
     const execution = resolveFfmpegBinary('ffmpeg', {
-      remotionCandidates: [{
-        command: remotionCandidate,
+      bundledCandidates: [{
+        command: bundledCandidate,
         cwd: directoryPath,
-        env: { REMOTION_TEST_LIBRARY_PATH: 'enabled' },
+        env: { STATIC_TEST_LIBRARY_PATH: 'enabled' },
       }],
     })
     const execOptions = buildFfmpegExecFileOptions(execution, {
@@ -79,33 +79,41 @@ describe('ffmpeg binary resolver', () => {
     })
 
     expect(execution).toEqual(expect.objectContaining({
-      command: remotionCandidate,
+      command: bundledCandidate,
       cwd: directoryPath,
     }))
     expect(execOptions.cwd).toBe(directoryPath)
-    expect(execOptions.env?.REMOTION_TEST_LIBRARY_PATH).toBe('enabled')
+    expect(execOptions.env?.STATIC_TEST_LIBRARY_PATH).toBe('enabled')
     expect(execOptions.env?.CALLER_ENV).toBe('preserved')
+  })
+
+  it('resolves ffmpeg and ffprobe from the installed static package by default', () => {
+    delete process.env.FFMPEG_PATH
+    delete process.env.FFPROBE_PATH
+
+    expect(resolveFfmpegBinary('ffmpeg').command).toContain('ffmpeg-ffprobe-static')
+    expect(resolveFfmpegBinary('ffprobe').command).toContain('ffmpeg-ffprobe-static')
   })
 
   it('does not use system PATH ffmpeg when bundled candidates are unavailable', () => {
     delete process.env.FFMPEG_PATH
-    const brokenRemotionCandidate = createExecutable('broken-remotion-ffmpeg', 23)
+    const brokenBundledCandidate = createExecutable('broken-bundled-ffmpeg', 23)
     const systemDirectory = mkdtempSync(path.join(tmpdir(), 'waoowaoo-system-ffmpeg-bin-'))
     temporaryDirectories.push(systemDirectory)
     createExecutableAt(systemDirectory, 'ffmpeg', '#!/bin/sh\nexit 0\n')
     process.env.PATH = systemDirectory
 
     expect(() => resolveFfmpegBinary('ffmpeg', {
-      remotionCandidates: [{ command: brokenRemotionCandidate }],
+      bundledCandidates: [{ command: brokenBundledCandidate }],
     })).toThrow('FFMPEG_BINARY_NOT_FOUND:ffmpeg')
   })
 
   it('fails explicitly when every discovered candidate exists but cannot run', () => {
     delete process.env.FFPROBE_PATH
-    const brokenRemotionCandidate = createExecutable('broken-remotion-ffprobe', 23)
+    const brokenBundledCandidate = createExecutable('broken-bundled-ffprobe', 23)
 
     expect(() => resolveFfmpegBinary('ffprobe', {
-      remotionCandidates: [{ command: brokenRemotionCandidate }],
+      bundledCandidates: [{ command: brokenBundledCandidate }],
     })).toThrow('FFMPEG_BINARY_NOT_FOUND:ffprobe')
   })
 })
