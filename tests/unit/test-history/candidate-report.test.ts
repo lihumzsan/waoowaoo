@@ -44,7 +44,7 @@ describe('test history candidate report', () => {
   it('separates corrective candidates, test layers, and repeated production hotspots', () => {
     const repo = mkdtempSync(path.join(tmpdir(), 'waoowaoo-test-history-'))
     temporaryRepositories.push(repo)
-    git(repo, ['init'])
+    git(repo, ['init', '-q'])
     git(repo, ['config', 'user.email', 'test@example.com'])
     git(repo, ['config', 'user.name', 'Test User'])
 
