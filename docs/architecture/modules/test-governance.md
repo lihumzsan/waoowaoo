@@ -43,7 +43,7 @@
 - `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
 - `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
 - `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
-- `scripts/guards/test-size-guard.mjs` 拒绝本次新增或修改后超过 350 行或 10 个 case 的测试文件；既有超限文件必须在被修改时同步拆分。
+- `scripts/guards/test-size-guard.mjs` 穷尽扫描全仓测试，任何超过 350 行或 10 个 case 的测试文件都会失败；历史超限豁免已删除。
 
 ## 历史回归
 

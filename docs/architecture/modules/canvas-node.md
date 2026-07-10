@@ -45,7 +45,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
 - `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
-- `tests/unit/optimistic/sse-invalidation.test.ts` 验证 Query Cache materialization 早于 runtime clear。
+- `tests/unit/optimistic/sse-task-terminal.test.ts` 与 `sse-event-ordering.test.ts` 验证 Query Cache materialization 早于 runtime clear，并拒绝重复/乱序覆盖。
 - `tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 验证重复、晚到与 replay 事件不能越过 Task 终态水位。
 - `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
 - `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。

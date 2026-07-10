@@ -24,7 +24,6 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       '**/.stryker-tmp/**',
-      'tests/unit/project-agent/tool-adapter.test.ts',
     ],
     pool: 'forks',
     poolOptions: { forks: { minForks: 1, maxForks: 1 } },

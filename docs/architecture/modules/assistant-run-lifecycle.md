@@ -26,12 +26,12 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 验证
 
-- `tests/unit/project-agent/runtime-routing.test.ts` 验证运行时路由。
+- `tests/unit/project-agent/runtime-routing-*.test.ts` 按 bootstrap、choice、workflow、approval 与 settlement 验证运行时路由。
 - `tests/unit/project-agent/run-state-machine.test.ts` 验证七状态转换、终态单调和 expected-status 门禁。
 - `tests/unit/project-agent/run-heartbeat.test.ts` 验证 DB/Redis 续租失败和异常都会触发 ownership loss。
 - `tests/unit/project-agent/interruption-consume.test.ts` 验证重复/并发消费由 pending 状态 CAS 拒绝，基础设施故障不会伪装成重复提交。
 - `tests/unit/project-agent/interruption-reopen.test.ts` 验证 interruption 按消费代次幂等重开且失败显式上报。
-- `tests/unit/project-workflow/edit-first.test.ts` 验证失败状态不会开放剧本改写操作。
+- `tests/unit/project-workflow/edit-first-*.test.ts` 按剧本、规划、分镜视频与渲染音频验证失败状态不会开放错误操作。
 - `tests/unit/project-agent/tool-adapter-gates.test.ts` 验证工具确认与执行门禁。
 - `tests/unit/operations/registry.test.ts` 验证 operation metadata、confirmation 和 agentFlow。
 - `scripts/guards/no-client-agent-control.mjs` 阻止客户端成为 Agent 控制面。

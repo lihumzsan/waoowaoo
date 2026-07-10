@@ -3,26 +3,25 @@
 // Architecture contract: docs/architecture/modules/test-governance.md (TG-07).
 
 import fs from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import path from 'node:path'
 
 const MAX_LINES = 350
 const MAX_CASES = 10
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim()
-}
-
-function changedFiles() {
-  const base = process.env.TEST_IMPACT_BASE_SHA
-  const head = process.env.TEST_IMPACT_HEAD_SHA
-  if (process.env.CI === 'true') {
-    if (!base || !head) throw new Error('CI test size guard requires TEST_IMPACT_BASE_SHA and TEST_IMPACT_HEAD_SHA')
-    return git(['diff', '--name-only', '--diff-filter=AM', `${base}...${head}`]).split('\n').filter(Boolean)
+function discoverTestFiles(directory) {
+  const files = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...discoverTestFiles(entryPath))
+      continue
+    }
+    if (/\.test\.tsx?$/.test(entry.name)) files.push(entryPath)
   }
-  return git(['diff', '--cached', '--name-only', '--diff-filter=AM']).split('\n').filter(Boolean)
+  return files
 }
 
-const testFiles = changedFiles().filter((file) => /^tests\/.*\.test\.tsx?$/.test(file) && fs.existsSync(file))
+const testFiles = discoverTestFiles('tests').sort()
 const violations = []
 
 for (const file of testFiles) {
@@ -35,9 +34,9 @@ for (const file of testFiles) {
 }
 
 if (violations.length > 0) {
-  console.error('[test-size-guard] changed test files exceed the responsibility boundary')
+  console.error('[test-size-guard] test files exceed the responsibility boundary')
   for (const violation of violations) console.error(`  - ${violation}`)
   process.exit(1)
 }
 
-console.log(`[test-size-guard] OK changedTests=${testFiles.length}`)
+console.log(`[test-size-guard] OK testFiles=${testFiles.length}`)

@@ -30,8 +30,8 @@
         "tests/unit/billing/media-approval-policy.test.ts",
         "tests/unit/operations/planning.test.ts",
         "tests/unit/edit-script/style-preview-operation-plan.test.ts",
-        "tests/unit/project-agent/edit-first-choice-result.test.ts",
-        "tests/unit/worker/soundscape-worker.test.ts"
+        "tests/unit/project-agent/edit-first-choice-review.test.ts",
+        "tests/unit/worker/soundscape-generate-worker.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-hardcoded-operation-confirmed.mjs",
@@ -57,12 +57,12 @@
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
         "tests/regression/project-canvas-task-backed-running.test.ts",
-        "tests/regression/project-canvas-resource-lifecycle.test.ts",
+        "tests/regression/project-canvas-bible-resource-lifecycle.test.ts",
         "tests/regression/project-canvas-long-form-node-identity.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
-        "tests/unit/optimistic/sse-invalidation.test.ts",
+        "tests/unit/optimistic/sse-task-terminal.test.ts",
         "tests/unit/optimistic/workspace-sse-event-sequence.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts"
       ],
@@ -97,7 +97,7 @@
         "tests/unit/task/reconcile-queue-lifecycle.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts",
-        "tests/unit/optimistic/sse-invalidation.test.ts"
+        "tests/unit/optimistic/sse-task-terminal.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/task-submit-compensation-guard.mjs",
@@ -118,8 +118,8 @@
         "src/lib/workflow-lab"
       ],
       "testPaths": [
-        "tests/integration/api/contract/project-assistant-chat.route.test.ts",
-        "tests/unit/project-agent/runtime-routing.test.ts",
+        "tests/integration/api/contract/project-assistant-chat-text.route.test.ts",
+        "tests/unit/project-agent/runtime-routing-bootstrap.test.ts",
         "tests/unit/project-agent/run-state-machine.test.ts",
         "tests/unit/project-agent/run-heartbeat.test.ts",
         "tests/unit/project-agent/interruption-consume.test.ts",
@@ -154,7 +154,7 @@
       "testPaths": [
         "tests/integration/provider/fal-provider.contract.test.ts",
         "tests/integration/provider/fal-queue-result-errors.contract.test.ts",
-        "tests/integration/provider/fal-video-provider.contract.test.ts",
+        "tests/integration/provider/fal-video-seedance.contract.test.ts",
         "tests/integration/provider/elevenlabs-sound-effect-provider.contract.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts",
         "tests/unit/guards/no-provider-model-fallback.test.ts",
