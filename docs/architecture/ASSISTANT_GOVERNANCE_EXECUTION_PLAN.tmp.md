@@ -282,10 +282,59 @@ refetch、轮询和 timer 可以保留为一致性校验或体验优化，但删
 
 ### 阶段 0 — PlanRun 可执行面退役
 
-- 状态：已完成，等待本次 commit/push。
+- 状态：已完成并推送，commit `8751505cc`。
 - 权威入口变化：PlanRun runtime、5 个 API route、6 个 Operation、Project Context/Projection/Assistant phase 读取入口全部删除；生产入口由大于零降为零。
 - 删除规模：32 个相关文件发生删除或收敛，净删除约 2250 行。
 - 保留范围：Prisma 模型、历史 migration 和现有数据库数据未修改。
 - 防回流：Operation registry 负向断言；`no-plan-run-runtime` guard 已登记 Assistant 模块并加入 `test:guards`。
 - 验证：全量 unit 347 files / 1451 tests；guards 通过；typecheck 通过；`build:verify` 通过；route 构建产物中已无 `/api/plan-runs/**`。
 - 未完成的独立高风险项：统计遗留 PlanRun 表数据、制定保留/导出/drop migration 与 rollback；没有新的明确授权前不执行。
+
+### 阶段 1A — 收费确认止血
+
+- 状态：过渡止血已完成并推送，commit `92d554a96`；完整 ApprovalGrant 尚未开始，因此本工作项不能标记为最终完成。
+- 权威入口：`OperationPlan → commitOperationPlan → operation.commit → submitPlannedOperationTask → Task submitter`。
+- 删除的旧入口：`generateProjectEditScriptAssets` 及 service 内约 425 行资产创建、临时 Task 规划和私有提交逻辑；EditScript assets route 不再直接调用 service 执行器。
+- `generate_edit_script_assets` 已改为只读 planner、准确 Task/billing 计划、显式确认、commit 前 requirement snapshot 校验、统一 Task submitter。
+- 从首次业务写入开始，Task 提交、结果组装、正式 edit-script 回读、remaining count 和响应构造处于同一补偿域；失败会取消已提交 Task、恢复 requirement 原值并删除本次预留资产，补偿失败显式上报。
+- GUI 的收费执行调用由共享 `confirmOperationPlan` 构造过渡确认；这只证明确认来自用户发起的计划执行动作，不具备 Grant 的计划指纹、过期和单次消费能力。
+- Registry 实测：`billable_media` 共 31 个，具备 `plan+commit` 16 个，仍有 15 个未迁移：`ai_create_character`、`ai_create_location`、`ai_modify_appearance`、`ai_modify_location`、`ai_modify_prop`、`asset_hub_ai_design_character`、`asset_hub_ai_design_location`、`asset_hub_ai_modify_character`、`asset_hub_ai_modify_location`、`asset_hub_ai_modify_prop`、`asset_hub_reference_to_character`、`reference_to_character`、`regenerate_group`、`regenerate_single_image`、`revise_edit_script_assets`。
+- 已验证：typecheck；核心 unit 6 files / 31 tests；API contract 3 files / 42 tests；EditScript lifecycle regression 1 file / 7 tests。尚缺一个真实 DB system fixture，把 asset planner/commit 与 billing freeze、queue、worker 串为同一条路径。
+
+### 阶段 1B — Run 单调状态机与投影单写入者
+
+- 状态：止血主干已完成并推送，commit `9672b24e8`；持久 `runVersion/eventSeq` 尚未实现，所以治理状态仍标记为部分完成。
+- 状态集固定为七种，不引入 `queued`。Event reducer 校验合法前驱并以 `where(id,status=current)` CAS 写入；`completed/failed/cancelled` 不可被晚到事件重开。
+- Approval/Choice interruption 的 `pending → consumed` 与 Run 的 `awaiting_* → running` 已进入同一个 event transaction；第二消费者命中 CAS 失败并得到 conflict 语义，不再因固定 idempotency key 被误判为成功。
+- control 消费前的 `running` 写入和 server follow-up 的提前 `running` 写入已删除。Choice operation 只有 `ok:true` 才计入已执行，失败不再伪完成。
+- DB heartbeat 返回 false、Redis renew 返回 false 或任一续租异常都会中止 Agents SDK 流，并统一进入 `cancelled/run_lock_lost`；不再忽略失锁或记成业务 `failed`。
+- `session-state GET` 已删除 stale cancellation 写副作用。Interruption reopen 以 `consumedAt` 标识消费代次，失败显式上报。
+- Workflow Lab 的 Run/Activity/Interruption 直接写入已删除。Choice 在 Lab clone 的同一事务内走 event reducer，Thread card、Event 与投影共用目标 runtime identity；不可恢复的 Approval checkpoint 只恢复业务快照，不再伪造可点击 interruption。真实 DB 验证 2 files / 3 tests，现有 Workflow Lab unit/route 2 files / 10 tests。
+- 新 guard 扫描全 `src` 的 Run、Activity、Interruption 写入，只允许 event reducer 写生命周期；`heartbeatAt` 和已消费 interruption 的 `runState` 清理是两个显式非生命周期维护例外。
+- 仍存风险：status-only CAS 无法区分 `running(A) → 其他状态 → running(B)` 的 ABA 代次；需要 schema 级 `runVersion/eventSeq`、terminal watermark 和真实 MySQL 双事务故障注入后，才能宣称 AR-05/AR-06 完整闭环。
+
+### 阶段 1C/1D — Worker 最终失败与 Task reconciler
+
+- 状态：已完成并推送，核心 commit `fc51998a4`，guard 读投影修正 `a30c7506e`。
+- VIDEO_GROUP 和 style preview 的单次 worker attempt 不再提前写业务目标 `failed`；最终失败只由统一 Task final-failure projector 落地。
+- 独立 Task watchdog 已删除；instrumentation 只启动共享 reconciler，不再直接改 Task 或做 startup `processing → queued`。
+- Queue observation 明确为 `alive | terminal | absent | unavailable`；Redis 不可用不会被降级为 missing/absent，也不会释放 dedupe、回滚 billing 或创建第二 Task。
+- 初次入队与恢复共用完整 JobEnvelope；billing、operation、scope、priority、locale 和 trace 不再由 watchdog 残缺重建。
+- 已验证真实 MySQL + Redis 的 queued/absent 恢复与真实 Redis connection refusal 的 unavailable 零误恢复路径；最终合并状态已重跑全量 Task integration、regression、system 和 build。
+
+### 阶段 1 合并验证
+
+- 全量 `test:guards` 通过：Canvas conformance 85 tests、requirements matrix 2 tests、API route guard 105 routes，并包含 PlanRun、Task reconciler、worker attempt target terminal、Run/Activity/Interruption 单写入者和 hardcoded confirmation 防线。
+- 全量 unit：355 files / 1486 tests。
+- Billing integration：8 files / 35 tests；Billing concurrency：1 file / 4 tests。
+- API integration：44 files / 208 tests；provider：10 files / 61 tests；chain：4 files / 9 tests；Task integration：3 files / 10 tests。
+- system：2 files / 3 tests；regression：15 files / 49 tests。
+- `typecheck`（含 runtime scripts）与 `build:verify` 通过；构建产物无 PlanRun API。
+- 全量验证首次发现两类旧测试契约：tool adapter 曾把“实际产生收费媒体计划但 metadata 标成 none”视为可自动 commit；图片 route 测试只传 cost 不传确认。两者已改成显式拒绝/显式确认，commit `8f93e87e3`，没有放宽生产门禁。
+
+### 阶段 1 结束时仍未验证/未完成
+
+- Run 没有持久 `runVersion/eventSeq`，真实 MySQL 双事务、多标签页 ABA、late event 跨代覆盖仍未被版本围栏证明。
+- `generate_edit_script_assets` 尚无一个真实 DB system test 将 planner、资产事务、billing freeze、queue、worker、终态和补偿串成同一场景；现有验证由 planner/commit regression 与独立 billing/task integration 组合提供。
+- ApprovalGrant、剩余 15 个 billable Operation、Task terminal transaction/outbox、唯一 durable continuation、SSE bootstrap watermark、resourceVersion 比较、有界 event dedupe 尚未实施。
+- Task terminal 后资源/账务/Wait/outbox 的 kill-test 矩阵尚未建立；因此阶段 2—5 仍必须继续，本文不能删除，也不能宣称 Assistant 全链路已经统一。
