@@ -48,6 +48,7 @@ const hasOutputMock = vi.hoisted(() => ({
 }))
 
 const billingMock = vi.hoisted(() => ({
+  getBillingMode: vi.fn(async () => 'ENFORCE' as const),
   buildDefaultTaskBillingInfo: vi.fn((taskType: string, payload: Record<string, unknown>) => ({
     billable: true,
     source: 'task',
@@ -131,6 +132,7 @@ describe('api specific - novel promotion generate image art style', () => {
         kind: 'character',
         projectId: 'project-1',
         appearanceId: 'appearance-1',
+        confirmed: true,
         confirmedMaxCost: 1,
       },
     })
@@ -174,6 +176,7 @@ describe('api specific - novel promotion generate image art style', () => {
         projectId: 'project-1',
         appearanceId: 'appearance-1',
         count: 6,
+        confirmed: true,
         confirmedMaxCost: 1,
       },
     })
@@ -200,6 +203,7 @@ describe('api specific - novel promotion generate image art style', () => {
         projectId: 'project-1',
         appearanceId: 'appearance-1',
         count: 1,
+        confirmed: true,
         confirmedMaxCost: 1,
       },
     })

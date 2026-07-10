@@ -168,7 +168,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(execute).toHaveBeenCalledWith(expect.any(Object), { confirmed: true })
   })
 
-  it('[planned non-approval media operation] -> writes a quote preview and commits the same plan', async () => {
+  it('[planned media mislabeled as non-approval] -> writes the quote and refuses an unconfirmed commit', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.BILLING_MODE = 'ENFORCE'
     const writer = buildWriter()
@@ -239,11 +239,16 @@ describe('executeProjectAgentOperationFromTool', () => {
       toolCallId: 'tool-call-music',
     })
 
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.data).toEqual({ ok: true, taskCount: 1 })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toEqual(expect.objectContaining({
+      code: 'OPERATION_EXECUTION_FAILED',
+      details: expect.objectContaining({
+        reasonCode: 'OPERATION_CONFIRMATION_REQUIRED',
+      }),
+    }))
     expect(planMock).toHaveBeenCalledTimes(1)
-    expect(commitMock).toHaveBeenCalledWith(expect.any(Object), { prompt: 'quiet cue' }, plan)
+    expect(commitMock).not.toHaveBeenCalled()
     expect(execute).not.toHaveBeenCalled()
     expect(writer.write).toHaveBeenCalledWith({
       type: 'data-agent-operation-plan-preview',
