@@ -959,3 +959,144 @@ flowchart TD
 - 阶段 1 的全量命令已通过，但 build 曾输出既有 lint warning；后续若 warning 变化，应区分新引入与既有问题，不能把“build exit 0”解释为零警告。
 - unit 运行曾出现 `assets.overview.propAssets`、`assets.overview.propCounts` i18n missing message 输出但 suite 通过。它不直接证明 Assistant 主干失败，也不能被静默忽略；若后续修改相关 UI/i18n，需单独收敛并记录。
 - 当前临时文档没有被 `architecture:impact` 映射为正式模块；这是刻意避免把临时计划当运行时契约。真正改变不变量时必须更新对应正式模块和 `modules.json`，不能只修改本文。
+
+## 20. 2026-07-11 Task terminal / Outbox 阶段性交付与后续接管说明
+
+### 20.1 提交边界与准确状态
+
+- 状态：**部分完成，已形成可审查主干，但不得宣称 R3-01、R3-02、R3-03、R3-05 或 R3-07 完成**。
+- 基线 commit：`b7a18bb6b`。
+- 阶段结果 commit：`fac392c99 refactor(task): centralize terminal handoff`，已推送到 `origin/exp/assistant`。
+- 本批修改规模：48 个文件，新增 2817 行、删除 1830 行。
+- 本批唯一实现 owner：Task terminal / Outbox / Wait continuation owner。其他 agent 只做了只读审查，没有并行覆盖核心状态机。
+- 验证事实：Task/Wait/Run/reconciler 定向基线曾通过 7 files / 29 tests；提交前重新生成 Next route types 后，`npx tsc --noEmit --pretty false` 通过；staged 与全仓 secret scan 通过。
+- 未运行：真实 MySQL + Redis 故障注入、全量 unit/integration/system/regression、`test:guards`、`build:verify`。这些不是可选清理，而是本工作包仍未完成的明确门禁。
+
+### 20.2 原因、动机与本批目标
+
+**原因**：原终态由 worker、submitter、cancel/timeout service、reconciler、publisher、Wait resolver 分段写入。资源、账务、Task、TaskEvent、Wait 和 Assistant continuation 可以在不同事务、不同进程、甚至仅通过 Redis 瞬时事件推进。任何一步崩溃都会产生“资源完成但 Task 未完成”“Task 完成但 Wait 未解除”“账务处理了但终态未落库”等组合状态。
+
+**动机**：继续给每个入口补 rollback、refetch、timer 或 watchdog，只会让更多模块拥有“修复终态”的写权限。真正需要减少的是终态写入者和可达状态组合，而不是增加一次成功概率。
+
+**本批目的**：先建立一个共享 `commitTaskTerminal` 入口，使提交失败、最终 worker 成功/失败、取消、超时和对账恢复都提交同一种 terminal intent；在同一数据库事务中处理 Task 终态、账务、持久 TaskEvent、Wait 投影与 Outbox command；事务提交后的 SSE 和 Assistant continuation 只消费 Outbox，不再由浏览器决定是否继续。
+
+### 20.3 当前状态所有权
+
+| 事实 | 当前权威 | 当前唯一业务写入入口 | 消费者/投影者 | 本批结果 |
+|---|---|---|---|---|
+| Task 成功/失败/取消 | `Task.status` + terminal TaskEvent | `src/lib/task/terminal/service.ts` 的 `commitTaskTerminal` | query、SSE、target projector、Wait | 主要入口已迁移；真实 DB 原子性未验证 |
+| 执行输出 | `TaskExecutionCheckpoint` | worker shared checkpoint service | Terminal Service | 已建立，但 provider/handler 到 checkpoint 之间仍有崩溃窗 |
+| 初始执行身份 | `Task.executionFingerprint` | Task 创建入口 | worker、recovery JobEnvelope | 新 Task 已固化；旧 active Task 发布策略未完成 |
+| 终态账务 | Billing ledger / freeze | Terminal Service 调用显式 transaction API | balance、audit | 同事务方向已建立；完整对账与故障矩阵未验证 |
+| 持久终态事件 | `TaskEvent` | Terminal Service | SSE、Wait、诊断 | 已加入 idempotency key；重放/乱序真实测试未完成 |
+| Wait terminal | `ProjectAgentWait` | terminal transaction 通过 reducer 投影 | session-state、continuation | canceled 已正式表达；旧读侧 claim helpers 尚未删除 |
+| 事务后命令 | `OutboxCommand` | Terminal Service transaction | Outbox dispatcher/worker | 已建立固定 BullMQ jobId、lease 与重试骨架；真实 Redis 故障序列未验证 |
+| Assistant continuation | Wait + Outbox command | server-side outbox worker | Assistant runtime | 浏览器执行器/API 已删除；跨事务可重放 settlement 仍未闭环 |
+| UI follow-up | Session/Wait 投影 | 无业务写权 | Workspace Assistant | 浏览器 claim/poll/send loop 已删除 |
+
+### 20.4 本批已经完成的结构性收敛
+
+1. 新增 `src/lib/task/terminal/**`，把 worker success/final failure、submit validation/enqueue failure、cancel、timeout、dedupe orphan 和 reconciler terminal intent 路由到同一个服务。
+2. 新增 `OutboxCommand`、repository、dispatcher、queue 和 worker；DB row 是投递权威，BullMQ 只是运输。Outbox 使用固定 jobId、严格 payload 解析、lease owner、过期回收和幂等键冲突比较。
+3. 新增不可变 `executionFingerprint` 和 `TaskExecutionCheckpoint`，避免把会被 progress 合并修改的 `Task.payload` 当作恢复执行身份。
+4. Billing freeze/settle/rollback 增加事务内显式入口；freeze idempotency collision 会比较 user、task 和金额，不再把不同请求静默当作相同授权。
+5. `canceled` 进入 Task event、Wait、Activity 和 Run 投影，不再无条件伪装成 failed；取消不会触发普通失败 follow-up。
+6. 删除浏览器 continuation 的两个生产 API：
+   - `/assistant/waits`
+   - `/assistant/runs/[runId]/task-follow-up`
+7. 删除 Workspace Assistant 中 claim、轮询和主动提交 task follow-up 的执行 loop；浏览器不再是 continuation dispatcher。
+8. Terminal publisher 对绕过 Terminal Service 的 terminal publish 显式失败，不允许旧调用者继续偷偷发 completed/failed/canceled。
+
+### 20.5 尚未完成的 P0：外部执行 exactly-once 仍未证明
+
+**触发场景**：provider 已生成内容或 handler 已写正式资源，但进程在 `saveTaskExecutionCheckpoint` 之前崩溃。BullMQ 重试后仍会再次调用 provider 或再次执行 handler side effect。
+
+**根因**：当前 checkpoint 在整个 handler 返回之后才保存。它能阻止“checkpoint 已 ready、terminal transaction 失败”后的 provider 重跑，却不能覆盖“provider/资源写成功、checkpoint 尚未保存”的窗口。
+
+**为什么局部补丁不够**：在 worker catch 中猜资源是否已存在，或用 target status 推断 provider 是否执行过，会重新引入第二事实源和按 TaskType 扩散的启发式。
+
+**下一步统一方案**：按 TaskDefinition 穷尽声明执行协议。对可分离的 Task，先把 provider result 作为不可变 execution result checkpoint 落库，再由幂等 resource projector 以 `taskId + executionFingerprint + expectedVersion` 写正式资源；不能分离的 provider 必须证明并使用 provider idempotency key。每个 TaskType 必须明确属于哪一种协议，禁止默认分支。
+
+**必须验证**：在 provider 返回后、checkpoint 前；checkpoint 后、resource projector 前；resource projector 后、terminal transaction 前分别 kill。每个位置重启后 provider 调用次数、资源版本和账务次数都必须精确为一。
+
+### 20.6 尚未完成的 P0：continuation retry 与最终消息 settlement 仍分裂
+
+**触发场景 A**：`activity.started` 已持久化，随后 LLM、消息持久化或 finalize 失败。release 把 Wait 改回 resolved，但 Wait 保存的 fence 没随 `activity.started` 推进；同一 command 重试时，已有 idempotency event 与当前 Run fence 冲突，可能永久得到 `PROJECT_AGENT_EVENT_IDEMPOTENCY_FENCE_CONFLICT`。
+
+**触发场景 B**：assistant message 已持久化，进程在 `finalizeProjectAgentWaitFollowUp` 前崩溃。当前 server follow-up 没有用 commandId 设置稳定 requestId；重试可能再次调用模型，并用不同 messageId 写第二条 assistant message。
+
+**触发场景 C**：消息持久化与 `wait.followed + Run terminal` 是两个事务。任一事务单独成功都可能留下“消息存在但 command 未完成”或“将来错误重放”的中间态。
+
+**根因**：Outbox 已经持久，但 continuation 内部还没有一个持久 execution/settlement checkpoint；HTTP response body drain 也不是业务成功事实。
+
+**下一步统一方案**：commandId 必须同时成为稳定 requestId、Activity identity、assistant message identity 和 continuation execution identity。模型输出或可重放 response 必须先形成 durable checkpoint；随后在一个显式 settlement transaction 中验证 claim owner/lease/fence，幂等持久消息，并成批 append `wait.followed`、Activity 和 Run 最终事件。重试先读取 checkpoint，不重新调用模型。不得新建第二套 scheduler；继续复用同一个 Outbox worker。
+
+**必须验证**：正常 completed、awaiting_task、awaiting_choice、awaiting_approval、tool failure、消息 DB_DOWN、started 后 kill、message 后 kill、terminal watermark、旧 owner finalize 与新 owner reclaim 并发。每条路径必须证明 provider/LLM 与 message 各最多一次，Outbox 最终 accepted 或明确 dead-letter。
+
+### 20.7 尚未完成的 P0/P1：target projector 没有全 TaskType 所有权契约
+
+当前 `src/lib/task/target-failure-sync.ts` 对 `EDIT_SOURCE_SCRIPT_GENERATE` 和 `EDIT_BIBLE_GENERATE` 直接返回，因为对应模型没有可用于终态 CAS 的 task ownership 字段。这避免了错误覆盖，但会让失败目标继续停在 `generating`。未知 target/type 也存在静默 return，不能作为最终架构。
+
+**根因**：TaskDefinition 没有穷尽声明 terminal target ownership、success handoff 和 failure/cancel projector。不同 handler 仍隐式知道要写哪个业务表。
+
+**下一步统一方案**：为需要终态投影的业务模型增加明确 `generationTaskId` 或等价 execution identity；TaskDefinition 必须穷尽声明 `terminalHandoff` 与 `terminalFailureProjector`。projector 只允许 `where(id, generationTaskId, activeStatus)` CAS；unknown/missing definition 在编译或 guard 阶段失败，不得运行时静默跳过。
+
+**必须验证**：旧 Task 晚到、Task retry、用户启动新 Task、取消、最终失败、重复 terminal event。旧 execution 必须不能覆盖新资源或新错误。
+
+### 20.8 尚未完成的发布风险：旧 active Task 没有 executionFingerprint
+
+schema 为现有数据兼容暂时把 `Task.executionFingerprint` 设为 nullable，但新 worker 对缺失值显式失败。部署时若仍有 queued/processing Task，它们可能立即变成 `TASK_EXECUTION_FINGERPRINT_MISSING`。
+
+**禁止方案**：从已被 progress 污染的数据库 `Task.payload` 静默回填；这会制造一个与原始执行输入不相等的假身份。
+
+**可接受方案二选一**：
+
+1. 发布前排空 active Task，并用只读查询证明 queued/processing 为零；或
+2. 一次性从仍存活的 BullMQ 原始 JobEnvelope 读取 immutable input，按 taskId CAS 初始化，记录迁移窗口和删除日期。
+
+ApprovalGrant 上线后 execution fingerprint 还必须一次性用 `approvalGrantId + operationExecutionId` 契约重算，删除当前 `operationConfirmed` 布尔，不保留双轨 fingerprint。
+
+### 20.9 尚未删除的旧代码与明确删除条件
+
+虽然生产浏览器路由和 UI loop 已删除，`src/lib/project-agent/waits.ts` 仍保留：
+
+- `reconcilePendingProjectAgentWaitsForScope`
+- `listResolvedProjectAgentWaitFollowUps`
+- `claimResolvedProjectAgentWaitFollowUps`
+
+它们当前没有公开生产 route，但仍表达旧“读取时修复/浏览器 claim”语义。下一工作包在 durable continuation 的 settlement/retry tests 通过后必须删除这些函数及只服务于它们的测试和类型。不得因为“目前没有调用者”长期保留成未来可恢复的第二入口。
+
+### 20.10 测试、guard 与正式文档缺口
+
+当前定向 unit 只能证明 intent 传递和局部 reducer 行为，不能证明事务/队列/崩溃恢复。后续必须新增并挂入必跑脚本：
+
+1. 真实 MySQL terminal transaction：资源/账务/TaskEvent/Wait/Outbox 任一步抛错均整体 rollback。
+2. 真实 Redis outbox：enqueue 后未 mark、mark 后 job 丢失、Redis unavailable、consumer crash、lease 过期、重复 job、poison payload。
+3. checkpoint recovery：ready checkpoint + 多次 progress payload 修改 + Redis job 丢失，恢复时跳过 provider 并完成 terminal。
+4. commit 后、BullMQ ack 前 kill：重复 job 由 checkpoint/outbox idempotency 吸收。
+5. continuation 的全部 settlement/claim/reclaim/消息故障序列。
+6. canceled 在 Task、Event、Wait、Run、Session State、SSE、Canvas 的全链路组合验证。
+
+正式闭环还必须同步：
+
+- `docs/architecture/modules/async-task-lifecycle.md`
+- `docs/architecture/modules/assistant-run-lifecycle.md`
+- `docs/architecture/modules/billing-approval.md`
+- `docs/architecture/modules.json`
+- 禁止第二 terminal writer、禁止浏览器 continuation executor、TaskDefinition terminal policy 穷尽、Outbox consumer 单一入口等 guards。
+
+在上述测试、guard 和正式文档完成前，`fac392c99` 只能称为“主干切换提交”，不能称为完整架构迁移。
+
+### 20.11 下一执行顺序与文件所有权
+
+1. **先修 continuation 可重放 settlement**：独占 `runtime.ts`、`server-follow-up.ts`、`waits.ts`、event reducer、Outbox continuation consumer；删除剩余旧 wait helpers。
+2. **再补 TaskDefinition target ownership 与 provider checkpoint 协议**：独占 `task/**`、`workers/shared.ts`、target projectors 和相关业务模型。
+3. **补真实 MySQL/Redis fault tests、正式文档、modules 与 guards**，形成 R3-01/R3-02/R3-03/R3-05/R3-07 的真实完成证据。
+4. 上述共享主干稳定后，Choice owner 才开始 snapshot-bound Choice、Bible revise Task 和稳定 workflow boundary；Approval owner 才开始 ApprovalGrant，避免再次覆盖 Task schema/submitter。
+5. SSE/UI owner可以先做不碰 Terminal 的水位协议设计与 architecture mapping；涉及 terminal materialized handoff policy 时必须等待 TaskDefinition owner 提供共享穷尽契约。
+
+### 20.12 PlanRun 边界复核
+
+用户要求的“删除 PlanRun runtime”已经在 `8751505cc` 完成：生产 runtime、公开 API、Operation pack、Assistant/Project Context/Projection 读取和专用测试均已删除，`no-plan-run-runtime` guard 已挂入 `test:guards`。当前只保留 Prisma 历史模型和 migration。
+
+这些历史表不是可执行面。删除表会造成数据删除和 schema 风险，且当前与 Task terminal migration 冲突；没有新的明确数据删除授权时不得顺手 drop。后续若要删除，必须先只读统计 PlanRun/Step/Event/Artifact 数量与非终态数据，决定归档/保留策略并单独执行可恢复的 migration。
