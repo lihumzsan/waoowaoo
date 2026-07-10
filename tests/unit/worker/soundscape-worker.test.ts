@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import type { FinalRenderClipPlan } from '@/lib/video-compose/final-render-plan'
 import { buildSoundscapeTimelineSignature } from '@/lib/soundscape/timeline'
+import { buildSoundscapePlanFingerprint, parseSoundscapePlanStrict } from '@/lib/soundscape/plan-contract'
 
 const execFileMock = vi.hoisted(() => vi.fn())
 const prismaMock = vi.hoisted(() => ({
@@ -138,6 +139,20 @@ const soundscapePlan = {
   }],
 } as const
 
+const soundscapePlanHash = buildSoundscapePlanFingerprint({
+  plan: parseSoundscapePlanStrict(soundscapePlan),
+  timelineSignature,
+  soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+})
+
+const approvedGeneratePayload = {
+  episodeId: 'episode-1',
+  soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+  timelineSignature,
+  soundscapePlanHash,
+  soundscapePlan,
+}
+
 function buildJob(type: TaskJobData['type'], payload: Record<string, unknown>): Job<TaskJobData> {
   return {
     queueName: 'waoowaoo-music',
@@ -151,7 +166,9 @@ function buildJob(type: TaskJobData['type'], payload: Record<string, unknown>): 
       targetId: 'episode-1',
       payload,
       userId: 'user-1',
-      operationId: 'generate_episode_soundscape',
+      operationId: type === TASK_TYPE.SOUNDSCAPE_PLAN
+        ? 'plan_episode_soundscape'
+        : 'generate_episode_soundscape',
       operationSource: 'assistant-panel',
       operationConfirmed: true,
       operationRequestId: 'request-1',
@@ -239,7 +256,7 @@ describe('soundscape worker', () => {
     })
   })
 
-  it('writes a soundscape plan and submits the generate task with loop billing payload', async () => {
+  it('persists a planned soundscape without auto-submitting any paid generate task', async () => {
     const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
     executeAiStructuredTextStepMock.mockResolvedValue({ data: soundscapePlan })
 
@@ -248,31 +265,15 @@ describe('soundscape worker', () => {
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
     }))
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
       decision: 'soundscape',
       sourceCount: 1,
       sectionCount: 1,
     })
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.SOUNDSCAPE_GENERATE,
-      operationId: 'generate_episode_soundscape',
-      operationConfirmed: true,
-      operationRequestId: 'request-1',
-      payload: expect.objectContaining({
-        episodeId: 'episode-1',
-        soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-        sourceCount: 1,
-        loop: true,
-        outputFormat: 'mp3_44100_128',
-      }),
-      billingInfoSource: 'planned',
-      billingInfo: expect.objectContaining({
-        billable: true,
-        apiType: 'sound_effect',
-        quantity: 1,
-      }),
-    }))
+    expect(submitTaskMock.mock.calls).toEqual([])
+    expect(generateSoundEffectMock.mock.calls).toEqual([])
     expect(latestSoundscapeUpsertUpdate()).toMatchObject({
       status: 'planned',
       timelineSignature,
@@ -281,42 +282,44 @@ describe('soundscape worker', () => {
     })
   })
 
-  it('refuses to submit a paid sound effect task when the parent operation was not approved', async () => {
-    const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
-    executeAiStructuredTextStepMock.mockResolvedValue({ data: soundscapePlan })
-    const job = buildJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
-      episodeId: 'episode-1',
-      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-    })
-    job.data.operationConfirmed = false
+  it('refuses to generate paid sound effects when the operation is unapproved or mistargeted', async () => {
+    const { handleSoundscapeGenerateTask } = await import('@/lib/soundscape/generate')
 
-    await expect(handleSoundscapePlanTask(job)).rejects.toThrow(
+    const unconfirmedJob = buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload)
+    unconfirmedJob.data.operationConfirmed = false
+    await expect(handleSoundscapeGenerateTask(unconfirmedJob)).rejects.toThrow(
       'SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED',
     )
-    expect(submitTaskMock).not.toHaveBeenCalled()
+
+    const mistargetedJob = buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload)
+    mistargetedJob.data.operationId = 'plan_episode_soundscape'
+    await expect(handleSoundscapeGenerateTask(mistargetedJob)).rejects.toThrow(
+      'SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED',
+    )
+
+    expect(generateSoundEffectMock.mock.calls).toEqual([])
+    expect(prismaMock.projectEditSoundscape.upsert.mock.calls).toEqual([])
   })
 
-  it('refuses a sound_effect child task whose exact quote exceeds the approved ceiling', async () => {
-    const previousEdition = process.env.DEPLOYMENT_EDITION
-    const previousBillingMode = process.env.BILLING_MODE
-    process.env.DEPLOYMENT_EDITION = 'cloud'
-    process.env.BILLING_MODE = 'ENFORCE'
-    try {
-      const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
-      executeAiStructuredTextStepMock.mockResolvedValue({ data: soundscapePlan })
+  it('refuses to generate when the submitted plan does not match the approved exact plan', async () => {
+    const { handleSoundscapeGenerateTask } = await import('@/lib/soundscape/generate')
 
-      await expect(handleSoundscapePlanTask(buildJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
-        episodeId: 'episode-1',
-        soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-        approvedMediaMaxCost: 0.11,
-      }))).rejects.toThrow('SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_EXCEEDED:0.12:0.11')
-      expect(submitTaskMock).not.toHaveBeenCalled()
-    } finally {
-      if (previousEdition === undefined) delete process.env.DEPLOYMENT_EDITION
-      else process.env.DEPLOYMENT_EDITION = previousEdition
-      if (previousBillingMode === undefined) delete process.env.BILLING_MODE
-      else process.env.BILLING_MODE = previousBillingMode
-    }
+    await expect(handleSoundscapeGenerateTask(buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+      ...approvedGeneratePayload,
+      timelineSignature: undefined,
+    }))).rejects.toThrow('SOUNDSCAPE_GENERATE_TIMELINE_SIGNATURE_REQUIRED')
+
+    await expect(handleSoundscapeGenerateTask(buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+      ...approvedGeneratePayload,
+      soundscapePlanHash: undefined,
+    }))).rejects.toThrow('SOUNDSCAPE_GENERATE_PLAN_HASH_REQUIRED')
+
+    await expect(handleSoundscapeGenerateTask(buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
+      ...approvedGeneratePayload,
+      soundscapePlanHash: 'stale-approved-hash',
+    }))).rejects.toThrow('SOUNDSCAPE_APPROVED_PLAN_HASH_INVALID')
+
+    expect(generateSoundEffectMock.mock.calls).toEqual([])
   })
 
   it('generates loop sources, stores media records, renders a mix, and persists sourcesJson and mixJson', async () => {
@@ -327,10 +330,9 @@ describe('soundscape worker', () => {
       timelineSignature,
     })
 
-    const result = await handleSoundscapeGenerateTask(buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
-      episodeId: 'episode-1',
-      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-    }))
+    const result = await handleSoundscapeGenerateTask(
+      buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload),
+    )
 
     expect(generateSoundEffectMock).toHaveBeenCalledWith(
       'user-1',
@@ -411,12 +413,11 @@ describe('soundscape worker', () => {
       url: '/m/soundscape-mix',
     })
 
-    const result = await handleSoundscapeGenerateTask(buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, {
-      episodeId: 'episode-1',
-      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-    }))
+    const result = await handleSoundscapeGenerateTask(
+      buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload),
+    )
 
-    expect(generateSoundEffectMock).not.toHaveBeenCalled()
+    expect(generateSoundEffectMock.mock.calls).toEqual([])
     expect(storageMock.getObjectBuffer).toHaveBeenCalledWith('soundscape/source/existing.mp3')
     expect(ensureMediaObjectFromStorageKeyMock).toHaveBeenCalledTimes(1)
     expect(ensureMediaObjectFromStorageKeyMock).toHaveBeenCalledWith('soundscape/mix/asset.m4a', {

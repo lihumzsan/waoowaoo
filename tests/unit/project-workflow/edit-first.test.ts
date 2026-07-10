@@ -544,7 +544,7 @@ describe('edit-first workflow state', () => {
     expect(state.nextAction?.requiresUserConfirmation).toBe(true)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
       'generate_episode_bgm_score',
-      'generate_episode_soundscape',
+      'plan_episode_soundscape',
     ])
   })
 
@@ -573,7 +573,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('bgm_score_generating')
     expect(state.nextAction).toBeNull()
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_soundscape'])
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['plan_episode_soundscape'])
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {
