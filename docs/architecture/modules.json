@@ -172,20 +172,26 @@
         ".github/workflows/verify.yml",
         "scripts/test-history",
         "scripts/test-verification",
+        "scripts/mutation",
         "scripts/verify-push.sh",
         "scripts/guards/changed-file-test-impact-guard.mjs",
         "scripts/guards/test-behavior-quality-guard.mjs",
+        "scripts/guards/test-size-guard.mjs",
         "scripts/guards/test-route-coverage-guard.mjs",
         "tests/history",
         "tests/harness",
+        "tests/mutation",
         "tests/contracts/requirements-matrix.ts",
         "tests/contracts/route-catalog.ts",
         "tests/contracts/route-scenario-registry.ts",
-        "tests/contracts/tasktype-scenario-registry.ts"
+        "tests/contracts/tasktype-scenario-registry.ts",
+        "stryker.incremental.config.mjs",
+        "vitest.mutation.config.ts"
       ],
       "testPaths": [
         "tests/unit/test-history/catalog.test.ts",
         "tests/unit/test-history/candidate-report.test.ts",
+        "tests/unit/test-history/discovered-gaps.test.ts",
         "tests/unit/test-harness/behavior-scenario.test.ts",
         "tests/unit/test-harness/lifecycle-sequence.test.ts",
         "tests/unit/test-verification/verify-vitest-report.test.ts",
@@ -193,11 +199,13 @@
         "tests/unit/guards/changed-file-test-impact-guard.test.ts",
         "tests/contracts/tasktype-scenario-conformance.test.ts",
         "tests/integration/api/contract/route-scenario-conformance.test.ts",
-        "tests/regression/historical-defect-scenarios.test.ts"
+        "tests/regression/historical-defect-scenarios.test.ts",
+        "tests/unit/test-verification/mutation-baseline.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/changed-file-test-impact-guard.mjs",
         "scripts/guards/test-behavior-quality-guard.mjs",
+        "scripts/guards/test-size-guard.mjs",
         "scripts/guards/test-route-coverage-guard.mjs"
       ]
     }

@@ -68,6 +68,7 @@ run_npm_script test:integration:chain
 run_npm_script test:integration:task
 run_npm_script test:system
 run_npm_script test:regression:cases
+run_npm_script test:mutation:incremental
 
 run_npm_script build:verify
 

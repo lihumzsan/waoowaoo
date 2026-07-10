@@ -37,6 +37,8 @@ vi.mock('next-auth', () => ({
   }),
 }))
 
+vi.mock('@/lib/auth', () => ({ authOptions: {} }))
+
 describe('route executable scenario registry', () => {
   it('invokes every route and records every declared scenario exactly once', async () => {
     const expectedIds = ROUTE_SCENARIO_REGISTRY.map((scenario) => scenario.id)

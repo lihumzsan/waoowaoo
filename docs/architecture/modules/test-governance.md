@@ -19,6 +19,7 @@
 ## 权威入口
 
 - 历史缺陷：`tests/history/catalog.ts`。
+- 实施中发现但不得在测试阶段修生产代码的缺口：`tests/history/discovered-gaps.ts`。
 - 可执行场景与实际执行证据：`tests/harness/behavior-scenario.ts`。
 - 生命周期事实序列：`tests/harness/lifecycle-sequence.ts`。
 - 历史错误反证：`tests/harness/historical-regression.ts` 与 `tests/history/scenarios/**`。
@@ -26,6 +27,8 @@
 - Route identity 与访问边界：`tests/contracts/route-catalog.ts`；可执行契约：`tests/contracts/route-scenario-registry.ts`。
 - Git 候选报告：`scripts/test-history/candidate-report.mjs`。
 - 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
+- 必跑 suite 执行器：`scripts/test-verification/run-required-suite.mjs`，统一生成 Vitest JSON 并立即核对发现文件、实际文件、case 与 skip 数。
+- Mutation：`stryker.incremental.config.mjs`、`vitest.mutation.config.ts` 与 `scripts/mutation/verify-baseline.mjs`。
 - 统一完整验证：`scripts/verify-push.sh`。
 
 ## 验证
@@ -39,6 +42,7 @@
 - `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
 - `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
 - `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
+- `scripts/guards/test-size-guard.mjs` 拒绝本次新增或修改后超过 350 行或 10 个 case 的测试文件；既有超限文件必须在被修改时同步拆分。
 
 ## 历史回归
 

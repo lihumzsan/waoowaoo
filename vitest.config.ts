@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { resolve } from 'node:path'
 
 export default defineConfig({
@@ -26,6 +26,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup/env.ts'],
     globalSetup: ['./tests/setup/global-setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
+    exclude: [...configDefaults.exclude, '**/.stryker-tmp/**'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
     coverage: {

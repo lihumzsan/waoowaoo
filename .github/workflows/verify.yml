@@ -3,6 +3,8 @@ name: Verify
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '30 18 * * *'
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
@@ -43,6 +45,9 @@ jobs:
         shell: bash
         run: |
           base="$TEST_IMPACT_BASE_SHA"
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            base="$(git rev-parse HEAD^)"
+          fi
           if [[ "$base" =~ ^0+$ ]]; then
             base="$(git rev-parse HEAD^)"
           fi
@@ -68,3 +73,7 @@ jobs:
 
       - name: Full verification
         run: npm run verify:push
+
+      - name: Full nightly mutation
+        if: github.event_name == 'schedule'
+        run: npm run test:mutation:nightly
