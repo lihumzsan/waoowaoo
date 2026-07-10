@@ -18,6 +18,7 @@ export default defineConfig({
     include: [
       'tests/unit/**/*.test.ts',
       'tests/contracts/**/*.test.ts',
+      'tests/integration/provider/**/*.test.ts',
       'tests/regression/historical-defect-scenarios.test.ts',
     ],
     exclude: [

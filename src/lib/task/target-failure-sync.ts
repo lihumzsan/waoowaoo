@@ -12,7 +12,7 @@ type TaskTargetFailure = {
 }
 
 function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? value.slice(0, maxLength) : value
+  return value.slice(0, maxLength)
 }
 
 function toInputJson(value: Record<string, unknown>): Prisma.InputJsonValue {

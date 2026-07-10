@@ -9,17 +9,6 @@ export type DiscoveredTestGap = {
 
 export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
   {
-    id: 'GAP-MUT-001',
-    symptom: 'The initial critical-module mutation baseline contains 203 survived and 144 no-coverage mutants.',
-    evidence: [
-      'tests/mutation/baseline.json',
-      'reports/mutation/mutation.json: 755 total, 408 killed, 203 survived, 144 no coverage',
-    ],
-    owner: 'test-system-refactor',
-    rationale: 'The first run establishes a non-arbitrary baseline; Provider, Canvas, job envelope, and target failure survivors must be burned down in later test slices.',
-    status: 'scenario-required',
-  },
-  {
     id: 'GAP-CLEANUP-001',
     symptom: 'Forty existing test files still exceed the 350-line or 10-case responsibility boundary.',
     evidence: [

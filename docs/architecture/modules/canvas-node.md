@@ -40,6 +40,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - `tests/unit/project-workspace/structured-stream-adapters.test.ts` 验证 stream adapter 契约。
 - `tests/unit/project-workspace/structured-stream-runtime.test.ts` 验证 runtime 合并与重放语义。
+- `tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts` 穷尽验证唯一 resolver 的身份、进度、stream、终态交接、取消和派生投影。
 - `tests/regression/project-canvas-task-backed-running.test.ts` 验证运行态来自任务权威状态。
 - `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
 - `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。

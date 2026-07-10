@@ -40,20 +40,26 @@ export interface WorkspaceCanvasLifecycleFacts {
   readonly contractError?: WorkspaceCanvasLifecycleError | null
 }
 
+function normalizeIdentity(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized ? normalized : null
+}
+
 function readTaskId(task: TaskRuntimeStateLike | null): string | null {
-  const taskId = task?.taskId ?? task?.runningTaskId
-  return typeof taskId === 'string' && taskId.trim() ? taskId.trim() : null
+  return normalizeIdentity(task?.taskId) ?? normalizeIdentity(task?.runningTaskId)
 }
 
 function readTaskType(task: TaskRuntimeStateLike | null): string | null {
-  const taskType = task?.runningTaskType
-  return typeof taskType === 'string' && taskType.trim() ? taskType.trim() : null
+  return normalizeIdentity(task?.runningTaskType)
 }
 
 function readTaskError(task: TaskRuntimeStateLike | null): WorkspaceCanvasLifecycleError | null {
-  const message = task?.lastError?.message
+  const lastError = task?.lastError
+  if (lastError === null || lastError === undefined) return null
+  const message = lastError.message
   if (typeof message !== 'string' || !message.trim()) return null
-  const code = task?.lastError?.code
+  const code = lastError.code
   return {
     code: typeof code === 'string' && code.trim() ? code.trim() : 'TASK_FAILED',
     message: message.trim(),
@@ -61,8 +67,8 @@ function readTaskError(task: TaskRuntimeStateLike | null): WorkspaceCanvasLifecy
 }
 
 function readTaskProgress(task: TaskRuntimeStateLike | null): number | null {
-  const progress = task?.progress
-  return typeof progress === 'number' && Number.isFinite(progress)
+  const progress = task?.progress as number
+  return Number.isFinite(progress)
     ? Math.max(0, Math.min(100, Math.floor(progress)))
     : null
 }
@@ -227,7 +233,6 @@ export function isWorkspaceCanvasLifecycleStreaming(
 export function workspaceCanvasLifecycleStatusKey(
   lifecycleValue: WorkspaceCanvasLifecycle,
 ): 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' {
-  if (isWorkspaceCanvasLifecycleRunning(lifecycleValue)) return 'processing'
   switch (lifecycleValue.phase) {
     case 'pending':
     case 'succeeded':

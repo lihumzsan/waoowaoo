@@ -7,8 +7,6 @@ import {
   type TaskType,
 } from './types'
 
-const TASK_TYPES: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
-
 export type TaskJobEnvelopeSource = {
   id: string
   parentTaskId: string | null
@@ -29,34 +27,34 @@ export type TaskJobEnvelopeSource = {
 }
 
 function requireTaskType(value: string): TaskType {
-  if (!TASK_TYPES.has(value)) {
+  if (!Object.values(TASK_TYPE).includes(value as TaskType)) {
     throw new Error(`invalid task type: ${value}`)
   }
   return value as TaskType
 }
 
-function parsePayload(value: unknown): Record<string, unknown> | null {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'object' || Array.isArray(value)) {
+function parsePayload(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('task payload must be an object or null')
   }
   return value as Record<string, unknown>
 }
 
-const BILLING_API_TYPES: ReadonlySet<string> = new Set([
-  'text',
-  'image',
-  'video',
-  'music',
-  'sound_effect',
-])
-const BILLING_UNITS: ReadonlySet<string> = new Set([
-  'token',
-  'image',
-  'video',
-  'second',
-  'call',
-])
+function isBillingApiType(value: unknown): boolean {
+  return value === 'text'
+    || value === 'image'
+    || value === 'video'
+    || value === 'music'
+    || value === 'sound_effect'
+}
+
+function isBillingUnit(value: unknown): boolean {
+  return value === 'token'
+    || value === 'image'
+    || value === 'video'
+    || value === 'second'
+    || value === 'call'
+}
 
 function parseBillingInfo(value: unknown, taskType: TaskType): TaskBillingInfo | null {
   if (value === null || value === undefined) return null
@@ -70,18 +68,14 @@ function parseBillingInfo(value: unknown, taskType: TaskType): TaskBillingInfo |
   if (record.billable === true) {
     const valid = record.source === 'task'
       && record.taskType === taskType
-      && typeof record.apiType === 'string'
-      && BILLING_API_TYPES.has(record.apiType)
+      && isBillingApiType(record.apiType)
       && typeof record.model === 'string'
       && record.model.trim().length > 0
-      && typeof record.quantity === 'number'
-      && Number.isFinite(record.quantity)
-      && record.quantity > 0
-      && typeof record.unit === 'string'
-      && BILLING_UNITS.has(record.unit)
-      && typeof record.maxFrozenCost === 'number'
-      && Number.isFinite(record.maxFrozenCost)
-      && record.maxFrozenCost >= 0
+      && Number.isFinite(record.quantity as number)
+      && (record.quantity as number) > 0
+      && isBillingUnit(record.unit)
+      && Number.isFinite(record.maxFrozenCost as number)
+      && (record.maxFrozenCost as number) >= 0
       && typeof record.action === 'string'
       && record.action.trim().length > 0
     if (!valid) {
@@ -92,18 +86,11 @@ function parseBillingInfo(value: unknown, taskType: TaskType): TaskBillingInfo |
 }
 
 function readTraceRequestId(
-  payload: Record<string, unknown> | null,
+  payload: Record<string, unknown>,
   operationRequestId: string | null,
 ): string | null {
-  const meta = payload?.meta
-  const metaRecord = meta && typeof meta === 'object' && !Array.isArray(meta)
-    ? meta as Record<string, unknown>
-    : null
-  const trace = metaRecord?.trace
-  const traceRecord = trace && typeof trace === 'object' && !Array.isArray(trace)
-    ? trace as Record<string, unknown>
-    : null
-  const requestId = traceRecord?.requestId
+  const meta = payload.meta as { trace?: { requestId?: unknown } | null } | null | undefined
+  const requestId = meta?.trace?.requestId
   if (typeof requestId === 'string' && requestId.trim()) {
     return requestId.trim()
   }

@@ -55,6 +55,7 @@
       "testPaths": [
         "tests/unit/project-workspace/structured-stream-adapters.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
+        "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
         "tests/regression/project-canvas-task-backed-running.test.ts",
         "tests/regression/project-canvas-resource-lifecycle.test.ts",
         "tests/regression/project-canvas-long-form-node-identity.test.ts",
@@ -152,6 +153,7 @@
       ],
       "testPaths": [
         "tests/integration/provider/fal-provider.contract.test.ts",
+        "tests/integration/provider/fal-queue-result-errors.contract.test.ts",
         "tests/integration/provider/fal-video-provider.contract.test.ts",
         "tests/integration/provider/elevenlabs-sound-effect-provider.contract.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts",
