@@ -11,6 +11,10 @@ import {
   bindAssistantWaitToSystemTask,
   expectTerminalFailureConsistency,
 } from './helpers/terminal-failure-consistency'
+import {
+  expectAssistantTaskContinuation,
+  submitApprovedAssistantImageTask,
+} from './helpers/assistant-approved-task'
 
 const imageState = vi.hoisted(() => ({
   mode: 'success' as 'success' | 'fatal' | 'transient-once',
@@ -287,4 +291,31 @@ describe('system - generate image', () => {
     expect(eventTypes).not.toContain(TASK_EVENT_TYPE.FAILED)
     expectLifecycleEvents(eventTypes, 'completed')
   }, 30_000)
+
+  it('[P0:SYS-ASSISTANT-APPROVAL-TASK-CONTINUE] exact media approval submits one task and resumes its server-owned run', async () => {
+    const seeded = await seedMinimalDomainState()
+    mockAuthenticated(seeded.user.id)
+    const submitted = await submitApprovedAssistantImageTask({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      characterId: seeded.character.id,
+      appearanceId: seeded.appearance.id,
+    })
+    workers = await startSystemWorkers(['image'])
+
+    const task = await waitForTaskTerminalState(submitted.taskId)
+    expect(task).toMatchObject({
+      status: 'completed',
+      operationId: 'generate_character_image',
+      operationSource: 'assistant-panel',
+      operationConfirmed: true,
+    })
+    await expectAssistantTaskContinuation({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      ...submitted,
+    })
+  })
 })
