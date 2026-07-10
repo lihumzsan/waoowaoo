@@ -10,6 +10,7 @@ import {
   resolveImageFrameAspectRatio,
 } from '@/features/project-workspace/canvas/nodes/AdaptiveImageAspectFrame'
 import type { WorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/node-canvas-types'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 vi.mock('@xyflow/react', () => ({
   Handle: (props: { type?: string }) => createElement('span', { 'data-handle': props.type }),
@@ -57,6 +58,13 @@ const messages = {
   projectWorkflow: {
     canvas: {
       workspace: {
+        status: {
+          pending: '待生成',
+          processing: '处理中',
+          succeeded: '成功',
+          failed: '失败',
+          canceled: '已取消',
+        },
         nodeFields: {
           expandDetails: '展开',
           itemCount: '{count} 项',
@@ -131,7 +139,7 @@ describe('adaptive image aspect frame', () => {
       eyebrow: '风格圣经',
       body: '非真人的高质感暗黑3D动画方案。',
       meta: 'ready',
-      statusLabel: '已就绪',
+      lifecycle: canvasLifecycle('succeeded'),
       width: 420,
       height: 420,
       previewImageUrl: 'https://example.com/style-reference.png',

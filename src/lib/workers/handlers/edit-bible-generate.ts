@@ -7,9 +7,11 @@ import { withTextBilling } from '@/lib/billing'
 import {
   generateEditBibleArtifacts,
   markEditBibleScriptReadyForReview,
+  normalizeExpandedSourceScriptOutput,
   persistGeneratedEditBibleBundle,
+  type NormalizedSourceScriptSegments,
 } from '@/lib/edit-bible'
-import { expandedSourceScriptOutputSchema, type ExpandedSourceScriptOutput } from '@/lib/edit-bible/schemas'
+import { expandedSourceScriptOutputSchema } from '@/lib/edit-bible/schemas'
 import {
   EDIT_SOURCE_DOCUMENT_OUTPUT_TOKEN_RESERVE,
   estimateEditSourceDocumentInputTokens,
@@ -39,7 +41,7 @@ async function expandPromptGeneratedSource(input: {
   readonly locale: Locale
   readonly prompt: string
   readonly previousScript?: string | null
-}): Promise<ExpandedSourceScriptOutput> {
+}): Promise<NormalizedSourceScriptSegments> {
   const userPrompt = input.previousScript
     ? [
         '当前完整剧本：',
@@ -91,8 +93,9 @@ async function expandPromptGeneratedSource(input: {
     },
     runCompletion,
   )
-  if (!result.data.scriptText.trim()) throw new Error('EDIT_BIBLE_PROMPT_SOURCE_GENERATION_EMPTY')
-  return result.data
+  const normalized = normalizeExpandedSourceScriptOutput(result.data)
+  if (!normalized.normalizedText) throw new Error('EDIT_BIBLE_PROMPT_SOURCE_GENERATION_EMPTY')
+  return normalized
 }
 
 export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
@@ -153,7 +156,7 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
             projectId: job.data.projectId,
             episodeId,
             sourceDocumentId,
-            text: expandedSource.scriptText,
+            text: expandedSource.normalizedText,
             scriptStructure: expandedSource.structure,
           })
           await markEditBibleScriptReadyForReview({

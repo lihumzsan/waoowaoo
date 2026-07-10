@@ -24,7 +24,7 @@ type PreviousTaskRuntime = {
 }
 
 function isTerminalPhase(phase: string | null | undefined): boolean {
-  return phase === 'completed' || phase === 'failed'
+  return phase === 'completed' || phase === 'failed' || phase === 'canceled'
 }
 
 function stateRuntimeKey(state: TaskTargetState): string {

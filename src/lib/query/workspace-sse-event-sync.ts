@@ -8,6 +8,7 @@ import { applyTaskLifecycleToOverlay } from './task-target-overlay'
 import { applyTaskTargetTerminalStateToCache } from './task-target-state-cache'
 import { syncWorkspaceResourceChanges } from './resource-change-sync'
 import { readWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+import { applyWorkspaceMaterializedResourcesToCache } from './materialized-resource-cache'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -113,6 +114,23 @@ export function applyWorkspaceSSEEvent(params: {
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
 
+  const materializedResult = (
+    normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED
+    || normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
+  )
+    ? applyWorkspaceMaterializedResourcesToCache({
+        queryClient,
+        taskId: event.taskId,
+        projectId,
+        value: payloadRecord?.materializedResources,
+      })
+    : { applied: [], errors: [] }
+  const missingCompletedHandoff = normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED
+    && Boolean(resolvedEpisodeId)
+    && materializedResult.applied.length === 0
+  const terminalHandoffError = materializedResult.errors[0]
+    ?? (missingCompletedHandoff ? 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING' : null)
+
   if (isLifecycleEvent && shouldInvalidateTasksList) {
     queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId) })
   }
@@ -187,8 +205,10 @@ export function applyWorkspaceSSEEvent(params: {
         progress: typeof payloadRecord?.progress === 'number' ? Math.floor(payloadRecord.progress) : null,
         stage: typeof payloadRecord?.stage === 'string' ? payloadRecord.stage : null,
         stageLabel: typeof payloadRecord?.stageLabel === 'string' ? payloadRecord.stageLabel : null,
-        errorCode: payloadErrorCode,
-        errorMessage: payloadErrorMessage,
+        errorCode: terminalHandoffError ?? payloadErrorCode,
+        errorMessage: terminalHandoffError
+          ? 'Task reached completed without a valid materialized Canvas resource.'
+          : payloadErrorMessage,
         eventTs: typeof event.ts === 'string' ? event.ts : null,
       })
     }

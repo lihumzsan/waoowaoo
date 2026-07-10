@@ -8,6 +8,13 @@ function readRepoFile(path: string): string {
   return readFileSync(join(ROOT, path), 'utf8')
 }
 
+function readWorkspaceNodeSources(): string {
+  return [
+    readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNodeRenderers.tsx'),
+    readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx'),
+  ].join('\n')
+}
+
 function cssRule(source: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = source.match(new RegExp(`${escapedSelector}\\s*\\{(?<body>[^}]*)\\}`))
@@ -121,7 +128,7 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('uses presence motion for clicked node details instead of animating the card shell', () => {
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     // ShotGrid（网格卡片 · 整行展开）已抽离为共享权威实现，供核心剪辑表 / 摄影指导 / 剧本创作 / 制作规划复用。
     const shotGrid = readRepoFile('src/features/project-workspace/canvas/nodes/shot-grid.tsx')
 
@@ -137,7 +144,7 @@ describe('workspace canvas layout runtime contract', () => {
 
   it('locks scrollable node regions and wraps read-only prompts vertically', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     const scrollLock = readRepoFile('src/features/project-workspace/canvas/canvas-scroll-lock.ts')
     const previewDetail = readRepoFile('src/features/project-workspace/canvas/details/EditScriptPreviewDetail.tsx')
 
@@ -160,7 +167,7 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('requires every expanded content function to use canvas motion presence', () => {
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
     const expandedFunctions = expandedContentFunctions(node)
 
@@ -195,7 +202,7 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('defers node measurement during local canvas motion', () => {
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
 
     expect(motion).toContain("WORKSPACE_CANVAS_MOTION_ACTIVE_ATTRIBUTE = 'data-workspace-canvas-motion-active'")
@@ -213,7 +220,7 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('lets width-stable card shells follow local collapse without filling stale node height', () => {
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
 
     expect(node).toContain('fixedExpandedShell = expanded && Boolean(getWorkspaceCanvasNodePresentationProfile(data.kind).expanded)')
     expect(node).toContain("fixedExpandedShell\n      ? 'min-h-full overflow-visible'\n      : 'overflow-visible'")
@@ -222,7 +229,7 @@ describe('workspace canvas layout runtime contract', () => {
   })
 
   it('keeps collapse motion for width-stable expanded content only', () => {
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     const widthStableFunctions = [
       'EditablePromptSection',
       'ImageContent',
@@ -253,7 +260,7 @@ describe('workspace canvas layout runtime contract', () => {
 
   it('removes width-changing collapse exit motion while keeping local detail motion', () => {
     const canvas = readRepoFile('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
-    const node = readRepoFile('src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+    const node = readWorkspaceNodeSources()
     const shotGrid = readRepoFile('src/features/project-workspace/canvas/nodes/shot-grid.tsx')
     const motion = readRepoFile('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx')
     const types = readRepoFile('src/features/project-workspace/canvas/node-canvas-types.ts')

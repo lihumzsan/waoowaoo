@@ -43,18 +43,28 @@
       "document": "docs/architecture/modules/canvas-node.md",
       "title": "Canvas 节点与流式状态",
       "sourcePaths": [
-        "src/features/project-workspace/canvas"
+        "src/features/project-workspace/canvas",
+        "src/lib/workspace-resource/materialized-resource.ts",
+        "src/lib/query/materialized-resource-cache.ts",
+        "src/lib/edit-bible/source-script-segments.ts",
+        "src/lib/ai-prompts/templates/edit-bible/outline-script"
       ],
       "testPaths": [
         "tests/unit/project-workspace/structured-stream-adapters.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/regression/project-canvas-task-backed-running.test.ts",
-        "tests/regression/project-canvas-artifact-phase.test.ts",
-        "tests/regression/project-canvas-long-form-node-identity.test.ts"
+        "tests/regression/project-canvas-resource-lifecycle.test.ts",
+        "tests/regression/project-canvas-long-form-node-identity.test.ts",
+        "tests/contracts/canvas-node-conformance.test.ts",
+        "tests/unit/edit-bible/source-script-segments.test.ts",
+        "tests/integration/provider/source-script-scene-stream.contract.test.ts",
+        "tests/unit/optimistic/sse-invalidation.test.ts",
+        "tests/unit/workspace-resource/materialized-resource.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-history-state-inference.mjs",
-        "scripts/guards/no-server-mirror-state.mjs"
+        "scripts/guards/no-server-mirror-state.mjs",
+        "scripts/guards/canvas-node-lifecycle-contract-guard.mjs"
       ]
     },
     {
@@ -64,6 +74,8 @@
       "sourcePaths": [
         "src/lib/task",
         "src/lib/workers",
+        "src/lib/workspace-resource/materialized-resource.ts",
+        "src/lib/query/materialized-resource-cache.ts",
         "src/lib/edit-bible/task-submission.ts",
         "src/lib/operations/submit-operation-task.ts"
       ],
@@ -72,7 +84,9 @@
         "tests/regression/task-dedupe-recovery.test.ts",
         "tests/regression/task-enqueue-billing-rollback.test.ts",
         "tests/unit/edit-bible/task-submission.test.ts",
-        "tests/unit/task/service-operation-metadata.test.ts"
+        "tests/unit/task/service-operation-metadata.test.ts",
+        "tests/unit/workspace-resource/materialized-resource.test.ts",
+        "tests/unit/optimistic/sse-invalidation.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/task-submit-compensation-guard.mjs",

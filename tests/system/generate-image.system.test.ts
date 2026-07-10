@@ -86,6 +86,7 @@ describe('system - generate image', () => {
         locale: 'zh',
         appearanceId: seeded.appearance.id,
         count: 1,
+        confirmed: true,
       },
       { params: { assetId: seeded.character.id } },
     )
@@ -138,6 +139,7 @@ describe('system - generate image', () => {
         locale: 'zh',
         appearanceId: seeded.appearance.id,
         count: 1,
+        confirmed: true,
       },
       { params: { assetId: seeded.character.id } },
     )

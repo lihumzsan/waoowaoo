@@ -6,6 +6,7 @@ import {
   resolveWorkspaceCanvasStyleBibleFocusNodeIds,
 } from '@/features/project-workspace/canvas/hooks/useCanvasFocusFollow'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 function workspaceNode(
   id: string,
@@ -26,8 +27,7 @@ function workspaceNode(
       eyebrow: 'Shot',
       body: 'body',
       meta: 'meta',
-      statusLabel: isRunning ? 'Processing' : 'Ready',
-      isRunning,
+      lifecycle: canvasLifecycle(isRunning ? 'processing' : 'succeeded'),
       width: 320,
       height: 420,
     },

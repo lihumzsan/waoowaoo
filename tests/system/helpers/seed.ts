@@ -76,10 +76,15 @@ export async function seedMinimalDomainState() {
             shotNumber: 1,
             shotPurpose: 'action',
             durationSec: 3,
-            scene: { name: 'Office' },
+            scene: {
+              locationId: 'seed-location-office',
+              name: 'Office',
+              subScene: 'Main floor',
+            },
             action: 'seed panel',
             characters: [
               {
+                characterId: 'seed-character-narrator',
                 name: 'Narrator',
                 visibility: 'visible',
                 role: 'focus',

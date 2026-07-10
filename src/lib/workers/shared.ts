@@ -23,6 +23,7 @@ import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import { withLogContext } from '@/lib/logging/context'
+import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -268,6 +269,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       projectId: data.projectId,
       userId: data.userId,
     }, async () => await withTextUsageCollection(async () => await handler(job)))
+    const materializedResources = await materializeWorkspaceResourcesForTask(data)
     if (billingInfo?.billable) {
       billingInfo = (await settleTaskBilling({
         id: taskId,
@@ -298,6 +300,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     })
     const completedPayload = withFlowFields(data, {
       ...(result || {}),
+      materializedResources,
       displayMode: 'loading',
       trace: {
         requestId: data.trace?.requestId || null,
@@ -468,8 +471,22 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       errorMessage: normalizedError.message,
       errorDetails: normalizedError.details,
     })
+    let materializedResources: Awaited<ReturnType<typeof materializeWorkspaceResourcesForTask>> = []
+    let materializationError: string | null = null
+    try {
+      materializedResources = await materializeWorkspaceResourcesForTask(data)
+    } catch (handoffError: unknown) {
+      materializationError = handoffError instanceof Error ? handoffError.message : String(handoffError)
+      logger.error({
+        action: 'worker.failed.materialization_failed',
+        message: materializationError,
+        errorCode: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_FAILED',
+      })
+    }
     const failedPayload = withFlowFields(data, {
       error: normalizedError,
+      materializedResources,
+      ...(materializationError ? { materializationError } : {}),
       displayMode: 'loading',
       trace: {
         requestId: data.trace?.requestId || null,

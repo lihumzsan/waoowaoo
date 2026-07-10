@@ -16,6 +16,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-06 — 终态驱动下游。** Task 完成/失败是唤醒 Agent 和刷新 Canvas 的唯一业务边；不得用轮询、历史消息或局部 loading 推断替代。
 - **TL-06A — 终态立即撤销瞬时运行态。** 结构化流和 optimistic runtime 在 Task 终态到达时必须立即退出；历史 `task-submitted` 消息不得继续充当 active Task。源剧本生成和制作规划生成即使复用同一 worker，也必须使用不同 Task type 与 target。
 - **TL-06B — 目标失败只跟随最终终态。** 单次 worker attempt 失败且仍会重试时不得把业务目标写成 `failed`；只有 Task 确认进入最终失败终态后，统一目标失败同步才可落库诊断。
+- **TL-06C — 终态携带物化资源。** 影响 Canvas 的 worker 必须在业务资源持久化后、Task completed 事件前，通过统一 materialization registry 读取正式 Query DTO。客户端处理顺序固定为 Query Cache → Task terminal → runtime clear → 异步 invalidation；不得把 refetch 时机当作终态 UI 接力。
 
 ## 权威入口
 
@@ -23,6 +24,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - 提交、队列与计费边界：`src/lib/task/submitter.ts`。
 - Task 服务与终态写入：`src/lib/task/service.ts`。
 - Operation 到 Task 的提交适配：`src/lib/operations/submit-operation-task.ts`。
+- Canvas 终态物化：`src/lib/workspace-resource/materialized-resource.ts`；客户端接力：`src/lib/query/materialized-resource-cache.ts`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
 
 ## 验证

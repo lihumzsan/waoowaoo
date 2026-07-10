@@ -220,6 +220,7 @@
         "aiEditing": "AI Editing",
         "generatingBgm": "Generating Music",
         "processing": "Processing",
+        "canceled": "Canceled",
         "inconsistent": "Task state inconsistent",
         "failed": "Failed"
       },

@@ -20,9 +20,10 @@ export type TaskTargetStateQuery = {
 }
 
 export type TaskTargetState = {
+  taskId?: string | null
   targetType: string
   targetId: string
-  phase: 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+  phase: 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
   runningTaskId: string | null
   runningTaskType: string | null
   progressGroupId?: string | null
@@ -390,7 +391,7 @@ export function useTaskTargetStateMap(
           }
           continue
         }
-        if (current.phase === 'completed' || current.phase === 'failed') {
+        if (current.phase === 'completed' || current.phase === 'failed' || current.phase === 'canceled') {
           const runtimeUpdatedAt = dateMillis(runtime.updatedAt)
           const currentUpdatedAt = dateMillis(current.updatedAt)
           if (runtimeUpdatedAt !== null && currentUpdatedAt !== null && runtimeUpdatedAt <= currentUpdatedAt) {

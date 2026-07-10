@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { buildMockRequest } from '../../../helpers/request'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import { TASK_TYPE } from '@/lib/task/types'
 import {
   PROJECT_ASSISTANT_TEXT_ATTACHMENT_METADATA_KEY,
   type ProjectAssistantTextAttachment,
@@ -36,10 +37,21 @@ const editBibleMock = vi.hoisted(() => ({
   })),
 }))
 
+const styleTaskSubmissionMock = vi.hoisted(() => vi.fn(async (): Promise<unknown> => ({
+  taskId: 'style-parent-task-1',
+  status: 'queued',
+})))
+
 const prismaMock = vi.hoisted(() => ({
   project: {
+    findFirst: vi.fn(async (): Promise<{ videoRatio: string }> => ({ videoRatio: '16:9' })),
+    update: vi.fn(async (): Promise<{ id: string }> => ({ id: 'project-1' })),
     updateMany: vi.fn(async (): Promise<{ count: number }> => ({ count: 1 })),
   },
+  projectEditBible: {
+    updateMany: vi.fn(async (): Promise<{ count: number }> => ({ count: 1 })),
+  },
+  $transaction: vi.fn(async (operations: readonly Promise<unknown>[]): Promise<unknown[]> => await Promise.all(operations)),
 }))
 
 const waitMock = vi.hoisted(() => ({
@@ -196,6 +208,9 @@ vi.mock('@/lib/api-auth', () => {
 vi.mock('@/lib/project-agent', () => projectAgentMock)
 vi.mock('@/lib/adapters/api/execute-project-agent-operation', () => apiAdapterMock)
 vi.mock('@/lib/edit-script/service', () => editScriptServiceMock)
+vi.mock('@/lib/edit-script/task-submission', () => ({
+  submitProjectEditStylePreviewsGenerationTask: styleTaskSubmissionMock,
+}))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/edit-bible', async () => {
   const actual = await vi.importActual<typeof import('@/lib/edit-bible')>('@/lib/edit-bible')
@@ -736,7 +751,49 @@ describe('project assistant chat route', () => {
       status: 'consumed',
       operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'bible_review' },
+      payload: {
+        choiceType: 'bible_review',
+        card: {
+          cardId: 'edit-first-bible-review:plan-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'bible_review',
+          title: 'Confirm production plan',
+          groups: [],
+          submitLabel: 'Confirm production plan',
+          submit: { kind: 'submit_tool_output' },
+          operationPlan: {
+            operationId: 'generate_edit_style_previews',
+            kind: 'task_submission',
+            taskCount: 1,
+            quote: {
+              showCredits: true,
+              billingMode: 'ENFORCE',
+              billable: true,
+              taskCount: 1,
+              mediaTaskCount: 1,
+              totalMaxFrozenCost: 1.25,
+              currency: 'credits',
+              items: [{
+                id: 'style-task-1',
+                taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+                targetType: 'ProjectEditStylePreview',
+                targetId: 'style-preview-1',
+                apiType: 'image',
+                model: 'image-model',
+                quantity: 1,
+                unit: 'image',
+                maxFrozenCost: 1.25,
+              }],
+            },
+            tasks: [{
+              id: 'style-task-1',
+              taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+              targetType: 'ProjectEditStylePreview',
+              targetId: 'style-preview-1',
+            }],
+          },
+        },
+      },
     })
 
     const response = await choicePost(
@@ -782,6 +839,11 @@ describe('project assistant chat route', () => {
         videoRatio: '9:16',
       },
     })
+    expect(styleTaskSubmissionMock).toHaveBeenCalledWith(expect.objectContaining({
+      plannedStylePreviewIds: ['style-preview-1'],
+      plannedImageModel: 'image-model',
+      confirmed: true,
+    }))
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> consumes a claimed wait follow-up exactly once', async () => {

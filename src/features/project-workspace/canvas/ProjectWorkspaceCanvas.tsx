@@ -23,9 +23,7 @@ import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-previ
 import type { ProjectEditScript } from '@/types/project'
 import {
   isTaskRuntimeRunningPhase,
-  taskRuntimeStateMapSignature,
   TASK_RUNTIME_TARGETS,
-  type TaskRuntimeStateLike,
 } from '@/lib/task/runtime-targets'
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
@@ -83,17 +81,13 @@ import {
 import { captureLayoutBasePositions } from './layout/workspace-layout-composer'
 import {
   collectWorkspaceNodeRuntimeTargets,
-  resolveWorkspaceNodeRuntimePatch,
+  resolveWorkspaceCanvasNodeData,
 } from './workspace-node-runtime'
-import {
-  applyWorkspaceStructuredStreamPatches,
-  useWorkspaceStructuredStreamRuntime,
-} from './structured-stream/useWorkspaceStructuredStreamRuntime'
+import { useWorkspaceStructuredStreamRuntime } from './structured-stream/useWorkspaceStructuredStreamRuntime'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
-const OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS = 15000
 const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
 const MEASURED_NODE_SIZE_EPSILON = 1
 
@@ -300,15 +294,12 @@ function ProjectWorkspaceCanvasContent({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
+  const [submittingNodeIds, setSubmittingNodeIds] = useState<ReadonlySet<string>>(() => new Set())
   const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const optimisticRunningNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
-  const optimisticRunningClearTimersRef = useRef<Map<string, number>>(new Map())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
-  const workspaceTaskStateByQueryKeyRef = useRef<ReadonlyMap<string, TaskRuntimeStateLike>>(new Map())
-  const projectedNodeByIdRef = useRef<ReadonlyMap<string, WorkspaceCanvasFlowNode>>(new Map())
   const appliedProjectionNodeSignatureRef = useRef<string | null>(null)
   const stableEdgesRef = useRef<{
     signature: string
@@ -387,73 +378,6 @@ function ProjectWorkspaceCanvasContent({
     || activeAssistantOperationId === 'plan_chapters'
     || activeAssistantOperationId === 'replan_chapter'
     || (editScriptGenerationActive && !scopedEditScript)
-  const nodeRunningStatusLabel = useCallback((): string => (
-    t('status.processing')
-  ), [t])
-  const clearOptimisticRunningNode = useCallback((nodeId: string) => {
-    const timer = optimisticRunningClearTimersRef.current.get(nodeId)
-    if (timer !== undefined) {
-      window.clearTimeout(timer)
-      optimisticRunningClearTimersRef.current.delete(nodeId)
-    }
-    const nextIds = new Set(optimisticRunningNodeIdsRef.current)
-    nextIds.delete(nodeId)
-    optimisticRunningNodeIdsRef.current = nextIds
-  }, [])
-  const restoreNodeRuntimeBaseline = useCallback((nodeId: string) => {
-    setSourceNodes((currentNodes) => currentNodes.map((node) => {
-      if (node.id !== nodeId) return node
-      const projectedNode = projectedNodeByIdRef.current.get(nodeId)
-      if (!projectedNode) {
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            isRunning: false,
-          },
-        }
-      }
-      const runtimePatch = resolveWorkspaceNodeRuntimePatch({
-        node: projectedNode,
-        statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        labels: {
-          running: nodeRunningStatusLabel(),
-          pending: t('status.pending'),
-          failed: t('status.failed'),
-        },
-      })
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          ...runtimePatch,
-        },
-      }
-    }))
-  }, [nodeRunningStatusLabel, t])
-  const markNodeOptimisticallyRunning = useCallback((nodeId: string) => {
-    const previousTimer = optimisticRunningClearTimersRef.current.get(nodeId)
-    if (previousTimer !== undefined) window.clearTimeout(previousTimer)
-    const nextIds = new Set(optimisticRunningNodeIdsRef.current)
-    nextIds.add(nodeId)
-    optimisticRunningNodeIdsRef.current = nextIds
-    const timer = window.setTimeout(() => {
-      clearOptimisticRunningNode(nodeId)
-      restoreNodeRuntimeBaseline(nodeId)
-    }, OPTIMISTIC_NODE_RUNNING_TIMEOUT_MS)
-    optimisticRunningClearTimersRef.current.set(nodeId, timer)
-    setSourceNodes((currentNodes) => currentNodes.map((node) => node.id === nodeId
-      ? {
-          ...node,
-          data: {
-            ...node.data,
-            artifactPhase: 'running',
-            isRunning: true,
-            statusLabel: nodeRunningStatusLabel(),
-          },
-        }
-      : node))
-  }, [clearOptimisticRunningNode, nodeRunningStatusLabel, restoreNodeRuntimeBaseline])
   const clearFocusHighlightedNode = useCallback((nodeId: string) => {
     const timer = focusHighlightClearTimersRef.current.get(nodeId)
     if (timer !== undefined) {
@@ -498,18 +422,24 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [clearFocusHighlightedNode])
   const onNodeAction = useCallback(async (action: WorkspaceCanvasNodeAction, nodeId?: string) => {
-    if (nodeId) markNodeOptimisticallyRunning(nodeId)
+    if (nodeId) {
+      setSubmittingNodeIds((current) => new Set(current).add(nodeId))
+    }
     try {
       await runNodeAction(action)
     } catch (error: unknown) {
-      if (nodeId) {
-        clearOptimisticRunningNode(nodeId)
-        restoreNodeRuntimeBaseline(nodeId)
-      }
       _ulogWarn('[ProjectWorkspaceCanvas] node action failed', error)
       throw error
+    } finally {
+      if (nodeId) {
+        setSubmittingNodeIds((current) => {
+          const next = new Set(current)
+          next.delete(nodeId)
+          return next
+        })
+      }
     }
-  }, [clearOptimisticRunningNode, markNodeOptimisticallyRunning, restoreNodeRuntimeBaseline, runNodeAction])
+  }, [runNodeAction])
   const updateNodeDisclosureOverrides = useCallback((
     updater: (current: ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>) => ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>,
   ) => {
@@ -574,65 +504,6 @@ function ProjectWorkspaceCanvasContent({
       return changed ? measuredNodes : currentNodes
     })
   }, [])
-  const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => {
-    return inputNodes.map((node) => {
-      const runtimePatch = resolveWorkspaceNodeRuntimePatch({
-        node,
-        statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        labels: {
-          running: nodeRunningStatusLabel(),
-          pending: t('status.pending'),
-          failed: t('status.failed'),
-        },
-      })
-      const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
-      const patchedData = {
-        ...node.data,
-        ...runtimePatch,
-      }
-      const isStreaming = patchedData.streamPresentation?.isStreaming === true
-      const shouldCollapseCompletedStream = !isStreaming
-        && streamingDisclosureNodeIdsRef.current.has(node.id)
-        && profile.disclosure.kind === 'collapsible'
-        && profile.disclosure.collapseWhenStreamCompletes
-      const disclosureOverride = nodeDisclosureOverrides.get(node.id)
-      const disclosure = resolveWorkspaceCanvasNodeDisclosure({
-        kind: patchedData.kind,
-        userExpandedOverride: shouldCollapseCompletedStream ? false : disclosureOverride?.expanded,
-        defaultExpanded: patchedData.defaultExpanded,
-        isStreaming,
-      })
-      const expanded = disclosure.effectiveExpanded
-      const size = resolveWorkspaceCanvasNodeSize({
-        kind: patchedData.kind,
-        expanded,
-        collapsedSize: {
-          width: patchedData.width,
-          height: patchedData.height,
-        },
-      })
-      const zIndex = node.id === selectedNodeId ? 30 : expanded ? 20 : undefined
-      return {
-        ...node,
-        zIndex,
-        style: {
-          ...node.style,
-          width: size.width,
-          height: size.height,
-        },
-        data: {
-          ...patchedData,
-          focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
-          disclosure,
-          expanded,
-          expandedLayout: expanded ? profile.expandedLayout : undefined,
-          onToggleExpanded: toggleNodeExpanded,
-          onMeasureNodeSize: handleMeasuredNodeSize,
-        },
-      }
-    })
-  }, [handleMeasuredNodeSize, nodeDisclosureOverrides, nodeRunningStatusLabel, selectedNodeId, t, toggleNodeExpanded])
-
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
     translate: t,
@@ -659,10 +530,7 @@ function ProjectWorkspaceCanvasContent({
     translate: t,
     onAction: onNodeAction,
   })
-  const projectedNodes = useMemo(
-    () => applyWorkspaceStructuredStreamPatches(projection.nodes, structuredStreamRuntime.patches),
-    [projection.nodes, structuredStreamRuntime.patches],
-  )
+  const projectedNodes = projection.nodes
   const billingQuoteWithCredits = useCallback(
     (values: { count: number; cost: number }) => billingT('cards.billingQuoteWithCredits', values),
     [billingT],
@@ -688,7 +556,6 @@ function ProjectWorkspaceCanvasContent({
     [actionBillingPreviews, episodeId, projectId, projectedNodes],
   )
   const projectionEdges = projection.edges
-  projectedNodeByIdRef.current = new Map(projectedNodesWithBilling.map((node) => [node.id, node]))
   const workspaceRuntimeTargets = useMemo(
     () => collectWorkspaceNodeRuntimeTargets(projectedNodesWithBilling),
     [projectedNodesWithBilling],
@@ -697,11 +564,6 @@ function ProjectWorkspaceCanvasContent({
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
     staleTime: 1000,
   })
-  const workspaceTaskStateSignature = useMemo(
-    () => taskRuntimeStateMapSignature(workspaceTaskStateMap.byQueryKey),
-    [workspaceTaskStateMap.byQueryKey],
-  )
-  workspaceTaskStateByQueryKeyRef.current = workspaceTaskStateMap.byQueryKey
   const terminalInvalidationStates = useMemo(
     () => [
       ...editScriptGenerationTaskStateMap.data,
@@ -716,9 +578,77 @@ function ProjectWorkspaceCanvasContent({
     enabled: terminalInvalidationStates.length > 0,
   })
 
+  const streamPatchByNodeId = useMemo(
+    () => new Map(structuredStreamRuntime.patches.map((patch) => [patch.nodeId, patch])),
+    [structuredStreamRuntime.patches],
+  )
+  const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => {
+    return inputNodes.map((node) => {
+      const resolvedData = resolveWorkspaceCanvasNodeData({
+        node,
+        statesByQueryKey: workspaceTaskStateMap.byQueryKey,
+        streamPatch: streamPatchByNodeId.get(node.id) ?? null,
+        submitting: submittingNodeIds.has(node.id),
+      })
+      const profile = getWorkspaceCanvasNodePresentationProfile(resolvedData.kind)
+      const isStreaming = resolvedData.lifecycle.phase === 'streaming'
+      const shouldCollapseCompletedStream = !isStreaming
+        && streamingDisclosureNodeIdsRef.current.has(node.id)
+        && profile.disclosure.kind === 'collapsible'
+        && profile.disclosure.collapseWhenStreamCompletes
+      const disclosureOverride = nodeDisclosureOverrides.get(node.id)
+      const disclosure = resolveWorkspaceCanvasNodeDisclosure({
+        kind: resolvedData.kind,
+        userExpandedOverride: shouldCollapseCompletedStream ? false : disclosureOverride?.expanded,
+        defaultExpanded: resolvedData.defaultExpanded,
+        isStreaming,
+      })
+      const expanded = disclosure.effectiveExpanded
+      const size = resolveWorkspaceCanvasNodeSize({
+        kind: resolvedData.kind,
+        expanded,
+        collapsedSize: {
+          width: resolvedData.width,
+          height: resolvedData.height,
+        },
+      })
+      const zIndex = node.id === selectedNodeId ? 30 : expanded ? 20 : undefined
+      return {
+        ...node,
+        zIndex,
+        style: {
+          ...node.style,
+          width: size.width,
+          height: size.height,
+        },
+        data: {
+          ...resolvedData,
+          focusHighlighted: focusHighlightedNodeIdsRef.current.has(node.id) ? true : undefined,
+          disclosure,
+          expanded,
+          expandedLayout: expanded ? profile.expandedLayout : undefined,
+          onToggleExpanded: toggleNodeExpanded,
+          onMeasureNodeSize: handleMeasuredNodeSize,
+        },
+      }
+    })
+  }, [
+    handleMeasuredNodeSize,
+    nodeDisclosureOverrides,
+    selectedNodeId,
+    streamPatchByNodeId,
+    submittingNodeIds,
+    toggleNodeExpanded,
+    workspaceTaskStateMap.byQueryKey,
+  ])
+  const resolvedProjectedNodes = useMemo(
+    () => attachNodeUiState(projectedNodesWithBilling),
+    [attachNodeUiState, projectedNodesWithBilling],
+  )
+
   const projectionNodeSignature = useMemo(
-    () => buildWorkspaceCanvasNodeSignature(projectedNodesWithBilling),
-    [projectedNodesWithBilling],
+    () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
+    [resolvedProjectedNodes],
   )
   const projectionEdgeSignature = useMemo(
     () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
@@ -774,43 +704,13 @@ function ProjectWorkspaceCanvasContent({
   useEffect(() => {
     if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
     appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(attachNodeUiState(projectedNodesWithBilling))
-  }, [attachNodeUiState, projectedNodesWithBilling, projectionNodeSignature])
-
-  useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes))
-  }, [attachNodeUiState, workspaceTaskStateSignature])
-
-  useEffect(() => {
-    const projectionByNodeId = new Map(projectedNodesWithBilling.map((node) => [node.id, node]))
-    let changed = false
-    const nextIds = new Set<string>()
-    optimisticRunningNodeIdsRef.current.forEach((nodeId) => {
-      const projectedNode = projectionByNodeId.get(nodeId)
-      if (!projectedNode || projectedNode.data.isRunning === true) {
-        const timer = optimisticRunningClearTimersRef.current.get(nodeId)
-        if (timer !== undefined) {
-          window.clearTimeout(timer)
-          optimisticRunningClearTimersRef.current.delete(nodeId)
-        }
-        changed = true
-        return
-      }
-      nextIds.add(nodeId)
-    })
-    if (changed) optimisticRunningNodeIdsRef.current = nextIds
-  }, [projectedNodesWithBilling, projectionNodeSignature])
+    setSourceNodes(resolvedProjectedNodes)
+  }, [projectionNodeSignature, resolvedProjectedNodes])
 
   useEffect(() => () => {
-    optimisticRunningClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    optimisticRunningClearTimersRef.current.clear()
     focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     focusHighlightClearTimersRef.current.clear()
   }, [])
-
-  useEffect(() => {
-    setSourceNodes((currentNodes) => attachNodeUiState(currentNodes))
-  }, [attachNodeUiState])
 
   useEffect(() => {
     const currentStreamingNodeIds = new Set<string>()

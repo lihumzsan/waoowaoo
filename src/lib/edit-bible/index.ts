@@ -6,6 +6,11 @@ export {
 } from './constraints'
 export { splitEditBibleIntoChapterPlans } from './chapter-split'
 export { validateEditBibleBundle } from './cross-check'
+export {
+  normalizeExpandedSourceScriptOutput,
+  normalizeSourceScriptSegments,
+  type NormalizedSourceScriptSegments,
+} from './source-script-segments'
 export { generateEditBibleArtifacts, readEditBibleExtractionDiagnostics } from './extraction'
 export {
   confirmEditBibleInputSchema,
@@ -22,6 +27,7 @@ export {
   editBibleStatusSchema,
   editSourceScriptStructureSchema,
   expandedSourceScriptOutputSchema,
+  sourceScriptSceneSegmentSchema,
   getEditBibleInputSchema,
   getEditChaptersInputSchema,
   ingestEditBibleScriptInputSchema,
@@ -35,6 +41,7 @@ export {
   type EditBibleEmotionalCurve,
   type EditSourceScriptStructure,
   type ExpandedSourceScriptOutput,
+  type SourceScriptSceneSegment,
 } from './schemas'
 export {
   approveEpisodePromptGeneratedScript,

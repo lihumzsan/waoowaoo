@@ -255,7 +255,7 @@ describe('project canvas edit-first visibility', () => {
     })
     const bible = projection.nodes.find((node) => node.data.kind === 'editBible')
 
-    expect(bible?.data.statusLabel).toBeTruthy()
+    expect(bible?.data.lifecycle.phase).toBe('succeeded')
     expect(bible?.data.meta).toBe('')
   })
 
@@ -311,9 +311,7 @@ describe('project canvas edit-first visibility', () => {
     const editScriptNode = projection.nodes.find((node) => node.data.kind === 'editScript')
 
     expect(editScriptNode).toBeDefined()
-    expect(editScriptNode?.data.isRunning).toBe(false)
-    expect(editScriptNode?.data.artifactPhase).toBeUndefined()
-    expect(editScriptNode?.data.statusLabel).toBe('status.pending')
+    expect(editScriptNode?.data.lifecycle.phase).toBe('pending')
     expect(editScriptNode?.data.body).toBe('nodes.editScript.pendingBody')
   })
 

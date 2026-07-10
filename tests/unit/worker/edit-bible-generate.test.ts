@@ -25,6 +25,53 @@ const editBibleMock = vi.hoisted(() => ({
     emotionalCurve: { cues: [] },
   })),
   markEditBibleScriptReadyForReview: vi.fn(async () => undefined),
+  normalizeExpandedSourceScriptOutput: vi.fn((value: {
+    title: string
+    summary: string
+    segments: Array<{
+      episodeIndex: number
+      episodeTitle: string
+      episodeSummary: string
+      actIndex: number
+      actTitle: string
+      actSummary: string
+      sceneIndex: number
+      title: string
+      location: string
+      timeOfDay?: string | null
+      characters: string[]
+      summary: string
+      body: string
+      beats: Array<{ beatIndex: number; title: string; summary: string }>
+    }>
+  }) => ({
+    normalizedText: value.segments.map((segment) => segment.body).join('\n\n'),
+    structure: {
+      version: 1,
+      title: value.title,
+      summary: value.summary,
+      episodes: [{
+        episodeIndex: 0,
+        title: value.segments[0]?.episodeTitle,
+        summary: value.segments[0]?.episodeSummary,
+        acts: [{
+          actIndex: 0,
+          title: value.segments[0]?.actTitle,
+          summary: value.segments[0]?.actSummary,
+          scenes: value.segments.map((segment) => ({
+            sceneIndex: segment.sceneIndex,
+            title: segment.title,
+            location: segment.location,
+            timeOfDay: segment.timeOfDay,
+            characters: segment.characters,
+            summary: segment.summary,
+            body: segment.body,
+            beats: segment.beats,
+          })),
+        }],
+      }],
+    },
+  })),
   persistGeneratedEditBibleBundle: vi.fn(async () => ({
     editBible: {
       id: 'bible-1',
@@ -67,70 +114,33 @@ const sourceDocumentMock = vi.hoisted(() => ({
 
 const aiMock = vi.hoisted(() => ({
   expandedScriptOutput: {
-    scriptText: '扩写后的完整剧本',
-    structure: {
-      version: 1 as const,
-      title: '民科超光速',
-      summary: '民间科学家试图证明超光速，最终面对代价。',
-      episodes: [{
-        episodeIndex: 0,
-        title: '第 1 集',
-        summary: '主角启动实验并付出代价。',
-        acts: [{
-          actIndex: 0,
-          title: '实验启动',
-          summary: '主角进入实验室并开启装置。',
-          scenes: [{
-            sceneIndex: 0,
-            title: '地下实验室',
-            location: '地下实验室',
-            timeOfDay: '夜',
-            characters: ['林'],
-            summary: '林启动超光速装置。',
-            body: '场景一：地下实验室。林启动超光速装置。',
-            beats: [{
-              beatIndex: 0,
-              title: '启动',
-              summary: '林按下开关。',
-            }],
-          }],
-        }],
-      }],
-    },
+    version: 1 as const,
+    title: '民科超光速',
+    summary: '民间科学家试图证明超光速，最终面对代价。',
+    segments: [{
+      episodeIndex: 0,
+      episodeTitle: '第 1 集',
+      episodeSummary: '主角启动实验并付出代价。',
+      actIndex: 0,
+      actTitle: '实验启动',
+      actSummary: '主角进入实验室并开启装置。',
+      sceneIndex: 0,
+      title: '地下实验室',
+      location: '地下实验室',
+      timeOfDay: '夜',
+      characters: ['林'],
+      summary: '林启动超光速装置。',
+      body: '场景一：地下实验室。林启动超光速装置。',
+      beats: [{ beatIndex: 0, title: '启动', summary: '林按下开关。' }],
+    }],
   },
   executeAiStructuredTextStep: vi.fn(async () => ({
     text: '扩写后的完整剧本',
     data: {
-      scriptText: '扩写后的完整剧本',
-      structure: {
-        version: 1 as const,
-        title: '民科超光速',
-        summary: '民间科学家试图证明超光速，最终面对代价。',
-        episodes: [{
-          episodeIndex: 0,
-          title: '第 1 集',
-          summary: '主角启动实验并付出代价。',
-          acts: [{
-            actIndex: 0,
-            title: '实验启动',
-            summary: '主角进入实验室并开启装置。',
-            scenes: [{
-              sceneIndex: 0,
-              title: '地下实验室',
-              location: '地下实验室',
-              timeOfDay: '夜',
-              characters: ['林'],
-              summary: '林启动超光速装置。',
-              body: '场景一：地下实验室。林启动超光速装置。',
-              beats: [{
-                beatIndex: 0,
-                title: '启动',
-                summary: '林按下开关。',
-              }],
-            }],
-          }],
-        }],
-      },
+      version: 1 as const,
+      title: '民科超光速',
+      summary: '民间科学家试图证明超光速，最终面对代价。',
+      segments: [] as unknown[],
     },
     reasoning: '',
     usage: null,
@@ -362,8 +372,8 @@ describe('worker edit-bible-generate behavior', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       sourceDocumentId: 'source-1',
-      text: aiMock.expandedScriptOutput.scriptText,
-      scriptStructure: aiMock.expandedScriptOutput.structure,
+      text: '场景一：地下实验室。林启动超光速装置。',
+      scriptStructure: expect.objectContaining({ title: '民科超光速' }),
     })
     expect(editBibleMock.markEditBibleScriptReadyForReview).toHaveBeenCalledWith({
       editBibleId: 'bible-1',

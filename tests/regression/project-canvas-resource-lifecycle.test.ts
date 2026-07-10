@@ -6,6 +6,7 @@ import {
   buildWorkspaceNodeCanvasProjection,
 } from '@/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
+import { isWorkspaceCanvasLifecycleRunning } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
 
 function t(key: string): string {
   return key
@@ -81,7 +82,7 @@ function sourceScriptNode(input: {
   return node
 }
 
-describe('project canvas artifact phase', () => {
+describe('project canvas resource lifecycle', () => {
   it('does not render a placeholder node when the bible artifact does not exist', () => {
     const projection = buildWorkspaceNodeCanvasProjection({
       projectId: 'project-1',
@@ -100,9 +101,8 @@ describe('project canvas artifact phase', () => {
   it('treats bible review as a succeeded artifact instead of a running node', () => {
     const node = editBibleNode({ status: 'ready_for_review' })
 
-    expect(node.data.artifactPhase).toBe('succeeded')
-    expect(node.data.statusLabel).toBe('status.succeeded')
-    expect(node.data.isRunning).toBe(false)
+    expect(node.data.lifecycle.phase).toBe('succeeded')
+    expect(isWorkspaceCanvasLifecycleRunning(node.data.lifecycle)).toBe(false)
   })
 
   it('passes structured production planning modules into edit bible node details', () => {
@@ -206,9 +206,8 @@ describe('project canvas artifact phase', () => {
   it('treats style confirmation as a succeeded artifact instead of a running node', () => {
     const node = editBibleNode({ status: 'confirmed' })
 
-    expect(node.data.artifactPhase).toBe('succeeded')
-    expect(node.data.statusLabel).toBe('status.succeeded')
-    expect(node.data.isRunning).toBe(false)
+    expect(node.data.lifecycle.phase).toBe('succeeded')
+    expect(isWorkspaceCanvasLifecycleRunning(node.data.lifecycle)).toBe(false)
   })
 
   it('projects the confirmed Style Bible image through the required media loading contract', () => {
@@ -274,9 +273,8 @@ describe('project canvas artifact phase', () => {
   it('does not use assistant focus as the edit bible lifecycle authority', () => {
     const node = editBibleNode({ status: 'ready_for_review', activeAssistantOperationId: 'ingest_script' })
 
-    expect(node.data.artifactPhase).toBe('succeeded')
-    expect(node.data.statusLabel).toBe('status.succeeded')
-    expect(node.data.isRunning).toBe(false)
+    expect(node.data.lifecycle.phase).toBe('succeeded')
+    expect(isWorkspaceCanvasLifecycleRunning(node.data.lifecycle)).toBe(false)
   })
 
   it('keeps a submitted edit bible generation task visible before the bible query catches up', () => {
@@ -305,7 +303,7 @@ describe('project canvas artifact phase', () => {
     expect(node?.data.title).toBe('nodes.editSourceScript.pendingTitle')
     expect(node?.data.eyebrow).toBe('nodes.editSourceScript.eyebrow')
     expect(node?.data.body).toBe('nodes.editSourceScript.pendingBody')
-    expect(node?.data.artifactPhase).toBe('running')
+    expect(node?.data.lifecycle.phase).toBe('pending')
   })
 
   it('isolates source script, production plan, and visual style runtime targets', () => {
@@ -351,14 +349,14 @@ describe('project canvas artifact phase', () => {
     const sourceNode = projection.nodes.find((node) => node.data.kind === 'editSourceScript')
     const bibleNode = projection.nodes.find((node) => node.data.kind === 'editBible')
     const styleNode = projection.nodes.find((node) => node.data.kind === 'editStylePreview')
-    expect(sourceNode?.data.isRunning).toBe(false)
-    expect(bibleNode?.data.isRunning).toBe(false)
+    expect(sourceNode?.data.lifecycle.phase).toBe('succeeded')
+    expect(bibleNode?.data.lifecycle.phase).toBe('succeeded')
     expect(styleNode).toMatchObject({
       id: 'edit-style-preview:pending:bible-1',
       data: {
         title: 'nodes.editStylePreview.pendingTitle',
         targetId: 'bible-1',
-        isRunning: false,
+        lifecycle: expect.objectContaining({ phase: 'pending' }),
         runtimeTargets: [{
           targetType: 'ProjectEditBible',
           targetId: 'bible-1',
@@ -382,6 +380,6 @@ describe('project canvas artifact phase', () => {
     expect(node.data.eyebrow).toBe('nodes.editSourceScript.eyebrow')
     expect(node.data.body).toBe('完整扩写剧本')
     expect(node.data.sourceScriptDetails?.sourceText).toBe('完整扩写剧本')
-    expect(node.data.artifactPhase).toBe('succeeded')
+    expect(node.data.lifecycle.phase).toBe('succeeded')
   })
 })

@@ -15,9 +15,13 @@ type ProjectWorkflowMessages = {
 
 const REPO_ROOT = process.cwd()
 const WORKSPACE_NODE_PATH = join(REPO_ROOT, 'src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx')
+const WORKSPACE_NODE_RENDERERS_PATH = join(
+  REPO_ROOT,
+  'src/features/project-workspace/canvas/nodes/WorkspaceNodeRenderers.tsx',
+)
 const WORKSPACE_NODE_CANVAS_PROJECTION_PATH = join(
   REPO_ROOT,
-  'src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts',
+  'src/features/project-workspace/canvas/projection/workspace-node-canvas-projection.ts',
 )
 
 interface StaticMessageCall {
@@ -46,7 +50,9 @@ function readSourceFiles(dir: string): readonly string[] {
 }
 
 function readWorkspaceNodeFieldKeys(): readonly string[] {
-  const source = readFileSync(WORKSPACE_NODE_PATH, 'utf8')
+  const source = [WORKSPACE_NODE_PATH, WORKSPACE_NODE_RENDERERS_PATH]
+    .map((path) => readFileSync(path, 'utf8'))
+    .join('\n')
   return Array.from(source.matchAll(/labels\('([^']+)'/g), (match) => match[1])
     .filter((key): key is string => typeof key === 'string')
     .filter((key, index, keys) => keys.indexOf(key) === index)
@@ -189,6 +195,13 @@ describe('WorkspaceNode i18n messages', () => {
       },
       {
         calls: readStaticMessageCalls(WORKSPACE_NODE_PATH, 'labels'),
+        readMessage: (workspaceMessages: JsonRecord | undefined, key: string) => readNestedMessageValue(
+          isJsonRecord(workspaceMessages?.nodeFields) ? workspaceMessages.nodeFields : undefined,
+          key,
+        ),
+      },
+      {
+        calls: readStaticMessageCalls(WORKSPACE_NODE_RENDERERS_PATH, 'labels'),
         readMessage: (workspaceMessages: JsonRecord | undefined, key: string) => readNestedMessageValue(
           isJsonRecord(workspaceMessages?.nodeFields) ? workspaceMessages.nodeFields : undefined,
           key,

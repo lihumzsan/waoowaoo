@@ -6,10 +6,6 @@ import { logError } from '@/lib/logging/core'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
-import {
-  readProjectEditScripts,
-  readProjectEditShotExecutionPlans,
-} from '@/lib/edit-script/service'
 import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { deleteObject } from '@/lib/storage'
@@ -18,7 +14,7 @@ import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { normalizeFinalVideoSummary } from './final-video-summary'
+import { readProjectEpisodeDetail } from '@/lib/projects/read-episode-detail'
 
 const EFFECTS_QUERY = {
   writes: false,
@@ -895,85 +891,15 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
-          where: { id: input.episodeId, projectId: ctx.projectId },
-          include: {
-            storyboards: {
-              include: {
-                panels: { orderBy: { panelIndex: 'asc' } },
-              },
-              orderBy: { createdAt: 'asc' },
-            },
-            videoGroups: {
-              orderBy: { createdAt: 'asc' },
-            },
-            finalOutput: {
-              select: {
-                id: true,
-                episodeId: true,
-                renderStatus: true,
-                renderTaskId: true,
-                outputUrl: true,
-                updatedAt: true,
-              },
-            },
-            musicScore: {
-              select: {
-                id: true,
-                status: true,
-                version: true,
-                taskId: true,
-                timelineSignature: true,
-                musicModel: true,
-                cuesJson: true,
-                mixJson: true,
-                diagnosticsJson: true,
-                updatedAt: true,
-              },
-            },
-            soundscape: {
-              select: {
-                id: true,
-                status: true,
-                version: true,
-                taskId: true,
-                timelineSignature: true,
-                soundEffectModel: true,
-                planJson: true,
-                sourcesJson: true,
-                mixJson: true,
-                diagnosticsJson: true,
-                updatedAt: true,
-              },
-            },
-          },
-        })
-        if (!episode) throw new ApiError('NOT_FOUND')
-
         prisma.project.update({
           where: { id: ctx.projectId },
           data: { lastEpisodeId: input.episodeId },
         }).catch((error: unknown) => logError('update lastEpisodeId failed', error))
-
-        const [episodeWithSignedUrls, editScripts, editShotExecutionPlans] = await Promise.all([
-          attachMediaFieldsToProject(episode),
-          readProjectEditScripts({
-            projectId: ctx.projectId,
-            episodeId: input.episodeId,
-          }),
-          readProjectEditShotExecutionPlans({
-            projectId: ctx.projectId,
-            episodeId: input.episodeId,
-          }),
-        ])
         return {
-          episode: {
-            ...episodeWithSignedUrls,
-            editScript: editScripts.length === 1 ? editScripts[0] : null,
-            editScripts,
-            editShotExecutionPlans,
-            finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.soundscape),
-          },
+          episode: await readProjectEpisodeDetail({
+            projectId: ctx.projectId,
+            episodeId: input.episodeId,
+          }),
         }
       },
     }),

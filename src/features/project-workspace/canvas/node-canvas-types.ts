@@ -1,9 +1,9 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
-import type { TaskRuntimeStateLike, TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
-import type { WorkspaceCanvasArtifactPhase } from './artifact-phase'
+import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
 
 export type WorkspaceCanvasNodeKind =
   | 'shot'
@@ -382,11 +382,9 @@ export interface WorkspaceCanvasEditAssetGroupItem {
   readonly description: string
   readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
-  readonly statusLabel: string
-  readonly isRunning: boolean
+  readonly lifecycle: WorkspaceCanvasLifecycle
   readonly previewImageUrl?: string | null
   readonly runtimeTarget?: TaskRuntimeTarget | null
-  readonly taskProgress?: TaskRuntimeStateLike | null
   readonly action?: WorkspaceCanvasNodeAction
   readonly actionLabel?: string
 }
@@ -428,13 +426,9 @@ export interface WorkspaceCanvasNodeData {
   readonly eyebrow: string
   readonly body: string
   readonly meta: string
-  readonly artifactPhase?: WorkspaceCanvasArtifactPhase
-  readonly statusLabel: string
-  readonly isRunning?: boolean
+  readonly lifecycle: WorkspaceCanvasLifecycle
   readonly focusHighlighted?: boolean
   readonly disclosure?: WorkspaceCanvasNodeDisclosureState
-  readonly streamPresentation?: WorkspaceCanvasStreamPresentation
-  readonly taskProgress?: TaskRuntimeStateLike | null
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]
   readonly width: number
   readonly height: number

@@ -242,6 +242,51 @@ describe('sse invalidation behavior', () => {
     })
   })
 
+  it('writes the materialized Query DTO before notifying runtime listeners to clear the stream', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+    const episode = { id: 'episode-1', name: 'Materialized episode' }
+    const runtimeClear = vi.fn(() => {
+      expect(runtime.queryClient.setQueryData).toHaveBeenCalledWith(
+        queryKeys.episodeData('project-1', 'episode-1'),
+        episode,
+      )
+    })
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+      onEvent: runtimeClear,
+    })
+
+    FakeEventSource.instances[0]?.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      id: 'materialized-terminal-1',
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-materialized-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:01.000Z',
+      taskType: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      episodeId: 'episode-1',
+      payload: {
+        lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+        materializedResources: [{
+          kind: 'episodeData',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          resourceKey: 'episodeData:project-1:episode-1',
+          resourceVersion: '1',
+          taskId: 'task-materialized-1',
+          data: episode,
+        }],
+      },
+    })
+
+    expect(runtimeClear).toHaveBeenCalledTimes(1)
+  })
+
   it('does not apply duplicate SSE event ids twice', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
 

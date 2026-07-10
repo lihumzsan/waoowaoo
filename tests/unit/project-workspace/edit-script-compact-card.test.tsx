@@ -9,6 +9,7 @@ import type {
   WorkspaceCanvasStreamPresentation,
 } from '@/features/project-workspace/canvas/node-canvas-types'
 import { resolveWorkspaceCanvasNodeDisclosure } from '@/features/project-workspace/canvas/node-presentation-profiles'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 vi.mock('@xyflow/react', () => ({
   Handle: (props: { readonly type?: string }) => createElement('span', { 'data-handle': props.type }),
@@ -59,6 +60,13 @@ const messages = {
   projectWorkflow: {
     canvas: {
       workspace: {
+        status: {
+          pending: '待生成',
+          processing: '处理中',
+          succeeded: '成功',
+          failed: '失败',
+          canceled: '已取消',
+        },
         nodeFields: {
           action: '动作',
           axisAndEyeline: '轴线与视线',
@@ -151,14 +159,11 @@ function editScriptNodeData(input?: {
     eyebrow: '核心剪辑表',
     body: '核心剪辑表摘要',
     meta: '2 个镜头',
-    artifactPhase: isStreaming ? 'running' : 'succeeded',
-    statusLabel: isStreaming ? '处理中' : '成功',
-    isRunning: isStreaming,
+    lifecycle: canvasLifecycle(isStreaming ? 'streaming' : 'succeeded', streamPresentation ?? null),
     width: 760,
     height: 360,
     disclosure,
     expanded: disclosure.effectiveExpanded,
-    streamPresentation,
     onToggleExpanded: () => undefined,
     editScriptDetails: {
       bibleText: '剧本文本',
@@ -218,9 +223,7 @@ function sourceScriptNodeData(input?: {
     eyebrow: '源剧本',
     body: '完整剧本文本',
     meta: '',
-    artifactPhase: 'succeeded',
-    statusLabel: '成功',
-    isRunning: false,
+    lifecycle: canvasLifecycle('succeeded'),
     width: 760,
     height: 360,
     disclosure,
@@ -296,14 +299,14 @@ function editShotExecutionPlanNodeData(input?: {
     eyebrow: '摄影与空间执行',
     body: '2 个镜头 · 摄影执行计划',
     meta: '2 个镜头',
-    artifactPhase: input?.streamPresentation?.isStreaming === true ? 'running' : 'succeeded',
-    statusLabel: input?.streamPresentation?.isStreaming === true ? '处理中' : '成功',
-    isRunning: input?.streamPresentation?.isStreaming === true,
+    lifecycle: canvasLifecycle(
+      input?.streamPresentation?.isStreaming === true ? 'streaming' : 'succeeded',
+      input?.streamPresentation ?? null,
+    ),
     width: 760,
     height: 360,
     disclosure,
     expanded: disclosure.effectiveExpanded,
-    streamPresentation: input?.streamPresentation,
     onToggleExpanded: () => undefined,
     editPipelineStepDetails: {
       items: [
@@ -364,9 +367,7 @@ function editAssetGroupNodeData(input?: {
     eyebrow: '人物与场景',
     body: '林晓 / character\n客厅 / location',
     meta: '2 个资产',
-    artifactPhase: 'succeeded',
-    statusLabel: '成功',
-    isRunning: false,
+    lifecycle: canvasLifecycle('succeeded'),
     width: 720,
     height: 360,
     disclosure,
@@ -383,11 +384,9 @@ function editAssetGroupNodeData(input?: {
           description: '年轻女性。',
           shotIds: ['shot-1', 'shot-2'],
           shotNumbers: [1, 2],
-          statusLabel: '成功',
-          isRunning: false,
+          lifecycle: canvasLifecycle('succeeded'),
           previewImageUrl: null,
           runtimeTarget: null,
-          taskProgress: null,
         },
         {
           requirementId: 'asset-2',
@@ -397,11 +396,9 @@ function editAssetGroupNodeData(input?: {
           description: '深夜客厅。',
           shotIds: ['shot-1', 'shot-2'],
           shotNumbers: [1, 2],
-          statusLabel: '成功',
-          isRunning: false,
+          lifecycle: canvasLifecycle('succeeded'),
           previewImageUrl: null,
           runtimeTarget: null,
-          taskProgress: null,
         },
       ],
     },
@@ -425,9 +422,7 @@ function videoPlanNodeData(input: {
     eyebrow: '视频生成片段',
     body: '连续视频片段',
     meta: '连续片段',
-    artifactPhase: input.outputUrl ? 'succeeded' : undefined,
-    statusLabel: input.outputUrl ? '成功' : '',
-    isRunning: false,
+    lifecycle: canvasLifecycle(input.outputUrl ? 'succeeded' : 'pending'),
     width: 320,
     height: 420,
     onAction: () => undefined,

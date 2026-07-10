@@ -18,7 +18,7 @@ describe('workspace structured stream adapters', () => {
     expect(findStructuredStreamAdapters({
       taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
       stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
-    }).map((adapter) => adapter.key)).toEqual(['sourceScript.structure', 'sourceScript.episodes'])
+    }).map((adapter) => adapter.key)).toEqual(['sourceScript.segments'])
 
     for (const stepId of expectedStructuredKeys.keys()) {
       expect(findTextStreamAdapters({

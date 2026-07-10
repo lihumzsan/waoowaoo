@@ -1,6 +1,6 @@
 import { TASK_TYPE, type TaskType } from './types'
 
-export type TaskRuntimePhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+export type TaskRuntimePhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 
 export type TaskRuntimeTarget = {
   readonly targetType: string
@@ -9,6 +9,7 @@ export type TaskRuntimeTarget = {
 }
 
 export type TaskRuntimeStateLike = {
+  readonly taskId?: string | null
   readonly targetType?: string | null
   readonly targetId?: string | null
   readonly phase: TaskRuntimePhase | string | null | undefined

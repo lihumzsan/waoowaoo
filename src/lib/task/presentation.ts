@@ -1,6 +1,6 @@
 import type { TaskIntent } from './intent'
 
-export type TaskPresentationPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+export type TaskPresentationPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 export type TaskPresentationResource = 'image' | 'video' | 'audio' | 'text'
 export type TaskPresentationMode = 'none' | 'overlay' | 'placeholder'
 

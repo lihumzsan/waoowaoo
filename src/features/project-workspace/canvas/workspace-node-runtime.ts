@@ -6,18 +6,18 @@ import {
   isTaskRuntimeStateRunning,
   taskRuntimeTargetQueryKey,
 } from '@/lib/task/runtime-targets'
+import {
+  resolveWorkspaceCanvasLifecycle,
+  type WorkspaceCanvasLifecycle,
+  type WorkspaceCanvasPersistedPhase,
+} from './lifecycle/workspace-canvas-lifecycle'
 import type {
   WorkspaceCanvasEditAssetGroupDetails,
   WorkspaceCanvasEditAssetGroupItem,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasNodeData,
 } from './node-canvas-types'
-
-export interface WorkspaceNodeRuntimeLabels {
-  readonly running: string
-  readonly pending: string
-  readonly failed: string
-}
+import type { WorkspaceCanvasStreamPatch } from './structured-stream/workspace-structured-stream-runtime-types'
 
 export function collectWorkspaceNodeRuntimeTargets(
   nodes: readonly WorkspaceCanvasFlowNode[],
@@ -43,179 +43,113 @@ function orderedRuntimeStates(
   return states
 }
 
-function firstRunningState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
-  return states.find((state) => isTaskRuntimeStateRunning(state)) ?? null
+function authoritativeTaskState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
+  return states.find((state) => isTaskRuntimeStateRunning(state))
+    ?? states.find((state) => state.phase === 'failed')
+    ?? states.find((state) => state.phase === 'canceled' || state.phase === 'dismissed')
+    ?? states.find((state) => state.phase === 'completed')
+    ?? null
 }
 
-function firstFailedState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
-  return states.find((state) => state.phase === 'failed') ?? null
+function persistedPhase(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasPersistedPhase {
+  if (lifecycle.phase === 'succeeded') return 'succeeded'
+  if (lifecycle.phase === 'failed') return 'failed'
+  if (lifecycle.phase === 'canceled') return 'canceled'
+  return 'pending'
 }
 
-function readErrorMessage(state: TaskRuntimeStateLike | null): string | null {
-  const message = state?.lastError?.message
-  return typeof message === 'string' && message.trim() ? message.trim() : null
+function completedWithoutMaterializedResource(
+  task: TaskRuntimeStateLike | null,
+  phase: WorkspaceCanvasPersistedPhase,
+): boolean {
+  return task?.phase === 'completed'
+    && (
+      phase === 'pending'
+      || task.lastError?.code?.startsWith('CANVAS_TERMINAL_RESOURCE_') === true
+    )
 }
 
-function resolveEditAssetItemRuntimePatch(input: {
-  readonly asset: WorkspaceCanvasEditAssetGroupItem
-  readonly statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>
-  readonly labels: WorkspaceNodeRuntimeLabels
-}): WorkspaceCanvasEditAssetGroupItem {
-  const state = input.asset.runtimeTarget
-    ? input.statesByQueryKey.get(taskRuntimeTargetQueryKey(input.asset.runtimeTarget)) ?? null
-    : null
+function streamFact(patch: WorkspaceCanvasStreamPatch | null) {
+  return patch ? {
+    taskId: patch.taskId,
+    taskType: patch.taskType,
+    presentation: patch.presentation,
+    error: patch.error,
+  } : null
+}
 
-  if (state && isTaskRuntimeStateRunning(state)) {
-    return {
-      ...input.asset,
-      isRunning: true,
-      statusLabel: input.labels.running,
-      taskProgress: state,
-    }
-  }
-
-  if (state?.phase === 'failed') {
-    return {
-      ...input.asset,
-      isRunning: false,
-      statusLabel: input.labels.failed,
-      taskProgress: state,
-    }
-  }
-
-  if (input.asset.isRunning) {
-    return {
-      ...input.asset,
-      isRunning: false,
-      statusLabel: input.labels.pending,
-      taskProgress: null,
-    }
-  }
-
-  if (input.asset.taskProgress) {
-    return {
-      ...input.asset,
-      taskProgress: null,
-    }
-  }
-
-  return input.asset
+function resolveItemLifecycle(input: {
+  readonly item: WorkspaceCanvasEditAssetGroupItem
+  readonly state: TaskRuntimeStateLike | null
+}): WorkspaceCanvasLifecycle {
+  const phase = persistedPhase(input.item.lifecycle)
+  return resolveWorkspaceCanvasLifecycle({
+    persistedPhase: phase,
+    task: input.state,
+    stream: null,
+    submitting: false,
+    contractError: completedWithoutMaterializedResource(input.state, phase)
+      ? {
+          code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
+          message: 'Task completed before its materialized asset resource reached the canvas cache.',
+        }
+      : null,
+  })
 }
 
 function resolveEditAssetGroupRuntimeDetails(input: {
   readonly node: WorkspaceCanvasFlowNode
   readonly statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>
-  readonly labels: WorkspaceNodeRuntimeLabels
 }): WorkspaceCanvasEditAssetGroupDetails | null {
   const details = input.node.data.editAssetGroupDetails
   if (input.node.data.kind !== 'editAssetGroup' || !details) return null
   return {
     ...details,
-    assets: details.assets.map((asset) => resolveEditAssetItemRuntimePatch({
-      asset,
-      statesByQueryKey: input.statesByQueryKey,
-      labels: input.labels,
-    })),
+    assets: details.assets.map((item) => {
+      const state = item.runtimeTarget
+        ? input.statesByQueryKey.get(taskRuntimeTargetQueryKey(item.runtimeTarget)) ?? null
+        : null
+      return {
+        ...item,
+        lifecycle: resolveItemLifecycle({ item, state }),
+      }
+    }),
   }
 }
 
-function withRuntimeErrorMessage(
-  node: WorkspaceCanvasFlowNode,
-  patch: Partial<WorkspaceCanvasNodeData>,
-  errorMessage: string | null,
-): Partial<WorkspaceCanvasNodeData> {
-  if (!errorMessage) return patch
-
-  if (node.data.kind === 'videoPlan' && node.data.videoPlanDetails) {
-    return {
-      ...patch,
-      videoPlanDetails: {
-        ...node.data.videoPlanDetails,
-        errorMessage,
-      },
-    }
-  }
-
-  if (node.data.kind === 'bgmScore' && node.data.bgmScoreDetails) {
-    return {
-      ...patch,
-      meta: errorMessage,
-      bgmScoreDetails: {
-        ...node.data.bgmScoreDetails,
-        errorMessage,
-      },
-    }
-  }
-
-  if (node.data.kind === 'soundscape' && node.data.soundscapeDetails) {
-    return {
-      ...patch,
-      meta: errorMessage,
-      soundscapeDetails: {
-        ...node.data.soundscapeDetails,
-        errorMessage,
-      },
-    }
-  }
-
-  if (node.data.kind === 'finalTimeline') {
-    return {
-      ...patch,
-      meta: errorMessage,
-    }
-  }
-
-  return patch
-}
-
-export function resolveWorkspaceNodeRuntimePatch(input: {
+/**
+ * Resolves one final node view from explicit persisted, task, stream, and
+ * submission facts. No React state, query client, or global ref is read here.
+ */
+export function resolveWorkspaceCanvasNodeData(input: {
   readonly node: WorkspaceCanvasFlowNode
   readonly statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>
-  readonly labels: WorkspaceNodeRuntimeLabels
-}): Partial<WorkspaceCanvasNodeData> {
+  readonly streamPatch: WorkspaceCanvasStreamPatch | null
+  readonly submitting: boolean
+}): WorkspaceCanvasNodeData {
   const states = orderedRuntimeStates(input.node, input.statesByQueryKey)
-  const runningState = firstRunningState(states)
-  const editAssetGroupDetails = resolveEditAssetGroupRuntimeDetails({
-    node: input.node,
-    statesByQueryKey: input.statesByQueryKey,
-    labels: input.labels,
+  const task = authoritativeTaskState(states)
+  const basePhase = persistedPhase(input.node.data.lifecycle)
+  const lifecycle = resolveWorkspaceCanvasLifecycle({
+    persistedPhase: basePhase,
+    task,
+    stream: streamFact(input.streamPatch),
+    submitting: input.submitting,
+    contractError: completedWithoutMaterializedResource(task, basePhase)
+      ? {
+          code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
+          message: 'Task completed before its materialized resource reached the canvas cache.',
+        }
+      : null,
   })
-  const editAssetGroupPatch = editAssetGroupDetails ? { editAssetGroupDetails } : {}
-  if (runningState) {
-    return {
-      ...editAssetGroupPatch,
-      artifactPhase: 'running',
-      isRunning: true,
-      statusLabel: input.labels.running,
-      taskProgress: runningState,
-    }
-  }
+  const acceptsStreamContent = lifecycle.phase === 'streaming'
+    || (lifecycle.phase === 'failed' && input.streamPatch?.error !== null)
+  const editAssetGroupDetails = resolveEditAssetGroupRuntimeDetails(input)
 
-  const failedState = firstFailedState(states)
-  if (failedState) {
-    return withRuntimeErrorMessage(input.node, {
-      ...editAssetGroupPatch,
-      artifactPhase: 'failed',
-      isRunning: false,
-      statusLabel: input.labels.failed,
-      taskProgress: failedState,
-    }, readErrorMessage(failedState))
-  }
-
-  if (typeof input.node.data.isRunning === 'boolean') {
-    const missingActiveTask = input.node.data.isRunning === true
-    return {
-      ...editAssetGroupPatch,
-      artifactPhase: missingActiveTask ? undefined : input.node.data.artifactPhase,
-      isRunning: false,
-      statusLabel: missingActiveTask ? input.labels.pending : input.node.data.statusLabel,
-      taskProgress: null,
-    }
-  }
   return {
-    ...editAssetGroupPatch,
-    artifactPhase: input.node.data.artifactPhase,
-    statusLabel: input.node.data.statusLabel,
-    taskProgress: null,
+    ...input.node.data,
+    ...(acceptsStreamContent ? input.streamPatch?.data ?? {} : {}),
+    lifecycle,
+    ...(editAssetGroupDetails ? { editAssetGroupDetails } : {}),
   }
 }

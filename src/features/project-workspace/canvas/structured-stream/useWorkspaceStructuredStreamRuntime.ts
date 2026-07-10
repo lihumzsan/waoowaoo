@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import { normalizeSourceScriptSegments } from '@/lib/edit-bible/source-script-segments'
+import type { EditSourceScriptStructure } from '@/lib/edit-bible/schemas'
 import {
   appendStructuredJsonChunk,
   createStructuredStreamObjectParseState,
@@ -10,7 +12,6 @@ import {
 } from '@/lib/structured-stream/incremental-json'
 import type {
   WorkspaceCanvasEditPipelineStepItem,
-  WorkspaceCanvasFlowNode,
   WorkspaceCanvasStreamPresentation,
 } from '../node-canvas-types'
 import { useWorkspaceProvider } from '../../WorkspaceProvider'
@@ -294,6 +295,8 @@ function createStreamRuntimeEntry(input: {
   readonly targetType: string | null
   readonly targetId: string
   readonly episodeId: string | null
+  readonly presentation: WorkspaceCanvasStreamPresentation
+  readonly error: string | null
   readonly data: WorkspaceCanvasStreamPatchData
 }): WorkspaceCanvasStreamRuntimeEntry {
   return {
@@ -310,6 +313,12 @@ function createStreamRuntimeEntry(input: {
       nodeId: input.nodeId,
       streamKind: input.streamKind,
       taskId: input.taskId,
+      taskType: input.taskType,
+      presentation: input.presentation,
+      error: input.error ? {
+        code: 'STRUCTURED_STREAM_INVALID',
+        message: input.error,
+      } : null,
       data: input.data,
     },
   }
@@ -344,30 +353,36 @@ function buildSourceScriptRuntimeEntries(
   snapshots: readonly StructuredStreamSnapshot[],
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
-  const matchingSnapshots = snapshots.filter((snapshot) => (
-    snapshot.adapterKey === 'sourceScript.structure'
-    || snapshot.adapterKey === 'sourceScript.episodes'
-  ))
+  const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'sourceScript.segments')
   const grouped = new Map<string, StructuredStreamSnapshot[]>()
   matchingSnapshots.forEach((snapshot) => {
     if (snapshot.targetType !== 'ProjectEditSourceScript' || !snapshot.targetId) return
-    const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
+    const key = `${snapshot.taskId}:${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
     grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
   })
   return [...grouped.values()].flatMap((group) => {
     const firstSnapshot = group[0] ?? null
     if (!firstSnapshot?.targetId) return []
-    const completeStructure = firstItemOfKind(group, 'sourceScript.structure', 'sourceScriptStructure')?.structure ?? null
-    const episodeItems = itemsOfKind(group, 'sourceScript.episodes', 'sourceScriptEpisode')
-    const structure = completeStructure ?? (episodeItems.length > 0
-      ? {
-          version: 1 as const,
-          title: episodeItems[0]?.episode.title ?? translate('nodes.editSourceScript.pendingTitle'),
-          summary: episodeItems[0]?.episode.summary ?? translate('nodes.editSourceScript.pendingBody'),
-          episodes: episodeItems.map((item) => item.episode),
-        }
-      : null)
-    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
+    const segmentItems = itemsOfKind(group, 'sourceScript.segments', 'sourceScriptSceneSegment')
+    const firstSegment = segmentItems[0]?.segment ?? null
+    let structure: EditSourceScriptStructure | null = null
+    let sourceText = ''
+    let normalizationError: string | null = null
+    if (firstSegment) {
+      try {
+        const normalized = normalizeSourceScriptSegments({
+          version: 1,
+          title: firstSegment.episodeTitle,
+          summary: firstSegment.episodeSummary,
+          segments: segmentItems.map((item) => item.segment),
+        })
+        structure = normalized.structure
+        sourceText = normalized.normalizedText
+      } catch (error: unknown) {
+        normalizationError = error instanceof Error ? error.message : String(error)
+      }
+    }
+    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? normalizationError
     if (!structure && !error) return []
     const rawItems = group.flatMap((snapshot) => snapshot.items)
     const nodeId = workspaceNodeId.editSourceScript(firstSnapshot.episodeId ?? firstSnapshot.targetId)
@@ -379,15 +394,13 @@ function buildSourceScriptRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
+      presentation: streamPresentation(rawItems),
+      error,
       data: {
         body: error ?? structure?.summary ?? translate('nodes.editSourceScript.pendingBody'),
         meta: error ?? translate('nodes.editSourceScript.pendingMeta'),
-        artifactPhase: error ? 'failed' : 'running',
-        statusLabel: error ? translate('status.failed') : translate('status.processing'),
-        isRunning: !error,
-        streamPresentation: streamPresentation(rawItems),
         sourceScriptDetails: {
-          sourceText: '',
+          sourceText,
           scriptStructure: structure,
         },
       },
@@ -403,7 +416,7 @@ function buildProductionPlanningRuntimeEntries(
   const grouped = new Map<string, StructuredStreamSnapshot[]>()
   matchingSnapshots.forEach((snapshot) => {
     if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return
-    const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
+    const key = `${snapshot.taskId}:${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
     grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
   })
   return [...grouped.values()].flatMap((group) => {
@@ -432,13 +445,11 @@ function buildProductionPlanningRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
+      presentation: streamPresentation(rawItems),
+      error,
       data: {
         body,
         meta: error ?? translate('nodes.editBible.pendingMeta'),
-        artifactPhase: error ? 'failed' : 'running',
-        statusLabel: error ? translate('status.failed') : translate('status.processing'),
-        isRunning: !error,
-        streamPresentation: streamPresentation(rawItems),
         editBibleDetails: {
           bibleText: body,
           bible: globalBible?.bible ?? null,
@@ -458,9 +469,16 @@ function buildEditScriptRuntimeEntries(
   translate: Translate,
 ): readonly WorkspaceCanvasStreamRuntimeEntry[] {
   const editScriptSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'editScript.shots')
-  const targetIds = Array.from(new Set(editScriptSnapshots.map((snapshot) => snapshot.targetId).filter((targetId): targetId is string => Boolean(targetId))))
-  return targetIds.flatMap((targetId) => {
-    const scopedSnapshots = editScriptSnapshots.filter((snapshot) => snapshot.targetId === targetId)
+  const taskTargets = Array.from(new Set(editScriptSnapshots.flatMap((snapshot) => (
+    snapshot.targetId ? [`${snapshot.taskId}:${snapshot.targetId}`] : []
+  ))))
+  return taskTargets.flatMap((taskTarget) => {
+    const separator = taskTarget.indexOf(':')
+    const taskId = taskTarget.slice(0, separator)
+    const targetId = taskTarget.slice(separator + 1)
+    const scopedSnapshots = editScriptSnapshots.filter((snapshot) => (
+      snapshot.taskId === taskId && snapshot.targetId === targetId
+    ))
     const shotItems = itemsOfKind(scopedSnapshots, 'editScript.shots', 'editScriptShot')
     const error = scopedSnapshots.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
     if (shotItems.length === 0 && !error) return []
@@ -477,6 +495,8 @@ function buildEditScriptRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId,
       episodeId: firstSnapshot.episodeId ?? episodeId,
+      presentation: streamPresentation(rawItems),
+      error,
       data: {
         body: error ?? translate('nodes.editScript.pendingBody'),
         meta: error
@@ -487,10 +507,6 @@ function buildEditScriptRuntimeEntries(
               assets: 0,
               completed: 0,
             }),
-        artifactPhase: error ? 'failed' : 'running',
-        statusLabel: error ? translate('status.failed') : translate('status.processing'),
-        isRunning: !error,
-        streamPresentation: streamPresentation(rawItems),
         editScriptDetails: shotItems.length > 0 ? {
           durationSec,
           shotCount: shotItems.length,
@@ -540,13 +556,11 @@ function buildShotExecutionRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: editScriptId,
     episodeId: firstSnapshot.episodeId,
+    presentation: streamPresentation(rawItems),
+    error,
     data: {
       body: error ?? translate('nodes.editShotExecutionPlan.pendingBody'),
       meta: error ?? translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
-      artifactPhase: error ? 'failed' : 'running',
-      statusLabel: error ? translate('status.failed') : translate('status.processing'),
-      isRunning: !error,
-      streamPresentation: streamPresentation(rawItems),
       editPipelineStepDetails: shotItems.length > 0 ? {
         items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
       } : undefined,
@@ -578,13 +592,11 @@ function buildBgmRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
+    presentation: streamPresentation(rawItems),
+    error,
     data: {
       body: error ?? translate('nodes.bgmScore.body', { videos: 0 }),
       meta: error ? error : translate('nodes.bgmScore.ready', { count: promptSections.length }),
-      artifactPhase: error ? 'failed' : 'running',
-      statusLabel: error ? translate('status.failed') : translate('status.processing'),
-      isRunning: !error,
-      streamPresentation: streamPresentation(rawItems),
       bgmScoreDetails: {
         status: error ? 'failed' : 'generating',
         durationSeconds: null,
@@ -647,13 +659,11 @@ function buildSoundscapeRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
+    presentation: streamPresentation(rawItems),
+    error,
     data: {
       body: error ?? translate('nodes.soundscape.body', { videos: 0 }),
       meta: error ? error : translate('nodes.soundscape.ready', { sources: sources.length, sections: sections.length }),
-      artifactPhase: error ? 'failed' : 'running',
-      statusLabel: error ? translate('status.failed') : translate('status.processing'),
-      isRunning: !error,
-      streamPresentation: streamPresentation(rawItems),
       soundscapeDetails: {
         status: error ? 'failed' : 'planning',
         decision: null,
@@ -684,128 +694,19 @@ export function buildStreamRuntimeEntries(
   ].filter((entry): entry is WorkspaceCanvasStreamRuntimeEntry => entry !== null)
 }
 
-function hasPersistedStreamContentForPatch(
-  baseNodes: readonly WorkspaceCanvasFlowNode[],
-  patch: WorkspaceCanvasStreamPatch,
-): boolean {
-  const baseNode = baseNodes.find((node) => node.id === patch.nodeId) ?? null
-  if (baseNode) {
-    if (
-      patch.streamKind === 'editSourceScript'
-      && baseNode.data.kind === 'editSourceScript'
-      && baseNode.data.sourceScriptDetails?.scriptStructure
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'editBible'
-      && baseNode.data.kind === 'editBible'
-      && baseNode.data.editBibleDetails
-      && (
-        baseNode.data.editBibleDetails.bible
-        || baseNode.data.editBibleDetails.beatSheet
-        || baseNode.data.editBibleDetails.ledger
-        || baseNode.data.editBibleDetails.emotionalCurve
-        || baseNode.data.editBibleDetails.chapters.length > 0
-      )
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'editScript'
-      && baseNode.data.kind === 'editScript'
-      && baseNode.data.targetType === 'editScript'
-      && (baseNode.data.editScriptDetails?.shots.length ?? 0) > 0
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'editShotExecutionPlan'
-      && baseNode.data.kind === 'editShotExecutionPlan'
-      && (baseNode.data.editPipelineStepDetails?.items.length ?? 0) > 0
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'bgmScore'
-      && baseNode.data.kind === 'bgmScore'
-      && baseNode.data.bgmScoreDetails?.hasPromptDesign === true
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-    if (
-      patch.streamKind === 'soundscape'
-      && baseNode.data.kind === 'soundscape'
-      && baseNode.data.soundscapeDetails?.decision
-      && baseNode.data.isRunning !== true
-    ) {
-      return true
-    }
-  }
-
-  return false
-}
-
-export function applyWorkspaceStructuredStreamPatches(
-  baseNodes: readonly WorkspaceCanvasFlowNode[],
-  patches: readonly WorkspaceCanvasStreamPatch[],
-): readonly WorkspaceCanvasFlowNode[] {
-  if (patches.length === 0) return baseNodes
-
-  const patchByNodeId = new Map(patches.map((patch) => [patch.nodeId, patch]))
-  const usedPatchNodeIds = new Set<string>()
-  const merged = baseNodes.map((node) => {
-    const patch = patchByNodeId.get(node.id)
-    if (!patch) return node
-    usedPatchNodeIds.add(patch.nodeId)
-    if (hasPersistedStreamContentForPatch(baseNodes, patch)) return node
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        ...patch.data,
-        nodeId: node.id,
-        layoutNodeType: node.data.layoutNodeType,
-        targetType: node.data.targetType,
-        targetId: node.data.targetId,
-        runtimeTargets: node.data.runtimeTargets,
-        actionLabel: node.data.actionLabel,
-        action: node.data.action,
-        actionDisabled: node.data.actionDisabled,
-        secondaryActionLabel: node.data.secondaryActionLabel,
-        secondaryAction: node.data.secondaryAction,
-        tertiaryActionLabel: node.data.tertiaryActionLabel,
-        tertiaryAction: node.data.tertiaryAction,
-        onAction: node.data.onAction,
-      },
-    }
-  })
-  patches.forEach((patch) => {
-    if (usedPatchNodeIds.has(patch.nodeId)) return
-    if (hasPersistedStreamContentForPatch(baseNodes, patch)) return
-    // Batch edit-first tasks can stream updates for chapters that are not part
-    // of the current canvas projection. Keep those patches in runtime state and
-    // apply them when their canonical node becomes visible after a refresh or
-    // scope change; crashing here would make off-screen progress break the page.
-  })
-  return merged
-}
-
 export function useWorkspaceStructuredStreamRuntime({
   episodeId,
   translate,
 }: UseWorkspaceStructuredStreamRuntimeInput): UseWorkspaceStructuredStreamRuntimeResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
+  const terminalTaskIdsRef = useRef<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     return subscribeTaskEvents((event) => {
       if ('episodeId' in event && event.episodeId && event.episodeId !== episodeId) return
       if (event.type === TASK_SSE_EVENT_TYPE.STREAM) {
+        if (terminalTaskIdsRef.current.has(event.taskId)) return
         setAccumulators((current) => processStreamEvent(current, event))
         return
       }
@@ -813,6 +714,7 @@ export function useWorkspaceStructuredStreamRuntime({
       const payload = readRecord(event.payload)
       const lifecycleType = readString(payload.lifecycleType)
       if (shouldClearStreamAccumulatorsForLifecycle(lifecycleType, payload)) {
+        terminalTaskIdsRef.current = new Set(terminalTaskIdsRef.current).add(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
         return
       }
@@ -822,6 +724,7 @@ export function useWorkspaceStructuredStreamRuntime({
       ) {
         return
       }
+      terminalTaskIdsRef.current = new Set(terminalTaskIdsRef.current).add(event.taskId)
       setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
     })
   }, [episodeId, subscribeTaskEvents])

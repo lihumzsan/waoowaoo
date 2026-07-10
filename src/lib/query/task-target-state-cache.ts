@@ -126,7 +126,7 @@ function shouldApplyTerminalState(params: {
   }
 
   if (
-    (params.state.phase === 'completed' || params.state.phase === 'failed') &&
+    (params.state.phase === 'completed' || params.state.phase === 'failed' || params.state.phase === 'canceled') &&
     isIncomingOlder(params.state.updatedAt, params.input.eventTs)
   ) {
     return false
@@ -136,7 +136,8 @@ function shouldApplyTerminalState(params: {
 }
 
 function terminalLastError(input: ApplyTaskTargetTerminalStateInput): TaskTargetState['lastError'] {
-  if (input.phase !== 'failed') return null
+  const isHandoffContractError = input.errorCode?.startsWith('CANVAS_TERMINAL_RESOURCE_') === true
+  if (input.phase !== 'failed' && !isHandoffContractError) return null
   const message = input.errorMessage || input.errorCode
   if (!message) return null
   return {
@@ -163,6 +164,7 @@ function applyTerminalStateToData(
     return {
       ...state,
       phase: input.phase,
+      taskId: input.taskId,
       runningTaskId: null,
       runningTaskType: input.taskType || state.runningTaskType,
       progressGroupId: input.progressGroupId ?? state.progressGroupId ?? null,

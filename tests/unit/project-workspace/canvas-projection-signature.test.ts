@@ -7,6 +7,7 @@ import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
 } from '@/features/project-workspace/canvas/node-canvas-types'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 function createNode(input: {
   readonly id: string
@@ -28,7 +29,7 @@ function createNode(input: {
       eyebrow: 'eyebrow',
       body: 'body',
       meta: 'meta',
-      statusLabel: 'ready',
+      lifecycle: canvasLifecycle('succeeded'),
       width: 320,
       height: 380,
       onAction: input.onAction,

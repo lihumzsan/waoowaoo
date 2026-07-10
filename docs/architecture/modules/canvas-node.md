@@ -17,14 +17,23 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
+- **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
+- **CN-08 — 原子终态资源交接。** Canvas Task 完成前必须从已持久化数据读取画布实际消费的 Query DTO，并随 completed SSE 发送 `materializedResources`。客户端必须先同步写 Query Cache，再写 Task 终态，最后清除 structured runtime；`affectedResources` 只负责后续一致性校验。必需信封缺失必须显式呈现 `CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING`，禁止 timer 或 refetch fallback。
+- **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
+- **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
 
 ## 权威入口
 
 - 节点稳定 ID：`src/features/project-workspace/canvas/workspace-canvas-node-ids.ts`。
+- 节点能力总契约：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
+- 生命周期状态机：`src/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle.ts`；最终节点解析：`src/features/project-workspace/canvas/workspace-node-runtime.ts`。
 - 流式 schema 与 adapter：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`。
-- 流式 runtime 合并：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`。
-- DB/Task 到节点的投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
+- 流式事实收集：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`；该模块无权合并最终节点生命周期。
+- DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
+- 原子终态接力：`src/lib/workspace-resource/materialized-resource.ts` 与 `src/lib/query/materialized-resource-cache.ts`。
+- 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
+- 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
 
 ## 验证
 
@@ -32,14 +41,17 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/unit/project-workspace/structured-stream-runtime.test.ts` 验证 runtime 合并与重放语义。
 - `tests/regression/project-canvas-task-backed-running.test.ts` 验证运行态来自任务权威状态。
 - `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
+- `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
+- `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
+- `tests/unit/optimistic/sse-invalidation.test.ts` 验证 Query Cache materialization 早于 runtime clear。
+- `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
 - `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。
-
-后续演进目标：抽出所有节点均可运行的 conformance harness，统一验证“patch 早到、重复、终态后旧 patch、刷新恢复展开态、失败重试”。
 
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
+- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query refetch 空窗；`d31a5615b` 按 TL-06A 删除 timer 后空窗重新暴露。正确修复是 CN-08 的原子 Query DTO 交接，而不是恢复延迟清理。
 
 ## 修改检查表
 

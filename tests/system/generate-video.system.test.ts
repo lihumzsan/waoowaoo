@@ -103,6 +103,7 @@ describe('system - generate video', () => {
         locale: 'zh',
         storyboardId: seeded.storyboard.id,
         panelIndex: 0,
+        confirmed: true,
         generationOptions: {
           resolution: '720p',
           generateAudio: false,

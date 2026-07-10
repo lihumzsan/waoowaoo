@@ -176,11 +176,26 @@ export type EditSourceScriptAct = z.infer<typeof editSourceScriptActSchema>
 export type EditSourceScriptEpisode = z.infer<typeof editSourceScriptEpisodeSchema>
 export type EditSourceScriptStructure = z.infer<typeof editSourceScriptStructureSchema>
 
-export const expandedSourceScriptOutputSchema = z.object({
-  scriptText: scriptStructureText.max(10000),
-  structure: editSourceScriptStructureSchema,
+export const sourceScriptSceneSegmentSchema = editSourceScriptSceneSchema.omit({
+  sceneIndex: true,
+}).extend({
+  episodeIndex: z.number().int().min(0),
+  episodeTitle: scriptStructureText.max(160),
+  episodeSummary: scriptStructureText.max(1000),
+  actIndex: z.number().int().min(0),
+  actTitle: scriptStructureText.max(160),
+  actSummary: scriptStructureText.max(800),
+  sceneIndex: z.number().int().min(0),
 }).strict()
 
+export const expandedSourceScriptOutputSchema = z.object({
+  version: z.literal(1),
+  title: scriptStructureText.max(160),
+  summary: scriptStructureText.max(1200),
+  segments: z.array(sourceScriptSceneSegmentSchema).min(1).max(480),
+}).strict()
+
+export type SourceScriptSceneSegment = z.infer<typeof sourceScriptSceneSegmentSchema>
 export type ExpandedSourceScriptOutput = z.infer<typeof expandedSourceScriptOutputSchema>
 
 export const editBibleDiagnosticsSchema = z.object({

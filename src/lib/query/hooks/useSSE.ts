@@ -51,7 +51,6 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
 
   const applyEvent = useCallback((payload: SSEEvent) => {
     if (!projectId) return
-    onEvent?.(payload)
     applyWorkspaceSSEEvent({
       queryClient,
       event: payload,
@@ -60,6 +59,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       isGlobalAssetProject,
       scheduleTargetStatesInvalidation,
     })
+    onEvent?.(payload)
   }, [episodeId, isGlobalAssetProject, onEvent, projectId, queryClient, scheduleTargetStatesInvalidation])
 
   const handleParsedEvent = useCallback((payload: unknown) => {

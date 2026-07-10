@@ -10,9 +10,10 @@ export type TaskTargetQuery = {
   types?: string[]
 }
 
-export type TaskTargetPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
+export type TaskTargetPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed' | 'canceled'
 
 export type TaskTargetState = {
+  taskId?: string | null
   targetType: string
   targetId: string
   phase: TaskTargetPhase
@@ -154,7 +155,7 @@ export function resolveTargetState(
 
   const running = filtered.find((task) => ACTIVE_STATUS.has(task.status)) || null
   const terminal = filtered.find((task) =>
-    task.status === 'completed' || task.status === 'failed' || task.status === 'canceled'
+    task.status === 'completed' || task.status === 'failed' || task.status === 'canceled' || task.status === 'dismissed'
   ) || null
   const latest = running || terminal
 
@@ -168,6 +169,7 @@ export function resolveTargetState(
       targetType: target.targetType,
       targetId: target.targetId,
       phase: running.status === 'processing' ? 'processing' : 'queued',
+      taskId: running.id,
       runningTaskId: running.id,
       runningTaskType: running.type,
       progressGroupId: runningFields.progressGroupId,
@@ -186,6 +188,7 @@ export function resolveTargetState(
       targetType: target.targetType,
       targetId: target.targetId,
       phase: 'completed',
+      taskId: latest.id,
       runningTaskId: null,
       runningTaskType: latest.type,
       progressGroupId: latestFields.progressGroupId,
@@ -199,10 +202,30 @@ export function resolveTargetState(
     }
   }
 
+  if (latest.status === 'canceled' || latest.status === 'dismissed') {
+    return {
+      targetType: target.targetType,
+      targetId: target.targetId,
+      phase: 'canceled',
+      taskId: latest.id,
+      runningTaskId: null,
+      runningTaskType: latest.type,
+      progressGroupId: latestFields.progressGroupId,
+      intent: latestFields.intent,
+      hasOutputAtStart: latestFields.hasOutputAtStart,
+      progress: null,
+      stage: latestFields.stage,
+      stageLabel: latestFields.stageLabel,
+      lastError: null,
+      updatedAt: latest.updatedAt.toISOString(),
+    }
+  }
+
   return {
     targetType: target.targetType,
     targetId: target.targetId,
     phase: 'failed',
+    taskId: latest.id,
     runningTaskId: null,
     runningTaskType: latest.type,
     progressGroupId: latestFields.progressGroupId,
@@ -273,7 +296,7 @@ export async function queryTaskTargetStates(params: {
           targetId: item.targetId,
         })),
         status: {
-          in: ['queued', 'processing', 'completed', 'failed', 'canceled'],
+          in: ['queued', 'processing', 'completed', 'failed', 'canceled', 'dismissed'],
         },
         ...typeFilter,
       },

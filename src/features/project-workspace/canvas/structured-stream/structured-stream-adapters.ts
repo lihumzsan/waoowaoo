@@ -4,13 +4,11 @@ import {
   editBibleBeatSchema,
   editBibleEmotionalCueSchema,
   editBibleSchema,
-  editSourceScriptEpisodeSchema,
-  editSourceScriptStructureSchema,
+  sourceScriptSceneSegmentSchema,
   type EditBible,
   type EditBibleBeat,
   type EditBibleEmotionalCue,
-  type EditSourceScriptEpisode,
-  type EditSourceScriptStructure,
+  type SourceScriptSceneSegment,
 } from '@/lib/edit-bible/schemas'
 import {
   ledgerEventSchema,
@@ -93,8 +91,7 @@ export interface StructuredStreamTaskEventMeta {
 }
 
 export type StructuredStreamAdapterKey =
-  | 'sourceScript.structure'
-  | 'sourceScript.episodes'
+  | 'sourceScript.segments'
   | 'productionPlanning.globalBible'
   | 'productionPlanning.beats'
   | 'productionPlanning.ledgerEvents'
@@ -112,12 +109,8 @@ export type TextStreamAdapterKey =
 
 export type StructuredStreamParsedItem =
   | {
-    readonly kind: 'sourceScriptStructure'
-    readonly structure: EditSourceScriptStructure
-  }
-  | {
-    readonly kind: 'sourceScriptEpisode'
-    readonly episode: EditSourceScriptEpisode
+    readonly kind: 'sourceScriptSceneSegment'
+    readonly segment: SourceScriptSceneSegment
   }
   | {
     readonly kind: 'productionPlanningGlobalBible'
@@ -195,29 +188,17 @@ function numberKey(value: number | null | undefined, fallbackIndex: number): str
 
 export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   {
-    key: 'sourceScript.structure',
-    taskTypes: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
-    stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
-    mode: 'object',
-    path: ['structure'],
-    parseItem: (value) => ({
-      kind: 'sourceScriptStructure',
-      structure: editSourceScriptStructureSchema.parse(value),
-    }),
-    itemKey: () => 'structure',
-  },
-  {
-    key: 'sourceScript.episodes',
+    key: 'sourceScript.segments',
     taskTypes: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
     mode: 'array',
-    path: ['structure', 'episodes'],
+    path: ['segments'],
     parseItem: (value) => ({
-      kind: 'sourceScriptEpisode',
-      episode: editSourceScriptEpisodeSchema.parse(value),
+      kind: 'sourceScriptSceneSegment',
+      segment: sourceScriptSceneSegmentSchema.parse(value),
     }),
-    itemKey: (item, fallbackIndex) => item.kind === 'sourceScriptEpisode'
-      ? numberKey(item.episode.episodeIndex, fallbackIndex)
+    itemKey: (item, fallbackIndex) => item.kind === 'sourceScriptSceneSegment'
+      ? `${item.segment.episodeIndex}:${item.segment.actIndex}:${item.segment.sceneIndex}`
       : String(fallbackIndex + 1),
   },
   {

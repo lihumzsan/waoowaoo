@@ -32,10 +32,10 @@ if (matched.length === 0) {
   process.exit(0)
 }
 
-for (const module of matched) {
-  process.stdout.write(`\n[${module.id}] ${module.title}\n`)
-  process.stdout.write(`  Read: ${module.document}\n`)
+for (const architectureModule of matched) {
+  process.stdout.write(`\n[${architectureModule.id}] ${architectureModule.title}\n`)
+  process.stdout.write(`  Read: ${architectureModule.document}\n`)
   process.stdout.write('  Verify:\n')
-  for (const testPath of module.testPaths) process.stdout.write(`    - ${testPath}\n`)
-  for (const guardPath of module.guardPaths) process.stdout.write(`    - ${guardPath}\n`)
+  for (const testPath of architectureModule.testPaths) process.stdout.write(`    - ${testPath}\n`)
+  for (const guardPath of architectureModule.guardPaths) process.stdout.write(`    - ${guardPath}\n`)
 }

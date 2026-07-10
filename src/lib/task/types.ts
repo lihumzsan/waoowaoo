@@ -148,6 +148,7 @@ export type TaskSSEEvent = {
     lifecycleType?: TaskLifecycleEventType
     coveredTargets?: readonly { readonly targetType: string; readonly targetId: string }[]
     affectedResources?: readonly WorkspaceResourceRef[]
+    materializedResources?: readonly WorkspaceMaterializedResourceEnvelope[]
   }) | null
 }
 
@@ -179,6 +180,16 @@ export type WorkspaceResourceRef = {
   kind: WorkspaceResourceName
   projectId: string
   episodeId?: string | null
+}
+
+export type WorkspaceMaterializedResourceEnvelope = {
+  readonly kind: WorkspaceResourceName
+  readonly projectId: string
+  readonly episodeId: string | null
+  readonly resourceKey: string
+  readonly resourceVersion: string
+  readonly taskId: string
+  readonly data: unknown
 }
 
 export type ResourceChangedSSEEvent = {

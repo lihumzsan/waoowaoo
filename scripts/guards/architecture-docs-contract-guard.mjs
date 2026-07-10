@@ -36,12 +36,12 @@ const readme = fs.readFileSync(readmePath, 'utf8')
 const ids = new Set()
 const errors = []
 
-for (const module of manifest.modules) {
-  if (!module || typeof module !== 'object' || Array.isArray(module)) {
+for (const architectureModule of manifest.modules) {
+  if (!architectureModule || typeof architectureModule !== 'object' || Array.isArray(architectureModule)) {
     errors.push('module entry must be an object')
     continue
   }
-  const { id, document, title, sourcePaths, testPaths, guardPaths } = module
+  const { id, document, title, sourcePaths, testPaths, guardPaths } = architectureModule
   if (typeof id !== 'string' || !id.trim()) {
     errors.push('module id must be a non-empty string')
     continue

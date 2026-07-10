@@ -5,6 +5,7 @@ import {
   composeWorkspaceCanvasLegacyLayout,
 } from '@/features/project-workspace/canvas/layout/workspace-layout-composer'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 interface TestNodeInput {
   readonly id: string
@@ -39,7 +40,7 @@ function node(input: TestNodeInput): WorkspaceCanvasFlowNode {
       eyebrow: '',
       body: '',
       meta: '',
-      statusLabel: '',
+      lifecycle: canvasLifecycle(),
       width,
       height,
       layoutBasePosition: basePosition,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { ReactFlowInstance } from '@xyflow/react'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
+import { isWorkspaceCanvasLifecycleRunning } from '../lifecycle/workspace-canvas-lifecycle'
 
 const FOCUS_FOLLOW_DEBOUNCE_MS = 240
 export const FOCUS_FOLLOW_MANUAL_PAUSE_MS = 3000
@@ -93,7 +94,7 @@ function firstNodeIdByKind(
   for (const kind of kinds) {
     const node = nodes.find((candidate) => (
       candidate.data.kind === kind
-      && (!runningOnly || candidate.data.isRunning === true)
+      && (!runningOnly || isWorkspaceCanvasLifecycleRunning(candidate.data.lifecycle))
     ))
     if (node) return node.id
   }
@@ -118,7 +119,7 @@ export function resolveWorkspaceCanvasFocusNodeIds(
   const runningPriorityNodeId = firstNodeIdByKind(nodes, RUNNING_FOCUS_KIND_PRIORITY, true)
   if (runningPriorityNodeId) return [runningPriorityNodeId]
 
-  const runningNodeId = nodes.find((node) => node.data.isRunning === true)?.id
+  const runningNodeId = nodes.find((node) => isWorkspaceCanvasLifecycleRunning(node.data.lifecycle))?.id
   return runningNodeId ? [runningNodeId] : []
 }
 

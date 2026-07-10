@@ -1,0 +1,106 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import ts from 'typescript'
+
+const root = process.cwd()
+const canvasRoot = path.join(root, 'src/features/project-workspace/canvas')
+const violations = []
+
+function read(relativePath) {
+  return fs.readFileSync(path.join(root, relativePath), 'utf8')
+}
+
+function walk(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const filePath = path.join(directory, entry.name)
+    if (entry.isDirectory()) return walk(filePath)
+    return entry.isFile() && /\.(ts|tsx)$/.test(entry.name) ? [filePath] : []
+  })
+}
+
+const nodeTypes = read('src/features/project-workspace/canvas/node-canvas-types.ts')
+const nodeTypesSource = ts.createSourceFile('node-canvas-types.ts', nodeTypes, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const guardedInterfaces = new Set(['WorkspaceCanvasNodeData', 'WorkspaceCanvasEditAssetGroupItem'])
+for (const statement of nodeTypesSource.statements) {
+  if (!ts.isInterfaceDeclaration(statement) || !guardedInterfaces.has(statement.name.text)) continue
+  const fields = new Set(statement.members.flatMap((member) => {
+    if (!ts.isPropertySignature(member) || !member.name) return []
+    return [member.name.getText(nodeTypesSource)]
+  }))
+  for (const field of ['artifactPhase', 'isRunning', 'statusLabel', 'taskProgress', 'streamPresentation']) {
+    if (fields.has(field)) violations.push(`${statement.name.text} exposes legacy field ${field}`)
+  }
+  if (!fields.has('lifecycle')) violations.push(`${statement.name.text} must expose one required lifecycle object`)
+}
+
+const definitionRegistry = read('src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts')
+if (!definitionRegistry.includes('satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasNodeDefinition>')) {
+  violations.push('node definition registry is not exhaustive')
+}
+const fixtureRegistry = read('src/features/project-workspace/canvas/conformance/workspace-canvas-conformance-fixtures.ts')
+if (!fixtureRegistry.includes('satisfies Record<WorkspaceCanvasNodeKind, WorkspaceCanvasConformanceFixture>')) {
+  violations.push('conformance fixture registry is not exhaustive')
+}
+const rendererRegistry = read('src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx')
+if (!rendererRegistry.includes("satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>")) {
+  violations.push('renderer registry is not exhaustive')
+}
+
+const lifecycleCallAllowlist = new Set([
+  'src/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle.ts',
+  'src/features/project-workspace/canvas/lifecycle/workspace-canvas-resource-lifecycle.ts',
+  'src/features/project-workspace/canvas/workspace-node-runtime.ts',
+])
+
+for (const absolutePath of walk(canvasRoot)) {
+  const relativePath = path.relative(root, absolutePath)
+  const content = fs.readFileSync(absolutePath, 'utf8')
+  for (const pattern of [
+    /\.artifactPhase\b/,
+    /\.taskProgress\b/,
+    /\bdata\.isRunning\b/,
+    /\bdata\.streamPresentation\b/,
+  ]) {
+    if (pattern.test(content)) violations.push(`${relativePath} reads a legacy lifecycle field`)
+  }
+
+  const sourceFile = ts.createSourceFile(
+    relativePath,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    relativePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
+  function visit(node) {
+    if (
+      ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'resolveWorkspaceCanvasLifecycle'
+      && !lifecycleCallAllowlist.has(relativePath)
+    ) {
+      violations.push(`${relativePath} constructs lifecycle outside the authoritative resolver boundary`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+}
+
+for (const rendererPath of walk(path.join(canvasRoot, 'nodes'))) {
+  const relativePath = path.relative(root, rendererPath)
+  const content = fs.readFileSync(rendererPath, 'utf8')
+  if (/from ['"]@\/lib\/task\/(runtime-targets|state-service)/.test(content)) {
+    violations.push(`${relativePath} reads Task runtime directly`)
+  }
+  if (/useWorkspaceStructuredStreamRuntime|workspace-node-runtime/.test(content)) {
+    violations.push(`${relativePath} reads structured runtime directly`)
+  }
+}
+
+if (violations.length > 0) {
+  console.error([
+    'CN-07/CN-08/CN-09: Canvas lifecycle must have one resolver, exhaustive registries, and no legacy writers.',
+    'See docs/architecture/modules/canvas-node.md#不变量.',
+    ...Array.from(new Set(violations)),
+  ].join('\n'))
+  process.exit(1)
+}

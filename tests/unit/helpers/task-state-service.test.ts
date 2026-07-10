@@ -126,7 +126,7 @@ describe('task state service helpers', () => {
     expect(state.lastError?.message).toBe('bad input')
   })
 
-  it('treats canceled task as failed presentation state', () => {
+  it('preserves canceled task as a distinct terminal presentation state', () => {
     const state = resolveTargetState(
       { targetType: 'GlobalCharacter', targetId: 'c1' },
       [
@@ -143,9 +143,9 @@ describe('task state service helpers', () => {
       ],
     )
 
-    expect(state.phase).toBe('failed')
-    expect(state.lastError?.code).toBe('CONFLICT')
-    expect(state.lastError?.message).toBe('Task cancelled by user')
+    expect(state.phase).toBe('canceled')
+    expect(state.taskId).toBe('task-3')
+    expect(state.lastError).toBeNull()
   })
 
   it('resolves direct panel image task state for the requested target', async () => {

@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
-import { resolveWorkspaceNodeRuntimePatch } from '@/features/project-workspace/canvas/workspace-node-runtime'
+import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
 import { taskRuntimeTargetQueryKey, type TaskRuntimeStateLike } from '@/lib/task/runtime-targets'
 
 const runtimeTarget = {
   targetType: 'CharacterAppearance',
   targetId: 'appearance-1',
   types: ['image_character'],
+} as const
+
+const pendingLifecycle = {
+  phase: 'pending',
+  taskId: null,
+  taskType: null,
+  progress: null,
+  error: null,
+  stream: null,
 } as const
 
 function node(): WorkspaceCanvasFlowNode {
@@ -24,9 +33,7 @@ function node(): WorkspaceCanvasFlowNode {
       eyebrow: 'Assets',
       body: 'Alice',
       meta: '',
-      artifactPhase: 'running',
-      statusLabel: 'Generating',
-      isRunning: true,
+      lifecycle: pendingLifecycle,
       runtimeTargets: [runtimeTarget],
       width: 720,
       height: 420,
@@ -40,60 +47,54 @@ function node(): WorkspaceCanvasFlowNode {
           description: 'Alice',
           shotIds: ['shot-1'],
           shotNumbers: [1],
-          statusLabel: 'Generating',
-          isRunning: true,
+          lifecycle: pendingLifecycle,
           runtimeTarget,
-          taskProgress: null,
         }],
       },
     },
   }
 }
 
-const labels = {
-  running: 'Running',
-  pending: 'Pending',
-  failed: 'Failed',
-}
-
 describe('project canvas task-backed running invariant', () => {
-  it('does not display generating artifacts as running when no real task exists', () => {
-    const patch = resolveWorkspaceNodeRuntimePatch({
+  it('does not display an artifact as running when no real task exists', () => {
+    const resolved = resolveWorkspaceCanvasNodeData({
       node: node(),
       statesByQueryKey: new Map(),
-      labels,
+      streamPatch: null,
+      submitting: false,
     })
 
-    expect(patch.isRunning).toBe(false)
-    expect(patch.statusLabel).toBe('Pending')
-    expect(patch.taskProgress).toBeNull()
-    expect(patch.editAssetGroupDetails?.assets[0]).toMatchObject({
-      isRunning: false,
-      statusLabel: 'Pending',
-      taskProgress: null,
-    })
+    expect(resolved.lifecycle.phase).toBe('pending')
+    expect(resolved.editAssetGroupDetails?.assets[0]?.lifecycle.phase).toBe('pending')
   })
 
-  it('requires a real taskId in addition to a queued or processing phase', () => {
+  it('requires a real taskId in addition to queued or processing phase', () => {
     const withoutTaskId: TaskRuntimeStateLike = { phase: 'queued', runningTaskId: null }
-    const withoutTaskIdPatch = resolveWorkspaceNodeRuntimePatch({
+    const unresolved = resolveWorkspaceCanvasNodeData({
       node: node(),
       statesByQueryKey: new Map([[taskRuntimeTargetQueryKey(runtimeTarget), withoutTaskId]]),
-      labels,
+      streamPatch: null,
+      submitting: false,
     })
-    expect(withoutTaskIdPatch.isRunning).toBe(false)
+    expect(unresolved.lifecycle.phase).toBe('pending')
 
     const withTaskId: TaskRuntimeStateLike = {
       phase: 'queued',
+      taskId: 'task-image-1',
       runningTaskId: 'task-image-1',
       runningTaskType: 'image_character',
     }
-    const withTaskIdPatch = resolveWorkspaceNodeRuntimePatch({
+    const resolved = resolveWorkspaceCanvasNodeData({
       node: node(),
       statesByQueryKey: new Map([[taskRuntimeTargetQueryKey(runtimeTarget), withTaskId]]),
-      labels,
+      streamPatch: null,
+      submitting: false,
     })
-    expect(withTaskIdPatch.isRunning).toBe(true)
-    expect(withTaskIdPatch.taskProgress).toBe(withTaskId)
+    expect(resolved.lifecycle).toMatchObject({
+      phase: 'queued',
+      taskId: 'task-image-1',
+      taskType: 'image_character',
+    })
+    expect(resolved.editAssetGroupDetails?.assets[0]?.lifecycle.phase).toBe('queued')
   })
 })

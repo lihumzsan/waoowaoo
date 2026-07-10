@@ -12,10 +12,6 @@ export type WorkspaceCanvasStreamPatchData = Partial<Pick<
   WorkspaceCanvasNodeData,
   | 'body'
   | 'meta'
-  | 'artifactPhase'
-  | 'statusLabel'
-  | 'isRunning'
-  | 'streamPresentation'
   | 'sourceScriptDetails'
   | 'editBibleDetails'
   | 'editScriptDetails'
@@ -28,6 +24,12 @@ export interface WorkspaceCanvasStreamPatch {
   readonly nodeId: string
   readonly streamKind: WorkspaceCanvasStreamKind
   readonly taskId: string
+  readonly taskType: string | null
+  readonly presentation: NonNullable<WorkspaceCanvasNodeData['lifecycle']['stream']>
+  readonly error: {
+    readonly code: string
+    readonly message: string
+  } | null
   readonly data: WorkspaceCanvasStreamPatchData
 }
 

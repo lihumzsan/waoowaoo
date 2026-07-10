@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildWorkspaceCanvasLayoutInput } from '@/features/project-workspace/canvas/canvasLayoutInput'
 import { DEFAULT_WORKSPACE_CANVAS_VIEWPORT } from '@/features/project-workspace/canvas/canvasViewport'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
+import { canvasLifecycle } from '../../helpers/workspace-canvas'
 
 function canvasNode(input: {
   readonly id: string
@@ -28,7 +29,7 @@ function canvasNode(input: {
       eyebrow: '',
       body: '',
       meta: '',
-      statusLabel: '',
+      lifecycle: canvasLifecycle(),
       width: 320,
       height: 214,
     },
