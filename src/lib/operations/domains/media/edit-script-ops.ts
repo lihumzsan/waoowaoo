@@ -2,7 +2,6 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
-import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
 import {
   submitProjectEditShotExecutionPlanBatchTasks,
@@ -63,6 +62,10 @@ import {
   planProjectEditStylePreviews,
   readEditStylePreviewPlanMetadata,
 } from '@/lib/edit-script/style-preview-operation-plan'
+import {
+  commitProjectEditScriptAssetsOperation,
+  planProjectEditScriptAssetsOperation,
+} from '@/lib/edit-script/asset-generation-operation-plan'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -113,6 +116,7 @@ const planChaptersInputSchema = z.object({
 
 const generateEditScriptAssetsInputSchema = z.object({
   ...confirmedInputFields,
+  confirmedMaxCost: z.number().nonnegative().optional(),
   editScriptId: z.string().trim().min(1).optional(),
   requirementId: editScriptAssetRequirementIdSchema
     .describe('Optional exact requirement id from editScript.requirements[].id. Omit requirementId to process every requirement. Never pass "*" or any wildcard.')
@@ -246,6 +250,23 @@ const editScriptAssetGenerationOutputSchema = z.object({
   })),
   editScript: editScriptSummaryOutputSchema,
 }).passthrough()
+
+function toEditScriptAssetGenerationOutput(
+  result: Awaited<ReturnType<typeof commitProjectEditScriptAssetsOperation>>,
+) {
+  return editScriptAssetGenerationOutputSchema.parse({
+    success: result.success,
+    async: result.async,
+    noop: result.taskIds.length === 0 && result.remainingRequirementCount === 0 ? true : undefined,
+    total: result.total,
+    processedRequirementCount: result.processedRequirementCount,
+    remainingRequirementCount: result.remainingRequirementCount,
+    taskIds: [...result.taskIds],
+    results: result.results.map((item) => ({ ...item })),
+    submittedTasks: result.submittedTasks.map((item) => ({ ...item })),
+    editScript: summarizeEditScriptPayload(result.editScript),
+  })
+}
 
 const editScriptAssetRevisionOutputSchema = z.object({
   success: z.literal(true),
@@ -844,30 +865,39 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetGenerationOutputSchema,
-      execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
+      plan: async (ctx, input: GenerateEditScriptAssetsInput) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await generateProjectEditScriptAssets({
-          request: ctx.request,
-          projectId: ctx.projectId,
-          userId: ctx.userId,
+        return await planProjectEditScriptAssetsOperation(ctx, {
           episodeId,
-          chapterId: input.chapterId,
-          locale: resolveLocale(ctx.context.locale),
+          ...(input.chapterId ? { chapterId: input.chapterId } : {}),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           ...(input.requirementId ? { requirementId: input.requirementId } : {}),
         })
-        const output = editScriptAssetGenerationOutputSchema.parse({
-          success: result.success,
-          async: result.async,
-          noop: result.taskIds.length === 0 && result.remainingRequirementCount === 0 ? true : undefined,
-          total: result.total,
-          processedRequirementCount: result.processedRequirementCount,
-          remainingRequirementCount: result.remainingRequirementCount,
-          taskIds: [...result.taskIds],
-          results: result.results.map((item) => ({ ...item })),
-          submittedTasks: result.submittedTasks.map((item) => ({ ...item })),
-          editScript: summarizeEditScriptPayload(result.editScript),
+      },
+      commit: async (ctx, input: GenerateEditScriptAssetsInput, plan) => {
+        return toEditScriptAssetGenerationOutput(await commitProjectEditScriptAssetsOperation({
+          ctx,
+          input,
+          plan,
+        }))
+      },
+      execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const plan = await planProjectEditScriptAssetsOperation(ctx, {
+          episodeId,
+          ...(input.chapterId ? { chapterId: input.chapterId } : {}),
+          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
+          ...(input.requirementId ? { requirementId: input.requirementId } : {}),
         })
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
+        })
+        const output = toEditScriptAssetGenerationOutput(await commitProjectEditScriptAssetsOperation({
+          ctx,
+          input,
+          plan,
+        }))
         if (output.taskIds.length > 0) {
           writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
             operationId: 'generate_edit_script_assets',

@@ -114,6 +114,8 @@ describe('api contract - project media generation routes (operation adapter)', (
         method: 'POST',
         body: {
           panelId: 'panel-1',
+          confirmed: true,
+          confirmedMaxCost: 2.5,
           referenceMode: 'storyboard',
           referencePanelIds: ['panel-previous'],
           extraImageUrls: ['https://example.com/asset-ref.png'],
@@ -141,6 +143,8 @@ describe('api contract - project media generation routes (operation adapter)', (
       operationId: 'regenerate_panel_image',
       input: expect.objectContaining({
         panelId: 'panel-1',
+        confirmed: true,
+        confirmedMaxCost: 2.5,
         referenceMode: 'storyboard',
         referencePanelIds: ['panel-previous'],
         extraImageUrls: ['https://example.com/asset-ref.png'],

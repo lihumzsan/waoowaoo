@@ -7,6 +7,7 @@ import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ProjectEditBible, ProjectEditChapter, ProjectEditScript, ProjectEditShotExecutionPlan, ProjectEditStylePreview } from '@/types/project'
 import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
+import { useMediaOperationBillingPlan } from '../use-media-operation-billing-plan'
 
 interface EditScriptResponse {
   editScript: ProjectEditScript | null
@@ -396,13 +397,15 @@ export function useCreateProjectEditShotExecutionPlan(projectId: string | null) 
 
 export function useGenerateProjectEditScriptAssets(projectId: string | null) {
   const queryClient = useQueryClient()
+  const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId)
   return useMutation({
     mutationFn: async (input: GenerateEditScriptAssetsInput) => {
       if (!projectId) throw new Error('Project ID is required')
+      const confirmation = await mediaOperationBillingPlan('generate_edit_script_assets', { ...input })
       const response = await apiFetch(`/api/projects/${projectId}/edit-script/assets/generate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, ...confirmation }),
       })
       if (!response.ok) {
         throw await readJsonError(response, 'Failed to generate required assets')

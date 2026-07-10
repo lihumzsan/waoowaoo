@@ -34,13 +34,13 @@ export function useRegenerateCharacterGroup(projectId: string) {
                 appearanceId,
                 count,
             }
-            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to regenerate group')
         },
@@ -90,13 +90,13 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
                 appearanceId,
                 imageIndex,
             }
-            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to regenerate image')
         },
@@ -170,13 +170,13 @@ export function useBatchGenerateCharacterImages(projectId: string) {
                         projectId,
                         appearanceId: item.appearanceId,
                     }
-                    const confirmedMaxCost = await assetOperationBillingPlan(item.characterId, 'generate', requestBody)
+                    const confirmation = await assetOperationBillingPlan(item.characterId, 'generate', requestBody)
                     return await apiFetch(`/api/assets/${item.characterId}/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             ...requestBody,
-                            ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                            ...confirmation,
                         })
                     })
                 })

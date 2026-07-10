@@ -91,6 +91,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
         kind: 'prop',
         projectId: undefined,
         id: 'prop-1',
+        confirmed: true,
         confirmedMaxCost: 3,
       }),
     })
@@ -131,6 +132,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
         projectId: 'project-1',
         id: 'prop-2',
         episodeId: 'episode-1',
+        confirmed: true,
         confirmedMaxCost: 3,
       }),
     })

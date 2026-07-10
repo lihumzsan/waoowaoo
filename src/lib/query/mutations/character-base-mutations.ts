@@ -125,13 +125,13 @@ export function useGenerateProjectCharacterImage(projectId: string) {
                 appearanceId,
                 count,
             }
-            const confirmedMaxCost = await assetOperationBillingPlan(characterId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to generate image')
         },

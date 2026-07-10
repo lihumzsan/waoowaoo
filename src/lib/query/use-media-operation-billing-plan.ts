@@ -1,8 +1,8 @@
 'use client'
 
 import {
+  confirmOperationPlan,
   fetchOperationPlanView,
-  readPlanConfirmedMaxCost,
 } from './operation-plan-client'
 
 export function useMediaOperationBillingPlan(projectId: string | null, episodeId?: string | null) {
@@ -14,6 +14,6 @@ export function useMediaOperationBillingPlan(projectId: string | null, episodeId
       input,
       context: episodeId ? { episodeId } : undefined,
     })
-    return readPlanConfirmedMaxCost(plan)
+    return confirmOperationPlan(plan)
   }
 }

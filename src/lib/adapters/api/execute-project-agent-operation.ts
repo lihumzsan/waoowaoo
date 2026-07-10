@@ -1,6 +1,11 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
+import {
+  commitOperationPlan,
+  planOperation,
+  resolveConfirmedMaxCostForExecution,
+} from '@/lib/operations/planning'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import {
   extractPrismaMissingColumn,
@@ -39,8 +44,7 @@ export async function executeProjectAgentOperationFromApi(params: {
     })
   }
 
-  try {
-    const result = await operation.execute({
+  const operationContext = {
       request: params.request,
       userId: params.userId,
       projectId: params.projectId,
@@ -54,7 +58,29 @@ export async function executeProjectAgentOperationFromApi(params: {
       source: params.source || 'project-ui',
       writer: null,
       toolCallId: null,
-    }, parsed.data)
+    }
+
+  try {
+    const result = operation.plan && operation.commit
+      ? await (async () => {
+          const plan = await planOperation({
+            operation,
+            ctx: operationContext,
+            input: parsed.data,
+          })
+          return await commitOperationPlan({
+            operation,
+            ctx: operationContext,
+            input: parsed.data,
+            plan,
+            confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+              ctx: operationContext,
+              input: parsed.data,
+              plan,
+            }),
+          })
+        })()
+      : await operation.execute(operationContext, parsed.data)
     const outputParsed = operation.outputSchema.safeParse(result)
     if (!outputParsed.success) {
       throw new ApiError('EXTERNAL_ERROR', {

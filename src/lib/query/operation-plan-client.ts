@@ -3,7 +3,10 @@ import {
   buildBillingActionQuotePreview,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
-import type { OperationPlanView } from '@/lib/operations/planning'
+import type {
+  ConfirmedOperationPlanInput,
+  OperationPlanView,
+} from '@/lib/operations/planning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -56,6 +59,19 @@ export async function fetchAssetOperationPlanView(params: {
 export function readPlanConfirmedMaxCost(plan: OperationPlanView): number | null {
   const value = plan.quote.totalMaxFrozenCost
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * Converts the exact plan that the user chose to execute into the transitional
+ * confirmation input accepted by operation commit. This is the only client
+ * constructor for `confirmed: true`; callers must first obtain a server plan.
+ */
+export function confirmOperationPlan(plan: OperationPlanView): ConfirmedOperationPlanInput {
+  const confirmedMaxCost = readPlanConfirmedMaxCost(plan)
+  return {
+    confirmed: true,
+    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+  }
 }
 
 export function buildOperationPlanBillingText(params: {

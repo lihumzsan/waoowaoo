@@ -491,6 +491,8 @@ export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object
 })
 
 export const generateEditAssetsRequestSchema = z.object({
+  confirmed: z.boolean(),
+  confirmedMaxCost: z.number().nonnegative().optional(),
   episodeId: z.string().trim().min(1),
   chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1).optional(),

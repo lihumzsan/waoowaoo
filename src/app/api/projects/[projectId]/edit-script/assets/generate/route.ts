@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import { generateProjectEditScriptAssets } from '@/lib/edit-script/service'
 import { generateEditAssetsRequestSchema } from '@/lib/edit-script/types'
+import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 
 export const POST = apiHandler(async (
   request: NextRequest,
@@ -19,19 +18,14 @@ export const POST = apiHandler(async (
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const result = await generateProjectEditScriptAssets({
+  const result = await executeProjectAgentOperationFromApi({
     request,
+    operationId: 'generate_edit_script_assets',
     projectId,
-    episodeId: parsed.data.episodeId,
-    chapterId: parsed.data.chapterId,
     userId: authResult.session.user.id,
-    locale: resolveRequiredTaskLocale(request, body),
-    editScriptId: parsed.data.editScriptId,
-    requirementId: parsed.data.requirementId,
+    context: { episodeId: parsed.data.episodeId },
+    input: parsed.data,
+    source: 'project-ui',
   })
-
-  return NextResponse.json({
-    editScript: result.editScript,
-    submittedTasks: result.submittedTasks,
-  })
+  return NextResponse.json(result)
 })

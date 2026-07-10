@@ -83,6 +83,11 @@ export interface OperationPlanView {
   }>
 }
 
+export type ConfirmedOperationPlanInput = Readonly<{
+  confirmed: true
+  confirmedMaxCost?: number
+}>
+
 function shouldExposeCredits(): boolean {
   return shouldExposeBillingCredits()
 }
@@ -255,6 +260,25 @@ export async function assertOperationPlanConfirmedCost(params: {
   }
 }
 
+export async function assertOperationPlanConfirmed(params: {
+  plan: OperationPlan
+  input: unknown
+}): Promise<void> {
+  const quote = await quoteOperationPlan(params.plan)
+  if (!quote.billable) return
+  const confirmed = !!params.input
+    && typeof params.input === 'object'
+    && !Array.isArray(params.input)
+    && (params.input as { confirmed?: unknown }).confirmed === true
+  if (!confirmed) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_CONFIRMATION_REQUIRED',
+      message: 'the exact billable operation plan must be explicitly confirmed before commit',
+      operationId: params.plan.operationId,
+    })
+  }
+}
+
 export async function submitPlannedOperationTask(params: {
   ctx: ProjectAgentOperationContext
   task: PlannedTask
@@ -315,6 +339,10 @@ export async function commitOperationPlan<Input, Output>(params: {
       message: `operation commit unavailable: ${params.operation.id}`,
     })
   }
+  await assertOperationPlanConfirmed({
+    plan: params.plan,
+    input: params.input,
+  })
   await assertOperationPlanConfirmedCost({
     plan: params.plan,
     confirmedMaxCost: params.confirmedMaxCost ?? readConfirmedMaxCost(params.input),

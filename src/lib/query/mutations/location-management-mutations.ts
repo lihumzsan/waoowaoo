@@ -312,13 +312,13 @@ export function useBatchGenerateLocationImages(projectId: string) {
                         kind: 'location',
                         projectId,
                     }
-                    const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
+                    const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
                     return await apiFetch(`/api/assets/${locationId}/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             ...requestBody,
-                            ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                            ...confirmation,
                         })
                     })
                 })

@@ -144,6 +144,8 @@ describe('project agent operation registry', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.generate_edit_script_assets
     expect(operation).toBeDefined()
+    expect(operation.plan).toBeTypeOf('function')
+    expect(operation.commit).toBeTypeOf('function')
 
     const parsed = operation.outputSchema.safeParse({
       success: true,

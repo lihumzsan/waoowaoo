@@ -56,13 +56,13 @@ export function useRegenerateProjectPanelImage(projectId: string, episodeId?: st
                 ...(extraImageUrls && extraImageUrls.length > 0 ? { extraImageUrls } : {}),
                 ...(referenceImageNotes && referenceImageNotes.length > 0 ? { referenceImageNotes } : {}),
             }
-            const confirmedMaxCost = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
+            const confirmation = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             if (!res.ok) {

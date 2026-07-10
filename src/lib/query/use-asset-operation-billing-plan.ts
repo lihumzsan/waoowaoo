@@ -1,8 +1,8 @@
 'use client'
 
 import {
+  confirmOperationPlan,
   fetchAssetOperationPlanView,
-  readPlanConfirmedMaxCost,
 } from './operation-plan-client'
 
 export function useAssetOperationBillingPlan() {
@@ -16,6 +16,6 @@ export function useAssetOperationBillingPlan() {
       action,
       input,
     })
-    return readPlanConfirmedMaxCost(plan)
+    return confirmOperationPlan(plan)
   }
 }

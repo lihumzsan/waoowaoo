@@ -89,13 +89,13 @@ export function useGenerateProjectLocationImage(projectId: string) {
                 imageIndex,
                 count,
             })
-            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to generate image')
         },
@@ -180,13 +180,13 @@ export function useRegenerateLocationGroup(projectId: string) {
                 projectId,
                 count,
             }
-            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to regenerate group')
         },
@@ -227,13 +227,13 @@ export function useRegenerateSingleLocationImage(projectId: string) {
                 projectId,
                 imageIndex,
             }
-            const confirmedMaxCost = await assetOperationBillingPlan(locationId, 'generate', requestBody)
+            const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
             return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 })
             }, 'Failed to regenerate image')
         },

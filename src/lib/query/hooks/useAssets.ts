@@ -330,7 +330,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
       projectId: input.projectId,
       ...payload,
     }
-    const confirmedMaxCost = await assetOperationBillingPlan(assetId, 'generate', requestBody)
+    const confirmation = await assetOperationBillingPlan(assetId, 'generate', requestBody)
     const overlayTarget = resolveGenerateOverlayTarget(input, payload)
 
     try {
@@ -339,7 +339,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...requestBody,
-          ...(typeof confirmedMaxCost === 'number' ? { confirmedMaxCost } : {}),
+          ...confirmation,
         }),
       })
       if (!response.ok) {

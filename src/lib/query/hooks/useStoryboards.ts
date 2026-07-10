@@ -90,13 +90,13 @@ export function useRegeneratePanelImage(projectId: string | null, episodeId: str
         mutationFn: async ({ panelId }: { panelId: string }) => {
             if (!projectId) throw new Error('Project ID is required')
             const requestBody = { panelId }
-            const confirmedMaxCost = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
+            const confirmation = await mediaOperationBillingPlan('regenerate_panel_image', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/regenerate-panel-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             if (!res.ok) {
@@ -151,7 +151,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 requestBody.generationOptions = params.generationOptions
             }
 
-            const confirmedMaxCost = await mediaOperationBillingPlan('generate_panel_video', {
+            const confirmation = await mediaOperationBillingPlan('generate_panel_video', {
                 ...requestBody,
             })
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
@@ -159,7 +159,7 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...requestBody,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             // 🔥 使用统一错误处理
@@ -219,13 +219,13 @@ export function useBatchGenerateVideos(projectId: string | null, episodeId: stri
                 segmentIndex: params.segmentIndex,
                 referenceImageUrls: params.referenceImageUrls,
             })
-            const confirmedMaxCost = await mediaOperationBillingPlan(request.operationId, request.input)
+            const confirmation = await mediaOperationBillingPlan(request.operationId, request.input)
             const res = await apiFetch(`/api/projects/${projectId}/generate-video`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...request.input,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             // 🔥 使用统一错误处理
@@ -310,14 +310,13 @@ export function useGenerateBgmScore(projectId: string | null, episodeId: string 
             if (!episodeId) throw new Error('Episode ID is required')
 
             const requestBody = { episodeId }
-            const confirmedMaxCost = await mediaOperationBillingPlan('generate_episode_bgm_score', requestBody)
+            const confirmation = await mediaOperationBillingPlan('generate_episode_bgm_score', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/generate-bgm`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    confirmed: true,
                     ...requestBody,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             await checkApiResponse(res)
@@ -413,14 +412,13 @@ export function useGenerateSoundscape(projectId: string | null, episodeId: strin
             if (!episodeId) throw new Error('Episode ID is required')
 
             const requestBody = { episodeId }
-            const confirmedMaxCost = await mediaOperationBillingPlan('generate_episode_soundscape', requestBody)
+            const confirmation = await mediaOperationBillingPlan('generate_episode_soundscape', requestBody)
             const res = await apiFetch(`/api/projects/${projectId}/generate-soundscape`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    confirmed: true,
                     ...requestBody,
-                    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+                    ...confirmation,
                 }),
             })
             await checkApiResponse(res)

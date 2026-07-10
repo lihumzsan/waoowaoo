@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  assertOperationPlanConfirmed,
   assertOperationPlanConfirmedCost,
   quoteOperationPlan,
   toOperationPlanView,
@@ -167,6 +168,24 @@ describe('operation planning billing quote', () => {
     })
   })
 
+  it('rejects a billable plan before commit when the real confirmation input is missing', async () => {
+    await expect(assertOperationPlanConfirmed({
+      plan: buildPlan(),
+      input: { confirmedMaxCost: 12.25 },
+    })).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: expect.objectContaining({
+        code: 'OPERATION_CONFIRMATION_REQUIRED',
+        operationId: 'regenerate_panel_image',
+      }),
+    })
+
+    await expect(assertOperationPlanConfirmed({
+      plan: buildPlan(),
+      input: { confirmed: true, confirmedMaxCost: 12.25 },
+    })).resolves.toBeUndefined()
+  })
+
   it('does not require confirmed maximum cost for music-only fixed-price media plans', async () => {
     const basePlan = buildPlan()
     const musicOnlyPlan: OperationPlan = {
@@ -188,6 +207,8 @@ describe('operation planning billing quote', () => {
     const registry = createProjectAgentOperationRegistryForApi()
     const mediaOperationIds = [
       'generate_edit_script_storyboard_images',
+      'generate_edit_script_assets',
+      'generate_edit_style_previews',
       'regenerate_panel_image',
       'generate_panel_video',
       'generate_episode_videos',
@@ -198,6 +219,7 @@ describe('operation planning billing quote', () => {
       'generate_episode_asset_reference_videos',
       'generate_project_music',
       'generate_episode_bgm_score',
+      'generate_episode_soundscape',
       'generate_character_image',
       'generate_location_image',
       'api_assets_generate',
