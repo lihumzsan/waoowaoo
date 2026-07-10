@@ -110,6 +110,7 @@ describe('createProjectAgentOperationTool', () => {
   })
 
   it('maps confirmation requirements to Agents SDK approval and preserves execution path', async () => {
+    const onExecutionSettled = vi.fn()
     const writer = {
       write: vi.fn(),
       merge: vi.fn(),
@@ -127,6 +128,7 @@ describe('createProjectAgentOperationTool', () => {
       },
       assistantPermissionMode: 'ask',
       writer,
+      onExecutionSettled,
     })
 
     expect(tool.type).toBe('function')
@@ -161,9 +163,11 @@ describe('createProjectAgentOperationTool', () => {
         confirmed: true,
       },
     }))
+    expect(onExecutionSettled).toHaveBeenCalledWith({ ok: true })
   })
 
   it('returns approval preflight failures as standard tool results without executing the operation', async () => {
+    const onExecutionSettled = vi.fn()
     const writer = {
       write: vi.fn(),
       merge: vi.fn(),
@@ -188,6 +192,7 @@ describe('createProjectAgentOperationTool', () => {
       assistantPermissionMode: 'ask',
       writer,
       approvalPreflightStore: createProjectAgentApprovalPreflightStore(),
+      onExecutionSettled,
     })
 
     expect(tool.type).toBe('function')
@@ -215,6 +220,7 @@ describe('createProjectAgentOperationTool', () => {
     expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
       type: 'data-agent-operation-start',
     }))
+    expect(onExecutionSettled).toHaveBeenCalledWith({ ok: false })
   })
 
   it('skips Agents SDK approval in auto mode while preserving the execution path', async () => {
@@ -369,6 +375,7 @@ describe('createProjectAgentOperationTool', () => {
   })
 
   it('fails long-running assistant operations that do not return an async task signal', async () => {
+    const onExecutionSettled = vi.fn()
     executeState.executeProjectAgentOperationFromTool.mockResolvedValueOnce({
       ok: true,
       data: {
@@ -391,6 +398,7 @@ describe('createProjectAgentOperationTool', () => {
         merge: vi.fn(),
         onError: (error) => (error instanceof Error ? error.message : String(error)),
       },
+      onExecutionSettled,
     })
 
     expect(tool.type).toBe('function')
@@ -415,5 +423,17 @@ describe('createProjectAgentOperationTool', () => {
         },
       },
     })
+    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
+
+    executeState.executeProjectAgentOperationFromTool.mockRejectedValueOnce(new Error('PROVIDER_THROWN'))
+    await expect(tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+      toolCall: {
+        type: 'function_call',
+        callId: 'call-2',
+        name: 'generate_edit_script_storyboard_images',
+        arguments: JSON.stringify({ episodeId: 'episode-1' }),
+      },
+    })).resolves.toContain('PROVIDER_THROWN')
+    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
   })
 })

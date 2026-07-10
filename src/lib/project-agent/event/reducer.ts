@@ -1,5 +1,10 @@
 import { Prisma } from '@prisma/client'
 import type { ProjectAgentRunStatus } from '../runs'
+import {
+  assertProjectAgentRunTransition,
+  isProjectAgentRunTerminalStatus,
+  normalizeProjectAgentRunStatus,
+} from '../run-state-machine'
 import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
@@ -126,14 +131,31 @@ async function markRunStatus(
   params: {
     runId: string
     status: ProjectAgentRunStatus
+    expectedStatuses?: readonly ProjectAgentRunStatus[]
     stopReason?: string | null
     errorCode?: string | null
     errorMessage?: string | null
   },
 ): Promise<void> {
-  const timestamp = now()
-  await tx.projectAgentRun.updateMany({
+  const current = await tx.projectAgentRun.findUnique({
     where: { id: params.runId },
+    select: { status: true },
+  })
+  if (!current) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
+  const currentStatus = normalizeProjectAgentRunStatus(current.status)
+  assertProjectAgentRunTransition({
+    runId: params.runId,
+    from: currentStatus,
+    to: params.status,
+    expectedStatuses: params.expectedStatuses,
+  })
+  if (currentStatus === params.status && isProjectAgentRunTerminalStatus(currentStatus)) return
+  const timestamp = now()
+  const updated = await tx.projectAgentRun.updateMany({
+    where: {
+      id: params.runId,
+      status: currentStatus,
+    },
     data: {
       status: params.status,
       stopReason: params.stopReason ?? null,
@@ -145,6 +167,9 @@ async function markRunStatus(
       ...(params.status === 'running' ? { heartbeatAt: timestamp } : {}),
     },
   })
+  if (updated.count !== 1) {
+    throw new Error(`PROJECT_AGENT_RUN_TRANSITION_RACED runId=${params.runId} from=${currentStatus} to=${params.status}`)
+  }
 }
 
 async function applyRunStarted(
@@ -153,9 +178,8 @@ async function applyRunStarted(
   event: Extract<ProjectAgentEventPayload, { kind: 'run.started' }>,
 ): Promise<void> {
   const timestamp = now()
-  await tx.projectAgentRun.upsert({
-    where: { id: event.runId },
-    create: {
+  await tx.projectAgentRun.create({
+    data: {
       id: event.runId,
       projectId: scope.projectId,
       userId: scope.userId,
@@ -166,18 +190,6 @@ async function applyRunStarted(
       status: 'running',
       controlKind: event.controlKind,
       heartbeatAt: timestamp,
-    },
-    update: {
-      requestId: event.requestId,
-      status: 'running',
-      controlKind: event.controlKind,
-      heartbeatAt: timestamp,
-      stopReason: null,
-      errorCode: null,
-      errorMessage: null,
-      completedAt: null,
-      failedAt: null,
-      cancelledAt: null,
     },
   })
 }
@@ -476,7 +488,14 @@ async function applyInterruptionResolved(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.resolved' }>,
 ): Promise<ProjectAgentActivitySnapshot | null> {
-  await tx.projectAgentInterruption.updateMany({
+  const interruption = await tx.projectAgentInterruption.findUnique({
+    where: { id: event.interruptionId },
+    select: { type: true },
+  })
+  if (!interruption || (interruption.type !== 'approval' && interruption.type !== 'choice')) {
+    throw new Error(`PROJECT_AGENT_INTERRUPTION_TYPE_INVALID:${event.interruptionId}`)
+  }
+  const resolved = await tx.projectAgentInterruption.updateMany({
     where: {
       id: event.interruptionId,
       runId: event.runId,
@@ -489,6 +508,11 @@ async function applyInterruptionResolved(
       runState: null,
     },
   })
+  if (event.outcome === 'consumed' && resolved.count !== 1) {
+    throw new Error(
+      `PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED interruptionId=${event.interruptionId} runId=${event.runId}`,
+    )
+  }
   if (event.activityId) {
     await tx.projectAgentActivity.updateMany({
       where: {
@@ -503,6 +527,14 @@ async function applyInterruptionResolved(
       },
     })
   }
+  if (event.outcome === 'consumed') {
+    await markRunStatus(tx, {
+      runId: event.runId,
+      status: 'running',
+      expectedStatuses: [interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice'],
+      stopReason: interruption.type === 'approval' ? 'approval_response' : 'choice_response',
+    })
+  }
   return getActivitySnapshot(tx, event.activityId)
 }
 
@@ -510,7 +542,14 @@ async function applyInterruptionReopened(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.reopened' }>,
 ): Promise<ProjectAgentActivitySnapshot | null> {
-  await tx.projectAgentInterruption.updateMany({
+  const interruption = await tx.projectAgentInterruption.findUnique({
+    where: { id: event.interruptionId },
+    select: { type: true },
+  })
+  if (!interruption || (interruption.type !== 'approval' && interruption.type !== 'choice')) {
+    throw new Error(`PROJECT_AGENT_INTERRUPTION_TYPE_INVALID:${event.interruptionId}`)
+  }
+  const reopened = await tx.projectAgentInterruption.updateMany({
     where: {
       id: event.interruptionId,
       runId: event.runId,
@@ -522,7 +561,7 @@ async function applyInterruptionReopened(
       consumedAt: null,
     },
   })
-  if (event.activityId) {
+  if (reopened.count === 1 && event.activityId) {
     await tx.projectAgentActivity.updateMany({
       where: {
         id: event.activityId,
@@ -539,8 +578,12 @@ async function applyInterruptionReopened(
     })
     await markRunStatus(tx, {
       runId: event.runId,
-      status: 'awaiting_approval',
-      stopReason: 'awaiting_approval',
+      status: interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
+      expectedStatuses: [
+        'running',
+        interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
+      ],
+      stopReason: interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
     })
   }
   return getActivitySnapshot(tx, event.activityId)
@@ -560,6 +603,7 @@ export async function reduceProjectAgentEvent(params: {
       await markRunStatus(tx, {
         runId: event.runId,
         status: event.status,
+        expectedStatuses: event.expectedStatuses,
         stopReason: event.stopReason,
         errorCode: event.errorCode,
         errorMessage: event.errorMessage,

@@ -16,6 +16,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - **AR-04 — 用户界面只呈现产品语义。** 运行卡片可展示本地化操作名和任务数量，不得展示 taskType、targetType、targetId、operationId、原始工具参数或原始工具结果；这些字段只用于诊断日志和持久协议。
 - **AR-04 — 工具契约在 registry。** operation 的输入、confirmation、agentFlow、plan/commit 与输出 schema 必须在 registry 统一声明；不得以 operation id 特判或从文案反推控制流。
 - **AR-05 — 并发与心跳可证明。** 锁、心跳、超时取消和恢复必须由同一运行时状态协调；旧 run 不得覆盖新 run 的结果。
+- **AR-06 — Run 转换单调。** Run 只使用 `running`、`awaiting_approval`、`awaiting_choice`、`awaiting_task`、`completed`、`failed`、`cancelled` 七种状态。状态转换必须经事件 reducer 校验合法前驱并执行 CAS；三个终态不可重开。失去 DB heartbeat 或 Redis lock 所有权必须中止模型流并进入 `cancelled/run_lock_lost`，不得继续写入或伪装成业务失败。
 
 ## 权威入口
 
@@ -26,6 +27,10 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 ## 验证
 
 - `tests/unit/project-agent/runtime-routing.test.ts` 验证运行时路由。
+- `tests/unit/project-agent/run-state-machine.test.ts` 验证七状态转换、终态单调和 expected-status 门禁。
+- `tests/unit/project-agent/run-heartbeat.test.ts` 验证 DB/Redis 续租失败和异常都会触发 ownership loss。
+- `tests/unit/project-agent/interruption-consume.test.ts` 验证重复/并发消费由 pending 状态 CAS 拒绝，基础设施故障不会伪装成重复提交。
+- `tests/unit/project-agent/interruption-reopen.test.ts` 验证 interruption 按消费代次幂等重开且失败显式上报。
 - `tests/unit/project-workflow/edit-first.test.ts` 验证失败状态不会开放剧本改写操作。
 - `tests/unit/project-agent/tool-adapter-gates.test.ts` 验证工具确认与执行门禁。
 - `tests/unit/operations/registry.test.ts` 验证 operation metadata、confirmation 和 agentFlow。
@@ -34,6 +39,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `scripts/guards/no-history-state-inference.mjs` 阻止从历史消息推断当前业务状态。
 - `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant 控制层直接提交 Task 并绕过 operation/Wait。
 - `scripts/guards/no-plan-run-runtime.mjs` 阻止已退役的 PlanRun runtime、API 与 operation 入口重新形成第二套 Assistant 执行状态机。
+- `tests/integration/api/specific/workflow-lab-service.integration.test.ts` 与 `workflow-lab-style-choice.integration.test.ts` 验证 Lab Choice 也经同一事件 reducer 投影并共用目标 runtime identity，Approval checkpoint 不伪造不可消费的运行态。
+- `scripts/guards/project-agent-run-state-machine-guard.mjs` 扫描全 `src` 的 Run、Activity、Interruption 生命周期写入，阻止 reducer 外重新出现第二写入者，并阻止 session-state GET 恢复 stale cancellation 副作用。仅允许 `heartbeatAt` 与已消费 interruption `runState` 清理两个明确的非生命周期维护写入。
 
 ## 历史回归
 
@@ -49,3 +56,4 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 4. 并发、重放、心跳超时和取消是否有测试？
 5. 是否新增了按 operation id 或消息文本的控制流特判？若是，必须重做为 registry/状态机语义。
 6. Choice 落库后若 Workflow 存在 `nextAction`，run 是否证明已执行、等待或显式失败？
+7. 此转换是否带有可区分同状态代次的持久 `runVersion/eventSeq`？仅比较 status 不能阻止 ABA，未具备版本围栏时必须明确记录为未完成风险。

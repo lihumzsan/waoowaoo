@@ -14,6 +14,7 @@ import {
   appendProjectAgentEventsInTransaction,
   type ProjectAgentEventTransactionClient,
 } from './event'
+import { normalizeProjectAgentRunStatus } from './run-state-machine'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -74,19 +75,6 @@ function buildRunScope(scope: ProjectAgentRunScope): {
   }
 }
 
-function normalizeRunStatus(value: string): ProjectAgentRunStatus {
-  if (
-    value === 'running'
-    || value === 'awaiting_approval'
-    || value === 'awaiting_choice'
-    || value === 'awaiting_task'
-    || value === 'completed'
-    || value === 'failed'
-    || value === 'cancelled'
-  ) return value
-  throw new Error(`PROJECT_AGENT_RUN_STATUS_INVALID:${value}`)
-}
-
 function normalizeControlKind(value: string): ProjectAgentRunControlKind {
   if (
     value === 'user_turn'
@@ -114,7 +102,7 @@ function toProjectAgentRunRecord(run: {
 }): ProjectAgentRunRecord {
   return {
     ...run,
-    status: normalizeRunStatus(run.status),
+    status: normalizeProjectAgentRunStatus(run.status),
     controlKind: normalizeControlKind(run.controlKind),
   }
 }
@@ -265,6 +253,7 @@ export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRun
 export async function updateProjectAgentRunStatus(params: {
   runId: string
   status: ProjectAgentRunStatus
+  expectedStatuses?: readonly ProjectAgentRunStatus[]
   stopReason?: string | null
   errorCode?: string | null
   errorMessage?: string | null
@@ -291,6 +280,7 @@ export async function updateProjectAgentRunStatus(params: {
         kind: 'run.status_changed',
         runId: params.runId,
         status: params.status,
+        expectedStatuses: params.expectedStatuses ? [...params.expectedStatuses] : undefined,
         stopReason: params.stopReason,
         errorCode: params.errorCode,
         errorMessage: params.errorMessage,
@@ -302,6 +292,7 @@ export async function updateProjectAgentRunStatus(params: {
 export async function safelyUpdateProjectAgentRunStatus(params: {
   runId: string | null | undefined
   status: ProjectAgentRunStatus
+  expectedStatuses?: readonly ProjectAgentRunStatus[]
   stopReason?: string | null
   errorCode?: string | null
   errorMessage?: string | null
@@ -311,6 +302,7 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
     await updateProjectAgentRunStatus({
       runId: params.runId,
       status: params.status,
+      expectedStatuses: params.expectedStatuses,
       stopReason: params.stopReason,
       errorCode: params.errorCode,
       errorMessage: params.errorMessage,
@@ -460,6 +452,7 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
     await updateProjectAgentRunStatus({
       runId,
       status: 'cancelled',
+      expectedStatuses: ['running'],
       stopReason: 'stale_running_run',
     })
     await releaseProjectAgentRunLockForRun({
@@ -527,6 +520,7 @@ export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): 
   await Promise.all(ids.map((runId) => updateProjectAgentRunStatus({
     runId,
     status: 'cancelled',
+    expectedStatuses: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
     stopReason: 'superseded',
   })))
   return ids

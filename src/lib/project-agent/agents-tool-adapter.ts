@@ -135,12 +135,8 @@ export interface CreateProjectAgentOperationToolParams {
    * model turn. Omit for tools that are always available.
    */
   isEnabled?: () => Promise<boolean>
-  /**
-   * Called after every execution attempt (success or failure). The runtime
-   * uses it to invalidate its cached workflow state so the next turn's
-   * isEnabled evaluations see the post-execution project state.
-   */
-  onExecutionSettled?: () => void
+  /** Called exactly once after an execution attempt with its real outcome. */
+  onExecutionSettled?: (outcome: { ok: boolean }) => void
   approvalPreflightStore?: ProjectAgentApprovalPreflightStore
 }
 
@@ -175,6 +171,12 @@ export function createProjectAgentOperationTool(
     ...(requiresApproval ? { needsApproval } : {}),
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
+      let executionSettlementReported = false
+      const reportExecutionSettled = (ok: boolean): void => {
+        if (executionSettlementReported) return
+        executionSettlementReported = true
+        params.onExecutionSettled?.({ ok })
+      }
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
@@ -185,7 +187,7 @@ export function createProjectAgentOperationTool(
         input: normalizeToolInputForExecution(toolInput),
       }) ?? null
       if (approvalPreflightFailure) {
-        params.onExecutionSettled?.()
+        reportExecutionSettled(false)
         return approvalPreflightFailure
       }
       const operationTargetKey = buildProjectAgentOperationTargetKey({
@@ -203,7 +205,7 @@ export function createProjectAgentOperationTool(
           targetKey: operationTargetKey,
         })
         if (budgetFailure) {
-          params.onExecutionSettled?.()
+          reportExecutionSettled(false)
           return budgetFailure
         }
       }
@@ -221,9 +223,12 @@ export function createProjectAgentOperationTool(
             input: normalizedInput,
             toolCallId,
           })
-          return enforceLongRunningTaskSignal(params.operation, result)
-        } finally {
-          params.onExecutionSettled?.()
+          const enforcedResult = enforceLongRunningTaskSignal(params.operation, result)
+          reportExecutionSettled(enforcedResult.ok)
+          return enforcedResult
+        } catch (error) {
+          reportExecutionSettled(false)
+          throw error
         }
       }
       const operationActivityId = randomUUID()
@@ -308,6 +313,7 @@ export function createProjectAgentOperationTool(
           }],
         })
         if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
+        reportExecutionSettled(result.ok)
         return result
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
@@ -330,9 +336,8 @@ export function createProjectAgentOperationTool(
           }],
         })
         if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
+        reportExecutionSettled(false)
         throw error
-      } finally {
-        params.onExecutionSettled?.()
       }
     },
   })

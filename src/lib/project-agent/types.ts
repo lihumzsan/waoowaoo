@@ -10,6 +10,14 @@ import type { AssistantPermissionMode } from './permission-mode'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import type {
+  ProjectAgentRunControlKind,
+  ProjectAgentRunStatus,
+} from './runs'
+import type {
+  ProjectAgentActivityStatus,
+  ProjectAgentActivityType,
+} from './event'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -29,8 +37,8 @@ export interface ProjectAgentContext {
 export interface ProjectAgentRunPartData {
   runId: string
   requestId: string
-  status: 'running' | 'awaiting_approval' | 'awaiting_choice' | 'awaiting_task' | 'completed' | 'failed' | 'cancelled'
-  controlKind: 'user_turn' | 'approval_response' | 'choice_response' | 'task_follow_up'
+  status: ProjectAgentRunStatus
+  controlKind: ProjectAgentRunControlKind
   stopReason?: string | null
 }
 
@@ -43,8 +51,8 @@ export interface ProjectAgentOperationStartPartData {
 export interface ProjectAgentActivityPartData {
   activityId: string
   runId: string
-  type: 'operation' | 'waiting_task' | 'task_follow_up' | 'awaiting_choice' | 'awaiting_approval'
-  status: 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'
+  type: ProjectAgentActivityType
+  status: ProjectAgentActivityStatus
   operationId?: string | null
   sourceOperationId?: string | null
   toolCallId?: string | null

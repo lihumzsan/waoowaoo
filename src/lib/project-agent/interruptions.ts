@@ -53,6 +53,11 @@ export interface ProjectAgentInterruptionSnapshot {
   payload: Prisma.JsonValue
 }
 
+function isInterruptionConsumeRace(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.startsWith('PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED')
+}
+
 const projectAgentInterruptionLogger = createScopedLogger({
   module: 'project-agent.interruptions',
 })
@@ -247,20 +252,24 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
   })
   if (!record || record.status !== 'pending' || !record.runState) return null
 
-  await appendProjectAgentEvents({
-    scope: params,
-    events: [{
-      idempotencyKey: `interruption-resolved:${record.id}:consumed`,
-      event: {
-        kind: 'interruption.resolved',
-        runId: params.runId,
-        activityId: record.activityId,
-        interruptionId: record.id,
-        outcome: 'consumed',
-        response: params.response,
-      },
-    }],
-  })
+  try {
+    await appendProjectAgentEvents({
+      scope: params,
+      events: [{
+        event: {
+          kind: 'interruption.resolved',
+          runId: params.runId,
+          activityId: record.activityId,
+          interruptionId: record.id,
+          outcome: 'consumed',
+          response: params.response,
+        },
+      }],
+    })
+  } catch (error) {
+    if (isInterruptionConsumeRace(error)) return null
+    throw error
+  }
 
   return {
     id: record.id,
@@ -392,20 +401,24 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   })
   if (!record || record.status !== 'pending') return null
 
-  await appendProjectAgentEvents({
-    scope: params,
-    events: [{
-      idempotencyKey: `interruption-resolved:${record.id}:consumed`,
-      event: {
-        kind: 'interruption.resolved',
-        runId: params.runId,
-        activityId: record.activityId,
-        interruptionId: record.id,
-        outcome: 'consumed',
-        response: params.response,
-      },
-    }],
-  })
+  try {
+    await appendProjectAgentEvents({
+      scope: params,
+      events: [{
+        event: {
+          kind: 'interruption.resolved',
+          runId: params.runId,
+          activityId: record.activityId,
+          interruptionId: record.id,
+          outcome: 'consumed',
+          response: params.response,
+        },
+      }],
+    })
+  } catch (error) {
+    if (isInterruptionConsumeRace(error)) return null
+    throw error
+  }
 
   return {
     id: record.id,
@@ -419,54 +432,44 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   }
 }
 
-/**
- * Re-opens an interruption that was consumed but whose continuation run failed
- * to start. Best-effort: keeps the approval answerable instead of dead.
- */
+/** Re-opens the exact consumed generation whose continuation failed to start. */
 export async function reopenProjectAgentInterruption(interruptionId: string): Promise<void> {
-  try {
-    const interruption = await prisma.projectAgentInterruption.findUnique({
-      where: {
-        id: interruptionId,
-      },
-      select: {
-        id: true,
-        runId: true,
-        activityId: true,
-        projectId: true,
-        userId: true,
-        episodeId: true,
-        assistantId: true,
-      },
-    })
-    if (!interruption?.runId) return
-    await appendProjectAgentEvents({
-      scope: {
-        projectId: interruption.projectId,
-        userId: interruption.userId,
-        episodeId: interruption.episodeId,
-        assistantId: interruption.assistantId as ProjectAssistantId,
-      },
-      events: [{
-        idempotencyKey: `interruption-reopened:${interruption.id}`,
-        event: {
-          kind: 'interruption.reopened',
-          runId: interruption.runId,
-          activityId: interruption.activityId,
-          interruptionId: interruption.id,
-        },
-      }],
-    })
-  } catch (error) {
-    projectAgentInterruptionLogger.error({
-      action: 'assistant.interruption.reopen.failed',
-      message: 'Failed to reopen project agent interruption',
-      details: {
-        interruptionId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    })
+  const interruption = await prisma.projectAgentInterruption.findUnique({
+    where: {
+      id: interruptionId,
+    },
+    select: {
+      id: true,
+      runId: true,
+      activityId: true,
+      projectId: true,
+      userId: true,
+      episodeId: true,
+      assistantId: true,
+      status: true,
+      consumedAt: true,
+    },
+  })
+  if (!interruption?.runId || interruption.status !== 'consumed' || !interruption.consumedAt) {
+    throw new Error(`PROJECT_AGENT_INTERRUPTION_NOT_CONSUMED:${interruptionId}`)
   }
+  await appendProjectAgentEvents({
+    scope: {
+      projectId: interruption.projectId,
+      userId: interruption.userId,
+      episodeId: interruption.episodeId,
+      assistantId: interruption.assistantId as ProjectAssistantId,
+    },
+    events: [{
+      idempotencyKey: `interruption-reopened:${interruption.id}:${interruption.consumedAt.toISOString()}`,
+      event: {
+        kind: 'interruption.reopened',
+        runId: interruption.runId,
+        activityId: interruption.activityId,
+        interruptionId: interruption.id,
+      },
+    }],
+  })
 }
 
 /**

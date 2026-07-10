@@ -688,12 +688,7 @@ describe('project agent session-state', () => {
       locale: 'zh',
     })
 
-    expect(runsMock.cancelStaleRunningProjectAgentRunsForScope).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-    })
+    expect(runsMock.cancelStaleRunningProjectAgentRunsForScope).not.toHaveBeenCalled()
     expect(state.pendingInteraction).toBeNull()
     expect(state.currentRun).toEqual({
       runId: 'run-stale-1',

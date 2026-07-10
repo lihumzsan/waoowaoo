@@ -56,7 +56,10 @@ import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
 } from './run-lock'
-import { startProjectAgentRunHeartbeat } from './run-heartbeat'
+import {
+  isProjectAgentRunOwnershipLostError,
+  startProjectAgentRunHeartbeat,
+} from './run-heartbeat'
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
@@ -109,6 +112,39 @@ interface ProjectAgentAgentsRunContext {
   projectId: string
   userId: string
   locale: string
+}
+
+function readProjectAgentRunOwnershipLoss(signal: AbortSignal): Error | null {
+  const reason = signal.reason
+  return isProjectAgentRunOwnershipLostError(reason) ? reason : null
+}
+
+function resolveProjectAgentRunFailureTerminal(params: {
+  ownershipLoss: Error | null
+  stopReason: string
+  errorCode: string
+  errorMessage: string
+}): {
+  status: 'failed' | 'cancelled'
+  expectedStatuses: readonly ['running']
+  stopReason: string
+  errorCode?: string
+  errorMessage?: string
+} {
+  if (params.ownershipLoss) {
+    return {
+      status: 'cancelled',
+      expectedStatuses: ['running'],
+      stopReason: 'run_lock_lost',
+    }
+  }
+  return {
+    status: 'failed',
+    expectedStatuses: ['running'],
+    stopReason: params.stopReason,
+    errorCode: params.errorCode,
+    errorMessage: params.errorMessage,
+  }
 }
 
 /**
@@ -729,6 +765,7 @@ export async function createProjectAgentChatResponse(input: {
     await safelyReleaseProjectAgentRunLock(input.runLock)
   }
   let heartbeatStopped = false
+  const runAbortController = new AbortController()
   let heartbeatController: ReturnType<typeof startProjectAgentRunHeartbeat> | null = null
   const stopHeartbeatOnce = async () => {
     if (!heartbeatController || heartbeatStopped) return
@@ -979,8 +1016,8 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: () => {
-        executedOperationIds.add(item.operation.id)
+      onExecutionSettled: (outcome) => {
+        if (outcome.ok) executedOperationIds.add(item.operation.id)
         liveWorkflow.invalidate()
       },
       approvalPreflightStore,
@@ -1049,12 +1086,16 @@ export async function createProjectAgentChatResponse(input: {
     heartbeatController = startProjectAgentRunHeartbeat({
       runId: input.run.id,
       runLock: input.runLock,
+      onOwnershipLost: (error) => {
+        if (!runAbortController.signal.aborted) runAbortController.abort(error)
+      },
     })
     const result = await run(agent, runInput, {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
       context: runContext,
       toolNotFoundBehavior: 'raise_error',
+      signal: runAbortController.signal,
     })
     let runStatusFinalized = false
     let assistantMessagePersisted = false
@@ -1321,7 +1362,9 @@ export async function createProjectAgentChatResponse(input: {
         return chunks
       },
       onError: async (error) => {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
+        const effectiveError = ownershipLoss ?? error
+        const errorMessage = effectiveError instanceof Error ? effectiveError.message : String(effectiveError)
         projectAgentLogger.error({
           action: 'assistant.agents.stream.failed',
           message: 'Project agent UI message stream failed',
@@ -1343,14 +1386,20 @@ export async function createProjectAgentChatResponse(input: {
           return
         }
         await settleTaskFollowUpActivity('failed', error)
-        await updateProjectAgentRunStatus({
-          runId: input.run.id,
-          status: 'failed',
+        const failureTerminal = resolveProjectAgentRunFailureTerminal({
+          ownershipLoss,
           stopReason: 'stream_error',
           errorCode: 'PROJECT_AGENT_STREAM_FAILED',
           errorMessage,
         })
-        recordAssistantChunk(createRuntimeStatusChunk('failed', 'stream_error'))
+        await updateProjectAgentRunStatus({
+          runId: input.run.id,
+          ...failureTerminal,
+        })
+        recordAssistantChunk(createRuntimeStatusChunk(
+          failureTerminal.status,
+          failureTerminal.stopReason,
+        ))
         await persistAssistantMessageOrLog('error')
         runStatusFinalized = true
       },
@@ -1376,16 +1425,23 @@ export async function createProjectAgentChatResponse(input: {
     return response
   } catch (error) {
     await stopHeartbeatOnce()
-    await releaseRunLockOnce()
-    await updateProjectAgentRunStatus({
-      runId: input.run.id,
-      status: 'failed',
-      stopReason: 'run_failed',
-      errorCode: 'PROJECT_AGENT_RUN_FAILED',
-      errorMessage: error instanceof Error ? error.message : String(error),
-    })
-    if (approvalInterruption) {
-      await reopenProjectAgentInterruption(approvalInterruption.id)
+    try {
+      if (approvalInterruption) {
+        await reopenProjectAgentInterruption(approvalInterruption.id)
+      } else {
+        const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
+        await updateProjectAgentRunStatus({
+          runId: input.run.id,
+          ...resolveProjectAgentRunFailureTerminal({
+            ownershipLoss,
+            stopReason: 'run_failed',
+            errorCode: 'PROJECT_AGENT_RUN_FAILED',
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }),
+        })
+      }
+    } finally {
+      await releaseRunLockOnce()
     }
     const message = error instanceof Error ? error.message : String(error)
     projectAgentLogger.error({

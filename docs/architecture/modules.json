@@ -109,10 +109,18 @@
       "title": "Assistant Run 生命周期",
       "sourcePaths": [
         "src/lib/project-agent",
-        "src/lib/operations"
+        "src/lib/operations",
+        "src/lib/workflow-lab"
       ],
       "testPaths": [
+        "tests/integration/api/contract/project-assistant-chat.route.test.ts",
         "tests/unit/project-agent/runtime-routing.test.ts",
+        "tests/unit/project-agent/run-state-machine.test.ts",
+        "tests/unit/project-agent/run-heartbeat.test.ts",
+        "tests/unit/project-agent/interruption-consume.test.ts",
+        "tests/unit/project-agent/interruption-reopen.test.ts",
+        "tests/integration/api/specific/workflow-lab-service.integration.test.ts",
+        "tests/integration/api/specific/workflow-lab-style-choice.integration.test.ts",
         "tests/regression/project-agent-style-preview-lifecycle.test.ts",
         "tests/unit/project-agent/tool-adapter-gates.test.ts",
         "tests/unit/guards/no-project-agent-direct-task-submit.test.ts",
@@ -124,7 +132,8 @@
         "scripts/guards/no-assistant-fixed-workflow-surface.mjs",
         "scripts/guards/no-history-state-inference.mjs",
         "scripts/guards/no-project-agent-direct-task-submit.mjs",
-        "scripts/guards/no-plan-run-runtime.mjs"
+        "scripts/guards/no-plan-run-runtime.mjs",
+        "scripts/guards/project-agent-run-state-machine-guard.mjs"
       ]
     },
     {

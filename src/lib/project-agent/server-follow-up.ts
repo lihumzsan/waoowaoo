@@ -9,7 +9,6 @@ import {
 } from './waits'
 import {
   getProjectAgentRun,
-  updateProjectAgentRunStatus,
   safelyUpdateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
@@ -107,11 +106,6 @@ async function runClaimedFollowUp(params: {
 
   let lock: ProjectAgentRunLock | null = runLock
   try {
-    await updateProjectAgentRunStatus({
-      runId: run.id,
-      status: 'running',
-      stopReason: 'task_follow_up',
-    })
     const consumed = await consumeProjectAgentWaitFollowUp({
       runId: run.id,
       waitId: params.followUp.waitId,

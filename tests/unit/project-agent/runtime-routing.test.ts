@@ -48,9 +48,15 @@ const runState = vi.hoisted(() => ({
 
 const runHeartbeatState = vi.hoisted(() => ({
   stop: vi.fn(async () => undefined),
-  startProjectAgentRunHeartbeat: vi.fn(() => ({
-    stop: runHeartbeatState.stop,
-  })),
+  ownershipLossOnStart: null as Error | null,
+  startProjectAgentRunHeartbeat: vi.fn((input: { onOwnershipLost: (error: Error) => void }) => {
+    if (runHeartbeatState.ownershipLossOnStart) {
+      input.onOwnershipLost(runHeartbeatState.ownershipLossOnStart)
+    }
+    return {
+      stop: runHeartbeatState.stop,
+    }
+  }),
 }))
 
 const persistenceState = vi.hoisted(() => ({
@@ -372,6 +378,9 @@ vi.mock('@/lib/project-agent/runs', () => ({
 
 vi.mock('@/lib/project-agent/run-heartbeat', () => ({
   startProjectAgentRunHeartbeat: runHeartbeatState.startProjectAgentRunHeartbeat,
+  isProjectAgentRunOwnershipLostError: (value: unknown) => (
+    value instanceof Error && value.name === 'ProjectAgentRunOwnershipLostError'
+  ),
 }))
 
 vi.mock('@/lib/project-agent/run-lock', () => ({
@@ -577,6 +586,7 @@ describe('project agent runtime deterministic tool injection', () => {
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
     runState.cancelRunningProjectAgentRun.mockClear()
     runHeartbeatState.stop.mockClear()
+    runHeartbeatState.ownershipLossOnStart = null
     runHeartbeatState.startProjectAgentRunHeartbeat.mockClear()
     persistenceState.appendProjectAssistantThreadMessages.mockClear()
     runLockState.safelyReleaseProjectAgentRunLock.mockClear()
@@ -650,6 +660,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runHeartbeatState.startProjectAgentRunHeartbeat).toHaveBeenCalledWith({
       runId: 'run-user_turn',
       runLock: undefined,
+      onOwnershipLost: expect.any(Function),
     })
   })
 
@@ -754,7 +765,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
   })
 
-  it('fails explicitly when a choice response skips its authoritative next operation', async () => {
+  it('fails explicitly when the authoritative choice continuation returns ok false', async () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
@@ -771,6 +782,15 @@ describe('project agent runtime deterministic tool injection', () => {
     phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_style_previews', [
       'generate_edit_style_previews',
     ])
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+    const { executeProjectAgentOperationFromTool } = await import('@/lib/adapters/tools/execute-project-agent-operation')
+    vi.mocked(executeProjectAgentOperationFromTool).mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'OPERATION_EXECUTION_FAILED',
+        message: 'provider rejected the request',
+      },
+    })
 
     const response = await createProjectAgentChatResponse({
       request: buildRequest(),
@@ -1201,6 +1221,26 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runHeartbeatState.stop).toHaveBeenCalled()
   })
 
+  it('cancels the run with run_lock_lost when ownership is lost after the stream is established', async () => {
+    runHeartbeatState.ownershipLossOnStart = Object.assign(
+      new Error('PROJECT_AGENT_RUN_OWNERSHIP_LOST runId=run-user_turn reason=lock_not_owned'),
+      { name: 'ProjectAgentRunOwnershipLostError' },
+    )
+    streamState.streamError = new Error('ABORTED_STREAM')
+
+    const response = await runAssistant({ text: '生成剧本' })
+
+    expect(response.status).toBe(200)
+    await expect(drainCapturedResponseStream()).rejects.toThrow('ABORTED_STREAM')
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith({
+      runId: 'run-user_turn',
+      status: 'cancelled',
+      expectedStatuses: ['running'],
+      stopReason: 'run_lock_lost',
+    })
+    expectLastPersistedRunStatus('cancelled', 'run_lock_lost')
+  })
+
   it('logs assistant message persistence failures during stream settlement', async () => {
     persistenceState.appendProjectAssistantThreadMessages.mockRejectedValueOnce(new Error('DB_DOWN'))
 
@@ -1264,5 +1304,28 @@ describe('project agent runtime deterministic tool injection', () => {
       errorCode: 'PROJECT_AGENT_RUN_FAILED',
       errorMessage: 'DB_WORKFLOW_REFRESH_FAILED',
     }))
+  })
+
+  it('cancels with the same run_lock_lost terminal when ownership is lost before response creation', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_edit_script', [
+      'plan_chapters',
+    ])
+    runHeartbeatState.ownershipLossOnStart = Object.assign(
+      new Error('PROJECT_AGENT_RUN_OWNERSHIP_LOST runId=run-user_turn reason=lock_not_owned'),
+      { name: 'ProjectAgentRunOwnershipLostError' },
+    )
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+    workflowRefreshState.resolveEditFirstWorkflowState.mockRejectedValueOnce(new Error('DB_WORKFLOW_REFRESH_FAILED'))
+
+    await expect(runAssistant({ text: '继续生成导演拆镜' })).rejects.toThrow(
+      /PROJECT_AGENT_RUN_FAILED requestId=req-1: DB_WORKFLOW_REFRESH_FAILED/,
+    )
+
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith({
+      runId: 'run-user_turn',
+      status: 'cancelled',
+      expectedStatuses: ['running'],
+      stopReason: 'run_lock_lost',
+    })
   })
 })

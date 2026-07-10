@@ -44,6 +44,7 @@ export type ProjectAgentEventPayload =
     kind: 'run.status_changed'
     runId: string
     status: ProjectAgentRunStatus
+    expectedStatuses?: ProjectAgentRunStatus[]
     stopReason?: string | null
     errorCode?: string | null
     errorMessage?: string | null

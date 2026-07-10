@@ -23,6 +23,7 @@ import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
   declinePendingProjectAgentInterruptionsForUserTurn,
+  reopenProjectAgentInterruption,
 } from '@/lib/project-agent/interruptions'
 import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import {
@@ -40,6 +41,7 @@ import {
   ensureProjectAgentRunSlotAvailable,
   getProjectAgentRun,
   listBlockingProjectAgentRunsForThreadClear,
+  safelyUpdateProjectAgentRunStatus,
   updateProjectAgentRunStatus,
   supersedePendingRunsInScope,
   type ProjectAgentRunRecord,
@@ -287,6 +289,7 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'choice_response') {
+    let consumedInterruptionId: string | null = null
     if (controlAction.interruptionId) {
       const consumedChoice = await consumeProjectAgentChoiceInterruption({
         ...scope,
@@ -300,6 +303,7 @@ async function resolveProjectAgentControl(params: {
           message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
         })
       }
+      consumedInterruptionId = consumedChoice.id
     } else {
       const choiceActivity = await getCurrentProjectAgentActivity({
         projectId: scope.projectId,
@@ -326,29 +330,36 @@ async function resolveProjectAgentControl(params: {
         }],
       })
     }
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: controlAction.choiceType,
-      output: controlAction.output,
-      projectId: scope.projectId,
-      userId: scope.userId,
-      episodeId: scope.episodeId ?? null,
-    })
-    const choiceResult = buildEditFirstChoiceResult({
-      choiceType: controlAction.choiceType,
-      toolCallId: controlAction.toolCallId,
-      output: controlAction.output,
-      latestUserText: readLatestVisibleUserText(params.messages),
-    })
-    if (!choiceResult) {
-      throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
-    }
-    return {
-      kind: 'choice',
-      interruptionId: controlAction.interruptionId,
-      choiceType: controlAction.choiceType,
-      toolCallId: controlAction.toolCallId,
-      cardId: readNonEmptyString(controlAction.output.cardId),
-      choiceResult,
+    try {
+      await applyEditFirstChoiceResultSideEffects({
+        choiceType: controlAction.choiceType,
+        output: controlAction.output,
+        projectId: scope.projectId,
+        userId: scope.userId,
+        episodeId: scope.episodeId ?? null,
+      })
+      const choiceResult = buildEditFirstChoiceResult({
+        choiceType: controlAction.choiceType,
+        toolCallId: controlAction.toolCallId,
+        output: controlAction.output,
+        latestUserText: readLatestVisibleUserText(params.messages),
+      })
+      if (!choiceResult) {
+        throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
+      }
+      return {
+        kind: 'choice',
+        interruptionId: controlAction.interruptionId,
+        choiceType: controlAction.choiceType,
+        toolCallId: controlAction.toolCallId,
+        cardId: readNonEmptyString(controlAction.output.cardId),
+        choiceResult,
+      }
+    } catch (error) {
+      if (consumedInterruptionId) {
+        await reopenProjectAgentInterruption(consumedInterruptionId)
+      }
+      throw error
     }
   }
 
@@ -408,12 +419,32 @@ async function resolveProjectAgentRunForRequest(params: {
       message: 'the agent run is not available for this control action',
     })
   }
+  return run
+}
+
+async function transitionConsumedControlToRunning(params: {
+  controlAction: ProjectAgentControlAction
+  runId: string
+}): Promise<void> {
+  if (params.controlAction.type === 'task_follow_up') {
+    // Wait consumption starts the follow-up activity and transitions the run in
+    // the same ProjectAgentEvent transaction.
+    return
+  }
+  if (
+    params.controlAction.type === 'approval_response'
+    || (params.controlAction.type === 'choice_response' && params.controlAction.interruptionId)
+  ) {
+    // Interruption consumption and the awaiting_* -> running transition are
+    // projected atomically by the interruption.resolved event reducer.
+    return
+  }
   await updateProjectAgentRunStatus({
-    runId: run.id,
+    runId: params.runId,
     status: 'running',
+    expectedStatuses: ['awaiting_choice'],
     stopReason: params.controlAction.type,
   })
-  return run
 }
 
 export const DELETE = apiHandler(async (
@@ -495,6 +526,7 @@ export const POST = apiHandler(async (
       })
     }
     let run: ProjectAgentRunRecord | null = null
+    let controlTransitioned = false
     try {
       const existingMessages = await loadAuthoritativeThreadMessages(scope)
       const visibleUserText = controlAction ? readVisibleUserText(body) : null
@@ -530,6 +562,13 @@ export const POST = apiHandler(async (
         messages,
         run,
       })
+      if (controlAction) {
+        await transitionConsumedControlToRunning({
+          controlAction,
+          runId: run.id,
+        })
+      }
+      controlTransitioned = true
       return await createProjectAgentChatResponse({
         request,
         userId,
@@ -542,16 +581,17 @@ export const POST = apiHandler(async (
         runLock,
       })
     } catch (error) {
-      await safelyReleaseProjectAgentRunLock(runLock)
-      if (run) {
-        await updateProjectAgentRunStatus({
+      if (run && controlTransitioned) {
+        await safelyUpdateProjectAgentRunStatus({
           runId: run.id,
           status: 'failed',
+          expectedStatuses: ['running'],
           stopReason: 'control_resolution_failed',
           errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
           errorMessage: error instanceof Error ? error.message : String(error),
         })
       }
+      await safelyReleaseProjectAgentRunLock(runLock)
       throw error
     }
   } catch (error) {
