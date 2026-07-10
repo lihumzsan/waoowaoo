@@ -10,16 +10,11 @@ import {
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
-import {
-  getEditFirstOperationApprovalKind,
-  type EditFirstOperationApprovalKind,
-  type EditFirstWorkflowOperationId,
-} from './edit-first-operation-policy'
+import type { EditFirstWorkflowOperationId } from './edit-first-operation-ids'
 export {
-  EDIT_FIRST_OPERATION_APPROVAL_KINDS,
   EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   type EditFirstWorkflowOperationId,
-} from './edit-first-operation-policy'
+} from './edit-first-operation-ids'
 
 export type EditFirstWorkflowStage =
   | 'not_started'
@@ -66,9 +61,12 @@ export interface EditFirstWorkflowAction {
   id: string
   operationId: EditFirstWorkflowOperationId
   title: string
-  approvalKind: EditFirstOperationApprovalKind
-  requiresUserConfirmation: boolean
 }
+
+export type EditFirstReviewChoiceDecision =
+  | { readonly choiceType: 'script_review'; readonly decision: 'approve' | 'revise' }
+  | { readonly choiceType: 'bible_review'; readonly decision: 'approve' | 'revise' }
+  | { readonly choiceType: 'asset_review'; readonly decision: 'approve' | 'revise' }
 
 export interface EditFirstWorkflowState {
   active: boolean
@@ -149,13 +147,10 @@ function workflowAction(
   operationId: EditFirstWorkflowOperationId,
   title: string,
 ): EditFirstWorkflowAction {
-  const approvalKind = getEditFirstOperationApprovalKind(operationId)
   return {
     id: operationId,
     operationId,
     title,
-    approvalKind,
-    requiresUserConfirmation: approvalKind !== 'none',
   }
 }
 
@@ -171,11 +166,49 @@ function state(params: {
     active: params.active ?? true,
     stage: params.stage,
     blocking: params.blocking ?? {
-      kind: nextAction && nextAction.requiresUserConfirmation ? 'needs_confirmation' : 'none',
+      kind: 'none',
       reason: null,
     },
     nextAction,
     allowedOperationIds: params.allowedOperationIds ? [...params.allowedOperationIds] : nextAction ? [nextAction.operationId] : [],
+  }
+}
+
+/**
+ * Applies a consumed review decision to the current workflow view without
+ * mutating domain resources. The returned nextAction is the only command the
+ * continuation may execute; the registered Operation owns every write.
+ */
+export function resolveEditFirstWorkflowReviewChoice(
+  workflow: EditFirstWorkflowState,
+  choice: EditFirstReviewChoiceDecision,
+): EditFirstWorkflowState {
+  const transition = (() => {
+    if (choice.choiceType === 'script_review' && workflow.stage === 'script_ready_for_review') {
+      return choice.decision === 'approve'
+        ? workflowAction('approve_script', 'Approve generated script')
+        : workflowAction('revise_script', 'Revise generated script')
+    }
+    if (choice.choiceType === 'bible_review' && workflow.stage === 'bible_ready_for_review') {
+      return choice.decision === 'approve'
+        ? workflowAction('confirm_bible', 'Confirm episode plan')
+        : workflowAction('revise_bible', 'Revise episode plan')
+    }
+    if (choice.choiceType === 'asset_review' && workflow.stage === 'assets_ready_for_review') {
+      return choice.decision === 'approve'
+        ? workflowAction('approve_edit_script_assets', 'Approve required assets')
+        : workflowAction('revise_edit_script_assets', 'Revise required assets')
+    }
+    return null
+  })()
+  if (!transition) {
+    throw new Error(`EDIT_FIRST_REVIEW_CHOICE_STAGE_MISMATCH:${choice.choiceType}:${workflow.stage}`)
+  }
+  return {
+    ...workflow,
+    blocking: { kind: 'none', reason: null },
+    nextAction: transition,
+    allowedOperationIds: [transition.operationId],
   }
 }
 
@@ -331,7 +364,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'script_ready_for_review',
       blocking: { kind: 'needs_user_choice', reason: 'review the generated script before episode planning' },
-      allowedOperationIds: ['revise_script'],
+      allowedOperationIds: [],
     })
   }
 
@@ -348,7 +381,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'bible_ready_for_review',
       blocking: { kind: 'needs_user_choice', reason: 'review the episode planning baseline and choose approval or revision before style preview generation' },
-      allowedOperationIds: ['revise_bible'],
+      allowedOperationIds: [],
     })
   }
 
@@ -733,80 +766,6 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     nextAction: finalRenderAction,
     allowedOperationIds: [finalRenderAction.operationId],
   })
-}
-
-export function resolveEditFirstWorkflowCapabilityOperationIds(
-  workflow: EditFirstWorkflowState,
-): EditFirstWorkflowOperationId[] {
-  if (!workflow.active && workflow.stage === 'not_started') return ['ingest_script']
-  switch (workflow.stage) {
-    case 'ready_to_ingest_script':
-      return ['ingest_script']
-    case 'script_generating':
-      return []
-    case 'script_ready_for_review':
-      return ['revise_script']
-    case 'ready_to_generate_bible':
-      return ['generate_bible_from_script']
-    case 'bible_generating':
-      return []
-    case 'bible_ready_for_review':
-      return ['revise_bible']
-    case 'ready_to_generate_style_previews':
-      return ['generate_edit_style_previews']
-    case 'style_preview_generating':
-      return []
-    case 'needs_style_choice':
-      return ['generate_edit_style_previews']
-    case 'ready_to_generate_edit_script':
-      return ['plan_chapters']
-    case 'edit_script_generating':
-      return []
-    case 'ready_to_generate_assets':
-      return ['generate_edit_script_assets']
-    case 'assets_generating':
-      return []
-    case 'assets_ready_for_review':
-      return ['revise_edit_script_assets']
-    case 'ready_to_generate_shot_execution_plan':
-      return [...workflow.allowedOperationIds]
-    case 'ready_to_generate_storyboard':
-      return ['generate_edit_script_storyboard']
-    case 'storyboard_generating':
-      return []
-    case 'ready_to_generate_storyboard_images':
-      return ['generate_edit_script_storyboard_images']
-    case 'storyboard_images_generating':
-      return []
-    case 'ready_to_generate_videos':
-      return [...workflow.allowedOperationIds]
-    case 'videos_generating':
-      return [...workflow.allowedOperationIds]
-    case 'ready_to_render_chapters':
-      return ['render_chapters']
-    case 'chapters_rendering':
-      return []
-    case 'ready_to_generate_bgm_score':
-      return ['generate_episode_bgm_score']
-    case 'bgm_score_generating':
-      return [...workflow.allowedOperationIds]
-    case 'ready_to_generate_audio_layers':
-      return [...workflow.allowedOperationIds]
-    case 'audio_layers_generating':
-      return [...workflow.allowedOperationIds]
-    case 'ready_to_render_final':
-      return [...workflow.allowedOperationIds]
-    case 'final_rendering':
-      return []
-    case 'completed':
-      return []
-    case 'failed':
-      return [...workflow.allowedOperationIds]
-    case 'not_started':
-      return ['ingest_script']
-    default:
-      return [...workflow.allowedOperationIds]
-  }
 }
 
 export async function resolveEditFirstWorkflowState(params: {

@@ -25,6 +25,23 @@ export type FreezeSnapshot = {
   status: string
 }
 
+export type FreezeBalanceResult =
+  | {
+      status: 'frozen' | 'already_frozen'
+      freezeId: string
+    }
+  | {
+      status: 'conflict'
+      freezeId: string
+      freezeStatus: string
+      frozenAmount: number
+    }
+  | {
+      status: 'insufficient_balance'
+      required: number
+      available: number
+    }
+
 type BalanceSnapshot = {
   id: string
   userId: string
@@ -112,10 +129,12 @@ export async function freezeBalance(
     idempotencyKey?: string
     metadata?: Record<string, unknown>
   },
-): Promise<string | null> {
+): Promise<FreezeBalanceResult> {
   const normalizedAmount = normalizeMoney(Number(amount))
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-    return null
+    throw new BillingOperationError('BILLING_INVALID_FREEZE_AMOUNT', 'freeze amount must be a positive number', {
+      amount,
+    })
   }
 
   try {
@@ -125,16 +144,25 @@ export async function freezeBalance(
           where: { idempotencyKey: options.idempotencyKey },
         })
         if (existing) {
-          return existing.id
+          const existingAmount = toMoneyNumber(existing.amount)
+          return existing.status === 'pending' && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+            ? {
+                status: 'already_frozen' as const,
+                freezeId: existing.id,
+              }
+            : {
+                status: 'conflict' as const,
+                freezeId: existing.id,
+                freezeStatus: existing.status,
+                frozenAmount: existingAmount,
+              }
         }
       }
 
-      const balance = await tx.userBalance.findUnique({ where: { userId } })
-      if (!balance) {
-        await tx.userBalance.create({
+      const existingBalance = await tx.userBalance.findUnique({ where: { userId } })
+      const balance = existingBalance ?? await tx.userBalance.create({
           data: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
         })
-      }
 
       const updated = await tx.userBalance.updateMany({
         where: {
@@ -147,7 +175,15 @@ export async function freezeBalance(
         },
       })
       if (updated.count === 0) {
-        return null
+        const latest = await tx.userBalance.findUnique({
+          where: { userId },
+          select: { balance: true },
+        })
+        return {
+          status: 'insufficient_balance' as const,
+          required: normalizedAmount,
+          available: latest ? toMoneyNumber(latest.balance) : toMoneyNumber(balance.balance),
+        }
       }
 
       const freezeId = `freeze_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -165,7 +201,10 @@ export async function freezeBalance(
         },
       })
 
-      return freezeId
+      return {
+        status: 'frozen' as const,
+        freezeId,
+      }
     })
 
     return result
@@ -177,14 +216,37 @@ export async function freezeBalance(
     ) {
       const existing = await prisma.balanceFreeze.findUnique({
         where: { idempotencyKey: options.idempotencyKey },
-        select: { id: true },
+        select: { id: true, status: true, amount: true },
       })
       if (existing?.id) {
-        return existing.id
+        const existingAmount = toMoneyNumber(existing.amount)
+        return existing.status === 'pending' && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+          ? {
+              status: 'already_frozen',
+              freezeId: existing.id,
+            }
+          : {
+              status: 'conflict',
+              freezeId: existing.id,
+              freezeStatus: existing.status,
+              frozenAmount: existingAmount,
+            }
       }
     }
     _ulogError('[Billing] freeze failed:', error)
-    return null
+    if (error instanceof BillingOperationError) throw error
+    if (error instanceof Error) {
+      throw new BillingOperationError('BILLING_FREEZE_FAILED', error.message, {
+        userId,
+        amount: normalizedAmount,
+        idempotencyKey: options?.idempotencyKey ?? null,
+      }, error)
+    }
+    throw new BillingOperationError('BILLING_FREEZE_FAILED', `freeze balance failed: ${String(error)}`, {
+      userId,
+      amount: normalizedAmount,
+      idempotencyKey: options?.idempotencyKey ?? null,
+    })
   }
 }
 

@@ -13,7 +13,7 @@ vi.mock('@/lib/logging/core', () => ({
   logError: vi.fn(),
 }))
 
-import { addBalance, recordShadowUsage } from '@/lib/billing/ledger'
+import { addBalance, freezeBalance, recordShadowUsage } from '@/lib/billing/ledger'
 
 function buildTxStub() {
   return {
@@ -36,6 +36,24 @@ describe('billing/ledger extra', () => {
     const result = await addBalance('u1', 0)
     expect(result).toBe(false)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid freeze amount instead of reporting insufficient balance', async () => {
+    await expect(freezeBalance('u1', 0, { idempotencyKey: 'invalid-freeze' })).rejects.toMatchObject({
+      name: 'BillingOperationError',
+      code: 'BILLING_INVALID_FREEZE_AMOUNT',
+    })
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('surfaces freeze infrastructure failures instead of converting them to insufficient balance', async () => {
+    prismaMock.$transaction.mockRejectedValue(new Error('DB_CONNECTION_LOST'))
+
+    await expect(freezeBalance('u1', 2, { idempotencyKey: 'db-down-freeze' })).rejects.toMatchObject({
+      name: 'BillingOperationError',
+      code: 'BILLING_FREEZE_FAILED',
+      message: 'DB_CONNECTION_LOST',
+    })
   })
 
   it('adds recharge balance with string reason', async () => {
@@ -132,4 +150,3 @@ describe('billing/ledger extra', () => {
     expect(result).toBe(false)
   })
 })
-

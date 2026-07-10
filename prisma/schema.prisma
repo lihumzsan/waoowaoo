@@ -541,6 +541,8 @@ model ProjectAgentWait {
   taskIds         Json
   followUpMode    String    @default("resume_agent") @db.VarChar(32)
   status          String    @default("pending") @db.VarChar(32)
+  runVersion      Int       @default(0)
+  eventSeq        BigInt    @default(0)
   terminalStatus  String?   @db.VarChar(32)
   terminalTaskIds Json?
   failedTaskIds   Json?
@@ -575,6 +577,9 @@ model ProjectAgentRun {
   episodeId      String?
   requestId      String    @db.VarChar(96)
   status         String    @default("running") @db.VarChar(32)
+  runVersion     Int       @default(1)
+  eventSeq       BigInt    @default(0)
+  terminalEventSeq BigInt?
   controlKind    String    @db.VarChar(32)
   stopReason     String?   @db.VarChar(64)
   errorCode      String?   @db.VarChar(128)
@@ -667,6 +672,8 @@ model ProjectAgentInterruption {
   episodeId   String?
   type        String    @db.VarChar(32)
   status      String    @default("pending") @db.VarChar(32)
+  runVersion  Int       @default(0)
+  eventSeq    BigInt    @default(0)
   operationId String    @db.VarChar(128)
   approvalId  String    @db.VarChar(128)
   toolCallId  String?   @db.VarChar(128)

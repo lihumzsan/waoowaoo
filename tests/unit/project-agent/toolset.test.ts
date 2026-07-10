@@ -42,8 +42,6 @@ function workflow(stage: EditFirstWorkflowState['stage'], operationIds: string[]
           id: operationId,
           operationId: operationId as EditFirstWorkflowOperationId,
           title: operationId,
-          approvalKind: 'billable_media',
-          requiresUserConfirmation: true,
         }
       : null,
     allowedOperationIds: operationIds as EditFirstWorkflowState['allowedOperationIds'],

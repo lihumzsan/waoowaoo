@@ -15,6 +15,11 @@ import {
   type ProjectAgentEventTransactionClient,
 } from './event'
 import { normalizeProjectAgentRunStatus } from './run-state-machine'
+import {
+  createInitialProjectAgentRunFence,
+  createProjectAgentRunFence,
+  type ProjectAgentRunFence,
+} from './run-fence'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -47,6 +52,9 @@ export interface ProjectAgentRunRecord {
   episodeId: string | null
   requestId: string
   status: ProjectAgentRunStatus
+  runVersion: number
+  eventSeq: string
+  terminalEventSeq: string | null
   controlKind: ProjectAgentRunControlKind
   stopReason?: string | null
   errorCode?: string | null
@@ -94,6 +102,9 @@ function toProjectAgentRunRecord(run: {
   episodeId: string | null
   requestId: string
   status: string
+  runVersion: number
+  eventSeq: bigint
+  terminalEventSeq: bigint | null
   controlKind: string
   stopReason?: string | null
   errorCode?: string | null
@@ -102,6 +113,8 @@ function toProjectAgentRunRecord(run: {
 }): ProjectAgentRunRecord {
   return {
     ...run,
+    eventSeq: run.eventSeq.toString(),
+    terminalEventSeq: run.terminalEventSeq?.toString() ?? null,
     status: normalizeProjectAgentRunStatus(run.status),
     controlKind: normalizeControlKind(run.controlKind),
   }
@@ -140,6 +153,9 @@ const projectAgentRunRecordSelect = {
   episodeId: true,
   requestId: true,
   status: true,
+  runVersion: true,
+  eventSeq: true,
+  terminalEventSeq: true,
   controlKind: true,
   stopReason: true,
   errorCode: true,
@@ -154,6 +170,7 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
   appendMessages?: UIMessage[]
 }): Promise<ProjectAgentRunRecord> {
   const runId = params.runId?.trim() || randomUUID()
+  const runFence = createInitialProjectAgentRunFence(runId)
   const appendMessages = params.appendMessages ?? []
   if (appendMessages.length > 0) {
     const run = await prisma.$transaction(async (tx) => {
@@ -176,6 +193,7 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
           }),
         },
         events: [{
+          runFence,
           idempotencyKey: `run-started:${runId}`,
           event: {
             kind: 'run.started',
@@ -196,6 +214,7 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
   await appendProjectAgentEvents({
     scope: params,
     events: [{
+      runFence,
       idempotencyKey: `run-started:${runId}`,
       event: {
         kind: 'run.started',
@@ -251,7 +270,7 @@ export async function listRecentProjectAgentRunsForScope(params: ProjectAgentRun
 }
 
 export async function updateProjectAgentRunStatus(params: {
-  runId: string
+  runFence: ProjectAgentRunFence
   status: ProjectAgentRunStatus
   expectedStatuses?: readonly ProjectAgentRunStatus[]
   stopReason?: string | null
@@ -259,7 +278,7 @@ export async function updateProjectAgentRunStatus(params: {
   errorMessage?: string | null
 }): Promise<void> {
   const run = await prisma.projectAgentRun.findUnique({
-    where: { id: params.runId },
+    where: { id: params.runFence.runId },
     select: {
       projectId: true,
       userId: true,
@@ -267,7 +286,7 @@ export async function updateProjectAgentRunStatus(params: {
       assistantId: true,
     },
   })
-  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runFence.runId}`)
   await appendProjectAgentEvents({
     scope: {
       projectId: run.projectId,
@@ -276,9 +295,10 @@ export async function updateProjectAgentRunStatus(params: {
       assistantId: run.assistantId as ProjectAssistantId,
     },
     events: [{
+      runFence: params.runFence,
       event: {
         kind: 'run.status_changed',
-        runId: params.runId,
+        runId: params.runFence.runId,
         status: params.status,
         expectedStatuses: params.expectedStatuses ? [...params.expectedStatuses] : undefined,
         stopReason: params.stopReason,
@@ -290,17 +310,17 @@ export async function updateProjectAgentRunStatus(params: {
 }
 
 export async function safelyUpdateProjectAgentRunStatus(params: {
-  runId: string | null | undefined
+  runFence: ProjectAgentRunFence | null | undefined
   status: ProjectAgentRunStatus
   expectedStatuses?: readonly ProjectAgentRunStatus[]
   stopReason?: string | null
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<void> {
-  if (!params.runId) return
+  if (!params.runFence) return
   try {
     await updateProjectAgentRunStatus({
-      runId: params.runId,
+      runFence: params.runFence,
       status: params.status,
       expectedStatuses: params.expectedStatuses,
       stopReason: params.stopReason,
@@ -312,7 +332,7 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
       action: 'assistant.run.status-update.failed',
       message: 'Failed to update project agent run status',
       details: {
-        runId: params.runId,
+        runId: params.runFence.runId,
         status: params.status,
         error: error instanceof Error ? error.message : String(error),
       },
@@ -321,14 +341,14 @@ export async function safelyUpdateProjectAgentRunStatus(params: {
 }
 
 export async function cancelRunningProjectAgentRun(params: {
-  runId: string
+  runFence: ProjectAgentRunFence
   stopReason: string
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<boolean> {
   const run = await prisma.projectAgentRun.findFirst({
     where: {
-      id: params.runId,
+      id: params.runFence.runId,
       status: 'running',
     },
     select: {
@@ -348,6 +368,7 @@ export async function cancelRunningProjectAgentRun(params: {
       assistantId: run.assistantId as ProjectAssistantId,
     },
     events: [{
+      runFence: params.runFence,
       idempotencyKey: `run-cancelled:${run.id}:${params.stopReason}`,
       event: {
         kind: 'run.cancelled',
@@ -360,15 +381,15 @@ export async function cancelRunningProjectAgentRun(params: {
 }
 
 export async function safelyCancelRunningProjectAgentRun(params: {
-  runId: string | null | undefined
+  runFence: ProjectAgentRunFence | null | undefined
   stopReason: string
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<void> {
-  if (!params.runId) return
+  if (!params.runFence) return
   try {
     await cancelRunningProjectAgentRun({
-      runId: params.runId,
+      runFence: params.runFence,
       stopReason: params.stopReason,
       errorCode: params.errorCode,
       errorMessage: params.errorMessage,
@@ -378,7 +399,7 @@ export async function safelyCancelRunningProjectAgentRun(params: {
       action: 'assistant.run.cancel-running.failed',
       message: 'Failed to cancel running project agent run',
       details: {
-        runId: params.runId,
+        runId: params.runFence.runId,
         stopReason: params.stopReason,
         error: error instanceof Error ? error.message : String(error),
       },
@@ -445,25 +466,25 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
         },
       ],
     },
-    select: { id: true },
+    select: { id: true, runVersion: true, eventSeq: true },
   })
   const runIds = staleRuns.map((run) => run.id)
-  await Promise.all(runIds.map(async (runId) => {
+  await Promise.all(staleRuns.map(async (run) => {
     await updateProjectAgentRunStatus({
-      runId,
+      runFence: createProjectAgentRunFence(run),
       status: 'cancelled',
       expectedStatuses: ['running'],
       stopReason: 'stale_running_run',
     })
     await releaseProjectAgentRunLockForRun({
       ...scope,
-      runId,
+      runId: run.id,
     }).catch((error: unknown) => {
       projectAgentRunLogger.warn({
         action: 'assistant.run-lock.stale-release.failed',
         message: 'Failed to release stale project agent run lock',
         details: {
-          runId,
+          runId: run.id,
           error: error instanceof Error ? error.message : String(error),
         },
       })
@@ -513,12 +534,12 @@ export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): 
         in: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
       },
     },
-    select: { id: true },
+    select: { id: true, runVersion: true, eventSeq: true },
   })
   if (pending.length === 0) return []
   const ids = pending.map((run) => run.id)
-  await Promise.all(ids.map((runId) => updateProjectAgentRunStatus({
-    runId,
+  await Promise.all(pending.map((run) => updateProjectAgentRunStatus({
+    runFence: createProjectAgentRunFence(run),
     status: 'cancelled',
     expectedStatuses: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
     stopReason: 'superseded',

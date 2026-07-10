@@ -6,6 +6,10 @@ import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
 import { appendProjectAgentEvents } from './event'
 import { isEditFirstChoiceType } from './edit-first-choice-tools'
+import {
+  createProjectAgentRunFence,
+  type ProjectAgentRunFence,
+} from './run-fence'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
 export type ProjectAgentInterruptionStatus = 'pending' | 'consumed' | 'superseded'
@@ -116,6 +120,7 @@ function toInterruptionSnapshot(record: {
  * The serialized RunState stays server-side; clients only ever see the id.
  */
 export async function createProjectAgentApprovalInterruption(params: ProjectAgentInterruptionScope & {
+  runFence: ProjectAgentRunFence
   runId: string
   operationId: string
   approvalId: string
@@ -141,6 +146,7 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
     events: [
       ...(params.previousActivityId
         ? [{
+            runFence: params.runFence,
             idempotencyKey: `activity-completed:${params.previousActivityId}:before:${activityId}`,
             event: {
               kind: 'activity.completed' as const,
@@ -150,6 +156,7 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
           }]
         : []),
       {
+        runFence: params.runFence,
         idempotencyKey: `interruption-raised:${interruptionId}`,
         event: {
           kind: 'interruption.raised',
@@ -170,6 +177,7 @@ export async function createProjectAgentApprovalInterruption(params: ProjectAgen
 }
 
 export async function createProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
+  runFence: ProjectAgentRunFence
   runId: string
   operationId: string
   toolCallId: string | null
@@ -193,6 +201,7 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
     events: [
       ...(params.previousActivityId
         ? [{
+            runFence: params.runFence,
             idempotencyKey: `activity-completed:${params.previousActivityId}:before:${activityId}`,
             event: {
               kind: 'activity.completed' as const,
@@ -202,6 +211,7 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
           }]
         : []),
       {
+        runFence: params.runFence,
         idempotencyKey: `interruption-raised:${interruptionId}`,
         event: {
           kind: 'interruption.raised',
@@ -256,6 +266,7 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
     await appendProjectAgentEvents({
       scope: params,
       events: [{
+        runFence: createProjectAgentRunFence(record),
         event: {
           kind: 'interruption.resolved',
           runId: params.runId,
@@ -405,6 +416,7 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
     await appendProjectAgentEvents({
       scope: params,
       events: [{
+        runFence: createProjectAgentRunFence(record),
         event: {
           kind: 'interruption.resolved',
           runId: params.runId,
@@ -448,6 +460,8 @@ export async function reopenProjectAgentInterruption(interruptionId: string): Pr
       assistantId: true,
       status: true,
       consumedAt: true,
+      runVersion: true,
+      eventSeq: true,
     },
   })
   if (!interruption?.runId || interruption.status !== 'consumed' || !interruption.consumedAt) {
@@ -461,6 +475,7 @@ export async function reopenProjectAgentInterruption(interruptionId: string): Pr
       assistantId: interruption.assistantId as ProjectAssistantId,
     },
     events: [{
+      runFence: createProjectAgentRunFence(interruption),
       idempotencyKey: `interruption-reopened:${interruption.id}:${interruption.consumedAt.toISOString()}`,
       event: {
         kind: 'interruption.reopened',
@@ -487,7 +502,7 @@ export interface SupersededProjectAgentInterruption {
 }
 
 export async function supersedePendingProjectAgentInterruptions(
-  scope: ProjectAgentInterruptionScope,
+  scope: ProjectAgentInterruptionScope & { runFence?: ProjectAgentRunFence },
 ): Promise<SupersededProjectAgentInterruption[]> {
   const { assistantId, scopeRef } = buildScope(scope)
   const pending = await prisma.projectAgentInterruption.findMany({
@@ -498,7 +513,14 @@ export async function supersedePendingProjectAgentInterruptions(
       scopeRef,
       status: 'pending',
     },
-    select: { id: true, approvalId: true, runId: true, activityId: true },
+    select: {
+      id: true,
+      approvalId: true,
+      runId: true,
+      activityId: true,
+      runVersion: true,
+      eventSeq: true,
+    },
   })
   if (pending.length === 0) return []
   if (pending.some((record) => !record.runId)) {
@@ -507,6 +529,13 @@ export async function supersedePendingProjectAgentInterruptions(
   await appendProjectAgentEvents({
     scope,
     events: pending.map((record) => ({
+        runFence: scope.runFence?.runId === record.runId
+          ? scope.runFence
+          : createProjectAgentRunFence({
+              id: record.runId as string,
+              runVersion: record.runVersion,
+              eventSeq: record.eventSeq,
+            }),
         idempotencyKey: `interruption-resolved:${record.id}:superseded`,
         event: {
           kind: 'interruption.resolved' as const,
@@ -551,7 +580,16 @@ export async function declinePendingProjectAgentInterruptionsForUserTurn(
       scopeRef,
       status: 'pending',
     },
-    select: { id: true, approvalId: true, runId: true, activityId: true, type: true, operationId: true },
+    select: {
+      id: true,
+      approvalId: true,
+      runId: true,
+      activityId: true,
+      type: true,
+      operationId: true,
+      runVersion: true,
+      eventSeq: true,
+    },
   })
   if (pending.length === 0) return []
   if (pending.some((record) => !record.runId)) {
@@ -563,6 +601,11 @@ export async function declinePendingProjectAgentInterruptionsForUserTurn(
     events: pending.map((record) => {
       const isApproval = record.type === 'approval'
       return {
+        runFence: createProjectAgentRunFence({
+          id: record.runId as string,
+          runVersion: record.runVersion,
+          eventSeq: record.eventSeq,
+        }),
         idempotencyKey: `interruption-resolved:${record.id}:${isApproval ? 'consumed' : 'superseded'}`,
         event: {
           kind: 'interruption.resolved' as const,

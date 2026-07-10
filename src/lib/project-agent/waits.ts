@@ -9,7 +9,10 @@ import {
   isProjectAgentRunWakeupBudgetAvailable,
   PROJECT_AGENT_RUN_WAKEUP_LIMIT,
 } from './run-budget'
-import { safelyUpdateProjectAgentRunStatus } from './runs'
+import {
+  createProjectAgentRunFence,
+  type ProjectAgentRunFence,
+} from './run-fence'
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed'
@@ -33,6 +36,7 @@ interface ProjectAgentWaitScopeInput {
 }
 
 export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput {
+  runFence: ProjectAgentRunFence
   runId: string
   operationId: string
   taskIds: string[]
@@ -52,6 +56,8 @@ interface ProjectAgentWaitRow {
   taskIds: unknown
   followUpMode: string
   status: string
+  runVersion: number
+  eventSeq: bigint
   terminalStatus: string | null
   terminalTaskIds: unknown | null
   failedTaskIds: unknown | null
@@ -323,6 +329,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
     scope: input,
     events: [
       {
+        runFence: input.runFence,
         idempotencyKey: `activity-started:${activityId}`,
         event: {
           kind: 'activity.started',
@@ -333,6 +340,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
         },
       },
       {
+        runFence: input.runFence,
         idempotencyKey: `task-bound:${waitId}`,
         event: {
           kind: 'task.bound',
@@ -347,6 +355,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
     ],
   })
   await resolveNewProjectAgentWaitFromCurrentTasks({
+    runFence: input.runFence,
     waitId,
     runId: input.runId,
     activityId,
@@ -419,7 +428,8 @@ export function resolveWaitTerminalNextStatus(params: {
 
 async function applyWaitTerminalStatus(input: {
   waitId: string
-  runId?: string | null
+  runId: string
+  runFence: ProjectAgentRunFence
   activityId: string
   projectId: string
   userId: string
@@ -443,6 +453,7 @@ async function applyWaitTerminalStatus(input: {
       assistantId: input.assistantId,
     },
     events: [{
+      runFence: input.runFence,
       idempotencyKey: buildProjectAgentTaskTerminalIdempotencyKey({
         waitId: input.waitId,
         terminalStatus: input.terminalStatus,
@@ -451,7 +462,7 @@ async function applyWaitTerminalStatus(input: {
       }),
       event: {
         kind: 'task.terminal',
-        runId: input.runId ?? null,
+        runId: input.runId,
         activityId: input.activityId,
         waitId: input.waitId,
         terminalStatus: input.terminalStatus,
@@ -465,7 +476,8 @@ async function applyWaitTerminalStatus(input: {
 
 async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
   waitId: string
-  runId?: string | null
+  runId: string
+  runFence: ProjectAgentRunFence
   activityId: string
   projectId: string
   userId: string
@@ -491,6 +503,7 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
     await appendProjectAgentEvents({
       scope: input,
       events: [{
+        runFence: input.runFence,
         idempotencyKey: buildProjectAgentTaskProgressedIdempotencyKey({
           waitId: input.waitId,
           terminalTaskIds: result.terminalTaskIds,
@@ -498,7 +511,7 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
         }),
         event: {
           kind: 'task.progressed',
-          runId: input.runId ?? null,
+          runId: input.runId,
           activityId: input.activityId,
           waitId: input.waitId,
           terminalTaskIds: result.terminalTaskIds,
@@ -510,6 +523,7 @@ async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
   }
 
   await applyWaitTerminalStatus({
+    runFence: input.runFence,
     waitId: input.waitId,
     runId: input.runId,
     activityId: input.activityId,
@@ -546,6 +560,8 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -564,7 +580,13 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
   `
 
   for (const row of rows) {
+    if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
     if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
+    const runFence = createProjectAgentRunFence({
+      id: row.runId,
+      runVersion: row.runVersion,
+      eventSeq: row.eventSeq,
+    })
     const result = applyProjectAgentWaitTerminalEvent({
       taskId: input.taskId,
       lifecycleType: input.lifecycleType,
@@ -582,6 +604,7 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
           assistantId: row.assistantId as ProjectAssistantId,
         },
         events: [{
+          runFence,
           idempotencyKey: buildProjectAgentTaskProgressedIdempotencyKey({
             waitId: row.id,
             terminalTaskIds: result.terminalTaskIds,
@@ -601,6 +624,7 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
     }
 
     await applyWaitTerminalStatus({
+      runFence,
       waitId: row.id,
       runId: row.runId,
       activityId: row.activityId,
@@ -632,6 +656,8 @@ async function reconcilePendingProjectAgentWaitsForScope(input: ProjectAgentWait
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -652,8 +678,14 @@ async function reconcilePendingProjectAgentWaitsForScope(input: ProjectAgentWait
   `
 
   for (const row of rows) {
+    if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
     if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
     await resolveNewProjectAgentWaitFromCurrentTasks({
+      runFence: createProjectAgentRunFence({
+        id: row.runId,
+        runVersion: row.runVersion,
+        eventSeq: row.eventSeq,
+      }),
       waitId: row.id,
       runId: row.runId,
       activityId: row.activityId,
@@ -687,6 +719,8 @@ export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentW
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -738,6 +772,8 @@ export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeI
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -838,6 +874,8 @@ export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgent
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -896,6 +934,8 @@ export async function consumeProjectAgentWaitFollowUp(input: {
       taskIds,
       followUpMode,
       status,
+      runVersion,
+      eventSeq,
       terminalStatus,
       terminalTaskIds,
       failedTaskIds,
@@ -919,31 +959,48 @@ export async function consumeProjectAgentWaitFollowUp(input: {
   if (!row || (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed') || !row.followUpKey) {
     return null
   }
+  if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
+  if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
+  const runFence = createProjectAgentRunFence({
+    id: row.runId,
+    runVersion: row.runVersion,
+    eventSeq: row.eventSeq,
+  })
   const wakeupBudgetAvailable = await isProjectAgentRunWakeupBudgetAvailable({
     projectId: input.projectId,
     userId: input.userId,
     runId: input.runId,
   })
   if (!wakeupBudgetAvailable) {
-    await prisma.projectAgentWait.updateMany({
-      where: {
-        id: row.id,
-        status: 'claimed',
-        claimId: input.claimId,
-        followedAt: null,
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: row.projectId,
+        userId: row.userId,
+        episodeId: row.episodeId,
+        assistantId: row.assistantId as ProjectAssistantId,
       },
-      data: {
-        status: 'followed',
-        followedAt: new Date(),
-        updatedAt: new Date(),
-      },
-    })
-    await safelyUpdateProjectAgentRunStatus({
-      runId: input.runId,
-      status: 'failed',
-      stopReason: 'run_budget_exceeded',
-      errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
-      errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
+      events: [{
+        runFence,
+        idempotencyKey: `wait-followed:${row.id}:${input.claimId}:budget-exhausted`,
+        event: {
+          kind: 'wait.followed',
+          runId: row.runId,
+          activityId: row.activityId,
+          waitId: row.id,
+          claimId: input.claimId,
+          sourceOperationId: row.operationId,
+        },
+      }, {
+        runFence,
+        idempotencyKey: `run-failed:${row.runId}:wakeup-budget`,
+        event: {
+          kind: 'run.failed',
+          runId: row.runId,
+          stopReason: 'run_budget_exceeded',
+          errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
+          errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
+        },
+      }],
     })
     return null
   }
@@ -957,6 +1014,7 @@ export async function consumeProjectAgentWaitFollowUp(input: {
     },
     events: [
       {
+        runFence,
         idempotencyKey: `activity-started:${followUpActivityId}`,
         event: {
           kind: 'activity.started',
@@ -968,6 +1026,7 @@ export async function consumeProjectAgentWaitFollowUp(input: {
         },
       },
       {
+        runFence,
         idempotencyKey: `wait-followed:${row.id}:${input.claimId}`,
         event: {
           kind: 'wait.followed',

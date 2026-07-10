@@ -13,7 +13,16 @@ import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
-import { EDIT_FIRST_OPERATION_APPROVAL_KINDS } from '@/lib/project-workflow/edit-first-operation-policy'
+
+const TEST_BILLABLE_EDIT_FIRST_OPERATION_IDS = new Set<string>([
+  'generate_edit_style_previews',
+  'generate_edit_script_assets',
+  'revise_edit_script_assets',
+  'generate_edit_script_storyboard_images',
+  'generate_episode_videos',
+  'generate_episode_bgm_score',
+  'generate_episode_soundscape',
+])
 
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
@@ -419,6 +428,9 @@ function buildRun(controlKind: ProjectAgentRunRecord['controlKind'] = 'user_turn
     episodeId: 'episode-1',
     requestId: 'request-1',
     status: 'running',
+    runVersion: 1,
+    eventSeq: '1',
+    terminalEventSeq: null,
     controlKind,
     heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   }
@@ -442,8 +454,6 @@ function buildWorkflow(stage: EditFirstWorkflowState['stage'], operationIds: str
           id: operationId,
           operationId: operationId as EditFirstWorkflowOperationId,
           title: operationId,
-          approvalKind: 'billable_media',
-          requiresUserConfirmation: true,
         }
       : null,
     allowedOperationIds: operationIds as EditFirstWorkflowState['allowedOperationIds'],
@@ -451,15 +461,17 @@ function buildWorkflow(stage: EditFirstWorkflowState['stage'], operationIds: str
 }
 
 function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
-  const editFirstApprovalKind = (EDIT_FIRST_OPERATION_APPROVAL_KINDS as Readonly<Record<string, 'none' | 'billable_media'>>)[id]
-  const approvalKind = editFirstApprovalKind ?? (intent === 'act' ? 'billable_media' : 'none')
+  const approvalKind = TEST_BILLABLE_EDIT_FIRST_OPERATION_IDS.has(id)
+    || (intent === 'act' && !EDIT_FIRST_WORKFLOW_OPERATION_IDS.includes(id as EditFirstWorkflowOperationId))
+    ? 'billable_media'
+    : 'none'
   return makeTestOperation({
     id,
     summary: id,
     intent,
     groupPath: id.startsWith('get_') || id.startsWith('list_') ? ['project', 'read'] : ['edit-script'],
     prerequisites: { episodeId: 'optional' },
-    effects: intent === 'act' ? EFFECTS_BILLABLE : EFFECTS_NONE,
+    effects: approvalKind === 'billable_media' ? EFFECTS_BILLABLE : EFFECTS_NONE,
     confirmation: approvalKind === 'none'
       ? { kind: 'none', required: false }
       : { kind: approvalKind, required: true, summary: 'billable operation' },

@@ -803,6 +803,7 @@ export async function confirmEpisodeEditBible(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly videoRatio?: EditScriptVideoRatio
 }): Promise<PersistedEditBibleBundle> {
   return await prisma.$transaction(async (tx) => {
     await assertEpisodeAccess({ ...input, client: tx })
@@ -822,6 +823,18 @@ export async function confirmEpisodeEditBible(input: {
       throw new Error('EDIT_BIBLE_CONFIRMATION_REQUIRES_CHAPTERS')
     }
     const parsedBible = editBibleSchema.parse(bible.bibleJson)
+    if (input.videoRatio) {
+      const projectUpdate = await tx.project.updateMany({
+        where: {
+          id: input.projectId,
+          userId: input.userId,
+        },
+        data: {
+          videoRatio: input.videoRatio,
+        },
+      })
+      if (projectUpdate.count !== 1) throw new ApiError('NOT_FOUND')
+    }
     await ensureEditBibleAssets({
       tx,
       projectId: input.projectId,

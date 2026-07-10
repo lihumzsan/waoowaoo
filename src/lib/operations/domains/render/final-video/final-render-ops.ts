@@ -14,7 +14,6 @@ import {
 } from '@/lib/operations/output-schemas'
 import { createTaskBatchKey } from '@/lib/task/batch'
 import { compensateSubmittedTasks } from '@/lib/operations/planning'
-import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const finalRenderInputSchema = z.object({
   confirmed: z.boolean().optional(),
@@ -108,7 +107,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('render_chapters'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
@@ -195,7 +194,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('render_final_video'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,

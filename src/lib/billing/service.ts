@@ -545,7 +545,7 @@ async function withSyncBillingCore<T>(
     }
   }
 
-  const freezeId = await freezeBalance(params.userId, quotedCost, {
+  const freezeResult = await freezeBalance(params.userId, quotedCost, {
     source: 'sync',
     requestId,
     idempotencyKey: billingKey,
@@ -564,10 +564,19 @@ async function withSyncBillingCore<T>(
       pricingSelections,
     },
   })
-  if (!freezeId) {
-    const balance = await getBalance(params.userId)
-    throw new InsufficientBalanceError(quotedCost, balance.balance)
+  if (freezeResult.status === 'conflict') {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'billing freeze is not pending', {
+      freezeId: freezeResult.freezeId,
+      status: freezeResult.freezeStatus,
+      frozenAmount: freezeResult.frozenAmount,
+      requestedAmount: quotedCost,
+      billingKey,
+    })
   }
+  if (freezeResult.status === 'insufficient_balance') {
+    throw new InsufficientBalanceError(freezeResult.required, freezeResult.available)
+  }
+  const freezeId = freezeResult.freezeId
 
   try {
     const { result, textUsage } = await executeWithUsage(params.apiType, execute)
@@ -758,7 +767,7 @@ export async function prepareTaskBilling(task: {
     return next
   }
 
-  const freezeId = await freezeBalance(task.userId, quotedCost, {
+  const freezeResult = await freezeBalance(task.userId, quotedCost, {
     source: 'task',
     taskId: task.id,
     idempotencyKey: info.billingKey || task.id,
@@ -776,10 +785,19 @@ export async function prepareTaskBilling(task: {
       ...(info.metadata || {}),
     },
   })
-  if (!freezeId) {
-    const balance = await getBalance(task.userId)
-    throw new InsufficientBalanceError(quotedCost, balance.balance)
+  if (freezeResult.status === 'conflict') {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'task billing freeze is not pending', {
+      taskId: task.id,
+      freezeId: freezeResult.freezeId,
+      status: freezeResult.freezeStatus,
+      frozenAmount: freezeResult.frozenAmount,
+      requestedAmount: quotedCost,
+    })
   }
+  if (freezeResult.status === 'insufficient_balance') {
+    throw new InsufficientBalanceError(freezeResult.required, freezeResult.available)
+  }
+  const freezeId = freezeResult.freezeId
 
   next.status = 'frozen'
   next.freezeId = freezeId

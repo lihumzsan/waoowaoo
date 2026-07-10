@@ -4,7 +4,7 @@ import {
   localizeSelectableToolDescription,
 } from '@/lib/project-agent/copy'
 import { buildProjectAgentSystemPrompt } from '@/lib/project-agent/system-prompt'
-import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-policy'
+import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-ids'
 
 describe('project agent prompt copy', () => {
   it('builds the Chinese project-agent system prompt with staged workflow guardrails', () => {

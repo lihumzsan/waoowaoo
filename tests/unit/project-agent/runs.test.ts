@@ -53,7 +53,7 @@ describe('project agent runs', () => {
     })
 
     const cancelled = await cancelRunningProjectAgentRun({
-      runId: 'run-1',
+      runFence: { runId: 'run-1', runVersion: 1, eventSeq: '1' },
       stopReason: 'stream_cancelled',
     })
 
@@ -96,7 +96,10 @@ describe('project agent runs', () => {
   })
 
   it('cancels stale running runs when heartbeat is expired', async () => {
-    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{ id: 'run-1' }, { id: 'run-2' }])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([
+      { id: 'run-1', runVersion: 1, eventSeq: BigInt(1) },
+      { id: 'run-2', runVersion: 3, eventSeq: BigInt(9) },
+    ])
 
     const cancelledIds = await cancelStaleRunningProjectAgentRunsForScope({
       projectId: 'project-1',
@@ -133,6 +136,9 @@ describe('project agent runs', () => {
       episodeId: 'episode-1',
       requestId: 'request-1',
       status: 'running',
+      runVersion: 1,
+      eventSeq: BigInt(1),
+      terminalEventSeq: null,
       controlKind: 'user_turn',
       stopReason: null,
       heartbeatAt: new Date(),

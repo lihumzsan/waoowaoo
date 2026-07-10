@@ -4,26 +4,12 @@ import {
   TASK_TYPE,
   type TaskJobData,
   type WorkspaceMaterializedResourceEnvelope,
-  type WorkspaceResourceName,
 } from '@/lib/task/types'
-
-function resourceKey(kind: WorkspaceResourceName, projectId: string, episodeId: string): string {
-  return `${kind}:${projectId}:${episodeId}`
-}
-
-function envelope(input: {
-  readonly kind: WorkspaceResourceName
-  readonly taskId: string
-  readonly projectId: string
-  readonly episodeId: string
-  readonly resourceVersion: string
-  readonly data: unknown
-}): WorkspaceMaterializedResourceEnvelope {
-  return {
-    ...input,
-    resourceKey: resourceKey(input.kind, input.projectId, input.episodeId),
-  }
-}
+import {
+  createWorkspaceRevisionVersion,
+  createWorkspaceUpdatedAtVersion,
+  workspaceMaterializedResourceKey,
+} from './materialized-resource-version'
 
 function isEditBibleQueryTask(taskType: string): boolean {
   return taskType === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
@@ -52,12 +38,17 @@ export async function materializeWorkspaceResourcesForTask(
       readEpisodeEditChapters({ projectId: task.projectId, episodeId }),
     ])
     if (!editBible) throw new Error(`CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING:editBible:${task.taskId}`)
-    return [envelope({
+    return [{
       kind: 'editBible',
       taskId: task.taskId,
       projectId: task.projectId,
       episodeId,
-      resourceVersion: String(editBible.version),
+      resourceKey: workspaceMaterializedResourceKey({
+        kind: 'editBible',
+        projectId: task.projectId,
+        episodeId,
+      }),
+      resourceVersion: createWorkspaceRevisionVersion(editBible.version),
       data: {
         editBible: {
           ...editBible,
@@ -65,22 +56,28 @@ export async function materializeWorkspaceResourcesForTask(
         },
         chapters,
       },
-    })]
+    }]
   }
 
   const episode = await readProjectEpisodeDetail({
     projectId: task.projectId,
     episodeId,
   })
-  const updatedAt = 'updatedAt' in episode && episode.updatedAt instanceof Date
-    ? episode.updatedAt.toISOString()
-    : task.taskId
-  return [envelope({
+  if (!('updatedAt' in episode) || !(episode.updatedAt instanceof Date)) {
+    throw new Error(`CANVAS_TERMINAL_RESOURCE_VERSION_MISSING:episodeData:${task.taskId}`)
+  }
+  const updatedAt = episode.updatedAt.toISOString()
+  return [{
     kind: 'episodeData',
     taskId: task.taskId,
     projectId: task.projectId,
     episodeId,
-    resourceVersion: updatedAt,
+    resourceKey: workspaceMaterializedResourceKey({
+      kind: 'episodeData',
+      projectId: task.projectId,
+      episodeId,
+    }),
+    resourceVersion: createWorkspaceUpdatedAtVersion(updatedAt),
     data: episode,
-  })]
+  }]
 }

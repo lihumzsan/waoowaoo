@@ -5,7 +5,6 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
-import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -229,7 +228,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_episode_videos'),
+        kind: 'billable_media',
         required: true,
         summary: '将按核心剪辑计划中的生成分段提交缺失的连续视频片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },

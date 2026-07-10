@@ -1,80 +1,136 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type {
-  WorkspaceMaterializedResourceEnvelope,
-  WorkspaceResourceName,
-} from '@/lib/task/types'
-import { isWorkspaceResourceName } from '@/lib/workspace-resource/resource-impact'
+import type { WorkspaceMaterializedResourceEnvelope } from '@/lib/task/types'
+import {
+  compareWorkspaceMaterializedResourceVersions,
+  parseWorkspaceMaterializedResourceVersion,
+  readWorkspaceMaterializedResourceVersionFromData,
+  workspaceMaterializedResourceKey,
+  type WorkspaceMaterializedResourceKind,
+} from '@/lib/workspace-resource/materialized-resource-version'
 import { queryKeys } from './keys'
 
-interface MaterializedResourceApplyResult {
+export interface MaterializedResourceIgnored {
+  readonly envelope: WorkspaceMaterializedResourceEnvelope
+  readonly reason: 'duplicate' | 'stale'
+}
+
+export interface MaterializedResourceApplyResult {
   readonly applied: readonly WorkspaceMaterializedResourceEnvelope[]
+  readonly ignored: readonly MaterializedResourceIgnored[]
   readonly errors: readonly string[]
 }
+
+type EnvelopeReadResult =
+  | { readonly envelope: WorkspaceMaterializedResourceEnvelope; readonly error: null }
+  | { readonly envelope: null; readonly error: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function readEnvelope(value: unknown): WorkspaceMaterializedResourceEnvelope | null {
-  if (!isRecord(value)) return null
+function isMaterializedResourceKind(value: unknown): value is WorkspaceMaterializedResourceKind {
+  return value === 'editBible' || value === 'episodeData'
+}
+
+function readEnvelope(value: unknown, index: number): EnvelopeReadResult {
+  if (!isRecord(value)) {
+    return { envelope: null, error: `CANVAS_TERMINAL_RESOURCE_ENVELOPE_INVALID:${index}` }
+  }
+  if (!isMaterializedResourceKind(value.kind)) {
+    return {
+      envelope: null,
+      error: `CANVAS_TERMINAL_RESOURCE_VERSION_UNSUPPORTED:${String(value.kind ?? index)}`,
+    }
+  }
   const kind = value.kind
-  const episodeId = value.episodeId
   if (
-    typeof kind !== 'string'
-    || !isWorkspaceResourceName(kind)
-    || typeof value.projectId !== 'string'
-    || (episodeId !== null && typeof episodeId !== 'string')
+    typeof value.projectId !== 'string'
+    || typeof value.episodeId !== 'string'
     || typeof value.resourceKey !== 'string'
-    || typeof value.resourceVersion !== 'string'
     || typeof value.taskId !== 'string'
     || !Object.prototype.hasOwnProperty.call(value, 'data')
   ) {
-    return null
+    return { envelope: null, error: `CANVAS_TERMINAL_RESOURCE_ENVELOPE_INVALID:${index}` }
+  }
+  const resourceVersion = parseWorkspaceMaterializedResourceVersion(kind, value.resourceVersion)
+  if (!resourceVersion) {
+    return {
+      envelope: null,
+      error: `CANVAS_TERMINAL_RESOURCE_VERSION_INVALID:${kind}:${index}`,
+    }
+  }
+  if (kind === 'editBible' && resourceVersion.scheme === 'revision') {
+    return {
+      error: null,
+      envelope: {
+        kind,
+        projectId: value.projectId,
+        episodeId: value.episodeId,
+        resourceKey: value.resourceKey,
+        resourceVersion,
+        taskId: value.taskId,
+        data: value.data,
+      },
+    }
+  }
+  if (kind === 'episodeData' && resourceVersion.scheme === 'updated_at') {
+    return {
+      error: null,
+      envelope: {
+        kind,
+        projectId: value.projectId,
+        episodeId: value.episodeId,
+        resourceKey: value.resourceKey,
+        resourceVersion,
+        taskId: value.taskId,
+        data: value.data,
+      },
+    }
   }
   return {
-    kind,
-    projectId: value.projectId,
-    episodeId,
-    resourceKey: value.resourceKey,
-    resourceVersion: value.resourceVersion,
-    taskId: value.taskId,
-    data: value.data,
+    envelope: null,
+    error: `CANVAS_TERMINAL_RESOURCE_VERSION_NOT_COMPARABLE:${kind}:${index}`,
   }
 }
 
-function queryKeyForEnvelope(envelope: WorkspaceMaterializedResourceEnvelope): readonly unknown[] | null {
-  const episodeId = envelope.episodeId
-  switch (envelope.kind) {
-    case 'editBible':
-      return episodeId ? queryKeys.project.editBible(envelope.projectId, episodeId) : null
-    case 'editScript':
-      return episodeId ? queryKeys.project.editScript(envelope.projectId, episodeId) : null
-    case 'editShotExecutionPlan':
-      return episodeId ? queryKeys.project.editShotExecutionPlan(envelope.projectId, episodeId) : null
-    case 'storyboards':
-      return episodeId ? queryKeys.storyboards.all(episodeId) : null
-    case 'videos':
-      return episodeId ? queryKeys.videos.all(episodeId) : null
-    case 'episodeData':
-      return episodeId ? queryKeys.episodeData(envelope.projectId, episodeId) : null
-    case 'projectData':
-      return queryKeys.projectData(envelope.projectId)
-    case 'projectContext':
-      return queryKeys.project.context(envelope.projectId, episodeId)
-    case 'projectAssets':
-    case 'globalAssets':
-      return null
-  }
+function queryKeyForEnvelope(envelope: WorkspaceMaterializedResourceEnvelope): readonly unknown[] {
+  return envelope.kind === 'editBible'
+    ? queryKeys.project.editBible(envelope.projectId, envelope.episodeId)
+    : queryKeys.episodeData(envelope.projectId, envelope.episodeId)
 }
 
-function validateData(kind: WorkspaceResourceName, data: unknown): boolean {
-  if (!isRecord(data)) return false
-  if (kind === 'editBible') {
-    return Array.isArray(data.chapters)
-      && (data.editBible === null || isRecord(data.editBible))
+function validateData(envelope: WorkspaceMaterializedResourceEnvelope): string | null {
+  if (!isRecord(envelope.data)) {
+    return `CANVAS_TERMINAL_RESOURCE_ENVELOPE_DATA_INVALID:${envelope.resourceKey}`
   }
-  if (kind === 'episodeData') return typeof data.id === 'string'
-  return true
+  if (envelope.kind === 'editBible') {
+    if (!Array.isArray(envelope.data.chapters) || !isRecord(envelope.data.editBible)) {
+      return `CANVAS_TERMINAL_RESOURCE_ENVELOPE_DATA_INVALID:${envelope.resourceKey}`
+    }
+  } else if (typeof envelope.data.id !== 'string') {
+    return `CANVAS_TERMINAL_RESOURCE_ENVELOPE_DATA_INVALID:${envelope.resourceKey}`
+  }
+  const dataVersion = readWorkspaceMaterializedResourceVersionFromData(envelope.kind, envelope.data)
+  if (!dataVersion) {
+    return `CANVAS_TERMINAL_RESOURCE_DATA_VERSION_INVALID:${envelope.resourceKey}`
+  }
+  const order = compareWorkspaceMaterializedResourceVersions({
+    kind: envelope.kind,
+    incoming: envelope.resourceVersion,
+    current: dataVersion,
+  })
+  return order === 'same'
+    ? null
+    : `CANVAS_TERMINAL_RESOURCE_DATA_VERSION_MISMATCH:${envelope.resourceKey}`
+}
+
+function replaceWorkspaceMaterializedResourceSnapshot(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  data: unknown,
+): void {
+  void queryClient.cancelQueries({ queryKey, exact: true })
+  queryClient.setQueryData(queryKey, data)
 }
 
 export function applyWorkspaceMaterializedResourcesToCache(input: {
@@ -83,32 +139,62 @@ export function applyWorkspaceMaterializedResourcesToCache(input: {
   readonly projectId: string
   readonly value: unknown
 }): MaterializedResourceApplyResult {
-  if (!Array.isArray(input.value)) return { applied: [], errors: [] }
+  if (!Array.isArray(input.value)) return { applied: [], ignored: [], errors: [] }
   const applied: WorkspaceMaterializedResourceEnvelope[] = []
+  const ignored: MaterializedResourceIgnored[] = []
   const errors: string[] = []
 
   input.value.forEach((value, index) => {
-    const envelope = readEnvelope(value)
-    if (!envelope) {
-      errors.push(`CANVAS_TERMINAL_RESOURCE_ENVELOPE_INVALID:${index}`)
+    const readResult = readEnvelope(value, index)
+    if (!readResult.envelope) {
+      errors.push(readResult.error)
       return
     }
-    if (envelope.taskId !== input.taskId || envelope.projectId !== input.projectId) {
+    const envelope = readResult.envelope
+    const expectedResourceKey = workspaceMaterializedResourceKey({
+      kind: envelope.kind,
+      projectId: envelope.projectId,
+      episodeId: envelope.episodeId,
+    })
+    if (
+      envelope.taskId !== input.taskId
+      || envelope.projectId !== input.projectId
+      || envelope.resourceKey !== expectedResourceKey
+    ) {
       errors.push(`CANVAS_TERMINAL_RESOURCE_ENVELOPE_SCOPE_MISMATCH:${envelope.resourceKey}`)
       return
     }
-    if (!validateData(envelope.kind, envelope.data)) {
-      errors.push(`CANVAS_TERMINAL_RESOURCE_ENVELOPE_DATA_INVALID:${envelope.resourceKey}`)
+    const dataError = validateData(envelope)
+    if (dataError) {
+      errors.push(dataError)
       return
     }
+
     const queryKey = queryKeyForEnvelope(envelope)
-    if (!queryKey) {
-      errors.push(`CANVAS_TERMINAL_RESOURCE_ENVELOPE_QUERY_UNSUPPORTED:${envelope.resourceKey}`)
-      return
+    const currentData = input.queryClient.getQueryData(queryKey)
+    if (currentData !== undefined) {
+      const currentVersion = readWorkspaceMaterializedResourceVersionFromData(envelope.kind, currentData)
+      if (!currentVersion) {
+        errors.push(`CANVAS_TERMINAL_RESOURCE_CURRENT_VERSION_INVALID:${envelope.resourceKey}`)
+        return
+      }
+      const order = compareWorkspaceMaterializedResourceVersions({
+        kind: envelope.kind,
+        incoming: envelope.resourceVersion,
+        current: currentVersion,
+      })
+      if (order !== 'newer') {
+        ignored.push({
+          envelope,
+          reason: order === 'same' ? 'duplicate' : 'stale',
+        })
+        return
+      }
     }
-    input.queryClient.setQueryData(queryKey, envelope.data)
+
+    replaceWorkspaceMaterializedResourceSnapshot(input.queryClient, queryKey, envelope.data)
     applied.push(envelope)
   })
 
-  return { applied, errors }
+  return { applied, ignored, errors }
 }

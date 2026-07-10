@@ -1,0 +1,26 @@
+export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
+  'ingest_script',
+  'approve_script',
+  'revise_script',
+  'generate_bible_from_script',
+  'confirm_bible',
+  'revise_bible',
+  'generate_edit_style_previews',
+  'plan_chapters',
+  'generate_edit_script',
+  'replan_chapter',
+  'generate_edit_script_assets',
+  'approve_edit_script_assets',
+  'revise_edit_script_assets',
+  'generate_edit_shot_execution_plan',
+  'generate_edit_script_storyboard',
+  'generate_edit_script_storyboard_images',
+  'generate_episode_videos',
+  'render_chapters',
+  'generate_episode_bgm_score',
+  'plan_episode_soundscape',
+  'generate_episode_soundscape',
+  'render_final_video',
+] as const
+
+export type EditFirstWorkflowOperationId = (typeof EDIT_FIRST_WORKFLOW_OPERATION_IDS)[number]

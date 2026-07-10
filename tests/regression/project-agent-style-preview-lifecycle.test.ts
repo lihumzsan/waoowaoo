@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildEditFirstAssistantChoiceCard } from '@/lib/project-agent/choice-card'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import {
-  resolveEditFirstWorkflowCapabilityOperationIds,
-  resolveEditFirstWorkflowStateFromSnapshot,
+import {  resolveEditFirstWorkflowStateFromSnapshot,
   type EditFirstWorkflowSnapshot,
 } from '@/lib/project-workflow/edit-first'
 
@@ -77,7 +75,7 @@ describe('regression - production plan to visual-style lifecycle', () => {
     })
 
     expect(workflow.stage).toBe('bible_ready_for_review')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(workflow)).toEqual(['revise_bible'])
+    expect(workflow.allowedOperationIds).toEqual([])
     expect(card.groups).toEqual([expect.objectContaining({
       key: 'aspectRatio',
       required: true,
@@ -95,10 +93,8 @@ describe('regression - production plan to visual-style lifecycle', () => {
     expect(workflow.stage).toBe('ready_to_generate_style_previews')
     expect(workflow.nextAction).toEqual(expect.objectContaining({
       operationId: 'generate_edit_style_previews',
-      approvalKind: 'billable_media',
-      requiresUserConfirmation: true,
     }))
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(workflow)).toEqual(['generate_edit_style_previews'])
+    expect(workflow.allowedOperationIds).toEqual(['generate_edit_style_previews'])
     expect(operation?.confirmation).toEqual(expect.objectContaining({
       kind: 'billable_media',
       required: true,

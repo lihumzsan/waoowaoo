@@ -18,6 +18,7 @@ import type {
   ProjectAgentActivityStatus,
   ProjectAgentActivityType,
 } from './event'
+import type { ProjectAgentRunFence } from './run-fence'
 
 export type UnknownObject = { [key: string]: unknown }
 
@@ -27,6 +28,7 @@ export interface ProjectAgentContext {
   locale?: string
   episodeId?: string | null
   runId?: string | null
+  runFence?: ProjectAgentRunFence | null
   currentActivityId?: string | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null

@@ -29,6 +29,7 @@ import {
   enforceProjectAgentOperationRunBudget,
 } from './run-budget'
 import type { ProjectAgentContext, ProjectAgentActivityPartData, ProjectAgentOperationStartPartData } from './types'
+import type { ProjectAgentRunFence } from './run-fence'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -128,6 +129,7 @@ export interface CreateProjectAgentOperationToolParams {
   projectId: string
   userId: string
   context: ProjectAgentContext
+  runFence: ProjectAgentRunFence
   assistantPermissionMode: AssistantPermissionMode
   writer: UIMessageStreamWriter<UIMessage>
   /**
@@ -241,7 +243,8 @@ export function createProjectAgentOperationTool(
         },
         events: [
           ...(params.context.currentActivityId
-            ? [{
+              ? [{
+                runFence: params.runFence,
                 idempotencyKey: `activity-completed:${params.context.currentActivityId}:before:${operationActivityId}`,
                 event: {
                   kind: 'activity.completed' as const,
@@ -251,6 +254,7 @@ export function createProjectAgentOperationTool(
               }]
             : []),
           {
+            runFence: params.runFence,
             idempotencyKey: `activity-started:${operationActivityId}`,
             event: {
               kind: 'activity.started',
@@ -294,6 +298,7 @@ export function createProjectAgentOperationTool(
             assistantId: 'workspace-command',
           },
           events: [{
+            runFence: params.runFence,
             idempotencyKey: result.ok
               ? `activity-completed:${operationActivityId}`
               : `activity-failed:${operationActivityId}:${result.error.code}`,
@@ -325,6 +330,7 @@ export function createProjectAgentOperationTool(
             assistantId: 'workspace-command',
           },
           events: [{
+            runFence: params.runFence,
             idempotencyKey: `activity-failed:${operationActivityId}:throw`,
             event: {
               kind: 'activity.failed',

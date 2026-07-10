@@ -18,6 +18,7 @@ import {
   type ProjectAgentRunLock,
 } from './run-lock'
 import { loadProjectAssistantThread } from './persistence'
+import { createProjectAgentRunFence } from './run-fence'
 
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
 let scheduledFollowUpChain: Promise<void> = Promise.resolve()
@@ -81,7 +82,7 @@ async function runClaimedFollowUp(params: {
   followUp: ProjectAgentWaitFollowUp
 }): Promise<boolean> {
   if (params.followUp.followUpMode !== 'resume_agent') return false
-  const run = await loadRunForFollowUp(params)
+  let run = await loadRunForFollowUp(params)
   if (!run) {
     logger.warn({
       action: 'assistant.wait-follow-up.run-missing',
@@ -114,6 +115,14 @@ async function runClaimedFollowUp(params: {
       userId: params.userId,
     })
     if (!consumed) return false
+    const refreshedRun = await getProjectAgentRun({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      runId: run.id,
+    })
+    if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
+    run = refreshedRun
 
     const thread = await loadProjectAssistantThread({
       projectId: params.projectId,
@@ -152,7 +161,7 @@ async function runClaimedFollowUp(params: {
     return true
   } catch (error) {
     await safelyUpdateProjectAgentRunStatus({
-      runId: run.id,
+      runFence: createProjectAgentRunFence(run),
       status: 'failed',
       stopReason: 'server_task_follow_up_failed',
       errorCode: 'PROJECT_AGENT_SERVER_FOLLOW_UP_FAILED',

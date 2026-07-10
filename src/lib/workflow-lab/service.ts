@@ -8,6 +8,7 @@ import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import { createInitialProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
@@ -259,7 +260,9 @@ async function createLabChoiceState(params: {
     interruptionId,
     toolCallId,
   }
+  const runFence = createInitialProjectAgentRunFence(runId)
   const baseEvents = [{
+    runFence,
     idempotencyKey: `workflow-lab:run-started:${runId}`,
     event: {
       kind: 'run.started' as const,
@@ -270,6 +273,7 @@ async function createLabChoiceState(params: {
   }]
   const choiceEvents = params.choiceType === 'style'
     ? [{
+        runFence,
         idempotencyKey: `workflow-lab:activity-started:${activityId}`,
         event: {
           kind: 'activity.started' as const,
@@ -285,6 +289,7 @@ async function createLabChoiceState(params: {
     : (() => {
         if (!interruptionId) throw new Error('WORKFLOW_LAB_CHOICE_INTERRUPTION_ID_REQUIRED')
         return [{
+          runFence,
           idempotencyKey: `workflow-lab:interruption-raised:${interruptionId}`,
           event: {
             kind: 'interruption.raised' as const,

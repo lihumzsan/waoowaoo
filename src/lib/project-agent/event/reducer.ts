@@ -5,6 +5,10 @@ import {
   isProjectAgentRunTerminalStatus,
   normalizeProjectAgentRunStatus,
 } from '../run-state-machine'
+import {
+  advanceProjectAgentRunFence,
+  type ProjectAgentRunFence,
+} from '../run-fence'
 import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
@@ -130,6 +134,7 @@ async function markRunStatus(
   tx: ProjectAgentProjectionTx,
   params: {
     runId: string
+    expectedFence: ProjectAgentRunFence
     status: ProjectAgentRunStatus
     expectedStatuses?: readonly ProjectAgentRunStatus[]
     stopReason?: string | null
@@ -139,22 +144,29 @@ async function markRunStatus(
 ): Promise<void> {
   const current = await tx.projectAgentRun.findUnique({
     where: { id: params.runId },
-    select: { status: true },
+    select: { status: true, runVersion: true, eventSeq: true },
   })
   if (!current) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
   const currentStatus = normalizeProjectAgentRunStatus(current.status)
+  if (
+    current.runVersion !== params.expectedFence.runVersion
+    || current.eventSeq.toString() !== params.expectedFence.eventSeq
+  ) {
+    throw new Error(`PROJECT_AGENT_RUN_EVENT_STALE runId=${params.runId} expectedVersion=${params.expectedFence.runVersion} actualVersion=${current.runVersion}`)
+  }
   assertProjectAgentRunTransition({
     runId: params.runId,
     from: currentStatus,
     to: params.status,
     expectedStatuses: params.expectedStatuses,
   })
-  if (currentStatus === params.status && isProjectAgentRunTerminalStatus(currentStatus)) return
   const timestamp = now()
   const updated = await tx.projectAgentRun.updateMany({
     where: {
       id: params.runId,
       status: currentStatus,
+      runVersion: params.expectedFence.runVersion,
+      eventSeq: BigInt(params.expectedFence.eventSeq),
     },
     data: {
       status: params.status,
@@ -176,7 +188,12 @@ async function applyRunStarted(
   tx: ProjectAgentProjectionTx,
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'run.started' }>,
+  eventId: bigint,
+  expectedFence: ProjectAgentRunFence,
 ): Promise<void> {
+  if (expectedFence.runVersion !== 0 || expectedFence.eventSeq !== '0') {
+    throw new Error(`PROJECT_AGENT_RUN_START_FENCE_INVALID runId=${event.runId}`)
+  }
   const timestamp = now()
   await tx.projectAgentRun.create({
     data: {
@@ -188,6 +205,9 @@ async function applyRunStarted(
       episodeId: scope.episodeId,
       requestId: event.requestId,
       status: 'running',
+      runVersion: 1,
+      eventSeq: eventId,
+      terminalEventSeq: null,
       controlKind: event.controlKind,
       heartbeatAt: timestamp,
     },
@@ -198,6 +218,7 @@ async function applyActivityStarted(
   tx: ProjectAgentProjectionTx,
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'activity.started' }>,
+  expectedFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   await assertRunHasNoOpenActivity(tx, event.runId, event.activityId)
   const type = event.type
@@ -235,6 +256,7 @@ async function applyActivityStarted(
   })
   await markRunStatus(tx, {
     runId: event.runId,
+    expectedFence,
     status: runStatusForActivityType(type),
     stopReason: type,
   })
@@ -303,6 +325,7 @@ async function applyTaskBound(
   tx: ProjectAgentProjectionTx,
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'task.bound' }>,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   await tx.projectAgentWait.upsert({
     where: { id: event.waitId },
@@ -319,6 +342,8 @@ async function applyTaskBound(
       taskIds: event.taskIds,
       followUpMode: event.followUpMode,
       status: 'pending',
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
     update: {
       activityId: event.activityId,
@@ -326,6 +351,8 @@ async function applyTaskBound(
       taskIds: event.taskIds,
       followUpMode: event.followUpMode,
       status: 'pending',
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
       terminalStatus: null,
       terminalTaskIds: [],
       failedTaskIds: [],
@@ -343,6 +370,7 @@ async function applyTaskBound(
 async function applyTaskProgressed(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'task.progressed' }>,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   await tx.projectAgentWait.updateMany({
     where: {
@@ -353,6 +381,8 @@ async function applyTaskProgressed(
     data: {
       terminalTaskIds: event.terminalTaskIds,
       failedTaskIds: event.failedTaskIds,
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
   })
   return getActivitySnapshot(tx, event.activityId)
@@ -362,6 +392,8 @@ async function applyTaskTerminal(
   tx: ProjectAgentProjectionTx,
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'task.terminal' }>,
+  expectedFence: ProjectAgentRunFence,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   const wait = await tx.projectAgentWait.findUnique({
     where: { id: event.waitId },
@@ -391,6 +423,8 @@ async function applyTaskTerminal(
       followUpKey: `project-agent-wait:${event.waitId}:${event.terminalStatus}`,
       followedAt: nextStatus === 'followed' ? now() : null,
       resolvedAt: now(),
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
   })
   await tx.projectAgentActivity.updateMany({
@@ -410,6 +444,7 @@ async function applyTaskTerminal(
     if (wait.followUpMode === 'complete') {
       await markRunStatus(tx, {
         runId: wait.runId,
+        expectedFence,
         status: 'completed',
         stopReason: 'task_completed',
       })
@@ -422,7 +457,7 @@ async function applyTaskTerminal(
         operationId: null,
         sourceOperationId: wait.operationId,
         choiceType: 'style',
-      })
+      }, expectedFence)
     }
   }
   return getActivitySnapshot(tx, event.activityId)
@@ -431,6 +466,7 @@ async function applyTaskTerminal(
 async function applyWaitFollowed(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'wait.followed' }>,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   await tx.projectAgentWait.updateMany({
     where: {
@@ -443,6 +479,8 @@ async function applyWaitFollowed(
     data: {
       status: 'followed',
       followedAt: now(),
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
   })
   return getActivitySnapshot(tx, event.activityId)
@@ -452,6 +490,8 @@ async function applyInterruptionRaised(
   tx: ProjectAgentProjectionTx,
   scope: ProjectAgentEventScopeRef,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.raised' }>,
+  expectedFence: ProjectAgentRunFence,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   await applyActivityStarted(tx, scope, {
     kind: 'activity.started',
@@ -461,7 +501,7 @@ async function applyInterruptionRaised(
     operationId: event.operationId,
     toolCallId: event.toolCallId ?? null,
     choiceType: event.choiceType ?? null,
-  })
+  }, expectedFence)
   await tx.projectAgentInterruption.create({
     data: {
       id: event.interruptionId,
@@ -474,6 +514,8 @@ async function applyInterruptionRaised(
       episodeId: scope.episodeId,
       type: event.interruptionKind,
       status: 'pending',
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
       operationId: event.operationId,
       approvalId: event.approvalId,
       toolCallId: event.toolCallId ?? null,
@@ -487,6 +529,8 @@ async function applyInterruptionRaised(
 async function applyInterruptionResolved(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.resolved' }>,
+  expectedFence: ProjectAgentRunFence,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   const interruption = await tx.projectAgentInterruption.findUnique({
     where: { id: event.interruptionId },
@@ -506,6 +550,8 @@ async function applyInterruptionResolved(
       response: event.response ?? undefined,
       consumedAt: now(),
       runState: null,
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
   })
   if (event.outcome === 'consumed' && resolved.count !== 1) {
@@ -530,6 +576,7 @@ async function applyInterruptionResolved(
   if (event.outcome === 'consumed') {
     await markRunStatus(tx, {
       runId: event.runId,
+      expectedFence,
       status: 'running',
       expectedStatuses: [interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice'],
       stopReason: interruption.type === 'approval' ? 'approval_response' : 'choice_response',
@@ -541,6 +588,8 @@ async function applyInterruptionResolved(
 async function applyInterruptionReopened(
   tx: ProjectAgentProjectionTx,
   event: Extract<ProjectAgentEventPayload, { kind: 'interruption.reopened' }>,
+  expectedFence: ProjectAgentRunFence,
+  nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
   const interruption = await tx.projectAgentInterruption.findUnique({
     where: { id: event.interruptionId },
@@ -559,6 +608,8 @@ async function applyInterruptionReopened(
       status: 'pending',
       response: Prisma.DbNull,
       consumedAt: null,
+      runVersion: nextFence.runVersion,
+      eventSeq: BigInt(nextFence.eventSeq),
     },
   })
   if (reopened.count === 1 && event.activityId) {
@@ -578,6 +629,7 @@ async function applyInterruptionReopened(
     })
     await markRunStatus(tx, {
       runId: event.runId,
+      expectedFence,
       status: interruption.type === 'approval' ? 'awaiting_approval' : 'awaiting_choice',
       expectedStatuses: [
         'running',
@@ -589,19 +641,94 @@ async function applyInterruptionReopened(
   return getActivitySnapshot(tx, event.activityId)
 }
 
+async function assertProjectAgentRunEventFence(
+  tx: ProjectAgentProjectionTx,
+  expectedFence: ProjectAgentRunFence,
+): Promise<void> {
+  const run = await tx.projectAgentRun.findUnique({
+    where: { id: expectedFence.runId },
+    select: {
+      runVersion: true,
+      eventSeq: true,
+      terminalEventSeq: true,
+    },
+  })
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${expectedFence.runId}`)
+  if (run.terminalEventSeq !== null) {
+    throw new Error(
+      `PROJECT_AGENT_RUN_TERMINAL_WATERMARK runId=${expectedFence.runId} terminalEventSeq=${run.terminalEventSeq.toString()}`,
+    )
+  }
+  if (
+    run.runVersion !== expectedFence.runVersion
+    || run.eventSeq.toString() !== expectedFence.eventSeq
+  ) {
+    throw new Error(
+      `PROJECT_AGENT_RUN_EVENT_STALE runId=${expectedFence.runId} expectedVersion=${expectedFence.runVersion} actualVersion=${run.runVersion} expectedEventSeq=${expectedFence.eventSeq} actualEventSeq=${run.eventSeq.toString()}`,
+    )
+  }
+}
+
+async function finalizeProjectAgentRunEventFence(
+  tx: ProjectAgentProjectionTx,
+  params: {
+    expectedFence: ProjectAgentRunFence
+    eventId: bigint
+  },
+): Promise<void> {
+  const run = await tx.projectAgentRun.findUnique({
+    where: { id: params.expectedFence.runId },
+    select: { status: true },
+  })
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.expectedFence.runId}`)
+  const status = normalizeProjectAgentRunStatus(run.status)
+  const updated = await tx.projectAgentRun.updateMany({
+    where: {
+      id: params.expectedFence.runId,
+      runVersion: params.expectedFence.runVersion,
+      eventSeq: BigInt(params.expectedFence.eventSeq),
+      terminalEventSeq: null,
+    },
+    data: {
+      runVersion: { increment: 1 },
+      eventSeq: params.eventId,
+      ...(isProjectAgentRunTerminalStatus(status)
+        ? { terminalEventSeq: params.eventId }
+        : {}),
+    },
+  })
+  if (updated.count !== 1) {
+    throw new Error(
+      `PROJECT_AGENT_RUN_EVENT_RACED runId=${params.expectedFence.runId} expectedVersion=${params.expectedFence.runVersion} expectedEventSeq=${params.expectedFence.eventSeq}`,
+    )
+  }
+}
+
 export async function reduceProjectAgentEvent(params: {
   tx: ProjectAgentProjectionTx
   scope: ProjectAgentEventScopeRef
   event: ProjectAgentEventPayload
+  eventId: bigint
+  expectedFence: ProjectAgentRunFence
 }): Promise<ProjectAgentActivitySnapshot | null> {
-  const { tx, scope, event } = params
+  const { tx, scope, event, eventId, expectedFence } = params
+  if (event.runId !== expectedFence.runId) {
+    throw new Error(
+      `PROJECT_AGENT_EVENT_RUN_FENCE_MISMATCH eventRunId=${event.runId} fenceRunId=${expectedFence.runId}`,
+    )
+  }
+  if (event.kind === 'run.started') {
+    await applyRunStarted(tx, scope, event, eventId, expectedFence)
+    return null
+  }
+  await assertProjectAgentRunEventFence(tx, expectedFence)
+  const nextFence = advanceProjectAgentRunFence(expectedFence, eventId)
+  let activity: ProjectAgentActivitySnapshot | null = null
   switch (event.kind) {
-    case 'run.started':
-      await applyRunStarted(tx, scope, event)
-      return null
     case 'run.status_changed':
       await markRunStatus(tx, {
         runId: event.runId,
+        expectedFence,
         status: event.status,
         expectedStatuses: event.expectedStatuses,
         stopReason: event.stopReason,
@@ -611,45 +738,69 @@ export async function reduceProjectAgentEvent(params: {
       if (event.status === 'failed' || event.status === 'cancelled') {
         await cancelOpenActivitiesForRun(tx, event.runId, event.errorMessage ?? event.stopReason ?? event.status)
       }
-      return null
+      break
     case 'run.completed':
-      await markRunStatus(tx, { runId: event.runId, status: 'completed', stopReason: event.stopReason ?? 'completed' })
-      return null
+      await markRunStatus(tx, {
+        runId: event.runId,
+        expectedFence,
+        status: 'completed',
+        stopReason: event.stopReason ?? 'completed',
+      })
+      break
     case 'run.failed':
       await markRunStatus(tx, {
         runId: event.runId,
+        expectedFence,
         status: 'failed',
         stopReason: event.stopReason ?? 'failed',
         errorCode: event.errorCode,
         errorMessage: event.errorMessage,
       })
       await cancelOpenActivitiesForRun(tx, event.runId, event.errorMessage)
-      return null
+      break
     case 'run.cancelled':
-      await markRunStatus(tx, { runId: event.runId, status: 'cancelled', stopReason: event.reason })
+      await markRunStatus(tx, {
+        runId: event.runId,
+        expectedFence,
+        status: 'cancelled',
+        stopReason: event.reason,
+      })
       await cancelOpenActivitiesForRun(tx, event.runId, event.reason)
-      return null
+      break
     case 'activity.started':
-      return await applyActivityStarted(tx, scope, event)
+      activity = await applyActivityStarted(tx, scope, event, expectedFence)
+      break
     case 'activity.completed':
-      return await completeActivity(tx, event)
+      activity = await completeActivity(tx, event)
+      break
     case 'activity.failed':
-      return await failActivity(tx, event)
+      activity = await failActivity(tx, event)
+      break
     case 'activity.cancelled':
-      return await cancelActivity(tx, event)
+      activity = await cancelActivity(tx, event)
+      break
     case 'task.bound':
-      return await applyTaskBound(tx, scope, event)
+      activity = await applyTaskBound(tx, scope, event, nextFence)
+      break
     case 'task.progressed':
-      return await applyTaskProgressed(tx, event)
+      activity = await applyTaskProgressed(tx, event, nextFence)
+      break
     case 'task.terminal':
-      return await applyTaskTerminal(tx, scope, event)
+      activity = await applyTaskTerminal(tx, scope, event, expectedFence, nextFence)
+      break
     case 'wait.followed':
-      return await applyWaitFollowed(tx, event)
+      activity = await applyWaitFollowed(tx, event, nextFence)
+      break
     case 'interruption.raised':
-      return await applyInterruptionRaised(tx, scope, event)
+      activity = await applyInterruptionRaised(tx, scope, event, expectedFence, nextFence)
+      break
     case 'interruption.resolved':
-      return await applyInterruptionResolved(tx, event)
+      activity = await applyInterruptionResolved(tx, event, expectedFence, nextFence)
+      break
     case 'interruption.reopened':
-      return await applyInterruptionReopened(tx, event)
+      activity = await applyInterruptionReopened(tx, event, expectedFence, nextFence)
+      break
   }
+  await finalizeProjectAgentRunEventFence(tx, { expectedFence, eventId })
+  return activity
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-import { EDIT_FIRST_OPERATION_APPROVAL_KINDS } from '@/lib/project-workflow/edit-first-operation-policy'
+import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-operation-ids'
 
 describe('project agent operation registry', () => {
   it('keeps operation ids aligned and core fields defined', () => {
@@ -132,11 +132,17 @@ describe('project agent operation registry', () => {
     }
   })
 
-  it('keeps every edit-first operation aligned with the canonical workflow approval policy', () => {
+  it('keeps every edit-first operation registered with internally consistent confirmation semantics', () => {
     const registry = createProjectAgentOperationRegistry()
-    for (const [operationId, approvalKind] of Object.entries(EDIT_FIRST_OPERATION_APPROVAL_KINDS)) {
-      expect(registry[operationId]?.confirmation.kind, operationId).toBe(approvalKind)
-      expect(registry[operationId]?.confirmation.required, operationId).toBe(approvalKind !== 'none')
+    for (const operationId of EDIT_FIRST_WORKFLOW_OPERATION_IDS) {
+      const operation = registry[operationId]
+      expect(operation, operationId).toBeDefined()
+      expect(operation.confirmation.required, operationId).toBe(operation.confirmation.kind !== 'none')
+      if (operation.effects.billable) {
+        expect(operation.confirmation.kind, operationId).toBe('billable_media')
+      } else {
+        expect(operation.confirmation.kind, operationId).toBe('none')
+      }
     }
   })
 

@@ -94,6 +94,7 @@ function buildOperation(
 }
 
 describe('createProjectAgentOperationTool', () => {
+  const runFence = { runId: 'run-1', runVersion: 1, eventSeq: '1' }
   beforeEach(() => {
     vi.clearAllMocks()
     prismaState.projectAgentEvent.findMany.mockResolvedValue([])
@@ -122,6 +123,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Generate images',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',
@@ -185,6 +187,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Generate videos',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',
@@ -230,6 +233,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Generate images',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',
@@ -279,6 +283,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Get project context',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',
@@ -339,6 +344,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Choose duration and aspect ratio',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',
@@ -388,6 +394,7 @@ describe('createProjectAgentOperationTool', () => {
       description: 'Generate images',
       projectId: 'project-1',
       userId: 'user-1',
+      runFence,
       context: {
         episodeId: 'episode-1',
         runId: 'run-1',

@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import { prisma } from '@/lib/prisma'
+import type { EditFirstReviewChoiceDecision } from '@/lib/project-workflow/edit-first'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
-import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
-import { approveEpisodePromptGeneratedScript, confirmEpisodeEditBible } from '@/lib/edit-bible'
 import { normalizeScriptIntakeChoiceBrief } from './script-intake'
 
 interface UnknownRecord {
@@ -20,6 +18,7 @@ export interface EditFirstChoiceResult {
    * operation.
    */
   inputItems: AgentInputItem[]
+  reviewDecision: EditFirstReviewChoiceDecision | null
 }
 
 function readString(value: unknown): string | null {
@@ -90,6 +89,7 @@ export function buildEditFirstChoiceResult(params: {
     })
     if (!normalizedBrief) return null
     return {
+      reviewDecision: null,
       inputItems: buildChoiceInputItems({
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
@@ -104,6 +104,7 @@ export function buildEditFirstChoiceResult(params: {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
       return {
+        reviewDecision: { choiceType: 'bible_review', decision: 'revise' },
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
@@ -115,6 +116,7 @@ export function buildEditFirstChoiceResult(params: {
       const aspectRatio = readChoiceAspectRatio(params.output)
       if (!aspectRatio) return null
       return {
+        reviewDecision: { choiceType: 'bible_review', decision: 'approve' },
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
@@ -131,6 +133,7 @@ export function buildEditFirstChoiceResult(params: {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
       return {
+        reviewDecision: { choiceType: 'script_review', decision: 'revise' },
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
@@ -140,6 +143,7 @@ export function buildEditFirstChoiceResult(params: {
     }
     if (decision !== 'approve') return null
     return {
+      reviewDecision: { choiceType: 'script_review', decision: 'approve' },
       inputItems: buildChoiceInputItems({
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
@@ -154,6 +158,7 @@ export function buildEditFirstChoiceResult(params: {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
       return {
+        reviewDecision: { choiceType: 'asset_review', decision: 'revise' },
         inputItems: buildChoiceInputItems({
           toolCallId: params.toolCallId,
           choiceType: params.choiceType,
@@ -163,6 +168,7 @@ export function buildEditFirstChoiceResult(params: {
     }
     if (decision !== 'approve') return null
     return {
+      reviewDecision: { choiceType: 'asset_review', decision: 'approve' },
       inputItems: buildChoiceInputItems({
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
@@ -175,97 +181,11 @@ export function buildEditFirstChoiceResult(params: {
   const aspectRatio = readAspectRatio(params.output.aspectRatio)
   if (!stylePreviewId || !aspectRatio) return null
   return {
+    reviewDecision: null,
     inputItems: buildChoiceInputItems({
       toolCallId: params.toolCallId,
       choiceType: params.choiceType,
       result: { stylePreviewId, aspectRatio, saved: true },
     }),
   }
-}
-
-export async function applyEditFirstChoiceResultSideEffects(params: {
-  choiceType: EditFirstChoiceType
-  output: UnknownRecord
-  projectId: string
-  userId: string
-  episodeId: string | null
-}): Promise<void> {
-  if (params.output.ok !== true && params.output.ok !== undefined) return
-  const decision = readString(params.output.decision)
-  if (params.choiceType === 'script_intake') return
-  if (params.choiceType === 'script_review') {
-    if (decision !== 'approve') return
-    if (!params.episodeId) {
-      throw new Error('PROJECT_AGENT_SCRIPT_REVIEW_EPISODE_ID_REQUIRED')
-    }
-    await approveEpisodePromptGeneratedScript({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-    })
-    return
-  }
-  if (params.choiceType === 'bible_review') {
-    if (decision !== 'approve') return
-    const aspectRatio = readChoiceAspectRatio(params.output)
-    if (!aspectRatio) {
-      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_ASPECT_RATIO_REQUIRED')
-    }
-    if (!params.episodeId) {
-      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_EPISODE_ID_REQUIRED')
-    }
-    const project = await prisma.project.findFirst({
-      where: { id: params.projectId, userId: params.userId },
-      select: { videoRatio: true },
-    })
-    if (!project) throw new Error('PROJECT_AGENT_BIBLE_REVIEW_PROJECT_NOT_FOUND')
-    const updateResult = await prisma.project.updateMany({
-      where: {
-        id: params.projectId,
-        userId: params.userId,
-      },
-      data: {
-        videoRatio: aspectRatio,
-      },
-    })
-    if (updateResult.count !== 1) {
-      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_PROJECT_NOT_FOUND')
-    }
-    try {
-      await confirmEpisodeEditBible({
-        projectId: params.projectId,
-        userId: params.userId,
-        episodeId: params.episodeId,
-      })
-    } catch (error) {
-      await prisma.$transaction([
-        prisma.project.update({
-          where: { id: params.projectId },
-          data: { videoRatio: project.videoRatio },
-        }),
-        prisma.projectEditBible.updateMany({
-          where: {
-            episodeId: params.episodeId,
-            status: 'confirmed',
-          },
-          data: {
-            status: 'ready_for_review',
-            lockedAt: null,
-          },
-        }),
-      ])
-      throw error
-    }
-    return
-  }
-  if (params.choiceType !== 'asset_review') return
-  if (decision !== 'approve') return
-  if (!params.episodeId) {
-    throw new Error('PROJECT_AGENT_ASSET_REVIEW_EPISODE_ID_REQUIRED')
-  }
-  await approveProjectEpisodeEditScriptAssets({
-    projectId: params.projectId,
-    userId: params.userId,
-    episodeId: params.episodeId,
-  })
 }

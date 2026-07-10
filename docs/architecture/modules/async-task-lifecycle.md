@@ -17,6 +17,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-06A — 终态立即撤销瞬时运行态。** 结构化流和 optimistic runtime 在 Task 终态到达时必须立即退出；历史 `task-submitted` 消息不得继续充当 active Task。源剧本生成和制作规划生成即使复用同一 worker，也必须使用不同 Task type 与 target。
 - **TL-06B — 目标失败只跟随最终终态。** 单次 worker attempt 失败且仍会重试时不得把业务目标写成 `failed`；只有 Task 确认进入最终失败终态后，统一目标失败同步才可落库诊断。
 - **TL-06C — 终态携带物化资源。** 影响 Canvas 的 worker 必须在业务资源持久化后、Task completed 事件前，通过统一 materialization registry 读取正式 Query DTO。客户端处理顺序固定为 Query Cache → Task terminal → runtime clear → 异步 invalidation；不得把 refetch 时机当作终态 UI 接力。
+- **TL-06D — 物化资源版本是强制门禁。** `materializedResources` 只支持声明了版本 scheme、DTO 版本提取器和 comparator 的资源 kind。版本与 DTO 必须作为同一快照校验和交接；跨 Task、重复、replay 或乱序 envelope 不能用旧 DTO 覆盖新 Query Cache。缺失版本必须终止该资源交接，禁止退回 taskId、事件时间或接收顺序。
 - **TL-07 — Queue 观察与恢复只有一个裁判。** BullMQ 只负责运输，Task DB 仍是业务生命周期权威。Queue 观察必须穷尽表达 `alive`、`terminal`、`absent`、`unavailable`；Redis 不可用不得解释成 job 丢失。恢复、超时终止和 DB ↔ BullMQ 对账必须由同一个 reconciler 执行，Next 启动逻辑、独立脚本和 worker handler 不得各自改写同一 Task 或业务目标终态。
 
 ## 状态所有权
@@ -38,6 +39,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - Queue 四态观察与唯一恢复 cycle：`src/lib/task/reconcile.ts`；`src/instrumentation.ts` 只负责启动，不写 Task。
 - Operation 到 Task 的提交适配：`src/lib/operations/submit-operation-task.ts`。
 - Canvas 终态物化：`src/lib/workspace-resource/materialized-resource.ts`；客户端接力：`src/lib/query/materialized-resource-cache.ts`。
+- 物化版本协议：`src/lib/workspace-resource/materialized-resource-version.ts`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
 
 ## 验证
@@ -48,12 +50,14 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/unit/task/job-envelope.test.ts` 验证恢复入队不会丢失 billing、operation、scope、priority 与 trace。
 - `tests/unit/task/reconcile-target-sync.test.ts` 验证 queue unavailable 零写入以及最终失败投影。
 - `tests/integration/task/task-reconcile-queue.integration.test.ts` 验证真实 DB + Redis 下 queued/absent 的完整恢复时序。
+- `tests/unit/query/materialized-resource-cache.test.ts` 验证物化资源跨 Task 和乱序交接不回退。
 - `scripts/guards/task-submit-compensation-guard.mjs` 检查 route 的 create + submit 补偿标记。
 - `scripts/guards/no-operation-direct-submit-task.mjs` 阻止 operation 绕过统一提交边界。
 - `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant choice/runtime 绕过 operation registry 直接提交 Task。
 - `scripts/guards/task-target-states-no-polling-guard.mjs` 阻止以 polling 伪造目标状态。
 - `scripts/guards/single-task-reconciler-guard.mjs` 阻止第二 watchdog、instrumentation 直接写 Task，以及四态观察/完整 envelope 被绕过。
 - `scripts/guards/no-worker-attempt-target-terminal-write.mjs` 阻止单次 worker attempt 提前写业务目标终态。
+- `scripts/guards/materialized-resource-version-guard.mjs` 阻止物化资源版本退化为无类型字符串、taskId fallback 或无条件 cache replace。
 
 ## 历史回归
 

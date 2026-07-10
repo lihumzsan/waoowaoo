@@ -10,7 +10,9 @@ const runtime = vi.hoisted(() => ({
   queryClient: {
     invalidateQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
     refetchQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
+    cancelQueries: vi.fn<(arg?: InvalidateArg) => Promise<void>>(async () => undefined),
     setQueryData: vi.fn(),
+    getQueryData: vi.fn(() => undefined),
     getQueriesData: vi.fn(() => []),
   },
   effectCleanup: null as EffectCleanup,
@@ -244,7 +246,11 @@ describe('sse invalidation behavior', () => {
 
   it('writes the materialized Query DTO before notifying runtime listeners to clear the stream', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
-    const episode = { id: 'episode-1', name: 'Materialized episode' }
+    const episode = {
+      id: 'episode-1',
+      name: 'Materialized episode',
+      updatedAt: '2026-04-24T00:00:01.000Z',
+    }
     const runtimeClear = vi.fn(() => {
       expect(runtime.queryClient.setQueryData).toHaveBeenCalledWith(
         queryKeys.episodeData('project-1', 'episode-1'),
@@ -277,7 +283,10 @@ describe('sse invalidation behavior', () => {
           projectId: 'project-1',
           episodeId: 'episode-1',
           resourceKey: 'episodeData:project-1:episode-1',
-          resourceVersion: '1',
+          resourceVersion: {
+            scheme: 'updated_at',
+            value: '2026-04-24T00:00:01.000Z',
+          },
           taskId: 'task-materialized-1',
           data: episode,
         }],

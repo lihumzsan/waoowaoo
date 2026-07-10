@@ -8,6 +8,13 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createQueuedTask, createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 
+function requireFreezeId(result: Awaited<ReturnType<typeof freezeBalance>>): string {
+  if (result.status !== 'frozen' && result.status !== 'already_frozen') {
+    throw new Error(`EXPECTED_FREEZE_TO_SUCCEED:${result.status}`)
+  }
+  return result.freezeId
+}
+
 function readRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('EXPECTED_RECORD')
@@ -79,15 +86,14 @@ describe('billing/user transactions integration', () => {
       targetId: panel.id,
     })
 
-    const freezeId = await freezeBalance(user.id, 1.25, {
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 1.25, {
       source: 'task',
       taskId: task.id,
       idempotencyKey: 'user_transactions_panel_image',
-    })
-    expect(freezeId).toBeTruthy()
+    }))
 
     await confirmChargeWithRecord(
-      freezeId!,
+      freezeId,
       {
         projectId: project.id,
         episodeId: episode.id,
@@ -190,12 +196,11 @@ describe('billing/user transactions integration', () => {
         operationRequestId: 'request_user_transactions_batch_image',
       })
 
-      const freezeId = await freezeBalance(user.id, 1.14, {
+      const freezeId = requireFreezeId(await freezeBalance(user.id, 1.14, {
         source: 'task',
         taskId: task.id,
         idempotencyKey: `user_transactions_batch_image_${panelNumber}`,
-      })
-      if (!freezeId) throw new Error('failed to create batch image freeze')
+      }))
 
       await confirmChargeWithRecord(
         freezeId,

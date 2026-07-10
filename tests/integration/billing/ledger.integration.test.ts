@@ -10,6 +10,13 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 
+function requireFreezeId(result: Awaited<ReturnType<typeof freezeBalance>>): string {
+  if (result.status !== 'frozen' && result.status !== 'already_frozen') {
+    throw new Error(`EXPECTED_FREEZE_TO_SUCCEED:${result.status}`)
+  }
+  return result.freezeId
+}
+
 describe('billing/ledger integration', () => {
   beforeEach(async () => {
     await resetBillingState()
@@ -20,20 +27,25 @@ describe('billing/ledger integration', () => {
     const user = await createTestUser()
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 3, { idempotencyKey: 'freeze_ok' })
-    expect(freezeId).toBeTruthy()
+    const result = await freezeBalance(user.id, 3, { idempotencyKey: 'freeze_ok' })
+    expect(result.status).toBe('frozen')
+    expect(requireFreezeId(result)).toBeTruthy()
 
     const balance = await getBalance(user.id)
     expect(balance.balance).toBeCloseTo(7, 8)
     expect(balance.frozenAmount).toBeCloseTo(3, 8)
   })
 
-  it('returns null freeze id when balance is insufficient', async () => {
+  it('returns an explicit insufficient-balance result', async () => {
     const user = await createTestUser()
     await seedBalance(user.id, 1)
 
-    const freezeId = await freezeBalance(user.id, 3, { idempotencyKey: 'freeze_no_money' })
-    expect(freezeId).toBeNull()
+    const result = await freezeBalance(user.id, 3, { idempotencyKey: 'freeze_no_money' })
+    expect(result).toEqual({
+      status: 'insufficient_balance',
+      required: 3,
+      available: 1,
+    })
   })
 
   it('reuses same freeze record with the same idempotency key', async () => {
@@ -43,8 +55,9 @@ describe('billing/ledger integration', () => {
     const first = await freezeBalance(user.id, 2, { idempotencyKey: 'idem_key' })
     const second = await freezeBalance(user.id, 2, { idempotencyKey: 'idem_key' })
 
-    expect(first).toBeTruthy()
-    expect(second).toBe(first)
+    expect(first.status).toBe('frozen')
+    expect(second.status).toBe('already_frozen')
+    expect(requireFreezeId(second)).toBe(requireFreezeId(first))
 
     const balance = await getBalance(user.id)
     expect(balance.balance).toBeCloseTo(8, 8)
@@ -52,16 +65,33 @@ describe('billing/ledger integration', () => {
     expect(await prisma.balanceFreeze.count()).toBe(1)
   })
 
+  it('returns an explicit conflict when an idempotency key is reused for a different amount', async () => {
+    const user = await createTestUser()
+    await seedBalance(user.id, 10)
+
+    const first = await freezeBalance(user.id, 2, { idempotencyKey: 'idem_amount_mismatch' })
+    const freezeId = requireFreezeId(first)
+
+    await expect(freezeBalance(user.id, 3, { idempotencyKey: 'idem_amount_mismatch' })).resolves.toEqual({
+      status: 'conflict',
+      freezeId,
+      freezeStatus: 'pending',
+      frozenAmount: 2,
+    })
+    const balance = await getBalance(user.id)
+    expect(balance.balance).toBeCloseTo(8, 8)
+    expect(balance.frozenAmount).toBeCloseTo(2, 8)
+  })
+
   it('supports partial confirmation and refunds difference', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 3, { idempotencyKey: 'confirm_partial' })
-    expect(freezeId).toBeTruthy()
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 3, { idempotencyKey: 'confirm_partial' }))
 
     const confirmed = await confirmChargeWithRecord(
-      freezeId!,
+      freezeId,
       {
         projectId: project.id,
         action: 'integration_confirm',
@@ -86,11 +116,10 @@ describe('billing/ledger integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 2, { idempotencyKey: 'confirm_idem' })
-    expect(freezeId).toBeTruthy()
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 2, { idempotencyKey: 'confirm_idem' }))
 
     const first = await confirmChargeWithRecord(
-      freezeId!,
+      freezeId,
       {
         projectId: project.id,
         action: 'integration_confirm',
@@ -102,7 +131,7 @@ describe('billing/ledger integration', () => {
       { chargedAmount: 1 },
     )
     const second = await confirmChargeWithRecord(
-      freezeId!,
+      freezeId,
       {
         projectId: project.id,
         action: 'integration_confirm',
@@ -116,17 +145,44 @@ describe('billing/ledger integration', () => {
 
     expect(first).toBe(true)
     expect(second).toBe(true)
-    expect(await prisma.balanceTransaction.count({ where: { freezeId: freezeId! } })).toBe(1)
+    expect(await prisma.balanceTransaction.count({ where: { freezeId } })).toBe(1)
+  })
+
+  it('returns an explicit conflict instead of reusing a terminal freeze', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    await seedBalance(user.id, 10)
+
+    const first = await freezeBalance(user.id, 2, { idempotencyKey: 'terminal_freeze_conflict' })
+    const freezeId = requireFreezeId(first)
+    await confirmChargeWithRecord(
+      freezeId,
+      {
+        projectId: project.id,
+        action: 'integration_confirm',
+        apiType: 'image',
+        model: 'ark::doubao-seedream-4-5-251128',
+        quantity: 1,
+        unit: 'image',
+      },
+      { chargedAmount: 1 },
+    )
+
+    await expect(freezeBalance(user.id, 2, { idempotencyKey: 'terminal_freeze_conflict' })).resolves.toEqual({
+      status: 'conflict',
+      freezeId,
+      freezeStatus: 'confirmed',
+      frozenAmount: 2,
+    })
   })
 
   it('rolls back pending freeze and restores funds', async () => {
     const user = await createTestUser()
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 4, { idempotencyKey: 'rollback_ok' })
-    expect(freezeId).toBeTruthy()
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 4, { idempotencyKey: 'rollback_ok' }))
 
-    const rolled = await rollbackFreeze(freezeId!)
+    const rolled = await rollbackFreeze(freezeId)
     expect(rolled).toBe(true)
 
     const balance = await getBalance(user.id)
@@ -139,11 +195,10 @@ describe('billing/ledger integration', () => {
     const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
-    const freezeId = await freezeBalance(user.id, 2, { idempotencyKey: 'rollback_after_confirm' })
-    expect(freezeId).toBeTruthy()
+    const freezeId = requireFreezeId(await freezeBalance(user.id, 2, { idempotencyKey: 'rollback_after_confirm' }))
 
     await confirmChargeWithRecord(
-      freezeId!,
+      freezeId,
       {
         projectId: project.id,
         action: 'integration_confirm',
@@ -155,7 +210,7 @@ describe('billing/ledger integration', () => {
       { chargedAmount: 1 },
     )
 
-    const rolled = await rollbackFreeze(freezeId!)
+    const rolled = await rollbackFreeze(freezeId)
     expect(rolled).toBe(false)
   })
 

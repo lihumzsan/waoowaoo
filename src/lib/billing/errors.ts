@@ -12,6 +12,8 @@ export class InsufficientBalanceError extends Error {
 
 export type BillingOperationErrorCode =
   | 'BILLING_CONFIRM_FAILED'
+  | 'BILLING_FREEZE_FAILED'
+  | 'BILLING_INVALID_FREEZE_AMOUNT'
   | 'BILLING_INVALID_FREEZE'
   | 'BILLING_INVALID_API_TYPE'
   | 'BILLING_FREEZE_NOT_PENDING'

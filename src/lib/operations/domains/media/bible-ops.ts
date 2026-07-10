@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import {
+  approveEpisodePromptGeneratedScript,
   confirmEpisodeEditBible,
   confirmEditBibleInputSchema,
   getEditBibleInputSchema,
@@ -30,7 +31,6 @@ import {
   EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
-import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const optionalEpisodeIdField = {
   episodeId: z.string().trim().min(1).optional(),
@@ -60,8 +60,24 @@ const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
 })
 const confirmBibleOperationInputSchema = confirmEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
+  aspectRatio: z.enum(['9:16', '16:9', '21:9']),
   confirmed: z.boolean().optional(),
 })
+
+const confirmBibleToolInputSchema: ProjectAgentToolInputSchema = {
+  type: 'object',
+  properties: {
+    aspectRatio: {
+      type: 'string',
+      enum: ['9:16', '16:9', '21:9'],
+      description: 'The exact aspect ratio selected by the user in the Bible review choice.',
+    },
+  },
+  required: ['aspectRatio'],
+  additionalProperties: false,
+}
+
+const approveScriptOutputSchema = z.object({ approved: z.literal(true) })
 
 const sourceScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
@@ -404,6 +420,29 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
         return editBibleTaskSubmitOutputSchema.parse(result)
       },
     }),
+    approve_script: defineOperation({
+      id: 'approve_script',
+      summary: 'Record the user-approved generated source script so episode planning can start from that immutable review decision.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BIBLE_WRITE,
+      confirmation: {
+        kind: 'none',
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: generateBibleFromScriptOperationInputSchema,
+      outputSchema: approveScriptOutputSchema,
+      execute: async (ctx, input) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        await approveEpisodePromptGeneratedScript({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+        })
+        return { approved: true as const }
+      },
+    }),
     generate_bible_from_script: defineOperation({
       id: 'generate_bible_from_script',
       summary: 'Submit episode planning generation from the user-approved generated source script.',
@@ -535,7 +574,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('revise_bible'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: reviseBibleToolInputSchema,
@@ -564,10 +603,10 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
-        required: true,
-        summary: '将确认并锁定当前剧集规划基线，之后不能直接替换源剧本。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
-      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      toolInputSchema: confirmBibleToolInputSchema,
       inputSchema: confirmBibleOperationInputSchema,
       outputSchema: editBibleMutationOutputSchema,
       execute: async (ctx, input) => {
@@ -576,6 +615,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
+          videoRatio: input.aspectRatio,
         })
         return editBibleMutationOutputSchema.parse({ editBible })
       },

@@ -1,38 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const prismaMock = vi.hoisted(() => ({
-  project: {
-    findFirst: vi.fn(async () => ({ videoRatio: '16:9' })),
-    update: vi.fn(async () => ({ id: 'project-1' })),
-    updateMany: vi.fn(async () => ({ count: 1 })),
-  },
-  projectEditBible: {
-    updateMany: vi.fn(async () => ({ count: 1 })),
-  },
-  $transaction: vi.fn(async (operations: readonly Promise<unknown>[]) => await Promise.all(operations)),
-}))
-
-vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-
-import {
-  applyEditFirstChoiceResultSideEffects,
-  buildEditFirstChoiceResult,
-} from '@/lib/project-agent/edit-first-choice-result'
-import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
-import { approveEpisodePromptGeneratedScript, confirmEpisodeEditBible } from '@/lib/edit-bible'
-
-vi.mock('@/lib/edit-script/service', () => ({
-  approveProjectEpisodeEditScriptAssets: vi.fn(async () => undefined),
-}))
-
-vi.mock('@/lib/edit-bible', () => ({
-  approveEpisodePromptGeneratedScript: vi.fn(async () => undefined),
-  confirmEpisodeEditBible: vi.fn(async () => ({ id: 'bible-1' })),
-}))
-
-const approveProjectEpisodeEditScriptAssetsMock = vi.mocked(approveProjectEpisodeEditScriptAssets)
-const approveEpisodePromptGeneratedScriptMock = vi.mocked(approveEpisodePromptGeneratedScript)
-const confirmEpisodeEditBibleMock = vi.mocked(confirmEpisodeEditBible)
+import { describe, expect, it } from 'vitest'
+import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 
 function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstChoiceResult>): {
   callId: string
@@ -54,14 +21,6 @@ function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstC
 }
 
 describe('buildEditFirstChoiceResult', () => {
-  beforeEach(() => {
-    approveProjectEpisodeEditScriptAssetsMock.mockClear()
-    approveEpisodePromptGeneratedScriptMock.mockClear()
-    confirmEpisodeEditBibleMock.mockClear()
-    prismaMock.project.updateMany.mockClear()
-    prismaMock.project.updateMany.mockResolvedValue({ count: 1 })
-  })
-
   it('serializes script intake answers as a normalized brief without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'script_intake',
@@ -109,6 +68,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'bible_review', decision: 'approve' })
     expect(parsed.decision).toBe('approve')
     expect(parsed.aspectRatio).toBe('16:9')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -127,6 +87,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'bible_review', decision: 'revise' })
     expect(parsed.nextOperationId).toBeUndefined()
     expect(parsed.revisionNotes).toBe('更克苏鲁一些')
   })
@@ -143,6 +104,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { name, parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'script_review', decision: 'approve' })
     expect(name).toBe('request_edit_script_review_choice')
     expect(parsed.decision).toBe('approve')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -161,6 +123,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'script_review', decision: 'revise' })
     expect(parsed.decision).toBe('revise')
     expect(parsed.revisionNotes).toBe('结尾更冷峻，不要解释因果悖论')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -196,6 +159,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'asset_review', decision: 'approve' })
     expect(parsed.decision).toBe('approve')
     expect(parsed.nextOperationId).toBeUndefined()
   })
@@ -213,75 +177,10 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'asset_review', decision: 'revise' })
     expect(parsed.decision).toBe('revise')
     expect(parsed.revisionNotes).toBe('把祠堂场景调得更旧，空间关系更压迫')
     expect(parsed.nextOperationId).toBeUndefined()
-  })
-
-  it('persists approved bible review without submitting billable visual-style tasks', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'bible_review',
-      output: {
-        ok: true,
-        decision: 'approve',
-        selections: {
-          aspectRatio: '21:9',
-        },
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(prismaMock.project.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'project-1',
-        userId: 'user-1',
-      },
-      data: {
-        videoRatio: '21:9',
-      },
-    })
-    expect(confirmEpisodeEditBibleMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-  })
-
-  it('persists approved script review as an explicit script approval edge', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'script_review',
-      output: {
-        ok: true,
-        decision: 'approve',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(approveEpisodePromptGeneratedScriptMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-  })
-
-  it('does not approve script review when the user requests revision', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'script_review',
-      output: {
-        ok: true,
-        decision: 'revise',
-        revisionNotes: '换一个结局',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(approveEpisodePromptGeneratedScriptMock).not.toHaveBeenCalled()
   })
 
   it('rejects bible approval without a selected aspect ratio', () => {
@@ -294,22 +193,6 @@ describe('buildEditFirstChoiceResult', () => {
         decision: 'approve',
       },
     })).toBeNull()
-  })
-
-  it('does not confirm bible review when approval is missing the selected aspect ratio', async () => {
-    await expect(applyEditFirstChoiceResultSideEffects({
-      choiceType: 'bible_review',
-      output: {
-        ok: true,
-        decision: 'approve',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })).rejects.toThrow('PROJECT_AGENT_BIBLE_REVIEW_ASPECT_RATIO_REQUIRED')
-
-    expect(prismaMock.project.updateMany).not.toHaveBeenCalled()
-    expect(confirmEpisodeEditBibleMock).not.toHaveBeenCalled()
   })
 
   it('rejects a bible review without a decision', () => {
@@ -347,52 +230,4 @@ describe('buildEditFirstChoiceResult', () => {
     })).toBeNull()
   })
 
-  it('persists approved asset review as the user decision without selecting the next operation', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'asset_review',
-      output: {
-        ok: true,
-        decision: 'approve',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(approveProjectEpisodeEditScriptAssetsMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-  })
-
-  it('does not persist asset review when the user has not approved assets', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'asset_review',
-      output: {
-        ok: true,
-        decision: 'revise',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(approveProjectEpisodeEditScriptAssetsMock).not.toHaveBeenCalled()
-  })
-
-  it('does not persist asset review from a failed choice result', async () => {
-    await applyEditFirstChoiceResultSideEffects({
-      choiceType: 'asset_review',
-      output: {
-        ok: false,
-        decision: 'approve',
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-
-    expect(approveProjectEpisodeEditScriptAssetsMock).not.toHaveBeenCalled()
-  })
 })

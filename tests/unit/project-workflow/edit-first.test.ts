@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  resolveEditFirstWorkflowCapabilityOperationIds,
-  resolveEditFirstWorkflowStateFromSnapshot,
+import {  resolveEditFirstWorkflowStateFromSnapshot,
   type EditFirstWorkflowSnapshot,
 } from '@/lib/project-workflow/edit-first'
 
@@ -67,9 +65,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_ingest_script')
     expect(state.nextAction?.operationId).toBe('ingest_script')
-    expect(state.nextAction?.approvalKind).toBe('none')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['ingest_script'])
+    expect(state.allowedOperationIds).toEqual(['ingest_script'])
   })
 
   it('separates prompt script expansion from episode plan generation', () => {
@@ -81,7 +77,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('script_generating')
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('does not expose script ingestion after a confirmed script bible generation fails', () => {
@@ -93,7 +89,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('failed')
     expect(state.nextAction).toBeNull()
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('keeps planned visual style rows in the pre-submission stage until a task is active', () => {
@@ -126,8 +122,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('script_ready_for_review')
     expect(state.blocking.kind).toBe('needs_user_choice')
-    expect(state.allowedOperationIds).toEqual(['revise_script'])
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['revise_script'])
+    expect(state.allowedOperationIds).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('generates the episode plan only after the generated script is approved', () => {
@@ -139,8 +135,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_bible')
     expect(state.nextAction?.operationId).toBe('generate_bible_from_script')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_bible_from_script'])
+    expect(state.allowedOperationIds).toEqual(['generate_bible_from_script'])
   })
 
   it('goes from confirmed style bible to chapter planning', () => {
@@ -154,7 +149,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('ready_to_generate_edit_script')
     expect(state.nextAction?.operationId).toBe('plan_chapters')
     expect(state.allowedOperationIds).toEqual(['plan_chapters'])
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['plan_chapters'])
+    expect(state.allowedOperationIds).toEqual(['plan_chapters'])
   })
 
   it('treats submitted chapter planning tasks as an active edit-script generation edge', () => {
@@ -168,7 +163,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('edit_script_generating')
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('recovers missing chapter planning when no planning task is active', () => {
@@ -184,7 +179,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_edit_script')
     expect(state.nextAction?.operationId).toBe('plan_chapters')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['plan_chapters'])
+    expect(state.allowedOperationIds).toEqual(['plan_chapters'])
   })
 
   it('keeps chapter planning blocked while a missing chapter task is active', () => {
@@ -199,7 +194,7 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.stage).toBe('edit_script_generating')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('allows batch repair and explicit chapter repair after edit-script generation failure', () => {
@@ -214,7 +209,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('failed')
     expect(state.nextAction?.operationId).toBe('replan_chapter')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['replan_chapter', 'plan_chapters'])
+    expect(state.allowedOperationIds).toEqual(['replan_chapter', 'plan_chapters'])
   })
 
   it('waits for required assets and spatial profiles before shot execution planning', () => {
@@ -253,7 +248,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('assets_ready_for_review')
     expect(state.blocking.kind).toBe('needs_user_choice')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['revise_edit_script_assets'])
+    expect(state.allowedOperationIds).toEqual(['revise_edit_script_assets'])
   })
 
   it('generates shot execution plan after core plan, assets, and spatial profiles are ready', () => {
@@ -273,8 +268,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_shot_execution_plan')
     expect(state.nextAction?.operationId).toBe('generate_edit_shot_execution_plan')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_shot_execution_plan'])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_shot_execution_plan'])
   })
 
   it('recovers missing shot execution plans when no shot-plan task is active', () => {
@@ -292,7 +286,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_shot_execution_plan')
     expect(state.nextAction?.operationId).toBe('generate_edit_shot_execution_plan')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_shot_execution_plan'])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_shot_execution_plan'])
   })
 
   it('keeps shot execution planning blocked while a shot-plan task is active', () => {
@@ -310,7 +304,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_shot_execution_plan')
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('generates storyboard panels after shot execution plan is ready', () => {
@@ -328,7 +322,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_script_storyboard'])
   })
 
   it('does not advance to video generation when some chapters have no storyboard', () => {
@@ -354,7 +348,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_edit_script_storyboard'])
+    expect(state.allowedOperationIds).toEqual(['generate_edit_script_storyboard'])
   })
 
   it('fails explicitly when generated storyboard panels are missing deterministic prompts', () => {
@@ -398,8 +392,6 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard_images')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_images')
-    expect(state.nextAction?.approvalKind).toBe('billable_media')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
   })
 
   it('fails explicitly when generated storyboard panels are missing video prompts', () => {
@@ -446,7 +438,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('generate_episode_videos')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
+    expect(state.allowedOperationIds).toEqual(['generate_episode_videos'])
   })
 
   it('does not expose BGM while video segments are generating because chapter renders are not ready', () => {
@@ -470,7 +462,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('videos_generating')
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('does not allow final render until every video segment has output even when BGM is ready', () => {
@@ -495,7 +487,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('generate_episode_videos')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_videos'])
+    expect(state.allowedOperationIds).toEqual(['generate_episode_videos'])
   })
 
   it('renders chapters after all video segments are ready', () => {
@@ -520,7 +512,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_render_chapters')
     expect(state.nextAction?.operationId).toBe('render_chapters')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_chapters'])
+    expect(state.allowedOperationIds).toEqual(['render_chapters'])
   })
 
   it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {
@@ -546,7 +538,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_videos')
     expect(state.nextAction?.operationId).toBe('render_chapters')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+    expect(state.allowedOperationIds).toEqual([
       'render_chapters',
       'generate_episode_videos',
     ])
@@ -574,9 +566,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_audio_layers')
     expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(state.nextAction?.approvalKind).toBe('billable_media')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
+    expect(state.allowedOperationIds).toEqual([
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
     ])
@@ -607,7 +597,7 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('bgm_score_generating')
     expect(state.nextAction).toBeNull()
     expect(state.blocking.kind).toBe('processing')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['plan_episode_soundscape'])
+    expect(state.allowedOperationIds).toEqual(['plan_episode_soundscape'])
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {
@@ -633,7 +623,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('failed')
     expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['generate_episode_bgm_score'])
+    expect(state.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
   })
 
   it('allows final render after videos, chapters, and required BGM are ready', () => {
@@ -662,9 +652,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_render_final')
     expect(state.nextAction?.operationId).toBe('render_final_video')
-    expect(state.nextAction?.approvalKind).toBe('none')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_final_video'])
+    expect(state.allowedOperationIds).toEqual(['render_final_video'])
   })
 
   it('tracks final render processing before completion', () => {
@@ -716,6 +704,6 @@ describe('edit-first workflow state', () => {
     }))
 
     expect(state.stage).toBe('completed')
-    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+    expect(state.allowedOperationIds).toEqual([])
   })
 })

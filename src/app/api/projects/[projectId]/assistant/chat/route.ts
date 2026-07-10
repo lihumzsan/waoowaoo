@@ -30,10 +30,7 @@ import {
   appendProjectAgentEvents,
   getCurrentProjectAgentActivity,
 } from '@/lib/project-agent/event'
-import {
-  applyEditFirstChoiceResultSideEffects,
-  buildEditFirstChoiceResult,
-} from '@/lib/project-agent/edit-first-choice-result'
+import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
@@ -46,6 +43,7 @@ import {
   supersedePendingRunsInScope,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
+import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 
 type RequestBody = {
   message?: unknown
@@ -321,6 +319,7 @@ async function resolveProjectAgentControl(params: {
       await appendProjectAgentEvents({
         scope,
         events: [{
+          runFence: createProjectAgentRunFence(params.run),
           idempotencyKey: `activity-completed:${choiceActivity.activityId}:choice-response`,
           event: {
             kind: 'activity.completed',
@@ -331,13 +330,6 @@ async function resolveProjectAgentControl(params: {
       })
     }
     try {
-      await applyEditFirstChoiceResultSideEffects({
-        choiceType: controlAction.choiceType,
-        output: controlAction.output,
-        projectId: scope.projectId,
-        userId: scope.userId,
-        episodeId: scope.episodeId ?? null,
-      })
       const choiceResult = buildEditFirstChoiceResult({
         choiceType: controlAction.choiceType,
         toolCallId: controlAction.toolCallId,
@@ -424,7 +416,7 @@ async function resolveProjectAgentRunForRequest(params: {
 
 async function transitionConsumedControlToRunning(params: {
   controlAction: ProjectAgentControlAction
-  runId: string
+  run: ProjectAgentRunRecord
 }): Promise<void> {
   if (params.controlAction.type === 'task_follow_up') {
     // Wait consumption starts the follow-up activity and transitions the run in
@@ -440,7 +432,7 @@ async function transitionConsumedControlToRunning(params: {
     return
   }
   await updateProjectAgentRunStatus({
-    runId: params.runId,
+    runFence: createProjectAgentRunFence(params.run),
     status: 'running',
     expectedStatuses: ['awaiting_choice'],
     stopReason: params.controlAction.type,
@@ -565,8 +557,11 @@ export const POST = apiHandler(async (
       if (controlAction) {
         await transitionConsumedControlToRunning({
           controlAction,
-          runId: run.id,
+          run,
         })
+        const refreshedRun = await getProjectAgentRun({ ...scope, runId: run.id })
+        if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
+        run = refreshedRun
       }
       controlTransitioned = true
       return await createProjectAgentChatResponse({
@@ -583,7 +578,7 @@ export const POST = apiHandler(async (
     } catch (error) {
       if (run && controlTransitioned) {
         await safelyUpdateProjectAgentRunStatus({
-          runId: run.id,
+          runFence: createProjectAgentRunFence(run),
           status: 'failed',
           expectedStatuses: ['running'],
           stopReason: 'control_resolution_failed',

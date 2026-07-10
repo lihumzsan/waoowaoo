@@ -19,6 +19,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
 - **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
 - **CN-08 — 原子终态资源交接。** Canvas Task 完成前必须从已持久化数据读取画布实际消费的 Query DTO，并随 completed SSE 发送 `materializedResources`。客户端必须先同步写 Query Cache，再写 Task 终态，最后清除 structured runtime；`affectedResources` 只负责后续一致性校验。必需信封缺失必须显式呈现 `CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING`，禁止 timer 或 refetch fallback。
+- **CN-08A — 资源版本单调。** `editBible` 只接受服务端 revision，`episodeData` 只接受规范 UTC `updatedAt`；版本类型、DTO 内嵌版本提取与比较由 `materialized-resource-version.ts` 唯一声明。`{ editBible: null, chapters: [] }` 是显式“尚未创建”的 revision 0 快照，不是缺失版本。终态 envelope 的版本必须与 DTO 内版本相等，Query Cache 仅在 incoming 严格更新时替换；相同版本幂等忽略，旧版本显式记为 stale，其他缺失、格式错误或不可比较版本原地失败。taskId、到达顺序和客户端时间均无权充当版本。
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
 
@@ -31,6 +32,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 流式事实收集：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`；该模块无权合并最终节点生命周期。
 - DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
 - 原子终态接力：`src/lib/workspace-resource/materialized-resource.ts` 与 `src/lib/query/materialized-resource-cache.ts`。
+- 物化资源版本类型与比较器：`src/lib/workspace-resource/materialized-resource-version.ts`。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
@@ -44,7 +46,9 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
 - `tests/unit/optimistic/sse-invalidation.test.ts` 验证 Query Cache materialization 早于 runtime clear。
+- `tests/unit/query/materialized-resource-cache.test.ts` 验证连续、重复、旧版本、跨 Task、refetch/SSE 交错和刷新重建时的单调门禁。
 - `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
+- `scripts/guards/materialized-resource-version-guard.mjs` 阻止无条件 cache replace、字符串猜序和 taskId 版本 fallback 回流。
 - `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。
 
 ## 历史回归

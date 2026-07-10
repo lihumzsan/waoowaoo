@@ -1,9 +1,6 @@
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import {
-  EDIT_FIRST_WORKFLOW_OPERATION_IDS,
-  resolveEditFirstWorkflowCapabilityOperationIds,
-} from '@/lib/project-workflow/edit-first'
+import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first'
 import {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   EDIT_FIRST_CHOICE_TOOL_IDS,
@@ -200,8 +197,5 @@ export function isProjectAgentOperationEnabled(params: {
       operationId: params.operationId,
     })
   }
-  const enabledOperationIds = new Set<string>(resolveEditFirstWorkflowCapabilityOperationIds(params.workflow))
-  const nextActionOperationId = params.workflow.nextAction?.operationId ?? null
-  if (nextActionOperationId) enabledOperationIds.add(nextActionOperationId)
-  return enabledOperationIds.has(params.operationId)
+  return params.workflow.allowedOperationIds.some((operationId) => operationId === params.operationId)
 }

@@ -74,12 +74,14 @@ import {
   updateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
+import { createProjectAgentRunFence } from './run-fence'
 import {
   isProjectAgentOperationAlwaysEnabled,
   isProjectAgentOperationEnabled,
   resolveProjectAgentToolset,
 } from './toolset'
 import {
+  resolveEditFirstWorkflowReviewChoice,
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
 } from '@/lib/project-workflow/edit-first'
@@ -607,6 +609,7 @@ async function maybeCreateProjectAgentWait(params: {
   projectId: string
   userId: string
   episodeId: string | null
+  runFence: ReturnType<typeof createProjectAgentRunFence>
 }): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
@@ -615,6 +618,7 @@ async function maybeCreateProjectAgentWait(params: {
   for (const taskWait of params.stopPart.taskWaits) {
     const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, [taskWait.operationId])
     const waitId = await createProjectAgentWait({
+      runFence: params.runFence,
       runId: params.runId,
       projectId: params.projectId,
       userId: params.userId,
@@ -707,6 +711,7 @@ export async function createProjectAgentChatResponse(input: {
   runLock?: ProjectAgentRunLock | null
 }): Promise<Response> {
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
+  const runFence = createProjectAgentRunFence(input.run)
   const validation = await safeValidateUIMessages({ messages: input.messages })
   if (!validation.success) {
     throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
@@ -726,16 +731,26 @@ export async function createProjectAgentChatResponse(input: {
   const context: ProjectAgentContext = {
     ...contextBase,
     runId: input.run.id,
+    runFence,
     currentActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
     ...(approvedConfirmedMaxCost !== null && control.kind === 'approval'
       ? { confirmedMaxCostByOperationId: { [control.interruption.operationId]: approvedConfirmedMaxCost } }
       : {}),
   }
-  const phase = await resolveProjectPhase({
+  const resolvedPhase = await resolveProjectPhase({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: context.episodeId || null,
   })
+  const phase = control.kind === 'choice' && control.choiceResult.reviewDecision
+    ? {
+        ...resolvedPhase,
+        editFirstWorkflow: resolveEditFirstWorkflowReviewChoice(
+          resolvedPhase.editFirstWorkflow,
+          control.choiceResult.reviewDecision,
+        ),
+      }
+    : resolvedPhase
   const openRouterSessionId = buildAiExecutionSessionId({
     kind: 'project-agent',
     userId: input.userId,
@@ -967,6 +982,7 @@ export async function createProjectAgentChatResponse(input: {
         assistantId: 'workspace-command',
       },
       events: [{
+        runFence,
         idempotencyKey: status === 'completed'
           ? `activity-completed:${control.followUp.followUpActivityId}:runtime`
           : `activity-failed:${control.followUp.followUpActivityId}:runtime`,
@@ -999,6 +1015,7 @@ export async function createProjectAgentChatResponse(input: {
       projectId: input.projectId,
       userId: input.userId,
       context,
+      runFence,
       assistantPermissionMode: input.assistantPermissionMode,
       writer: {
         write: (chunk) => {
@@ -1218,6 +1235,7 @@ export async function createProjectAgentChatResponse(input: {
             approvalPreflightStore,
           })
           const interruptionId = await createProjectAgentApprovalInterruption({
+            runFence,
             runId: input.run.id,
             projectId: input.projectId,
             userId: input.userId,
@@ -1249,11 +1267,6 @@ export async function createProjectAgentChatResponse(input: {
             },
             operationPlan,
           } satisfies ProjectAgentInterruptionPartData))
-          await updateProjectAgentRunStatus({
-            runId: input.run.id,
-            status: 'awaiting_approval',
-            stopReason: 'awaiting_approval',
-          })
           chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
           runStatusFinalized = true
         }
@@ -1265,6 +1278,7 @@ export async function createProjectAgentChatResponse(input: {
         let waitFollowUpMode: ProjectAgentWaitFollowUpMode | null = null
         try {
           waitFollowUpMode = await maybeCreateProjectAgentWait({
+            runFence,
             stopPart: latestStopPart,
             registry: operations,
             runId: input.run.id,
@@ -1276,7 +1290,7 @@ export async function createProjectAgentChatResponse(input: {
           const errorMessage = error instanceof Error ? error.message : String(error)
           chunks.push(...await settleTaskFollowUpActivity('failed', error))
           await updateProjectAgentRunStatus({
-            runId: input.run.id,
+            runFence,
             status: 'failed',
             stopReason: 'wait_binding_failed',
             errorCode: 'PROJECT_AGENT_WAIT_BINDING_FAILED',
@@ -1293,7 +1307,7 @@ export async function createProjectAgentChatResponse(input: {
         if (completionError && !shouldPersistApprovalInterruption) {
           chunks.push(...await settleTaskFollowUpActivity('failed', completionError))
           await updateProjectAgentRunStatus({
-            runId: input.run.id,
+            runFence,
             status: 'failed',
             stopReason: 'completion_error',
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
@@ -1311,7 +1325,7 @@ export async function createProjectAgentChatResponse(input: {
         ) {
           const errorMessage = `Choice response did not execute required workflow continuation: ${requiredChoiceContinuationOperationId}`
           await updateProjectAgentRunStatus({
-            runId: input.run.id,
+            runFence,
             status: 'failed',
             stopReason: 'choice_continuation_missing',
             errorCode: 'PROJECT_AGENT_CHOICE_CONTINUATION_MISSING',
@@ -1324,24 +1338,14 @@ export async function createProjectAgentChatResponse(input: {
         if (!shouldPersistApprovalInterruption) {
           chunks.push(...await settleTaskFollowUpActivity('completed'))
           if (latestStopPart?.reason === 'awaiting_external_task') {
-            await updateProjectAgentRunStatus({
-              runId: input.run.id,
-              status: 'awaiting_task',
-              stopReason: waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task',
-            })
             chunks.push(createRuntimeStatusChunk('awaiting_task', waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task'))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
-            await updateProjectAgentRunStatus({
-              runId: input.run.id,
-              status: 'awaiting_choice',
-              stopReason: 'awaiting_user_choice',
-            })
             chunks.push(createRuntimeStatusChunk('awaiting_choice', 'awaiting_user_choice'))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             await updateProjectAgentRunStatus({
-              runId: input.run.id,
+              runFence,
               status: 'failed',
               stopReason: 'tool_error',
               errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
@@ -1351,7 +1355,7 @@ export async function createProjectAgentChatResponse(input: {
             runStatusFinalized = true
           } else {
             await updateProjectAgentRunStatus({
-              runId: input.run.id,
+              runFence,
               status: 'completed',
               stopReason: 'completed',
             })
@@ -1393,7 +1397,7 @@ export async function createProjectAgentChatResponse(input: {
           errorMessage,
         })
         await updateProjectAgentRunStatus({
-          runId: input.run.id,
+          runFence,
           ...failureTerminal,
         })
         recordAssistantChunk(createRuntimeStatusChunk(
@@ -1405,7 +1409,7 @@ export async function createProjectAgentChatResponse(input: {
       },
       onCancel: async () => {
         await cancelRunningProjectAgentRun({
-          runId: input.run.id,
+          runFence,
           stopReason: 'stream_cancelled',
         })
         recordAssistantChunk(createRuntimeStatusChunk('cancelled', 'stream_cancelled'))
@@ -1431,7 +1435,7 @@ export async function createProjectAgentChatResponse(input: {
       } else {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
         await updateProjectAgentRunStatus({
-          runId: input.run.id,
+          runFence,
           ...resolveProjectAgentRunFailureTerminal({
             ownershipLoss,
             stopReason: 'run_failed',

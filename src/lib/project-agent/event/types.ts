@@ -3,6 +3,7 @@ import type { EditFirstChoiceType } from '../edit-first-choice-tools'
 import type { ProjectAgentRunControlKind, ProjectAgentRunStatus } from '../runs'
 import type { ProjectAgentWaitFollowUpMode, ProjectAgentWaitTerminalStatus } from '../waits'
 import type { ProjectAssistantId } from '../types'
+import type { ProjectAgentRunFence } from '../run-fence'
 
 export type ProjectAgentActivityType =
   | 'operation'
@@ -106,7 +107,7 @@ export type ProjectAgentEventPayload =
   }
   | {
     kind: 'task.progressed'
-    runId: string | null
+    runId: string
     activityId: string
     waitId: string
     terminalTaskIds: string[]
@@ -114,7 +115,7 @@ export type ProjectAgentEventPayload =
   }
   | {
     kind: 'task.terminal'
-    runId: string | null
+    runId: string
     activityId: string
     waitId: string
     terminalStatus: ProjectAgentWaitTerminalStatus
@@ -160,7 +161,13 @@ export type ProjectAgentEventPayload =
 
 export interface ProjectAgentEventInput {
   event: ProjectAgentEventPayload
+  runFence: ProjectAgentRunFence
   idempotencyKey?: string | null
+}
+
+export type ProjectAgentPersistedEventPayload = ProjectAgentEventPayload & {
+  expectedRunVersion: number
+  expectedEventSeq: string
 }
 
 export interface ProjectAgentActivitySnapshot {

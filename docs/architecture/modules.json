@@ -45,6 +45,7 @@
       "sourcePaths": [
         "src/features/project-workspace/canvas",
         "src/lib/workspace-resource/materialized-resource.ts",
+        "src/lib/workspace-resource/materialized-resource-version.ts",
         "src/lib/query/materialized-resource-cache.ts",
         "src/lib/edit-bible/source-script-segments.ts",
         "src/lib/ai-prompts/templates/edit-bible/outline-script"
@@ -59,12 +60,14 @@
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts",
+        "tests/unit/query/materialized-resource-cache.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-history-state-inference.mjs",
         "scripts/guards/no-server-mirror-state.mjs",
-        "scripts/guards/canvas-node-lifecycle-contract-guard.mjs"
+        "scripts/guards/canvas-node-lifecycle-contract-guard.mjs",
+        "scripts/guards/materialized-resource-version-guard.mjs"
       ]
     },
     {
@@ -76,6 +79,7 @@
         "src/lib/workers",
         "src/instrumentation.ts",
         "src/lib/workspace-resource/materialized-resource.ts",
+        "src/lib/workspace-resource/materialized-resource-version.ts",
         "src/lib/query/materialized-resource-cache.ts",
         "src/lib/edit-bible/task-submission.ts",
         "src/lib/edit-script/task-submission.ts",
@@ -91,6 +95,7 @@
         "tests/unit/task/job-envelope.test.ts",
         "tests/unit/task/reconcile-queue-lifecycle.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts",
+        "tests/unit/query/materialized-resource-cache.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts"
       ],
@@ -100,7 +105,8 @@
         "scripts/guards/no-project-agent-direct-task-submit.mjs",
         "scripts/guards/task-target-states-no-polling-guard.mjs",
         "scripts/guards/single-task-reconciler-guard.mjs",
-        "scripts/guards/no-worker-attempt-target-terminal-write.mjs"
+        "scripts/guards/no-worker-attempt-target-terminal-write.mjs",
+        "scripts/guards/materialized-resource-version-guard.mjs"
       ]
     },
     {

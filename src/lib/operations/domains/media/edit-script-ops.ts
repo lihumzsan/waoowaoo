@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
+import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import {
   submitProjectEditShotExecutionPlanBatchTasks,
   submitProjectEditScriptGenerationTask,
@@ -57,7 +58,6 @@ import {
   resolveConfirmedMaxCostForExecution,
   type OperationPlan,
 } from '@/lib/operations/planning'
-import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 import {
   planProjectEditStylePreviews,
   readEditStylePreviewPlanMetadata,
@@ -297,6 +297,11 @@ const editScriptAssetRevisionOutputSchema = z.object({
   editScript: editScriptSummaryOutputSchema,
 }).passthrough()
 
+const editScriptAssetApprovalOutputSchema = z.object({
+  approvedCount: z.number().int().min(1),
+  scripts: z.array(z.unknown()).min(1),
+})
+
 const planChaptersOutputSchema = z.object({
   success: z.literal(true),
   async: z.literal(true),
@@ -491,6 +496,10 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
             toolCallId,
           })
       const interruptionId = await createProjectAgentChoiceInterruption({
+        runFence: (() => {
+          if (!ctx.context.runFence) throw new Error('PROJECT_AGENT_RUN_FENCE_REQUIRED')
+          return ctx.context.runFence
+        })(),
         runId,
         projectId: ctx.projectId,
         userId: ctx.userId,
@@ -590,7 +599,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_edit_style_previews'),
+        kind: 'billable_media',
         required: true,
         summary: '将生成视觉风格候选图片并产生媒体费用。批准后执行当前已确定的生成调用。',
       },
@@ -667,7 +676,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_edit_script'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
@@ -712,7 +721,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('replan_chapter'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA,
@@ -770,7 +779,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('plan_chapters'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
@@ -858,7 +867,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_edit_script_assets'),
+        kind: 'billable_media',
         required: true,
         summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -909,6 +918,28 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         return output
       },
     }),
+    approve_edit_script_assets: defineOperation({
+      id: 'approve_edit_script_assets',
+      summary: 'Record the user approval of all ready required edit-first assets so shot execution planning can proceed.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BULK_WRITE,
+      confirmation: {
+        kind: 'none',
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: requestEditChoiceInputSchema,
+      outputSchema: editScriptAssetApprovalOutputSchema,
+      execute: async (ctx, input) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        return editScriptAssetApprovalOutputSchema.parse(await approveProjectEpisodeEditScriptAssets({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+        }))
+      },
+    }),
     revise_edit_script_assets: defineOperation({
       id: 'revise_edit_script_assets',
       summary: 'Revise ready required character/location asset images from user asset review notes and submit async modification tasks.',
@@ -916,7 +947,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('revise_edit_script_assets'),
+        kind: 'billable_media',
         required: true,
         summary: '将根据用户审核意见返工所需资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -966,7 +997,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_edit_shot_execution_plan'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
@@ -1042,7 +1073,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_edit_script_storyboard'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,

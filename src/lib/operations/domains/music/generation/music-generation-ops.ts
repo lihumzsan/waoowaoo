@@ -8,7 +8,6 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft }
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
-import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 import { ApiError } from '@/lib/api-errors'
 import { isCloudDeployment, isPlatformProviderCredentialMode } from '@/lib/deployment/config'
 import { getProjectModelConfig } from '@/lib/config-service'
@@ -676,7 +675,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_episode_bgm_score'),
+        kind: 'billable_media',
         required: true,
         summary: '将按当前集的声场计划提交付费环境音生成任务。',
       },
@@ -709,7 +708,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('plan_episode_soundscape'),
+        kind: 'none',
         required: false,
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
@@ -737,7 +736,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
-        kind: getEditFirstOperationApprovalKind('generate_episode_soundscape'),
+        kind: 'billable_media',
         required: true,
         summary: '将按当前集的声场计划提交付费环境音生成任务。',
       },

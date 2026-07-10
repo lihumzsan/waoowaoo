@@ -1,5 +1,5 @@
 import type { ProjectAgentLocale } from './locale'
-import type { EditFirstWorkflowOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
+import type { EditFirstWorkflowOperationId } from '@/lib/project-workflow/edit-first-operation-ids'
 
 type ProjectAgentOperationTitleCopy = {
   zh: string
@@ -71,6 +71,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '接收本集的完整剧本，或问诊后已经整理充分的创作简报。用户贴完整可拍剧本时，sourceKind=paste，任务会生成制作规划；问诊后的 normalizedBrief 使用 sourceKind=prompt_generated_outline，任务只扩写出完整剧本并等待用户确认。凡是缺少剧本基本条件的短创意、标题、主题方向或一句话梗概，都必须先用 request_script_intake_choice 做问诊，不要直接扩写。',
     en: 'Take this episode\'s complete script, or a post-intake brief that is detailed enough. When the user pasted a complete filmable script, set sourceKind=paste and the task generates the production plan. For a post-intake normalizedBrief, set sourceKind=prompt_generated_outline; the task only expands a full script and then waits for user script confirmation. Any short idea, title, theme direction, or one-line logline that lacks basic script conditions must run request_script_intake_choice first instead of expanding directly.',
   },
+  approve_script: {
+    zh: '确认剧本',
+    en: 'Approve script',
+  },
   revise_script: {
     zh: '根据用户在剧本确认卡片中的修改意见，基于当前生成出的完整剧本重新创作一版完整源剧本。只在 script_review 的用户选择返回 decision=revise 时调用。',
     en: 'Revise the current generated full source script using the user\'s notes from the script confirmation card. Call this only after a script_review choice result returns decision=revise.',
@@ -78,6 +82,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
   generate_bible_from_script: {
     zh: '在用户已经确认生成剧本后，从这份剧本生成制作规划、节拍表、事件台账、情绪曲线和章节切分。不要在 request_edit_script_review_choice 之前调用。',
     en: 'After the user has approved the generated script, generate the production plan, beat sheet, event ledger, emotional curve, and chapter split from that script. Do not call it before request_edit_script_review_choice.',
+  },
+  confirm_bible: {
+    zh: '确认制作规划',
+    en: 'Confirm production plan',
   },
   revise_bible: {
     zh: '根据用户在制作规划确认中的修改意见，修改当前的制作规划、节拍表、台账或情绪曲线。当用户对制作规划提出了具体改动、需要覆盖现有规划时用它。',
@@ -90,6 +98,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
   generate_edit_script_assets: {
     zh: '为当前剧本创建或复用所需的角色与场景资产，并为还缺图片的资产提交生成任务。需要处理哪些资产由系统自动确定，你不用先去查、也不用自己指定。',
     en: 'Create or reuse the character and location assets the current script needs, and submit generation tasks for assets that still lack images. The system decides which assets to handle — you do not need to look them up first or specify them yourself.',
+  },
+  approve_edit_script_assets: {
+    zh: '确认所需资产',
+    en: 'Approve required assets',
   },
   revise_edit_script_assets: {
     zh: '当资产审核没通过时，根据用户的修改意见返工当前所需的资产图片。要返工哪些资产由系统按当前审核范围确定。任务真正提交成功（工具返回）之前，不要对用户说已经重新提交。',
@@ -165,6 +177,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '创作剧本',
     en: 'Create script',
   },
+  approve_script: {
+    zh: '确认剧本',
+    en: 'Approve script',
+  },
   revise_script: {
     zh: '修改剧本',
     en: 'Revise script',
@@ -172,6 +188,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
   generate_bible_from_script: {
     zh: '生成制作规划',
     en: 'Generate production plan',
+  },
+  confirm_bible: {
+    zh: '确认制作规划',
+    en: 'Confirm production plan',
   },
   revise_bible: {
     zh: '修改制作规划',
@@ -196,6 +216,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
   generate_edit_script_assets: {
     zh: '生成所需资产',
     en: 'Generate required assets',
+  },
+  approve_edit_script_assets: {
+    zh: '确认所需资产',
+    en: 'Approve required assets',
   },
   revise_edit_script_assets: {
     zh: '返工所需资产',
