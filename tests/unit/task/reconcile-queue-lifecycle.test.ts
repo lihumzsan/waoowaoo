@@ -33,6 +33,14 @@ const publisherMock = vi.hoisted(() => ({
 const targetFailureMock = vi.hoisted(() => ({
   syncTaskTargetFailure: vi.fn(),
 }))
+const terminalMock = vi.hoisted(() => ({
+  commitTaskTerminal: vi.fn(async () => ({
+    applied: true as const,
+    status: 'failed' as const,
+    terminalEventId: 1,
+    outboxCommandIds: [],
+  })),
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/queues', () => ({
@@ -42,6 +50,7 @@ vi.mock('@/lib/task/queues', () => ({
 vi.mock('@/lib/task/service', () => serviceMock)
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/task/target-failure-sync', () => targetFailureMock)
+vi.mock('@/lib/task/terminal', () => terminalMock)
 
 import { reconcileActiveTasks, runTaskReconciliationCycle } from '@/lib/task/reconcile'
 
@@ -129,13 +138,12 @@ describe('task reconcile queue lifecycle', () => {
     const result = await reconcileActiveTasks()
 
     expect(result.failedTaskIds).toEqual(['task-1'])
-    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        status: TASK_STATUS.FAILED,
-        errorMessage: 'Queue job failed before Task terminal update: provider request exhausted',
-      }),
-    }))
-    expect(targetFailureMock.syncTaskTargetFailure).toHaveBeenCalledWith(expect.objectContaining({
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'failed',
+      taskId: 'task-1',
+      fence: { kind: 'snapshot', updatedAt: new Date('2026-01-01T00:00:00.000Z') },
+      source: 'reconciler',
+      errorCode: 'RECONCILE_ORPHAN',
       errorMessage: 'Queue job failed before Task terminal update: provider request exhausted',
     }))
   })
@@ -151,10 +159,11 @@ describe('task reconcile queue lifecycle', () => {
       unavailableTaskIds: [],
     })
     expect(queuesMock.addTaskJob).not.toHaveBeenCalled()
-    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        errorMessage: 'Queued task recovery contract invalid: task locale is missing',
-      }),
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'failed',
+      taskId: 'task-1',
+      source: 'reconciler',
+      errorMessage: 'Queued task recovery contract invalid: task locale is missing',
     }))
   })
 

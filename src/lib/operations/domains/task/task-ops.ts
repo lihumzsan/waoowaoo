@@ -2,9 +2,9 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeTaskError } from '@/lib/errors/normalize'
 import { removeTaskJob } from '@/lib/task/queues'
-import { listTaskLifecycleEvents, publishTaskEvent } from '@/lib/task/publisher'
+import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { cancelTask, dismissFailedTasks, getTaskById, queryTasks } from '@/lib/task/service'
-import { TASK_EVENT_TYPE, type TaskStatus } from '@/lib/task/types'
+import type { TaskStatus } from '@/lib/task/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -193,24 +193,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
 
         if (cancelled) {
           await removeTaskJob(input.taskId).catch(() => false)
-          await publishTaskEvent({
-            taskId: updatedTask.id,
-            projectId: updatedTask.projectId,
-            userId: updatedTask.userId,
-            type: TASK_EVENT_TYPE.FAILED,
-            taskType: updatedTask.type,
-            targetType: updatedTask.targetType,
-            targetId: updatedTask.targetId,
-            episodeId: updatedTask.episodeId || null,
-            payload: {
-              ...toObject(updatedTask.payload),
-              stage: 'cancelled',
-              stageLabel: '任务已取消',
-              cancelled: true,
-              message: updatedTask.errorMessage || 'Task cancelled by user',
-            },
-            persist: false,
-          })
         }
 
         return {

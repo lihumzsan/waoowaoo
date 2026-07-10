@@ -14,9 +14,11 @@ describe('project agent waits', () => {
       taskIds: ['task-1', 'task-2'],
       terminalTaskIds: [],
       failedTaskIds: [],
+      canceledTaskIds: [],
     })).toEqual({
       terminalTaskIds: ['task-1'],
       failedTaskIds: [],
+      canceledTaskIds: [],
       terminalStatus: null,
     })
   })
@@ -28,9 +30,11 @@ describe('project agent waits', () => {
       taskIds: ['task-1', 'task-2'],
       terminalTaskIds: ['task-1'],
       failedTaskIds: [],
+      canceledTaskIds: [],
     })).toEqual({
       terminalTaskIds: ['task-1', 'task-2'],
       failedTaskIds: [],
+      canceledTaskIds: [],
       terminalStatus: 'completed',
     })
   })
@@ -42,9 +46,11 @@ describe('project agent waits', () => {
       taskIds: ['task-1', 'task-2'],
       terminalTaskIds: ['task-1'],
       failedTaskIds: [],
+      canceledTaskIds: [],
     })).toEqual({
       terminalTaskIds: ['task-1', 'task-2'],
       failedTaskIds: ['task-2'],
+      canceledTaskIds: [],
       terminalStatus: 'failed',
     })
   })
@@ -59,6 +65,7 @@ describe('project agent waits', () => {
     })).toEqual({
       terminalTaskIds: ['task-1', 'task-2'],
       failedTaskIds: [],
+      canceledTaskIds: [],
       terminalStatus: 'completed',
     })
   })
@@ -73,6 +80,7 @@ describe('project agent waits', () => {
     })).toEqual({
       terminalTaskIds: ['task-1'],
       failedTaskIds: [],
+      canceledTaskIds: [],
       terminalStatus: null,
     })
   })

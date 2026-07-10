@@ -1,11 +1,12 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
-import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
 import { syncTaskTargetFailure } from './target-failure-sync'
 import type { TaskJobObservation } from './reconcile'
+import { commitTaskTerminal, type TaskTerminalCommitResult } from './terminal'
+import { createTaskExecutionFingerprint } from './execution-identity'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const taskModel = prisma.task
@@ -80,115 +81,58 @@ function mergeTaskProgressPayload(currentPayload: unknown, progressPayload: Reco
   return next
 }
 
-function parseTaskBillingInfo(raw: unknown): TaskBillingInfo | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  if (!('billable' in raw)) return null
-  const billable = (raw as { billable?: unknown }).billable
-  if (typeof billable !== 'boolean') return null
-  return raw as TaskBillingInfo
-}
-
-function needsRollback(info: TaskBillingInfo | null): info is Extract<TaskBillingInfo, { billable: true }> {
-  if (!info || !info.billable) return false
-  if (!info.freezeId) return false
-  if (info.modeSnapshot === 'OFF' || info.modeSnapshot === 'SHADOW') return false
-  if (info.status === 'settled' || info.status === 'rolled_back') return false
-  return true
-}
-
-type TaskBillingRollbackResult = {
-  attempted: boolean
-  rolledBack: boolean
-  billingInfo: TaskBillingInfo | null
-}
-
-function resolveCompensationFailure(
-  rollback: TaskBillingRollbackResult,
-  fallbackCode: string,
-  fallbackMessage: string,
-) {
-  if (!rollback.attempted || rollback.rolledBack) {
-    return {
-      errorCode: fallbackCode,
-      errorMessage: fallbackMessage,
-    }
-  }
-  return {
-    errorCode: 'BILLING_COMPENSATION_FAILED',
-    errorMessage: `${fallbackMessage}; billing rollback failed`,
-  }
-}
-
 async function failTaskWithMissingLocale(task: {
   id: string
-  type: string
-  targetType: string
-  targetId: string
-  billingInfo: unknown
+  updatedAt: Date
 }) {
-  const rollbackResult = await rollbackTaskBillingForTask({
+  await commitTaskTerminal({
+    kind: 'failed',
     taskId: task.id,
-    billingInfo: task.billingInfo,
-  })
-  const failure = resolveCompensationFailure(
-    rollbackResult,
-    'TASK_LOCALE_REQUIRED',
-    'task locale is missing',
-  )
-
-  await taskModel.update({
-    where: { id: task.id },
-    data: {
-      status: TASK_STATUS.FAILED,
-      errorCode: failure.errorCode,
-      errorMessage: failure.errorMessage,
-      finishedAt: new Date(),
-      heartbeatAt: null,
-      dedupeKey: null,
-    },
-  })
-  await syncTaskTargetFailure({
-    type: task.type,
-    targetType: task.targetType,
-    targetId: task.targetId,
-    errorCode: failure.errorCode,
-    errorMessage: failure.errorMessage,
+    fence: { kind: 'active' },
+    source: 'validation',
+    errorCode: 'TASK_LOCALE_REQUIRED',
+    errorMessage: 'task locale is missing',
+    eventPayload: { stage: 'validation_failed' },
   })
 }
 
-export async function rollbackTaskBillingForTask(params: {
-  taskId: string
-  billingInfo?: unknown
-}): Promise<TaskBillingRollbackResult> {
-  const current =
-    params.billingInfo === undefined
-      ? await taskModel.findUnique({
-        where: { id: params.taskId },
-        select: { billingInfo: true },
-      })
-      : { billingInfo: params.billingInfo }
+async function failObservedOrphanTask(
+  task: { id: string; updatedAt: Date },
+  message: string,
+): Promise<TaskTerminalCommitResult> {
+  return await commitTaskTerminal({
+    kind: 'failed',
+    taskId: task.id,
+    fence: { kind: 'snapshot', updatedAt: task.updatedAt },
+    source: 'reconciler',
+    errorCode: 'RECONCILE_ORPHAN',
+    errorMessage: message,
+    eventPayload: { stage: 'dedupe_orphan_reconciled' },
+  })
+}
 
-  const billingInfo = parseTaskBillingInfo(current?.billingInfo ?? null)
-  if (!needsRollback(billingInfo)) {
-    return {
-      attempted: false,
-      rolledBack: true,
-      billingInfo,
-    }
+async function resolveObservedOrphanTask(
+  task: { id: string; updatedAt: Date },
+  message: string,
+) {
+  const result = await failObservedOrphanTask(task, message)
+  if (result.applied) return null
+
+  const latest = await taskModel.findUnique({ where: { id: task.id } })
+  if (!latest) return null
+  if (isActiveStatus(latest.status)) {
+    // A heartbeat/re-enqueue won the snapshot race. It remains the authoritative
+    // active Task; a caller must not create another row with the same dedupe key.
+    return latest
   }
 
-  const nextInfo = (await rollbackTaskBilling({
-    id: params.taskId,
-    billingInfo,
-  })) as TaskBillingInfo
-
-  await updateTaskBillingInfo(params.taskId, nextInfo)
-
-  return {
-    attempted: true,
-    rolledBack: nextInfo.billable ? nextInfo.status === 'rolled_back' : true,
-    billingInfo: nextInfo,
+  // A concurrent terminal commit owns the replacement decision and clears the
+  // unique key in the same transaction. Refuse to create until that handoff is
+  // visible instead of treating a P2002 collision as a retry signal.
+  if (latest.dedupeKey !== null) {
+    throw new Error(`TASK_TERMINAL_DEDUPE_NOT_RELEASED:${latest.id}`)
   }
+  return null
 }
 
 export async function createTask(input: CreateTaskInput) {
@@ -223,35 +167,11 @@ export async function createTask(input: CreateTaskInput) {
             return { task: existing, deduped: true as const }
           }
 
-          const rollbackResult = await rollbackTaskBillingForTask({
-            taskId: existing.id,
-            billingInfo: existing.billingInfo,
-          })
-          const failure = resolveCompensationFailure(
-            rollbackResult,
-            'RECONCILE_ORPHAN',
+          const authoritative = await resolveObservedOrphanTask(
+            existing,
             'Queue job lost, replaced by new task',
           )
-
-          // Job 已死（terminal / missing）→ 终止孤儿任务，释放 dedupeKey，继续创建新任务
-          await model.update({
-            where: { id: existing.id },
-            data: {
-              status: TASK_STATUS.FAILED,
-              errorCode: failure.errorCode,
-              errorMessage: failure.errorMessage,
-              finishedAt: new Date(),
-              heartbeatAt: null,
-              dedupeKey: null,
-            },
-          })
-          await syncTaskTargetFailure({
-            type: existing.type,
-            targetType: existing.targetType,
-            targetId: existing.targetId,
-            errorCode: failure.errorCode,
-            errorMessage: failure.errorMessage,
-          })
+          if (authoritative) return { task: authoritative, deduped: true as const }
         }
       } else {
         // dedupeKey is unique in DB. Release terminal-task key so a new task can be created.
@@ -282,6 +202,7 @@ export async function createTask(input: CreateTaskInput) {
     operationConfirmed: input.operationConfirmed ?? null,
     operationRequestId: input.operationRequestId || null,
     payload: toNullableJson(input.payload ?? null),
+    executionFingerprint: createTaskExecutionFingerprint(input),
     billingInfo: toNullableJson(input.billingInfo ?? null),
     queuedAt: new Date(),
   }
@@ -317,34 +238,11 @@ export async function createTask(input: CreateTaskInput) {
               return { task: collided, deduped: true as const }
             }
 
-            const rollbackResult = await rollbackTaskBillingForTask({
-              taskId: collided.id,
-              billingInfo: collided.billingInfo,
-            })
-            const failure = resolveCompensationFailure(
-              rollbackResult,
-              'RECONCILE_ORPHAN',
+            const authoritative = await resolveObservedOrphanTask(
+              collided,
               'Queue job lost, replaced by new task',
             )
-
-            await model.update({
-              where: { id: collided.id },
-              data: {
-                status: TASK_STATUS.FAILED,
-                errorCode: failure.errorCode,
-                errorMessage: failure.errorMessage,
-                finishedAt: new Date(),
-                heartbeatAt: null,
-                dedupeKey: null,
-              },
-            })
-            await syncTaskTargetFailure({
-              type: collided.type,
-              targetType: collided.targetType,
-              targetId: collided.targetId,
-              errorCode: failure.errorCode,
-              errorMessage: failure.errorMessage,
-            })
+            if (authoritative) return { task: authoritative, deduped: true as const }
           }
         } else {
           await model.update({
@@ -546,34 +444,6 @@ export async function tryUpdateTaskProgress(taskId: string, progress: number, pa
   return result.count > 0
 }
 
-export async function tryMarkTaskCompleted(taskId: string, resultPayload?: Record<string, unknown> | null) {
-  const result = await taskModel.updateMany({
-    where: activeTaskWhere(taskId),
-    data: {
-      status: TASK_STATUS.COMPLETED,
-      progress: 100,
-      result: toNullableJson(resultPayload ?? null),
-      finishedAt: new Date(),
-      heartbeatAt: null,
-    },
-  })
-  return result.count > 0
-}
-
-export async function tryMarkTaskFailed(taskId: string, errorCode: string, errorMessage: string) {
-  const result = await taskModel.updateMany({
-    where: activeTaskWhere(taskId),
-    data: {
-      status: TASK_STATUS.FAILED,
-      errorCode: errorCode.slice(0, 80),
-      errorMessage: errorMessage.slice(0, 2000),
-      finishedAt: new Date(),
-      heartbeatAt: null,
-    },
-  })
-  return result.count > 0
-}
-
 export async function tryMarkTaskQueuedForRetry(taskId: string) {
   const result = await taskModel.updateMany({
     where: {
@@ -589,20 +459,6 @@ export async function tryMarkTaskQueuedForRetry(taskId: string) {
   return result.count > 0
 }
 
-export async function tryMarkTaskCanceled(taskId: string, errorCode: string, errorMessage: string) {
-  const result = await taskModel.updateMany({
-    where: activeTaskWhere(taskId),
-    data: {
-      status: TASK_STATUS.CANCELED,
-      errorCode: errorCode.slice(0, 80),
-      errorMessage: errorMessage.slice(0, 2000),
-      finishedAt: new Date(),
-      heartbeatAt: null,
-    },
-  })
-  return result.count > 0
-}
-
 export async function markTaskProcessing(taskId: string, externalId?: string | null) {
   return await tryMarkTaskProcessing(taskId, externalId)
 }
@@ -611,25 +467,12 @@ export async function updateTaskProgress(taskId: string, progress: number, paylo
   return await tryUpdateTaskProgress(taskId, progress, payload)
 }
 
-export async function markTaskCompleted(taskId: string, result?: Record<string, unknown> | null) {
-  return await tryMarkTaskCompleted(taskId, result)
-}
-
-export async function markTaskFailed(taskId: string, errorCode: string, errorMessage: string) {
-  return await tryMarkTaskFailed(taskId, errorCode, errorMessage)
-}
-
-export async function markTaskCanceled(taskId: string, errorCode: string, errorMessage: string) {
-  return await tryMarkTaskCanceled(taskId, errorCode, errorMessage)
-}
-
 export async function cancelTask(taskId: string, reason = 'Task cancelled by user') {
   const snapshot = await taskModel.findUnique({
     where: { id: taskId },
     select: {
       id: true,
       status: true,
-      billingInfo: true,
     },
   })
   if (!snapshot) {
@@ -640,19 +483,17 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
   }
 
   const active = isActiveStatus(snapshot.status)
-  const rollbackResult = active
-    ? await rollbackTaskBillingForTask({
-      taskId: taskId,
-      billingInfo: snapshot.billingInfo,
-    })
-    : {
-      attempted: false,
-      rolledBack: true,
-      billingInfo: parseTaskBillingInfo(snapshot.billingInfo),
-    }
-
-  const failure = resolveCompensationFailure(rollbackResult, 'TASK_CANCELLED', reason)
-  const cancelled = await tryMarkTaskCanceled(taskId, failure.errorCode, failure.errorMessage)
+  const terminal = active
+    ? await commitTaskTerminal({
+        kind: 'canceled',
+        taskId,
+        fence: { kind: 'active' },
+        source: 'user',
+        reason,
+        eventPayload: { stage: 'canceled', canceled: true },
+      })
+    : null
+  const cancelled = terminal?.applied === true
   const task = await taskModel.findUnique({ where: { id: taskId } })
   return {
     task,
@@ -694,6 +535,7 @@ export async function sweepStaleTasks(params: {
       targetType: true,
       targetId: true,
       billingInfo: true,
+      updatedAt: true,
     },
   })
 
@@ -705,41 +547,20 @@ export async function sweepStaleTasks(params: {
     errorMessage: string
   }> = []
   for (const task of staleProcessing) {
-    const rollbackResult = await rollbackTaskBillingForTask({
+    const terminal = await commitTaskTerminal({
+      kind: 'failed',
       taskId: task.id,
-      billingInfo: task.billingInfo,
+      fence: { kind: 'snapshot', updatedAt: task.updatedAt },
+      source: 'timeout',
+      errorCode: 'WATCHDOG_TIMEOUT',
+      errorMessage: 'Task heartbeat timeout',
+      eventPayload: { stage: 'reconciler_timeout' },
     })
-    const failure = resolveCompensationFailure(
-      rollbackResult,
-      'WATCHDOG_TIMEOUT',
-      'Task heartbeat timeout',
-    )
-
-    const updated = await taskModel.updateMany({
-      where: {
-        id: task.id,
-        status: TASK_STATUS.PROCESSING,
-      },
-      data: {
-        status: TASK_STATUS.FAILED,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
-        finishedAt,
-        heartbeatAt: null,
-      },
-    })
-    if (updated.count > 0) {
-      await syncTaskTargetFailure({
-        type: task.type,
-        targetType: task.targetType,
-        targetId: task.targetId,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
-      })
+    if (terminal.applied) {
       timedOut.push({
         ...task,
-        errorCode: failure.errorCode,
-        errorMessage: failure.errorMessage,
+        errorCode: 'WATCHDOG_TIMEOUT',
+        errorMessage: 'Task heartbeat timeout',
       })
     }
   }

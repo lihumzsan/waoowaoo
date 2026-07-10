@@ -546,7 +546,9 @@ model ProjectAgentWait {
   terminalStatus  String?   @db.VarChar(32)
   terminalTaskIds Json?
   failedTaskIds   Json?
+  canceledTaskIds Json?
   followUpKey     String?   @db.VarChar(96)
+  followUpCommandId String? @db.VarChar(191)
   claimId         String?   @db.VarChar(36)
   claimedAt       DateTime?
   claimExpiresAt  DateTime?
@@ -564,6 +566,7 @@ model ProjectAgentWait {
   @@index([projectId, userId, assistantId, scopeRef, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([followUpKey])
+  @@index([followUpCommandId])
   @@index([claimId])
   @@map("project_agent_waits")
 }
@@ -1085,6 +1088,7 @@ model Task {
   operationConfirmed Boolean?
   operationRequestId String?   @db.VarChar(128)
   payload          Json?
+  executionFingerprint String? @db.VarChar(64)
   result           Json?
   errorCode        String?
   errorMessage     String?   @db.Text
@@ -1104,6 +1108,7 @@ model Task {
   parentTask Task?       @relation("TaskChildren", fields: [parentTaskId], references: [id], onDelete: SetNull)
   childTasks Task[]      @relation("TaskChildren")
   events     TaskEvent[]
+  executionCheckpoints TaskExecutionCheckpoint[]
 
   @@index([status])
   @@index([type])
@@ -1118,14 +1123,32 @@ model Task {
   @@map("tasks")
 }
 
+model TaskExecutionCheckpoint {
+  id               String   @id @default(uuid())
+  taskId           String
+  stepKey          String   @db.VarChar(128)
+  inputFingerprint String   @db.VarChar(64)
+  state            String   @db.VarChar(32)
+  output           Json
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  task             Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, stepKey])
+  @@index([taskId, state])
+  @@map("task_execution_checkpoints")
+}
+
 model TaskEvent {
-  id        Int      @id @default(autoincrement())
-  taskId    String
-  projectId String
-  userId    String
-  eventType String
-  payload   Json?
-  createdAt DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  taskId         String
+  projectId      String
+  userId         String
+  eventType      String
+  idempotencyKey String?  @unique @db.VarChar(191)
+  payload        Json?
+  createdAt      DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1134,6 +1157,31 @@ model TaskEvent {
   @@index([taskId])
   @@index([userId])
   @@map("task_events")
+}
+
+model OutboxCommand {
+  id             String    @id @default(uuid())
+  kind           String    @db.VarChar(64)
+  version        Int       @default(1)
+  idempotencyKey String    @unique @db.VarChar(191)
+  aggregateType  String    @db.VarChar(64)
+  aggregateId    String    @db.VarChar(96)
+  payload        Json
+  availableAt    DateTime  @default(now())
+  enqueuedAt     DateTime?
+  acceptedAt     DateTime?
+  deadAt         DateTime?
+  deliveryCount  Int       @default(0)
+  leaseOwner     String?   @db.VarChar(96)
+  leaseExpiresAt DateTime?
+  lastError      String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([acceptedAt, deadAt, availableAt])
+  @@index([leaseExpiresAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_commands")
 }
 
 model PlanRun {

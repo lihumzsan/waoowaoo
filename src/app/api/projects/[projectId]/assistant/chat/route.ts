@@ -25,7 +25,6 @@ import {
   declinePendingProjectAgentInterruptionsForUserTurn,
   reopenProjectAgentInterruption,
 } from '@/lib/project-agent/interruptions'
-import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 import {
   appendProjectAgentEvents,
   getCurrentProjectAgentActivity,
@@ -355,23 +354,10 @@ async function resolveProjectAgentControl(params: {
     }
   }
 
-  const followUp = await consumeProjectAgentWaitFollowUp({
-    runId: controlAction.runId,
-    waitId: controlAction.waitId,
-    claimId: controlAction.claimId,
-    projectId: scope.projectId,
-    userId: scope.userId,
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'PROJECT_AGENT_TASK_FOLLOW_UP_SERVER_ONLY',
+    message: 'task follow-up is delivered only by the durable server outbox',
   })
-  if (!followUp) {
-    throw new ApiError('CONFLICT', {
-      code: 'PROJECT_AGENT_WAIT_FOLLOW_UP_NOT_CLAIMED',
-      message: 'the wait follow-up is not claimable (claim mismatch or already followed)',
-    })
-  }
-  return {
-    kind: 'task_follow_up',
-    followUp,
-  }
 }
 
 export const runtime = 'nodejs'

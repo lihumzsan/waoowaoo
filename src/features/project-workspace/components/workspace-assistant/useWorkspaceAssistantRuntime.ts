@@ -40,7 +40,7 @@ import {
 } from './thread-sync'
 
 export type WorkspaceAssistantChoiceType = 'script_intake' | 'script_review' | 'bible_review' | 'style' | 'asset_review'
-export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
+export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 
 /**
@@ -114,11 +114,6 @@ interface UseWorkspaceAssistantRuntimeResult {
     toolCallId: string | null
     output: Record<string, unknown>
     visibleUserText?: string
-  }) => Promise<void>
-  submitTaskFollowUp: (params: {
-    runId: string
-    waitId: string
-    claimId: string
   }) => Promise<void>
   addRunApprovalResponse: (params: {
     runId: string
@@ -213,10 +208,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function buildWorkspaceAssistantControlError(endpoint: WorkspaceAssistantControlEndpoint, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
-  const code = endpoint === 'task-follow-up'
-    ? 'PROJECT_ASSISTANT_BACKGROUND_FOLLOW_UP_FAILED'
-    : 'PROJECT_ASSISTANT_CARD_RESPONSE_FAILED'
-  return new Error(`${code}:${message}`)
+  return new Error(`PROJECT_ASSISTANT_CARD_RESPONSE_FAILED:${message}`)
 }
 
 export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunStatus): boolean {
@@ -748,23 +740,6 @@ export function useWorkspaceAssistantRuntime({
     })
   }, [sendControlRequest])
 
-  const submitTaskFollowUp = useCallback(async (params: {
-    runId: string
-    waitId: string
-    claimId: string
-  }) => {
-    await sendControlRequest({
-      runId: params.runId,
-      endpoint: 'task-follow-up',
-      intent: 'task_follow_up',
-      operationId: null,
-      payload: {
-        waitId: params.waitId,
-        claimId: params.claimId,
-      },
-    })
-  }, [sendControlRequest])
-
   const addRunApprovalResponse = useCallback(async (params: {
     runId: string
     interruptionId: string
@@ -934,7 +909,6 @@ export function useWorkspaceAssistantRuntime({
     sendHiddenMessage,
     stopReply,
     submitChoiceResponse,
-    submitTaskFollowUp,
     addRunApprovalResponse,
     replaceMessages,
     appendMessages,

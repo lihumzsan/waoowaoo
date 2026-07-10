@@ -4,26 +4,27 @@ import { createScopedLogger } from '@/lib/logging/core'
 import type { LLMStreamChunk } from '@/lib/llm-observe/types'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import {
-  rollbackTaskBillingForTask,
   touchTaskHeartbeat,
-  tryMarkTaskCompleted,
-  tryMarkTaskFailed,
   tryMarkTaskQueuedForRetry,
   tryMarkTaskProcessing,
   tryUpdateTaskProgress,
-  updateTaskBillingInfo,
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
-import { TASK_EVENT_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, type TaskJobData } from '@/lib/task/types'
 import { shouldRetryTaskFailure, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
-import { syncTaskTargetFailure } from '@/lib/task/target-failure-sync'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import { withLogContext } from '@/lib/logging/context'
 import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
+import { commitTaskTerminal } from '@/lib/task/terminal'
+import {
+  finalizeTaskHandlerCheckpoint,
+  loadTaskExecutionFingerprint,
+  loadTaskHandlerCheckpoint,
+  saveTaskHandlerCheckpoint,
+} from '@/lib/task/execution-checkpoint'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -192,7 +193,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
   const taskId = data.taskId
   const logger = buildWorkerLogger(data, job.queueName)
   const startedAt = Date.now()
-  let billingInfo = (data.billingInfo || null) as TaskBillingInfo | null
 
   // Register project name for per-project log file routing
   void resolveProjectNameForLogging(data.projectId)
@@ -215,20 +215,6 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     })
     const markedProcessing = await tryMarkTaskProcessing(taskId)
     if (!markedProcessing) {
-      const rollbackResult = await rollbackTaskBillingForTask({
-        taskId,
-        billingInfo,
-      })
-      if (rollbackResult.billingInfo) {
-        billingInfo = rollbackResult.billingInfo
-      }
-      if (rollbackResult.attempted && !rollbackResult.rolledBack) {
-        logger.error({
-          action: 'worker.skip.terminated.rollback_failed',
-          message: 'task is terminal and billing rollback failed',
-          errorCode: 'BILLING_COMPENSATION_FAILED',
-        })
-      }
       logger.info({
         action: 'worker.skip.terminated',
         message: 'task is not active, skip worker execution',
@@ -263,40 +249,28 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       },
     })
 
-    const { result, textUsage } = await withLogContext({
+    const inputFingerprint = await loadTaskExecutionFingerprint(taskId)
+    const existingCheckpoint = await loadTaskHandlerCheckpoint({ taskId, inputFingerprint })
+    const checkpoint = existingCheckpoint ?? await withLogContext({
       taskId,
       taskAttempt: job.attemptsMade + 1,
       projectId: data.projectId,
       userId: data.userId,
-    }, async () => await withTextUsageCollection(async () => await handler(job)))
-    const materializedResources = await materializeWorkspaceResourcesForTask(data)
-    if (billingInfo?.billable) {
-      billingInfo = (await settleTaskBilling({
-        id: taskId,
-        projectId: data.projectId,
-        episodeId: data.episodeId || null,
-        userId: data.userId,
-        billingInfo,
-      }, {
-        result: (result || undefined) as Record<string, unknown> | void,
-        textUsage,
-      })) as TaskBillingInfo
-      await updateTaskBillingInfo(taskId, billingInfo)
-    }
-    const markedCompleted = await tryMarkTaskCompleted(taskId, result || null)
-    if (!markedCompleted) {
-      logger.info({
-        action: 'worker.skip.completed',
-        message: 'task already terminal, skip completed event',
-        durationMs: Date.now() - startedAt,
+    }, async () => {
+      const executed = await withTextUsageCollection(async () => await handler(job))
+      return await saveTaskHandlerCheckpoint({
+        taskId,
+        inputFingerprint,
+        output: { result: executed.result || null, textUsage: executed.textUsage },
       })
-      return
-    }
-    logger.info({
-      action: 'worker.completed',
-      message: 'worker completed',
-      durationMs: Date.now() - startedAt,
-      details: result || null,
+    })
+    const { result } = checkpoint.output
+    const materializedResources = await materializeWorkspaceResourcesForTask(data)
+    const readyCheckpoint = await finalizeTaskHandlerCheckpoint({
+      id: checkpoint.id,
+      taskId,
+      inputFingerprint,
+      materializedResources,
     })
     const completedPayload = withFlowFields(data, {
       ...(result || {}),
@@ -306,16 +280,12 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
         requestId: data.trace?.requestId || null,
       },
     })
-    await publishLifecycleEvent({
+    const terminal = await commitTaskTerminal({
+      kind: 'completed',
       taskId,
-      projectId: data.projectId,
-      userId: data.userId,
-      type: TASK_EVENT_TYPE.COMPLETED,
-      taskType: data.type,
-      targetType: data.targetType,
-      targetId: data.targetId,
-      episodeId: data.episodeId || null,
-      payload: {
+      fence: { kind: 'attempt', attempt: job.attemptsMade + 1 },
+      executionCheckpointId: readyCheckpoint.id,
+      eventPayload: {
         ...completedPayload,
         message: buildTaskProgressMessage({
           eventType: TASK_EVENT_TYPE.COMPLETED,
@@ -324,15 +294,14 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
         }),
       },
     })
+    logger.info({
+      action: terminal.applied ? 'worker.completed' : 'worker.completed.idempotent',
+      message: 'worker terminal completion committed',
+      durationMs: Date.now() - startedAt,
+      details: { result: result || null, terminalEventId: terminal.terminalEventId },
+    })
   } catch (error: unknown) {
     if (error instanceof TaskTerminatedError) {
-      if (billingInfo?.billable) {
-        billingInfo = (await rollbackTaskBilling({
-          id: taskId,
-          billingInfo,
-        })) as TaskBillingInfo
-        await updateTaskBillingInfo(taskId, billingInfo)
-      }
       logger.info({
         action: 'worker.terminated',
         message: error.message,
@@ -447,46 +416,8 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       })
     }
 
-    if (billingInfo?.billable) {
-      billingInfo = (await rollbackTaskBilling({
-        id: taskId,
-        billingInfo,
-      })) as TaskBillingInfo
-      await updateTaskBillingInfo(taskId, billingInfo)
-    }
-    const markedFailed = await tryMarkTaskFailed(taskId, normalizedError.code, normalizedError.message)
-    if (!markedFailed) {
-      logger.info({
-        action: 'worker.skip.failed',
-        message: 'task already terminal, skip failed event',
-        durationMs: Date.now() - startedAt,
-      })
-      throw new UnrecoverableError('task already terminal')
-    }
-    await syncTaskTargetFailure({
-      type: data.type,
-      targetType: data.targetType,
-      targetId: data.targetId,
-      errorCode: normalizedError.code,
-      errorMessage: normalizedError.message,
-      errorDetails: normalizedError.details,
-    })
-    let materializedResources: Awaited<ReturnType<typeof materializeWorkspaceResourcesForTask>> = []
-    let materializationError: string | null = null
-    try {
-      materializedResources = await materializeWorkspaceResourcesForTask(data)
-    } catch (handoffError: unknown) {
-      materializationError = handoffError instanceof Error ? handoffError.message : String(handoffError)
-      logger.error({
-        action: 'worker.failed.materialization_failed',
-        message: materializationError,
-        errorCode: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_FAILED',
-      })
-    }
     const failedPayload = withFlowFields(data, {
       error: normalizedError,
-      materializedResources,
-      ...(materializationError ? { materializationError } : {}),
       displayMode: 'loading',
       trace: {
         requestId: data.trace?.requestId || null,
@@ -495,16 +426,15 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     if (process.env.NODE_ENV !== 'production' && error instanceof Error && typeof error.stack === 'string') {
       failedPayload.errorStack = error.stack.slice(0, 8000)
     }
-    await publishLifecycleEvent({
+    await commitTaskTerminal({
+      kind: 'failed',
       taskId,
-      projectId: data.projectId,
-      userId: data.userId,
-      type: TASK_EVENT_TYPE.FAILED,
-      taskType: data.type,
-      targetType: data.targetType,
-      targetId: data.targetId,
-      episodeId: data.episodeId || null,
-      payload: {
+      fence: { kind: 'attempt', attempt: job.attemptsMade + 1 },
+      source: 'worker',
+      errorCode: normalizedError.code,
+      errorMessage: normalizedError.message,
+      errorDetails: normalizedError.details,
+      eventPayload: {
         ...failedPayload,
         message: normalizedError.message || buildTaskProgressMessage({
           eventType: TASK_EVENT_TYPE.FAILED,

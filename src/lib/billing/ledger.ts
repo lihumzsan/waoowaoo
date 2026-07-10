@@ -119,95 +119,134 @@ export async function checkBalance(userId: string, requiredAmount: number): Prom
   return balance.balance >= requiredAmount
 }
 
-export async function freezeBalance(
-  userId: string,
-  amount: number,
-  options?: {
-    source?: string
-    taskId?: string
-    requestId?: string
-    idempotencyKey?: string
-    metadata?: Record<string, unknown>
-  },
-): Promise<FreezeBalanceResult> {
+type FreezeBalanceOptions = {
+  source?: string
+  taskId?: string
+  requestId?: string
+  idempotencyKey?: string
+  metadata?: Record<string, unknown>
+}
+
+function requirePositiveFreezeAmount(amount: number): number {
   const normalizedAmount = normalizeMoney(Number(amount))
   if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
     throw new BillingOperationError('BILLING_INVALID_FREEZE_AMOUNT', 'freeze amount must be a positive number', {
       amount,
     })
   }
+  return normalizedAmount
+}
 
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      if (options?.idempotencyKey) {
-        const existing = await tx.balanceFreeze.findUnique({
-          where: { idempotencyKey: options.idempotencyKey },
-        })
-        if (existing) {
-          const existingAmount = toMoneyNumber(existing.amount)
-          return existing.status === 'pending' && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
-            ? {
-                status: 'already_frozen' as const,
-                freezeId: existing.id,
-              }
-            : {
-                status: 'conflict' as const,
-                freezeId: existing.id,
-                freezeStatus: existing.status,
-                frozenAmount: existingAmount,
-              }
-        }
-      }
+export type FreezeExpectation = {
+  userId: string
+  taskId: string | null
+  amount: number
+}
 
-      const existingBalance = await tx.userBalance.findUnique({ where: { userId } })
-      const balance = existingBalance ?? await tx.userBalance.create({
-          data: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
-        })
-
-      const updated = await tx.userBalance.updateMany({
-        where: {
-          userId,
-          balance: { gte: normalizedAmount },
-        },
-        data: {
-          balance: { decrement: normalizedAmount },
-          frozenAmount: { increment: normalizedAmount },
-        },
-      })
-      if (updated.count === 0) {
-        const latest = await tx.userBalance.findUnique({
-          where: { userId },
-          select: { balance: true },
-        })
-        return {
-          status: 'insufficient_balance' as const,
-          required: normalizedAmount,
-          available: latest ? toMoneyNumber(latest.balance) : toMoneyNumber(balance.balance),
-        }
-      }
-
-      const freezeId = `freeze_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      await tx.balanceFreeze.create({
-        data: {
-          id: freezeId,
-          userId,
-          amount: normalizedAmount,
-          status: 'pending',
-          source: options?.source || 'sync',
-          taskId: options?.taskId || null,
-          requestId: options?.requestId || null,
-          idempotencyKey: options?.idempotencyKey || null,
-          metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
-        },
-      })
-
-      return {
-        status: 'frozen' as const,
-        freezeId,
-      }
+function assertFreezeExpectation(
+  freeze: { id: string; userId: string; taskId: string | null; amount: Prisma.Decimal },
+  expected: FreezeExpectation,
+): void {
+  const amount = normalizeMoney(toMoneyNumber(freeze.amount))
+  const expectedAmount = normalizeMoney(expected.amount)
+  if (
+    freeze.userId !== expected.userId
+    || freeze.taskId !== expected.taskId
+    || Math.abs(amount - expectedAmount) > MONEY_EPSILON
+  ) {
+    throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'freeze ownership does not match task billing snapshot', {
+      freezeId: freeze.id,
+      actualUserId: freeze.userId,
+      expectedUserId: expected.userId,
+      actualTaskId: freeze.taskId,
+      expectedTaskId: expected.taskId,
+      actualAmount: amount,
+      expectedAmount,
     })
+  }
+}
 
-    return result
+export async function freezeBalanceInTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  amount: number,
+  options?: FreezeBalanceOptions,
+): Promise<FreezeBalanceResult> {
+  const normalizedAmount = requirePositiveFreezeAmount(amount)
+
+  if (options?.idempotencyKey) {
+    const existing = await tx.balanceFreeze.findUnique({ where: { idempotencyKey: options.idempotencyKey } })
+    if (existing) {
+      const existingAmount = toMoneyNumber(existing.amount)
+      const sameOwner = existing.userId === userId
+        && existing.taskId === (options.taskId ?? null)
+      if (!sameOwner) {
+        throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'idempotency key belongs to another billing owner', {
+          freezeId: existing.id,
+          idempotencyKey: options.idempotencyKey,
+          actualUserId: existing.userId,
+          expectedUserId: userId,
+          actualTaskId: existing.taskId,
+          expectedTaskId: options.taskId ?? null,
+        })
+      }
+      return existing.status === 'pending'
+        && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+        ? { status: 'already_frozen', freezeId: existing.id }
+        : {
+            status: 'conflict',
+            freezeId: existing.id,
+            freezeStatus: existing.status,
+            frozenAmount: existingAmount,
+          }
+    }
+  }
+  const existingBalance = await tx.userBalance.findUnique({ where: { userId } })
+  const balance = existingBalance ?? await tx.userBalance.create({
+    data: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
+  })
+  const updated = await tx.userBalance.updateMany({
+    where: { userId, balance: { gte: normalizedAmount } },
+    data: {
+      balance: { decrement: normalizedAmount },
+      frozenAmount: { increment: normalizedAmount },
+    },
+  })
+  if (updated.count === 0) {
+    const latest = await tx.userBalance.findUnique({ where: { userId }, select: { balance: true } })
+    return {
+      status: 'insufficient_balance',
+      required: normalizedAmount,
+      available: latest ? toMoneyNumber(latest.balance) : toMoneyNumber(balance.balance),
+    }
+  }
+  const freezeId = `freeze_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  await tx.balanceFreeze.create({
+    data: {
+      id: freezeId,
+      userId,
+      amount: normalizedAmount,
+      status: 'pending',
+      source: options?.source || 'sync',
+      taskId: options?.taskId || null,
+      requestId: options?.requestId || null,
+      idempotencyKey: options?.idempotencyKey || null,
+      metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
+    },
+  })
+  return { status: 'frozen', freezeId }
+}
+
+export async function freezeBalance(
+  userId: string,
+  amount: number,
+  options?: FreezeBalanceOptions,
+): Promise<FreezeBalanceResult> {
+  const normalizedAmount = requirePositiveFreezeAmount(amount)
+  try {
+    return await prisma.$transaction(async (tx) => (
+      await freezeBalanceInTransaction(tx, userId, normalizedAmount, options)
+    ))
   } catch (error) {
     if (
       options?.idempotencyKey
@@ -216,11 +255,24 @@ export async function freezeBalance(
     ) {
       const existing = await prisma.balanceFreeze.findUnique({
         where: { idempotencyKey: options.idempotencyKey },
-        select: { id: true, status: true, amount: true },
+        select: { id: true, status: true, amount: true, userId: true, taskId: true },
       })
       if (existing?.id) {
         const existingAmount = toMoneyNumber(existing.amount)
-        return existing.status === 'pending' && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
+        const sameOwner = existing.userId === userId
+          && existing.taskId === (options.taskId ?? null)
+        if (!sameOwner) {
+          throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'idempotency key belongs to another billing owner', {
+            freezeId: existing.id,
+            idempotencyKey: options.idempotencyKey,
+            actualUserId: existing.userId,
+            expectedUserId: userId,
+            actualTaskId: existing.taskId,
+            expectedTaskId: options.taskId ?? null,
+          })
+        }
+        return existing.status === 'pending'
+          && Math.abs(existingAmount - normalizedAmount) <= MONEY_EPSILON
           ? {
               status: 'already_frozen',
               freezeId: existing.id,
@@ -250,85 +302,88 @@ export async function freezeBalance(
   }
 }
 
+export async function confirmChargeWithRecordInTransaction(
+  tx: Prisma.TransactionClient,
+  freezeId: string,
+  recordParams: LedgerRecordParams,
+  options: {
+    chargedAmount?: number
+    expected: FreezeExpectation
+  },
+): Promise<'settled' | 'already_settled'> {
+  const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
+  if (!freeze) {
+    throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
+  }
+  assertFreezeExpectation(freeze, options.expected)
+  const freezeAmount = normalizeMoney(toMoneyNumber(freeze.amount))
+  if (freeze.status === 'confirmed') return 'already_settled'
+  if (freeze.status !== 'pending') {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
+      freezeId,
+      status: freeze.status,
+    })
+  }
+  const requested = Number(options?.chargedAmount)
+  const chargedAmount = normalizeMoney(Number.isFinite(requested) ? requested : freezeAmount)
+  if (chargedAmount < 0 || chargedAmount - freezeAmount > MONEY_EPSILON) {
+    throw new BillingOperationError('BILLING_INVALID_CHARGED_AMOUNT', 'Invalid chargedAmount', {
+      freezeId,
+      chargedAmount,
+      freezeAmount,
+    })
+  }
+  const refundAmount = normalizeMoney(Math.max(0, freezeAmount - chargedAmount))
+  const switched = await tx.balanceFreeze.updateMany({
+    where: { id: freezeId, status: 'pending' },
+    data: { status: 'confirmed' },
+  })
+  if (switched.count === 0) {
+    const latest = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
+    if (latest?.status === 'confirmed') return 'already_settled'
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
+      freezeId,
+      status: latest?.status || null,
+    })
+  }
+  const updatedBalance = await tx.userBalance.update({
+    where: { userId: freeze.userId },
+    data: {
+      frozenAmount: { decrement: freezeAmount },
+      totalSpent: { increment: chargedAmount },
+      ...(refundAmount > 0 ? { balance: { increment: refundAmount } } : {}),
+    },
+  })
+  if (chargedAmount > 0) {
+    await recordUsageCostOnly(tx, {
+      ...recordParams,
+      userId: freeze.userId,
+      cost: chargedAmount,
+      balanceAfter: toMoneyNumber(updatedBalance.balance),
+      freezeId: freeze.id,
+    })
+  }
+  return 'settled'
+}
+
 export async function confirmChargeWithRecord(
   freezeId: string,
   recordParams: LedgerRecordParams,
-  options?: {
-    chargedAmount?: number
-  },
+  options?: { chargedAmount?: number },
 ): Promise<boolean> {
   try {
     await prisma.$transaction(async (tx) => {
       const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
-      if (!freeze) {
-        throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
-      }
-      const freezeAmount = normalizeMoney(toMoneyNumber(freeze.amount))
-
-      if (freeze.status === 'confirmed') {
-        return
-      }
-
-      if (freeze.status !== 'pending') {
-        throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
-          freezeId,
-          status: freeze.status,
-        })
-      }
-
-      const requested = Number(options?.chargedAmount)
-      const chargedAmount = normalizeMoney(Number.isFinite(requested) ? requested : freezeAmount)
-      if (chargedAmount < 0 || chargedAmount - freezeAmount > MONEY_EPSILON) {
-        throw new BillingOperationError('BILLING_INVALID_CHARGED_AMOUNT', 'Invalid chargedAmount', {
-          freezeId,
-          chargedAmount,
-          freezeAmount,
-        })
-      }
-
-      const refundAmount = normalizeMoney(Math.max(0, freezeAmount - chargedAmount))
-
-      const switched = await tx.balanceFreeze.updateMany({
-        where: {
-          id: freezeId,
-          status: 'pending',
-        },
-        data: { status: 'confirmed' },
-      })
-      if (switched.count === 0) {
-        const latest = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
-        if (latest?.status === 'confirmed') {
-          return
-        }
-        throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
-          freezeId,
-          status: latest?.status || null,
-        })
-      }
-
-      const updatedBalance = await tx.userBalance.update({
-        where: { userId: freeze.userId },
-        data: {
-          frozenAmount: { decrement: freezeAmount },
-          totalSpent: { increment: chargedAmount },
-          ...(refundAmount > 0 ? { balance: { increment: refundAmount } } : {}),
-        },
-      })
-
-      if (chargedAmount > 0) {
-        await recordUsageCostOnly(tx, {
-          ...recordParams,
+      if (!freeze) throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
+      await confirmChargeWithRecordInTransaction(tx, freezeId, recordParams, {
+        chargedAmount: options?.chargedAmount,
+        expected: {
           userId: freeze.userId,
-          cost: chargedAmount,
-          balanceAfter: toMoneyNumber(updatedBalance.balance),
-          freezeId: freeze.id,
-        })
-      }
-    }, {
-      maxWait: 10_000,
-      timeout: 10_000,
-    })
-
+          taskId: freeze.taskId,
+          amount: toMoneyNumber(freeze.amount),
+        },
+      })
+    }, { maxWait: 10_000, timeout: 10_000 })
     return true
   } catch (error) {
     _ulogError('[Billing] confirm charge failed:', error)
@@ -342,42 +397,55 @@ export async function confirmChargeWithRecord(
   }
 }
 
+export async function rollbackFreezeInTransaction(
+  tx: Prisma.TransactionClient,
+  freezeId: string,
+  expected: FreezeExpectation,
+): Promise<'rolled_back' | 'already_rolled_back'> {
+  const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
+  if (!freeze) {
+    throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
+  }
+  assertFreezeExpectation(freeze, expected)
+  const freezeAmount = normalizeMoney(toMoneyNumber(freeze.amount))
+  if (freeze.status === 'rolled_back') return 'already_rolled_back'
+  if (freeze.status !== 'pending') {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
+      freezeId,
+      status: freeze.status,
+    })
+  }
+  const switched = await tx.balanceFreeze.updateMany({
+    where: { id: freezeId, status: 'pending' },
+    data: { status: 'rolled_back' },
+  })
+  if (switched.count === 0) {
+    const latest = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
+    if (latest?.status === 'rolled_back') return 'already_rolled_back'
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
+      freezeId,
+      status: latest?.status || null,
+    })
+  }
+  await tx.userBalance.update({
+    where: { userId: freeze.userId },
+    data: {
+      balance: { increment: freezeAmount },
+      frozenAmount: { decrement: freezeAmount },
+    },
+  })
+  return 'rolled_back'
+}
+
 export async function rollbackFreeze(freezeId: string): Promise<boolean> {
   try {
     await prisma.$transaction(async (tx) => {
       const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
-      if (!freeze) {
-        throw new Error('Invalid freeze record')
-      }
-      const freezeAmount = normalizeMoney(toMoneyNumber(freeze.amount))
-      if (freeze.status === 'rolled_back') {
-        return
-      }
-      if (freeze.status !== 'pending') {
-        throw new Error('Freeze is not pending')
-      }
-
-      const switched = await tx.balanceFreeze.updateMany({
-        where: {
-          id: freezeId,
-          status: 'pending',
-        },
-        data: { status: 'rolled_back' },
-      })
-      if (switched.count === 0) {
-        const latest = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
-        if (latest?.status === 'rolled_back') {
-          return
-        }
-        throw new Error('Freeze is not pending')
-      }
-
-      await tx.userBalance.update({
-        where: { userId: freeze.userId },
-        data: {
-          balance: { increment: freezeAmount },
-          frozenAmount: { decrement: freezeAmount },
-        },
+      if (!freeze) throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
+      await rollbackFreezeInTransaction(tx, freezeId, {
+        userId: freeze.userId,
+        taskId: freeze.taskId,
+        amount: toMoneyNumber(freeze.amount),
       })
     })
 
@@ -388,7 +456,11 @@ export async function rollbackFreeze(freezeId: string): Promise<boolean> {
   }
 }
 
-export async function increasePendingFreezeAmount(freezeId: string, delta: number): Promise<boolean> {
+export async function increasePendingFreezeAmountInTransaction(
+  tx: Prisma.TransactionClient,
+  freezeId: string,
+  delta: number,
+): Promise<boolean> {
   const normalizedDelta = normalizeMoney(Number(delta))
   if (!Number.isFinite(normalizedDelta) || normalizedDelta < 0) {
     throw new BillingOperationError('BILLING_INVALID_DELTA', 'delta must be a non-negative number', {
@@ -400,52 +472,41 @@ export async function increasePendingFreezeAmount(freezeId: string, delta: numbe
     return true
   }
 
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
-      if (!freeze) {
-        throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
-      }
-      if (freeze.status === 'confirmed') {
-        return true
-      }
-      if (freeze.status !== 'pending') {
-        throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
-          freezeId,
-          status: freeze.status,
-        })
-      }
-
-      const updated = await tx.userBalance.updateMany({
-        where: {
-          userId: freeze.userId,
-          balance: { gte: normalizedDelta },
-        },
-        data: {
-          balance: { decrement: normalizedDelta },
-          frozenAmount: { increment: normalizedDelta },
-        },
-      })
-      if (updated.count === 0) {
-        return false
-      }
-
-      const switched = await tx.balanceFreeze.updateMany({
-        where: {
-          id: freezeId,
-          status: 'pending',
-        },
-        data: {
-          amount: { increment: normalizedDelta },
-        },
-      })
-      if (switched.count === 0) {
-        throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', { freezeId })
-      }
-      return true
+  const freeze = await tx.balanceFreeze.findUnique({ where: { id: freezeId } })
+  if (!freeze) {
+    throw new BillingOperationError('BILLING_INVALID_FREEZE', 'Invalid freeze record', { freezeId })
+  }
+  if (freeze.status === 'confirmed') return true
+  if (freeze.status !== 'pending') {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', {
+      freezeId,
+      status: freeze.status,
     })
+  }
+  const updated = await tx.userBalance.updateMany({
+    where: { userId: freeze.userId, balance: { gte: normalizedDelta } },
+    data: {
+      balance: { decrement: normalizedDelta },
+      frozenAmount: { increment: normalizedDelta },
+    },
+  })
+  if (updated.count === 0) return false
+  const switched = await tx.balanceFreeze.updateMany({
+    where: { id: freezeId, status: 'pending' },
+    data: { amount: { increment: normalizedDelta } },
+  })
+  if (switched.count === 0) {
+    throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'Freeze is not pending', { freezeId })
+  }
+  return true
+}
 
-    return result
+export async function increasePendingFreezeAmount(freezeId: string, delta: number): Promise<boolean> {
+  const normalizedDelta = normalizeMoney(Number(delta))
+  try {
+    return await prisma.$transaction(async (tx) => (
+      await increasePendingFreezeAmountInTransaction(tx, freezeId, normalizedDelta)
+    ))
   } catch (error) {
     _ulogError('[Billing] increase pending freeze failed:', error)
     if (error instanceof BillingOperationError) {
@@ -458,7 +519,8 @@ export async function increasePendingFreezeAmount(freezeId: string, delta: numbe
   }
 }
 
-export async function recordShadowUsage(
+export async function recordShadowUsageInTransaction(
+  tx: Prisma.TransactionClient,
   userId: string,
   params: {
     projectId: string
@@ -472,34 +534,39 @@ export async function recordShadowUsage(
     cost: number
     metadata?: Record<string, unknown>
   },
+): Promise<void> {
+  const balance = await tx.userBalance.upsert({
+    where: { userId },
+    create: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
+    update: {},
+  })
+  const metadataSummary = params.metadata
+    ? JSON.stringify(params.metadata).slice(0, 500)
+    : ''
+  await tx.balanceTransaction.create({
+    data: {
+      userId,
+      type: 'shadow_consume',
+      amount: 0,
+      balanceAfter: toMoneyNumber(balance.balance),
+      description: `[SHADOW] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits${metadataSummary ? ` | ${metadataSummary}` : ''}`,
+      relatedId: null,
+      freezeId: null,
+      projectId: params.projectId || null,
+      episodeId: params.episodeId || null,
+      taskType: params.taskType || params.action || null,
+      billingMeta: buildBillingMeta(params),
+    },
+  })
+}
+
+export async function recordShadowUsage(
+  userId: string,
+  params: Parameters<typeof recordShadowUsageInTransaction>[2],
 ): Promise<boolean> {
   try {
     await prisma.$transaction(async (tx) => {
-      const balance = await tx.userBalance.upsert({
-        where: { userId },
-        create: { userId, balance: 0, frozenAmount: 0, totalSpent: 0 },
-        update: {},
-      })
-
-      const metadataSummary = params.metadata
-        ? JSON.stringify(params.metadata).slice(0, 500)
-        : ''
-
-      await tx.balanceTransaction.create({
-        data: {
-          userId,
-          type: 'shadow_consume',
-          amount: 0,
-          balanceAfter: toMoneyNumber(balance.balance),
-          description: `[SHADOW] ${params.action} - ${params.model} - ${params.cost.toFixed(4)} credits${metadataSummary ? ` | ${metadataSummary}` : ''}`,
-          relatedId: null,
-          freezeId: null,
-          projectId: params.projectId || null,
-          episodeId: params.episodeId || null,
-          taskType: params.taskType || params.action || null,
-          billingMeta: buildBillingMeta(params),
-        },
-      })
+      await recordShadowUsageInTransaction(tx, userId, params)
     })
     return true
   } catch (error) {

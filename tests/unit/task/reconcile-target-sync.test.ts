@@ -33,6 +33,14 @@ const billingMock = vi.hoisted(() => ({
   markTaskEnqueued: vi.fn(),
   sweepStaleTasks: vi.fn(async () => []),
 }))
+const terminalMock = vi.hoisted(() => ({
+  commitTaskTerminal: vi.fn(async () => ({
+    applied: true as const,
+    status: 'failed' as const,
+    terminalEventId: 1,
+    outboxCommandIds: [],
+  })),
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/queues', () => ({
@@ -41,6 +49,7 @@ vi.mock('@/lib/task/queues', () => ({
 }))
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/task/service', () => billingMock)
+vi.mock('@/lib/task/terminal', () => terminalMock)
 
 import { reconcileActiveTasks } from '@/lib/task/reconcile'
 
@@ -91,25 +100,17 @@ describe('task reconcile target sync', () => {
       recoveredTaskIds: [],
       unavailableTaskIds: [],
     })
-    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        id: 'task-1',
-        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      },
-      data: expect.objectContaining({
-        status: TASK_STATUS.FAILED,
-        errorCode: 'RECONCILE_ORPHAN',
-        errorMessage: 'Queue job already terminated but DB was not updated',
-        dedupeKey: null,
-      }),
-    }))
-    expect(prismaMock.projectVideoGroup.updateMany).toHaveBeenCalledWith({
-      where: { id: 'group-1' },
-      data: {
-        status: 'failed',
-        taskId: null,
-        errorCode: 'RECONCILE_ORPHAN',
-        errorMessage: 'Queue job already terminated but DB was not updated',
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith({
+      kind: 'failed',
+      taskId: 'task-1',
+      fence: { kind: 'snapshot', updatedAt: new Date('2026-05-20T10:00:00.000Z') },
+      source: 'reconciler',
+      errorCode: 'RECONCILE_ORPHAN',
+      errorMessage: 'Queue job already terminated but DB was not updated',
+      eventPayload: {
+        stage: 'reconciled',
+        stageLabel: 'progress.stage.taskReconciled',
+        message: 'Queue job already terminated but DB was not updated',
       },
     })
   })
@@ -136,28 +137,13 @@ describe('task reconcile target sync', () => {
       recoveredTaskIds: [],
       unavailableTaskIds: [],
     })
-    expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        id: 'task-style-1',
-        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      },
-      data: expect.objectContaining({
-        status: TASK_STATUS.FAILED,
-        errorCode: 'RECONCILE_ORPHAN',
-        errorMessage: 'Queue job already terminated but DB was not updated',
-        dedupeKey: null,
-      }),
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'failed',
+      taskId: 'task-style-1',
+      fence: { kind: 'snapshot', updatedAt: new Date('2026-05-20T10:00:00.000Z') },
+      source: 'reconciler',
+      errorCode: 'RECONCILE_ORPHAN',
     }))
-    expect(prismaMock.projectEditStylePreview.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'style-preview-1',
-        status: { in: ['pending', 'generating'] },
-      },
-      data: {
-        status: 'failed',
-        errorMessage: 'Queue job already terminated but DB was not updated',
-      },
-    })
   })
 
   it('does not mutate task, billing, dedupe, or target state when queue observation is unavailable', async () => {
@@ -172,7 +158,7 @@ describe('task reconcile target sync', () => {
     })
     expect(billingMock.rollbackTaskBillingForTask).not.toHaveBeenCalled()
     expect(prismaMock.task.updateMany).not.toHaveBeenCalled()
-    expect(prismaMock.projectVideoGroup.updateMany).not.toHaveBeenCalled()
+    expect(terminalMock.commitTaskTerminal).not.toHaveBeenCalled()
     expect(publisherMock.publishTaskEvent).not.toHaveBeenCalled()
   })
 

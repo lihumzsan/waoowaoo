@@ -1,15 +1,20 @@
+import { randomUUID } from 'node:crypto'
 import { NextRequest } from 'next/server'
 import type { UIMessage } from 'ai'
 import { createScopedLogger } from '@/lib/logging/core'
 import { createProjectAgentChatResponse } from './runtime'
 import {
-  claimResolvedProjectAgentWaitFollowUps,
-  consumeProjectAgentWaitFollowUp,
+  claimProjectAgentWaitContinuation,
+  finalizeProjectAgentWaitFollowUp,
+  extendProjectAgentWaitContinuationClaim,
+  releaseProjectAgentWaitContinuationClaim,
+  startProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUp,
 } from './waits'
+import type { ProjectAgentContinueWaitCommand } from '@/lib/outbox/types'
+import { OutboxPermanentError } from '@/lib/outbox/types'
 import {
   getProjectAgentRun,
-  safelyUpdateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
 } from './runs'
 import {
@@ -18,10 +23,8 @@ import {
   type ProjectAgentRunLock,
 } from './run-lock'
 import { loadProjectAssistantThread } from './persistence'
-import { createProjectAgentRunFence } from './run-fence'
 
 const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
-let scheduledFollowUpChain: Promise<void> = Promise.resolve()
 
 function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessage {
   return {
@@ -80,8 +83,9 @@ async function runClaimedFollowUp(params: {
   userId: string
   episodeId: string | null
   followUp: ProjectAgentWaitFollowUp
+  commandId: string
+  claimOwner: string
 }): Promise<boolean> {
-  if (params.followUp.followUpMode !== 'resume_agent') return false
   let run = await loadRunForFollowUp(params)
   if (!run) {
     logger.warn({
@@ -94,8 +98,9 @@ async function runClaimedFollowUp(params: {
         runId: params.followUp.runId,
       },
     })
-    return false
+    throw new OutboxPermanentError(`PROJECT_AGENT_CONTINUATION_RUN_MISSING:${String(params.followUp.runId)}`)
   }
+  const continuationRunId = run.id
 
   const runLock = await acquireProjectAgentRunLock({
     projectId: params.projectId,
@@ -103,14 +108,15 @@ async function runClaimedFollowUp(params: {
     episodeId: params.episodeId,
     runId: run.id,
   })
-  if (!runLock) return false
+    if (!runLock) throw new Error(`PROJECT_AGENT_CONTINUATION_RUN_LOCK_BUSY:${run.id}`)
 
   let lock: ProjectAgentRunLock | null = runLock
   try {
-    const consumed = await consumeProjectAgentWaitFollowUp({
+    const consumed = await startProjectAgentWaitFollowUp({
       runId: run.id,
       waitId: params.followUp.waitId,
-      claimId: params.followUp.claimId,
+      commandId: params.commandId,
+      claimOwner: params.claimOwner,
       projectId: params.projectId,
       userId: params.userId,
     })
@@ -155,18 +161,22 @@ async function runClaimedFollowUp(params: {
         followUp: consumed,
       },
       runLock: lock,
+      settleTaskFollowUp: async (outcome) => {
+        await finalizeProjectAgentWaitFollowUp({
+          runId: continuationRunId,
+          waitId: params.followUp.waitId,
+          commandId: params.commandId,
+          claimOwner: params.claimOwner,
+          projectId: params.projectId,
+          userId: params.userId,
+          outcome,
+        })
+      },
     })
     lock = null
     await drainResponseBody(response)
     return true
   } catch (error) {
-    await safelyUpdateProjectAgentRunStatus({
-      runFence: createProjectAgentRunFence(run),
-      status: 'failed',
-      stopReason: 'server_task_follow_up_failed',
-      errorCode: 'PROJECT_AGENT_SERVER_FOLLOW_UP_FAILED',
-      errorMessage: error instanceof Error ? error.message : String(error),
-    })
     logger.error({
       action: 'assistant.wait-follow-up.failed',
       message: 'Server-side project agent follow-up failed',
@@ -178,71 +188,65 @@ async function runClaimedFollowUp(params: {
         error: error instanceof Error ? error.message : String(error),
       },
     })
-    return false
+    throw error
   } finally {
     if (lock) await safelyReleaseProjectAgentRunLock(lock)
   }
 }
 
-export async function runResolvedProjectAgentWaitFollowUpsForTaskEvent(input: {
-  projectId: string
-  userId: string
-  episodeId?: string | null
-}): Promise<{ claimed: number; ran: number }> {
-  const scopes = input.episodeId
-    ? [input.episodeId, null]
-    : [null]
-  let claimed = 0
-  let ran = 0
-  for (const episodeId of scopes) {
-    const followUps = await claimResolvedProjectAgentWaitFollowUps({
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId,
-      assistantId: 'workspace-command',
-      followUpMode: 'resume_agent',
-      limit: 5,
-      claimTtlMs: 30_000,
-    })
-    claimed += followUps.length
-    for (const followUp of followUps) {
-      const didRun = await runClaimedFollowUp({
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId,
-        followUp,
-      })
-      if (didRun) ran += 1
-    }
+export async function runProjectAgentWaitContinuationCommand(
+  command: ProjectAgentContinueWaitCommand,
+  outboxId: string,
+): Promise<void> {
+  const claimOwner = randomUUID()
+  const claim = await claimProjectAgentWaitContinuation({
+    waitId: command.waitId,
+    runId: command.runId,
+    expectedRunVersion: command.expectedRunVersion,
+    expectedEventSeq: command.expectedEventSeq,
+    commandId: outboxId,
+    claimOwner,
+  })
+  if (claim.status === 'already_followed') return
+  if (claim.status === 'busy') throw new Error(`PROJECT_AGENT_CONTINUATION_BUSY:${command.waitId}`)
+  if (claim.status === 'stale_or_not_claimable') {
+    throw new OutboxPermanentError(
+      `PROJECT_AGENT_CONTINUATION_STALE:${command.waitId}:${command.runId}:${String(command.expectedRunVersion)}:${command.expectedEventSeq}`,
+    )
   }
-  return { claimed, ran }
-}
-
-export function scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent(input: {
-  projectId: string
-  userId: string
-  episodeId?: string | null
-}): void {
-  scheduledFollowUpChain = scheduledFollowUpChain
-    .catch(() => undefined)
-    .then(async () => {
-      try {
-        await runResolvedProjectAgentWaitFollowUpsForTaskEvent(input)
-      } catch (error) {
-        logger.error({
-          action: 'assistant.wait-follow-up.schedule-failed',
-          message: 'Scheduled server-side project agent follow-up failed',
-          projectId: input.projectId,
-          userId: input.userId,
-          details: {
-            episodeId: input.episodeId ?? null,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        })
-      }
+  let ran = false
+  let claimLeaseLost = false
+  const claimHeartbeat = setInterval(() => {
+    void extendProjectAgentWaitContinuationClaim({
+      waitId: command.waitId,
+      commandId: outboxId,
+      claimOwner,
+      claimTtlMs: 10 * 60 * 1000,
+    }).then((extended) => {
+      if (!extended) claimLeaseLost = true
+    }).catch(() => {
+      claimLeaseLost = true
     })
-}
-
-export async function flushScheduledProjectAgentWaitFollowUpsForTest(): Promise<void> {
-  await scheduledFollowUpChain
+  }, 60_000)
+  try {
+    ran = await runClaimedFollowUp({
+      projectId: claim.projectId,
+      userId: claim.userId,
+      episodeId: claim.episodeId,
+      followUp: claim.followUp,
+      commandId: outboxId,
+      claimOwner,
+    })
+    if (claimLeaseLost) throw new Error(`PROJECT_AGENT_CONTINUATION_CLAIM_LEASE_LOST:${command.waitId}`)
+  } catch (error) {
+    await releaseProjectAgentWaitContinuationClaim({
+      waitId: command.waitId,
+      commandId: outboxId,
+      claimOwner,
+    })
+    throw error
+  } finally {
+    clearInterval(claimHeartbeat)
+  }
+  if (!ran) throw new Error(`PROJECT_AGENT_CONTINUATION_NOT_RUN:${command.waitId}`)
 }

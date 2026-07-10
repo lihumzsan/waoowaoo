@@ -37,7 +37,6 @@ import {
 } from './workspace-assistant/assistant-send-event'
 import {
   collectAssistantAsyncTaskSubmissions,
-  resolveAssistantAsyncTaskTerminalEvent,
 } from './workspace-assistant/async-task-follow-up'
 import {
   extractWorkspaceResourceChangesFromWriteResult,
@@ -65,36 +64,6 @@ import type {
   WorkspaceAssistantActiveTaskTarget,
 } from '../workspace-assistant-focus'
 
-const WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS = 5000
-
-interface ProjectAgentWaitFollowUp {
-  runId: string | null
-  waitId: string
-  followUpKey: string
-  operationId: string
-  taskIds: string[]
-  failedTaskIds: string[]
-  failedTasks: Array<{
-    taskId: string
-    taskType: string | null
-    targetType: string | null
-    targetId: string | null
-    status: string | null
-    errorCode: string | null
-    errorMessage: string | null
-  }>
-  terminalStatus: 'completed' | 'failed'
-  total: number
-  successCount: number
-  failedCount: number
-  claimId: string
-}
-
-interface ProjectAgentWaitFollowUpResponse {
-  success: boolean
-  followUps: ProjectAgentWaitFollowUp[]
-}
-
 interface WorkspaceAssistantPanelProps {
   projectId: string
   episodeId?: string
@@ -107,35 +76,6 @@ interface WorkspaceAssistantPanelProps {
   onAutoStartConsumed?: () => void
   onActiveOperationChange?: (focusRequest: WorkspaceAssistantActiveFocusRequest | null) => void
   onStyleBibleConfirmed?: () => void
-}
-
-export function shouldDeferWorkspaceAssistantTaskFollowUp(input: {
-  pending: boolean
-  controlPending: boolean
-  chatStatus: ChatStatus
-  storageLoading: boolean
-  pendingApprovalId: string | null
-  currentRunStatus?: ProjectAgentRunPartData['status'] | null
-}): boolean {
-  if (input.storageLoading || input.pendingApprovalId) return true
-  if (input.chatStatus === 'submitted' || input.chatStatus === 'streaming') return true
-  if (input.controlPending) return true
-  if (!input.pending) return false
-  return input.currentRunStatus === 'running'
-}
-
-export function shouldPollWorkspaceAssistantWaitFollowUps(input: {
-  storageLoading: boolean
-  sessionState: {
-    activeWaits: ReadonlyArray<Pick<ProjectAgentSessionState['activeWaits'][number], 'status'>>
-  } | null
-}): boolean {
-  if (input.storageLoading) return false
-  return Boolean(input.sessionState?.activeWaits.some((wait) => (
-    wait.status === 'pending'
-    || wait.status === 'resolved'
-    || wait.status === 'claimed'
-  )))
 }
 
 const WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY = 'workspace-assistant-panel-width'
@@ -371,7 +311,6 @@ export default function WorkspaceAssistantPanel({
   })
   const assistantRuntimeRef = useRef(assistantRuntime)
   const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
-  const queuedTaskFollowUpsRef = useRef<Array<{ runId: string; waitId: string; claimId: string }>>([])
   useEffect(() => {
     assistantRuntimeRef.current = assistantRuntime
   }, [assistantRuntime])
@@ -403,109 +342,6 @@ export default function WorkspaceAssistantPanel({
     if (pendingSyncs.length === 0) return
     void Promise.all(pendingSyncs)
   }, [assistantRuntime.messages, episodeId, projectId, queryClient])
-  // Claimed follow-ups are consumed exactly once by the chat endpoint
-  // (task_follow_up control). If sending fails, the claim simply expires
-  // server-side and the wait becomes claimable again — no local bookkeeping.
-  const sendTaskFollowUp = useCallback(async (followUp: { runId: string; waitId: string; claimId: string }) => {
-    const runtime = assistantRuntimeRef.current
-    if (shouldDeferWorkspaceAssistantTaskFollowUp({
-      pending: runtime.pending,
-      controlPending: runtime.controlPending,
-      chatStatus: runtime.status,
-      storageLoading: runtime.storageLoading,
-      pendingApprovalId: runtime.pendingApprovalId,
-      currentRunStatus: runtime.sessionState?.currentRun?.status ?? null,
-    })) {
-      queuedTaskFollowUpsRef.current = [...queuedTaskFollowUpsRef.current, followUp]
-      return
-    }
-    await runtime.submitTaskFollowUp(followUp)
-  }, [])
-  useEffect(() => {
-    if (shouldDeferWorkspaceAssistantTaskFollowUp({
-      pending: assistantRuntime.pending,
-      controlPending: assistantRuntime.controlPending,
-      chatStatus: assistantRuntime.status,
-      storageLoading: assistantRuntime.storageLoading,
-      pendingApprovalId: assistantRuntime.pendingApprovalId,
-      currentRunStatus: assistantRuntime.sessionState?.currentRun?.status ?? null,
-    })) return
-    const [queuedFollowUp, ...remainingFollowUps] = queuedTaskFollowUpsRef.current
-    if (!queuedFollowUp) return
-    queuedTaskFollowUpsRef.current = remainingFollowUps
-    void assistantRuntime.submitTaskFollowUp(queuedFollowUp)
-  }, [
-    assistantRuntime,
-    assistantRuntime.controlPending,
-    assistantRuntime.pending,
-    assistantRuntime.pendingApprovalId,
-    assistantRuntime.sessionState?.currentRun?.status,
-    assistantRuntime.status,
-    assistantRuntime.storageLoading,
-  ])
-  const flushResolvedWaitFollowUps = useCallback(async () => {
-    const runtime = assistantRuntimeRef.current
-    if (shouldDeferWorkspaceAssistantTaskFollowUp({
-      pending: runtime.pending,
-      controlPending: runtime.controlPending,
-      chatStatus: runtime.status,
-      storageLoading: runtime.storageLoading,
-      pendingApprovalId: runtime.pendingApprovalId,
-      currentRunStatus: runtime.sessionState?.currentRun?.status ?? null,
-    })) return
-    const response = await apiFetch(`/api/projects/${projectId}/assistant/waits`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        action: 'claim',
-        ...(episodeId ? { episodeId } : {}),
-      }),
-    })
-    if (!response.ok) return
-    const payload = await response.json().catch(() => null) as ProjectAgentWaitFollowUpResponse | null
-    if (!payload?.success || !Array.isArray(payload.followUps)) return
-    for (const followUp of payload.followUps) {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) })
-      if (episodeId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
-      }
-      if (!followUp.runId) continue
-      await sendTaskFollowUp({
-        runId: followUp.runId,
-        waitId: followUp.waitId,
-        claimId: followUp.claimId,
-      })
-    }
-  }, [episodeId, projectId, queryClient, sendTaskFollowUp])
-  const shouldPollWaitFollowUps = shouldPollWorkspaceAssistantWaitFollowUps({
-    storageLoading: assistantRuntime.storageLoading,
-    sessionState: assistantRuntime.sessionState,
-  })
-  useEffect(() => {
-    if (!shouldPollWaitFollowUps) return
-    void flushResolvedWaitFollowUps()
-  }, [flushResolvedWaitFollowUps, shouldPollWaitFollowUps])
-  useEffect(() => {
-    if (!shouldPollWaitFollowUps) return
-    const timer = window.setInterval(() => {
-      void flushResolvedWaitFollowUps()
-    }, WORKSPACE_ASSISTANT_WAIT_FOLLOW_UP_POLL_MS)
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [flushResolvedWaitFollowUps, shouldPollWaitFollowUps])
-  useEffect(() => {
-    return subscribeTaskEvents((event) => {
-      const terminalEvent = resolveAssistantAsyncTaskTerminalEvent(event)
-      if (!terminalEvent) return
-      const runtime = assistantRuntimeRef.current
-      if (!shouldPollWorkspaceAssistantWaitFollowUps({
-        storageLoading: runtime.storageLoading,
-        sessionState: runtime.sessionState,
-      })) return
-      void flushResolvedWaitFollowUps()
-    })
-  }, [flushResolvedWaitFollowUps, subscribeTaskEvents])
   const consumedMessageKeysRef = useRef<Set<string>>(new Set())
   const sendAssistantMessageOnce = useCallback(async (
     key: string,

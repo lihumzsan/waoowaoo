@@ -108,8 +108,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route.ts',
   'src/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route.ts',
-  'src/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route.ts',
-  'src/app/api/projects/[projectId]/assistant/waits/route.ts',
   'src/app/api/projects/[projectId]/context/route.ts',
   'src/app/api/projects/[projectId]/costs/route.ts',
   'src/app/api/projects/[projectId]/data/route.ts',

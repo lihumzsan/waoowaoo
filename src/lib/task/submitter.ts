@@ -5,17 +5,14 @@ import {
   createTask,
   markTaskEnqueueFailed,
   markTaskEnqueued,
-  markTaskFailed,
-  rollbackTaskBillingForTask,
-  updateTaskBillingInfo,
 } from './service'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
+  authorizeTaskBilling,
   getBillingMode,
   InsufficientBalanceError,
   isBillableTaskType,
-  prepareTaskBilling,
 } from '@/lib/billing'
 import { ApiError } from '@/lib/api-errors'
 import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
@@ -24,6 +21,8 @@ import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progre
 import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
 import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
 import { buildTaskJobEnvelope } from './job-envelope'
+import { commitTaskTerminal } from './terminal'
+import { observeTaskJob } from './reconcile'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -190,7 +189,15 @@ export async function submitTask(params: {
   if (!deduped && isBillableTaskType(params.type) && preparedBillingInfo?.billable !== true) {
     const billingMode = await getBillingMode()
     if (billingMode === 'ENFORCE') {
-      await markTaskFailed(task.id, 'INVALID_PARAMS', `missing server-generated billingInfo for billable task type: ${params.type}`)
+      await commitTaskTerminal({
+        kind: 'failed',
+        taskId: task.id,
+        fence: { kind: 'active' },
+        source: 'validation',
+        errorCode: 'INVALID_PARAMS',
+        errorMessage: `missing server-generated billingInfo for billable task type: ${params.type}`,
+        eventPayload: { stage: 'billing_validation_failed' },
+      })
       throw new ApiError('INVALID_PARAMS', {
         message: `missing server-generated billingInfo for billable task type: ${params.type}`,
       })
@@ -208,26 +215,33 @@ export async function submitTask(params: {
 
   if (!deduped && preparedBillingInfo) {
     try {
-      preparedBillingInfo = (await prepareTaskBilling({
-        id: task.id,
-        userId: params.userId,
-        projectId: params.projectId,
-        episodeId: params.episodeId || null,
-        billingInfo: preparedBillingInfo,
-      })) as TaskBillingInfo | null
-      if (preparedBillingInfo) {
-        await updateTaskBillingInfo(task.id, preparedBillingInfo)
-      }
+      preparedBillingInfo = await authorizeTaskBilling(task.id)
     } catch (error) {
       if (error instanceof InsufficientBalanceError) {
-        await markTaskFailed(task.id, 'INSUFFICIENT_BALANCE', error.message)
+        await commitTaskTerminal({
+          kind: 'failed',
+          taskId: task.id,
+          fence: { kind: 'active' },
+          source: 'validation',
+          errorCode: 'INSUFFICIENT_BALANCE',
+          errorMessage: error.message,
+          eventPayload: { stage: 'billing_prepare_failed' },
+        })
         throw new ApiError('INSUFFICIENT_BALANCE', {
           message: error.message,
           required: error.required,
           available: error.available,
         })
       }
-      await markTaskFailed(task.id, 'INTERNAL_ERROR', error instanceof Error ? error.message : String(error))
+      await commitTaskTerminal({
+        kind: 'failed',
+        taskId: task.id,
+        fence: { kind: 'active' },
+        source: 'validation',
+        errorCode: 'INTERNAL_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        eventPayload: { stage: 'billing_prepare_failed' },
+      })
       throw error
     }
   }
@@ -294,44 +308,51 @@ export async function submitTask(params: {
       })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
-      await markTaskEnqueueFailed(task.id, message || 'queue.add failed')
-      const rollbackResult = await rollbackTaskBillingForTask({
+      const failedMessage = message || 'queue add failed'
+      const observation = await observeTaskJob(task.id)
+      if (observation === 'alive' || typeof observation === 'object') {
+        await markTaskEnqueued(task.id)
+        logger.warn({
+          action: 'task.submit.enqueue_response_lost',
+          message: 'queue add threw after BullMQ accepted the deterministic task job',
+          taskId: task.id,
+          details: { observation },
+        })
+      } else if (observation === 'unavailable') {
+        await markTaskEnqueueFailed(task.id, failedMessage)
+        logger.error({
+          action: 'task.submit.enqueue_unavailable',
+          message: failedMessage,
+          taskId: task.id,
+          errorCode: 'EXTERNAL_ERROR',
+          retryable: true,
+        })
+        throw new ApiError('EXTERNAL_ERROR', {
+          message: failedMessage,
+          taskId: task.id,
+        })
+      } else {
+        await markTaskEnqueueFailed(task.id, failedMessage)
+      await commitTaskTerminal({
+        kind: 'failed',
         taskId: task.id,
-        billingInfo: preparedBillingInfo,
-      })
-      const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-      const failedCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'ENQUEUE_FAILED'
-      const failedMessage = compensationFailed
-        ? `${message || 'queue add failed'}; billing rollback failed`
-        : (message || 'queue add failed')
-      await markTaskFailed(task.id, failedCode, failedMessage)
-      await publishTaskEvent({
-        taskId: task.id,
-        projectId: params.projectId,
-        userId: params.userId,
-        type: TASK_EVENT_TYPE.FAILED,
-        taskType: params.type,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        episodeId: params.episodeId || null,
-        payload: {
+        fence: { kind: 'active' },
+        source: 'enqueue',
+        errorCode: 'ENQUEUE_FAILED',
+        errorMessage: failedMessage,
+        eventPayload: {
           stage: 'enqueue_failed',
           stageLabel: 'progress.stage.enqueueFailed',
           message: failedMessage,
-          compensationFailed,
-          errorCode: failedCode,
+          errorCode: 'ENQUEUE_FAILED',
         },
-        persist: false,
       })
       logger.error({
         action: 'task.submit.enqueue_failed',
         message: failedMessage,
         taskId: task.id,
-        errorCode: compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR',
+        errorCode: 'EXTERNAL_ERROR',
         retryable: false,
-        details: {
-          compensationFailed,
-        },
         error:
           error instanceof Error
             ? {
@@ -343,10 +364,11 @@ export async function submitTask(params: {
                 message: String(error),
               },
       })
-      throw new ApiError(compensationFailed ? 'INTERNAL_ERROR' : 'EXTERNAL_ERROR', {
+      throw new ApiError('EXTERNAL_ERROR', {
         message: failedMessage,
         taskId: task.id,
       })
+      }
     }
   }
 

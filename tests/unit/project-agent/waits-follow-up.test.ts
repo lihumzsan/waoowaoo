@@ -28,7 +28,7 @@ vi.mock('@/lib/project-agent/event', () => ({
   appendProjectAgentEvents: eventState.appendProjectAgentEvents,
 }))
 
-import { consumeProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
+import { startProjectAgentWaitFollowUp } from '@/lib/project-agent/waits'
 
 describe('project agent wait follow-up details', () => {
   beforeEach(() => {
@@ -59,6 +59,7 @@ describe('project agent wait follow-up details', () => {
         terminalTaskIds: ['task-1', 'task-2'],
         failedTaskIds: ['task-2'],
         followUpKey: 'project-agent-wait:wait-1:failed',
+        followUpCommandId: 'command-1',
         claimId: 'claim-1',
         claimedAt: new Date(),
         claimExpiresAt: new Date(Date.now() + 60_000),
@@ -76,10 +77,11 @@ describe('project agent wait follow-up details', () => {
         errorMessage: 'output video may be related to copyright restrictions',
       }])
 
-    const followUp = await consumeProjectAgentWaitFollowUp({
+    const followUp = await startProjectAgentWaitFollowUp({
       runId: 'run-1',
       waitId: 'wait-1',
-      claimId: 'claim-1',
+      commandId: 'command-1',
+      claimOwner: 'claim-1',
       projectId: 'project-1',
       userId: 'user-1',
     })

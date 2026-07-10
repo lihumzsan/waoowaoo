@@ -356,6 +356,7 @@ async function applyTaskBound(
       terminalStatus: null,
       terminalTaskIds: [],
       failedTaskIds: [],
+      canceledTaskIds: [],
       followUpKey: null,
       claimId: null,
       claimedAt: null,
@@ -381,6 +382,7 @@ async function applyTaskProgressed(
     data: {
       terminalTaskIds: event.terminalTaskIds,
       failedTaskIds: event.failedTaskIds,
+      canceledTaskIds: event.canceledTaskIds,
       runVersion: nextFence.runVersion,
       eventSeq: BigInt(nextFence.eventSeq),
     },
@@ -405,10 +407,11 @@ async function applyTaskTerminal(
     },
   })
   if (!wait) throw new Error(`PROJECT_AGENT_WAIT_NOT_FOUND waitId=${event.waitId}`)
-  const nextStatus = (
-    (wait.followUpMode === 'await_user_choice' || wait.followUpMode === 'complete')
-    && event.terminalStatus === 'completed'
-  ) ? 'followed' : 'resolved'
+  const nextStatus = event.terminalStatus === 'canceled'
+    || (
+      (wait.followUpMode === 'await_user_choice' || wait.followUpMode === 'complete')
+      && event.terminalStatus === 'completed'
+    ) ? 'followed' : 'resolved'
   await tx.projectAgentWait.updateMany({
     where: {
       id: event.waitId,
@@ -420,6 +423,7 @@ async function applyTaskTerminal(
       terminalStatus: event.terminalStatus,
       terminalTaskIds: event.terminalTaskIds,
       failedTaskIds: event.failedTaskIds,
+      canceledTaskIds: event.canceledTaskIds,
       followUpKey: `project-agent-wait:${event.waitId}:${event.terminalStatus}`,
       followedAt: nextStatus === 'followed' ? now() : null,
       resolvedAt: now(),
@@ -433,14 +437,26 @@ async function applyTaskTerminal(
       status: { in: OPEN_ACTIVITY_STATUSES },
     },
     data: {
-      status: event.terminalStatus === 'completed' ? 'completed' : 'failed',
+      status: event.terminalStatus === 'completed'
+        ? 'completed'
+        : event.terminalStatus === 'canceled'
+          ? 'cancelled'
+          : 'failed',
       completedAt: event.terminalStatus === 'completed' ? now() : null,
       failedAt: event.terminalStatus === 'failed' ? now() : null,
+      cancelledAt: event.terminalStatus === 'canceled' ? now() : null,
       errorCode: event.terminalStatus === 'failed' ? 'PROJECT_AGENT_TASK_FAILED' : null,
       errorMessage: event.terminalStatus === 'failed' ? 'Project agent task wait failed' : null,
     },
   })
-  if (event.terminalStatus === 'completed' && wait.runId) {
+  if (event.terminalStatus === 'canceled' && wait.runId) {
+    await markRunStatus(tx, {
+      runId: wait.runId,
+      expectedFence,
+      status: 'cancelled',
+      stopReason: 'task_cancelled',
+    })
+  } else if (event.terminalStatus === 'completed' && wait.runId) {
     if (wait.followUpMode === 'complete') {
       await markRunStatus(tx, {
         runId: wait.runId,
@@ -468,13 +484,15 @@ async function applyWaitFollowed(
   event: Extract<ProjectAgentEventPayload, { kind: 'wait.followed' }>,
   nextFence: ProjectAgentRunFence,
 ): Promise<ProjectAgentActivitySnapshot | null> {
-  await tx.projectAgentWait.updateMany({
+  const followed = await tx.projectAgentWait.updateMany({
     where: {
       id: event.waitId,
       runId: event.runId,
       status: 'claimed',
       claimId: event.claimId,
+      followUpCommandId: event.commandId,
       followedAt: null,
+      claimExpiresAt: { gt: now() },
     },
     data: {
       status: 'followed',
@@ -483,6 +501,9 @@ async function applyWaitFollowed(
       eventSeq: BigInt(nextFence.eventSeq),
     },
   })
+  if (followed.count !== 1) {
+    throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_CAS_FAILED:${event.waitId}:${event.commandId}`)
+  }
   return getActivitySnapshot(tx, event.activityId)
 }
 

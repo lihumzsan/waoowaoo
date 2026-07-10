@@ -1,0 +1,50 @@
+export type TaskTerminalFence =
+  | { kind: 'attempt'; attempt: number }
+  | { kind: 'snapshot'; updatedAt: Date }
+  | { kind: 'active' }
+
+type TaskTerminalBase = {
+  taskId: string
+  fence: TaskTerminalFence
+  eventPayload?: Record<string, unknown> | null
+}
+
+export type TaskTerminalCommitIntent =
+  | (TaskTerminalBase & {
+      kind: 'completed'
+      executionCheckpointId: string
+    })
+  | (TaskTerminalBase & {
+      kind: 'failed'
+      errorCode: string
+      errorMessage: string
+      errorDetails?: Record<string, unknown> | null
+      source: 'worker' | 'enqueue' | 'validation' | 'reconciler' | 'timeout'
+    })
+  | (TaskTerminalBase & {
+      kind: 'canceled'
+      reason: string
+      source: 'user' | 'operation_compensation' | 'system'
+    })
+
+export type TaskTerminalCommitResult =
+  | {
+      applied: true
+      status: 'completed' | 'failed' | 'canceled'
+      terminalEventId: number
+      outboxCommandIds: readonly string[]
+    }
+  | {
+      applied: false
+      reason: 'already_terminal'
+      existingStatus: string
+      terminalEventId: number
+      outboxCommandIds: readonly string[]
+    }
+  | {
+      applied: false
+      reason: 'stale_fence'
+      existingStatus: string
+      terminalEventId: null
+      outboxCommandIds: readonly []
+    }

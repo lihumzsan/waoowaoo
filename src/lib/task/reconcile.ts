@@ -3,14 +3,11 @@ import { prisma } from '@/lib/prisma'
 import type { Queue } from 'bullmq'
 import { buildTaskJobEnvelope, type TaskJobEnvelopeSource } from './job-envelope'
 import { addTaskJob, getAllQueues } from './queues'
-import { publishTaskEvent } from './publisher'
 import {
   markTaskEnqueueFailed,
   markTaskEnqueued,
-  rollbackTaskBillingForTask,
   sweepStaleTasks,
 } from './service'
-import { syncTaskTargetFailure } from './target-failure-sync'
 import {
   TASK_EVENT_TYPE,
   TASK_STATUS,
@@ -18,6 +15,7 @@ import {
   type TaskJobData,
   type TaskStatus,
 } from './types'
+import { commitTaskTerminal } from './terminal'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const RECONCILE_INTERVAL_MS = 60_000
@@ -91,55 +89,20 @@ type ReconcileTask = TaskJobEnvelopeSource & {
 }
 
 async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<boolean> {
-  const rollbackResult = await rollbackTaskBillingForTask({
+  const terminal = await commitTaskTerminal({
+    kind: 'failed',
     taskId: task.id,
-    billingInfo: task.billingInfo,
-  })
-  const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-  const errorCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'RECONCILE_ORPHAN'
-  const errorMessage = compensationFailed ? `${reason}; billing rollback failed` : reason
-
-  const result = await prisma.task.updateMany({
-    where: {
-      id: task.id,
-      status: { in: ACTIVE_STATUSES },
-    },
-    data: {
-      status: TASK_STATUS.FAILED,
-      errorCode,
-      errorMessage,
-      finishedAt: new Date(),
-      heartbeatAt: null,
-      dedupeKey: null,
-    },
-  })
-
-  if (result.count === 0) return false
-
-  await syncTaskTargetFailure({
-    type: task.type,
-    targetType: task.targetType,
-    targetId: task.targetId,
-    errorCode,
-    errorMessage,
-  })
-  await publishTaskEvent({
-    taskId: task.id,
-    projectId: task.projectId,
-    userId: task.userId,
-    type: TASK_EVENT_TYPE.FAILED,
-    taskType: task.type,
-    targetType: task.targetType,
-    targetId: task.targetId,
-    episodeId: task.episodeId,
-    payload: {
+    fence: { kind: 'snapshot', updatedAt: task.updatedAt },
+    source: 'reconciler',
+    errorCode: 'RECONCILE_ORPHAN',
+    errorMessage: reason,
+    eventPayload: {
       stage: 'reconciled',
       stageLabel: 'progress.stage.taskReconciled',
-      message: errorMessage,
-      compensationFailed,
+      message: reason,
     },
   })
-  return true
+  return terminal.applied
 }
 
 type QueuedTaskRecovery = 'recovered' | 'failed' | 'retry_later'
@@ -253,25 +216,6 @@ async function executeTaskReconciliationCycle(): Promise<void> {
   const sweptProcessing = await sweepStaleTasks({
     processingThresholdMs: PROCESSING_TIMEOUT_MS,
   })
-  for (const task of sweptProcessing) {
-    await publishTaskEvent({
-      taskId: task.id,
-      projectId: task.projectId,
-      userId: task.userId,
-      type: TASK_EVENT_TYPE.FAILED,
-      taskType: task.type,
-      targetType: task.targetType,
-      targetId: task.targetId,
-      episodeId: task.episodeId || null,
-      payload: {
-        stage: 'reconciler_timeout',
-        stageLabel: 'progress.stage.taskTimeout',
-        message: task.errorMessage,
-        errorCode: task.errorCode,
-        compensationFailed: task.errorCode === 'BILLING_COMPENSATION_FAILED',
-      },
-    })
-  }
 
   const reconciled = await reconcileActiveTasks()
   const changed = sweptProcessing.length

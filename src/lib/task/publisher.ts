@@ -8,8 +8,6 @@ import {
   type TaskSSEEvent,
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
-import { resolveProjectAgentWaitsForTaskEvent } from '@/lib/project-agent/waits'
-import { scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent } from '@/lib/project-agent/server-follow-up'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
 import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
@@ -37,6 +35,7 @@ type TaskMeta = {
 
 type TaskEventModel = {
   create: (args: unknown) => Promise<TaskEventRow>
+  findUnique: (args: unknown) => Promise<TaskEventRow | null>
   findMany: (args: unknown) => Promise<TaskEventRow[]>
 }
 
@@ -54,13 +53,15 @@ function createEphemeralId() {
 function isLifecycleEventType(value: string): value is TaskLifecycleEventType {
   return value === TASK_EVENT_TYPE.CREATED ||
     value === TASK_EVENT_TYPE.PROCESSING ||
+    value === TASK_EVENT_TYPE.PROGRESS ||
     value === TASK_EVENT_TYPE.COMPLETED ||
-    value === TASK_EVENT_TYPE.FAILED
+    value === TASK_EVENT_TYPE.FAILED ||
+    value === TASK_EVENT_TYPE.CANCELED
 }
 
 function normalizeLifecycleType(type: TaskEventType): TaskLifecycleEventType {
   if (isLifecycleEventType(type)) return type
-  return TASK_EVENT_TYPE.PROCESSING
+  throw new Error(`TASK_LIFECYCLE_TYPE_UNSUPPORTED:${type}`)
 }
 
 function isStreamEventType(type: string) {
@@ -260,7 +261,7 @@ export async function listRecentTerminalLifecycleEvents(params: {
     where: {
       projectId: params.projectId,
       userId: params.userId,
-      eventType: { in: [TASK_EVENT_TYPE.COMPLETED, TASK_EVENT_TYPE.FAILED] },
+      eventType: { in: [TASK_EVENT_TYPE.COMPLETED, TASK_EVENT_TYPE.FAILED, TASK_EVENT_TYPE.CANCELED] },
       ...(params.episodeId ? { task: { episodeId: params.episodeId } } : {}),
     },
     orderBy: { id: 'desc' },
@@ -272,6 +273,57 @@ export async function listRecentTerminalLifecycleEvents(params: {
 
 export function getProjectChannel(projectId: string) {
   return `${CHANNEL_PREFIX}${projectId}`
+}
+
+export function buildTaskLifecycleEventPayload(params: {
+  taskId: string
+  projectId: string
+  lifecycleType: TaskEventType
+  taskType: string
+  targetType: string
+  targetId: string
+  episodeId?: string | null
+  payload?: Record<string, unknown> | null
+  coveragePayload?: unknown
+}): Record<string, unknown> {
+  const normalizedType = normalizeLifecycleType(params.lifecycleType)
+  const normalizedPayload = withTaskCoveredTargetsPayload({
+    taskType: params.taskType,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    payload: normalizeLifecyclePayload(
+      params.lifecycleType,
+      params.taskType,
+      params.payload || null,
+    ),
+    coveragePayload: params.coveragePayload ?? params.payload ?? null,
+  })
+  const isTerminal = normalizedType === TASK_EVENT_TYPE.COMPLETED
+    || normalizedType === TASK_EVENT_TYPE.FAILED
+    || normalizedType === TASK_EVENT_TYPE.CANCELED
+  if (!isTerminal) return normalizedPayload
+  const affectedResources = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
+    taskType: params.taskType,
+    lifecycleType: normalizedType,
+    projectId: params.projectId,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    episodeId: params.episodeId || null,
+    payload: normalizedPayload,
+  })
+  return { ...normalizedPayload, affectedResources }
+}
+
+export async function publishPersistedTaskEventById(eventId: number, expectedTaskId?: string): Promise<TaskSSEEvent> {
+  const row = await taskEventModel.findUnique({ where: { id: eventId } })
+  if (!row) throw new Error(`TASK_EVENT_NOT_FOUND:${String(eventId)}`)
+  if (expectedTaskId && row.taskId !== expectedTaskId) {
+    throw new Error(`TASK_EVENT_TASK_MISMATCH:${String(eventId)}:${expectedTaskId}:${row.taskId}`)
+  }
+  const [message] = await mapRowsToReplayEvents([row])
+  if (!message) throw new Error(`TASK_EVENT_MESSAGE_NOT_BUILT:${String(eventId)}`)
+  await redis.publish(getProjectChannel(row.projectId), JSON.stringify(message))
+  return message
 }
 
 export async function publishTaskLifecycleEvent(params: {
@@ -286,6 +338,13 @@ export async function publishTaskLifecycleEvent(params: {
   payload?: Record<string, unknown> | null
   persist?: boolean
 }) {
+  if (
+    params.lifecycleType === TASK_EVENT_TYPE.COMPLETED
+    || params.lifecycleType === TASK_EVENT_TYPE.FAILED
+    || params.lifecycleType === TASK_EVENT_TYPE.CANCELED
+  ) {
+    throw new Error(`TASK_TERMINAL_EVENT_REQUIRES_TERMINAL_SERVICE:${params.taskId}`)
+  }
   const persist = params.persist !== false
   const normalizedType = normalizeLifecycleType(params.lifecycleType)
   const taskMeta = await loadTaskMeta(params.taskId)
@@ -294,32 +353,19 @@ export async function publishTaskLifecycleEvent(params: {
   const eventTargetId = params.targetId || taskMeta?.targetId || null
   const eventEpisodeId = params.episodeId || taskMeta?.episodeId || null
   const coveragePayload = taskMeta?.payload ?? params.payload ?? null
-  const normalizedPayload = withTaskCoveredTargetsPayload({
-    taskType: eventTaskType,
-    targetType: eventTargetType,
-    targetId: eventTargetId,
-    payload: normalizeLifecyclePayload(
-      params.lifecycleType,
-      eventTaskType,
-      params.payload || null,
-    ),
-    coveragePayload,
-  })
-  const affectedResources = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-    taskType: eventTaskType,
-    lifecycleType: normalizedType,
-    projectId: params.projectId,
-    targetType: eventTargetType,
-    targetId: eventTargetId,
-    episodeId: eventEpisodeId,
-    payload: normalizedPayload,
-  })
-  const eventPayload = (
-    normalizedType === TASK_EVENT_TYPE.COMPLETED ||
-    normalizedType === TASK_EVENT_TYPE.FAILED
-  )
-    ? { ...normalizedPayload, affectedResources }
-    : normalizedPayload
+  const eventPayload = eventTaskType && eventTargetType && eventTargetId
+    ? buildTaskLifecycleEventPayload({
+        taskId: params.taskId,
+        projectId: params.projectId,
+        lifecycleType: params.lifecycleType,
+        taskType: eventTaskType,
+        targetType: eventTargetType,
+        targetId: eventTargetId,
+        episodeId: eventEpisodeId,
+        payload: params.payload,
+        coveragePayload,
+      })
+    : normalizeLifecyclePayload(params.lifecycleType, eventTaskType, params.payload || null)
   const event = persist
     ? await taskEventModel.create({
         data: {
@@ -349,20 +395,7 @@ export async function publishTaskLifecycleEvent(params: {
     coveragePayload,
   })
 
-  await resolveProjectAgentWaitsForTaskEvent({
-    taskId: params.taskId,
-    projectId: params.projectId,
-    userId: params.userId,
-    lifecycleType: normalizedType,
-  })
   await redis.publish(getProjectChannel(params.projectId), JSON.stringify(message))
-  if (normalizedType === TASK_EVENT_TYPE.COMPLETED || normalizedType === TASK_EVENT_TYPE.FAILED) {
-    scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: eventEpisodeId,
-    })
-  }
   return message
 }
 

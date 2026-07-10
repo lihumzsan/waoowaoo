@@ -112,6 +112,7 @@ export type ProjectAgentEventPayload =
     waitId: string
     terminalTaskIds: string[]
     failedTaskIds: string[]
+    canceledTaskIds: string[]
   }
   | {
     kind: 'task.terminal'
@@ -121,6 +122,7 @@ export type ProjectAgentEventPayload =
     terminalStatus: ProjectAgentWaitTerminalStatus
     terminalTaskIds: string[]
     failedTaskIds: string[]
+    canceledTaskIds: string[]
     nextActivityId?: string | null
   }
   | {
@@ -129,6 +131,7 @@ export type ProjectAgentEventPayload =
     activityId: string
     waitId: string
     claimId: string
+    commandId: string
     sourceOperationId: string
   }
   | {

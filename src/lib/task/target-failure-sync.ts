@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from './types'
 
 type TaskTargetFailure = {
+  readonly taskId: string
   readonly type: string
   readonly targetType: string
   readonly targetId: string
@@ -15,32 +16,25 @@ function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value
 }
 
-function toInputJson(value: Record<string, unknown>): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
-export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
+export async function syncTaskTargetFailureInTransaction(
+  tx: Prisma.TransactionClient,
+  input: TaskTargetFailure,
+): Promise<void> {
+  // ProjectEditBible currently has no task ownership field. An unfenced failure
+  // projector could overwrite a newer generation, so it is intentionally not
+  // projected until the resource contract carries a generation task identity.
   if (
-    (input.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE && input.targetType === 'ProjectEditSourceScript')
-    || (input.type === TASK_TYPE.EDIT_BIBLE_GENERATE && input.targetType === 'ProjectEditBible')
+    input.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
+    || input.type === TASK_TYPE.EDIT_BIBLE_GENERATE
   ) {
-    await prisma.projectEditBible.updateMany({
-      where: {
-        id: input.targetId,
-        status: 'generating',
-      },
-      data: {
-        status: 'failed',
-        diagnosticsJson: toInputJson(input.errorDetails ?? { error: truncate(input.errorMessage, 2000) }),
-      },
-    })
     return
   }
 
   if (input.type === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE && input.targetType === 'ProjectEditStylePreview') {
-    await prisma.projectEditStylePreview.updateMany({
+    await tx.projectEditStylePreview.updateMany({
       where: {
         id: input.targetId,
+        taskId: input.taskId,
         status: { in: ['pending', 'generating'] },
       },
       data: {
@@ -53,9 +47,11 @@ export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<v
 
   if (input.type !== TASK_TYPE.VIDEO_GROUP || input.targetType !== 'ProjectVideoGroup') return
 
-  await prisma.projectVideoGroup.updateMany({
-    where: {
-      id: input.targetId,
+  await tx.projectVideoGroup.updateMany({
+      where: {
+        id: input.targetId,
+        taskId: input.taskId,
+        status: { in: ['pending', 'generating', 'processing'] },
     },
     data: {
       status: 'failed',
@@ -63,5 +59,11 @@ export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<v
       errorCode: truncate(input.errorCode, 80),
       errorMessage: truncate(input.errorMessage, 2000),
     },
+  })
+}
+
+export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await syncTaskTargetFailureInTransaction(tx, input)
   })
 }

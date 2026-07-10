@@ -7,6 +7,8 @@ import { createImageWorker } from './image.worker'
 import { createMusicWorker } from './music.worker'
 import { createVideoWorker } from './video.worker'
 import { createTextWorker } from './text.worker'
+import { createOutboxWorker } from './outbox.worker'
+import { startOutboxDispatcher } from '@/lib/outbox/dispatcher'
 
 installYunwuFetchTraceIfEnabled()
 
@@ -65,13 +67,15 @@ function jobDetails(job: Job<TaskJobData> | undefined | null, extra?: Record<str
 }
 
 const workers: Worker<TaskJobData>[] = [createImageWorker(), createVideoWorker(), createMusicWorker(), createTextWorker()]
+const outboxWorker = createOutboxWorker()
+startOutboxDispatcher()
 
 runtimeLogger.info({
   action: 'workers.process.started',
   message: 'worker process started',
   details: runtimeDetails({
-    workerCount: workers.length,
-    queues: workers.map((worker) => worker.name),
+    workerCount: workers.length + 1,
+    queues: [...workers.map((worker) => worker.name), outboxWorker.name],
   }),
 })
 
@@ -150,7 +154,7 @@ async function shutdown(signal: string) {
     details: runtimeDetails({ signal }),
   })
   try {
-    await Promise.all(workers.map(async (worker) => {
+    await Promise.all([...workers, outboxWorker].map(async (worker) => {
       runtimeLogger.info({
         action: 'worker.close.start',
         message: 'closing BullMQ worker',

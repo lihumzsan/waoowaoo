@@ -178,6 +178,7 @@ describe('project agent event reducer', () => {
         terminalStatus: 'completed',
         terminalTaskIds: ['task-style-1'],
         failedTaskIds: [],
+        canceledTaskIds: [],
         nextActivityId: 'activity-choice-style-1',
       },
     })
@@ -303,7 +304,12 @@ describe('project agent event reducer', () => {
     })).rejects.toThrow('PROJECT_AGENT_RUN_TRANSITION_RACED')
 
     expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'run-1', status: 'running' },
+      where: {
+        id: 'run-1',
+        status: 'running',
+        runVersion: 1,
+        eventSeq: BigInt(1),
+      },
     }))
   })
 

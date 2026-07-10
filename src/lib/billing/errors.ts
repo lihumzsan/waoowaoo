@@ -29,6 +29,7 @@ export type BillingOperationErrorCode =
   | 'BILLING_IDEMPOTENT_IN_PROGRESS'
   | 'BILLING_IDEMPOTENT_ROLLED_BACK'
   | 'BILLING_INVALID_PROJECT'
+  | 'BILLING_FREEZE_OWNERSHIP_MISMATCH'
 
 export class BillingOperationError extends Error {
   public readonly code: BillingOperationErrorCode

@@ -13,12 +13,15 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     operationId: 'generate_edit_script_storyboard',
     taskIds: ['task-1'],
     failedTaskIds: [],
+    canceledTaskIds: [],
     failedTasks: [],
     terminalStatus: 'completed',
     total: 1,
     successCount: 1,
     failedCount: 0,
+    canceledCount: 0,
     claimId: 'claim-1',
+    commandId: 'command-1',
     ...overrides,
   }
 }

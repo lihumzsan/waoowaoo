@@ -234,14 +234,9 @@ import {
   POST as chatPost,
 } from '@/app/api/projects/[projectId]/assistant/chat/route'
 import { GET as chatLogGet } from '@/app/api/projects/[projectId]/assistant/chat/log/route'
-import {
-  GET as waitsGet,
-  POST as waitsPost,
-} from '@/app/api/projects/[projectId]/assistant/waits/route'
 import { POST as approvalPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route'
 import { POST as choicePost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route'
 import { GET as runGet } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/route'
-import { POST as taskFollowUpPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/task-follow-up/route'
 
 describe('project assistant chat route', () => {
   beforeEach(() => {
@@ -898,49 +893,6 @@ describe('project assistant chat route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/assistant/runs/[runId]/task-follow-up -> consumes wait follow-up through the run-scoped endpoint', async () => {
-    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce({
-      runId: 'run-1',
-      waitId: 'wait-1',
-      followUpKey: 'project-agent-wait:wait-1:completed',
-      operationId: 'generate_edit_script',
-      taskIds: ['task-1'],
-      failedTaskIds: [],
-      failedTasks: [],
-      terminalStatus: 'completed',
-      total: 1,
-      successCount: 1,
-      failedCount: 0,
-      claimId: 'claim-1',
-    })
-
-    const response = await taskFollowUpPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/runs/run-1/task-follow-up',
-        method: 'POST',
-        body: {
-          context: { episodeId: 'episode-1' },
-          assistantPermissionMode: 'ask',
-          waitId: 'wait-1',
-          claimId: 'claim-1',
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(waitMock.consumeProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-1',
-      waitId: 'wait-1',
-      claimId: 'claim-1',
-    }))
-    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
-      control: expect.objectContaining({
-        kind: 'task_follow_up',
-      }),
-    }))
-  })
-
   it('POST /api/projects/[projectId]/assistant/chat -> rejects an unclaimed task follow-up with a conflict', async () => {
     waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce(null)
 
@@ -1197,141 +1149,6 @@ describe('project assistant chat route', () => {
       error: expect.objectContaining({
         code: 'MISSING_CONFIG',
         details: expect.objectContaining({ code: 'PROJECT_AGENT_ASSISTANT_MODEL_NOT_CONFIGURED' }),
-      }),
-    }))
-  })
-
-  it('GET /api/projects/[projectId]/assistant/waits -> returns resolved follow-ups for the assistant scope', async () => {
-    waitMock.listResolvedProjectAgentWaitFollowUps.mockResolvedValueOnce([{
-      waitId: 'wait-1',
-      followUpKey: 'project-agent-wait:wait-1:completed',
-      operationId: 'generate_edit_script',
-      taskIds: ['task-1'],
-      failedTaskIds: [],
-      failedTasks: [],
-      terminalStatus: 'completed',
-      total: 1,
-      successCount: 1,
-      failedCount: 0,
-      claimId: '',
-    }])
-
-    const response = await waitsGet(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/waits?episodeId=episode-1',
-        method: 'GET',
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(waitMock.listResolvedProjectAgentWaitFollowUps).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-    })
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      followUps: [{
-        waitId: 'wait-1',
-        followUpKey: 'project-agent-wait:wait-1:completed',
-        operationId: 'generate_edit_script',
-        taskIds: ['task-1'],
-        failedTaskIds: [],
-        failedTasks: [],
-        terminalStatus: 'completed',
-        total: 1,
-        successCount: 1,
-        failedCount: 0,
-        claimId: '',
-      }],
-    })
-  })
-
-  it('POST /api/projects/[projectId]/assistant/waits -> atomically claims one follow-up before client wake-up', async () => {
-    waitMock.claimResolvedProjectAgentWaitFollowUps.mockResolvedValueOnce([{
-      waitId: 'wait-1',
-      followUpKey: 'project-agent-wait:wait-1:failed',
-      operationId: 'generate_edit_script',
-      taskIds: ['task-1', 'task-2'],
-      failedTaskIds: ['task-2'],
-      failedTasks: [{
-        taskId: 'task-2',
-        taskType: 'video_group',
-        targetType: 'ProjectVideoGroup',
-        targetId: 'group-1',
-        status: 'failed',
-        errorCode: 'INTERNAL_ERROR',
-        errorMessage: 'output video may be related to copyright restrictions',
-      }],
-      terminalStatus: 'failed',
-      total: 2,
-      successCount: 1,
-      failedCount: 1,
-      claimId: 'claim-1',
-    }])
-
-    const response = await waitsPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/waits',
-        method: 'POST',
-        body: {
-          action: 'claim',
-          episodeId: 'episode-1',
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(200)
-    expect(waitMock.claimResolvedProjectAgentWaitFollowUps).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-      limit: 1,
-    })
-    await expect(response.json()).resolves.toEqual({
-      success: true,
-      followUps: [{
-        waitId: 'wait-1',
-        followUpKey: 'project-agent-wait:wait-1:failed',
-        operationId: 'generate_edit_script',
-        taskIds: ['task-1', 'task-2'],
-        failedTaskIds: ['task-2'],
-        failedTasks: [{
-          taskId: 'task-2',
-          taskType: 'video_group',
-          targetType: 'ProjectVideoGroup',
-          targetId: 'group-1',
-          status: 'failed',
-          errorCode: 'INTERNAL_ERROR',
-          errorMessage: 'output video may be related to copyright restrictions',
-        }],
-        terminalStatus: 'failed',
-        total: 2,
-        successCount: 1,
-        failedCount: 1,
-        claimId: 'claim-1',
-      }],
-    })
-  })
-
-  it('POST /api/projects/[projectId]/assistant/waits -> rejects legacy manual follow-up marking', async () => {
-    const response = await waitsPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/waits',
-        method: 'POST',
-        body: { waitId: 'wait-1', claimId: 'claim-1' },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toEqual(expect.objectContaining({
-      error: expect.objectContaining({
-        details: expect.objectContaining({ code: 'INVALID_WAIT_FOLLOW_UP_ACTION' }),
       }),
     }))
   })

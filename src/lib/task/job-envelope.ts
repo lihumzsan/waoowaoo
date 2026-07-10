@@ -1,7 +1,7 @@
 import { resolveTaskLocaleFromBody } from './resolve-locale'
+import { parseTaskBillingInfo } from './billing-info'
 import {
   TASK_TYPE,
-  type TaskBillingInfo,
   type TaskJobData,
   type TaskJobEnvelope,
   type TaskType,
@@ -41,54 +41,6 @@ function parsePayload(value: unknown): Record<string, unknown> | null {
     throw new Error('task payload must be an object or null')
   }
   return value as Record<string, unknown>
-}
-
-const BILLING_API_TYPES: ReadonlySet<string> = new Set([
-  'text',
-  'image',
-  'video',
-  'music',
-  'sound_effect',
-])
-const BILLING_UNITS: ReadonlySet<string> = new Set([
-  'token',
-  'image',
-  'video',
-  'second',
-  'call',
-])
-
-function parseBillingInfo(value: unknown, taskType: TaskType): TaskBillingInfo | null {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('task billingInfo must be an object or null')
-  }
-  const record = value as Record<string, unknown>
-  if (record.billable !== true && record.billable !== false) {
-    throw new Error('task billingInfo.billable must be a boolean')
-  }
-  if (record.billable === true) {
-    const valid = record.source === 'task'
-      && record.taskType === taskType
-      && typeof record.apiType === 'string'
-      && BILLING_API_TYPES.has(record.apiType)
-      && typeof record.model === 'string'
-      && record.model.trim().length > 0
-      && typeof record.quantity === 'number'
-      && Number.isFinite(record.quantity)
-      && record.quantity > 0
-      && typeof record.unit === 'string'
-      && BILLING_UNITS.has(record.unit)
-      && typeof record.maxFrozenCost === 'number'
-      && Number.isFinite(record.maxFrozenCost)
-      && record.maxFrozenCost >= 0
-      && typeof record.action === 'string'
-      && record.action.trim().length > 0
-    if (!valid) {
-      throw new Error('billable task billingInfo does not match the durable Task contract')
-    }
-  }
-  return record as TaskBillingInfo
 }
 
 function readTraceRequestId(
@@ -134,7 +86,7 @@ export function buildTaskJobEnvelope(source: TaskJobEnvelopeSource): TaskJobEnve
     targetId: source.targetId,
     payload,
     batchKey: source.batchKey,
-    billingInfo: parseBillingInfo(source.billingInfo, type),
+    billingInfo: parseTaskBillingInfo(source.billingInfo, type),
     userId: source.userId,
     operationId: source.operationId,
     operationSource: source.operationSource,

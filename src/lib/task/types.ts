@@ -23,6 +23,7 @@ export const TASK_EVENT_TYPE = {
   PROGRESS: 'task.progress',
   COMPLETED: 'task.completed',
   FAILED: 'task.failed',
+  CANCELED: 'task.canceled',
 } as const
 
 export type TaskEventType = (typeof TASK_EVENT_TYPE)[keyof typeof TASK_EVENT_TYPE]
@@ -43,8 +44,10 @@ export type WorkspaceSSEEventType = (typeof WORKSPACE_SSE_EVENT_TYPE)[keyof type
 export const TASK_LIFECYCLE_EVENT_TYPES = [
   TASK_EVENT_TYPE.CREATED,
   TASK_EVENT_TYPE.PROCESSING,
+  TASK_EVENT_TYPE.PROGRESS,
   TASK_EVENT_TYPE.COMPLETED,
   TASK_EVENT_TYPE.FAILED,
+  TASK_EVENT_TYPE.CANCELED,
 ] as const
 
 export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]

@@ -178,6 +178,13 @@ export type ProjectAgentResolvedControl =
     followUp: ProjectAgentWaitFollowUp
   }
 
+export type ProjectAgentTaskFollowUpSettlement =
+  | 'completed'
+  | 'failed'
+  | 'awaiting_task'
+  | 'awaiting_choice'
+  | 'awaiting_approval'
+
 function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -709,6 +716,7 @@ export async function createProjectAgentChatResponse(input: {
   run: ProjectAgentRunRecord
   control: ProjectAgentResolvedControl
   runLock?: ProjectAgentRunLock | null
+  settleTaskFollowUp?: (outcome: ProjectAgentTaskFollowUpSettlement) => Promise<void>
 }): Promise<Response> {
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
   const runFence = createProjectAgentRunFence(input.run)
@@ -1115,6 +1123,7 @@ export async function createProjectAgentChatResponse(input: {
       signal: runAbortController.signal,
     })
     let runStatusFinalized = false
+    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlement | null = null
     let assistantMessagePersisted = false
     let assistantMessagePersistenceFailureLogged = false
     let latestRunStatusForPersistence: Pick<ProjectAgentRunPartData, 'status' | 'stopReason'> | null = null
@@ -1163,6 +1172,7 @@ export async function createProjectAgentChatResponse(input: {
       try {
         await persistAssistantMessageOnce()
       } catch (error) {
+        if (input.settleTaskFollowUp) throw error
         if (assistantMessagePersistenceFailureLogged) return
         assistantMessagePersistenceFailureLogged = true
         projectAgentLogger.error({
@@ -1268,6 +1278,7 @@ export async function createProjectAgentChatResponse(input: {
             operationPlan,
           } satisfies ProjectAgentInterruptionPartData))
           chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
+          if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_approval'
           runStatusFinalized = true
         }
 
@@ -1287,6 +1298,7 @@ export async function createProjectAgentChatResponse(input: {
             episodeId: context.episodeId || null,
           })
         } catch (error) {
+          if (input.settleTaskFollowUp) throw error
           const errorMessage = error instanceof Error ? error.message : String(error)
           chunks.push(...await settleTaskFollowUpActivity('failed', error))
           await updateProjectAgentRunStatus({
@@ -1305,6 +1317,7 @@ export async function createProjectAgentChatResponse(input: {
         }
 
         if (completionError && !shouldPersistApprovalInterruption) {
+          if (input.settleTaskFollowUp) throw completionError
           chunks.push(...await settleTaskFollowUpActivity('failed', completionError))
           await updateProjectAgentRunStatus({
             runFence,
@@ -1339,26 +1352,30 @@ export async function createProjectAgentChatResponse(input: {
           chunks.push(...await settleTaskFollowUpActivity('completed'))
           if (latestStopPart?.reason === 'awaiting_external_task') {
             chunks.push(createRuntimeStatusChunk('awaiting_task', waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task'))
+            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_task'
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             chunks.push(createRuntimeStatusChunk('awaiting_choice', 'awaiting_user_choice'))
+            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_choice'
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
-            await updateProjectAgentRunStatus({
-              runFence,
-              status: 'failed',
-              stopReason: 'tool_error',
-              errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
-              errorMessage: latestStopPart.operationIds.join(','),
-            })
+            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'failed'
+            else await updateProjectAgentRunStatus({
+                runFence,
+                status: 'failed',
+                stopReason: 'tool_error',
+                errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
+                errorMessage: latestStopPart.operationIds.join(','),
+              })
             chunks.push(createRuntimeStatusChunk('failed', 'tool_error'))
             runStatusFinalized = true
           } else {
-            await updateProjectAgentRunStatus({
-              runFence,
-              status: 'completed',
-              stopReason: 'completed',
-            })
+            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'completed'
+            else await updateProjectAgentRunStatus({
+                runFence,
+                status: 'completed',
+                stopReason: 'completed',
+              })
             chunks.push(createRuntimeStatusChunk('completed', 'completed'))
             runStatusFinalized = true
           }
@@ -1386,6 +1403,10 @@ export async function createProjectAgentChatResponse(input: {
         })
         if (runStatusFinalized) {
           recordLatestRunStatusForPersistence()
+          await persistAssistantMessageOrLog('error')
+          return
+        }
+        if (input.settleTaskFollowUp) {
           await persistAssistantMessageOrLog('error')
           return
         }
@@ -1418,6 +1439,10 @@ export async function createProjectAgentChatResponse(input: {
       onSettled: async () => {
         try {
           await persistAssistantMessageOrLog('settle')
+          if (input.settleTaskFollowUp) {
+            if (!taskFollowUpSettlement) throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_SETTLEMENT_MISSING')
+            await input.settleTaskFollowUp(taskFollowUpSettlement)
+          }
         } finally {
           await stopHeartbeatOnce()
           await releaseRunLockOnce()
@@ -1432,7 +1457,7 @@ export async function createProjectAgentChatResponse(input: {
     try {
       if (approvalInterruption) {
         await reopenProjectAgentInterruption(approvalInterruption.id)
-      } else {
+      } else if (!input.settleTaskFollowUp) {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
         await updateProjectAgentRunStatus({
           runFence,

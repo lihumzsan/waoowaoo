@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { logError as _ulogError } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
@@ -14,13 +16,19 @@ import {
 } from './cost'
 import {
   confirmChargeWithRecord,
+  confirmChargeWithRecordInTransaction,
   freezeBalance,
+  freezeBalanceInTransaction,
   getBalance,
   getFreezeByIdempotencyKey,
   increasePendingFreezeAmount,
+  increasePendingFreezeAmountInTransaction,
   recordShadowUsage,
+  recordShadowUsageInTransaction,
   rollbackFreeze,
+  rollbackFreezeInTransaction,
 } from './ledger'
+import type { FreezeBalanceResult } from './ledger'
 import type { ApiType, UsageUnit } from './cost'
 import { getBillingMode } from './mode'
 import { BillingOperationError, InsufficientBalanceError } from './errors'
@@ -32,6 +40,7 @@ import type {
 } from './types'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { assertPositiveChargeForBillingMode } from './billing-policy'
+import { parseTaskBillingInfo } from '@/lib/task/billing-info'
 
 type CostInput = {
   apiType: ApiType
@@ -296,6 +305,29 @@ async function ensureFreezeCoverage(params: {
   await rollbackFreeze(params.freezeId)
   const balance = await getBalance(params.userId)
   throw new InsufficientBalanceError(chargedCost, balance.balance)
+}
+
+async function ensureFreezeCoverageInTransaction(
+  tx: Prisma.TransactionClient,
+  params: {
+    freezeId: string
+    userId: string
+    actualCost: number
+    quotedCost: number
+  },
+): Promise<number> {
+  const normalizedQuoted = normalizeMoney(params.quotedCost)
+  const chargedCost = clampChargedCost(params.actualCost, normalizedQuoted)
+  if (chargedCost <= normalizedQuoted + MONEY_EPSILON) return chargedCost
+  const overage = normalizeMoney(chargedCost - normalizedQuoted)
+  if (overage <= MONEY_EPSILON) return chargedCost
+  const expanded = await increasePendingFreezeAmountInTransaction(tx, params.freezeId, overage)
+  if (expanded) return chargedCost
+  const balance = await tx.userBalance.findUnique({
+    where: { userId: params.userId },
+    select: { balance: true },
+  })
+  throw new InsufficientBalanceError(chargedCost, balance ? Number(balance.balance) : 0)
 }
 
 function resolveActualForSync<T>(
@@ -723,17 +755,30 @@ export function handleBillingError(error: unknown): NextResponse | null {
   return null
 }
 
-export async function prepareTaskBilling(task: {
+type TaskBillingPreparation = {
   id: string
   userId: string
   projectId: string
   episodeId?: string | null
   billingInfo: TaskBillingInfo | { billable: false } | null
-}) {
+}
+
+async function prepareTaskBillingSnapshot(
+  task: TaskBillingPreparation,
+  mode: Awaited<ReturnType<typeof getBillingMode>>,
+  freeze: (
+    userId: string,
+    amount: number,
+    options: {
+      source: string
+      taskId: string
+      idempotencyKey: string
+      metadata: Record<string, unknown>
+    },
+  ) => Promise<FreezeBalanceResult>,
+) {
   const info = task.billingInfo
   if (!info || !info.billable) return info
-
-  const mode = await getBillingMode()
   const next: TaskBillingInfo = {
     ...info,
     modeSnapshot: mode,
@@ -767,7 +812,7 @@ export async function prepareTaskBilling(task: {
     return next
   }
 
-  const freezeResult = await freezeBalance(task.userId, quotedCost, {
+  const freezeResult = await freeze(task.userId, quotedCost, {
     source: 'task',
     taskId: task.id,
     idempotencyKey: info.billingKey || task.id,
@@ -803,6 +848,192 @@ export async function prepareTaskBilling(task: {
   next.freezeId = freezeId
   next.maxFrozenCost = quotedCost
   return next
+}
+
+export async function prepareTaskBilling(task: TaskBillingPreparation) {
+  const mode = await getBillingMode()
+  return await prepareTaskBillingSnapshot(task, mode, freezeBalance)
+}
+
+type LockedTaskBillingRow = {
+  id: string
+  userId: string
+  projectId: string
+  episodeId: string | null
+  type: string
+  status: string
+  billingInfo: unknown
+}
+
+export async function authorizeTaskBilling(taskId: string): Promise<TaskBillingInfo | null> {
+  const mode = await getBillingMode()
+  return await prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<LockedTaskBillingRow[]>(Prisma.sql`
+      SELECT id, userId, projectId, episodeId, type, status, billingInfo
+      FROM tasks
+      WHERE id = ${taskId}
+      FOR UPDATE
+    `)
+    const task = rows[0]
+    if (!task) throw new BillingOperationError('BILLING_INVALID_FREEZE', 'task not found during billing authorization', { taskId })
+    if (task.status !== 'queued' && task.status !== 'processing') {
+      throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'cannot authorize billing for terminal task', {
+        taskId,
+        status: task.status,
+      })
+    }
+    const info = parseTaskBillingInfo(task.billingInfo)
+    if (info?.billable && info.taskType !== task.type) {
+      throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'task billing type does not match Task row', {
+        taskId,
+        taskType: task.type,
+        billingTaskType: info.taskType,
+      })
+    }
+    const prepared = await prepareTaskBillingSnapshot({
+      id: task.id,
+      userId: task.userId,
+      projectId: task.projectId,
+      episodeId: task.episodeId,
+      billingInfo: info,
+    }, mode, async (userId, amount, options) => (
+      await freezeBalanceInTransaction(tx, userId, amount, options)
+    ))
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        billingInfo: prepared === null
+          ? Prisma.JsonNull
+          : JSON.parse(JSON.stringify(prepared)) as Prisma.InputJsonValue,
+      },
+    })
+    return prepared as TaskBillingInfo | null
+  }, { maxWait: 10_000, timeout: 15_000 })
+}
+
+export async function settleTaskBillingInTransaction(tx: Prisma.TransactionClient, task: {
+  id: string
+  projectId: string
+  episodeId?: string | null
+  userId: string
+  billingInfo: TaskBillingInfo | { billable: false } | null
+}, options?: {
+  result?: Record<string, unknown> | void
+  textUsage?: TextUsageEntry[]
+}): Promise<TaskBillingInfo | { billable: false } | null> {
+  const info = task.billingInfo
+  if (!info || !info.billable) return info
+  if (!info.modeSnapshot) {
+    throw new BillingOperationError('BILLING_CONFIRM_FAILED', 'task billing mode snapshot is missing', {
+      taskId: task.id,
+    })
+  }
+  const mode = info.modeSnapshot
+  const noChargeStatus = info.status === 'skipped' ? 'skipped' : 'settled'
+  if (mode === 'OFF') {
+    return { ...info, status: noChargeStatus, chargedCost: 0 }
+  }
+  const quotedCost = resolveCost({
+    apiType: info.apiType,
+    model: info.model,
+    quantity: info.quantity,
+    unit: info.unit,
+    metadata: info.metadata,
+    quotedCost: info.maxFrozenCost,
+  })
+  if (mode === 'SHADOW' && quotedCost <= 0) {
+    return { ...info, status: noChargeStatus, chargedCost: 0 }
+  }
+  const actual = resolveTaskActual(info, quotedCost, options)
+  if (mode === 'SHADOW') {
+    await recordShadowUsageInTransaction(tx, task.userId, {
+      projectId: task.projectId,
+      episodeId: task.episodeId ?? null,
+      taskType: info.taskType || null,
+      action: info.action,
+      apiType: info.apiType,
+      model: info.model,
+      quantity: actual.actualQuantity,
+      unit: info.unit,
+      cost: actual.actualCost,
+      metadata: {
+        ...(info.metadata || {}),
+        ...(actual.metadata || {}),
+        mode: 'SHADOW',
+        taskId: task.id,
+        quotedCost,
+      },
+    })
+    return { ...info, status: noChargeStatus, chargedCost: 0 }
+  }
+  if (mode !== 'ENFORCE') {
+    throw new BillingOperationError('BILLING_CONFIRM_FAILED', 'task billing mode is invalid', {
+      taskId: task.id,
+      mode,
+    })
+  }
+  if (!info.freezeId) {
+    throw new BillingOperationError('BILLING_INVALID_FREEZE', 'task billing freeze id is missing', {
+      taskId: task.id,
+    })
+  }
+  const chargedCost = await ensureFreezeCoverageInTransaction(tx, {
+    freezeId: info.freezeId,
+    userId: task.userId,
+    actualCost: actual.actualCost,
+    quotedCost,
+  })
+  const recordModel = resolveRecordModel(info.model, actual.metadata)
+  await confirmChargeWithRecordInTransaction(tx, info.freezeId, {
+    projectId: task.projectId,
+    episodeId: task.episodeId ?? null,
+    action: info.action,
+    apiType: info.apiType,
+    model: recordModel.model,
+    quantity: actual.actualQuantity,
+    unit: info.unit,
+    metadata: {
+      ...(info.metadata || {}),
+      ...(actual.metadata || {}),
+      billingKey: info.billingKey || task.id,
+      source: 'task',
+      taskType: info.taskType,
+      taskId: task.id,
+      mode: 'ENFORCE',
+      quotedCost,
+      actualCost: actual.actualCost,
+      chargedCost,
+      pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
+      pricingSelections: info.metadata || {},
+      ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),
+    },
+  }, {
+    chargedAmount: chargedCost,
+    expected: {
+      userId: task.userId,
+      taskId: task.id,
+      amount: Math.max(quotedCost, chargedCost),
+    },
+  })
+  return { ...info, status: 'settled', chargedCost }
+}
+
+export async function rollbackTaskBillingInTransaction(
+  tx: Prisma.TransactionClient,
+  task: {
+    id: string
+    userId: string
+    billingInfo: TaskBillingInfo | { billable: false } | null
+  },
+): Promise<TaskBillingInfo | { billable: false } | null> {
+  const info = task.billingInfo
+  if (!info || !info.billable || !info.freezeId || info.modeSnapshot !== 'ENFORCE') return info
+  await rollbackFreezeInTransaction(tx, info.freezeId, {
+    userId: task.userId,
+    taskId: task.id,
+    amount: info.maxFrozenCost,
+  })
+  return { ...info, status: 'rolled_back' }
 }
 
 export async function settleTaskBilling(task: {

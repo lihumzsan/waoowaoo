@@ -6,9 +6,12 @@ export { addBalance, addBalanceWithTransaction, getBalance } from './ledger'
 export type { FreezeBalanceResult } from './ledger'
 export {
   handleBillingError,
+  authorizeTaskBilling,
   prepareTaskBilling,
   rollbackTaskBilling,
+  rollbackTaskBillingInTransaction,
   settleTaskBilling,
+  settleTaskBillingInTransaction,
   withImageBilling,
   withTextBilling,
   withVideoBilling,
