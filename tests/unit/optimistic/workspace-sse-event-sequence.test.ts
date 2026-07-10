@@ -45,6 +45,34 @@ describe('WorkspaceSSEEventSequence', () => {
     expect(sequence.getLastNumericEventId()).toBe(22)
   })
 
+  it('treats failed as terminal while accepting stream and empty lifecycle payloads beforehand', () => {
+    const sequence = new WorkspaceSSEEventSequence()
+    const apply = vi.fn()
+    const streamWithMisleadingPayload = taskEvent({ id: '40', type: TASK_SSE_EVENT_TYPE.STREAM })
+    streamWithMisleadingPayload.payload = { lifecycleType: TASK_EVENT_TYPE.COMPLETED }
+    expect(sequence.process(streamWithMisleadingPayload, apply)).toBe('accepted')
+    expect(sequence.process(taskEvent({ id: '41' }), apply)).toBe('accepted')
+    expect(sequence.process(taskEvent({ id: '42', lifecycleType: TASK_EVENT_TYPE.FAILED }), apply)).toBe('accepted')
+    expect(sequence.process(taskEvent({ id: '43', lifecycleType: TASK_EVENT_TYPE.PROCESSING }), apply)).toBe('rejected_after_terminal')
+    expect(apply).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not classify a non-task workspace event by an extra taskId field', () => {
+    const sequence = new WorkspaceSSEEventSequence()
+    const apply = vi.fn()
+    expect(sequence.process(taskEvent({ id: '50', lifecycleType: TASK_EVENT_TYPE.COMPLETED }), apply)).toBe('accepted')
+    expect(sequence.process({
+      id: 'resource:50',
+      type: 'resource.changed',
+      taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-07-11T00:00:01.000Z',
+      affectedResources: [],
+    }, apply)).toBe('accepted')
+    expect(apply).toHaveBeenCalledTimes(2)
+  })
+
   it('does not let malformed values mutate execution state', () => {
     const sequence = new WorkspaceSSEEventSequence()
     const apply = vi.fn()

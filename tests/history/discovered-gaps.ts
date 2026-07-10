@@ -9,17 +9,6 @@ export type DiscoveredTestGap = {
 
 export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
   {
-    id: 'GAP-SYS-001',
-    symptom: 'Only image success/failure and video success are implemented as real P0 system journeys; seven required cross-layer journeys remain.',
-    evidence: [
-      'tests/system/generate-image.system.test.ts',
-      'tests/system/generate-video.system.test.ts',
-    ],
-    owner: 'test-system-refactor',
-    rationale: 'These journeys require new real-service system scenarios; existing integration tests cannot be relabeled as system evidence.',
-    status: 'scenario-required',
-  },
-  {
     id: 'GAP-MUT-001',
     symptom: 'The initial critical-module mutation baseline contains 203 survived and 144 no-coverage mutants.',
     evidence: [
@@ -29,17 +18,6 @@ export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
     owner: 'test-system-refactor',
     rationale: 'The first run establishes a non-arbitrary baseline; Provider, Canvas, job envelope, and target failure survivors must be burned down in later test slices.',
     status: 'scenario-required',
-  },
-  {
-    id: 'GAP-I18N-001',
-    symptom: 'LocationSection unit rendering reports missing zh messages for assets.overview prop asset labels.',
-    evidence: [
-      'tests/unit/components/location-section-prop-confirm.test.ts full-suite stderr',
-      'missing keys: assets.overview.propAssets and assets.overview.propCounts',
-    ],
-    owner: 'workspace-assets',
-    rationale: 'Missing production i18n messages are outside the test-system refactor ownership boundary and must fail visibly in the later production remediation slice.',
-    status: 'production-fix-required',
   },
   {
     id: 'GAP-CLEANUP-001',

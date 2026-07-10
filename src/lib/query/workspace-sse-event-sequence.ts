@@ -42,9 +42,7 @@ export class WorkspaceSSEEventSequence {
   private recordEventId(eventId: string): void {
     this.processedEventIds.add(eventId)
     const numericEventId = readNumericWorkspaceSSEEventId(eventId)
-    if (numericEventId !== null && numericEventId > this.lastNumericEventId) {
-      this.lastNumericEventId = numericEventId
-    }
+    this.lastNumericEventId = Math.max(this.lastNumericEventId, numericEventId ?? 0)
   }
 
   process(value: unknown, apply: (event: SSEEvent) => void): WorkspaceSSEEventDecision {

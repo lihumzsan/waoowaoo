@@ -4,6 +4,7 @@ export const MUTATION_TARGETS = [
   'src/lib/task/job-envelope.ts',
   'src/lib/project-agent/run-state-machine.ts',
   'src/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle.ts',
+  'src/lib/query/workspace-sse-event-sequence.ts',
   'src/lib/billing/media-approval-policy.ts',
   'src/lib/project-workflow/edit-first-operation-policy.ts',
   'src/lib/ai-providers/fal/queue.ts',
