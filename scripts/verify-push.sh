@@ -66,22 +66,7 @@ export BILLING_TEST_KEEP_SERVICES=1
 run_npm_script lint:all
 run_npm_script typecheck
 
-run_npm_script check:api-handler
-run_npm_script check:image-reference-normalization
-run_npm_script check:task-submit-compensation
-run_npm_script check:no-operation-direct-submit-task
-run_npm_script check:no-assistant-fixed-workflow-surface
-run_npm_script check:no-client-agent-control
-run_npm_script check:no-history-state-inference
-run_npm_script check:no-api-direct-llm-call
-run_npm_script check:test-behavior-quality
-run_npm_script check:test-route-coverage
-run_npm_script check:test-tasktype-coverage
-run_npm_script check:test-behavior-route-coverage
-run_npm_script check:test-behavior-tasktype-coverage
-run_npm_script check:changed-test-impact
-run_npm_script check:requirements-matrix
-run_npm_script check:locale-navigation
+run_npm_script test:guards
 
 run_npm_script test:unit:all
 run_npm_script test:integration:provider
