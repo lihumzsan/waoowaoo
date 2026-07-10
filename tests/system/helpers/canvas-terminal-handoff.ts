@@ -3,9 +3,10 @@ import { expect } from 'vitest'
 import { queryKeys } from '@/lib/query/keys'
 import { applyWorkspaceSSEEvent } from '@/lib/query/workspace-sse-event-sync'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
-import { TASK_EVENT_TYPE } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { resolveWorkspaceCanvasLifecycle } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
+import { WorkspaceSSEEventSequence } from '@/lib/query/workspace-sse-event-sequence'
 
 export async function expectCompletedCanvasHandoff(input: {
   readonly projectId: string
@@ -53,14 +54,32 @@ export async function expectCompletedCanvasHandoff(input: {
     updatedAt: new Date(Date.parse(completedEvent.ts) - 1).toISOString(),
   }])
 
-  applyWorkspaceSSEEvent({
-    queryClient,
-    event: completedEvent,
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    isGlobalAssetProject: false,
-    scheduleTargetStatesInvalidation: () => undefined,
-  })
+  const sequence = new WorkspaceSSEEventSequence()
+  const acceptedEvents: string[] = []
+  const apply = (event: SSEEvent) => {
+    acceptedEvents.push(event.id)
+    applyWorkspaceSSEEvent({
+      queryClient,
+      event,
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      isGlobalAssetProject: false,
+      scheduleTargetStatesInvalidation: () => undefined,
+    })
+  }
+  expect(sequence.process(completedEvent, apply)).toBe('accepted')
+  expect(sequence.process(completedEvent, apply)).toBe('duplicate')
+  expect(sequence.process({
+    ...completedEvent,
+    id: `late:${completedEvent.id}`,
+    ts: new Date(Date.parse(completedEvent.ts) - 1000).toISOString(),
+    payload: { lifecycleType: TASK_EVENT_TYPE.PROCESSING },
+  }, apply)).toBe('rejected_after_terminal')
+  expect(sequence.process({
+    ...completedEvent,
+    id: `replay:${completedEvent.id}`,
+  }, apply)).toBe('rejected_after_terminal')
+  expect(acceptedEvents).toEqual([completedEvent.id])
 
   const materializedEpisode = queryClient.getQueryData<unknown>(
     queryKeys.episodeData(input.projectId, input.episodeId),

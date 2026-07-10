@@ -84,7 +84,7 @@ describe('system - generate video', () => {
     resetAuthMockState()
   })
 
-  it('[P0:SYS-VIDEO-SUCCESS] [P0:SYS-CANVAS-TERMINAL-NO-GAP] queued video materializes before the Canvas terminal handoff', async () => {
+  it('[P0:SYS-VIDEO-SUCCESS] [P0:SYS-CANVAS-TERMINAL-NO-GAP] [P0:SYS-SSE-DUPLICATE-LATE-REPLAY] queued video materializes once across duplicate, late, and replay events', async () => {
     const seeded = await seedMinimalDomainState()
     await prisma.projectPanel.update({
       where: { id: seeded.panel.id },

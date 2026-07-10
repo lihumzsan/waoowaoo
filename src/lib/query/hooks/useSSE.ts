@@ -7,9 +7,8 @@ import { TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/
 import { apiFetch } from '@/lib/api-fetch'
 import {
   applyWorkspaceSSEEvent,
-  isWorkspaceSSEEvent,
-  readNumericWorkspaceSSEEventId,
 } from '../workspace-sse-event-sync'
+import { WorkspaceSSEEventSequence } from '../workspace-sse-event-sequence'
 import { queryKeys } from '../keys'
 
 const SSE_REPLAY_POLL_MS = 5000
@@ -29,10 +28,12 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   const queryClient = useQueryClient()
   const sourceRef = useRef<EventSource | null>(null)
   const targetStatesInvalidateTimerRef = useRef<number | null>(null)
-  const lastEventIdRef = useRef(0)
-  const processedEventIdsRef = useRef<Set<string>>(new Set())
   const replayInFlightRef = useRef(false)
   const isGlobalAssetProject = projectId === 'global-asset-hub'
+  const eventSequence = useMemo(
+    () => new WorkspaceSSEEventSequence(),
+    [episodeId, projectId],
+  )
 
   const url = useMemo(() => {
     if (!projectId) return null
@@ -63,15 +64,8 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   }, [episodeId, isGlobalAssetProject, onEvent, projectId, queryClient, scheduleTargetStatesInvalidation])
 
   const handleParsedEvent = useCallback((payload: unknown) => {
-    if (!isWorkspaceSSEEvent(payload)) return
-    if (processedEventIdsRef.current.has(payload.id)) return
-    applyEvent(payload)
-    processedEventIdsRef.current.add(payload.id)
-    const numericEventId = readNumericWorkspaceSSEEventId(payload.id)
-    if (numericEventId !== null && numericEventId > lastEventIdRef.current) {
-      lastEventIdRef.current = numericEventId
-    }
-  }, [applyEvent])
+    eventSequence.process(payload, applyEvent)
+  }, [applyEvent, eventSequence])
 
   useEffect(() => {
     if (!enabled || !url || !projectId) return
@@ -128,7 +122,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       try {
         const params = new URLSearchParams({
           projectId,
-          lastEventId: String(lastEventIdRef.current),
+          lastEventId: String(eventSequence.getLastNumericEventId()),
         })
         if (episodeId) params.set('episodeId', episodeId)
         const response = await apiFetch(`/api/sse/replay?${params.toString()}`)
@@ -161,7 +155,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [enabled, episodeId, handleParsedEvent, projectId])
+  }, [enabled, episodeId, eventSequence, handleParsedEvent, projectId])
 
   return {
     connected: !!sourceRef.current && sourceRef.current.readyState === EventSource.OPEN,

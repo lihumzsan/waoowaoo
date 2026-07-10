@@ -46,6 +46,9 @@
         "src/features/project-workspace/canvas",
         "src/lib/workspace-resource/materialized-resource.ts",
         "src/lib/query/materialized-resource-cache.ts",
+        "src/lib/query/workspace-sse-event-sync.ts",
+        "src/lib/query/workspace-sse-event-sequence.ts",
+        "src/lib/query/hooks/useSSE.ts",
         "src/lib/edit-bible/source-script-segments.ts",
         "src/lib/ai-prompts/templates/edit-bible/outline-script"
       ],
@@ -59,6 +62,7 @@
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts",
+        "tests/unit/optimistic/workspace-sse-event-sequence.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts"
       ],
       "guardPaths": [
