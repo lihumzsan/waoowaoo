@@ -123,7 +123,7 @@
     "bgmScorePersist": "Persist music result",
     "soundscapePrepare": "Prepare soundscape timeline",
     "soundscapePlan": "Plan ambience layer",
-    "soundscapeEnqueueGenerate": "Submit soundscape loop generation",
+    "soundscapePlanPersisted": "Soundscape plan ready for approval",
     "soundscapeGenerateSources": "Generate ambience loops",
     "soundscapeMix": "Mix soundscape layer",
     "soundscapePersist": "Persist soundscape result",

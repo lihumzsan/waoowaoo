@@ -8,15 +8,11 @@ import { z } from 'zod'
 import { generateSoundEffect } from '@/lib/ai-exec/engine'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { getProjectModelConfig } from '@/lib/config-service'
-import { buildDefaultTaskBillingInfo } from '@/lib/billing'
-import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
-import { shouldExposeBillingCredits } from '@/lib/billing/task-billing-view'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
 import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
-import { submitTask } from '@/lib/task/submitter'
-import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import type { TaskJobData } from '@/lib/task/types'
 import {
   buildFfmpegExecFileOptions,
   resolveFfmpegBinary,
@@ -27,6 +23,10 @@ import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapt
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/lib/workers/handlers/llm-stream'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { renderSoundscapeMix } from './mixer'
+import {
+  buildSoundscapePlanFingerprint,
+  parseSoundscapePlanStrict,
+} from './plan-contract'
 import { buildSoundscapePlanPrompt } from './prompt'
 import {
   readSoundscapeSourcesStrict,
@@ -38,7 +38,7 @@ import {
 } from './timeline'
 import {
   SOUNDSCAPE_STATUS,
-  soundscapePlanSchema,
+  SOUNDSCAPE_OUTPUT_FORMAT,
   type SoundscapeMix,
   type SoundscapePlan,
   type SoundscapePlanSource,
@@ -48,7 +48,6 @@ import {
 
 const execFileAsync = promisify(execFile)
 const SOUNDSCAPE_DURATION_TOLERANCE_SECONDS = 0.25
-const SOUNDSCAPE_OUTPUT_FORMAT = 'mp3_44100_128'
 
 type CommandResult = {
   readonly stdout: string | Buffer
@@ -63,7 +62,9 @@ type GeneratedAudioBuffer = {
 type SoundscapePayload = {
   readonly episodeId?: unknown
   readonly soundEffectModel?: unknown
-  readonly approvedMediaMaxCost?: unknown
+  readonly soundscapePlan?: unknown
+  readonly soundscapePlanHash?: unknown
+  readonly timelineSignature?: unknown
 }
 
 async function runFfmpegCommand(
@@ -80,10 +81,6 @@ async function runFfmpegCommand(
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function readNonnegativeNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 function extensionFromMimeType(mimeType: string): string {
@@ -160,18 +157,6 @@ function ensureTimeline(clips: readonly FinalRenderClipPlan[]): void {
   if (invalid) {
     throw new Error(`SOUNDSCAPE_VIDEO_TIMELINE_INCOMPLETE:${invalid.groupId ?? invalid.panelId}`)
   }
-}
-
-function parseSoundscapePlanValue(raw: unknown): SoundscapePlan {
-  const result = soundscapePlanSchema.safeParse(raw)
-  if (!result.success) {
-    throw new Error(`SOUNDSCAPE_PLAN_INVALID:${result.error.issues.map((issue) => issue.message).join(',')}`)
-  }
-  return result.data
-}
-
-function planSourceDurationSeconds(plan: SoundscapePlan): number {
-  return plan.sources.reduce((total, source) => total + source.loopDurationSeconds, 0)
 }
 
 function sourceMatchesPlan(input: {
@@ -289,69 +274,10 @@ async function uploadGeneratedSoundscapeMix(input: {
   }
 }
 
-async function submitSoundscapeGenerateTask(input: {
-  readonly job: Job<TaskJobData>
-  readonly episodeId: string
-  readonly soundEffectModel: string
-  readonly plan: SoundscapePlan
-  readonly approvedMediaMaxCost: number | null
-}): Promise<void> {
-  if (
-    input.job.data.operationId !== 'generate_episode_soundscape'
-    || input.job.data.operationConfirmed !== true
-  ) {
-    throw new Error('SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
-  }
-
-  const payload = {
-    episodeId: input.episodeId,
-    soundEffectModel: input.soundEffectModel,
-    durationSeconds: Math.max(0.5, planSourceDurationSeconds(input.plan)),
-    sourceCount: input.plan.sources.length,
-    loop: true,
-    outputFormat: SOUNDSCAPE_OUTPUT_FORMAT,
-  }
-  const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, payload)
-  if (!requiresBillableMediaApproval(billingInfo) || billingInfo.apiType !== 'sound_effect') {
-    throw new Error('SOUNDSCAPE_BILLING_INFO_REQUIRED')
-  }
-  if (shouldExposeBillingCredits()) {
-    if (input.approvedMediaMaxCost === null) {
-      throw new Error('SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_REQUIRED')
-    }
-    if (billingInfo.maxFrozenCost > input.approvedMediaMaxCost) {
-      throw new Error(
-        `SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_EXCEEDED:${billingInfo.maxFrozenCost}:${input.approvedMediaMaxCost}`,
-      )
-    }
-  }
-
-  await submitTask({
-    userId: input.job.data.userId,
-    locale: input.job.data.locale,
-    requestId: input.job.data.trace?.requestId || null,
-    projectId: input.job.data.projectId,
-    parentTaskId: input.job.data.taskId,
-    episodeId: input.episodeId,
-    type: TASK_TYPE.SOUNDSCAPE_GENERATE,
-    targetType: 'ProjectEpisode',
-    targetId: input.episodeId,
-    payload,
-    billingInfo,
-    billingInfoSource: 'planned',
-    dedupeKey: `soundscape_generate:${input.job.data.projectId}:${input.episodeId}:${input.job.data.taskId}`,
-    operationId: 'generate_episode_soundscape',
-    operationSource: 'worker',
-    operationConfirmed: input.job.data.operationConfirmed,
-    operationRequestId: input.job.data.operationRequestId || input.job.data.trace?.requestId || null,
-  })
-}
-
 export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as SoundscapePayload
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   const soundEffectModel = readString(payload.soundEffectModel)
-  const approvedMediaMaxCost = readNonnegativeNumber(payload.approvedMediaMaxCost)
   if (!episodeId) throw new Error('SOUNDSCAPE_EPISODE_REQUIRED')
   if (!soundEffectModel) throw new Error('SOUNDSCAPE_SOUND_EFFECT_MODEL_REQUIRED')
 
@@ -434,7 +360,7 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
             },
             schema: z.unknown(),
             parse: { kind: 'object' },
-            validate: parseSoundscapePlanValue,
+            validate: parseSoundscapePlanStrict,
           })
         } finally {
           await streamCallbacks.flush()
@@ -481,14 +407,7 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
       },
     })
 
-    await reportTaskProgress(job, 88, { stage: 'soundscape_enqueue_generate' })
-    await submitSoundscapeGenerateTask({
-      job,
-      episodeId,
-      soundEffectModel,
-      plan,
-      approvedMediaMaxCost,
-    })
+    await reportTaskProgress(job, 95, { stage: 'soundscape_plan_persisted' })
 
     return {
       episodeId,
@@ -522,8 +441,30 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as SoundscapePayload
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   const soundEffectModel = readString(payload.soundEffectModel)
+  const approvedTimelineSignature = readString(payload.timelineSignature)
+  const approvedPlanHash = readString(payload.soundscapePlanHash)
   if (!episodeId) throw new Error('SOUNDSCAPE_GENERATE_EPISODE_REQUIRED')
   if (!soundEffectModel) throw new Error('SOUNDSCAPE_GENERATE_SOUND_EFFECT_MODEL_REQUIRED')
+  if (!approvedTimelineSignature) throw new Error('SOUNDSCAPE_GENERATE_TIMELINE_SIGNATURE_REQUIRED')
+  if (!approvedPlanHash) throw new Error('SOUNDSCAPE_GENERATE_PLAN_HASH_REQUIRED')
+  if (
+    job.data.operationId !== 'generate_episode_soundscape'
+    || job.data.operationConfirmed !== true
+  ) {
+    throw new Error('SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
+  }
+  const approvedPlan = parseSoundscapePlanStrict(payload.soundscapePlan)
+  if (approvedPlan.decision !== 'soundscape') {
+    throw new Error(`SOUNDSCAPE_GENERATE_NOT_REQUIRED:${approvedPlan.decision}`)
+  }
+  const computedApprovedPlanHash = buildSoundscapePlanFingerprint({
+    plan: approvedPlan,
+    timelineSignature: approvedTimelineSignature,
+    soundEffectModel,
+  })
+  if (computedApprovedPlanHash !== approvedPlanHash) {
+    throw new Error(`SOUNDSCAPE_APPROVED_PLAN_HASH_INVALID:${approvedPlanHash}:${computedApprovedPlanHash}`)
+  }
 
   let signature = ''
   let durationSeconds = 0
@@ -547,13 +488,22 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
       }),
     ])
     if (!soundscape) throw new Error('SOUNDSCAPE_PLAN_REQUIRED')
-    plan = parseSoundscapePlanValue(soundscape.planJson)
-    if (plan.decision !== 'soundscape') throw new Error(`SOUNDSCAPE_GENERATE_NOT_REQUIRED:${plan.decision}`)
+    const persistedPlan = parseSoundscapePlanStrict(soundscape.planJson)
+    const persistedTimelineSignature = readString(soundscape.timelineSignature)
+    const persistedPlanHash = buildSoundscapePlanFingerprint({
+      plan: persistedPlan,
+      timelineSignature: persistedTimelineSignature,
+      soundEffectModel,
+    })
+    if (persistedPlanHash !== approvedPlanHash) {
+      throw new Error(`SOUNDSCAPE_APPROVED_PLAN_STALE:${approvedPlanHash}:${persistedPlanHash}`)
+    }
+    plan = approvedPlan
     ensureTimeline(clips)
     durationSeconds = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
     signature = buildSoundscapeTimelineSignature(clips)
-    if (soundscape.timelineSignature !== signature) {
-      throw new Error(`SOUNDSCAPE_TIMELINE_STALE:${soundscape.timelineSignature ?? 'null'}:${signature}`)
+    if (approvedTimelineSignature !== signature) {
+      throw new Error(`SOUNDSCAPE_TIMELINE_STALE:${approvedTimelineSignature}:${signature}`)
     }
     sources = readSoundscapeSourcesStrict(soundscape.sourcesJson)
 

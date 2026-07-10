@@ -103,6 +103,7 @@ export type WorkspaceCanvasNodeAction =
     }
   | { readonly type: 'render_final_video' }
   | { readonly type: 'generate_bgm_score' }
+  | { readonly type: 'plan_soundscape' }
   | { readonly type: 'generate_soundscape' }
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }

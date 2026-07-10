@@ -50,6 +50,7 @@ export function workspaceCanvasArtifactPhaseFromTerminalStatus(
     || status === 'script_ready_for_review'
     || status === 'script_approved'
     || status === 'ready_for_review'
+    || status === 'planned'
     || status === 'completed'
     || status === 'confirmed'
   ) {
@@ -65,6 +66,7 @@ export function workspaceCanvasArtifactPhaseFromTaskBackedStatus(
   if (terminalPhase) return terminalPhase
   if (
     status === 'generating'
+    || status === 'planning'
     || status === 'queued'
     || status === 'processing'
   ) return 'running'

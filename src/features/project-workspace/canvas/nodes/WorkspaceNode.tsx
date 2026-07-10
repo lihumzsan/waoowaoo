@@ -441,6 +441,7 @@ function nodeActionIconName(action: WorkspaceCanvasNodeAction): AppIconName {
     case 'generate_asset_reference_video':
       return 'video'
     case 'generate_bgm_score':
+    case 'plan_soundscape':
     case 'generate_soundscape':
       return 'audioWave'
     case 'render_final_video':

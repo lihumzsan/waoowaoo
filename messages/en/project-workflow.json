@@ -199,6 +199,7 @@
         "generateAllVideos": "Batch Generate",
         "generateBgmScore": "Generate Music Plan",
         "generatingBgm": "Generating Music",
+        "planSoundscape": "Plan Soundscape",
         "generateSoundscape": "Generate Soundscape",
         "renderFinalVideo": "AI Edit",
         "aiEditing": "AI Editing",

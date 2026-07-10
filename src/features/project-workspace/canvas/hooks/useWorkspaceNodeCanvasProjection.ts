@@ -1400,6 +1400,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   if (editFirstCanvasVisibility.soundscape) {
     soundscapeNodeId = workspaceNodeId.soundscape(episodeId)
     const details = soundscapeDetails(finalVideo)
+    const soundscapeReadyForGeneration = details?.decision === 'soundscape'
+      && details.status !== 'planning'
+      && details.status !== 'generating'
+      && !details.mixUrl
     const soundscapePresentation = details
       ? artifactPresentationFromTaskBackedStatus(details.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
@@ -1427,8 +1431,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : translate('nodes.soundscape.body', { videos: videoGroups.length }),
         meta: details?.soundEffectModel ?? '',
         ...(soundscapePresentation ?? { statusLabel: '', isRunning: false }),
-        actionLabel: translate('actions.generateSoundscape'),
-        action: { type: 'generate_soundscape' },
+        actionLabel: translate(
+          soundscapeReadyForGeneration ? 'actions.generateSoundscape' : 'actions.planSoundscape',
+        ),
+        action: soundscapeReadyForGeneration
+          ? { type: 'generate_soundscape' }
+          : { type: 'plan_soundscape' },
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeSoundscape(episodeId)),
         soundscapeDetails: details,
         onAction,

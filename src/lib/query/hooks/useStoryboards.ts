@@ -353,7 +353,55 @@ export function useGenerateBgmScore(projectId: string | null, episodeId: string 
 }
 
 /**
- * 生成连续环境音效层
+ * 规划连续环境音效层（仅 LLM 文本任务）
+ */
+export function usePlanSoundscape(projectId: string | null, episodeId: string | null) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async () => {
+            if (!projectId) throw new Error('Project ID is required')
+            if (!episodeId) throw new Error('Episode ID is required')
+
+            const res = await apiFetch(`/api/projects/${projectId}/plan-soundscape`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId }),
+            })
+            await checkApiResponse(res)
+            return res.json()
+        },
+        onMutate: async () => {
+            if (!projectId || !episodeId) return
+            upsertTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+                runningTaskType: 'soundscape_plan',
+                intent: 'generate',
+                stage: 'soundscape_prepare',
+            })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+        },
+        onError: () => {
+            if (!projectId || !episodeId) return
+            clearTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+            })
+        },
+        onSettled: () => {
+            if (episodeId && projectId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+            }
+        },
+    })
+}
+
+/**
+ * 按已确认的准确规划生成连续环境音效层
  */
 export function useGenerateSoundscape(projectId: string | null, episodeId: string | null) {
     const queryClient = useQueryClient()
@@ -384,9 +432,9 @@ export function useGenerateSoundscape(projectId: string | null, episodeId: strin
                 projectId,
                 targetType: 'ProjectEpisode',
                 targetId: episodeId,
-                runningTaskType: 'soundscape_plan',
+                runningTaskType: 'soundscape_generate',
                 intent: 'generate',
-                stage: 'soundscape_prepare',
+                stage: 'soundscape_generate_sources',
             })
             await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
         },

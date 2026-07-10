@@ -193,6 +193,7 @@ export function useProjectWorkspaceController({
     handleGenerateVideo: videoActions.handleGenerateVideo,
     handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleGenerateBgmScore: videoActions.handleGenerateBgmScore,
+    handlePlanSoundscape: videoActions.handlePlanSoundscape,
     handleGenerateSoundscape: videoActions.handleGenerateSoundscape,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditAssets,

@@ -64,6 +64,7 @@ const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceC
   generate_video_group: ['videoPlan'],
   generate_episode_bgm_score: ['bgmScore'],
   generate_episode_soundscape: ['soundscape'],
+  plan_episode_soundscape: ['soundscape'],
   generate_project_music: ['bgmScore'],
   render_chapters: ['finalTimeline', 'videoPlan'],
   render_final_video: ['finalTimeline'],

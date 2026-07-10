@@ -119,6 +119,11 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'plan_soundscape') {
+      await runtime.onPlanSoundscape()
+      return
+    }
+
     if (action.type === 'generate_soundscape') {
       await runtime.onGenerateSoundscape()
       return

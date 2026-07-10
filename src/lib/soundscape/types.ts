@@ -13,6 +13,7 @@ export type SoundscapeStatus = (typeof SOUNDSCAPE_STATUS)[keyof typeof SOUNDSCAP
 
 export const SOUNDSCAPE_MAX_SOURCE_COUNT = 12
 export const SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS = 30
+export const SOUNDSCAPE_OUTPUT_FORMAT = 'mp3_44100_128'
 
 export const soundscapePerspectiveSchema = z.enum([
   'exterior_near',

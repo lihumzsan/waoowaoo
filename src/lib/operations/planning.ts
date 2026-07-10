@@ -43,7 +43,6 @@ export interface OperationPlan {
   projectId: string
   userId: string
   tasks: PlannedTask[]
-  approvalQuoteTasks?: PlannedTask[]
   summary?: string | null
   metadata?: Record<string, unknown>
 }
@@ -92,10 +91,6 @@ type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
 type QuoteVisibleMediaApiType = Extract<BillableTaskBillingInfo['apiType'], BillableMediaApiType>
 type ConfirmedCostMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'sound_effect'>
 
-function operationPlanBillingTasks(plan: OperationPlan): readonly PlannedTask[] {
-  return [...plan.tasks, ...(plan.approvalQuoteTasks ?? [])]
-}
-
 function isQuoteVisibleMediaBillingInfo(
   info: TaskBillingInfo | null | undefined,
 ): info is BillableTaskBillingInfo & { apiType: QuoteVisibleMediaApiType } {
@@ -120,8 +115,7 @@ function toPositiveMoney(value: number): number {
 export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQuoteView> {
   const showCredits = shouldExposeCredits()
   const billingMode = await getBillingMode()
-  const mediaTasks = operationPlanBillingTasks(plan)
-    .filter((task) => isQuoteVisibleMediaBillingInfo(task.billingInfo))
+  const mediaTasks = plan.tasks.filter((task) => isQuoteVisibleMediaBillingInfo(task.billingInfo))
   const totalMaxFrozenCost = toPositiveMoney(mediaTasks.reduce((total, task) => {
     const info = task.billingInfo as Extract<TaskBillingInfo, { billable: true }>
     return total + info.maxFrozenCost
@@ -157,7 +151,7 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
 }
 
 function confirmedCostMediaTotal(plan: OperationPlan): number {
-  return toPositiveMoney(operationPlanBillingTasks(plan).reduce((total, task) => {
+  return toPositiveMoney(plan.tasks.reduce((total, task) => {
     if (!isConfirmedCostMediaBillingInfo(task.billingInfo)) return total
     return total + task.billingInfo.maxFrozenCost
   }, 0))

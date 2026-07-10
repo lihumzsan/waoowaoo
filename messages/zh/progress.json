@@ -123,7 +123,7 @@
     "bgmScorePersist": "保存配乐结果",
     "soundscapePrepare": "准备氛围音时间线",
     "soundscapePlan": "规划环境音层",
-    "soundscapeEnqueueGenerate": "提交氛围音循环生成",
+    "soundscapePlanPersisted": "氛围音规划已就绪，等待批准",
     "soundscapeGenerateSources": "生成环境音循环",
     "soundscapeMix": "混合氛围音层",
     "soundscapePersist": "保存氛围音结果",

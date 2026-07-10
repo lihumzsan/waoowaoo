@@ -66,7 +66,7 @@ const STAGE_LABELS: Record<string, string> = {
   bgm_score_persist: 'progress.stage.bgmScorePersist',
   soundscape_prepare: 'progress.stage.soundscapePrepare',
   soundscape_plan: 'progress.stage.soundscapePlan',
-  soundscape_enqueue_generate: 'progress.stage.soundscapeEnqueueGenerate',
+  soundscape_plan_persisted: 'progress.stage.soundscapePlanPersisted',
   soundscape_generate_sources: 'progress.stage.soundscapeGenerateSources',
   soundscape_mix: 'progress.stage.soundscapeMix',
   soundscape_persist: 'progress.stage.soundscapePersist',

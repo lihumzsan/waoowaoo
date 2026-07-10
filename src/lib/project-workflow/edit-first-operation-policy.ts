@@ -15,6 +15,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'generate_episode_videos',
   'render_chapters',
   'generate_episode_bgm_score',
+  'plan_episode_soundscape',
   'generate_episode_soundscape',
   'render_final_video',
 ] as const
@@ -40,6 +41,7 @@ export const EDIT_FIRST_OPERATION_APPROVAL_KINDS = {
   generate_episode_videos: 'billable_media',
   render_chapters: 'none',
   generate_episode_bgm_score: 'billable_media',
+  plan_episode_soundscape: 'none',
   generate_episode_soundscape: 'billable_media',
   render_final_video: 'none',
 } as const satisfies Record<EditFirstWorkflowOperationId, EditFirstOperationApprovalKind>

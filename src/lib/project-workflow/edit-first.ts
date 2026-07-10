@@ -560,6 +560,13 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   const bgmRunning = snapshot.activeBgmScoreTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
   const bgmFailed = snapshot.bgmScoreStatus === 'failed'
   const soundscapeSatisfied = snapshot.soundscapeDecision === 'none_needed' || snapshot.soundscapeHasMix
+  const soundscapeReadyForGeneration = snapshot.soundscapeDecision === 'soundscape'
+    && snapshot.soundscapeStatus !== 'planning'
+    && snapshot.soundscapeStatus !== 'generating'
+    && !snapshot.soundscapeHasMix
+  const soundscapeOperationId: EditFirstWorkflowOperationId = soundscapeReadyForGeneration
+    ? 'generate_episode_soundscape'
+    : 'plan_episode_soundscape'
   const soundscapeRunning = snapshot.activeSoundscapeTaskCount > 0
     || snapshot.soundscapeStatus === 'planning'
     || snapshot.soundscapeStatus === 'generating'
@@ -650,7 +657,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'bgm_score_generating',
       blocking: { kind: 'processing', reason: 'audio layer generation is still running' },
-      allowedOperationIds: soundscapeSatisfied ? [] : ['generate_episode_soundscape'],
+      allowedOperationIds: soundscapeSatisfied ? [] : [soundscapeOperationId],
     })
   }
 
@@ -673,7 +680,12 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (soundscapeFailed) {
-    const nextAction = workflowAction('generate_episode_soundscape', 'Regenerate soundscape')
+    const nextAction = workflowAction(
+      soundscapeOperationId,
+      soundscapeOperationId === 'generate_episode_soundscape'
+        ? 'Regenerate soundscape audio'
+        : 'Replan soundscape',
+    )
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'soundscape generation failed' },
@@ -685,14 +697,18 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (!bgmReady || !soundscapeSatisfied) {
     const missingActions: EditFirstWorkflowOperationId[] = []
     if (!bgmReady) missingActions.push('generate_episode_bgm_score')
-    if (!soundscapeSatisfied) missingActions.push('generate_episode_soundscape')
+    if (!soundscapeSatisfied) missingActions.push(soundscapeOperationId)
     const nextOperationId = missingActions[0]
     if (!nextOperationId) {
       throw new Error('EDIT_FIRST_AUDIO_LAYER_ACTION_REQUIRED')
     }
     const nextAction = workflowAction(
       nextOperationId,
-      nextOperationId === 'generate_episode_bgm_score' ? 'Generate BGM score' : 'Generate soundscape',
+      nextOperationId === 'generate_episode_bgm_score'
+        ? 'Generate BGM score'
+        : nextOperationId === 'plan_episode_soundscape'
+          ? 'Plan soundscape'
+          : 'Generate soundscape audio',
     )
     return state({
       stage: 'ready_to_generate_audio_layers',

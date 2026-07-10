@@ -47,6 +47,7 @@ interface UseWorkspaceRuntimeParams {
   ) => Promise<void>
   handleGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
   handleGenerateBgmScore: () => Promise<void>
+  handlePlanSoundscape: () => Promise<void>
   handleGenerateSoundscape: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
@@ -86,6 +87,7 @@ export function useWorkspaceRuntime({
   handleGenerateVideo,
   handleGenerateAllVideos,
   handleGenerateBgmScore,
+  handlePlanSoundscape,
   handleGenerateSoundscape,
   handleRenderFinalVideo,
   handleGenerateEditAssets,
@@ -124,6 +126,7 @@ export function useWorkspaceRuntime({
     onGenerateVideo: handleGenerateVideo,
     onGenerateAllVideos: handleGenerateAllVideos,
     onGenerateBgmScore: handleGenerateBgmScore,
+    onPlanSoundscape: handlePlanSoundscape,
     onGenerateSoundscape: handleGenerateSoundscape,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditAssets: handleGenerateEditAssets,
@@ -138,6 +141,7 @@ export function useWorkspaceRuntime({
     assetsLoading,
     handleGenerateAllVideos,
     handleGenerateBgmScore,
+    handlePlanSoundscape,
     handleGenerateSoundscape,
     handleRenderFinalVideo,
     handleGenerateEditAssets,
