@@ -7,6 +7,7 @@ import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-ur
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import type { Locale } from '@/i18n/routing'
 import { submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -462,8 +463,7 @@ export async function commitProjectEditScriptAssetsOperation(params: {
   if (metadata.projectId !== params.ctx.projectId) {
     throw new ApiError('CONFLICT', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
   }
-  const transaction = params.ctx.executionAuthorization?.transaction
-  if (!transaction) throw new Error('OPERATION_EXECUTION_TRANSACTION_REQUIRED')
+  const transaction = requireOperationExecutionTransaction(params.ctx)
   const submitted = new Map<string, Awaited<ReturnType<typeof submitPlannedOperationTask>>>()
   await applyPlanWrites(transaction, metadata)
 

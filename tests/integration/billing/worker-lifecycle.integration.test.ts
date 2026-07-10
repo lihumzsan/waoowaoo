@@ -5,13 +5,15 @@ import { UnrecoverableError } from 'bullmq'
 import { prepareTaskBilling } from '@/lib/billing/service'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
 import { TaskTerminatedError } from '@/lib/task/errors'
+import { cancelTask } from '@/lib/task/service'
 import { withTaskLifecycle } from '@/lib/workers/shared'
 import { TASK_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createQueuedTask, createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 
-vi.mock('@/lib/task/publisher', () => ({
+vi.mock('@/lib/task/publisher', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/task/publisher')>()),
   publishTaskEvent: vi.fn(async () => ({})),
   listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
@@ -145,6 +147,7 @@ describe('billing/worker lifecycle integration', () => {
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {
+        await cancelTask(fixture.taskId)
         throw new TaskTerminatedError(fixture.taskId)
       }),
     ).rejects.toBeInstanceOf(UnrecoverableError)

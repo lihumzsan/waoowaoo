@@ -96,6 +96,7 @@ describe('project agent interruption consumption', () => {
     await expect(consumeProjectAgentApprovalInterruption(scope)).resolves.toBeNull()
     expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
       events: expect.arrayContaining([expect.objectContaining({
+        runFence: { runId: 'run-1', runVersion: 2, eventSeq: '10' },
         event: expect.objectContaining({
           kind: 'interruption.resolved',
           interruptionId: 'interruption-1',

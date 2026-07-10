@@ -105,6 +105,6 @@ describe('regression - production plan to visual-style lifecycle', () => {
       },
       confirmation: { kind: 'none', required: false },
     })
-    expect(operation?.toolInputSchema.required).toEqual(['stylePreviewId'])
+    expect(operation?.toolInputSchema.required).toEqual([])
   })
 })

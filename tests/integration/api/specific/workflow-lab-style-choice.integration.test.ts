@@ -116,10 +116,10 @@ describe('workflow lab style-choice restoration', () => {
       checkpointId: checkpoint.id,
     })
 
-    const [run, activity, interruptionCount, events, thread, targetPreview] = await Promise.all([
+    const [run, activity, interruption, events, thread, targetPreview] = await Promise.all([
       prisma.projectAgentRun.findFirstOrThrow({ where: { projectId: result.labProject.id } }),
       prisma.projectAgentActivity.findFirstOrThrow({ where: { projectId: result.labProject.id } }),
-      prisma.projectAgentInterruption.count({ where: { projectId: result.labProject.id } }),
+      prisma.projectAgentInterruption.findFirstOrThrow({ where: { projectId: result.labProject.id } }),
       prisma.projectAgentEvent.findMany({
         where: { projectId: result.labProject.id },
         orderBy: { id: 'asc' },
@@ -127,15 +127,20 @@ describe('workflow lab style-choice restoration', () => {
       prisma.projectAssistantThread.findFirstOrThrow({ where: { projectId: result.labProject.id } }),
       prisma.projectEditStylePreview.findFirstOrThrow({ where: { projectId: result.labProject.id } }),
     ])
-    expect(events.map((event) => event.kind)).toEqual(['run.started', 'activity.started'])
-    expect(interruptionCount).toBe(0)
+    expect(events.map((event) => event.kind)).toEqual(['run.started', 'interruption.raised'])
+    expect(interruption).toMatchObject({
+      runId: run.id,
+      activityId: activity.id,
+      type: 'choice',
+      status: 'pending',
+    })
     expect(run).toMatchObject({ status: 'awaiting_choice', stopReason: 'awaiting_choice' })
     expect(activity).toMatchObject({
       runId: run.id,
       status: 'waiting',
       type: 'awaiting_choice',
-      operationId: null,
-      sourceOperationId: 'generate_edit_style_previews',
+      operationId: 'request_edit_style_choice',
+      sourceOperationId: null,
       choiceType: 'style',
     })
 
@@ -147,7 +152,7 @@ describe('workflow lab style-choice restoration', () => {
     const persistedCard = persistedPart.data as ProjectAgentChoiceCardPartData
     expect(persistedCard).toMatchObject({
       runId: run.id,
-      interruptionId: null,
+      interruptionId: interruption.id,
       toolCallId: activity.toolCallId,
       submit: { kind: 'submit_tool_output' },
     })
@@ -159,7 +164,14 @@ describe('workflow lab style-choice restoration', () => {
       episodeId: result.labEpisode.id,
       locale: 'en',
     })
-    expect(session.pendingInteraction).toBeNull()
-    expect(session.activeStylePreviewGeneration?.data.agentRunId).toBe(run.id)
+    expect(session.pendingInteraction).toMatchObject({
+      kind: 'choice',
+      runId: run.id,
+      interruptionId: interruption.id,
+      operationId: 'request_edit_style_choice',
+      choiceType: 'style',
+      choiceCard: { submit: { kind: 'submit_tool_output' } },
+    })
+    expect(session.activeStylePreviewGeneration).toBeNull()
   })
 })

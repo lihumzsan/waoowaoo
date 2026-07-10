@@ -1,11 +1,8 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { HISTORICAL_SCENARIO_REGISTRY } from '../history/scenarios/registry'
 import { REQUIREMENTS_MATRIX } from './requirements-matrix'
-
-function fileExists(repoPath: string) {
-  return fs.existsSync(path.resolve(process.cwd(), repoPath))
-}
+import { ROUTE_SCENARIO_REGISTRY } from './route-scenario-registry'
+import { TASKTYPE_SCENARIO_REGISTRY } from './tasktype-scenario-registry'
 
 describe('requirements matrix integrity', () => {
   it('requirement ids are unique', () => {
@@ -13,11 +10,19 @@ describe('requirements matrix integrity', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('all declared test files exist', () => {
+  it('maps P0 requirements only to registered executable scenario ids', () => {
+    const registeredIds = new Set([
+      ...ROUTE_SCENARIO_REGISTRY.map((scenario) => scenario.id),
+      ...TASKTYPE_SCENARIO_REGISTRY.map((scenario) => scenario.id),
+      ...HISTORICAL_SCENARIO_REGISTRY.map((scenario) => scenario.id),
+    ])
     for (const entry of REQUIREMENTS_MATRIX) {
-      expect(entry.tests.length, entry.id).toBeGreaterThan(0)
-      for (const testPath of entry.tests) {
-        expect(fileExists(testPath), `${entry.id} -> ${testPath}`).toBe(true)
+      if (entry.priority === 'P0') {
+        expect(entry.coverageStatus, entry.id).toBe('protected')
+        expect(entry.scenarioIds.length, entry.id).toBeGreaterThan(0)
+      }
+      for (const scenarioId of entry.scenarioIds) {
+        expect(registeredIds.has(scenarioId), `${entry.id} -> ${scenarioId}`).toBe(true)
       }
     }
   })

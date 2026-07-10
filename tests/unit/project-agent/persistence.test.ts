@@ -203,6 +203,43 @@ describe('project assistant persistence', () => {
     }))
   })
 
+  it('appendProjectAssistantThreadMessages -> accepts the empty aggregate row created before locking', async () => {
+    const emptyRecord = {
+      id: 'thread-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: null,
+      assistantId: 'workspace-command',
+      scopeRef: 'project:project-1',
+      messagesJson: [],
+      createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
+    }
+    prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce(emptyRecord)
+    prismaMock.projectAssistantThread.upsert.mockResolvedValueOnce(emptyRecord)
+    prismaMock.projectAssistantThread.update.mockImplementationOnce(async ({ data }) => ({
+      ...emptyRecord,
+      messagesJson: data.messagesJson,
+    }))
+
+    const message = {
+      id: 'assistant-first',
+      role: 'assistant' as const,
+      parts: [{ type: 'text' as const, text: 'first durable message' }],
+    }
+    const thread = await appendProjectAssistantThreadMessages({
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      messages: [message],
+    })
+
+    expect(thread.messages).toEqual([message])
+    expect(prismaMock.projectAssistantThread.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ messagesJson: [message] }),
+    }))
+  })
+
   it('appendProjectAssistantThreadMessages -> skips storage write when all appended ids already exist', async () => {
     prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
       id: 'thread-1',

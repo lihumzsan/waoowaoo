@@ -10,8 +10,7 @@ export const BILLABLE_MEDIA_API_TYPES = [
 export type BillableMediaApiType = (typeof BILLABLE_MEDIA_API_TYPES)[number]
 
 export function isBillableMediaApiType(value: unknown): value is BillableMediaApiType {
-  return typeof value === 'string'
-    && BILLABLE_MEDIA_API_TYPES.some((apiType) => apiType === value)
+  return BILLABLE_MEDIA_API_TYPES.some((apiType) => apiType === value)
 }
 
 export function requiresBillableMediaApproval(

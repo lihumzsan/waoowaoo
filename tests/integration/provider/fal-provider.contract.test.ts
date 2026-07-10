@@ -41,6 +41,7 @@ describe('provider contract - fal queue', () => {
     const requests = server!.getRequests('POST', '/fal/fal-ai/nano-banana-pro')
     expect(requests).toHaveLength(1)
     expect(requests[0]?.headers.authorization).toBe('Key fal-key-1')
+    expect(requests[0]?.headers['content-type']).toBe('application/json')
     expect(JSON.parse(requests[0]?.bodyText || '{}')).toEqual({
       prompt: 'generate image',
       image_urls: ['data:image/png;base64,AAAA'],
@@ -200,7 +201,7 @@ describe('provider contract - fal queue', () => {
     })
   })
 
-  it('fails explicitly when submit response is malformed', async () => {
+  it('fails explicitly for each malformed request id shape', async () => {
     server!.defineScenario({
       method: 'POST',
       path: '/fal/fal-ai/nano-banana-pro',
@@ -209,11 +210,17 @@ describe('provider contract - fal queue', () => {
         status: 200,
         body: { ok: true },
       },
+      pollSequence: [
+        { status: 200, body: { request_id: 42 } },
+        { status: 200, body: { request_id: '' } },
+      ],
     })
 
-    await expect(
-      submitFalTask('fal-ai/nano-banana-pro', { prompt: 'bad response' }, 'fal-key-4'),
-    ).rejects.toThrow('FAL未返回request_id')
+    for (let index = 0; index < 3; index += 1) {
+      await expect(
+        submitFalTask('fal-ai/nano-banana-pro', { prompt: 'bad response' }, 'fal-key-4'),
+      ).rejects.toThrow('FAL未返回request_id')
+    }
   })
 
   it('treats completed result without media url as failed', async () => {

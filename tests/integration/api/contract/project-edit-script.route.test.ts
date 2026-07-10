@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { TASK_TYPE } from '@/lib/task/types'
 import { buildMockRequest } from '../../../helpers/request'
 
 const authMock = vi.hoisted(() => {
@@ -134,16 +133,15 @@ describe('api contract - project edit script routes', () => {
       targetType: 'ProjectEditChapter',
       targetId: 'chapter-1',
     })
-    expect(taskSubmissionMock.submitProjectEditScriptGenerationTask).toHaveBeenCalledWith({
-      request: expect.any(Request),
+    expect(taskSubmissionMock.submitProjectEditScriptGenerationTask).toHaveBeenCalledWith(expect.objectContaining({
+      request,
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
       videoRatio: '16:9',
-    })
+    }))
     expect(submitOperationTaskMock).not.toHaveBeenCalled()
   })
 
@@ -167,16 +165,15 @@ describe('api contract - project edit script routes', () => {
       taskId: 'task-shot-execution-plan',
       editScriptId: 'edit-script-1',
     })
-    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanTask).toHaveBeenCalledWith({
-      request: expect.any(Request),
+    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanTask).toHaveBeenCalledWith(expect.objectContaining({
+      request,
       projectId: 'project-1',
       episodeId: 'episode-1',
       userId: 'user-1',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
       editScriptId: 'edit-script-1',
-    })
+    }))
   })
 
   it('PATCH /api/projects/[projectId]/edit-script rejects removed generation segment arrangement requests', async () => {

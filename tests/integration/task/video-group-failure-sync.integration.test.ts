@@ -67,6 +67,10 @@ describe('video group task failure sync', () => {
         queuedAt: new Date(),
       },
     })
+    await prisma.projectVideoGroup.update({
+      where: { id: group.id },
+      data: { taskId: existing.id },
+    })
 
     const result = await createTask({
       userId: user.id,
@@ -119,6 +123,10 @@ describe('video group task failure sync', () => {
         dedupeKey: `video_group:${group.id}`,
         queuedAt: new Date(),
       },
+    })
+    await prisma.projectVideoGroup.update({
+      where: { id: group.id },
+      data: { taskId: existing.id },
     })
     reconcileMock.observeTaskJob.mockResolvedValue('absent')
 
@@ -175,6 +183,10 @@ describe('video group task failure sync', () => {
         startedAt: staleHeartbeat,
         heartbeatAt: staleHeartbeat,
       },
+    })
+    await prisma.projectVideoGroup.update({
+      where: { id: group.id },
+      data: { taskId: task.id },
     })
 
     const timedOut = await sweepStaleTasks({

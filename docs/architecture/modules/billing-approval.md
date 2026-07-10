@@ -38,7 +38,7 @@
 - `tests/unit/billing/media-approval-policy.test.ts` 覆盖统一媒体分类。
 - `tests/unit/operations/planning.test.ts` 覆盖计划报价与确认额度边界。
 - `tests/integration/task/approved-operation-plan-batch.integration.test.ts` 用真实 MySQL 验证 Grant/Execution/业务写入/全 Task/freeze/outbox 全有或全无、余额不足回滚、Task batch 后故障回滚与并发重复调用串行化。
-- `tests/unit/worker/soundscape-worker.test.ts` 覆盖 Soundscape 任务链路。
+- `tests/unit/worker/soundscape-plan-worker.test.ts` 与 `soundscape-generate-worker.test.ts` 覆盖 Soundscape 任务链路。
 - `scripts/guards/no-hardcoded-operation-confirmed.mjs` 阻止在生产源码中写死批准状态。
 - `scripts/guards/no-media-provider-bypass.mjs` 阻止绕过统一媒体供应商入口。
 - `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant choice/runtime 绕过 operation registry 直接提交任务。

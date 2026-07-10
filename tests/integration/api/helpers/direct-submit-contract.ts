@@ -423,8 +423,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   {
     routeFile: 'src/app/api/projects/[projectId]/generate-bgm/route.ts',
     body: {
-      confirmed: true,
-      confirmedMaxCost: 1.44,
       episodeId: 'episode-1',
       musicModel: 'google::lyria-3-pro-preview',
       outputFormat: 'mp3',
@@ -457,8 +455,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
   {
     routeFile: 'src/app/api/projects/[projectId]/generate-soundscape/route.ts',
     body: {
-      confirmed: true,
-      confirmedMaxCost: 1.44,
       episodeId: 'episode-1',
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
     },
@@ -469,7 +465,6 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedPayloadSubset: {
       episodeId: 'episode-1',
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
-      confirmedMaxCost: 1.44,
     },
   },
   {

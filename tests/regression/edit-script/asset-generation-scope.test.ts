@@ -1,152 +1,27 @@
-import type { NextRequest } from 'next/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
-
-const prismaMock = vi.hoisted(() => ({
-  projectEditScript: {
-    findMany: vi.fn(),
-  },
-  projectEditAssetRequirement: {
-    findMany: vi.fn(),
-    update: vi.fn(),
-    count: vi.fn(),
-  },
-  projectCharacter: {
-    findMany: vi.fn(),
-    create: vi.fn(),
-    deleteMany: vi.fn(),
-  },
-  projectLocation: {
-    findMany: vi.fn(),
-    create: vi.fn(),
-    deleteMany: vi.fn(),
-  },
-  $transaction: vi.fn(),
-}))
-
-const readEpisodeEditBibleMock = vi.hoisted(() => vi.fn())
-const readEpisodeEditChaptersMock = vi.hoisted(() => vi.fn())
-const readProjectEditScriptsMock = vi.hoisted(() => vi.fn())
-const planAssetGenerateTaskMock = vi.hoisted(() => vi.fn())
-const submitPlannedOperationTaskMock = vi.hoisted(() => vi.fn())
-const compensateSubmittedTasksMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/edit-bible', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/edit-bible')>()
-  return {
-    ...original,
-    readEpisodeEditBible: readEpisodeEditBibleMock,
-    readEpisodeEditChapters: readEpisodeEditChaptersMock,
-  }
-})
-vi.mock('@/lib/edit-script/service', () => ({
-  readProjectEditScripts: readProjectEditScriptsMock,
-}))
-vi.mock('@/lib/assets/services/asset-actions', () => ({
-  planAssetGenerateTask: planAssetGenerateTaskMock,
-}))
-vi.mock('@/lib/operations/planning', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/lib/operations/planning')>()
-  return {
-    ...original,
-    submitPlannedOperationTask: submitPlannedOperationTaskMock,
-    compensateSubmittedTasks: compensateSubmittedTasksMock,
-  }
-})
-
 import {
+  TASK_TYPE,
+  authorizedOperationContext,
+  beforeEach,
+  billingInfo,
   commitProjectEditScriptAssetsOperation,
+  describe,
+  expect,
+  it,
+  operationContext,
   planProjectEditScriptAssetsOperation,
-} from '@/lib/edit-script/asset-generation-operation-plan'
-
-const billingInfo: TaskBillingInfo = {
-  billable: true,
-  source: 'task',
-  taskType: TASK_TYPE.IMAGE_CHARACTER,
-  apiType: 'image',
-  model: 'image-model',
-  quantity: 1,
-  unit: 'image',
-  maxFrozenCost: 1,
-  action: TASK_TYPE.IMAGE_CHARACTER,
-  status: 'quoted',
-}
-
-function request(): NextRequest {
-  return new Request('http://localhost', {
-    headers: { 'accept-language': 'zh' },
-  }) as unknown as NextRequest
-}
-
-function operationContext() {
-  return {
-    request: request(),
-    userId: 'user-1',
-    projectId: 'project-1',
-    context: { locale: 'zh', episodeId: 'episode-1' },
-    source: 'project-ui',
-    writer: null,
-    toolCallId: null,
-  }
-}
-
-function requirement(id: string, name: string) {
-  return {
-    id,
-    kind: 'character' as const,
-    name,
-    description: `${name} design`,
-    shotIds: ['shot-1'],
-    status: 'pending' as const,
-    targetId: null,
-    errorMessage: null,
-  }
-}
-
-function script(id: string, chapterId: string, requirements: readonly ReturnType<typeof requirement>[]) {
-  return {
-    id,
-    projectId: 'project-1',
-    episodeId: 'episode-1',
-    chapterId,
-    durationSec: 3,
-    shotCount: 1,
-    assetReviewStatus: 'pending' as const,
-    styleBible: null,
-    shots: [],
-    generationSegments: [],
-    requirements,
-  }
-}
+  planAssetGenerateTaskMock,
+  prismaMock,
+  readEpisodeEditChaptersMock,
+  readProjectEditScriptsMock,
+  requirement,
+  script,
+  setupAssetGenerationScopeMocks,
+  submitPlannedOperationTaskMock,
+} from './asset-generation-scope.fixture'
 
 describe('edit script asset generation planned lifecycle regression', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    readEpisodeEditBibleMock.mockResolvedValue({
-      stylePreviews: [{ status: 'confirmed', imageUrl: 'https://cdn.example/style.png' }],
-    })
-    readEpisodeEditChaptersMock.mockResolvedValue([{ id: 'chapter-1' }, { id: 'chapter-2' }])
-    prismaMock.projectEditScript.findMany.mockResolvedValue([
-      { chapterId: 'chapter-1', status: 'ready' },
-      { chapterId: 'chapter-2', status: 'ready' },
-    ])
-    prismaMock.projectCharacter.findMany.mockResolvedValue([])
-    prismaMock.projectLocation.findMany.mockResolvedValue([])
-    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) => await callback(prismaMock))
-    planAssetGenerateTaskMock.mockImplementation(async (input: { assetId: string; body: { appearanceId?: string } }) => ({
-      userId: 'user-1',
-      projectId: 'project-1',
-      task: {
-        id: `planned:${input.assetId}`,
-        taskType: TASK_TYPE.IMAGE_CHARACTER,
-        target: { targetType: 'CharacterAppearance', targetId: input.body.appearanceId! },
-        payload: { id: input.assetId, appearanceId: input.body.appearanceId },
-        billingInfo,
-        locale: 'zh',
-        episodeId: 'episode-1',
-      },
-    }))
+    setupAssetGenerationScopeMocks()
   })
 
   it('plans every episode-scoped requirement without writing assets or requirements', async () => {
@@ -191,7 +66,7 @@ describe('edit script asset generation planned lifecycle regression', () => {
     expect(submitPlannedOperationTaskMock).not.toHaveBeenCalled()
   })
 
-  it('rejects an unconfirmed billable commit before the first asset write', async () => {
+  it('rejects a billable commit without the approval-owned transaction before the first asset write', async () => {
     readProjectEditScriptsMock.mockResolvedValue([
       script('script-1', 'chapter-1', [requirement('requirement-1', 'Alice')]),
       script('script-2', 'chapter-2', [requirement('requirement-2', 'Bob')]),
@@ -200,16 +75,17 @@ describe('edit script asset generation planned lifecycle regression', () => {
 
     await expect(commitProjectEditScriptAssetsOperation({
       ctx: operationContext(),
-      input: { confirmed: false },
+      input: {},
       plan,
     })).rejects.toMatchObject({
-      details: expect.objectContaining({ code: 'OPERATION_CONFIRMATION_REQUIRED' }),
+      details: expect.objectContaining({ code: 'OPERATION_EXECUTION_TRANSACTION_REQUIRED' }),
     })
-    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    expect(prismaMock.projectCharacter.create).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditAssetRequirement.update).not.toHaveBeenCalled()
     expect(submitPlannedOperationTaskMock).not.toHaveBeenCalled()
   })
 
-  it('commits only planned child tasks and preserves their operation confirmation metadata', async () => {
+  it('commits only planned child tasks through the approval-owned execution transaction', async () => {
     const scripts = [
       script('script-1', 'chapter-1', [requirement('requirement-1', 'Alice')]),
       script('script-2', 'chapter-2', [requirement('requirement-2', 'Bob')]),
@@ -237,15 +113,21 @@ describe('edit script asset generation planned lifecycle regression', () => {
     }))
 
     const result = await commitProjectEditScriptAssetsOperation({
-      ctx: operationContext(),
-      input: { confirmed: true },
+      ctx: authorizedOperationContext(),
+      input: {},
       plan,
     })
 
     expect(submitPlannedOperationTaskMock).toHaveBeenCalledTimes(2)
     expect(submitPlannedOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       operationId: 'generate_edit_script_assets',
-      confirmed: true,
+      ctx: expect.objectContaining({
+        executionAuthorization: expect.objectContaining({
+          approvalGrantId: 'approval-grant-1',
+          operationExecutionId: 'operation-execution-1',
+          transaction: prismaMock,
+        }),
+      }),
       task: expect.objectContaining({
         taskType: TASK_TYPE.IMAGE_CHARACTER,
         billingInfo,
@@ -254,7 +136,12 @@ describe('edit script asset generation planned lifecycle regression', () => {
     for (const call of submitPlannedOperationTaskMock.mock.calls) {
       expect(call[0]).toMatchObject({
         operationId: 'generate_edit_script_assets',
-        confirmed: true,
+        ctx: expect.objectContaining({
+          executionAuthorization: expect.objectContaining({
+            approvalGrantId: 'approval-grant-1',
+            operationExecutionId: 'operation-execution-1',
+          }),
+        }),
       })
     }
     expect(result.taskIds).toHaveLength(2)
@@ -277,9 +164,9 @@ describe('edit script asset generation planned lifecycle regression', () => {
   })
 
   it.each([
-    ['projection read', 'projection read failed'],
+    ['persisted projection read', 'projection read failed'],
     ['remaining requirement count', 'remaining requirement count failed'],
-  ] as const)('compensates submitted tasks and restores asset writes when post-submit %s fails', async (failureStage, failureMessage) => {
+  ] as const)('propagates post-submit %s failure so the approval transaction rolls back atomically', async (failureStage, failureMessage) => {
     const scripts = [
       script('script-1', 'chapter-1', [requirement('requirement-1', 'Alice')]),
       script('script-2', 'chapter-2', [requirement('requirement-2', 'Bob')]),
@@ -304,33 +191,22 @@ describe('edit script asset generation planned lifecycle regression', () => {
       runId: null,
       deduped: false,
     }))
-    if (failureStage === 'projection read') {
-      readProjectEditScriptsMock.mockRejectedValueOnce(new Error(failureMessage))
+    if (failureStage === 'persisted projection read') {
+      prismaMock.projectEditScript.findFirst.mockRejectedValueOnce(new Error(failureMessage))
     } else {
       prismaMock.projectEditAssetRequirement.count.mockRejectedValueOnce(new Error(failureMessage))
     }
 
     await expect(commitProjectEditScriptAssetsOperation({
-      ctx: operationContext(),
-      input: { confirmed: true },
+      ctx: authorizedOperationContext(),
+      input: {},
       plan,
     })).rejects.toThrow(failureMessage)
 
-    const submittedTaskIds = plan.tasks.map((task) => `task:${task.id}`)
-    expect(compensateSubmittedTasksMock).toHaveBeenCalledWith(submittedTaskIds)
-    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith({
-      where: { id: 'requirement-1' },
-      data: { status: 'pending', targetId: null, errorMessage: null },
-    })
-    expect(prismaMock.projectEditAssetRequirement.update).toHaveBeenCalledWith({
-      where: { id: 'requirement-2' },
-      data: { status: 'pending', targetId: null, errorMessage: null },
-    })
-    expect(prismaMock.projectCharacter.deleteMany).toHaveBeenCalledTimes(2)
-    expect(prismaMock.projectCharacter.deleteMany).toHaveBeenCalledWith({
-      where: expect.objectContaining({ projectId: 'project-1' }),
-    })
-    if (failureStage === 'projection read') {
+    expect(submitPlannedOperationTaskMock).toHaveBeenCalledTimes(2)
+    expect(prismaMock.projectCharacter.deleteMany).not.toHaveBeenCalled()
+    expect(prismaMock.projectLocation.deleteMany).not.toHaveBeenCalled()
+    if (failureStage === 'persisted projection read') {
       expect(prismaMock.projectEditAssetRequirement.count).not.toHaveBeenCalled()
     } else {
       expect(prismaMock.projectEditAssetRequirement.count).toHaveBeenCalledWith({

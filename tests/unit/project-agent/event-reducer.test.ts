@@ -1,42 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reduceProjectAgentEvent as reduceProjectAgentEventWithFence } from '@/lib/project-agent/event/reducer'
-
 type ReducerParams = Parameters<typeof reduceProjectAgentEventWithFence>[0]
 type ReducerTx = ReducerParams['tx']
 type MockFunction = ReturnType<typeof vi.fn>
-
 interface ProjectAgentActivityTxMock {
   findFirst: MockFunction
   findUnique: MockFunction
   upsert: MockFunction
   updateMany: MockFunction
 }
-
 interface ProjectAgentRunTxMock {
   create: MockFunction
   findUnique: MockFunction
   updateMany: MockFunction
 }
-
 interface ProjectAgentWaitTxMock {
   findUnique: MockFunction
   upsert: MockFunction
   updateMany: MockFunction
 }
-
 interface ProjectAgentInterruptionTxMock {
   create: MockFunction
   findUnique: MockFunction
   updateMany: MockFunction
 }
-
 interface ProjectAgentReducerTxMock {
   projectAgentActivity: ProjectAgentActivityTxMock
   projectAgentRun: ProjectAgentRunTxMock
   projectAgentWait: ProjectAgentWaitTxMock
   projectAgentInterruption: ProjectAgentInterruptionTxMock
 }
-
 const scope = {
   projectId: 'project-1',
   userId: 'user-1',
@@ -44,7 +37,6 @@ const scope = {
   episodeId: 'episode-1',
   scopeRef: 'episode:episode-1',
 }
-
 function reduceProjectAgentEvent(
   params: Omit<ReducerParams, 'eventId' | 'expectedFence'>,
 ): ReturnType<typeof reduceProjectAgentEventWithFence> {
@@ -58,7 +50,6 @@ function reduceProjectAgentEvent(
     },
   })
 }
-
 function createTxMock(): ProjectAgentReducerTxMock {
   return {
     projectAgentActivity: {
@@ -98,18 +89,14 @@ function createTxMock(): ProjectAgentReducerTxMock {
     },
   }
 }
-
 function asReducerTx(tx: ProjectAgentReducerTxMock): ReducerTx {
   return tx as unknown as ReducerTx
 }
-
 describe('project agent event reducer', () => {
   let tx: ProjectAgentReducerTxMock
-
   beforeEach(() => {
     tx = createTxMock()
   })
-
   it('projects activity.started into one open activity and run status', async () => {
     const activity = await reduceProjectAgentEvent({
       tx: asReducerTx(tx),
@@ -123,7 +110,6 @@ describe('project agent event reducer', () => {
         toolCallId: 'tool-1',
       },
     })
-
     expect(tx.projectAgentActivity.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         runId: 'run-1',
@@ -154,7 +140,6 @@ describe('project agent event reducer', () => {
       operationId: 'ingest_script',
     }))
   })
-
   it('moves an await-user-choice run to awaiting_choice when its task wait completes', async () => {
     tx.projectAgentWait.findUnique.mockResolvedValueOnce({
       id: 'wait-style-1',
@@ -166,7 +151,6 @@ describe('project agent event reducer', () => {
       .mockResolvedValueOnce({ status: 'awaiting_task', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: null })
       .mockResolvedValueOnce({ status: 'awaiting_task', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: null })
       .mockResolvedValueOnce({ status: 'awaiting_choice' })
-
     await reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -182,7 +166,6 @@ describe('project agent event reducer', () => {
         nextActivityId: 'activity-choice-style-1',
       },
     })
-
     expect(tx.projectAgentActivity.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'activity-choice-style-1' },
       create: expect.objectContaining({
@@ -200,14 +183,12 @@ describe('project agent event reducer', () => {
       }),
     })
   })
-
   it('fails when a run already has an open activity', async () => {
     tx.projectAgentActivity.findFirst.mockResolvedValueOnce({
       id: 'activity-existing',
       type: 'waiting_task',
       status: 'waiting',
     })
-
     await expect(reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -220,7 +201,6 @@ describe('project agent event reducer', () => {
       },
     })).rejects.toThrow(/PROJECT_AGENT_ACTIVITY_OVERLAP/)
   })
-
   it('creates awaiting choice activity before interruption details to satisfy the activity foreign key', async () => {
     await reduceProjectAgentEvent({
       tx: asReducerTx(tx),
@@ -242,7 +222,6 @@ describe('project agent event reducer', () => {
         runState: null,
       },
     })
-
     expect(tx.projectAgentActivity.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
         id: 'activity-choice-1',
@@ -267,12 +246,10 @@ describe('project agent event reducer', () => {
     const interruptionWriteOrder = tx.projectAgentInterruption.create.mock.invocationCallOrder[0]
     expect(activityWriteOrder).toBeLessThan(interruptionWriteOrder)
   })
-
   it('rejects a late status event that tries to revive a completed run', async () => {
     tx.projectAgentRun.findUnique.mockResolvedValueOnce({
       status: 'completed', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: BigInt(1),
     })
-
     await expect(reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -284,16 +261,13 @@ describe('project agent event reducer', () => {
         stopReason: 'approval_response',
       },
     })).rejects.toThrow('PROJECT_AGENT_RUN_TERMINAL_WATERMARK')
-
     expect(tx.projectAgentRun.updateMany).not.toHaveBeenCalled()
   })
-
   it('rejects a raced transition instead of allowing a late writer to win', async () => {
     tx.projectAgentRun.findUnique.mockResolvedValueOnce({
       status: 'running', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: null,
     })
     tx.projectAgentRun.updateMany.mockResolvedValueOnce({ count: 0 })
-
     await expect(reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -302,7 +276,6 @@ describe('project agent event reducer', () => {
         runId: 'run-1',
       },
     })).rejects.toThrow('PROJECT_AGENT_RUN_TRANSITION_RACED')
-
     expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         id: 'run-1',
@@ -312,10 +285,8 @@ describe('project agent event reducer', () => {
       },
     }))
   })
-
   it('rejects a second interruption consumer instead of replaying the first decision', async () => {
     tx.projectAgentInterruption.updateMany.mockResolvedValueOnce({ count: 0 })
-
     await expect(reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -328,10 +299,8 @@ describe('project agent event reducer', () => {
         response: { approved: true },
       },
     })).rejects.toThrow('PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED')
-
     expect(tx.projectAgentActivity.updateMany).not.toHaveBeenCalled()
   })
-
   it('atomically consumes an approval and transitions its awaiting run to running', async () => {
     tx.projectAgentInterruption.findUnique.mockResolvedValueOnce({ type: 'approval' })
     tx.projectAgentInterruption.updateMany.mockResolvedValueOnce({ count: 1 })
@@ -339,7 +308,6 @@ describe('project agent event reducer', () => {
       .mockResolvedValueOnce({ status: 'awaiting_approval', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: null })
       .mockResolvedValueOnce({ status: 'awaiting_approval', runVersion: 1, eventSeq: BigInt(1), terminalEventSeq: null })
       .mockResolvedValueOnce({ status: 'running' })
-
     await reduceProjectAgentEvent({
       tx: asReducerTx(tx),
       scope,
@@ -352,7 +320,6 @@ describe('project agent event reducer', () => {
         response: { approved: true },
       },
     })
-
     expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: 'run-1', status: 'awaiting_approval', runVersion: 1 }),
       data: expect.objectContaining({

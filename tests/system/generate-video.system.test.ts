@@ -6,6 +6,8 @@ import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
 import { expectLifecycleEvents, listTaskEventTypes, waitForTaskTerminalState } from './helpers/tasks'
 import { startSystemWorkers, stopSystemWorkers, type SystemWorkers } from './helpers/workers'
+import { expectCompletedCanvasHandoff } from './helpers/canvas-terminal-handoff'
+import { approveSystemOperation, enqueueApprovedSystemTask } from './helpers/approved-operation'
 
 type PollState = {
   status: 'processing' | 'completed'
@@ -83,7 +85,7 @@ describe('system - generate video', () => {
     resetAuthMockState()
   })
 
-  it('queued external generation -> polling -> videoUrl persisted', async () => {
+  it('[P0:SYS-VIDEO-SUCCESS] [P0:SYS-CANVAS-TERMINAL-NO-GAP] [P0:SYS-SSE-DUPLICATE-LATE-REPLAY] queued video materializes once across duplicate, late, and replay events', async () => {
     const seeded = await seedMinimalDomainState()
     await prisma.projectPanel.update({
       where: { id: seeded.panel.id },
@@ -95,25 +97,37 @@ describe('system - generate video', () => {
     mockAuthenticated(seeded.user.id)
     workers = await startSystemWorkers(['video'])
 
+    const operationInput = {
+      episodeId: seeded.episode.id,
+      storyboardId: seeded.storyboard.id,
+      panelIndex: 0,
+      generationOptions: {
+        resolution: '720p',
+        generateAudio: false,
+      },
+    }
+    const approval = await approveSystemOperation({
+      projectId: seeded.project.id,
+      operationId: 'generate_panel_video',
+      operationInput,
+      context: { episodeId: seeded.episode.id, locale: 'zh' },
+    })
+
     const mod = await import('@/app/api/projects/[projectId]/generate-video/route')
     const response = await callRoute(
       mod.POST,
       'POST',
       {
         locale: 'zh',
-        storyboardId: seeded.storyboard.id,
-        panelIndex: 0,
-        confirmed: true,
-        generationOptions: {
-          resolution: '720p',
-          generateAudio: false,
-        },
+        ...operationInput,
+        ...approval,
       },
       { params: { projectId: seeded.project.id } },
     )
 
     expect(response.status).toBe(200)
     const json = await response.json() as { async: boolean; taskId: string }
+    await enqueueApprovedSystemTask(json.taskId)
     const task = await waitForTaskTerminalState(json.taskId)
 
     expect(task.status).toBe('completed')
@@ -132,5 +146,14 @@ describe('system - generate video', () => {
 
     const eventTypes = await listTaskEventTypes(json.taskId)
     expectLifecycleEvents(eventTypes, 'completed')
+    await expectCompletedCanvasHandoff({
+      projectId: seeded.project.id,
+      episodeId: seeded.episode.id,
+      taskId: json.taskId,
+      taskType: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: seeded.panel.id,
+      persistedOutput: videoState.uploadedCosKey,
+    })
   })
 })

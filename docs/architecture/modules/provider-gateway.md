@@ -25,7 +25,7 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 ## 验证
 
-- `tests/integration/provider/fal-provider.contract.test.ts`、`fal-video-provider.contract.test.ts` 和 `elevenlabs-sound-effect-provider.contract.test.ts` 验证真实 provider 协议。
+- `tests/integration/provider/fal-provider.contract.test.ts`、`fal-queue-result-errors.contract.test.ts`、`fal-video-*.contract.test.ts` 和 `elevenlabs-sound-effect-provider.contract.test.ts` 验证真实 provider 协议；FAL queue 的 malformed、FAILED、422、500 与 unknown 状态必须显式分类，不得进入 fallback。
 - `tests/unit/task/async-poll-external-id.test.ts` 验证异步 external id 与轮询语义。
 - `tests/unit/guards/no-provider-model-fallback.test.ts` 与 `no-cross-provider-model-data.test.ts` 验证零降级和物理隔离。
 - `scripts/guards/no-provider-model-fallback.mjs`、`no-cross-provider-switch.mjs`、`no-cross-provider-model-data.mjs`、`no-provider-guessing.mjs` 和 `no-legacy-ai-entry-imports.mjs` 阻止散落的 provider 语义。

@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 type ReplayEvent = {
   id: string
   type: string
@@ -16,7 +15,6 @@ type ReplayEvent = {
   targets?: Array<{ targetType: string; targetId: string }>
   payload?: Record<string, unknown> | null
 }
-
 type TaskSnapshotRow = {
   id: string
   type: string
@@ -29,22 +27,18 @@ type TaskSnapshotRow = {
   payload: Record<string, unknown> | null
   updatedAt: Date
 }
-
 const listEventsAfterMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
 const listRecentTerminalLifecycleEventsMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
 const listMutationBatchReplayEventsMock = vi.hoisted(() => vi.fn<() => Promise<ReplayEvent[]>>(async () => []))
 const taskFindManyMock = vi.hoisted(() => vi.fn<() => Promise<TaskSnapshotRow[]>>(async () => []))
-
 vi.mock('@/lib/task/publisher', () => ({
   getProjectChannel: (projectId: string) => `project:${projectId}`,
   listEventsAfter: listEventsAfterMock,
   listRecentTerminalLifecycleEvents: listRecentTerminalLifecycleEventsMock,
 }))
-
 vi.mock('@/lib/mutation-batch/service', () => ({
   listMutationBatchReplayEvents: listMutationBatchReplayEventsMock,
 }))
-
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     task: {
@@ -52,10 +46,8 @@ vi.mock('@/lib/prisma', () => ({
     },
   },
 }))
-
 import { createSseOperations } from '@/lib/operations/domains/debug/sse-ops'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
-
 function buildCtx(): ProjectAgentOperationContext {
   return {
     request: new Request('http://localhost') as ProjectAgentOperationContext['request'],
@@ -66,16 +58,13 @@ function buildCtx(): ProjectAgentOperationContext {
     writer: null,
   }
 }
-
 describe('sse bootstrap operations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     taskFindManyMock.mockResolvedValue([])
     listRecentTerminalLifecycleEventsMock.mockResolvedValue([])
   })
-
   afterEach(() => vi.useRealTimers())
-
   it('replays only missed numeric events after the cursor', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-24T00:05:00.000Z'))
@@ -96,7 +85,6 @@ describe('sse bootstrap operations', () => {
       },
     }
     listEventsAfterMock.mockResolvedValueOnce([missedEvent])
-
     const ops = createSseOperations()
     const result = await ops.get_sse_bootstrap.execute!(
       buildCtx() as never,
@@ -106,7 +94,6 @@ describe('sse bootstrap operations', () => {
         snapshotLimit: 100,
       } as never,
     )
-
     expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 14, 5000)
     expect(listRecentTerminalLifecycleEventsMock).not.toHaveBeenCalled()
     expect(result).toEqual({
@@ -125,7 +112,6 @@ describe('sse bootstrap operations', () => {
     })
     vi.useRealTimers()
   })
-
   it('returns no recoverable terminal snapshot for replay polling without a cursor', async () => {
     const ops = createSseOperations()
     const result = await ops.get_sse_bootstrap.execute!(
@@ -135,7 +121,6 @@ describe('sse bootstrap operations', () => {
         includeRecoverableSnapshot: false,
       } as never,
     )
-
     expect(listRecentTerminalLifecycleEventsMock).not.toHaveBeenCalled()
     expect(taskFindManyMock).not.toHaveBeenCalled()
     expect(result).toEqual({
@@ -144,7 +129,6 @@ describe('sse bootstrap operations', () => {
       events: [],
     })
   })
-
   it('replays mutation batches and active task snapshot from a mutation Last-Event-ID cursor', async () => {
     const event = {
       id: 'mb:1777046400000:batch-2',
@@ -172,7 +156,6 @@ describe('sse bootstrap operations', () => {
         updatedAt: new Date('2026-04-24T00:01:00.000Z'),
       },
     ])
-
     const ops = createSseOperations()
     const result = await ops.get_sse_bootstrap.execute!(
       buildCtx() as never,
@@ -181,7 +164,6 @@ describe('sse bootstrap operations', () => {
         lastEventId: 'mb:1777046300000:batch-1',
       } as never,
     )
-
     expect(listMutationBatchReplayEventsMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
@@ -223,7 +205,6 @@ describe('sse bootstrap operations', () => {
       ],
     })
   })
-
   it('replays task and mutation domains from one durable composite cursor', async () => {
     const taskEvent = {
       id: '16',
@@ -248,7 +229,6 @@ describe('sse bootstrap operations', () => {
     }
     listEventsAfterMock.mockResolvedValueOnce([taskEvent])
     listMutationBatchReplayEventsMock.mockResolvedValueOnce([mutationEvent])
-
     const result = await createSseOperations().get_sse_bootstrap.execute!(
       buildCtx() as never,
       {
@@ -256,7 +236,6 @@ describe('sse bootstrap operations', () => {
         lastEventId: 'v1;t=15;m=1777046400000:batch-2',
       } as never,
     )
-
     expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 15, 5000)
     expect(listMutationBatchReplayEventsMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -274,7 +253,6 @@ describe('sse bootstrap operations', () => {
       events: [taskEvent, mutationEvent],
     })
   })
-
   it('returns recent terminal events with the active snapshot when no replay cursor exists', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-24T00:05:00.000Z'))
@@ -308,7 +286,6 @@ describe('sse bootstrap operations', () => {
         updatedAt: new Date('2026-04-24T00:03:00.000Z'),
       },
     ])
-
     const ops = createSseOperations()
     const result = await ops.get_sse_bootstrap.execute!(
       buildCtx() as never,
@@ -316,7 +293,6 @@ describe('sse bootstrap operations', () => {
         episodeId: 'episode-1',
       } as never,
     )
-
     expect(listRecentTerminalLifecycleEventsMock).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',

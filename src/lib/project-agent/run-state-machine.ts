@@ -1,11 +1,5 @@
 import type { ProjectAgentRunStatus } from './runs'
 
-const TERMINAL_RUN_STATUSES = new Set<ProjectAgentRunStatus>([
-  'completed',
-  'failed',
-  'cancelled',
-])
-
 const RUN_TRANSITIONS = {
   running: [
     'running',
@@ -45,7 +39,7 @@ export function normalizeProjectAgentRunStatus(value: string): ProjectAgentRunSt
 }
 
 export function isProjectAgentRunTerminalStatus(status: ProjectAgentRunStatus): boolean {
-  return TERMINAL_RUN_STATUSES.has(status)
+  return status === 'completed' || status === 'failed' || status === 'cancelled'
 }
 
 export function canTransitionProjectAgentRun(params: {

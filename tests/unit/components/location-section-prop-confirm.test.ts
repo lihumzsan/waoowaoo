@@ -24,7 +24,7 @@ vi.mock('@/components/ui/icons', () => ({
 
 const messages = {
   assets: {
-    stage: {
+    overview: {
       locationAssets: '场景资产',
       locationCounts: '{count} 个场景',
       propAssets: '道具资产',

@@ -17,6 +17,7 @@ const eslintConfig = [
       ".agent/**",
       ".next/**",
       ".next-verify/**",
+      ".stryker-tmp/**",
       "out/**",
       "build/**",
       "coverage/**",

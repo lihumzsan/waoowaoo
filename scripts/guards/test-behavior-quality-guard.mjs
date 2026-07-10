@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Architecture contract: docs/architecture/modules/test-governance.md (TG-03, TG-07).
+
 import fs from 'fs'
 import path from 'path'
 
@@ -71,8 +73,11 @@ for (const file of files) {
     }
   }
 
-  const hasWeakCallAssertion = /toHaveBeenCalled\(\s*\)/.test(text)
-  const hasStrongCallAssertion = /toHaveBeenCalledWith\(/.test(text)
+  // A negative call assertion protects a failure boundary and does not need arguments.
+  // Only positive "it was called" assertions must also prove arguments or exact count.
+  const positiveAssertionText = text.replace(/\.not\.toHaveBeenCalled\(\s*\)/g, '')
+  const hasWeakCallAssertion = /toHaveBeenCalled\(\s*\)/.test(positiveAssertionText)
+  const hasStrongCallAssertion = /toHaveBeenCalledWith\(|toHaveBeenCalledTimes\(/.test(text)
   if (hasWeakCallAssertion && !hasStrongCallAssertion) {
     violations.push(`${rel}: has toHaveBeenCalled() without any toHaveBeenCalledWith() result assertions`)
   }

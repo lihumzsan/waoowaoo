@@ -106,7 +106,12 @@ for (const required of ['streamRunId', 'stepAttempt', 'lastSeq', 'MAX_STREAM_ACC
 }
 
 const sseHook = read('src/lib/query/hooks/useSSE.ts')
-if (!sseHook.includes('MAX_PROCESSED_SSE_EVENT_IDENTITIES')) {
+const sseSequence = read('src/lib/query/workspace-sse-event-sequence.ts')
+if (
+  !sseHook.includes('WorkspaceSSEEventSequence')
+  || !sseSequence.includes('MAX_TRACKED_EVENT_IDENTITIES')
+  || !sseSequence.includes('MAX_TRACKED_TERMINAL_TASKS')
+) {
   violations.push('SSE client event identity dedupe must be explicitly bounded')
 }
 

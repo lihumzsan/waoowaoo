@@ -36,7 +36,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 验证
 
-- `tests/unit/project-agent/runtime-routing.test.ts` 验证运行时路由。
+- `tests/unit/project-agent/runtime-routing-*.test.ts` 按 bootstrap、choice、workflow、approval 与 settlement 验证运行时路由。
 - `tests/unit/project-agent/server-follow-up.test.ts` 验证稳定 command identity、checkpoint-before-finalize 与 checkpoint replay 不重跑模型。
 - `tests/unit/project-agent/waits-follow-up.test.ts` 验证 Wait claim/start fence 的原子推进与同命令重放。
 - `tests/integration/task/project-agent-continuation-settlement.integration.test.ts` 在真实 MySQL 上验证并发 checkpoint、message/checkpoint 原子性、checkpoint 后崩溃重放与缺失 checkpoint 时终态事务整体回滚。
@@ -44,9 +44,9 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `tests/unit/project-agent/run-heartbeat.test.ts` 验证 DB/Redis 续租失败和异常都会触发 ownership loss。
 - `tests/unit/project-agent/interruption-consume.test.ts` 验证重复/并发消费由 pending 状态 CAS 拒绝，基础设施故障不会伪装成重复提交。
 - `tests/contracts/assistant-choice-offer-conformance.test.ts` 穷尽验证每一种 Choice 都绑定一个显式受审资源种类，且卡片必须有完整持久身份。
-- `tests/unit/project-agent/session-state.test.ts` 验证刷新只投影 interruption 中的持久 Offer，不调用卡片 builder。
+- `tests/unit/project-agent/session-state-*.test.ts` 验证刷新只投影 interruption 中的持久 Offer，不调用卡片 builder。
 - `tests/unit/project-agent/interruption-reopen.test.ts` 验证 interruption 按消费代次幂等重开且失败显式上报。
-- `tests/unit/project-workflow/edit-first.test.ts` 验证失败状态不会开放剧本改写操作。
+- `tests/unit/project-workflow/edit-first-*.test.ts` 按剧本、规划、分镜视频与渲染音频验证失败状态不会开放错误操作。
 - `tests/unit/project-agent/tool-adapter-gates.test.ts` 验证工具确认与执行门禁。
 - `tests/unit/operations/registry.test.ts` 验证 operation metadata、confirmation 和 agentFlow。
 - `scripts/guards/no-client-agent-control.mjs` 阻止客户端成为 Agent 控制面。

@@ -1,22 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import { buildTaskJobEnvelope } from '@/lib/task/job-envelope'
+import type { TaskJobEnvelopeSource } from '@/lib/task/job-envelope'
 import { TASK_TYPE } from '@/lib/task/types'
+
+const validBillingInfo = {
+  billable: true as const,
+  source: 'task' as const,
+  taskType: TASK_TYPE.VIDEO_GROUP,
+  apiType: 'video' as const,
+  model: 'kling::video-model',
+  quantity: 2,
+  unit: 'video' as const,
+  maxFrozenCost: 4,
+  action: 'generate_video_group',
+  freezeId: 'freeze-1',
+  status: 'frozen' as const,
+}
+
+function validSource(overrides: Partial<TaskJobEnvelopeSource> = {}): TaskJobEnvelopeSource {
+  return {
+    id: 'task-1',
+    parentTaskId: 'parent-1',
+    type: TASK_TYPE.VIDEO_GROUP,
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    targetType: 'ProjectVideoGroup',
+    targetId: 'group-1',
+    payload: { meta: { locale: 'zh', trace: { requestId: 'request-trace-1' } } },
+    batchKey: 'batch-1',
+    billingInfo: validBillingInfo,
+    userId: 'user-1',
+    operationId: 'generate_video_group',
+    operationSource: 'assistant',
+    approvalGrantId: 'grant-1',
+    operationExecutionId: 'execution-1',
+    operationPlanTaskId: 'plan-task-1',
+    operationRequestId: 'operation-request-1',
+    priority: 7,
+    ...overrides,
+  }
+}
 
 describe('task job envelope', () => {
   it('preserves every durable recovery field in the BullMQ payload', () => {
-    const billingInfo = {
-      billable: true as const,
-      source: 'task' as const,
-      taskType: TASK_TYPE.VIDEO_GROUP,
-      apiType: 'video' as const,
-      model: 'kling::video-model',
-      quantity: 2,
-      unit: 'video' as const,
-      maxFrozenCost: 4,
-      action: 'generate_video_group',
-      freezeId: 'freeze-1',
-      status: 'frozen' as const,
-    }
+    const billingInfo = validBillingInfo
     const payload = {
       groupId: 'group-1',
       meta: {
@@ -149,5 +176,81 @@ describe('task job envelope', () => {
       operationRequestId: null,
       priority: 0,
     })).toThrow('TASK_BILLING_INFO_INVALID:contract')
+  })
+
+  it('accepts every billing enum value and non-billable metadata', () => {
+    for (const apiType of ['text', 'image', 'video', 'music', 'sound_effect'] as const) {
+      for (const unit of ['token', 'image', 'video', 'second', 'call'] as const) {
+        expect(buildTaskJobEnvelope(validSource({
+          billingInfo: { ...validBillingInfo, apiType, unit },
+        })).data.billingInfo).toMatchObject({ apiType, unit })
+      }
+    }
+    expect(buildTaskJobEnvelope(validSource({ billingInfo: { billable: false } })).data.billingInfo).toEqual({ billable: false })
+    expect(buildTaskJobEnvelope(validSource({ billingInfo: null })).data.billingInfo).toBeNull()
+    expect(buildTaskJobEnvelope(validSource({ billingInfo: undefined })).data.billingInfo).toBeNull()
+  })
+
+  it('rejects each malformed billable field at the durable boundary', () => {
+    for (const billingInfo of ['billing', []]) {
+      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
+    }
+    for (const billingInfo of [{}, { ...validBillingInfo, billable: 'yes' }]) {
+      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow('TASK_BILLING_INFO_INVALID')
+    }
+    const invalidBillableContracts: unknown[] = [
+      { ...validBillingInfo, source: 'route' },
+      { ...validBillingInfo, taskType: TASK_TYPE.IMAGE_PANEL },
+      { ...validBillingInfo, apiType: 'unknown' },
+      { ...validBillingInfo, model: 3 },
+      { ...validBillingInfo, model: '   ' },
+      { ...validBillingInfo, quantity: '2' },
+      { ...validBillingInfo, quantity: Number.NaN },
+      { ...validBillingInfo, quantity: 0 },
+      { ...validBillingInfo, unit: 'unknown' },
+      { ...validBillingInfo, maxFrozenCost: '4' },
+      { ...validBillingInfo, maxFrozenCost: Number.NaN },
+      { ...validBillingInfo, maxFrozenCost: -1 },
+      { ...validBillingInfo, action: 7 },
+      { ...validBillingInfo, action: '   ' },
+    ]
+    for (const billingInfo of invalidBillableContracts) {
+      expect(() => buildTaskJobEnvelope(validSource({ billingInfo }))).toThrow(
+        'TASK_BILLING_INFO_INVALID',
+      )
+    }
+    expect(buildTaskJobEnvelope(validSource({
+      billingInfo: { ...validBillingInfo, maxFrozenCost: 0 },
+    })).data.billingInfo).toMatchObject({ maxFrozenCost: 0 })
+  })
+
+  it('rejects every non-object payload at the durable boundary', () => {
+    for (const payload of ['payload', 1, true, []]) {
+      expect(() => buildTaskJobEnvelope(validSource({ payload }))).toThrow('task payload must be an object or null')
+    }
+    for (const payload of [null, undefined]) {
+      expect(() => buildTaskJobEnvelope(validSource({ payload }))).toThrow('task locale is missing')
+    }
+  })
+
+  it('uses a trimmed payload trace only when its nested shape is valid', () => {
+    expect(buildTaskJobEnvelope(validSource({
+      payload: { meta: { locale: 'zh', trace: { requestId: '  trace-id  ' } } },
+    })).data.trace).toEqual({ requestId: 'trace-id' })
+
+    const fallbackPayloads: unknown[] = [
+      { locale: 'zh', meta: null },
+      { meta: { locale: 'zh' } },
+      { meta: { locale: 'zh', trace: null } },
+      { meta: { locale: 'zh', trace: [] } },
+      { meta: { locale: 'zh', trace: { requestId: 9 } } },
+      { meta: { locale: 'zh', trace: { requestId: '   ' } } },
+    ]
+    for (const payload of fallbackPayloads) {
+      expect(buildTaskJobEnvelope(validSource({
+        payload,
+        operationRequestId: 'operation-fallback',
+      })).data.trace).toEqual({ requestId: 'operation-fallback' })
+    }
   })
 })

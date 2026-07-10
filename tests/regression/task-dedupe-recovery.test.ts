@@ -26,7 +26,7 @@ describe('regression - task dedupe recovery', () => {
         userId: user.id,
         projectId: project.id,
         type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        targetType: 'ProjectEpisode',
+        targetType: 'ProjectEditBible',
         targetId: 'episode-regression-1',
         status: TASK_STATUS.QUEUED,
         payload: { episodeId: 'episode-regression-1' },
@@ -39,7 +39,7 @@ describe('regression - task dedupe recovery', () => {
       userId: user.id,
       projectId: project.id,
       type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-      targetType: 'ProjectEpisode',
+      targetType: 'ProjectEditBible',
       targetId: 'episode-regression-1',
       payload: {
         episodeId: 'episode-regression-1',

@@ -12,7 +12,6 @@ import { z } from 'zod'
 import { enqueuePersistedApprovedTask } from '@/lib/task/enqueue'
 import { observeTaskJob } from '@/lib/task/reconcile'
 import { removeTaskJob } from '@/lib/task/queues'
-
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
@@ -26,7 +25,6 @@ function billingInfo(id: string): TaskBillingInfo {
     action: `style-preview-${id}`,
   }
 }
-
 async function seedExecution(balance: number) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
@@ -36,8 +34,7 @@ async function seedExecution(balance: number) {
     operationId: 'generate_edit_style_previews',
     projectId: project.id,
     userId: user.id,
-    tasks: ['preview-1', 'preview-2'].map((id) => ({
-      id: `plan-${id}`,
+    tasks: ['preview-1', 'preview-2'].map((id) => ({ id: `plan-${id}`,
       taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
       target: { targetType: 'ProjectEditStylePreview', targetId: id },
       payload: { stylePreviewId: id, imageModel: 'fal::gpt-image-2' },
@@ -95,7 +92,6 @@ async function seedExecution(balance: number) {
   })
   return { user, project, plan, snapshot, issued, execution }
 }
-
 function createApprovedBatchOperation(plan: OperationPlan, afterSubmit?: () => Promise<void>) {
   return makeTestOperation({
     id: plan.operationId,
@@ -117,10 +113,8 @@ function createApprovedBatchOperation(plan: OperationPlan, afterSubmit?: () => P
     },
   })
 }
-
 describe('approved operation plan Task batch integration', () => {
   const queuedTaskIds: string[] = []
-
   beforeEach(async () => {
     await resetBillingState()
     await prisma.outboxCommand.deleteMany()
@@ -130,7 +124,6 @@ describe('approved operation plan Task batch integration', () => {
     process.env.BILLING_MODE = 'ENFORCE'
     queuedTaskIds.length = 0
   })
-
   afterEach(async () => {
     await Promise.all(
       queuedTaskIds.map(async (taskId) => {
@@ -138,7 +131,6 @@ describe('approved operation plan Task batch integration', () => {
       }),
     )
   })
-
   it('atomically consumes one Grant, freezes every Task, and creates durable enqueue responsibility', async () => {
     const seeded = await seedExecution(10)
     const results = await prisma.$transaction(
@@ -150,7 +142,6 @@ describe('approved operation plan Task batch integration', () => {
           operationSource: 'assistant-panel',
         }),
     )
-
     expect([...results.keys()].sort()).toEqual(['plan-preview-1', 'plan-preview-2'])
     const [grant, execution, tasks, freezes, commands] = await Promise.all([
       prisma.approvalGrant.findUnique({
@@ -183,10 +174,8 @@ describe('approved operation plan Task batch integration', () => {
     expect(enqueueCommands).toHaveLength(2)
     expect(enqueueCommands.every((command) => command.availableAt <= new Date())).toBe(true)
   })
-
   it('rolls back the entire batch and leaves the Grant unconsumed when any freeze fails', async () => {
     const seeded = await seedExecution(1)
-
     await expect(
       prisma.$transaction(
         async (transaction) =>
@@ -198,7 +187,6 @@ describe('approved operation plan Task batch integration', () => {
           }),
       ),
     ).rejects.toMatchObject({ name: 'InsufficientBalanceError' })
-
     const [grant, execution, taskCount, freezeCount, commandCount] = await Promise.all([
       prisma.approvalGrant.findUnique({
         where: { id: seeded.issued.approvalGrantId },
@@ -222,14 +210,12 @@ describe('approved operation plan Task batch integration', () => {
     expect(freezeCount).toBe(0)
     expect(commandCount).toBe(0)
   })
-
   it('releases every durable enqueue command only after the operation execution commits', async () => {
     const seeded = await seedExecution(10)
     await prisma.operationExecution.delete({
       where: { id: seeded.execution.id },
     })
     const operation = createApprovedBatchOperation(seeded.plan)
-
     const beforeInvoke = new Date()
     const output = await invokeApprovedOperationPlan({
       operation,
@@ -247,10 +233,9 @@ describe('approved operation plan Task batch integration', () => {
         requestId: seeded.issued.operationRequestId,
       },
     })
-
     const [execution, enqueueCommands] = await Promise.all([
       prisma.operationExecution.findUnique({
-        where: { id: seeded.execution.id },
+        where: { approvalGrantId: seeded.issued.approvalGrantId },
       }),
       prisma.outboxCommand.findMany({
         where: { kind: 'task.enqueue', aggregateType: 'task' },
@@ -261,7 +246,6 @@ describe('approved operation plan Task batch integration', () => {
     expect(execution).toMatchObject({ status: 'completed' })
     expect(enqueueCommands).toHaveLength(2)
     expect(enqueueCommands.every((command) => command.availableAt >= beforeInvoke && command.availableAt <= new Date())).toBe(true)
-
     for (const taskId of output.taskIds) {
       queuedTaskIds.push(taskId)
       await enqueuePersistedApprovedTask({
@@ -276,7 +260,6 @@ describe('approved operation plan Task batch integration', () => {
     })
     expect(enqueuedTasks.every((task) => task.enqueuedAt instanceof Date)).toBe(true)
   })
-
   it('rolls back Grant, execution, Task, freeze, and Outbox when killed after batch submission', async () => {
     const seeded = await seedExecution(10)
     await prisma.operationExecution.delete({
@@ -285,7 +268,6 @@ describe('approved operation plan Task batch integration', () => {
     const operation = createApprovedBatchOperation(seeded.plan, async () => {
       throw new Error('FAULT_AFTER_APPROVED_BATCH_SUBMISSION')
     })
-
     await expect(
       invokeApprovedOperationPlan({
         operation,
@@ -304,7 +286,6 @@ describe('approved operation plan Task batch integration', () => {
         },
       }),
     ).rejects.toThrow('FAULT_AFTER_APPROVED_BATCH_SUBMISSION')
-
     const [grant, executions, tasks, freezes, commands] = await Promise.all([
       prisma.approvalGrant.findUnique({
         where: { id: seeded.issued.approvalGrantId },
@@ -330,7 +311,6 @@ describe('approved operation plan Task batch integration', () => {
       commands: 0,
     })
   })
-
   it('serializes concurrent duplicate invocations and returns one completed execution output', async () => {
     const seeded = await seedExecution(10)
     await prisma.operationExecution.delete({
@@ -353,9 +333,7 @@ describe('approved operation plan Task batch integration', () => {
         requestId: seeded.issued.operationRequestId,
       },
     }
-
     const [first, second] = await Promise.all([invokeApprovedOperationPlan(invocation), invokeApprovedOperationPlan(invocation)])
-
     expect(second).toEqual(first)
     await expect(
       prisma.operationExecution.count({

@@ -17,7 +17,7 @@ export type TaskTargetTerminalProjection = {
 }
 
 function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? value.slice(0, maxLength) : value
+  return value.slice(0, maxLength)
 }
 
 function requireFailure(input: TaskTargetTerminalProjection): {

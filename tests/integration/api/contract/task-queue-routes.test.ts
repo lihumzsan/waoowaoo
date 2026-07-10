@@ -202,7 +202,7 @@ describe('api contract - task queue routes (behavior)', () => {
     expect(payload.task.id).toBe('task-1')
   })
 
-  it('DELETE /api/tasks/[taskId]: cancellation publishes cancelled event payload', async () => {
+  it('DELETE /api/tasks/[taskId]: delegates cancellation to the terminal service single writer', async () => {
     const { DELETE } = await import('@/app/api/tasks/[taskId]/route')
 
     const req = buildMockRequest({ path: '/api/tasks/task-1', method: 'DELETE' })
@@ -211,15 +211,9 @@ describe('api contract - task queue routes (behavior)', () => {
     const payload = await res.json() as { task: TaskRecord; cancelled: boolean }
 
     expect(removeTaskJobMock).toHaveBeenCalledWith('task-1')
+    expect(cancelTaskMock).toHaveBeenCalledWith('task-1')
     expect(payload.cancelled).toBe(true)
     expect(payload.task.status).toBe(TASK_STATUS.CANCELED)
-    expect(publishTaskEventMock).toHaveBeenCalledWith(expect.objectContaining({
-      taskId: 'task-1',
-      projectId: 'project-1',
-      payload: expect.objectContaining({
-        cancelled: true,
-        stage: 'cancelled',
-      }),
-    }))
+    expect(publishTaskEventMock).not.toHaveBeenCalled()
   })
 })

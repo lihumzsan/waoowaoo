@@ -339,7 +339,11 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
     await appendProjectAgentEvents({
       scope: params,
       events: [{
-        runFence: createProjectAgentRunFence(record),
+        runFence: createProjectAgentRunFence({
+          id: params.runId,
+          runVersion: record.runVersion,
+          eventSeq: record.eventSeq,
+        }),
         event: {
           kind: 'interruption.resolved',
           runId: params.runId,

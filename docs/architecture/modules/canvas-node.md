@@ -36,6 +36,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 原子终态接力：`src/lib/workspace-resource/materialized-resource.ts` 与 `src/lib/query/materialized-resource-cache.ts`。
 - 物化资源版本类型与比较器：`src/lib/workspace-resource/materialized-resource-version.ts`。
 - 正式 Query DTO 版本构造：`src/lib/workspace-resource/query-dto-version.ts`；Episode detail 与 Edit Bible GET 必须复用该入口。
+- SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
@@ -44,12 +45,14 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - `tests/unit/project-workspace/structured-stream-adapters.test.ts` 验证 stream adapter 契约。
 - `tests/unit/project-workspace/structured-stream-runtime.test.ts` 验证 runtime 合并与重放语义。
+- `tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts` 穷尽验证唯一 resolver 的身份、进度、stream、终态交接、取消和派生投影。
 - `tests/regression/project-canvas-task-backed-running.test.ts` 验证运行态来自任务权威状态。
 - `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
 - `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
-- `tests/unit/optimistic/sse-invalidation.test.ts` 验证 Query Cache materialization 早于 runtime clear。
+- `tests/unit/optimistic/sse-task-terminal.test.ts` 与 `sse-event-ordering.test.ts` 验证 Query Cache materialization 早于 runtime clear，并拒绝重复/乱序覆盖。
 - `tests/unit/query/materialized-resource-cache.test.ts` 验证连续、重复、旧版本、跨 Task、refetch/SSE 交错和刷新重建时的单调门禁。
+- `tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 验证重复、晚到与 replay 事件不能越过 Task 终态水位。
 - `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
 - 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写、无版本 rollback 和无界 stream/SSE identity 回流。
 - `scripts/guards/materialized-resource-version-guard.mjs` 阻止无条件 cache replace、字符串猜序和 taskId 版本 fallback 回流。

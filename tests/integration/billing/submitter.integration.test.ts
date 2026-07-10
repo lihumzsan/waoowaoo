@@ -14,11 +14,13 @@ const queueState = vi.hoisted(() => ({
 const addTaskJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'mock-job' })))
 const publishTaskEventMock = vi.hoisted(() => vi.fn(async () => ({})))
 
-vi.mock('@/lib/task/queues', () => ({
+vi.mock('@/lib/task/queues', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/task/queues')>()),
   addTaskJob: addTaskJobMock,
 }))
 
-vi.mock('@/lib/task/publisher', () => ({
+vi.mock('@/lib/task/publisher', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/task/publisher')>()),
   publishTaskEvent: publishTaskEventMock,
   listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
@@ -47,10 +49,10 @@ describe('billing/submitter integration', () => {
       userId: user.id,
       locale: 'en',
       projectId: 'project-a',
-      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-      targetType: 'Project',
+      type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+      targetType: 'ProjectEditChapter',
       targetId: 'project-a',
-      payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-a' },
+      payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-a' },
     })
 
     expect(result.success).toBe(true)
@@ -65,8 +67,8 @@ describe('billing/submitter integration', () => {
     const user = await createTestUser()
     await seedBalance(user.id, 0)
 
-    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_BIBLE_GENERATE, {
-      analysisModel: 'openai::gpt-4.1',
+    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {
+      analysisModel: 'openrouter::openai/gpt-5.5',
       episodeId: 'episode-b',
     })
     expect(billingInfo?.billable).toBe(true)
@@ -76,10 +78,10 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-b',
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        targetType: 'Project',
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        targetType: 'ProjectEditChapter',
         targetId: 'project-b',
-        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-b' },
+        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-b' },
         billingInfo,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
@@ -87,7 +89,7 @@ describe('billing/submitter integration', () => {
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -160,17 +162,17 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-e',
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        targetType: 'Project',
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        targetType: 'ProjectEditChapter',
         targetId: 'project-e',
-        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-e' },
+        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-e' },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' } satisfies Pick<ApiError, 'code'>)
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })

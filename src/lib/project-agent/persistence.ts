@@ -62,6 +62,7 @@ function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMe
 
 async function readThreadMessages(record: ProjectAssistantThread | null): Promise<UIMessage[]> {
   if (!record) return []
+  if (Array.isArray(record.messagesJson) && record.messagesJson.length === 0) return []
   return await validateMessages(record.messagesJson)
 }
 
@@ -96,10 +97,18 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
 ): Promise<ProjectAssistantThreadSnapshot> {
   const appendedMessages = await validateMessages(input.messages)
   const scopeRef = buildProjectAssistantScopeRef(input)
-  // Materialize the unique aggregate row before taking the lock. The no-op
-  // update makes concurrent first appends serialize on the same unique key;
-  // without this, two transactions can both read an absent/old JSON array and
-  // the last writer silently drops the other message.
+  // The thread row does not exist on the first append, so it cannot be the
+  // initial lock. Serialize first materialization on the stable parent row;
+  // MySQL can otherwise reject two concurrent upserts with a unique-key race.
+  const lockedProjects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM projects
+    WHERE id = ${input.projectId}
+    FOR UPDATE
+  `)
+  if (lockedProjects.length !== 1) {
+    throw new Error(`PROJECT_ASSISTANT_PROJECT_LOCK_FAILED:${input.projectId}`)
+  }
   await tx.projectAssistantThread.upsert({
     where: {
       projectId_userId_assistantId_scopeRef: {

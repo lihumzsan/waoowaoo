@@ -180,14 +180,15 @@ describe('task service dedupe + orphan recovery', () => {
       data: {
         userId: user.id,
         projectId: project.id,
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        targetType: 'ProjectEpisode',
-        targetId: 'episode-1',
+        type: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: project.id,
         status: TASK_STATUS.QUEUED,
         payload: {
-          episodeId: 'episode-1',
+          musicModel: 'google::lyria-3-pro-preview',
+          durationSeconds: 10,
         },
-        dedupeKey: 'edit_bible_generate:episode-1',
+        dedupeKey: 'music_generate:locale-replacement',
         queuedAt: new Date(),
       },
     })
@@ -195,14 +196,15 @@ describe('task service dedupe + orphan recovery', () => {
     const result = await createTask({
       userId: user.id,
       projectId: project.id,
-      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-      targetType: 'ProjectEpisode',
-      targetId: 'episode-1',
+      type: TASK_TYPE.MUSIC_GENERATE,
+      targetType: 'Project',
+      targetId: project.id,
       payload: {
-        episodeId: 'episode-1',
+        musicModel: 'google::lyria-3-pro-preview',
+        durationSeconds: 10,
         meta: { locale: 'zh' },
       },
-      dedupeKey: 'edit_bible_generate:episode-1',
+      dedupeKey: 'music_generate:locale-replacement',
     })
 
     expect(result.deduped).toBe(false)

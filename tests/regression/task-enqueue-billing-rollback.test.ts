@@ -3,21 +3,17 @@ import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../helpers/prisma'
 import { resetBillingState } from '../helpers/db-reset'
-import { createTestUser, seedBalance } from '../helpers/billing-fixtures'
+import { createTestProject, createTestUser, seedBalance } from '../helpers/billing-fixtures'
 
 const queueState = vi.hoisted(() => ({
   message: 'queue add failed',
 }))
 
-vi.mock('@/lib/task/queues', () => ({
+vi.mock('@/lib/task/queues', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/task/queues')>()),
   addTaskJob: vi.fn(async () => {
     throw new Error(queueState.message)
   }),
-}))
-
-vi.mock('@/lib/task/publisher', () => ({
-  publishTaskEvent: vi.fn(async () => ({})),
-  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
 }))
 
 describe('regression - enqueue compensation', () => {
@@ -30,24 +26,25 @@ describe('regression - enqueue compensation', () => {
 
   it('rolls back frozen balance when queue submission fails', async () => {
     const user = await createTestUser()
+    const project = await createTestProject(user.id)
     await seedBalance(user.id, 10)
 
     await expect(
       submitTask({
         userId: user.id,
         locale: 'en',
-        projectId: 'project-regression-enqueue',
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-        targetType: 'Project',
-        targetId: 'project-regression-enqueue',
-        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-regression' },
+        projectId: project.id,
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
+        targetType: 'ProjectEditChapter',
+        targetId: project.id,
+        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-regression' },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' })
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })

@@ -276,14 +276,11 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       summary: 'API-only: Submit asset generate task (global or project scope).',
       intent: 'act',
       effects: EFFECTS_LONG_RUNNING,
+      confirmation: { kind: 'billable_media', required: true },
       inputSchema: buildAssetGenerateSchema(),
       outputSchema: z.unknown(),
       plan: async (ctx, input) => planAssetGenerateOperation(ctx, input),
       commit: async (ctx, input, plan) => commitAssetGenerateOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planAssetGenerateOperation(ctx, input)
-        return await commitAssetGenerateOperation(ctx, input, plan)
-      },
     }),
 
     api_assets_upload_render: defineOperation({

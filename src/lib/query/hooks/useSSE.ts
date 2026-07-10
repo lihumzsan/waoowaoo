@@ -8,6 +8,7 @@ import {
   applyWorkspaceSSEEvent,
   isWorkspaceSSEEvent,
 } from '../workspace-sse-event-sync'
+import { WorkspaceSSEEventSequence } from '../workspace-sse-event-sequence'
 import { queryKeys } from '../keys'
 import {
   advanceWorkspaceSseCursor,
@@ -24,36 +25,24 @@ type UseSSEOptions = {
   onEvent?: (event: SSEEvent) => void
 }
 
-export const MAX_PROCESSED_SSE_EVENT_IDENTITIES = 2048
-
-export function addProcessedSseEventIdentity(
-  identities: Set<string>,
-  identity: string,
-): void {
-  identities.delete(identity)
-  identities.add(identity)
-  while (identities.size > MAX_PROCESSED_SSE_EVENT_IDENTITIES) {
-    const oldest = identities.values().next().value as string | undefined
-    if (!oldest) return
-    identities.delete(oldest)
-  }
-}
-
 function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
   return `workspace-sse-cursor:v1:${projectId}:${episodeId ?? 'all'}`
 }
 
 function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
+  const storage = window.sessionStorage
+  if (!storage) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   try {
-    return parseWorkspaceSseCursor(window.sessionStorage.getItem(cursorStorageKey(projectId, episodeId)))
+    return parseWorkspaceSseCursor(storage.getItem(cursorStorageKey(projectId, episodeId)))
   } catch (error) {
     _ulogError('[useSSE] invalid durable cursor', error)
-    throw error
+    storage.removeItem(cursorStorageKey(projectId, episodeId))
+    return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   }
 }
 
 function persistCursor(projectId: string, episodeId: string | null | undefined, cursor: WorkspaceSseCursor): void {
-  window.sessionStorage.setItem(cursorStorageKey(projectId, episodeId), serializeWorkspaceSseCursor(cursor))
+  window.sessionStorage?.setItem(cursorStorageKey(projectId, episodeId), serializeWorkspaceSseCursor(cursor))
 }
 
 export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
@@ -61,8 +50,11 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   const sourceRef = useRef<EventSource | null>(null)
   const targetStatesInvalidateTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
-  const processedEventIdsRef = useRef<Set<string>>(new Set())
   const isGlobalAssetProject = projectId === 'global-asset-hub'
+  const eventSequence = useMemo(
+    () => new WorkspaceSSEEventSequence(),
+    [episodeId, projectId],
+  )
 
   const connection = useMemo(() => {
     if (!projectId) return null
@@ -98,10 +90,8 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
 
   const handleParsedEvent = useCallback((payload: unknown, transportCursor?: string) => {
     if (!isWorkspaceSSEEvent(payload)) return
-    const identity = `${payload.type}:${payload.id}`
-    if (processedEventIdsRef.current.has(identity)) return
-    applyEvent(payload)
-    addProcessedSseEventIdentity(processedEventIdsRef.current, identity)
+    const decision = eventSequence.process(payload, applyEvent)
+    if (decision === 'duplicate' || decision === 'invalid') return
     const nextCursor = transportCursor
       ? parseWorkspaceSseCursor(transportCursor)
       : advanceWorkspaceSseCursor(cursorRef.current, payload)
@@ -109,13 +99,12 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     if (projectId) {
       persistCursor(projectId, episodeId, nextCursor)
     }
-  }, [applyEvent, episodeId, projectId])
+  }, [applyEvent, episodeId, eventSequence, projectId])
 
   useEffect(() => {
     if (!enabled || !connection || !projectId) return
 
     cursorRef.current = readStoredCursor(projectId, episodeId)
-    processedEventIdsRef.current = new Set()
     const source = new EventSource(connection.url)
     sourceRef.current = source
 

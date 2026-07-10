@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildMockRequest } from '../../../helpers/request'
+import { planAssetGenerateTask } from '@/lib/assets/services/asset-actions'
 
 const authMock = vi.hoisted(() => ({
   requireProjectAuthLight: vi.fn(async () => ({
@@ -96,126 +97,53 @@ vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
 }))
 
-describe('api specific - novel promotion generate image art style', () => {
+function planCharacter(body: Record<string, unknown>) {
+  return planAssetGenerateTask({
+    request: buildMockRequest({ path: '/api/assets/character-1/generate', method: 'POST', body }),
+    kind: 'character',
+    assetId: 'character-1',
+    body,
+    episodeId: null,
+    access: { scope: 'project', userId: 'user-1', projectId: 'project-1' },
+  })
+}
+
+describe('api specific - novel promotion generate image planning', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('rejects legacy artStyle on the unified asset generate route', async () => {
-    const mod = await import('@/app/api/assets/[assetId]/generate/route')
-    const req = buildMockRequest({
-      path: '/api/assets/character-1/generate',
-      method: 'POST',
-      body: {
-        scope: 'project',
-        kind: 'character',
-        projectId: 'project-1',
-        appearanceId: 'appearance-1',
-        artStyle: 'realistic',
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
-    const body = await res.json()
-    expect(res.status).toBe(400)
-    expect(body.error.code).toBe('INVALID_PARAMS')
+    await expect(planCharacter({
+      appearanceId: 'appearance-1',
+      artStyle: 'realistic',
+    })).rejects.toMatchObject({ code: 'INVALID_PARAMS' })
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('does not inject american-comic when artStyle is omitted', async () => {
-    const mod = await import('@/app/api/assets/[assetId]/generate/route')
-    const req = buildMockRequest({
-      path: '/api/assets/character-1/generate',
-      method: 'POST',
-      body: {
-        scope: 'project',
-        kind: 'character',
-        projectId: 'project-1',
-        appearanceId: 'appearance-1',
-        confirmed: true,
-        confirmedMaxCost: 1,
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
-    expect(res.status).toBe(200)
-
-    const submitArg = submitTaskMock.mock.calls[0]?.[0] as { payload?: Record<string, unknown> } | undefined
-    expect(submitArg?.payload).not.toHaveProperty('artStyle')
+    const planned = await planCharacter({ appearanceId: 'appearance-1' })
+    expect(planned.task.payload).not.toHaveProperty('artStyle')
+    expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('rejects invalid artStyle with invalid params', async () => {
-    const mod = await import('@/app/api/assets/[assetId]/generate/route')
-    const req = buildMockRequest({
-      path: '/api/assets/character-1/generate',
-      method: 'POST',
-      body: {
-        scope: 'project',
-        kind: 'character',
-        projectId: 'project-1',
-        appearanceId: 'appearance-1',
-        artStyle: 'anime',
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
-    const body = await res.json()
-    expect(res.status).toBe(400)
-    expect(body.error.code).toBe('INVALID_PARAMS')
+    await expect(planCharacter({
+      appearanceId: 'appearance-1',
+      artStyle: 'anime',
+    })).rejects.toMatchObject({ code: 'INVALID_PARAMS' })
     expect(submitTaskMock).not.toHaveBeenCalled()
   })
 
   it('uses the project character candidate count for multi-candidate generation', async () => {
-    const mod = await import('@/app/api/assets/[assetId]/generate/route')
-    const req = buildMockRequest({
-      path: '/api/assets/character-1/generate',
-      method: 'POST',
-      body: {
-        scope: 'project',
-        kind: 'character',
-        projectId: 'project-1',
-        appearanceId: 'appearance-1',
-        count: 6,
-        confirmed: true,
-        confirmedMaxCost: 1,
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
-    expect(res.status).toBe(200)
-
-    const submitArg = submitTaskMock.mock.calls[0]?.[0] as {
-      payload?: Record<string, unknown>
-      dedupeKey?: string
-    } | undefined
-    expect(submitArg?.payload?.count).toBe(3)
-    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:3:style-bible:none')
+    const planned = await planCharacter({ appearanceId: 'appearance-1', count: 6 })
+    expect(planned.task.payload.count).toBe(3)
+    expect(planned.task.dedupeKey).toBe('image_character:appearance-1:3:style-bible:none')
   })
 
   it('honors explicit single project character generation count', async () => {
-    const mod = await import('@/app/api/assets/[assetId]/generate/route')
-    const req = buildMockRequest({
-      path: '/api/assets/character-1/generate',
-      method: 'POST',
-      body: {
-        scope: 'project',
-        kind: 'character',
-        projectId: 'project-1',
-        appearanceId: 'appearance-1',
-        count: 1,
-        confirmed: true,
-        confirmedMaxCost: 1,
-      },
-    })
-
-    const res = await mod.POST(req, { params: Promise.resolve({ assetId: 'character-1' }) })
-    expect(res.status).toBe(200)
-
-    const submitArg = submitTaskMock.mock.calls[0]?.[0] as {
-      payload?: Record<string, unknown>
-      dedupeKey?: string
-    } | undefined
-    expect(submitArg?.payload?.count).toBe(1)
-    expect(submitArg?.dedupeKey).toBe('image_character:appearance-1:1:style-bible:none')
+    const planned = await planCharacter({ appearanceId: 'appearance-1', count: 1 })
+    expect(planned.task.payload.count).toBe(1)
+    expect(planned.task.dedupeKey).toBe('image_character:appearance-1:1:style-bible:none')
   })
 })
