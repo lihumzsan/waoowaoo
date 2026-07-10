@@ -12,7 +12,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-02 — 显式状态边。** 开始、等待用户、等待外部 provider、完成、失败、取消、重试必须有明确允许的状态转移和责任方。
 - **TL-03 — 范围与目标一致。** project、episode、chapter 和 target identity 必须从统一 payload/normalizer 派生；写入方与读取方不得使用不同 scope 语义。
 - **TL-04 — 提交失败可补偿。** 创建记录后提交任务若失败，必须有显式补偿；不得留下孤儿记录、冻结金额或不可恢复 dedupe 状态。
-- **TL-05 — 重试有唯一策略。** 错误分类决定是否重试；队列、worker 与 Agent 不能叠加隐式重试或把永久失败吞掉。
+- **TL-05 — 重试有唯一策略。** 错误分类决定是否重试；LLM 任务的模型输出校验失败可由队列重试，临时供应商错误同样可重试，鉴权、配置、余额和内容安全等永久失败不得重试。队列、worker 与 Agent 不能叠加隐式重试或把永久失败吞掉。
 - **TL-06 — 终态驱动下游。** Task 完成/失败是唤醒 Agent 和刷新 Canvas 的唯一业务边；不得用轮询、历史消息或局部 loading 推断替代。
 - **TL-06A — 终态立即撤销瞬时运行态。** 结构化流和 optimistic runtime 在 Task 终态到达时必须立即退出；历史 `task-submitted` 消息不得继续充当 active Task。源剧本生成和制作规划生成即使复用同一 worker，也必须使用不同 Task type 与 target。
 
@@ -22,6 +22,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - 提交、队列与计费边界：`src/lib/task/submitter.ts`。
 - Task 服务与终态写入：`src/lib/task/service.ts`。
 - Operation 到 Task 的提交适配：`src/lib/operations/submit-operation-task.ts`。
+- 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
 
 ## 验证
 

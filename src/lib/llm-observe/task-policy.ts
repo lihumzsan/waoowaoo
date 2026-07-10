@@ -40,6 +40,7 @@ const LLM_STANDARD_POLICY: LLMTaskPolicy = {
 
 const POLICY_BY_TASK_TYPE: Partial<Record<TaskType, LLMTaskPolicy>> = {
   [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: LONG_FLOW_HIGH_POLICY,
+  [TASK_TYPE.EDIT_BIBLE_GENERATE]: LONG_FLOW_HIGH_POLICY,
   [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE]: LONG_FLOW_HIGH_POLICY,
   [TASK_TYPE.EDIT_SCRIPT_GENERATE]: LONG_FLOW_HIGH_POLICY,
   [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: LONG_FLOW_HIGH_POLICY,
@@ -62,4 +63,9 @@ const POLICY_BY_TASK_TYPE: Partial<Record<TaskType, LLMTaskPolicy>> = {
 export function getLLMTaskPolicy(taskType: string | null | undefined): LLMTaskPolicy {
   if (!taskType) return DEFAULT_POLICY
   return POLICY_BY_TASK_TYPE[taskType as TaskType] || DEFAULT_POLICY
+}
+
+export function isLLMTaskType(taskType: string | null | undefined): taskType is TaskType {
+  return typeof taskType === 'string'
+    && Object.prototype.hasOwnProperty.call(POLICY_BY_TASK_TYPE, taskType)
 }

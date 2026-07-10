@@ -4,6 +4,8 @@ import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
+import { AppError, toAppError } from '@/lib/errors/app-error'
+import type { UnifiedErrorCode } from '@/lib/errors/codes'
 import {
   buildEditSourceBlocks,
   formatEditSourceBlocksForPrompt,
@@ -31,11 +33,11 @@ type EditBiblePromptStepId =
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_LEDGER
   | typeof AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE
 
-class EditBibleExtractionError extends Error {
+class EditBibleExtractionError extends AppError {
   readonly diagnostics: EditBibleDiagnostics
 
-  constructor(diagnostics: EditBibleDiagnostics) {
-    super('EDIT_BIBLE_EXTRACTION_FAILED')
+  constructor(diagnostics: EditBibleDiagnostics, code: UnifiedErrorCode) {
+    super(code, 'EDIT_BIBLE_EXTRACTION_FAILED', { details: diagnostics })
     this.name = 'EditBibleExtractionError'
     this.diagnostics = diagnostics
   }
@@ -169,6 +171,7 @@ export async function generateEditBibleArtifacts(input: {
   ] as const
   const settled = await Promise.allSettled(entries.map((entry) => entry[1]))
   const diagnostics: EditBibleDiagnostics = {}
+  const extractionErrors: AppError[] = []
   let bible: EditBible | null = null
   let beatSheet: EditBibleBeatSheet | null = null
   let ledger: Ledger | null = null
@@ -193,22 +196,37 @@ export async function generateEditBibleArtifacts(input: {
       }
       return
     }
+    const normalizedError = toAppError(result.reason, {
+      fallbackCode: 'PLAN_VALIDATION_FAILED',
+    })
+    extractionErrors.push(normalizedError)
     diagnostics[key] = serializeExtractionError(result.reason)
   })
   if (Object.keys(diagnostics).length > 0) {
-    throw new EditBibleExtractionError(diagnostics)
+    const primaryError = extractionErrors.find((error) => !error.retryable) ?? extractionErrors[0]
+    throw new EditBibleExtractionError(diagnostics, primaryError?.code ?? 'PLAN_VALIDATION_FAILED')
   }
   if (!bible || !beatSheet || !ledger || !emotionalCurve) {
-    throw new EditBibleExtractionError({ error: 'EDIT_BIBLE_EXTRACTION_RESULT_INCOMPLETE' })
+    throw new EditBibleExtractionError(
+      { error: 'EDIT_BIBLE_EXTRACTION_RESULT_INCOMPLETE' },
+      'PLAN_VALIDATION_FAILED',
+    )
   }
 
-  return validateEditBibleBundle({
-    bundle: {
-      bible,
-      beatSheet,
-      ledger,
-      emotionalCurve,
-    },
-    sourceText: input.sourceDocument,
-  })
+  try {
+    return validateEditBibleBundle({
+      bundle: {
+        bible,
+        beatSheet,
+        ledger,
+        emotionalCurve,
+      },
+      sourceText: input.sourceDocument,
+    })
+  } catch (error: unknown) {
+    throw new EditBibleExtractionError(
+      { bundle: serializeExtractionError(error) },
+      'PLAN_VALIDATION_FAILED',
+    )
+  }
 }

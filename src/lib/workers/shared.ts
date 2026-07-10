@@ -15,10 +15,9 @@ import {
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
 import { TASK_EVENT_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
-import { TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
+import { shouldRetryTaskFailure, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
-import { ERROR_FAILURE_CLASS } from '@/lib/errors/codes'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
@@ -346,7 +345,10 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       ? Math.max(1, Math.floor(rawMaxAttempts))
       : 1
     const currentAttempt = attemptsMade + 1
-    const bullmqWillRetry = normalizedError.failureClass === ERROR_FAILURE_CLASS.TRANSIENT_PROVIDER && currentAttempt < maxAttempts
+    const bullmqWillRetry = shouldRetryTaskFailure({
+      taskType: data.type,
+      failureClass: normalizedError.failureClass,
+    }) && currentAttempt < maxAttempts
     const workerFailureLog = {
       action: bullmqWillRetry ? 'worker.retryable_failed' : 'worker.failed',
       message: normalizedError.message,

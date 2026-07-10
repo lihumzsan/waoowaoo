@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getTaskFlowMeta, getTaskPipeline } from '@/lib/llm-observe/stage-pipeline'
-import { getLLMTaskPolicy } from '@/lib/llm-observe/task-policy'
+import { getLLMTaskPolicy, isLLMTaskType } from '@/lib/llm-observe/task-policy'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('llm observe task pipeline', () => {
@@ -15,6 +15,11 @@ describe('llm observe task pipeline', () => {
     expect(locationPolicy.consoleEnabled).toBe(true)
     expect(locationPolicy.displayMode).toBe('loading')
     expect(locationPolicy.captureReasoning).toBe(true)
+  })
+
+  it('registers edit bible generation as an llm task', () => {
+    expect(isLLMTaskType(TASK_TYPE.EDIT_BIBLE_GENERATE)).toBe(true)
+    expect(getLLMTaskPolicy(TASK_TYPE.EDIT_BIBLE_GENERATE).consoleEnabled).toBe(true)
   })
 
   it('maps AI_CREATE tasks to dedicated single-stage flows', () => {

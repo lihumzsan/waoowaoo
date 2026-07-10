@@ -136,6 +136,7 @@ describe('edit bible extraction', () => {
 
     expect(caught).toBeInstanceOf(Error)
     expect((caught as Error).message).toBe('EDIT_BIBLE_EXTRACTION_FAILED')
+    expect((caught as { readonly code?: unknown }).code).toBe('PLAN_VALIDATION_FAILED')
     expect(readEditBibleExtractionDiagnostics(caught)).toEqual({
       emotionalCurve: {
         error: 'EDIT_SOURCE_ANCHOR_BLOCK_NOT_FOUND:p9999',
