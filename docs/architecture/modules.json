@@ -192,7 +192,8 @@
         "tests/unit/guards/verify-push-fail-closed.test.ts",
         "tests/unit/guards/changed-file-test-impact-guard.test.ts",
         "tests/contracts/tasktype-scenario-conformance.test.ts",
-        "tests/integration/api/contract/route-scenario-conformance.test.ts"
+        "tests/integration/api/contract/route-scenario-conformance.test.ts",
+        "tests/regression/historical-defect-scenarios.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/changed-file-test-impact-guard.mjs",

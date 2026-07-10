@@ -21,6 +21,7 @@
 - 历史缺陷：`tests/history/catalog.ts`。
 - 可执行场景与实际执行证据：`tests/harness/behavior-scenario.ts`。
 - 生命周期事实序列：`tests/harness/lifecycle-sequence.ts`。
+- 历史错误反证：`tests/harness/historical-regression.ts` 与 `tests/history/scenarios/**`。
 - Task type 行为契约：`tests/contracts/tasktype-scenario-registry.ts`。
 - Route identity 与访问边界：`tests/contracts/route-catalog.ts`；可执行契约：`tests/contracts/route-scenario-registry.ts`。
 - Git 候选报告：`scripts/test-history/candidate-report.mjs`。
@@ -37,6 +38,7 @@
 - `tests/unit/guards/changed-file-test-impact-guard.test.ts` 验证 CI base/head range 与测试影响规则。
 - `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
 - `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
+- `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
 
 ## 历史回归
 

@@ -22,7 +22,7 @@ export const HISTORICAL_DEFECT_CATALOG = [
       'SCENARIO-ASSISTANT-AWAITING-TASK-RELOAD',
     ],
     replayMode: 'semantic-fault-injection',
-    status: 'scenario-required',
+    status: 'protected',
   },
   {
     id: 'BUG-TL-001',
@@ -43,7 +43,7 @@ export const HISTORICAL_DEFECT_CATALOG = [
       'SCENARIO-TASK-ABSENT-JOB-RECOVERY',
     ],
     replayMode: 'semantic-fault-injection',
-    status: 'scenario-required',
+    status: 'protected',
   },
   {
     id: 'BUG-CN-001',
@@ -65,7 +65,7 @@ export const HISTORICAL_DEFECT_CATALOG = [
       'SCENARIO-CANVAS-LATE-STREAM-AFTER-TERMINAL',
     ],
     replayMode: 'semantic-fault-injection',
-    status: 'scenario-required',
+    status: 'protected',
   },
   {
     id: 'BUG-PG-001',
@@ -86,8 +86,8 @@ export const HISTORICAL_DEFECT_CATALOG = [
       'SCENARIO-PROVIDER-COMPLETED-WITHOUT-MEDIA',
       'SCENARIO-PROVIDER-ZERO-FALLBACK',
     ],
-    replayMode: 'direct-parent',
-    status: 'scenario-required',
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
   },
 ] as const satisfies readonly HistoricalDefect[]
 
