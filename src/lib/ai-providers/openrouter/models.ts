@@ -9,6 +9,8 @@ import {
 } from '@/lib/ai-providers/shared/option-schema'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 
+export const OPENROUTER_PROVIDER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
+export const OPENROUTER_PROVIDER_TEST_LLM_MODEL_ID = 'openai/gpt-4o-mini'
 export const OPENROUTER_SEEDANCE_2_VIDEO_MODEL_ID = 'bytedance/seedance-2.0'
 export const OPENROUTER_SEEDANCE_2_FAST_VIDEO_MODEL_ID = 'bytedance/seedance-2.0-fast'
 export const OPENROUTER_GEMINI_3_5_FLASH_MODEL_ID = 'google/gemini-3.5-flash'

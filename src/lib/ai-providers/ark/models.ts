@@ -13,6 +13,7 @@ export const ARK_IMAGE_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:
 export const ARK_VIDEO_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'] as const
 export const ARK_IMAGE_RESOLUTIONS = ['4K', '3K'] as const
 export const ARK_VIDEO_SERVICE_TIERS = ['default', 'flex'] as const
+export const ARK_PROVIDER_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 export const ARK_PROVIDER_TEST_LLM_MODEL_ID = 'doubao-seed-2-0-lite-260215'
 export const ARK_TOKEN_PRICED_VIDEO_MODEL_IDS = [
   'doubao-seedance-2-0-260128',
@@ -37,6 +38,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p'],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -52,6 +54,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p'],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -66,6 +69,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: false,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -80,6 +84,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: false,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -94,6 +99,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -108,6 +114,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -122,6 +129,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -136,6 +144,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: false,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -151,6 +160,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
       },
     },
   },
@@ -166,6 +176,7 @@ export const ARK_BUILTIN_CAPABILITY_CATALOG_ENTRIES = [
         resolutionOptions: ['480p', '720p', '1080p'],
         firstlastframe: true,
         supportGenerateAudio: true,
+        assetReferenceMultiReference: true,
       },
     },
   },

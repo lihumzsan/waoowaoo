@@ -128,10 +128,25 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/media/outbound-image', () => ({
   normalizeToBase64ForGeneration: vi.fn(async (input: string) => input),
 }))
-vi.mock('@/lib/ai-registry/capabilities-catalog', () => ({
-  registerBuiltinCapabilityCatalogEntries: vi.fn(),
-  resolveBuiltinCapabilitiesByModelKey: vi.fn(() => ({ video: { firstlastframe: true } })),
-}))
+vi.mock('@/lib/ai-registry/capabilities-catalog', () => {
+  const multiReferenceVideoModelKeys = new Set([
+    'ark::doubao-seedance-2-0-260128',
+    'fal::bytedance/seedance-2.0',
+    'fal::bytedance/seedance-2.0/fast',
+    'fal::alibaba/happy-horse/image-to-video',
+    'fal::fal-ai/kling-video/o3/standard/image-to-video',
+    'fal::fal-ai/kling-video/v3/pro/image-to-video',
+  ])
+  return {
+    registerBuiltinCapabilityCatalogEntries: vi.fn(),
+    resolveBuiltinCapabilitiesByModelKey: vi.fn((_modelType: string, modelKey: string) => ({
+      video: {
+        firstlastframe: true,
+        assetReferenceMultiReference: multiReferenceVideoModelKeys.has(modelKey),
+      },
+    })),
+  }
+})
 vi.mock('@/lib/ai-registry/pricing-resolution', () => ({
   registerBuiltinPricingCatalogEntries: vi.fn(),
 }))
@@ -490,7 +505,7 @@ describe('worker video processor behavior', () => {
       targetId: 'group-asset-1',
       payload: {
         sourceMode: 'asset_reference',
-        videoModel: 'ark::seedance',
+        videoModel: 'ark::doubao-seedance-2-0-260128',
         episodeId: 'episode-1',
         chapterId: 'chapter-1',
         shotIds: ['shot-1', 'shot-2'],
@@ -511,7 +526,7 @@ describe('worker video processor behavior', () => {
     expect(videoGroupMocks.composeAndStoreGridReferenceImage).not.toHaveBeenCalled()
     expect(prismaMock.projectPanel.findMany).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      modelId: 'ark::seedance',
+      modelId: 'ark::doubao-seedance-2-0-260128',
       referenceImages: [
         { url: 'https://example.com/hero.png', role: 'reference', order: 1, source: 'asset' },
         { url: 'https://example.com/location.png', role: 'reference', order: 2, source: 'asset' },
@@ -555,7 +570,7 @@ describe('worker video processor behavior', () => {
       targetId: 'group-asset-1',
       payload: {
         sourceMode: 'asset_reference',
-        videoModel: 'ark::seedance',
+        videoModel: 'ark::doubao-seedance-2-0-260128',
         episodeId: 'episode-1',
         chapterId: 'chapter-1',
         shotIds: ['shot-1', 'shot-2'],

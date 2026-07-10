@@ -6,6 +6,7 @@ import {
   integerRangeValidator,
   nonEmptyStringValidator,
 } from '@/lib/ai-providers/shared/option-schema'
+import { googleConnectionTester } from './connection-test'
 import { executeGoogleImageGeneration } from './image'
 import { createGoogleSdkLanguageModel } from './language-model'
 import { runGoogleLlmCompletion, runGoogleLlmStream, runGoogleVisionCompletion } from './llm'
@@ -67,6 +68,7 @@ export const googleAdapter: AiProviderAdapter = {
   languageModel: {
     create: createGoogleSdkLanguageModel,
   },
+  connectionTest: googleConnectionTester,
   streamLlm: runGoogleLlmStream,
   completeVision: runGoogleVisionCompletion,
 }

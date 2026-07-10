@@ -253,6 +253,7 @@ export interface VideoCapabilities {
   resolutionOptions?: string[]
   firstlastframe?: boolean
   supportGenerateAudio?: boolean
+  assetReferenceMultiReference?: boolean
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -307,6 +308,7 @@ const VIDEO_ALLOWED_FIELDS = new Set<keyof VideoCapabilities>([
   'resolutionOptions',
   'firstlastframe',
   'supportGenerateAudio',
+  'assetReferenceMultiReference',
   'fieldI18n',
 ])
 
@@ -580,6 +582,14 @@ function validateVideoCapabilities(issues: CapabilityValidationIssue[], raw: unk
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.video.firstlastframe',
       message: 'firstlastframe must be boolean',
+    })
+  }
+
+  if (raw.assetReferenceMultiReference !== undefined && typeof raw.assetReferenceMultiReference !== 'boolean') {
+    issues.push({
+      code: 'CAPABILITY_FIELD_INVALID',
+      field: 'capabilities.video.assetReferenceMultiReference',
+      message: 'assetReferenceMultiReference must be boolean',
     })
   }
 

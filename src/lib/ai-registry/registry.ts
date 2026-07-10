@@ -21,11 +21,15 @@ export class AiRegistry<TAdapter extends AiProviderAdapter> {
   }
 
   public getAdapterByProviderId(providerId: string): TAdapter {
-    const providerKey = getProviderKey(providerId).toLowerCase()
-    const adapter = this.adapters.get(providerKey)
+    const adapter = this.tryGetAdapterByProviderId(providerId)
     if (!adapter) {
-      throw new Error(`AI_REGISTRY_PROVIDER_UNSUPPORTED:${providerKey}`)
+      throw new Error(`AI_REGISTRY_PROVIDER_UNSUPPORTED:${getProviderKey(providerId).toLowerCase()}`)
     }
     return adapter
+  }
+
+  public tryGetAdapterByProviderId(providerId: string): TAdapter | null {
+    const providerKey = getProviderKey(providerId).toLowerCase()
+    return this.adapters.get(providerKey) ?? null
   }
 }

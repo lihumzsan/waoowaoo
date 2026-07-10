@@ -1,5 +1,6 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
+import { falConnectionTester } from './connection-test'
 import { executeFalImageGeneration } from './image'
 import { executeFalMusicGeneration } from './music'
 import { resolveFalOptionSchema } from './models'
@@ -31,4 +32,5 @@ export const falAdapter: AiProviderAdapter = {
     describe: (selection) => describeFalMediaVariant('music', selection),
     execute: executeFalMusicGeneration,
   },
+  connectionTest: falConnectionTester,
 }

@@ -17,32 +17,9 @@ import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
-import {
-  buildOpenRouterSessionId,
-  normalizeOpenRouterSessionId,
-} from '@/lib/ai-providers/openrouter/session'
 import type { AiProviderLlmResult, AiProviderVisionExecutionContext } from '@/lib/ai-providers/runtime-types'
 
 ensureAiCatalogsRegistered()
-
-function resolveOpenRouterSessionForVision(input: {
-  providerKey: string
-  userId: string
-  projectId?: string
-  action?: string
-  modelKey: string
-  explicitSessionId?: string
-}): string | undefined {
-  if (input.providerKey !== 'openrouter') return undefined
-  return normalizeOpenRouterSessionId(input.explicitSessionId)
-    ?? buildOpenRouterSessionId({
-      kind: 'vision',
-      userId: input.userId,
-      projectId: input.projectId,
-      action: input.action,
-      modelKey: input.modelKey,
-    })
-}
 
 async function executeVisionCompletionViaAdapter(
   input: AiProviderVisionExecutionContext,
@@ -107,8 +84,8 @@ export async function runChatCompletionWithVision(
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
       ? options.projectId.trim()
       : undefined
-  const openRouterSessionId = resolveOpenRouterSessionForVision({
-    providerKey,
+  const openRouterSessionId = resolveAiProviderAdapter(provider).resolveLlmSessionId?.({
+    kind: 'vision',
     userId,
     projectId,
     action: options.action,

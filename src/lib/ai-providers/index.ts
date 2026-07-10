@@ -63,6 +63,10 @@ export function resolveAiProviderAdapter(providerId: string): AiProviderAdapter 
   return runtimeProviderRegistry.getAdapterByProviderId(providerId)
 }
 
+export function tryResolveAiProviderAdapter(providerId: string): AiProviderAdapter | null {
+  return runtimeProviderRegistry.tryGetAdapterByProviderId(providerId)
+}
+
 export function createRegisteredLanguageModel(input: AiProviderLanguageModelContext) {
   const languageModelProvider = resolveAiProviderAdapter(input.selection.provider).languageModel
   if (!languageModelProvider) {

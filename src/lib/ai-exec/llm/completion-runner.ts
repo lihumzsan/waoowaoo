@@ -18,32 +18,9 @@ import { describeLlmVariantBase } from '@/lib/ai-exec/llm-descriptor'
 import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
-import {
-  buildOpenRouterSessionId,
-  normalizeOpenRouterSessionId,
-} from '@/lib/ai-providers/openrouter/session'
 import type { AiLlmExecutionInput, AiLlmExecutionResult, ChatMessage } from '@/lib/ai-registry/types'
 
 ensureAiCatalogsRegistered()
-
-function resolveOpenRouterSessionForCompletion(input: {
-  providerKey: string
-  userId: string
-  projectId?: string
-  action?: string
-  modelKey: string
-  explicitSessionId?: string
-}): string | undefined {
-  if (input.providerKey !== 'openrouter') return undefined
-  return normalizeOpenRouterSessionId(input.explicitSessionId)
-    ?? buildOpenRouterSessionId({
-      kind: 'llm',
-      userId: input.userId,
-      projectId: input.projectId,
-      action: input.action,
-      modelKey: input.modelKey,
-    })
-}
 
 async function executeLlmCompletionViaAdapter(
   input: AiLlmExecutionInput,
@@ -93,8 +70,9 @@ export async function chatCompletionStream(
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
       ? options.projectId.trim()
       : undefined
-  const openRouterSessionId = resolveOpenRouterSessionForCompletion({
-    providerKey,
+  const providerRuntime = resolveAiProviderAdapter(provider)
+  const openRouterSessionId = providerRuntime.resolveLlmSessionId?.({
+    kind: 'llm',
     userId,
     projectId,
     action: options.action,
@@ -116,7 +94,6 @@ export async function chatCompletionStream(
     messages,
   })
 
-  const providerRuntime = resolveAiProviderAdapter(provider)
   if (!providerRuntime.streamLlm) {
     const error = new Error(`UNSUPPORTED_STREAM_PROVIDER: ${providerKey}`)
     callbacks?.onError?.(error, streamStep)
@@ -230,8 +207,8 @@ export async function runChatCompletion(
     typeof options.projectId === 'string' && options.projectId.trim().length > 0
       ? options.projectId.trim()
       : undefined
-  const openRouterSessionId = resolveOpenRouterSessionForCompletion({
-    providerKey,
+  const openRouterSessionId = resolveAiProviderAdapter(provider).resolveLlmSessionId?.({
+    kind: 'llm',
     userId,
     projectId,
     action: options.action,

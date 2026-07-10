@@ -39,7 +39,7 @@ describe('provider scope', () => {
   })
 
   it('exposes image, video, and music generation on FAL', () => {
-    expect(Object.keys(falAdapter).sort()).toEqual(['image', 'music', 'providerKey', 'video'])
+    expect(Object.keys(falAdapter).sort()).toEqual(['connectionTest', 'image', 'music', 'providerKey', 'video'])
   })
 
   it('exposes sound effect generation on ElevenLabs', () => {
@@ -50,8 +50,10 @@ describe('provider scope', () => {
     expect(Object.keys(openRouterAdapter).sort()).toEqual([
       'completeLlm',
       'completeVision',
+      'connectionTest',
       'languageModel',
       'providerKey',
+      'resolveLlmSessionId',
       'streamLlm',
       'video',
     ])

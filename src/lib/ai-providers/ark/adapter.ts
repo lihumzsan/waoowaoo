@@ -1,6 +1,7 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
 import { createOpenAiSdkLanguageModel } from '@/lib/ai-providers/shared/language-model'
+import { arkConnectionTester } from './connection-test'
 import { executeArkImageGeneration } from './image'
 import { runArkLlmCompletion, runArkLlmStream, runArkVisionCompletion } from './llm'
 import { resolveArkOptionSchema } from './models'
@@ -40,6 +41,7 @@ export const arkAdapter: AiProviderAdapter = {
   languageModel: {
     create: createOpenAiSdkLanguageModel,
   },
+  connectionTest: arkConnectionTester,
   streamLlm: runArkLlmStream,
   completeVision: runArkVisionCompletion,
 }

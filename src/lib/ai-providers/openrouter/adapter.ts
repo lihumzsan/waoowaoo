@@ -1,7 +1,9 @@
 import type { AiProviderAdapter } from '@/lib/ai-providers/runtime-types'
 import { describeMediaVariantBase } from '@/lib/ai-providers/shared/media-adapter'
-import { createOpenAiSdkLanguageModel } from '@/lib/ai-providers/shared/language-model'
+import { openRouterConnectionTester } from './connection-test'
+import { createOpenRouterLanguageModel } from './language-model'
 import { resolveOpenRouterOptionSchema } from './models'
+import { buildOpenRouterSessionId, normalizeOpenRouterSessionId } from './session'
 import { runOpenRouterLlmCompletion, runOpenRouterLlmStream, runOpenRouterVisionCompletion } from './llm'
 import { executeOpenRouterVideoGeneration } from './video'
 
@@ -29,8 +31,17 @@ export const openRouterAdapter: AiProviderAdapter = {
     openRouterSessionId: input.openRouterSessionId,
   }),
   languageModel: {
-    create: createOpenAiSdkLanguageModel,
+    create: createOpenRouterLanguageModel,
   },
+  connectionTest: openRouterConnectionTester,
+  resolveLlmSessionId: (input) => normalizeOpenRouterSessionId(input.explicitSessionId)
+    ?? buildOpenRouterSessionId({
+      kind: input.kind,
+      userId: input.userId,
+      projectId: input.projectId,
+      action: input.action,
+      modelKey: input.modelKey,
+    }),
   completeVision: runOpenRouterVisionCompletion,
   streamLlm: runOpenRouterLlmStream,
   video: {

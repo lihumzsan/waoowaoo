@@ -169,6 +169,46 @@ export type AiProviderLanguageModelAdapter = {
   create: (input: AiProviderLanguageModelContext) => LanguageModel
 }
 
+export type AiProviderLlmSessionContext = {
+  kind: 'llm' | 'vision'
+  userId: string
+  projectId?: string
+  action?: string
+  modelKey: string
+  explicitSessionId?: string
+}
+
+export type AiProviderConnectionTestStepName = 'models' | 'textGen' | 'imageGen' | 'credits'
+
+export type AiProviderConnectionTestStep = {
+  name: AiProviderConnectionTestStepName
+  status: 'pass' | 'fail' | 'skip'
+  message: string
+  model?: string
+  detail?: string
+}
+
+export type AiProviderConnectionTestReport = {
+  success: boolean
+  steps: AiProviderConnectionTestStep[]
+}
+
+export type AiProviderLlmConnectionInput = {
+  apiKey: string
+  baseUrl?: string
+  model?: string
+}
+
+export type AiProviderLlmConnectionResult = {
+  model?: string
+  answer?: string
+}
+
+export type AiProviderConnectionTester = {
+  testLlm?: (input: AiProviderLlmConnectionInput) => Promise<AiProviderLlmConnectionResult>
+  diagnose: (input: { apiKey: string; baseUrl?: string; llmModel?: string }) => Promise<AiProviderConnectionTestReport>
+}
+
 export interface AiProviderAdapter {
   readonly providerKey: string
   image?: AiProviderMediaModalityAdapter<'image'>
@@ -176,6 +216,8 @@ export interface AiProviderAdapter {
   music?: AiProviderMediaModalityAdapter<'music'>
   soundEffect?: AiProviderMediaModalityAdapter<'soundEffect'>
   languageModel?: AiProviderLanguageModelAdapter
+  resolveLlmSessionId?: (input: AiProviderLlmSessionContext) => string | undefined
+  connectionTest?: AiProviderConnectionTester
   completeLlm?: (input: AiLlmExecutionInput) => Promise<AiProviderLlmResult>
   streamLlm?: (input: AiProviderLlmStreamContext) => Promise<AiProviderLlmResult>
   completeVision?: (input: AiProviderVisionExecutionContext) => Promise<AiProviderLlmResult>
