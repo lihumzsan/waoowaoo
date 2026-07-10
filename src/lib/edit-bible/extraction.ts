@@ -125,11 +125,7 @@ export async function generateEditBibleArtifacts(input: {
       stepTitle: 'Edit bible global facts',
       stepIndex: 1,
       stepTotal: 4,
-      validate: (raw) => normalizeRawEditBible({
-        raw,
-        sourceText: input.sourceDocument,
-        blocks: sourceBlocks,
-      }),
+      validate: (raw) => normalizeRawEditBible({ raw }),
     })],
     ['beatSheet', runEditBibleStructuredStep<EditBibleBeatSheet>({
       ...input,

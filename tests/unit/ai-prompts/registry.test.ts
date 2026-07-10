@@ -82,7 +82,7 @@ describe('ai prompt registry', () => {
 
     expect(prompt).toContain('带编号的剧本原文块')
     expect(prompt).toContain('标题：《旧钟》')
-    expect(prompt).toContain('firstEvidence')
+    expect(prompt).not.toContain('firstEvidence')
     expect(prompt).not.toContain('"firstSourceStart":')
   })
 

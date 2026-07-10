@@ -105,10 +105,8 @@ describe('edit bible source-anchor normalization', () => {
     expect(curve.cues[0]?.sourceEnd).toBe(sourceText.indexOf('倒流。') + '倒流。'.length)
   })
 
-  it('converts global bible firstEvidence into firstSourceStart', () => {
+  it('normalizes global bible entities without source-position metadata', () => {
     const bible = normalizeRawEditBible({
-      sourceText,
-      blocks,
       raw: {
         synopsis: '老李启动机器后，时间开始倒流。',
         characters: [{
@@ -117,22 +115,20 @@ describe('edit bible source-anchor normalization', () => {
           aliases: [],
           summary: '启动机器的民间科学家。',
           voiceProfile: '低厚温润带细碎颗粒感的中年男声',
-          firstEvidence: { blockId: 'p0001', quote: '老李' },
         }],
         locations: [{
           entityId: 'location_basement',
           name: '地下室',
           aliases: [],
           summary: '蓝光出现的空间。',
-          firstEvidence: { blockId: 'p0001', quote: '地下室' },
         }],
         worldRules: ['时间可以开始倒流'],
         styleGuide: {},
       },
     })
 
-    expect(bible.characters[0]?.firstSourceStart).toBe(sourceText.indexOf('老李'))
     expect(bible.characters[0]?.voiceProfile).toBe('低厚温润带细碎颗粒感的中年男声')
-    expect(bible.locations[0]?.firstSourceStart).toBe(sourceText.indexOf('地下室'))
+    expect(bible.characters[0]).not.toHaveProperty('firstSourceStart')
+    expect(bible.locations[0]).not.toHaveProperty('firstSourceStart')
   })
 })

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { editSourceAnchorSchema, editSourcePointAnchorSchema } from '@/lib/edit-source-document/anchors'
+import { editSourceAnchorSchema } from '@/lib/edit-source-document/anchors'
 import { editSourceRangeSchema } from '@/lib/edit-source-document/schemas'
 import { ledgerEventBaseSchema, ledgerSchema } from '@/lib/edit-ledger/schemas'
 import { EDIT_BIBLE_STATUS } from './constraints'
@@ -20,7 +20,6 @@ export const editBibleEntityBaseSchema = z.object({
   name: z.string().trim().min(1),
   aliases: z.array(z.string().trim().min(1)).default([]),
   summary: z.string().trim().min(1),
-  firstSourceStart: z.number().int().min(0).optional(),
 })
 
 export const editBibleEntitySchema = editBibleEntityBaseSchema
@@ -29,17 +28,9 @@ export const editBibleCharacterSchema = editBibleEntityBaseSchema.extend({
   voiceProfile: editBibleCharacterVoiceProfileSchema,
 })
 
-export const rawEditBibleEntitySchema = editBibleEntityBaseSchema
-  .omit({ firstSourceStart: true })
-  .extend({
-    firstEvidence: editSourcePointAnchorSchema.optional(),
-  })
+export const rawEditBibleEntitySchema = editBibleEntitySchema
 
 export const rawEditBibleCharacterSchema = editBibleCharacterSchema
-  .omit({ firstSourceStart: true })
-  .extend({
-    firstEvidence: editSourcePointAnchorSchema.optional(),
-  })
 
 export const editBibleStyleGuideSchema = z.object({
   visualTone: z.string().trim().min(1),

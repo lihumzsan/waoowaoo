@@ -1,14 +1,8 @@
-import {
-  resolveEditSourceAnchor,
-  resolveEditSourcePointAnchor,
-  type EditSourceBlock,
-} from '@/lib/edit-source-document'
+import { resolveEditSourceAnchor, type EditSourceBlock } from '@/lib/edit-source-document'
 import { ledgerSchema, type Ledger } from '@/lib/edit-ledger'
 import {
   editBibleBeatSheetSchema,
-  editBibleCharacterSchema,
   editBibleEmotionalCurveSchema,
-  editBibleEntitySchema,
   editBibleSchema,
   rawEditBibleBeatSheetSchema,
   rawEditBibleEmotionalCurveSchema,
@@ -17,7 +11,6 @@ import {
   type EditBible,
   type EditBibleBeatSheet,
   type EditBibleEmotionalCurve,
-  type RawEditBible,
   type RawEditBibleBeatSheet,
   type RawEditBibleEmotionalCurve,
   type RawEditBibleLedger,
@@ -33,48 +26,9 @@ function omitSourceAnchor<TValue extends { readonly sourceAnchor: unknown }>(
 
 export function normalizeRawEditBible(input: {
   readonly raw: unknown
-  readonly sourceText: string
-  readonly blocks: readonly EditSourceBlock[]
 }): EditBible {
   const raw = rawEditBibleSchema.parse(input.raw)
-  const sourceStartFromEvidence = (entity: { readonly firstEvidence?: RawEditBible['characters'][number]['firstEvidence'] }): number | undefined => {
-    if (!entity.firstEvidence) return undefined
-    return resolveEditSourcePointAnchor({
-      sourceText: input.sourceText,
-      blocks: input.blocks,
-      anchor: entity.firstEvidence,
-    })
-  }
-  const normalizeCharacter = (
-    entity: RawEditBible['characters'][number],
-  ): EditBible['characters'][number] => {
-    const firstSourceStart = sourceStartFromEvidence(entity)
-    return editBibleCharacterSchema.parse({
-      entityId: entity.entityId,
-      name: entity.name,
-      aliases: entity.aliases,
-      summary: entity.summary,
-      voiceProfile: entity.voiceProfile,
-      ...(firstSourceStart !== undefined ? { firstSourceStart } : {}),
-    })
-  }
-  const normalizeLocation = (
-    entity: RawEditBible['locations'][number],
-  ): EditBible['locations'][number] => {
-    const firstSourceStart = sourceStartFromEvidence(entity)
-    return editBibleEntitySchema.parse({
-      entityId: entity.entityId,
-      name: entity.name,
-      aliases: entity.aliases,
-      summary: entity.summary,
-      ...(firstSourceStart !== undefined ? { firstSourceStart } : {}),
-    })
-  }
-  return editBibleSchema.parse({
-    ...raw,
-    characters: raw.characters.map(normalizeCharacter),
-    locations: raw.locations.map(normalizeLocation),
-  })
+  return editBibleSchema.parse(raw)
 }
 
 export function normalizeRawBeatSheet(input: {
