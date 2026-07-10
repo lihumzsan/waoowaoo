@@ -35,7 +35,6 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 - `95254ae71` 尝试收敛 AI 与 Task 重试，但错误分类没有成为唯一来源时，重试仍会在多层复发。
 - `ba753a204` 去除隐式队列重试后，后续又需要显式任务生命周期与错误分类，说明“删重试”本身不能替代契约。
-- 相关根因分析见 [`docs/e2e-failure-root-cause-analysis.md`](../../e2e-failure-root-cause-analysis.md)。
 
 ## 修改检查表
 

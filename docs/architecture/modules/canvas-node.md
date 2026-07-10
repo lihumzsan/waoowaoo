@@ -39,7 +39,6 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
-- 相关根因分析见 [`docs/e2e-round2-diagnosis.md`](../../e2e-round2-diagnosis.md)。
 
 ## 修改检查表
 

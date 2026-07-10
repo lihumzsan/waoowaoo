@@ -39,7 +39,6 @@
 
 - Soundscape 曾使用“最多 12 个音源”的上限授权：审批时真实音效 Prompt、数量和最终 Task 尚未确定。这类测试即使通过，也是在固化错误策略。
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。
-- 相关根因分析见 [`docs/e2e-failure-root-cause-analysis.md`](../../e2e-failure-root-cause-analysis.md)。
 
 ## 修改检查表
 

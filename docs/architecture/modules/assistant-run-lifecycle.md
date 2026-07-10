@@ -33,7 +33,6 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
-- 相关问题汇总见 [`docs/assistant-branch-issue-summary-2026-07-08.md`](../../assistant-branch-issue-summary-2026-07-08.md)。
 
 ## 修改检查表
 
