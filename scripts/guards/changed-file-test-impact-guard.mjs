@@ -19,8 +19,8 @@ const RULES = [
   {
     name: 'task',
     source: /^src\/lib\/task\//,
-    tests: [/^tests\/unit\/task\//, /^tests\/system\//, /^tests\/regression\//],
-    message: 'changing src/lib/task/** requires a matching task, system, or regression test change',
+    tests: [/^tests\/unit\/task\//, /^tests\/integration\/task\//, /^tests\/system\//, /^tests\/regression\//],
+    message: 'changing src/lib/task/** requires a matching task unit, task integration, system, or regression test change',
   },
   {
     name: 'media',

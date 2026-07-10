@@ -1,279 +1,341 @@
-/**
- * Task Reconciliation — DB ↔ BullMQ 状态对账
- *
- * 解决 DB 任务状态与 BullMQ Job 状态脱节导致的任务永久卡死问题。
- * 提供三个层次的对账能力：
- *   1. isJobAlive   — 单任务即时检查（供 createTask 去重时调用）
- *   2. reconcileActiveTasks — 批量对账（供 watchdog 定时调用）
- *   3. startTaskWatchdog    — 定时巡检入口（在 instrumentation.ts 启动）
- */
-
-import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
-import { TASK_STATUS, TASK_EVENT_TYPE } from './types'
+import { prisma } from '@/lib/prisma'
+import type { Queue } from 'bullmq'
+import { buildTaskJobEnvelope, type TaskJobEnvelopeSource } from './job-envelope'
+import { addTaskJob, getAllQueues } from './queues'
 import { publishTaskEvent } from './publisher'
-import { rollbackTaskBillingForTask } from './service'
+import {
+  markTaskEnqueueFailed,
+  markTaskEnqueued,
+  rollbackTaskBillingForTask,
+  sweepStaleTasks,
+} from './service'
 import { syncTaskTargetFailure } from './target-failure-sync'
 import {
-    getAllQueues,
-} from './queues'
+  TASK_EVENT_TYPE,
+  TASK_STATUS,
+  type TaskJobEnvelope,
+  type TaskJobData,
+  type TaskStatus,
+} from './types'
 
-// ────────────────────── 常量 ──────────────────────
-
-const ACTIVE_STATUSES = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
-
-/** watchdog 巡检间隔 */
-const WATCHDOG_INTERVAL_MS = 60_000
-
-/** processing 心跳超时阈值 */
+const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
+const RECONCILE_INTERVAL_MS = 60_000
 const PROCESSING_TIMEOUT_MS = 5 * 60_000
-
-/** 每次对账扫描上限 */
 const RECONCILE_BATCH_SIZE = 200
-
-/** terminal 态短暂竞态保护窗口，避免 worker 刚结束时被误判为孤儿任务 */
 const TERMINAL_RECONCILE_GRACE_MS = 90_000
-
-/** missing 态短暂竞态保护窗口，避免 createTask→enqueue 之间被误判为孤儿任务 */
 const MISSING_RECONCILE_GRACE_MS = 30_000
 
-// ────────────────────── BullMQ Job 状态检查 ──────────────────────
+export type TaskJobObservation =
+  | 'alive'
+  | 'absent'
+  | 'unavailable'
+  | {
+    state: 'terminal'
+    jobState: 'completed' | 'failed'
+    failedReason: string | null
+  }
 
-type JobState = 'alive' | 'terminal' | 'missing'
+export type TaskReconciliationResult = {
+  failedTaskIds: string[]
+  recoveredTaskIds: string[]
+  unavailableTaskIds: string[]
+}
+
+const logger = createScopedLogger({ module: 'task.reconciler' })
 
 /**
- * 检查 BullMQ 中某个 Job 的真实状态。
- * - alive:    Job 存在且仍可执行（waiting / active / delayed / waiting-children）
- * - terminal: Job 存在但已终态（completed / failed）
- * - missing:  Job 在所有队列中均不存在
+ * BullMQ observation is intentionally four-state. Infrastructure failure is not
+ * evidence that a job is absent and must never release a dedupe key.
  */
-async function getJobState(taskId: string): Promise<JobState> {
-    for (const queue of getAllQueues()) {
-        try {
-            const job = await queue.getJob(taskId)
-            if (!job) continue
-            const state = await job.getState()
-            if (state === 'completed' || state === 'failed') {
-                return 'terminal'
-            }
-            // waiting | active | delayed | waiting-children → 仍然活着
-            return 'alive'
-        } catch {
-            // 单个队列查询失败不影响其他队列
-            continue
+export async function observeTaskJobAcrossQueues(
+  taskId: string,
+  queues: readonly Pick<Queue<TaskJobData>, 'getJob'>[],
+): Promise<TaskJobObservation> {
+  let unavailable = false
+  for (const queue of queues) {
+    try {
+      const job = await queue.getJob(taskId)
+      if (!job) continue
+      const state = await job.getState()
+      if (state === 'completed' || state === 'failed') {
+        return {
+          state: 'terminal',
+          jobState: state,
+          failedReason: job.failedReason || null,
         }
+      }
+      return 'alive'
+    } catch (error) {
+      unavailable = true
+      logger.error({
+        action: 'task.job.observe_failed',
+        message: 'BullMQ job observation failed',
+        taskId,
+        error: error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { message: String(error) },
+      })
     }
-    return 'missing'
+  }
+  return unavailable ? 'unavailable' : 'absent'
 }
 
-/**
- * 检查 BullMQ Job 是否仍然活着。
- * 供 createTask 去重时调用——如果 Job 已死，则不应复用旧的 active 任务。
- */
-export async function isJobAlive(taskId: string): Promise<boolean> {
-    const state = await getJobState(taskId)
-    return state === 'alive'
+export async function observeTaskJob(taskId: string): Promise<TaskJobObservation> {
+  return await observeTaskJobAcrossQueues(taskId, getAllQueues())
 }
 
-// ────────────────────── 孤儿任务终止 ──────────────────────
+type ReconcileTask = TaskJobEnvelopeSource & {
+  status: string
+  updatedAt: Date
+}
 
-/**
- * 将一个孤儿任务标记为 failed 并发送 SSE 事件通知前端。
- */
-async function failOrphanedTask(
-    task: {
-        id: string
-        userId: string
-        projectId: string
-        episodeId: string | null
-        type: string
-        targetType: string
-        targetId: string
-        billingInfo: unknown
+async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<boolean> {
+  const rollbackResult = await rollbackTaskBillingForTask({
+    taskId: task.id,
+    billingInfo: task.billingInfo,
+  })
+  const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
+  const errorCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'RECONCILE_ORPHAN'
+  const errorMessage = compensationFailed ? `${reason}; billing rollback failed` : reason
+
+  const result = await prisma.task.updateMany({
+    where: {
+      id: task.id,
+      status: { in: ACTIVE_STATUSES },
     },
-    reason: string,
-): Promise<boolean> {
-    const rollbackResult = await rollbackTaskBillingForTask({
-        taskId: task.id,
-        billingInfo: task.billingInfo,
-    })
-    const compensationFailed = rollbackResult.attempted && !rollbackResult.rolledBack
-    const errorCode = compensationFailed ? 'BILLING_COMPENSATION_FAILED' : 'RECONCILE_ORPHAN'
-    const errorMessage = compensationFailed
-        ? `${reason}; billing rollback failed`
-        : reason
+    data: {
+      status: TASK_STATUS.FAILED,
+      errorCode,
+      errorMessage,
+      finishedAt: new Date(),
+      heartbeatAt: null,
+      dedupeKey: null,
+    },
+  })
 
-    const result = await prisma.task.updateMany({
-        where: {
-            id: task.id,
-            status: { in: ACTIVE_STATUSES },
-        },
-        data: {
-            status: TASK_STATUS.FAILED,
-            errorCode,
-            errorMessage,
-            finishedAt: new Date(),
-            heartbeatAt: null,
-            dedupeKey: null,
-        },
-    })
+  if (result.count === 0) return false
 
-    if (result.count > 0) {
-        await syncTaskTargetFailure({
-            type: task.type,
-            targetType: task.targetType,
-            targetId: task.targetId,
-            errorCode,
-            errorMessage,
-        })
-        // 发送 FAILED 事件，触发前端 SSE 更新 + 数据刷新
-        await publishTaskEvent({
-            taskId: task.id,
-            projectId: task.projectId,
-            userId: task.userId,
-            type: TASK_EVENT_TYPE.FAILED,
-            taskType: task.type,
-            targetType: task.targetType,
-            targetId: task.targetId,
-            episodeId: task.episodeId,
-            payload: {
-                stage: 'reconciled',
-                stageLabel: '任务已自动恢复',
-                message: errorMessage,
-                compensationFailed,
-            },
-            persist: false,
-        })
-    }
-
-    return result.count > 0
+  await syncTaskTargetFailure({
+    type: task.type,
+    targetType: task.targetType,
+    targetId: task.targetId,
+    errorCode,
+    errorMessage,
+  })
+  await publishTaskEvent({
+    taskId: task.id,
+    projectId: task.projectId,
+    userId: task.userId,
+    type: TASK_EVENT_TYPE.FAILED,
+    taskType: task.type,
+    targetType: task.targetType,
+    targetId: task.targetId,
+    episodeId: task.episodeId,
+    payload: {
+      stage: 'reconciled',
+      stageLabel: 'progress.stage.taskReconciled',
+      message: errorMessage,
+      compensationFailed,
+    },
+  })
+  return true
 }
 
-// ────────────────────── 批量对账 ──────────────────────
+type QueuedTaskRecovery = 'recovered' | 'failed' | 'retry_later'
 
-/**
- * 对账所有 DB 中 active 的任务与 BullMQ 的真实状态。
- * 任何 DB 里 active 但 BullMQ 里 terminal / missing 的任务会被标记为 failed。
- */
-export async function reconcileActiveTasks(): Promise<string[]> {
-    const now = Date.now()
-    const activeTasks = await prisma.task.findMany({
-        where: {
-            status: { in: ACTIVE_STATUSES },
-        },
-        select: {
-            id: true,
-            userId: true,
-            projectId: true,
-            episodeId: true,
-            type: true,
-            targetType: true,
-            targetId: true,
-            billingInfo: true,
-            updatedAt: true,
-        },
-        orderBy: { createdAt: 'asc' },
-        take: RECONCILE_BATCH_SIZE,
+async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecovery> {
+  let envelope: TaskJobEnvelope
+  try {
+    envelope = buildTaskJobEnvelope(task)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return await failOrphanedTask(task, `Queued task recovery contract invalid: ${message}`)
+      ? 'failed'
+      : 'retry_later'
+  }
+
+  try {
+    await addTaskJob(envelope.data, { priority: envelope.priority })
+    await markTaskEnqueued(task.id)
+    return 'recovered'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await markTaskEnqueueFailed(task.id, message || 're-enqueue failed')
+    logger.error({
+      action: 'task.reconcile.reenqueue_failed',
+      message: message || 're-enqueue failed',
+      taskId: task.id,
+      projectId: task.projectId,
+      userId: task.userId,
+      errorCode: 'EXTERNAL_ERROR',
+      retryable: true,
     })
-
-    if (activeTasks.length === 0) return []
-
-    const reconciled: string[] = []
-    for (const task of activeTasks) {
-        const jobState = await getJobState(task.id)
-        if (jobState === 'alive') continue
-        if (
-            jobState === 'terminal'
-            && now - task.updatedAt.getTime() < TERMINAL_RECONCILE_GRACE_MS
-        ) {
-            continue
-        }
-        if (
-            jobState === 'missing'
-            && now - task.updatedAt.getTime() < MISSING_RECONCILE_GRACE_MS
-        ) {
-            continue
-        }
-
-        const reason =
-            jobState === 'terminal'
-                ? 'Queue job already terminated but DB was not updated'
-                : 'Queue job missing (likely lost during restart)'
-
-        const failed = await failOrphanedTask(task, reason)
-        if (failed) {
-            reconciled.push(task.id)
-        }
-    }
-
-    return reconciled
+    return 'retry_later'
+  }
 }
 
-// ────────────────────── Watchdog ──────────────────────
+export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> {
+  const now = Date.now()
+  const activeTasks = await prisma.task.findMany({
+    where: { status: { in: ACTIVE_STATUSES } },
+    select: {
+      id: true,
+      parentTaskId: true,
+      userId: true,
+      projectId: true,
+      episodeId: true,
+      type: true,
+      targetType: true,
+      targetId: true,
+      status: true,
+      payload: true,
+      batchKey: true,
+      billingInfo: true,
+      priority: true,
+      operationId: true,
+      operationSource: true,
+      operationConfirmed: true,
+      operationRequestId: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'asc' },
+    take: RECONCILE_BATCH_SIZE,
+  })
 
-let watchdogTimer: ReturnType<typeof setInterval> | null = null
+  const result: TaskReconciliationResult = {
+    failedTaskIds: [],
+    recoveredTaskIds: [],
+    unavailableTaskIds: [],
+  }
 
-/**
- * 启动任务 watchdog 定时器。
- * 每个巡检周期执行：
- *   1. sweepStaleTasks — 心跳超时的 processing 任务 → failed
- *   2. reconcileActiveTasks — DB active 但 BullMQ 已死的任务 → failed
- */
-export function startTaskWatchdog() {
-    if (watchdogTimer) return
+  for (const task of activeTasks) {
+    const observation = await observeTaskJob(task.id)
+    if (observation === 'alive') continue
+    if (observation === 'unavailable') {
+      result.unavailableTaskIds.push(task.id)
+      continue
+    }
+    if (
+      typeof observation === 'object'
+      && now - task.updatedAt.getTime() < TERMINAL_RECONCILE_GRACE_MS
+    ) {
+      continue
+    }
+    if (
+      observation === 'absent'
+      && now - task.updatedAt.getTime() < MISSING_RECONCILE_GRACE_MS
+    ) {
+      continue
+    }
 
-    const logger = createScopedLogger({ module: 'task.watchdog' })
+    if (observation === 'absent' && task.status === TASK_STATUS.QUEUED) {
+      const recovery = await recoverQueuedTask(task)
+      if (recovery === 'recovered') result.recoveredTaskIds.push(task.id)
+      if (recovery === 'failed') result.failedTaskIds.push(task.id)
+      continue
+    }
+
+    const reason = typeof observation === 'object' && observation.failedReason
+      ? `Queue job ${observation.jobState} before Task terminal update: ${observation.failedReason}`
+      : typeof observation === 'object'
+        ? 'Queue job already terminated but DB was not updated'
+        : 'Queue job absent after reconciliation grace period'
+    if (await failOrphanedTask(task, reason)) {
+      result.failedTaskIds.push(task.id)
+    }
+  }
+
+  return result
+}
+
+async function executeTaskReconciliationCycle(): Promise<void> {
+  const sweptProcessing = await sweepStaleTasks({
+    processingThresholdMs: PROCESSING_TIMEOUT_MS,
+  })
+  for (const task of sweptProcessing) {
+    await publishTaskEvent({
+      taskId: task.id,
+      projectId: task.projectId,
+      userId: task.userId,
+      type: TASK_EVENT_TYPE.FAILED,
+      taskType: task.type,
+      targetType: task.targetType,
+      targetId: task.targetId,
+      episodeId: task.episodeId || null,
+      payload: {
+        stage: 'reconciler_timeout',
+        stageLabel: 'progress.stage.taskTimeout',
+        message: task.errorMessage,
+        errorCode: task.errorCode,
+        compensationFailed: task.errorCode === 'BILLING_COMPENSATION_FAILED',
+      },
+    })
+  }
+
+  const reconciled = await reconcileActiveTasks()
+  const changed = sweptProcessing.length
+    + reconciled.failedTaskIds.length
+    + reconciled.recoveredTaskIds.length
+  if (changed > 0 || reconciled.unavailableTaskIds.length > 0) {
     logger.info({
-        action: 'watchdog.start',
-        message: `Task watchdog started (interval: ${WATCHDOG_INTERVAL_MS}ms)`,
+      action: 'task.reconcile.cycle',
+      message: 'Task reconciliation cycle completed',
+      details: {
+        timedOut: sweptProcessing.length,
+        failed: reconciled.failedTaskIds.length,
+        recovered: reconciled.recoveredTaskIds.length,
+        unavailable: reconciled.unavailableTaskIds.length,
+      },
     })
+  }
+}
 
-    watchdogTimer = setInterval(async () => {
-        try {
-            // 1. 清理心跳超时的 processing 任务（已有逻辑，此前未被调用）
-            const { sweepStaleTasks } = await import('./service')
-            const sweptProcessing = await sweepStaleTasks({
-                processingThresholdMs: PROCESSING_TIMEOUT_MS,
-            })
-            for (const task of sweptProcessing) {
-                await publishTaskEvent({
-                    taskId: task.id,
-                    projectId: task.projectId,
-                    userId: task.userId,
-                    type: TASK_EVENT_TYPE.FAILED,
-                    taskType: task.type,
-                    targetType: task.targetType,
-                    targetId: task.targetId,
-                    episodeId: task.episodeId || null,
-                    payload: {
-                        stage: 'watchdog_timeout',
-                        stageLabel: '任务超时已终止',
-                        message: task.errorMessage,
-                        errorCode: task.errorCode,
-                        compensationFailed: task.errorCode === 'BILLING_COMPENSATION_FAILED',
-                    },
-                    persist: false,
-                })
-            }
+let activeReconciliationCycle: Promise<void> | null = null
 
-            // 2. 对账 DB vs BullMQ
-            const reconciled = await reconcileActiveTasks()
-            const total = sweptProcessing.length + reconciled.length
-            if (total > 0) {
-                logger.info({
-                    action: 'watchdog.cycle',
-                    message: `Watchdog: ${sweptProcessing.length} heartbeat-timeout, ${reconciled.length} orphan-reconciled`,
-                })
-            }
-        } catch (error) {
-            logger.error({
-                action: 'watchdog.error',
-                message: 'Watchdog cycle failed',
-                error:
-                    error instanceof Error
-                        ? { name: error.name, message: error.message, stack: error.stack }
-                        : { message: String(error) },
-            })
-        }
-    }, WATCHDOG_INTERVAL_MS)
+export function runTaskReconciliationCycle(): Promise<void> {
+  if (activeReconciliationCycle) {
+    logger.warn({
+      action: 'task.reconcile.overlap_skipped',
+      message: 'Task reconciliation cycle is already running',
+    })
+    return activeReconciliationCycle
+  }
+
+  activeReconciliationCycle = executeTaskReconciliationCycle().finally(() => {
+    activeReconciliationCycle = null
+  })
+  return activeReconciliationCycle
+}
+
+const globalForTaskReconciler = globalThis as typeof globalThis & {
+  __waoowaooTaskReconcilerTimer?: ReturnType<typeof setInterval>
+}
+
+export function startTaskReconciler(): void {
+  if (globalForTaskReconciler.__waoowaooTaskReconcilerTimer) return
+  logger.info({
+    action: 'task.reconcile.start',
+    message: 'Task reconciler started',
+    details: { intervalMs: RECONCILE_INTERVAL_MS },
+  })
+
+  const execute = async () => {
+    try {
+      await runTaskReconciliationCycle()
+    } catch (error) {
+      logger.error({
+        action: 'task.reconcile.error',
+        message: 'Task reconciliation cycle failed',
+        error: error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : { message: String(error) },
+      })
+    }
+  }
+
+  void execute()
+  globalForTaskReconciler.__waoowaooTaskReconcilerTimer = setInterval(() => {
+    void execute()
+  }, RECONCILE_INTERVAL_MS)
 }

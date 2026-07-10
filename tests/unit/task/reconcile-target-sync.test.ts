@@ -3,6 +3,7 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 const queueMock = vi.hoisted(() => ({
   getJob: vi.fn(),
+  addTaskJob: vi.fn(),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -28,10 +29,16 @@ const billingMock = vi.hoisted(() => ({
     attempted: false,
     rolledBack: true,
   })),
+  markTaskEnqueueFailed: vi.fn(),
+  markTaskEnqueued: vi.fn(),
+  sweepStaleTasks: vi.fn(async () => []),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/task/queues', () => ({ getAllQueues: () => [queueMock] }))
+vi.mock('@/lib/task/queues', () => ({
+  getAllQueues: () => [queueMock],
+  addTaskJob: queueMock.addTaskJob,
+}))
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/task/service', () => billingMock)
 
@@ -43,13 +50,28 @@ describe('task reconcile target sync', () => {
     prismaMock.task.findMany.mockResolvedValue([
       {
         id: 'task-1',
+        parentTaskId: 'parent-1',
         userId: 'user-1',
         projectId: 'project-1',
         episodeId: 'episode-1',
         type: TASK_TYPE.VIDEO_GROUP,
         targetType: 'ProjectVideoGroup',
         targetId: 'group-1',
+        status: TASK_STATUS.QUEUED,
+        payload: {
+          groupId: 'group-1',
+          meta: {
+            locale: 'zh',
+            trace: { requestId: 'request-1' },
+          },
+        },
+        batchKey: 'batch-1',
         billingInfo: null,
+        priority: 6,
+        operationId: 'generate_video_group',
+        operationSource: 'assistant',
+        operationConfirmed: true,
+        operationRequestId: 'operation-request-1',
         updatedAt: new Date('2026-05-20T10:00:00.000Z'),
       },
     ])
@@ -64,7 +86,11 @@ describe('task reconcile target sync', () => {
   it('marks video group failed when orphan reconciliation fails its task', async () => {
     const reconciled = await reconcileActiveTasks()
 
-    expect(reconciled).toEqual(['task-1'])
+    expect(reconciled).toEqual({
+      failedTaskIds: ['task-1'],
+      recoveredTaskIds: [],
+      unavailableTaskIds: [],
+    })
     expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         id: 'task-1',
@@ -105,7 +131,11 @@ describe('task reconcile target sync', () => {
 
     const reconciled = await reconcileActiveTasks()
 
-    expect(reconciled).toEqual(['task-style-1'])
+    expect(reconciled).toEqual({
+      failedTaskIds: ['task-style-1'],
+      recoveredTaskIds: [],
+      unavailableTaskIds: [],
+    })
     expect(prismaMock.task.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         id: 'task-style-1',
@@ -128,5 +158,60 @@ describe('task reconcile target sync', () => {
         errorMessage: 'Queue job already terminated but DB was not updated',
       },
     })
+  })
+
+  it('does not mutate task, billing, dedupe, or target state when queue observation is unavailable', async () => {
+    queueMock.getJob.mockRejectedValue(new Error('redis unavailable'))
+
+    const reconciled = await reconcileActiveTasks()
+
+    expect(reconciled).toEqual({
+      failedTaskIds: [],
+      recoveredTaskIds: [],
+      unavailableTaskIds: ['task-1'],
+    })
+    expect(billingMock.rollbackTaskBillingForTask).not.toHaveBeenCalled()
+    expect(prismaMock.task.updateMany).not.toHaveBeenCalled()
+    expect(prismaMock.projectVideoGroup.updateMany).not.toHaveBeenCalled()
+    expect(publisherMock.publishTaskEvent).not.toHaveBeenCalled()
+  })
+
+  it('re-enqueues an absent queued task with its complete durable job envelope', async () => {
+    queueMock.getJob.mockResolvedValue(null)
+
+    const reconciled = await reconcileActiveTasks()
+
+    expect(reconciled).toEqual({
+      failedTaskIds: [],
+      recoveredTaskIds: ['task-1'],
+      unavailableTaskIds: [],
+    })
+    expect(queueMock.addTaskJob).toHaveBeenCalledWith({
+      taskId: 'task-1',
+      parentTaskId: 'parent-1',
+      type: TASK_TYPE.VIDEO_GROUP,
+      locale: 'zh',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-1',
+      payload: {
+        groupId: 'group-1',
+        meta: {
+          locale: 'zh',
+          trace: { requestId: 'request-1' },
+        },
+      },
+      batchKey: 'batch-1',
+      billingInfo: null,
+      userId: 'user-1',
+      operationId: 'generate_video_group',
+      operationSource: 'assistant',
+      operationConfirmed: true,
+      operationRequestId: 'operation-request-1',
+      trace: { requestId: 'request-1' },
+    }, { priority: 6 })
+    expect(billingMock.markTaskEnqueued).toHaveBeenCalledWith('task-1')
+    expect(prismaMock.task.updateMany).not.toHaveBeenCalled()
   })
 })

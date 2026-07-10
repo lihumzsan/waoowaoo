@@ -19,8 +19,8 @@ const RULES: Rule[] = [
     patterns: ['sse.connect', 'sse.replay', 'sse.disconnect'],
   },
   {
-    file: 'scripts/watchdog.ts',
-    patterns: ['watchdog.started', 'watchdog.tick.ok', 'watchdog.tick.failed'],
+    file: 'scripts/log-cleanup.ts',
+    patterns: ['log.cleanup.started', 'log.cleanup.completed', 'log.cleanup.failed'],
   },
   {
     file: 'scripts/bull-board.ts',

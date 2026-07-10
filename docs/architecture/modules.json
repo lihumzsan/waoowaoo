@@ -74,6 +74,7 @@
       "sourcePaths": [
         "src/lib/task",
         "src/lib/workers",
+        "src/instrumentation.ts",
         "src/lib/workspace-resource/materialized-resource.ts",
         "src/lib/query/materialized-resource-cache.ts",
         "src/lib/edit-bible/task-submission.ts",
@@ -82,10 +83,13 @@
       ],
       "testPaths": [
         "tests/integration/task/create-task-dedupe.integration.test.ts",
+        "tests/integration/task/task-reconcile-queue.integration.test.ts",
         "tests/regression/task-dedupe-recovery.test.ts",
         "tests/regression/task-enqueue-billing-rollback.test.ts",
         "tests/unit/edit-bible/task-submission.test.ts",
         "tests/unit/edit-script/task-submission.test.ts",
+        "tests/unit/task/job-envelope.test.ts",
+        "tests/unit/task/reconcile-queue-lifecycle.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts"
@@ -94,7 +98,9 @@
         "scripts/guards/task-submit-compensation-guard.mjs",
         "scripts/guards/no-operation-direct-submit-task.mjs",
         "scripts/guards/no-project-agent-direct-task-submit.mjs",
-        "scripts/guards/task-target-states-no-polling-guard.mjs"
+        "scripts/guards/task-target-states-no-polling-guard.mjs",
+        "scripts/guards/single-task-reconciler-guard.mjs",
+        "scripts/guards/no-worker-attempt-target-terminal-write.mjs"
       ]
     },
     {

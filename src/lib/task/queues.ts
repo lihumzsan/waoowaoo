@@ -61,35 +61,45 @@ export function getAllQueues() {
   return [getImageQueue(), getVideoQueue(), getMusicQueue(), getTextQueue()]
 }
 
-const IMAGE_TYPES = new Set<TaskType>([
-  TASK_TYPE.IMAGE_PANEL,
-  TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-  TASK_TYPE.IMAGE_CHARACTER,
-  TASK_TYPE.IMAGE_LOCATION,
-  TASK_TYPE.MODIFY_ASSET_IMAGE,
-  TASK_TYPE.REGENERATE_GROUP,
-  TASK_TYPE.ASSET_HUB_IMAGE,
-  TASK_TYPE.ASSET_HUB_MODIFY,
-])
-
-const VIDEO_TYPES = new Set<TaskType>([
-  TASK_TYPE.VIDEO_PANEL,
-  TASK_TYPE.VIDEO_GROUP,
-  TASK_TYPE.FINAL_VIDEO_RENDER,
-  TASK_TYPE.CHAPTER_RENDER,
-])
-const MUSIC_TYPES = new Set<TaskType>([
-  TASK_TYPE.MUSIC_GENERATE,
-  TASK_TYPE.MUSIC_SCORE_PLAN,
-  TASK_TYPE.SOUNDSCAPE_PLAN,
-  TASK_TYPE.SOUNDSCAPE_GENERATE,
-])
+const TASK_QUEUE_TYPE = {
+  [TASK_TYPE.IMAGE_PANEL]: 'image',
+  [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE]: 'text',
+  [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'image',
+  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'text',
+  [TASK_TYPE.IMAGE_CHARACTER]: 'image',
+  [TASK_TYPE.IMAGE_LOCATION]: 'image',
+  [TASK_TYPE.MUSIC_GENERATE]: 'music',
+  [TASK_TYPE.MUSIC_SCORE_PLAN]: 'music',
+  [TASK_TYPE.SOUNDSCAPE_PLAN]: 'music',
+  [TASK_TYPE.SOUNDSCAPE_GENERATE]: 'music',
+  [TASK_TYPE.FINAL_VIDEO_RENDER]: 'video',
+  [TASK_TYPE.CHAPTER_RENDER]: 'video',
+  [TASK_TYPE.VIDEO_PANEL]: 'video',
+  [TASK_TYPE.VIDEO_GROUP]: 'video',
+  [TASK_TYPE.MODIFY_ASSET_IMAGE]: 'image',
+  [TASK_TYPE.REGENERATE_GROUP]: 'image',
+  [TASK_TYPE.ASSET_HUB_IMAGE]: 'image',
+  [TASK_TYPE.ASSET_HUB_MODIFY]: 'image',
+  [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: 'text',
+  [TASK_TYPE.EDIT_BIBLE_GENERATE]: 'text',
+  [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'text',
+  [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: 'text',
+  [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'text',
+  [TASK_TYPE.AI_MODIFY_LOCATION]: 'text',
+  [TASK_TYPE.AI_MODIFY_PROP]: 'text',
+  [TASK_TYPE.AI_CREATE_CHARACTER]: 'text',
+  [TASK_TYPE.AI_CREATE_LOCATION]: 'text',
+  [TASK_TYPE.REFERENCE_TO_CHARACTER]: 'text',
+  [TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER]: 'text',
+  [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: 'text',
+  [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: 'text',
+  [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: 'text',
+  [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: 'text',
+  [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: 'text',
+} satisfies Record<TaskType, QueueType>
 
 export function getQueueTypeByTaskType(type: TaskType): QueueType {
-  if (IMAGE_TYPES.has(type)) return 'image'
-  if (VIDEO_TYPES.has(type)) return 'video'
-  if (MUSIC_TYPES.has(type)) return 'music'
-  return 'text'
+  return TASK_QUEUE_TYPE[type]
 }
 
 export function getQueueByType(type: QueueType) {
@@ -101,7 +111,6 @@ export function getQueueByType(type: QueueType) {
     case 'music':
       return getMusicQueue()
     case 'text':
-    default:
       return getTextQueue()
   }
 }

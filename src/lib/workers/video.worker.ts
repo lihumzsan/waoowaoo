@@ -636,22 +636,7 @@ async function processVideoTask(job: Job<TaskJobData>) {
     case TASK_TYPE.VIDEO_PANEL:
       return await handleVideoPanelTask(job)
     case TASK_TYPE.VIDEO_GROUP:
-      try {
-        return await handleVideoGroupTask(job)
-      } catch (error) {
-        if (job.data.targetType === 'ProjectVideoGroup') {
-          await prisma.projectVideoGroup.update({
-            where: { id: job.data.targetId },
-            data: {
-              status: 'failed',
-              taskId: null,
-              errorCode: error instanceof Error ? error.name : 'VIDEO_GROUP_FAILED',
-              errorMessage: error instanceof Error ? error.message : String(error),
-            },
-          }).catch(() => undefined)
-        }
-        throw error
-      }
+      return await handleVideoGroupTask(job)
     case TASK_TYPE.FINAL_VIDEO_RENDER:
       return await handleFinalVideoRenderTask(job)
     case TASK_TYPE.CHAPTER_RENDER:

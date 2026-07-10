@@ -6,7 +6,7 @@ import { resetBillingState } from '../helpers/db-reset'
 import { createTestProject, createTestUser } from '../helpers/billing-fixtures'
 
 const reconcileMock = vi.hoisted(() => ({
-  isJobAlive: vi.fn(async () => true),
+  observeTaskJob: vi.fn(async (): Promise<'alive' | 'terminal' | 'absent' | 'unavailable'> => 'alive'),
 }))
 
 vi.mock('@/lib/task/reconcile', () => reconcileMock)
@@ -15,7 +15,7 @@ describe('regression - task dedupe recovery', () => {
   beforeEach(async () => {
     await resetBillingState()
     vi.clearAllMocks()
-    reconcileMock.isJobAlive.mockResolvedValue(true)
+    reconcileMock.observeTaskJob.mockResolvedValue('alive')
   })
 
   it('replaces locale-less queued task instead of deduping forever', async () => {
@@ -79,7 +79,7 @@ describe('regression - task dedupe recovery', () => {
         queuedAt: new Date(),
       },
     })
-    reconcileMock.isJobAlive.mockResolvedValue(false)
+    reconcileMock.observeTaskJob.mockResolvedValue('absent')
 
     const replacement = await createTask({
       userId: user.id,

@@ -23,6 +23,7 @@ import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
 import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
+import { buildTaskJobEnvelope } from './job-envelope'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -143,6 +144,9 @@ export async function submitTask(params: {
     meta: {
       ...normalizedPayloadMeta,
       locale: params.locale,
+      trace: {
+        requestId: params.requestId || null,
+      },
     },
   }
   const computedBillingInfo = isBillableTaskType(params.type)
@@ -261,11 +265,10 @@ export async function submitTask(params: {
 
   if (!deduped) {
     try {
-      await addTaskJob({
-        taskId: task.id,
+      const envelope = buildTaskJobEnvelope({
+        id: task.id,
         parentTaskId: params.parentTaskId || null,
         type: params.type,
-        locale: params.locale,
         projectId: params.projectId,
         episodeId: params.episodeId || null,
         targetType: params.targetType,
@@ -278,11 +281,10 @@ export async function submitTask(params: {
         operationSource: params.operationSource || null,
         operationConfirmed: params.operationConfirmed ?? null,
         operationRequestId,
-        trace: {
-          requestId: params.requestId || null,
-        },
-      }, {
-        priority: typeof task.priority === 'number' ? task.priority : 0,
+        priority: task.priority,
+      })
+      await addTaskJob(envelope.data, {
+        priority: envelope.priority,
       })
       await markTaskEnqueued(task.id)
       logger.info({

@@ -26,4 +26,12 @@ describe('changed-file-test-impact-guard', () => {
     ])
     expect(violations).toEqual([])
   })
+
+  it('accepts task changes when task integration coverage is updated', () => {
+    const violations = inspectChangedFiles([
+      'src/lib/task/reconcile.ts',
+      'tests/integration/task/create-task-dedupe.integration.test.ts',
+    ])
+    expect(violations).toEqual([])
+  })
 })

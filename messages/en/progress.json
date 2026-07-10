@@ -144,6 +144,8 @@
     "pollingExternal": "Waiting for external service",
     "retrying": "Retrying task",
     "enqueueFailed": "Task enqueue failed",
+    "taskReconciled": "Task stopped after queue reconciliation",
+    "taskTimeout": "Task stopped after its heartbeat timed out",
     "llmProxySubmit": "Submit LLM task",
     "llmProxyExecute": "Execute LLM task",
     "llmProxyPersist": "Persist LLM result",

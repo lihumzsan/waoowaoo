@@ -144,6 +144,8 @@
     "pollingExternal": "等待外部服务返回",
     "retrying": "正在重试任务",
     "enqueueFailed": "任务入队失败",
+    "taskReconciled": "队列对账后任务已终止",
+    "taskTimeout": "任务心跳超时，已终止",
     "llmProxySubmit": "提交 LLM 任务",
     "llmProxyExecute": "执行 LLM 任务",
     "llmProxyPersist": "保存 LLM 结果",

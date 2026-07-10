@@ -133,6 +133,11 @@ export type TaskJobData = {
   } | null
 }
 
+export type TaskJobEnvelope = {
+  data: TaskJobData
+  priority: number
+}
+
 export type TaskSSEEvent = {
   id: string
   type: TaskSSEEventType

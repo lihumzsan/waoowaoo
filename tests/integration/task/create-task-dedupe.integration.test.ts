@@ -6,7 +6,7 @@ import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 
 const reconcileMock = vi.hoisted(() => ({
-  isJobAlive: vi.fn(async () => true),
+  observeTaskJob: vi.fn(async (): Promise<'alive' | 'terminal' | 'absent' | 'unavailable'> => 'alive'),
 }))
 
 vi.mock('@/lib/task/reconcile', () => reconcileMock)
@@ -20,7 +20,7 @@ describe('task service dedupe + orphan recovery', () => {
   beforeEach(async () => {
     await resetBillingState()
     vi.clearAllMocks()
-    reconcileMock.isJobAlive.mockResolvedValue(true)
+    reconcileMock.observeTaskJob.mockResolvedValue('alive')
   })
 
   it('dedupes to an active task when dedupeKey matches and queue job is alive', async () => {
@@ -60,7 +60,7 @@ describe('task service dedupe + orphan recovery', () => {
 
     expect(result.deduped).toBe(true)
     expect(result.task.id).toBe(existing.id)
-    expect(reconcileMock.isJobAlive).toHaveBeenCalledWith(existing.id)
+    expect(reconcileMock.observeTaskJob).toHaveBeenCalledWith(existing.id)
   })
 
   it('fails orphaned active task and creates a replacement when queue job is missing', async () => {
@@ -83,7 +83,7 @@ describe('task service dedupe + orphan recovery', () => {
         queuedAt: new Date(),
       },
     })
-    reconcileMock.isJobAlive.mockResolvedValue(false)
+    reconcileMock.observeTaskJob.mockResolvedValue('absent')
 
     const result = await createTask({
       userId: user.id,
@@ -107,6 +107,69 @@ describe('task service dedupe + orphan recovery', () => {
       status: TASK_STATUS.FAILED,
       errorCode: 'RECONCILE_ORPHAN',
       dedupeKey: null,
+    })
+  })
+
+  it('keeps the authoritative active task unchanged when Redis observation is unavailable', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const dedupeKey = `music_generate:${project.id}:redis-unavailable`
+    const billingInfo = {
+      billable: true as const,
+      source: 'task' as const,
+      taskType: TASK_TYPE.MUSIC_GENERATE,
+      apiType: 'music' as const,
+      model: 'google::lyria-3-pro-preview',
+      quantity: 1,
+      unit: 'call' as const,
+      maxFrozenCost: 1,
+      action: 'generate_music',
+      status: 'frozen' as const,
+      freezeId: 'freeze-redis-unavailable',
+    }
+    const existing = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        type: TASK_TYPE.MUSIC_GENERATE,
+        targetType: 'Project',
+        targetId: project.id,
+        status: TASK_STATUS.QUEUED,
+        payload: {
+          musicModel: 'google::lyria-3-pro-preview',
+          durationSeconds: 10,
+          meta: { locale: 'zh' },
+        },
+        billingInfo,
+        dedupeKey,
+        queuedAt: new Date(),
+      },
+    })
+    reconcileMock.observeTaskJob.mockResolvedValue('unavailable')
+
+    const result = await createTask({
+      userId: user.id,
+      projectId: project.id,
+      type: TASK_TYPE.MUSIC_GENERATE,
+      targetType: 'Project',
+      targetId: project.id,
+      payload: {
+        musicModel: 'google::lyria-3-pro-preview',
+        durationSeconds: 10,
+        meta: { locale: 'zh' },
+      },
+      dedupeKey,
+    })
+
+    const tasks = await prisma.task.findMany({ where: { dedupeKey } })
+    expect(result).toMatchObject({ deduped: true, task: { id: existing.id } })
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]).toMatchObject({
+      id: existing.id,
+      status: TASK_STATUS.QUEUED,
+      dedupeKey,
+      billingInfo,
+      errorCode: null,
     })
   })
 

@@ -184,7 +184,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
     expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 
-  it('marks only the failed preview when image generation fails', async () => {
+  it('keeps the preview generating when an attempt fails before retry policy runs', async () => {
     handlerSharedMock.generateCleanImageToStorage.mockRejectedValueOnce(new Error('IMAGE_PROVIDER_FAILED'))
 
     await expect(handleEditStylePreviewImageTask(buildJob({
@@ -192,13 +192,17 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))).rejects.toThrow('IMAGE_PROVIDER_FAILED')
 
-    expect(prismaMock.projectEditStylePreview.update).toHaveBeenLastCalledWith({
+    expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledWith({
       where: { id: 'preview-1' },
       data: {
-        status: 'failed',
-        errorMessage: 'IMAGE_PROVIDER_FAILED',
+        status: 'generating',
+        taskId: 'task-style-preview-1',
+        errorMessage: null,
       },
     })
+    expect(prismaMock.projectEditStylePreview.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'failed' }),
+    }))
     expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
   })
 })

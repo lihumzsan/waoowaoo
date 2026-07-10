@@ -6,7 +6,7 @@ import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 
 const reconcileMock = vi.hoisted(() => ({
-  isJobAlive: vi.fn(async () => true),
+  observeTaskJob: vi.fn(async (): Promise<'alive' | 'terminal' | 'absent' | 'unavailable'> => 'alive'),
 }))
 
 vi.mock('@/lib/task/reconcile', () => reconcileMock)
@@ -46,7 +46,7 @@ describe('video group task failure sync', () => {
   beforeEach(async () => {
     await resetBillingState()
     vi.clearAllMocks()
-    reconcileMock.isJobAlive.mockResolvedValue(true)
+    reconcileMock.observeTaskJob.mockResolvedValue('alive')
   })
 
   it('marks video group failed when replacing a locale-less active group task', async () => {
@@ -120,7 +120,7 @@ describe('video group task failure sync', () => {
         queuedAt: new Date(),
       },
     })
-    reconcileMock.isJobAlive.mockResolvedValue(false)
+    reconcileMock.observeTaskJob.mockResolvedValue('absent')
 
     const result = await createTask({
       userId: user.id,

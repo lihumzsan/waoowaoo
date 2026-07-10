@@ -469,7 +469,7 @@ describe('worker video processor behavior', () => {
     }))
   })
 
-  it('VIDEO_GROUP: fails when ProjectVideoGroup.prompt is missing', async () => {
+  it('VIDEO_GROUP: does not finalize the target when an attempt fails before retry policy runs', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -488,6 +488,12 @@ describe('worker video processor behavior', () => {
     }))).rejects.toThrow('VIDEO_GROUP_PROMPT_MISSING:group-1')
 
     expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
+    expect(prismaMock.projectVideoGroup.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'group-1' },
+      data: expect.objectContaining({
+        status: 'failed',
+      }),
+    }))
   })
 
   it('VIDEO_GROUP asset_reference: uses reference assets and skips storyboard grid composition', async () => {

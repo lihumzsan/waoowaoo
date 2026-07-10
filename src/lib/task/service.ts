@@ -5,22 +5,14 @@ import { rollbackTaskBilling } from '@/lib/billing'
 import { locales } from '@/i18n/routing'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
 import { syncTaskTargetFailure } from './target-failure-sync'
+import type { TaskJobObservation } from './reconcile'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const taskModel = prisma.task
 
-/**
- * 校验 BullMQ Job 是否仍然活着。
- * 检查失败时（如 Redis 不可用）安全降级为 true，不阻塞正常创建流程。
- */
-async function verifyJobAlive(taskId: string): Promise<boolean> {
-  try {
-    const { isJobAlive } = await import('./reconcile')
-    return await isJobAlive(taskId)
-  } catch {
-    // Redis 异常等不可控情况 → 降级信任 DB 状态
-    return true
-  }
+async function observeJob(taskId: string): Promise<TaskJobObservation> {
+  const { observeTaskJob } = await import('./reconcile')
+  return await observeTaskJob(taskId)
 }
 
 function isPrismaKnownError(error: unknown): error is { code?: string } {
@@ -216,8 +208,11 @@ export async function createTask(input: CreateTaskInput) {
           await failTaskWithMissingLocale(existing)
         } else {
           // 校验 BullMQ Job 是否真的还活着，防止 DB 与队列状态脱节导致永久卡死
-          const jobAlive = await verifyJobAlive(existing.id)
-          if (jobAlive) {
+          const jobObservation = await observeJob(existing.id)
+          if (jobObservation === 'unavailable') {
+            return { task: existing, deduped: true as const }
+          }
+          if (jobObservation === 'alive') {
             if (input.batchKey && existing.batchKey !== input.batchKey) {
               const updated = await model.update({
                 where: { id: existing.id },
@@ -307,8 +302,11 @@ export async function createTask(input: CreateTaskInput) {
             await failTaskWithMissingLocale(collided)
           } else {
             // P2002 竞态路径：同样校验 BullMQ Job 状态
-            const jobAlive = await verifyJobAlive(collided.id)
-            if (jobAlive) {
+            const jobObservation = await observeJob(collided.id)
+            if (jobObservation === 'unavailable') {
+              return { task: collided, deduped: true as const }
+            }
+            if (jobObservation === 'alive') {
               if (input.batchKey && collided.batchKey !== input.batchKey) {
                 const updated = await model.update({
                   where: { id: collided.id },

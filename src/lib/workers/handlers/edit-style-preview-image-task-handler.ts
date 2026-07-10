@@ -43,64 +43,52 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
     displayMode: 'detail',
   })
 
-  try {
-    await prisma.projectEditStylePreview.update({
-      where: { id: preview.id },
-      data: {
-        status: 'generating',
-        taskId: job.data.taskId,
-        errorMessage: null,
-      },
-    })
+  await prisma.projectEditStylePreview.update({
+    where: { id: preview.id },
+    data: {
+      status: 'generating',
+      taskId: job.data.taskId,
+      errorMessage: null,
+    },
+  })
 
-    await reportTaskProgress(job, 45, {
-      stage: 'edit_style_preview_image_generate',
-      stageLabel: 'progress.stage.editStylePreviewImageGenerate',
-      displayMode: 'detail',
-    })
+  await reportTaskProgress(job, 45, {
+    stage: 'edit_style_preview_image_generate',
+    stageLabel: 'progress.stage.editStylePreviewImageGenerate',
+    displayMode: 'detail',
+  })
 
-    const imageKey = await generateCleanImageToStorage({
-      job,
-      userId: job.data.userId,
-      modelId,
-      prompt,
-      targetId: preview.id,
-      keyPrefix: 'edit-style-preview',
-      options: imageRuntimeOptions,
-    })
+  const imageKey = await generateCleanImageToStorage({
+    job,
+    userId: job.data.userId,
+    modelId,
+    prompt,
+    targetId: preview.id,
+    keyPrefix: 'edit-style-preview',
+    options: imageRuntimeOptions,
+  })
 
-    await prisma.projectEditStylePreview.update({
-      where: { id: preview.id },
-      data: {
-        imageKey,
-        status: 'completed',
-        errorMessage: null,
-      },
-    })
-
-    await reportTaskProgress(job, 95, {
-      stage: 'edit_style_preview_image_persist',
-      stageLabel: 'progress.stage.editStylePreviewImagePersist',
-      displayMode: 'detail',
-    })
-
-    return {
-      stylePreviewId: preview.id,
+  await prisma.projectEditStylePreview.update({
+    where: { id: preview.id },
+    data: {
       imageKey,
-      imageUrl: getSignedUrl(imageKey, 7 * 24 * 3600),
-      prompt,
-      aspectRatio: imageRuntimeOptions.aspectRatio,
-      targetResolution: EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
-    }
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : String(caught)
-    await prisma.projectEditStylePreview.update({
-      where: { id: preview.id },
-      data: {
-        status: 'failed',
-        errorMessage: message,
-      },
-    })
-    throw caught
+      status: 'completed',
+      errorMessage: null,
+    },
+  })
+
+  await reportTaskProgress(job, 95, {
+    stage: 'edit_style_preview_image_persist',
+    stageLabel: 'progress.stage.editStylePreviewImagePersist',
+    displayMode: 'detail',
+  })
+
+  return {
+    stylePreviewId: preview.id,
+    imageKey,
+    imageUrl: getSignedUrl(imageKey, 7 * 24 * 3600),
+    prompt,
+    aspectRatio: imageRuntimeOptions.aspectRatio,
+    targetResolution: EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
   }
 }
