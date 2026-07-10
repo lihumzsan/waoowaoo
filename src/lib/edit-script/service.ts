@@ -92,6 +92,8 @@ interface GenerateEditStylePreviewsInput {
   readonly styleDirection?: string
   readonly count?: number
   readonly parentTaskId?: string | null
+  readonly operationConfirmed: boolean
+  readonly operationRequestId?: string | null
 }
 
 interface ConfirmEditStylePreviewInput {
@@ -1420,6 +1422,8 @@ async function submitEditStylePreviewImageTask(input: {
   readonly styleKey: EditStylePreviewKey
   readonly imagePrompt: string
   readonly imageModel: string
+  readonly operationConfirmed: boolean
+  readonly operationRequestId?: string | null
 }) {
   const basePayload = {
     stylePreviewId: input.stylePreviewId,
@@ -1456,8 +1460,9 @@ async function submitEditStylePreviewImageTask(input: {
     targetType: 'ProjectEditStylePreview',
     targetId: input.stylePreviewId,
     operationId: 'generate_edit_style_preview_image',
-    operationSource: 'project-ui',
-    operationConfirmed: true,
+    operationSource: 'worker',
+    operationConfirmed: input.operationConfirmed,
+    operationRequestId: input.operationRequestId || null,
     payload,
     dedupeKey: `edit_style_preview_image:${input.projectId}:${input.episodeId}:${input.stylePreviewId}`,
     billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE, payload),
@@ -1632,6 +1637,8 @@ export async function generateProjectEditStylePreviews(input: GenerateEditStyleP
         styleKey: normalizeStylePreviewKey(preview.styleKey),
         imagePrompt: preview.imagePrompt,
         imageModel,
+        operationConfirmed: input.operationConfirmed,
+        operationRequestId: input.operationRequestId || null,
       })
       await prisma.projectEditStylePreview.update({
         where: { id: preview.id },

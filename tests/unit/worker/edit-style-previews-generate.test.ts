@@ -75,6 +75,10 @@ function buildJob(payload: Record<string, unknown> = {}): Job<TaskJobData> {
         ...payload,
       },
       userId: 'user-1',
+      operationId: 'generate_edit_style_previews',
+      operationSource: 'assistant-panel',
+      operationConfirmed: true,
+      operationRequestId: 'request-1',
       trace: {
         requestId: 'request-1',
       },
@@ -121,6 +125,8 @@ describe('worker edit-style-previews-generate', () => {
       episodeId: 'episode-1',
       bibleId: 'bible-1',
       parentTaskId: 'parent-task-1',
+      operationConfirmed: true,
+      operationRequestId: 'request-1',
       styleDirection: '更黑暗一些',
       count: 2,
     }))
@@ -132,6 +138,16 @@ describe('worker edit-style-previews-generate', () => {
       taskIds: ['child-1', 'child-2'],
       previewIds: ['preview-1', 'preview-2'],
     }))
+  })
+
+  it('does not create child image tasks when the parent media operation was not approved', async () => {
+    const job = buildJob()
+    job.data.operationConfirmed = false
+
+    await expect(handleEditStylePreviewsGenerateTask(job)).rejects.toThrow(
+      'EDIT_STYLE_PREVIEW_BILLABLE_MEDIA_APPROVAL_REQUIRED',
+    )
+    expect(serviceMock.generateProjectEditStylePreviews).not.toHaveBeenCalled()
   })
 
   it('does not generate duplicate style copy when retrying a parent task that already has children', async () => {

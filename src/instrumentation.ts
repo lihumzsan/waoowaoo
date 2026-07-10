@@ -122,6 +122,10 @@ export async function register() {
           payload: true,
           billingInfo: true,
           priority: true,
+          operationId: true,
+          operationSource: true,
+          operationConfirmed: true,
+          operationRequestId: true,
         },
         orderBy: { createdAt: 'asc' },
         take: RE_ENQUEUE_BATCH_SIZE,
@@ -185,6 +189,10 @@ export async function register() {
               payload: toTaskPayload(task.payload),
               billingInfo: toTaskBillingInfo(task.billingInfo),
               userId: task.userId,
+              operationId: task.operationId || null,
+              operationSource: task.operationSource || null,
+              operationConfirmed: task.operationConfirmed ?? null,
+              operationRequestId: task.operationRequestId || null,
               trace: null,
             }
             await addTaskJob(jobData, {

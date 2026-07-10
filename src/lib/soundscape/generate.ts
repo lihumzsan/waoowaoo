@@ -8,6 +8,9 @@ import { z } from 'zod'
 import { generateSoundEffect } from '@/lib/ai-exec/engine'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { getProjectModelConfig } from '@/lib/config-service'
+import { buildDefaultTaskBillingInfo } from '@/lib/billing'
+import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
+import { shouldExposeBillingCredits } from '@/lib/billing/task-billing-view'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
@@ -60,6 +63,7 @@ type GeneratedAudioBuffer = {
 type SoundscapePayload = {
   readonly episodeId?: unknown
   readonly soundEffectModel?: unknown
+  readonly approvedMediaMaxCost?: unknown
 }
 
 async function runFfmpegCommand(
@@ -76,6 +80,10 @@ async function runFfmpegCommand(
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function readNonnegativeNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 function extensionFromMimeType(mimeType: string): string {
@@ -286,7 +294,38 @@ async function submitSoundscapeGenerateTask(input: {
   readonly episodeId: string
   readonly soundEffectModel: string
   readonly plan: SoundscapePlan
+  readonly approvedMediaMaxCost: number | null
 }): Promise<void> {
+  if (
+    input.job.data.operationId !== 'generate_episode_soundscape'
+    || input.job.data.operationConfirmed !== true
+  ) {
+    throw new Error('SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
+  }
+
+  const payload = {
+    episodeId: input.episodeId,
+    soundEffectModel: input.soundEffectModel,
+    durationSeconds: Math.max(0.5, planSourceDurationSeconds(input.plan)),
+    sourceCount: input.plan.sources.length,
+    loop: true,
+    outputFormat: SOUNDSCAPE_OUTPUT_FORMAT,
+  }
+  const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, payload)
+  if (!requiresBillableMediaApproval(billingInfo) || billingInfo.apiType !== 'sound_effect') {
+    throw new Error('SOUNDSCAPE_BILLING_INFO_REQUIRED')
+  }
+  if (shouldExposeBillingCredits()) {
+    if (input.approvedMediaMaxCost === null) {
+      throw new Error('SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_REQUIRED')
+    }
+    if (billingInfo.maxFrozenCost > input.approvedMediaMaxCost) {
+      throw new Error(
+        `SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_EXCEEDED:${billingInfo.maxFrozenCost}:${input.approvedMediaMaxCost}`,
+      )
+    }
+  }
+
   await submitTask({
     userId: input.job.data.userId,
     locale: input.job.data.locale,
@@ -297,18 +336,14 @@ async function submitSoundscapeGenerateTask(input: {
     type: TASK_TYPE.SOUNDSCAPE_GENERATE,
     targetType: 'ProjectEpisode',
     targetId: input.episodeId,
-    payload: {
-      episodeId: input.episodeId,
-      soundEffectModel: input.soundEffectModel,
-      durationSeconds: Math.max(0.5, planSourceDurationSeconds(input.plan)),
-      sourceCount: input.plan.sources.length,
-      loop: true,
-      outputFormat: SOUNDSCAPE_OUTPUT_FORMAT,
-    },
+    payload,
+    billingInfo,
+    billingInfoSource: 'planned',
     dedupeKey: `soundscape_generate:${input.job.data.projectId}:${input.episodeId}:${input.job.data.taskId}`,
     operationId: 'generate_episode_soundscape',
     operationSource: 'worker',
-    operationConfirmed: true,
+    operationConfirmed: input.job.data.operationConfirmed,
+    operationRequestId: input.job.data.operationRequestId || input.job.data.trace?.requestId || null,
   })
 }
 
@@ -316,6 +351,7 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as SoundscapePayload
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   const soundEffectModel = readString(payload.soundEffectModel)
+  const approvedMediaMaxCost = readNonnegativeNumber(payload.approvedMediaMaxCost)
   if (!episodeId) throw new Error('SOUNDSCAPE_EPISODE_REQUIRED')
   if (!soundEffectModel) throw new Error('SOUNDSCAPE_SOUND_EFFECT_MODEL_REQUIRED')
 
@@ -451,6 +487,7 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
       episodeId,
       soundEffectModel,
       plan,
+      approvedMediaMaxCost,
     })
 
     return {

@@ -123,6 +123,10 @@ export type TaskJobData = {
   batchKey?: string | null
   billingInfo?: TaskBillingInfo | null
   userId: string
+  operationId?: string | null
+  operationSource?: string | null
+  operationConfirmed?: boolean | null
+  operationRequestId?: string | null
   trace?: {
     requestId?: string | null
   } | null

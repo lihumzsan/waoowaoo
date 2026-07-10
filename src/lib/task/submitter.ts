@@ -22,6 +22,7 @@ import { getTaskFlowMeta } from '@/lib/llm-observe/stage-pipeline'
 import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
+import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -151,6 +152,16 @@ export async function submitTask(params: {
     ? params.billingInfo || computedBillingInfo || null
     : computedBillingInfo || params.billingInfo || null
 
+  if (requiresBillableMediaApproval(resolvedBillingInfo) && params.operationConfirmed !== true) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'BILLABLE_MEDIA_APPROVAL_REQUIRED',
+      message: `billable media approval is required before submitting task: ${params.type}`,
+      taskType: params.type,
+      apiType: resolvedBillingInfo.apiType,
+      operationId: params.operationId || null,
+    })
+  }
+
   const { task, deduped } = await createTask({
     userId: params.userId,
     projectId: params.projectId,
@@ -263,6 +274,10 @@ export async function submitTask(params: {
         batchKey: params.batchKey || null,
         billingInfo: preparedBillingInfo || null,
         userId: params.userId,
+        operationId: params.operationId || null,
+        operationSource: params.operationSource || null,
+        operationConfirmed: params.operationConfirmed ?? null,
+        operationRequestId,
         trace: {
           requestId: params.requestId || null,
         },

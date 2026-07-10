@@ -112,10 +112,11 @@ describe('project agent operation registry', () => {
     })
   })
 
-  it('requires real media approval for edit-first style image generation', () => {
+  it('requires real media approval for edit-first image and sound_effect generation', () => {
     const registry = createProjectAgentOperationRegistry()
     for (const operationId of [
       'generate_edit_style_previews',
+      'generate_episode_soundscape',
     ] as const) {
       const operation = registry[operationId]
       expect(operation).toBeDefined()

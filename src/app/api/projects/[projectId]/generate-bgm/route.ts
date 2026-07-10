@@ -28,6 +28,7 @@ export const POST = apiHandler(async (
   }
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
   if (typeof body.musicModel === 'string') input.musicModel = body.musicModel
+  if (typeof body.confirmedMaxCost === 'number') input.confirmedMaxCost = body.confirmedMaxCost
   if (body.outputFormat === 'mp3' || body.outputFormat === 'wav') input.outputFormat = body.outputFormat
 
   const result = await executeProjectAgentOperationFromApi({

@@ -28,6 +28,7 @@ export const POST = apiHandler(async (
   }
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
   if (typeof body.soundEffectModel === 'string') input.soundEffectModel = body.soundEffectModel
+  if (typeof body.confirmedMaxCost === 'number') input.confirmedMaxCost = body.confirmedMaxCost
 
   const result = await executeProjectAgentOperationFromApi({
     request,

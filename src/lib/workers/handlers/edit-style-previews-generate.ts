@@ -148,6 +148,13 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
 
   if (!episodeId) throw new Error('episodeId is required')
   if (!bibleId) throw new Error('bibleId is required')
+  const operationConfirmed = job.data.operationConfirmed === true
+  if (
+    job.data.operationId !== 'generate_edit_style_previews'
+    || !operationConfirmed
+  ) {
+    throw new Error('EDIT_STYLE_PREVIEW_BILLABLE_MEDIA_APPROVAL_REQUIRED')
+  }
 
   await reportTaskProgress(job, 12, {
     stage: 'edit_style_previews_prepare',
@@ -177,6 +184,8 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
           locale: job.data.locale,
           bibleId,
           parentTaskId: job.data.taskId,
+          operationConfirmed,
+          operationRequestId: job.data.operationRequestId || job.data.trace?.requestId || null,
           ...(styleDirection ? { styleDirection } : {}),
           ...(count ? { count } : {}),
         }),

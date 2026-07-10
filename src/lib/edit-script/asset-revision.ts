@@ -31,6 +31,7 @@ interface ReviseEditScriptAssetsInput {
   readonly revisionNotes: string
   readonly editScriptId?: string
   readonly requirementId?: string
+  readonly operationConfirmed: boolean
 }
 
 interface RevisionAssetTarget {
@@ -181,6 +182,7 @@ async function submitEditScriptAssetRevisionTask(input: {
   readonly requirement: PersistedEditScriptRequirementForRevision
   readonly target: RevisionAssetTarget
   readonly revisionHash: string
+  readonly operationConfirmed: boolean
 }): Promise<Omit<EditScriptAssetRevisionTask, 'requirementId' | 'kind' | 'name'>> {
   const projectModelConfig = await getProjectModelConfig(input.projectId, input.userId)
   const aspectRatio = input.requirement.kind === 'character' ? CHARACTER_ASSET_IMAGE_RATIO : LOCATION_IMAGE_RATIO
@@ -212,7 +214,7 @@ async function submitEditScriptAssetRevisionTask(input: {
     billingInfo: buildDefaultTaskBillingInfo(TASK_TYPE.MODIFY_ASSET_IMAGE, billingPayload),
     operationId: 'revise_edit_script_assets',
     operationSource: 'assistant-panel',
-    operationConfirmed: true,
+    operationConfirmed: input.operationConfirmed,
   })
   return {
     taskId: result.taskId,
@@ -295,6 +297,7 @@ export async function reviseProjectEditScriptAssets(input: ReviseEditScriptAsset
       requirement: item.requirement,
       target,
       revisionHash,
+      operationConfirmed: input.operationConfirmed,
     })
     const kind = normalizeEditScriptAssetKindForRevision(item.requirement.kind)
     if (!kind) {

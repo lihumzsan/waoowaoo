@@ -151,6 +151,10 @@ function buildJob(type: TaskJobData['type'], payload: Record<string, unknown>): 
       targetId: 'episode-1',
       payload,
       userId: 'user-1',
+      operationId: 'generate_episode_soundscape',
+      operationSource: 'assistant-panel',
+      operationConfirmed: true,
+      operationRequestId: 'request-1',
       trace: { requestId: 'request-1' },
     } satisfies TaskJobData,
   } as unknown as Job<TaskJobData>
@@ -253,12 +257,20 @@ describe('soundscape worker', () => {
     expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       type: TASK_TYPE.SOUNDSCAPE_GENERATE,
       operationId: 'generate_episode_soundscape',
+      operationConfirmed: true,
+      operationRequestId: 'request-1',
       payload: expect.objectContaining({
         episodeId: 'episode-1',
         soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
         sourceCount: 1,
         loop: true,
         outputFormat: 'mp3_44100_128',
+      }),
+      billingInfoSource: 'planned',
+      billingInfo: expect.objectContaining({
+        billable: true,
+        apiType: 'sound_effect',
+        quantity: 1,
       }),
     }))
     expect(latestSoundscapeUpsertUpdate()).toMatchObject({
@@ -267,6 +279,44 @@ describe('soundscape worker', () => {
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
       planJson: soundscapePlan,
     })
+  })
+
+  it('refuses to submit a paid sound effect task when the parent operation was not approved', async () => {
+    const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
+    executeAiStructuredTextStepMock.mockResolvedValue({ data: soundscapePlan })
+    const job = buildJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    })
+    job.data.operationConfirmed = false
+
+    await expect(handleSoundscapePlanTask(job)).rejects.toThrow(
+      'SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED',
+    )
+    expect(submitTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a sound_effect child task whose exact quote exceeds the approved ceiling', async () => {
+    const previousEdition = process.env.DEPLOYMENT_EDITION
+    const previousBillingMode = process.env.BILLING_MODE
+    process.env.DEPLOYMENT_EDITION = 'cloud'
+    process.env.BILLING_MODE = 'ENFORCE'
+    try {
+      const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
+      executeAiStructuredTextStepMock.mockResolvedValue({ data: soundscapePlan })
+
+      await expect(handleSoundscapePlanTask(buildJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
+        episodeId: 'episode-1',
+        soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+        approvedMediaMaxCost: 0.11,
+      }))).rejects.toThrow('SOUNDSCAPE_APPROVED_MEDIA_MAX_COST_EXCEEDED:0.12:0.11')
+      expect(submitTaskMock).not.toHaveBeenCalled()
+    } finally {
+      if (previousEdition === undefined) delete process.env.DEPLOYMENT_EDITION
+      else process.env.DEPLOYMENT_EDITION = previousEdition
+      if (previousBillingMode === undefined) delete process.env.BILLING_MODE
+      else process.env.BILLING_MODE = previousBillingMode
+    }
   })
 
   it('generates loop sources, stores media records, renders a mix, and persists sourcesJson and mixJson', async () => {

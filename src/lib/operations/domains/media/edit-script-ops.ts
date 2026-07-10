@@ -842,6 +842,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           chapterId: input.chapterId,
           locale: resolveLocale(ctx.context.locale),
           revisionNotes: input.revisionNotes,
+          operationConfirmed: input.confirmed === true,
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           ...(input.requirementId ? { requirementId: input.requirementId } : {}),
         })

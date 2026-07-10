@@ -11,6 +11,9 @@ export const SOUNDSCAPE_STATUS = {
 
 export type SoundscapeStatus = (typeof SOUNDSCAPE_STATUS)[keyof typeof SOUNDSCAPE_STATUS]
 
+export const SOUNDSCAPE_MAX_SOURCE_COUNT = 12
+export const SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS = 30
+
 export const soundscapePerspectiveSchema = z.enum([
   'exterior_near',
   'exterior_far',
@@ -25,7 +28,7 @@ export const soundscapePlanSourceSchema = z.object({
   sourceId: z.string().trim().min(1),
   environmentFingerprint: z.string().trim().min(1),
   prompt: z.string().trim().min(20),
-  loopDurationSeconds: z.number().min(0.5).max(30),
+  loopDurationSeconds: z.number().min(0.5).max(SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS),
   promptInfluence: z.number().min(0).max(1),
 }).strict()
 
@@ -42,7 +45,7 @@ export const soundscapePlanSectionSchema = z.object({
 export const soundscapePlanSchema = z.object({
   schemaVersion: z.literal(1),
   decision: z.enum(['soundscape', 'none_needed']),
-  sources: z.array(soundscapePlanSourceSchema).max(12),
+  sources: z.array(soundscapePlanSourceSchema).max(SOUNDSCAPE_MAX_SOURCE_COUNT),
   sections: z.array(soundscapePlanSectionSchema).max(96),
 }).strict().superRefine((plan, ctx) => {
   const sourceIds = new Set<string>()

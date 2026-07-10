@@ -28,6 +28,10 @@ import {
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
+import {
+  SOUNDSCAPE_MAX_SOURCE_COUNT,
+  SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS,
+} from '@/lib/soundscape/types'
 
 const vocalModeSchema = z.enum(['instrumental', 'vocal'])
 const outputFormatSchema = z.enum(['mp3', 'wav'])
@@ -381,6 +385,33 @@ async function planGenerateEpisodeSoundscapeOperation(
         }),
       }),
     ],
+    approvalQuoteTasks: [
+      createPlannedTask({
+        id: `generate_episode_soundscape:${episodeId}:approval-quote`,
+        taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+        targetType: 'ProjectEpisode',
+        targetId: episodeId,
+        payload: {
+          episodeId,
+          soundEffectModel,
+          durationSeconds: SOUNDSCAPE_MAX_SOURCE_COUNT * SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS,
+          sourceCount: SOUNDSCAPE_MAX_SOURCE_COUNT,
+          loop: true,
+        },
+        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        episodeId,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
+          payload: {
+            soundEffectModel,
+            durationSeconds: SOUNDSCAPE_MAX_SOURCE_COUNT * SOUNDSCAPE_MAX_SOURCE_DURATION_SECONDS,
+            sourceCount: SOUNDSCAPE_MAX_SOURCE_COUNT,
+            loop: true,
+          },
+          allowedApiTypes: ['sound_effect'],
+        }),
+      }),
+    ],
     metadata: {
       episodeId,
       soundEffectModel,
@@ -446,9 +477,19 @@ async function commitGenerateEpisodeSoundscapeOperation(
     || normalizeString(input.episodeId)
     || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const confirmedMaxCost = await resolveConfirmedMaxCostForExecution({ ctx, input, plan })
+  const approvedTask = confirmedMaxCost === null
+    ? task
+    : {
+        ...task,
+        payload: {
+          ...task.payload,
+          approvedMediaMaxCost: confirmedMaxCost,
+        },
+      }
   const result = await submitPlannedOperationTask({
     ctx,
-    task,
+    task: approvedTask,
     operationId: 'generate_episode_soundscape',
     confirmed: input.confirmed === true,
   })
