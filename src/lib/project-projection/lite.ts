@@ -1,31 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getProjectModelConfig } from '@/lib/config-service'
-import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { resolveProjectContextPolicy } from '@/lib/project-context/policy'
 import type { ProjectProjectionLite, ProjectProjectionProgress } from './types'
-
-async function listLatestArtifactsForContext(params: {
-  userId: string
-  projectId: string
-  episodeId?: string | null
-}) {
-  const latestRun = (await listPlanRuns({
-    userId: params.userId,
-    projectId: params.projectId,
-    episodeId: params.episodeId || undefined,
-    limit: 1,
-  }))[0] || null
-  if (!latestRun) return []
-  const artifacts = await listPlanArtifacts({
-    planRunId: latestRun.id,
-    limit: 20,
-  })
-  return artifacts.map((artifact) => ({
-    type: artifact.artifactType,
-    refId: artifact.refId,
-    createdAt: artifact.createdAt,
-  }))
-}
 
 async function resolveEpisodeProgress(episodeId: string | null): Promise<ProjectProjectionProgress> {
   if (!episodeId) {
@@ -63,7 +39,7 @@ export async function assembleProjectProjectionLite(params: {
   selectedScopeRef?: string | null
 }): Promise<ProjectProjectionLite> {
   const episodeId = params.episodeId || null
-  const [project, episode, progress, runs, latestArtifacts, projectModelConfig] = await Promise.all([
+  const [project, episode, progress, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
       select: {
@@ -79,18 +55,6 @@ export async function assembleProjectProjectionLite(params: {
         })
       : Promise.resolve(null),
     resolveEpisodeProgress(episodeId),
-    listPlanRuns({
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: episodeId || undefined,
-      statuses: ['queued', 'running', 'canceling'],
-      limit: 10,
-    }),
-    listLatestArtifactsForContext({
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: episodeId || undefined,
-    }),
     getProjectModelConfig(params.projectId, params.userId),
   ])
 
@@ -118,13 +82,5 @@ export async function assembleProjectProjectionLite(params: {
     selectedScopeRef: params.selectedScopeRef || null,
     policy,
     progress,
-    latestArtifacts,
-    activePlanRuns: runs.map((run) => ({
-      id: run.id,
-      runType: 'plan_run',
-      status: run.status,
-      createdAt: run.createdAt,
-      updatedAt: run.updatedAt,
-    })),
   }
 }

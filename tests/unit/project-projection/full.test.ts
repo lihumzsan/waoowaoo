@@ -43,8 +43,6 @@ describe('assembleProjectProjectionFull', () => {
         storyboardCount: 1,
         panelCount: 5,
       },
-      activePlanRuns: [],
-      latestArtifacts: [],
     })
 
     prismaMock.projectPanel.count.mockResolvedValueOnce(5)
@@ -124,8 +122,6 @@ describe('assembleProjectProjectionFull', () => {
         storyboardCount: 0,
         panelCount: 0,
       },
-      activePlanRuns: [],
-      latestArtifacts: [],
     })
 
     const result = await assembleProjectProjectionFull({
@@ -157,8 +153,6 @@ describe('assembleProjectProjectionFull', () => {
         storyboardCount: 1,
         panelCount: 1,
       },
-      activePlanRuns: [],
-      latestArtifacts: [],
     })
 
     prismaMock.projectPanel.count.mockResolvedValueOnce(1)

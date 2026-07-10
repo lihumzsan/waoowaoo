@@ -115,11 +115,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/data/route.ts',
   'src/app/api/projects/[projectId]/route.ts',
   'src/app/api/projects/route.ts',
-  'src/app/api/plan-runs/[planRunId]/cancel/route.ts',
-  'src/app/api/plan-runs/[planRunId]/events/route.ts',
-  'src/app/api/plan-runs/[planRunId]/route.ts',
-  'src/app/api/plan-runs/[planRunId]/steps/[stepKey]/retry/route.ts',
-  'src/app/api/plan-runs/route.ts',
   'src/app/api/sse/replay/route.ts',
   'src/app/api/sse/route.ts',
   'src/app/api/system/boot-id/route.ts',
@@ -146,7 +141,6 @@ function resolveCategory(routeFile: string): RouteCategory {
   if (routeFile.startsWith('src/app/api/projects/')) return 'projects'
   if (
     routeFile.startsWith('src/app/api/tasks/')
-    || routeFile.startsWith('src/app/api/plan-runs/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
     || routeFile === 'src/app/api/sse/replay/route.ts'
   ) {
@@ -185,7 +179,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   if (routeFile.startsWith('src/app/api/asset-hub/')) return 'crud-asset-hub-routes'
   if (
     routeFile.startsWith('src/app/api/tasks/')
-    || routeFile.startsWith('src/app/api/plan-runs/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
     || routeFile === 'src/app/api/sse/replay/route.ts'
     || routeFile === 'src/app/api/sse/route.ts'

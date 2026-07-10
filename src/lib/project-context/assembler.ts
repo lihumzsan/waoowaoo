@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { getProjectModelConfig } from '@/lib/config-service'
-import { listPlanArtifacts, listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
@@ -17,29 +16,6 @@ function compactPreview(value: string, maxLength: number): string {
 function countGenerationSegments(corePlanJson: unknown): number {
   const parsed = editScriptStructureSchema.safeParse(corePlanJson)
   return parsed.success ? parsed.data.generationSegments.length : 0
-}
-
-async function listLatestArtifactsForContext(params: {
-  userId: string
-  projectId: string
-  episodeId?: string | null
-}) {
-  const latestRun = (await listPlanRuns({
-    userId: params.userId,
-    projectId: params.projectId,
-    episodeId: params.episodeId || undefined,
-    limit: 1,
-  }))[0] || null
-  if (!latestRun) return []
-  const artifacts = await listPlanArtifacts({
-    planRunId: latestRun.id,
-    limit: 20,
-  })
-  return artifacts.map((artifact) => ({
-    type: artifact.artifactType,
-    refId: artifact.refId,
-    createdAt: artifact.createdAt,
-  }))
 }
 
 async function listOperationResultsForContext(params: {
@@ -89,7 +65,7 @@ export async function assembleProjectContext(params: {
   selectedPanelId?: string | null
   selectedAssetId?: string | null
 }): Promise<ProjectContextSnapshot> {
-  const [project, episode, editBible, editChapters, editScripts, runs, latestArtifacts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
+  const [project, episode, editBible, editChapters, editScripts, activeOperationTasks, recentOperationResults, editFirstWorkflow, projectModelConfig] = await Promise.all([
     prisma.project.findUnique({
       where: { id: params.projectId },
     }),
@@ -165,18 +141,6 @@ export async function assembleProjectContext(params: {
           },
         })
       : Promise.resolve([]),
-    listPlanRuns({
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: params.episodeId || undefined,
-      statuses: ['queued', 'running', 'canceling'],
-      limit: 10,
-    }),
-    listLatestArtifactsForContext({
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: params.episodeId || undefined,
-    }),
     listOperationResultsForContext({
       userId: params.userId,
       projectId: params.projectId,
@@ -259,14 +223,6 @@ export async function assembleProjectContext(params: {
     selectedScopeRef: params.selectedScopeRef || null,
     selectedPanelId: params.selectedPanelId || null,
     selectedAssetId: params.selectedAssetId || null,
-    latestArtifacts,
-    activePlanRuns: runs.map((run) => ({
-      id: run.id,
-      runType: 'plan_run',
-      status: run.status,
-      createdAt: run.createdAt,
-      updatedAt: run.updatedAt,
-    })),
     activeOperationTasks,
     recentOperationResults,
     policy,

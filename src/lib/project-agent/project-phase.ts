@@ -1,7 +1,5 @@
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
-import { listPlanRuns } from '@/lib/plan-run-runtime/service'
 import { prisma } from '@/lib/prisma'
-import type { ProjectContextRunSummary } from '@/lib/project-context/types'
 import { resolveEditFirstWorkflowState, type EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 
 export const PROJECT_PHASE = {
@@ -24,9 +22,6 @@ export interface ProjectPhaseSnapshot {
     storyboardCount: number
     panelCount: number
   }
-  activePlanRuns: ProjectContextRunSummary[]
-  activePlanRunCount: number
-  failedItems: string[]
   staleArtifacts: string[]
   availableActions: string[]
   editFirstWorkflow: EditFirstWorkflowState
@@ -77,12 +72,6 @@ function resolveAvailableActions(phase: ProjectPhase, hasEpisode: boolean): Proj
     default:
       return []
   }
-}
-
-function truncateText(value: string, maxChars: number) {
-  const normalized = value.trim().replace(/\s+/g, ' ')
-  if (normalized.length <= maxChars) return normalized
-  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`
 }
 
 function maxDate(dates: Array<Date | null | undefined>): Date | null {
@@ -159,14 +148,7 @@ export async function resolveProjectPhase(params: {
   })
   const progress = projection.progress
 
-  const [recentFailedRuns, staleArtifacts, editFirstWorkflow, planning] = await Promise.all([
-    listPlanRuns({
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: projection.episodeId || undefined,
-      statuses: ['failed'],
-      limit: 5,
-    }),
+  const [staleArtifacts, editFirstWorkflow, planning] = await Promise.all([
     projection.episodeId
       ? resolveStaleArtifactsForEpisode({
           episodeId: projection.episodeId,
@@ -192,21 +174,10 @@ export async function resolveProjectPhase(params: {
     phase = PROJECT_PHASE.SCRIPT_READY
   }
 
-  const failedItems = recentFailedRuns
-    .slice(0, 3)
-    .map((run) => {
-      const headline = run.errorMessage || run.errorCode || run.status || 'failed'
-      const detail = truncateText(headline, 160)
-      return `planRun:${run.id}: ${detail}`
-    })
-
   return {
     phase,
     planning,
     progress,
-    activePlanRuns: projection.activePlanRuns,
-    activePlanRunCount: projection.activePlanRuns.length,
-    failedItems,
     staleArtifacts,
     availableActions: resolveAvailableActions(phase, !!projection.episodeId),
     editFirstWorkflow,

@@ -15,20 +15,6 @@ export interface ProjectPolicyOverrideInput {
   overrides?: Record<string, unknown>
 }
 
-export interface ProjectContextArtifactSummary {
-  type: string
-  refId: string
-  createdAt?: string | null
-}
-
-export interface ProjectContextRunSummary {
-  id: string
-  runType: string
-  status: string
-  createdAt: string
-  updatedAt: string
-}
-
 export interface ProjectContextEpisodeSnapshot {
   novelText: string | null
   storyboardCount: number
@@ -102,8 +88,6 @@ export interface ProjectContextSnapshot {
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedAssetId?: string | null
-  latestArtifacts: ProjectContextArtifactSummary[]
-  activePlanRuns: ProjectContextRunSummary[]
   activeOperationTasks: RecentOperationResult[]
   recentOperationResults: RecentOperationResult[]
   policy: ProjectPolicySnapshot

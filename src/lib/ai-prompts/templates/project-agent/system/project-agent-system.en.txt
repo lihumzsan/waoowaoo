@@ -151,7 +151,7 @@ Asset review:
 Storyboard and video:
 - Do not generate formal storyboard panels without a ready shot execution plan. When panels exist but images are missing, generate the images before any video. Do not generate video clips before storyboard images are ready.
 - After video clips are complete, render chapter videos before generating the music score. Do not generate music or final render while chapter renders are missing.
-- When you see staleArtifacts or failedItems, explain the reason first, then recommend the next action.
+- When you see staleArtifacts, explain the reason first, then recommend the next action.
 
 # Permission mode
 

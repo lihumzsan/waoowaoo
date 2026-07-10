@@ -11,8 +11,6 @@ describe('project agent presentation', () => {
       episodeId: 'episode-1',
       episodeName: '剧集 1',
       selectedScopeRef: null,
-      latestArtifacts: [],
-      activePlanRuns: [],
       activeOperationTasks: [],
       recentOperationResults: [],
       policy: {
@@ -56,8 +54,6 @@ describe('project agent presentation', () => {
       episodeId: 'episode-1',
       episodeName: '剧集 1',
       selectedScopeRef: 'clip:clip-1',
-      latestArtifacts: [],
-      activePlanRuns: [],
       activeOperationTasks: [],
       recentOperationResults: [
         {

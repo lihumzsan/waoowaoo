@@ -267,10 +267,8 @@ export interface ProjectAssistantContextSnapshot {
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedAssetId?: string | null
-  activePlanRuns: ProjectContextSnapshot['activePlanRuns']
   activeOperationTasks: ProjectContextSnapshot['activeOperationTasks']
   recentOperationResults: ProjectContextSnapshot['recentOperationResults']
-  latestArtifacts: ProjectContextSnapshot['latestArtifacts']
   editBible?: ProjectContextEditBibleSnapshot | null
   editScript?: ProjectContextEditScriptSnapshot | null
   editScripts?: ProjectContextEditScriptSnapshot[]

@@ -19,18 +19,11 @@ const configServiceMock = vi.hoisted(() => ({
   getProjectModelConfig: vi.fn(),
 }))
 
-const planRunRuntimeMock = vi.hoisted(() => ({
-  listPlanRuns: vi.fn(),
-  listPlanArtifacts: vi.fn(),
-}))
-
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
 
 vi.mock('@/lib/config-service', () => configServiceMock)
-
-vi.mock('@/lib/plan-run-runtime/service', () => planRunRuntimeMock)
 
 describe('assembleProjectProjectionLite', () => {
   beforeEach(() => {
@@ -42,8 +35,6 @@ describe('assembleProjectProjectionLite', () => {
     })
     prismaMock.projectStoryboard.count.mockResolvedValue(0)
     prismaMock.projectPanel.count.mockResolvedValue(0)
-    planRunRuntimeMock.listPlanRuns.mockResolvedValue([])
-    planRunRuntimeMock.listPlanArtifacts.mockResolvedValue([])
     configServiceMock.getProjectModelConfig.mockResolvedValue({
       analysisModel: 'openrouter::platform-analysis',
       videoRatio: '9:16',

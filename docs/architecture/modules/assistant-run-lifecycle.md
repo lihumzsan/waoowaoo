@@ -33,6 +33,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `scripts/guards/no-assistant-fixed-workflow-surface.mjs` 阻止将固定流程伪装成 Agent 自主运行。
 - `scripts/guards/no-history-state-inference.mjs` 阻止从历史消息推断当前业务状态。
 - `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant 控制层直接提交 Task 并绕过 operation/Wait。
+- `scripts/guards/no-plan-run-runtime.mjs` 阻止已退役的 PlanRun runtime、API 与 operation 入口重新形成第二套 Assistant 执行状态机。
 
 ## 历史回归
 

@@ -31,13 +31,6 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/config-service', () => configServiceMock)
 
-const planRunRuntimeMock = vi.hoisted(() => ({
-  listPlanRuns: vi.fn(),
-  listPlanArtifacts: vi.fn(),
-}))
-
-vi.mock('@/lib/plan-run-runtime/service', () => planRunRuntimeMock)
-
 vi.mock('@/lib/project-workflow/edit-first', () => ({
   resolveEditFirstWorkflowState: vi.fn(async () => ({
     active: false,
@@ -94,9 +87,6 @@ describe('assembleProjectContext', () => {
         },
       ],
     })
-    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
-    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
-    planRunRuntimeMock.listPlanArtifacts.mockResolvedValueOnce([])
     prismaMock.projectEditBible.findFirst.mockResolvedValueOnce(null)
     prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([])
     prismaMock.projectEditScript.findMany.mockResolvedValueOnce([])
@@ -210,9 +200,6 @@ describe('assembleProjectContext', () => {
       novelText: null,
       storyboards: [],
     })
-    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
-    planRunRuntimeMock.listPlanRuns.mockResolvedValueOnce([])
-    planRunRuntimeMock.listPlanArtifacts.mockResolvedValueOnce([])
     prismaMock.projectEditBible.findFirst.mockResolvedValueOnce(null)
     prismaMock.projectEditChapter.findMany.mockResolvedValueOnce([])
     prismaMock.projectEditScript.findMany.mockResolvedValueOnce([

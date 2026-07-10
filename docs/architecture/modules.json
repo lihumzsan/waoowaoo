@@ -117,7 +117,8 @@
         "scripts/guards/no-client-agent-control.mjs",
         "scripts/guards/no-assistant-fixed-workflow-surface.mjs",
         "scripts/guards/no-history-state-inference.mjs",
-        "scripts/guards/no-project-agent-direct-task-submit.mjs"
+        "scripts/guards/no-project-agent-direct-task-submit.mjs",
+        "scripts/guards/no-plan-run-runtime.mjs"
       ]
     },
     {

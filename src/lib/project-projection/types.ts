@@ -1,6 +1,4 @@
 import type {
-  ProjectContextArtifactSummary,
-  ProjectContextRunSummary,
   ProjectPolicySnapshot,
 } from '@/lib/project-context/types'
 
@@ -17,8 +15,6 @@ export interface ProjectProjectionLite {
   selectedScopeRef?: string | null
   policy: ProjectPolicySnapshot
   progress: ProjectProjectionProgress
-  activePlanRuns: ProjectContextRunSummary[]
-  latestArtifacts: ProjectContextArtifactSummary[]
 }
 
 export interface ProjectProjectionPanelSnapshot {
