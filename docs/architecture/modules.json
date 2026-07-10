@@ -176,12 +176,12 @@
         "scripts/guards/changed-file-test-impact-guard.mjs",
         "scripts/guards/test-behavior-quality-guard.mjs",
         "scripts/guards/test-route-coverage-guard.mjs",
-        "scripts/guards/test-tasktype-coverage-guard.mjs",
         "tests/history",
         "tests/harness",
         "tests/contracts/requirements-matrix.ts",
-        "tests/contracts/route-behavior-matrix.ts",
-        "tests/contracts/tasktype-behavior-matrix.ts"
+        "tests/contracts/route-catalog.ts",
+        "tests/contracts/route-scenario-registry.ts",
+        "tests/contracts/tasktype-scenario-registry.ts"
       ],
       "testPaths": [
         "tests/unit/test-history/catalog.test.ts",
@@ -190,13 +190,14 @@
         "tests/unit/test-harness/lifecycle-sequence.test.ts",
         "tests/unit/test-verification/verify-vitest-report.test.ts",
         "tests/unit/guards/verify-push-fail-closed.test.ts",
-        "tests/unit/guards/changed-file-test-impact-guard.test.ts"
+        "tests/unit/guards/changed-file-test-impact-guard.test.ts",
+        "tests/contracts/tasktype-scenario-conformance.test.ts",
+        "tests/integration/api/contract/route-scenario-conformance.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/changed-file-test-impact-guard.mjs",
         "scripts/guards/test-behavior-quality-guard.mjs",
-        "scripts/guards/test-route-coverage-guard.mjs",
-        "scripts/guards/test-tasktype-coverage-guard.mjs"
+        "scripts/guards/test-route-coverage-guard.mjs"
       ]
     }
   ]

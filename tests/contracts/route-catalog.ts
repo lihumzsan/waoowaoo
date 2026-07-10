@@ -21,12 +21,13 @@ export type RouteContractGroup =
   | 'infra-routes'
 
 export type RouteCatalogEntry = {
-  routeFile: string
+  routeFile: RouteFile
   category: RouteCategory
   contractGroup: RouteContractGroup
+  access: 'protected' | 'public'
 }
 
-const ROUTE_FILES = [
+export const ROUTE_FILES = [
   'src/app/api/admin/credits/grant/route.ts',
   'src/app/api/admin/download-logs/route.ts',
   'src/app/api/assistant/text-attachments/route.ts',
@@ -71,7 +72,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/ai-modify-appearance/route.ts',
   'src/app/api/projects/[projectId]/ai-modify-location/route.ts',
   'src/app/api/projects/[projectId]/ai-modify-prop/route.ts',
-  'src/app/api/projects/[projectId]/assets/route.ts',
   'src/app/api/projects/[projectId]/assistant/session-state/route.ts',
   'src/app/api/projects/[projectId]/canvas-layout/route.ts',
   'src/app/api/projects/[projectId]/character/appearance/route.ts',
@@ -135,6 +135,18 @@ const ROUTE_FILES = [
   'src/app/api/user/transactions/route.ts',
 ] as const
 
+export type RouteFile = (typeof ROUTE_FILES)[number]
+
+const PUBLIC_ROUTE_FILES = new Set<RouteFile>([
+  'src/app/api/auth/[...nextauth]/route.ts',
+  'src/app/api/auth/register/route.ts',
+  'src/app/api/cos/image/route.ts',
+  'src/app/api/deployment/route.ts',
+  'src/app/api/files/[...path]/route.ts',
+  'src/app/api/payments/stripe/webhook/route.ts',
+  'src/app/api/system/boot-id/route.ts',
+])
+
 function resolveCategory(routeFile: string): RouteCategory {
   if (routeFile.startsWith('src/app/api/assets/')) return 'assets'
   if (routeFile.startsWith('src/app/api/asset-hub/')) return 'asset-hub'
@@ -197,6 +209,7 @@ export const ROUTE_CATALOG: ReadonlyArray<RouteCatalogEntry> = ROUTE_FILES.map((
   routeFile,
   category: resolveCategory(routeFile),
   contractGroup: resolveContractGroup(routeFile),
+  access: PUBLIC_ROUTE_FILES.has(routeFile) ? 'public' : 'protected',
 }))
 
 export const ROUTE_COUNT = ROUTE_CATALOG.length

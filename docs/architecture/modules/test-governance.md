@@ -21,6 +21,8 @@
 - 历史缺陷：`tests/history/catalog.ts`。
 - 可执行场景与实际执行证据：`tests/harness/behavior-scenario.ts`。
 - 生命周期事实序列：`tests/harness/lifecycle-sequence.ts`。
+- Task type 行为契约：`tests/contracts/tasktype-scenario-registry.ts`。
+- Route identity 与访问边界：`tests/contracts/route-catalog.ts`；可执行契约：`tests/contracts/route-scenario-registry.ts`。
 - Git 候选报告：`scripts/test-history/candidate-report.mjs`。
 - 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
 - 统一完整验证：`scripts/verify-push.sh`。
@@ -33,6 +35,8 @@
 - `tests/unit/test-verification/verify-vitest-report.test.ts` 验证未收集与 skipped case 原地失败。
 - `tests/unit/guards/verify-push-fail-closed.test.ts` 验证测试服务不可用不会跳过高价值 suite。
 - `tests/unit/guards/changed-file-test-impact-guard.test.ts` 验证 CI base/head range 与测试影响规则。
+- `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
+- `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
 
 ## 历史回归
 
@@ -40,6 +44,8 @@
 - 旧 `verify:push` 在测试服务准备失败时跳过 integration、system 和 regression，仍可能成功结束。
 - 旧 changed-file guard 在 CI checkout 没有 staged diff 时输出 `SKIP no changed files detected`，没有检查真实 PR 影响范围。
 - 旧 route/task behavior matrix 主要验证测试文件存在，不能证明每个 route 或 task scenario 实际执行。
+- Task type 的旧文件名 catalog、behavior matrix 与文本 guard 已由穷尽型可执行 Registry 一次性替换。
+- Route 的旧文件名 behavior matrix 与文本 guard 已删除；源文件发现 guard、唯一 identity catalog 和执行账本共同保证新增 Route 必须实际运行。
 
 ## 修改检查表
 
