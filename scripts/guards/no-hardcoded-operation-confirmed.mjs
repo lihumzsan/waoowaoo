@@ -5,8 +5,8 @@ import process from 'node:process'
 const root = process.cwd()
 const sourceRoot = path.join(root, 'src')
 const allowedReadProjections = new Set([
-  'src/instrumentation.ts',
   'src/lib/project-context/assembler.ts',
+  'src/lib/task/reconcile.ts',
 ])
 const assignmentPattern = /operationConfirmed\s*:\s*true\b/g
 
