@@ -53,6 +53,8 @@ fi
 
 export TEST_SERVICES_EXTERNAL=1
 export BILLING_TEST_KEEP_SERVICES=1
+export GOOGLE_CLIENT_ID=test-google-client-id
+export GOOGLE_CLIENT_SECRET=test-google-client-secret
 
 run_npm_script lint:all
 run_npm_script typecheck

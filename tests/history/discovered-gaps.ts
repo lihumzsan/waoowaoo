@@ -41,4 +41,26 @@ export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
     rationale: 'The first run establishes a non-arbitrary baseline; Provider, Canvas, job envelope, and target failure survivors must be burned down in later test slices.',
     status: 'scenario-required',
   },
+  {
+    id: 'GAP-I18N-001',
+    symptom: 'LocationSection unit rendering reports missing zh messages for assets.overview prop asset labels.',
+    evidence: [
+      'tests/unit/components/location-section-prop-confirm.test.ts full-suite stderr',
+      'missing keys: assets.overview.propAssets and assets.overview.propCounts',
+    ],
+    owner: 'workspace-assets',
+    rationale: 'Missing production i18n messages are outside the test-system refactor ownership boundary and must fail visibly in the later production remediation slice.',
+    status: 'production-fix-required',
+  },
+  {
+    id: 'GAP-CLEANUP-001',
+    symptom: 'Forty existing test files still exceed the 350-line or 10-case responsibility boundary.',
+    evidence: [
+      'initial test-size audit on 2026-07-11: 40 legacy oversized files',
+      'scripts/guards/test-size-guard.mjs now prevents changed files from preserving this debt',
+    ],
+    owner: 'test-system-refactor',
+    rationale: 'Bulk splitting all legacy suites in the same infrastructure change would create review noise; each file must split when its behavior slice is migrated.',
+    status: 'scenario-required',
+  },
 ]
