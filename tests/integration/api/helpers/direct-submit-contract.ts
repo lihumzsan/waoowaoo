@@ -103,9 +103,15 @@ function inferTaskContractFromOperation(params: {
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
-    case 'generate_episode_soundscape':
+    case 'plan_episode_soundscape':
       return {
         type: TASK_TYPE.SOUNDSCAPE_PLAN,
+        targetType: 'ProjectEpisode',
+        targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
+      }
+    case 'generate_episode_soundscape':
+      return {
+        type: TASK_TYPE.SOUNDSCAPE_GENERATE,
         targetType: 'ProjectEpisode',
         targetId: typeof input.episodeId === 'string' ? input.episodeId : 'episode-1',
       }
@@ -434,6 +440,21 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
     },
   },
   {
+    routeFile: 'src/app/api/projects/[projectId]/plan-soundscape/route.ts',
+    body: {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    },
+    params: { projectId: 'project-1' },
+    expectedTaskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    expectedTargetType: 'ProjectEpisode',
+    expectedProjectId: 'project-1',
+    expectedPayloadSubset: {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    },
+  },
+  {
     routeFile: 'src/app/api/projects/[projectId]/generate-soundscape/route.ts',
     body: {
       confirmed: true,
@@ -442,7 +463,7 @@ export const DIRECT_MEDIA_CASES: ReadonlyArray<DirectRouteCase> = [
       soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
     },
     params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.SOUNDSCAPE_PLAN,
+    expectedTaskType: TASK_TYPE.SOUNDSCAPE_GENERATE,
     expectedTargetType: 'ProjectEpisode',
     expectedProjectId: 'project-1',
     expectedPayloadSubset: {
