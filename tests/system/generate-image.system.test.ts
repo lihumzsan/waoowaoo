@@ -70,7 +70,7 @@ describe('system - generate image', () => {
     resetAuthMockState()
   })
 
-  it('route -> queue -> worker -> db writes imageUrl and lifecycle events', async () => {
+  it('[P0:SYS-IMAGE-SUCCESS] route -> queue -> worker -> db writes imageUrl and lifecycle events', async () => {
     const seeded = await seedMinimalDomainState()
     mockAuthenticated(seeded.user.id)
     workers = await startSystemWorkers(['image'])
@@ -116,7 +116,7 @@ describe('system - generate image', () => {
     expectLifecycleEvents(eventTypes, 'completed')
   })
 
-  it('fatal provider path -> task fails and existing appearance images stay unchanged', async () => {
+  it('[P0:SYS-PROVIDER-FAILURE-NO-FALLBACK] fatal provider path fails without changing existing output', async () => {
     const seeded = await seedMinimalDomainState()
     mockAuthenticated(seeded.user.id)
     imageState.mode = 'fatal'

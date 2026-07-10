@@ -83,7 +83,7 @@ describe('system - generate video', () => {
     resetAuthMockState()
   })
 
-  it('queued external generation -> polling -> videoUrl persisted', async () => {
+  it('[P0:SYS-VIDEO-SUCCESS] queued external generation -> polling -> videoUrl persisted', async () => {
     const seeded = await seedMinimalDomainState()
     await prisma.projectPanel.update({
       where: { id: seeded.panel.id },

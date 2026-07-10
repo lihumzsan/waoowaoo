@@ -28,6 +28,7 @@
 - Git 候选报告：`scripts/test-history/candidate-report.mjs`。
 - 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
 - 必跑 suite 执行器：`scripts/test-verification/run-required-suite.mjs`，统一生成 Vitest JSON 并立即核对发现文件、实际文件、case 与 skip 数。
+- P0 System Journey：`tests/system/p0-journeys.json` 是十条旅程的 identity/status Registry；`verify-system-journeys.mjs` 只接受 Vitest JSON 中实际通过的 `[P0:<id>]` 作为执行证据。
 - Mutation：`stryker.incremental.config.mjs`、`vitest.mutation.config.ts` 与 `scripts/mutation/verify-baseline.mjs`。
 - 统一完整验证：`scripts/verify-push.sh`。
 

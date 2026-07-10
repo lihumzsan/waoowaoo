@@ -105,7 +105,7 @@
     "test:integration:provider": "cross-env BILLING_TEST_BOOTSTRAP=0 node scripts/test-verification/run-required-suite.mjs --suite integration-provider --root tests/integration/provider",
     "test:integration:chain": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite integration-chain --root tests/integration/chain",
     "test:integration:task": "cross-env BILLING_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite integration-task --root tests/integration/task",
-    "test:system": "cross-env SYSTEM_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite system --root tests/system",
+    "test:system": "cross-env SYSTEM_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite system --root tests/system --scenario-registry tests/system/p0-journeys.json",
     "e2e:long-form": "tsx scripts/e2e-long-form/index.ts",
     "test:regression:cases": "cross-env SYSTEM_TEST_BOOTSTRAP=1 node scripts/test-verification/run-required-suite.mjs --suite regression --root tests/regression",
     "test:mutation:dry": "stryker run stryker.incremental.config.mjs --dryRunOnly",

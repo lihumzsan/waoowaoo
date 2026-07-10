@@ -181,6 +181,8 @@
         "tests/history",
         "tests/harness",
         "tests/mutation",
+        "tests/system/p0-journey-registry.ts",
+        "tests/system/p0-journeys.json",
         "tests/contracts/requirements-matrix.ts",
         "tests/contracts/route-catalog.ts",
         "tests/contracts/route-scenario-registry.ts",
@@ -200,7 +202,8 @@
         "tests/contracts/tasktype-scenario-conformance.test.ts",
         "tests/integration/api/contract/route-scenario-conformance.test.ts",
         "tests/regression/historical-defect-scenarios.test.ts",
-        "tests/unit/test-verification/mutation-baseline.test.ts"
+        "tests/unit/test-verification/mutation-baseline.test.ts",
+        "tests/unit/test-verification/p0-system-journey-report.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/changed-file-test-impact-guard.mjs",
