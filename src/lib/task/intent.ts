@@ -40,6 +40,7 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.REGENERATE_GROUP]: 'regenerate',
   [TASK_TYPE.ASSET_HUB_IMAGE]: 'generate',
   [TASK_TYPE.ASSET_HUB_MODIFY]: 'modify',
+  [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_BIBLE_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: 'generate',

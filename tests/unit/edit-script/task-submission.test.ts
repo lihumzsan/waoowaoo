@@ -113,6 +113,33 @@ describe('edit style preview task submission', () => {
     }))
   })
 
+  it('carries the production-plan-approved exact visual style plan into the parent task', async () => {
+    await submitProjectEditStylePreviewsGenerationTask({
+      request: request(),
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      bibleId: 'bible-1',
+      count: 2,
+      plannedStylePreviewIds: ['style-preview-1', 'style-preview-2'],
+      plannedImageModel: 'fal::gpt-image-2',
+      confirmedMaxCost: 2.5,
+      source: 'assistant-production-plan-choice',
+      confirmed: true,
+      locale: 'zh',
+    })
+
+    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      confirmed: true,
+      source: 'assistant-production-plan-choice',
+      payload: expect.objectContaining({
+        plannedStylePreviewIds: ['style-preview-1', 'style-preview-2'],
+        plannedImageModel: 'fal::gpt-image-2',
+        confirmedMaxCost: 2.5,
+      }),
+    }))
+  })
+
   it('rejects style preview generation until the Bible is confirmed', async () => {
     prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
       id: 'bible-1',

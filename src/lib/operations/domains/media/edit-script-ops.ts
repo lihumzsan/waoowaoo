@@ -16,7 +16,7 @@ import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
-import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
@@ -52,8 +52,17 @@ import {
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
-import { compensateSubmittedTasks } from '@/lib/operations/planning'
+import {
+  assertOperationPlanConfirmedCost,
+  compensateSubmittedTasks,
+  resolveConfirmedMaxCostForExecution,
+  type OperationPlan,
+} from '@/lib/operations/planning'
 import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
+import {
+  planProjectEditStylePreviews,
+  readEditStylePreviewPlanMetadata,
+} from '@/lib/edit-script/style-preview-operation-plan'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -68,6 +77,7 @@ const confirmedInputFields = {
 
 const generateEditStylePreviewsInputSchema = z.object({
   ...confirmedInputFields,
+  confirmedMaxCost: z.number().nonnegative().optional(),
   bibleId: z.string().trim().min(1).optional(),
   styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
   count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
@@ -138,6 +148,31 @@ type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInpu
 type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSchema>
 type GenerateEditShotExecutionPlanInput = z.infer<typeof generateEditShotExecutionPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
+
+async function submitPlannedEditStylePreviewParentTask(
+  ctx: ProjectAgentOperationContext,
+  input: GenerateEditStylePreviewsInput,
+  plan: OperationPlan,
+) {
+  const metadata = readEditStylePreviewPlanMetadata(plan)
+  const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+  const confirmedMaxCost = await resolveConfirmedMaxCostForExecution({ ctx, input, plan })
+  return await submitProjectEditStylePreviewsGenerationTask({
+    request: ctx.request,
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    episodeId,
+    bibleId: metadata.bibleId,
+    count: metadata.count,
+    plannedStylePreviewIds: metadata.stylePreviewIds,
+    plannedImageModel: metadata.imageModel,
+    confirmedMaxCost,
+    locale: resolveLocale(ctx.context.locale),
+    source: ctx.source,
+    confirmed: input.confirmed === true,
+    ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
+  })
+}
 
 const requestEditFirstChoiceOutputSchema = z.object({
   emitted: z.literal(true),
@@ -544,20 +579,46 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
       outputSchema: editStylePreviewsTaskSubmitOutputSchema,
+      plan: async (ctx, input: GenerateEditStylePreviewsInput) => await planProjectEditStylePreviews({
+        projectId: ctx.projectId,
+        userId: ctx.userId,
+        episodeId: resolveEpisodeId(input, ctx.context.episodeId),
+        locale: resolveLocale(ctx.context.locale),
+        ...(input.bibleId ? { bibleId: input.bibleId } : {}),
+        ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
+        ...(input.count ? { count: input.count } : {}),
+      }),
+      commit: async (ctx, input: GenerateEditStylePreviewsInput, plan) => {
+        const result = await submitPlannedEditStylePreviewParentTask(ctx, input, plan)
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_style_previews',
+          taskId: result.taskId,
+          status: result.status,
+          runId: result.runId || null,
+          deduped: result.deduped,
+          projectId: ctx.projectId,
+          episodeId: result.episodeId,
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: result.bibleId,
+        })
+        return editStylePreviewsTaskSubmitOutputSchema.parse(result)
+      },
       execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitProjectEditStylePreviewsGenerationTask({
-          request: ctx.request,
+        const plan = await planProjectEditStylePreviews({
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
           locale: resolveLocale(ctx.context.locale),
-          source: ctx.source,
-          confirmed: input.confirmed === true,
           ...(input.bibleId ? { bibleId: input.bibleId } : {}),
           ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
           ...(input.count ? { count: input.count } : {}),
         })
+        await assertOperationPlanConfirmedCost({
+          plan,
+          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
+        })
+        const result = await submitPlannedEditStylePreviewParentTask(ctx, input, plan)
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
           operationId: 'generate_edit_style_previews',
           taskId: result.taskId,

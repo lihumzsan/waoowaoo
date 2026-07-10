@@ -9,8 +9,7 @@ import type { AbstractIntlMessages } from 'next-intl'
 import {
   AssistantChoiceCardView,
   ConfirmationActionCard,
-  isWorkspaceAssistantToolDetailsOpen,
-  setWorkspaceAssistantToolDetailsOpen,
+  WorkspaceAssistantActiveRunCard,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -35,6 +34,10 @@ const assistantMessages = {
       choiceCustomOptionLabel: '其他{label}',
       choiceCustomOptionPlaceholder: '其他{label}',
       choiceCustomOptionSubmit: '选择其他{label}',
+    },
+    toolCall: {
+      running: '进行中',
+      taskCount: '{count} 个任务',
     },
   },
 } as const
@@ -128,20 +131,17 @@ describe('workspace assistant renderers', () => {
     expect(html).not.toContain('flex-1 rounded-xl border border-[var(--glass-stroke-base)] bg-white')
   })
 
-  it('keeps tool call detail expansion keyed by tool call id', () => {
-    const toolCallId = 'tool-call-regression-expand'
+  it('renders only the localized active-run summary and never exposes internal task fields', () => {
+    const html = renderWithIntl(createElement(WorkspaceAssistantActiveRunCard, {
+      operationId: 'ingest_script',
+      taskCount: 1,
+    }))
 
-    setWorkspaceAssistantToolDetailsOpen(toolCallId, false)
-    expect(isWorkspaceAssistantToolDetailsOpen(toolCallId)).toBe(false)
-
-    setWorkspaceAssistantToolDetailsOpen(toolCallId, true)
-    expect(isWorkspaceAssistantToolDetailsOpen(toolCallId)).toBe(true)
-
-    setWorkspaceAssistantToolDetailsOpen('tool-call-regression-other', true)
-    expect(isWorkspaceAssistantToolDetailsOpen(toolCallId)).toBe(true)
-
-    setWorkspaceAssistantToolDetailsOpen(toolCallId, false)
-    expect(isWorkspaceAssistantToolDetailsOpen(toolCallId)).toBe(false)
+    expect(html).toContain('进行中')
+    expect(html).toContain('1 个任务')
+    expect(html).not.toContain('edit_bible_generate')
+    expect(html).not.toContain('ProjectEditBible')
+    expect(html).not.toContain('bible-1')
   })
 
   it('does not render mutation batch undo controls for submitted task cards', () => {

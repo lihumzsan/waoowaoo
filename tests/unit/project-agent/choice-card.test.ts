@@ -25,6 +25,44 @@ vi.mock('@/lib/storage', () => ({
   getSignedUrl: (key: string) => `/signed/${key}`,
 }))
 
+vi.mock('@/lib/edit-script/style-preview-operation-plan', () => ({
+  planProjectEditStylePreviews: vi.fn(async () => ({ kind: 'task_submission' })),
+}))
+
+vi.mock('@/lib/operations/planning', () => ({
+  toOperationPlanView: vi.fn(async () => ({
+    operationId: 'generate_edit_style_previews',
+    kind: 'task_submission',
+    taskCount: 1,
+    quote: {
+      showCredits: true,
+      billingMode: 'ENFORCE',
+      billable: true,
+      taskCount: 1,
+      mediaTaskCount: 1,
+      totalMaxFrozenCost: 1,
+      currency: 'credits',
+      items: [{
+        id: 'style-task-1',
+        taskType: 'edit_style_preview_image',
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'style-preview-1',
+        apiType: 'image',
+        model: 'image-model',
+        quantity: 1,
+        unit: 'image',
+        maxFrozenCost: 1,
+      }],
+    },
+    tasks: [{
+      id: 'style-task-1',
+      taskType: 'edit_style_preview_image',
+      targetType: 'ProjectEditStylePreview',
+      targetId: 'style-preview-1',
+    }],
+  })),
+}))
+
 import {
   buildEditFirstAssistantChoiceCard,
   readEditFirstAspectRatio,
@@ -71,12 +109,16 @@ describe('edit-first assistant choice cards', () => {
     })
 
     expect(card).toMatchObject({
-      cardId: 'edit-first-bible-review',
+      cardId: expect.stringMatching(/^edit-first-bible-review:/),
       toolCallId: 'tool-call-1',
       choiceType: 'bible_review',
       variant: 'confirm_or_reply',
       title: '确认制作规划',
-      description: '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份制作规划将作为各章节制作的基线。',
+      description: '请审核制作规划并选择项目画面比例。确认制作规划时也会一并授权下方列出的视觉风格候选图生成，不会再次弹出确认。',
+      operationPlan: expect.objectContaining({
+        operationId: 'generate_edit_style_previews',
+        taskCount: 1,
+      }),
       groups: [{
         key: 'aspectRatio',
         label: '画面比例',

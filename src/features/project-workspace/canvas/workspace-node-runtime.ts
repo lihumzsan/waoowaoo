@@ -15,8 +15,8 @@ import type {
 
 export interface WorkspaceNodeRuntimeLabels {
   readonly running: string
+  readonly pending: string
   readonly failed: string
-  readonly inconsistent: string
 }
 
 export function collectWorkspaceNodeRuntimeTargets(
@@ -87,7 +87,7 @@ function resolveEditAssetItemRuntimePatch(input: {
     return {
       ...input.asset,
       isRunning: false,
-      statusLabel: input.labels.inconsistent,
+      statusLabel: input.labels.pending,
       taskProgress: null,
     }
   }
@@ -203,12 +203,12 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   }
 
   if (typeof input.node.data.isRunning === 'boolean') {
-    const inconsistent = input.node.data.isRunning === true
+    const missingActiveTask = input.node.data.isRunning === true
     return {
       ...editAssetGroupPatch,
-      artifactPhase: inconsistent ? 'failed' : input.node.data.artifactPhase,
+      artifactPhase: missingActiveTask ? undefined : input.node.data.artifactPhase,
       isRunning: false,
-      statusLabel: inconsistent ? input.labels.inconsistent : input.node.data.statusLabel,
+      statusLabel: missingActiveTask ? input.labels.pending : input.node.data.statusLabel,
       taskProgress: null,
     }
   }

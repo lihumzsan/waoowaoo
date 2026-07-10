@@ -180,10 +180,6 @@ export function resolveWorkspaceAssistantExternalTaskOperationId(
   return currentActivity.operationId ?? currentActivity.sourceOperationId
 }
 
-function isWorkspaceAssistantTaskRunningStatus(status: string | null | undefined): boolean {
-  return status === 'queued' || status === 'processing'
-}
-
 function buildWorkspaceAssistantActiveTaskTarget(input: {
   readonly taskId: string | null | undefined
   readonly operationId: string | null
@@ -685,26 +681,9 @@ export default function WorkspaceAssistantPanel({
       })
       return target ? [target] : []
     })
-    const fromSubmittedParts = assistantRuntime.pending
-      ? Array.from(taskSubmissions.values()).flatMap((submission) => {
-          if (submission.kind !== 'single') return []
-          if (operationId && submission.operationId !== operationId) return []
-          if (!isWorkspaceAssistantTaskRunningStatus(submission.data.status)) return []
-          const target = buildWorkspaceAssistantActiveTaskTarget({
-            taskId: submission.data.taskId,
-            operationId: submission.operationId,
-            taskType: submission.data.taskType,
-            targetType: submission.data.targetType,
-            targetId: submission.data.targetId,
-            sourceKind: submission.data.sourceKind ?? null,
-          })
-          return target ? [target] : []
-        })
-      : []
-    return dedupeWorkspaceAssistantActiveTaskTargets([...fromActiveTasks, ...fromSubmittedParts])
+    return dedupeWorkspaceAssistantActiveTaskTargets(fromActiveTasks)
   }, [
     activeExternalTaskOperationId,
-    assistantRuntime.pending,
     assistantRuntime.pendingOperationId,
     assistantRuntime.sessionState?.activeTasks,
     taskSubmissions,
@@ -874,9 +853,9 @@ export default function WorkspaceAssistantPanel({
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
                       <WorkspaceAssistantActiveRunCard
                         operationId={activeExternalTaskOperationId}
-                        tasks={(assistantRuntime.sessionState?.activeTasks ?? []).filter((task) => (
+                        taskCount={(assistantRuntime.sessionState?.activeTasks ?? []).filter((task) => (
                           task.operationId === activeExternalTaskOperationId
-                        ))}
+                        )).length}
                       />
                     ) : null}
                     {serverPendingApproval ? (

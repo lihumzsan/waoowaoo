@@ -15,6 +15,7 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     completedStylePreviewCount: 0,
     confirmedStylePreviewCount: 0,
     failedStylePreviewCount: 0,
+    activeStylePreviewTaskCount: 0,
     hasEditScript: false,
     activeEditScriptTaskCount: 0,
     editScriptStatus: null,
@@ -81,6 +82,27 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('script_generating')
     expect(state.blocking.kind).toBe('processing')
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
+  it('treats planned visual style rows as processing only while the parent task is active', () => {
+    const plannedOnly = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 3,
+      activeStylePreviewTaskCount: 0,
+    }))
+    expect(plannedOnly.stage).toBe('needs_style_choice')
+    expect(plannedOnly.nextAction?.operationId).toBe('generate_edit_style_previews')
+    expect(plannedOnly.blocking.kind).not.toBe('processing')
+
+    const submitted = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 3,
+      activeStylePreviewTaskCount: 1,
+    }))
+    expect(submitted.stage).toBe('style_preview_generating')
+    expect(submitted.blocking.kind).toBe('processing')
   })
 
   it('requires script review before generating the episode plan from a generated prompt script', () => {

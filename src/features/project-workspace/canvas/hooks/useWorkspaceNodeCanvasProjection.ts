@@ -228,12 +228,14 @@ function taskTargetIncludesType(
   return target.types?.includes(taskType) ?? false
 }
 
-function findEditBibleActiveTaskTarget(
+function findActiveTaskTarget(
   targets: readonly WorkspaceCanvasActiveTaskTarget[],
+  targetType: string,
+  taskType: string,
 ): WorkspaceCanvasActiveTaskTarget | null {
   return targets.find((target) => (
-    target.targetType === 'ProjectEditBible'
-    && taskTargetIncludesType(target, TASK_TYPE.EDIT_BIBLE_GENERATE)
+    target.targetType === targetType
+    && taskTargetIncludesType(target, taskType)
   )) ?? null
 }
 
@@ -725,10 +727,24 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
-  const activeEditBibleTaskTarget = findEditBibleActiveTaskTarget(activeTaskTargets)
+  const activeSourceScriptTaskTarget = findActiveTaskTarget(
+    activeTaskTargets,
+    'ProjectEditSourceScript',
+    TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+  )
+  const activeEditBibleTaskTarget = findActiveTaskTarget(
+    activeTaskTargets,
+    'ProjectEditBible',
+    TASK_TYPE.EDIT_BIBLE_GENERATE,
+  )
+  const activeStylePreviewTaskTarget = findActiveTaskTarget(
+    activeTaskTargets,
+    'ProjectEditBible',
+    TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+  )
   const editSourceScriptStreamTarget = findStreamTarget(streamTargets, 'editSourceScript', episodeId)
   const editBibleStreamTarget = findStreamTarget(streamTargets, 'editBible', episodeId)
-  const sourceScriptRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
+  const sourceScriptRuntimeTargetId = editBible?.id ?? activeSourceScriptTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
   const editBibleRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editBibleStreamTarget?.targetId ?? null
   const sourceScriptMaterialized = Boolean(
     editBible?.sourceKind === 'prompt_generated_script'
@@ -738,7 +754,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     ),
   )
   const sourceScriptRunning = !sourceScriptMaterialized && (
-    Boolean(activeEditBibleTaskTarget?.sourceKind === 'prompt_generated_outline')
+    Boolean(activeSourceScriptTaskTarget)
     || Boolean(editSourceScriptStreamTarget)
     || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
   )
@@ -751,7 +767,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     || sourceScriptMaterialized
     || sourceScriptFailed
     || Boolean(editSourceScriptStreamTarget)
-  const bibleRunning = Boolean(activeEditBibleTaskTarget && activeEditBibleTaskTarget.sourceKind !== 'prompt_generated_outline')
+  const bibleRunning = Boolean(activeEditBibleTaskTarget)
     || Boolean(editBibleStreamTarget)
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const hasProductionPlanningArtifact = Boolean(
@@ -796,7 +812,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: sourceText || translate('nodes.editSourceScript.pendingBody'),
         meta: sourceScriptRunning ? translate('nodes.editSourceScript.pendingMeta') : '',
         ...sourceScriptPresentation,
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(sourceScriptRuntimeTargetId)),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditSourceScript(sourceScriptRuntimeTargetId)),
         sourceScriptDetails: {
           sourceDocumentId: editBible?.sourceDocumentId ?? null,
           sourceText,
@@ -860,6 +876,88 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     if (sourceScriptNodeId) edges.push(createEdge(`edge:${sourceScriptNodeId}:${bibleNodeId}`, sourceScriptNodeId, bibleNodeId))
   }
 
+  const stylePreviewCandidates = editBible?.stylePreviews ?? []
+  const displayableStylePreviewCandidates = stylePreviewCandidates.filter((preview) => (
+    Boolean(preview.taskId)
+    || preview.status === 'completed'
+    || preview.status === 'confirmed'
+    || preview.status === 'failed'
+  ))
+  const stylePreviewNodeIds: string[] = []
+  const stylePreviewStartY = (sourceScriptNodeId
+    ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96
+    : STAGE_START_Y) + ROW_GAP_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height
+  if (editBible && !styleBibleDetails && activeStylePreviewTaskTarget) {
+    const nodeId = workspaceNodeId.editStylePreviewPlaceholder(editBible.id)
+    stylePreviewNodeIds.push(nodeId)
+    nodes.push(createMediaNode({
+      id: nodeId,
+      position: layoutPosition(savedLayouts, nodeId, { x: STORY_COLUMN_X, y: stylePreviewStartY }),
+      width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: null },
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editStylePreview',
+        layoutNodeType: 'editStylePreview',
+        targetType: 'editStylePreview',
+        targetId: editBible.id,
+        title: translate('nodes.editStylePreview.pendingTitle'),
+        eyebrow: translate('nodes.editStylePreview.eyebrow'),
+        body: translate('nodes.editStylePreview.pendingBody'),
+        meta: '',
+        statusLabel: translate('status.pending'),
+        isRunning: false,
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviews(editBible.id)),
+        onAction,
+      },
+    }))
+    if (bibleNodeId) edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
+  }
+
+  if (editBible && !styleBibleDetails && !activeStylePreviewTaskTarget) {
+    displayableStylePreviewCandidates.forEach((preview, index) => {
+      const nodeId = workspaceNodeId.editStylePreview(preview.id)
+      const previewDetails = buildStyleBibleDetails(preview.styleBible)
+      const completed = preview.status === 'completed' || preview.status === 'confirmed'
+      const failed = preview.status === 'failed'
+      stylePreviewNodeIds.push(nodeId)
+      nodes.push(createMediaNode({
+        id: nodeId,
+        position: layoutPosition(savedLayouts, nodeId, {
+          x: STORY_COLUMN_X + index * (WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width + 44),
+          y: stylePreviewStartY,
+        }),
+        width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
+        loadingContext: { styleImageUrl: preview.imageUrl },
+        data: {
+          projectId,
+          episodeName,
+          kind: 'editStylePreview',
+          layoutNodeType: 'editStylePreview',
+          targetType: 'editStylePreview',
+          targetId: preview.id,
+          title: preview.title,
+          eyebrow: translate('nodes.editStylePreview.eyebrow'),
+          body: preview.summary || translate('nodes.editStylePreview.body'),
+          meta: completed ? translate('nodes.editStylePreview.meta') : '',
+          ...(completed
+            ? workspaceCanvasSucceededPresentation(phaseLabels)
+            : failed
+              ? workspaceCanvasFailedPresentation(phaseLabels)
+              : { statusLabel: translate('status.pending'), isRunning: false }),
+          previewImageUrl: preview.imageUrl,
+          styleBibleDetails: previewDetails ?? undefined,
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(preview.id)),
+          onAction,
+        },
+      }))
+      if (bibleNodeId) edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
+    })
+  }
+
   let styleBibleNodeId: string | null = null
   if (styleBibleDetails && editBible) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
@@ -867,7 +965,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       id: styleBibleNodeId,
       position: layoutPosition(savedLayouts, styleBibleNodeId, {
         x: STORY_COLUMN_X,
-        y: (sourceScriptNodeId ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96 : STAGE_START_Y) + (ROW_GAP_Y + 80) * 2,
+        y: stylePreviewNodeIds.length > 0
+          ? stylePreviewStartY + WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height + 96
+          : stylePreviewStartY,
       }),
       width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
@@ -889,7 +989,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         onAction,
       },
     }))
-    if (bibleNodeId) edges.push(createEdge(`edge:${bibleNodeId}:${styleBibleNodeId}`, bibleNodeId, styleBibleNodeId))
+    if (stylePreviewNodeIds.length > 0) {
+      stylePreviewNodeIds.forEach((previewNodeId) => {
+        edges.push(createEdge(`edge:${previewNodeId}:${styleBibleNodeId}`, previewNodeId, styleBibleNodeId as string))
+      })
+    } else if (bibleNodeId) {
+      edges.push(createEdge(`edge:${bibleNodeId}:${styleBibleNodeId}`, bibleNodeId, styleBibleNodeId))
+    }
   }
 
   let editScriptNodeId: string | null = null

@@ -418,8 +418,8 @@ function ProjectWorkspaceCanvasContent({
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
         labels: {
           running: nodeRunningStatusLabel(),
+          pending: t('status.pending'),
           failed: t('status.failed'),
-          inconsistent: t('status.inconsistent'),
         },
       })
       return {
@@ -581,8 +581,8 @@ function ProjectWorkspaceCanvasContent({
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
         labels: {
           running: nodeRunningStatusLabel(),
+          pending: t('status.pending'),
           failed: t('status.failed'),
-          inconsistent: t('status.inconsistent'),
         },
       })
       const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)

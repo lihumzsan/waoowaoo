@@ -9,12 +9,16 @@ import {
 describe('workspace structured stream adapters', () => {
   it('routes edit bible streaming prompt steps through structured adapters instead of raw text', () => {
     const expectedStructuredKeys = new Map([
-      [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT, ['sourceScript.structure', 'sourceScript.episodes']],
       [AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL, ['productionPlanning.globalBible']],
       [AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET, ['productionPlanning.beats']],
       [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER, ['productionPlanning.ledgerEvents']],
       [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE, ['productionPlanning.emotionalCues']],
     ])
+
+    expect(findStructuredStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
+    }).map((adapter) => adapter.key)).toEqual(['sourceScript.structure', 'sourceScript.episodes'])
 
     for (const stepId of expectedStructuredKeys.keys()) {
       expect(findTextStreamAdapters({
@@ -41,6 +45,10 @@ describe('workspace structured stream adapters', () => {
         stepId,
       })).toEqual([])
     }
+    expect(findTextStreamAdapters({
+      taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT,
+    })).toEqual([])
   })
 
   it('routes edit script structure stream items through shotId keyed adapters', () => {

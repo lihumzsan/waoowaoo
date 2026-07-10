@@ -309,7 +309,19 @@ describe('project agent session-state', () => {
       operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'bible_review', cardId: 'edit-first-bible-review' },
+      payload: {
+        choiceType: 'bible_review',
+        cardId: 'edit-first-bible-review:plan-1',
+        card: {
+          cardId: 'edit-first-bible-review:plan-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'bible_review',
+          title: '确认制作规划',
+          groups: [],
+          submitLabel: '确认制作规划',
+          submit: { kind: 'submit_tool_output' },
+        },
+      },
     })
     interruptionsMock.getLatestProjectAgentInterruptionForRun.mockResolvedValueOnce({
       id: 'choice-interruption-1',
@@ -320,7 +332,19 @@ describe('project agent session-state', () => {
       operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
-      payload: { choiceType: 'bible_review', cardId: 'edit-first-bible-review' },
+      payload: {
+        choiceType: 'bible_review',
+        cardId: 'edit-first-bible-review:plan-1',
+        card: {
+          cardId: 'edit-first-bible-review:plan-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'bible_review',
+          title: '确认制作规划',
+          groups: [],
+          submitLabel: '确认制作规划',
+          submit: { kind: 'submit_tool_output' },
+        },
+      },
     })
 
     const state = await getProjectAgentSessionState({
@@ -331,10 +355,7 @@ describe('project agent session-state', () => {
       locale: 'zh',
     })
 
-    expect(choiceCardMock.buildEditFirstAssistantChoiceCard).toHaveBeenCalledWith(expect.objectContaining({
-      choiceType: 'bible_review',
-      toolCallId: 'tool-choice-1',
-    }))
+    expect(choiceCardMock.buildEditFirstAssistantChoiceCard).not.toHaveBeenCalled()
     expect(state.pendingInteraction).toEqual(expect.objectContaining({
       kind: 'choice',
       runId: 'run-choice-1',

@@ -52,8 +52,8 @@ function node(): WorkspaceCanvasFlowNode {
 
 const labels = {
   running: 'Running',
+  pending: 'Pending',
   failed: 'Failed',
-  inconsistent: 'Task state inconsistent',
 }
 
 describe('project canvas task-backed running invariant', () => {
@@ -65,11 +65,11 @@ describe('project canvas task-backed running invariant', () => {
     })
 
     expect(patch.isRunning).toBe(false)
-    expect(patch.statusLabel).toBe('Task state inconsistent')
+    expect(patch.statusLabel).toBe('Pending')
     expect(patch.taskProgress).toBeNull()
     expect(patch.editAssetGroupDetails?.assets[0]).toMatchObject({
       isRunning: false,
-      statusLabel: 'Task state inconsistent',
+      statusLabel: 'Pending',
       taskProgress: null,
     })
   })

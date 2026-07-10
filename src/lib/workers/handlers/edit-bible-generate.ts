@@ -19,7 +19,7 @@ import {
   readEpisodeSourceDocumentById,
 } from '@/lib/edit-source-document'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
-import type { TaskJobData } from '@/lib/task/types'
+import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from './llm-stream'
@@ -107,10 +107,11 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
   if (!episodeId) throw new Error('episodeId is required')
   if (!sourceDocumentId) throw new Error('sourceDocumentId is required')
   if (!editBibleId) throw new Error('editBibleId is required')
+  const generatesSourceScript = job.data.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
 
   await reportTaskProgress(job, 12, {
-    stage: 'edit_bible_prepare',
-    stageLabel: 'progress.stage.editBiblePrepare',
+    stage: generatesSourceScript ? 'edit_source_script_prepare' : 'edit_bible_prepare',
+    stageLabel: generatesSourceScript ? 'progress.stage.editSourceScriptPrepare' : 'progress.stage.editBiblePrepare',
     displayMode: 'detail',
   })
   await assertTaskActive(job, 'edit_bible_prepare')
@@ -125,8 +126,8 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
   const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
   try {
     await reportTaskProgress(job, 20, {
-      stage: 'edit_bible_generate',
-      stageLabel: 'progress.stage.editBibleGenerate',
+      stage: generatesSourceScript ? 'edit_source_script_generate' : 'edit_bible_generate',
+      stageLabel: generatesSourceScript ? 'progress.stage.editSourceScriptGenerate' : 'progress.stage.editBibleGenerate',
       displayMode: 'detail',
     })
     await assertTaskActive(job, 'edit_bible_generate')

@@ -10,7 +10,7 @@ import {
   type ToolCallMessagePartProps,
 } from '@assistant-ui/react'
 import type { ComponentProps, CSSProperties } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AppIcon } from '@/components/ui/icons'
 import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProgress'
@@ -82,21 +82,6 @@ interface BillingActionItemSummary {
 
 export const WORKSPACE_ASSISTANT_USER_MESSAGE_CLASS = 'w-fit rounded-2xl bg-neutral-100 px-3 py-2.5 text-sm leading-6 text-[var(--glass-text-primary)]'
 const WORKSPACE_ASSISTANT_MESSAGE_CLASS = 'flex flex-col gap-3 px-1 py-1 text-sm leading-6 text-[var(--glass-text-primary)]'
-const workspaceAssistantToolDetailsOpenIds = new Set<string>()
-
-export function isWorkspaceAssistantToolDetailsOpen(toolCallId: string): boolean {
-  return workspaceAssistantToolDetailsOpenIds.has(toolCallId)
-}
-
-export function setWorkspaceAssistantToolDetailsOpen(toolCallId: string, open: boolean): void {
-  if (!toolCallId.trim()) return
-  if (open) {
-    workspaceAssistantToolDetailsOpenIds.add(toolCallId)
-    return
-  }
-  workspaceAssistantToolDetailsOpenIds.delete(toolCallId)
-}
-
 export function resolveProgressStageLabel(raw: string | null, progressT: ReturnType<typeof useTranslations<'progress'>>): string | null {
   if (!raw) return null
   if (!raw.startsWith('progress.')) return raw
@@ -126,28 +111,11 @@ function ProjectPhaseDataCard({ data }: DataMessagePartProps<ProjectPhasePartDat
 export function AgentStopDataCard({ data }: DataMessagePartProps<ProjectAgentStopPartData>) {
   const t = useTranslations('assistantAgent')
   if (data.reason === 'awaiting_user_confirmation' || data.reason === 'awaiting_external_task') return null
-  const title = data.reason === 'awaiting_external_task'
-      ? t('cards.awaitingExternalTask')
-      : t('cards.toolErrorBoundary')
-  const detail = data.reason === 'awaiting_external_task'
-      ? t('cards.awaitingExternalTaskDetail', {
-          operations: data.operationIds.join(', '),
-          tasks: data.taskIds.length > 0 ? data.taskIds.join(', ') : t('cards.unknownTask'),
-          phases: data.phases.length > 0 ? data.phases.join(', ') : t('cards.none'),
-        })
-      : t('cards.toolErrorBoundaryDetail', {
-          operations: data.operationIds.join(', '),
-          codes: data.codes.length > 0 ? data.codes.join(', ') : t('cards.none'),
-        })
   return (
-    <details className="group border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
-      <summary className="flex cursor-pointer list-none items-center gap-2">
-        <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 truncate">{detail ? `${title} · ${detail}` : title}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="ml-5 mt-1 text-[11px] text-[var(--glass-text-tertiary)]">{t('cards.reason', { reason: data.reason })}</div>
-    </details>
+    <div className="flex items-center gap-2 border-l-2 border-[var(--glass-text-tertiary)]/40 pl-2 text-[12px] leading-5 text-[var(--glass-text-secondary)]">
+      <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 truncate">{t('cards.toolErrorBoundary')}</span>
+    </div>
   )
 }
 
@@ -323,13 +291,7 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
 
 export function WorkspaceAssistantActiveRunCard(props: {
   operationId: string | null
-  tasks: readonly {
-    taskId: string
-    taskType: string
-    targetType: string
-    targetId: string
-    status: string
-  }[]
+  taskCount: number
 }) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -339,18 +301,9 @@ export function WorkspaceAssistantActiveRunCard(props: {
       <div className="flex items-center gap-2">
         <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
         <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
-          {t('toolCall.running')} · {operationTitle} · {t('toolCall.taskCount', { count: props.tasks.length })}
+          {t('toolCall.running')} · {operationTitle} · {t('toolCall.taskCount', { count: props.taskCount })}
         </div>
       </div>
-      {props.tasks.length > 0 ? (
-        <div className="mt-2 space-y-1 pl-5 text-[11px] text-[var(--glass-text-tertiary)]">
-          {props.tasks.map((task) => (
-            <div key={task.taskId} className="truncate">
-              {task.taskType} · {task.targetType}/{task.targetId} · {task.status}
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -427,6 +380,11 @@ export function AssistantChoiceCardView(props: {
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
   const isStylePreviewGroup = activeGroup?.key === 'stylePreviewId'
+  const choiceQuote = card.operationPlan?.quote ?? null
+  const choiceQuoteActionLabel = choiceQuote ? buildBillingActionSummaryLabel(choiceQuote, t) : null
+  const choiceQuotePreview = choiceQuote
+    ? buildAssistantBillingQuotePreview({ quote: choiceQuote, actionLabel: choiceQuoteActionLabel, t })
+    : null
 
   const readChoiceRunId = (): string => {
     const runId = card.runId?.trim()
@@ -485,6 +443,9 @@ export function AssistantChoiceCardView(props: {
             decision: 'approve',
             selections: submitSelections,
             labels,
+            ...(typeof card.operationPlan?.quote.totalMaxFrozenCost === 'number'
+              ? { confirmedMaxCost: card.operationPlan.quote.totalMaxFrozenCost }
+              : {}),
           },
         })
         props.onSubmitted?.(card.cardId)
@@ -704,6 +665,7 @@ export function AssistantChoiceCardView(props: {
         ) : null}
       </div>
       {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
+      <BillingQuoteBlock preview={choiceQuotePreview} summaryLabel={choiceQuoteActionLabel} />
       {isConfirmOnly || isConfirmOrReply ? renderActiveGroup() : null}
       {isConfirmOnly ? (
         <div className="mt-3">
@@ -1184,12 +1146,6 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
   const toolStatus = props.status.type
-  const [detailsOpen, setDetailsOpen] = useState(() => isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
-  const inputText = JSON.stringify(props.args ?? {}, null, 2)
-  const outputText = props.result === undefined ? '' : JSON.stringify(props.result, null, 2)
-  useEffect(() => {
-    setDetailsOpen(isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
-  }, [props.toolCallId])
   const failureMessage = readToolResultFailureMessage(props.result)
   const submissionState = toolStatus === 'complete' ? readOperationSubmissionState(props.result) : null
   const summaryText = toolStatus === 'complete'
@@ -1204,40 +1160,17 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       : 'settingsHex'
 
   return (
-    <details
-      className={`group text-[12px] leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}
-      open={detailsOpen}
-      onToggle={(event) => {
-        const nextOpen = event.currentTarget.open
-        setWorkspaceAssistantToolDetailsOpen(props.toolCallId, nextOpen)
-        setDetailsOpen(nextOpen)
-      }}
-    >
-      <summary className="flex cursor-pointer list-none items-center gap-2">
+    <div className={`text-[12px] leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+      <div className="flex items-center gap-2">
         <AppIcon name={iconName} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
         <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
-        <AppIcon name="chevronDown" className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="ml-5 mt-1 space-y-2 text-[11px]">
-        {failureMessage ? (
-          <div className="rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 leading-4">
-            {failureMessage}
-          </div>
-        ) : null}
-        <div>
-          <div>{t('toolCall.arguments')}</div>
-          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all leading-5">{inputText}</pre>
-        </div>
-        <div>
-          <div>{t('toolCall.result')}</div>
-          {props.result === undefined ? (
-            <div className="mt-1">{t('toolCall.waiting')}</div>
-          ) : (
-            <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all leading-5">{outputText}</pre>
-          )}
-        </div>
       </div>
-    </details>
+      {failureMessage ? (
+        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[11px] leading-4">
+          {failureMessage}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

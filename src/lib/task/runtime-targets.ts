@@ -90,11 +90,14 @@ export const TASK_RUNTIME_TARGETS = {
   projectEditChapterScriptGeneration(chapterId: string | null | undefined) {
     return target('ProjectEditChapter', chapterId, [TASK_TYPE.EDIT_SCRIPT_GENERATE])
   },
+  projectEditSourceScript(bibleId: string | null | undefined) {
+    return target('ProjectEditSourceScript', bibleId, [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE])
+  },
   projectEditBible(bibleId: string | null | undefined) {
-    return target('ProjectEditBible', bibleId, [
-      TASK_TYPE.EDIT_BIBLE_GENERATE,
-      TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-    ])
+    return target('ProjectEditBible', bibleId, [TASK_TYPE.EDIT_BIBLE_GENERATE])
+  },
+  projectEditStylePreviews(bibleId: string | null | undefined) {
+    return target('ProjectEditBible', bibleId, [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE])
   },
   projectEditShotExecutionPlan(editScriptId: string | null | undefined) {
     return target('ProjectEditScript', editScriptId, [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE])

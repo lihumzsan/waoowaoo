@@ -22,11 +22,15 @@
         "src/lib/operations/planning.ts",
         "src/lib/operations/confirmation.ts",
         "src/lib/operations/submit-operation-task.ts",
+        "src/lib/edit-script/style-preview-operation-plan.ts",
+        "src/lib/project-agent/edit-first-choice-result.ts",
         "src/lib/task/submitter.ts"
       ],
       "testPaths": [
         "tests/unit/billing/media-approval-policy.test.ts",
         "tests/unit/operations/planning.test.ts",
+        "tests/unit/edit-script/style-preview-operation-plan.test.ts",
+        "tests/unit/project-agent/edit-first-choice-result.test.ts",
         "tests/unit/worker/soundscape-worker.test.ts"
       ],
       "guardPaths": [
@@ -45,6 +49,7 @@
         "tests/unit/project-workspace/structured-stream-adapters.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/regression/project-canvas-task-backed-running.test.ts",
+        "tests/regression/project-canvas-artifact-phase.test.ts",
         "tests/regression/project-canvas-long-form-node-identity.test.ts"
       ],
       "guardPaths": [
@@ -59,12 +64,14 @@
       "sourcePaths": [
         "src/lib/task",
         "src/lib/workers",
+        "src/lib/edit-bible/task-submission.ts",
         "src/lib/operations/submit-operation-task.ts"
       ],
       "testPaths": [
         "tests/integration/task/create-task-dedupe.integration.test.ts",
         "tests/regression/task-dedupe-recovery.test.ts",
         "tests/regression/task-enqueue-billing-rollback.test.ts",
+        "tests/unit/edit-bible/task-submission.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts"
       ],
       "guardPaths": [
@@ -84,6 +91,7 @@
       "testPaths": [
         "tests/unit/project-agent/runtime-routing.test.ts",
         "tests/unit/project-agent/tool-adapter-gates.test.ts",
+        "tests/unit/components/workspace-assistant-renderers.test.ts",
         "tests/unit/operations/registry.test.ts"
       ],
       "guardPaths": [

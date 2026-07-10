@@ -759,6 +759,8 @@
           "pendingMeta": "The assistant will request script confirmation when it is ready"
         },
         "editStylePreview": {
+          "pendingTitle": "Generating Visual Styles",
+          "pendingBody": "AI is generating visual style candidates and preview grids from the production plan.",
           "eyebrow": "Style Candidate",
           "body": "A 3x3 film tone preview generated from the bible.",
           "meta": "Becomes the single Style Bible"

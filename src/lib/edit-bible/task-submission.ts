@@ -23,8 +23,8 @@ export type EditBibleGenerationTaskSubmitResult = OperationTaskSubmitResult & {
   readonly episodeId: string
   readonly sourceDocumentId: string
   readonly editBibleId: string
-  readonly taskType: typeof TASK_TYPE.EDIT_BIBLE_GENERATE
-  readonly targetType: 'ProjectEditBible'
+  readonly taskType: typeof TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE | typeof TASK_TYPE.EDIT_BIBLE_GENERATE
+  readonly targetType: 'ProjectEditSourceScript' | 'ProjectEditBible'
   readonly targetId: string
   readonly sourceKind: EditSourceDocumentKind
 }
@@ -68,6 +68,12 @@ async function submitPreparedEditBibleGenerationTask(input: {
   readonly operationId: string
   readonly previousSourceDocumentId?: string | null
 }): Promise<EditBibleGenerationTaskSubmitResult> {
+  const generatesSourceScript = input.sourceKind === 'prompt_generated_outline'
+  const taskType = generatesSourceScript
+    ? TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
+    : TASK_TYPE.EDIT_BIBLE_GENERATE
+  const targetType = generatesSourceScript ? 'ProjectEditSourceScript' : 'ProjectEditBible'
+  const dedupeNamespace = generatesSourceScript ? 'edit_source_script_generate' : 'edit_bible_generate'
   const payload = await buildEditBibleTextTaskPayload({
     projectId: input.projectId,
     userId: input.userId,
@@ -88,14 +94,14 @@ async function submitPreparedEditBibleGenerationTask(input: {
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
-    type: TASK_TYPE.EDIT_BIBLE_GENERATE,
-    targetType: 'ProjectEditBible',
+    type: taskType,
+    targetType,
     targetId: input.editBibleId,
     operationId: input.operationId,
     source: input.source,
     confirmed: input.confirmed,
     payload,
-    dedupeKey: `edit_bible_generate:${input.projectId}:${input.episodeId}:${input.sourceChecksum}:${input.operationId}`,
+    dedupeKey: `${dedupeNamespace}:${input.projectId}:${input.episodeId}:${input.sourceChecksum}:${input.operationId}`,
     locale: input.locale,
   })
 
@@ -104,8 +110,8 @@ async function submitPreparedEditBibleGenerationTask(input: {
     episodeId: input.episodeId,
     sourceDocumentId: input.sourceDocumentId,
     editBibleId: input.editBibleId,
-    taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-    targetType: 'ProjectEditBible',
+    taskType,
+    targetType,
     targetId: input.editBibleId,
     sourceKind: input.sourceKind,
   }

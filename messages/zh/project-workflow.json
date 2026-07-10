@@ -759,6 +759,8 @@
           "pendingMeta": "生成完成后由 assistant 发起剧本确认"
         },
         "editStylePreview": {
+          "pendingTitle": "视觉风格生成中",
+          "pendingBody": "AI 正在根据制作规划生成视觉风格候选和九宫格预览。",
           "eyebrow": "风格候选",
           "body": "根据剧本生成的九宫格影片基调预览。",
           "meta": "确认后作为唯一 Style Bible"

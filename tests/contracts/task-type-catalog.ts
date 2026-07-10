@@ -27,6 +27,7 @@ const TASK_TYPE_OWNER_MAP = {
   [TASK_TYPE.REGENERATE_GROUP]: 'tests/unit/worker/image-task-handlers-core.test.ts',
   [TASK_TYPE.ASSET_HUB_IMAGE]: 'tests/unit/worker/asset-hub-image-suffix.test.ts',
   [TASK_TYPE.ASSET_HUB_MODIFY]: 'tests/unit/worker/modify-image-reference-description.test.ts',
+  [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: 'tests/unit/worker/edit-bible-generate.test.ts',
   [TASK_TYPE.EDIT_BIBLE_GENERATE]: 'tests/unit/worker/edit-bible-generate.test.ts',
   [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'tests/unit/worker/edit-script-generate.test.ts',
   [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: 'tests/unit/worker/edit-script-structured-generate.test.ts',

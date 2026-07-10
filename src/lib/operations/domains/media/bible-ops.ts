@@ -63,7 +63,19 @@ const confirmBibleOperationInputSchema = confirmEditBibleInputSchema.extend({
   confirmed: z.boolean().optional(),
 })
 
-const editBibleTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+const sourceScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+  taskSubmitOperationOutputSchemaBase.extend({
+    episodeId: z.string().min(1),
+    sourceDocumentId: z.string().min(1),
+    editBibleId: z.string().min(1),
+    taskType: z.literal(TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE),
+    targetType: z.literal('ProjectEditSourceScript'),
+    targetId: z.string().min(1),
+    sourceKind: z.string().min(1),
+  }).passthrough(),
+)
+
+const productionPlanningTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
   taskSubmitOperationOutputSchemaBase.extend({
     episodeId: z.string().min(1),
     sourceDocumentId: z.string().min(1),
@@ -74,6 +86,11 @@ const editBibleTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
     sourceKind: z.string().min(1),
   }).passthrough(),
 )
+
+const editBibleTaskSubmitOutputSchema = z.union([
+  sourceScriptTaskSubmitOutputSchema,
+  productionPlanningTaskSubmitOutputSchema,
+])
 
 const editBibleReadOutputSchema = z.object({
   editBible: z.unknown().nullable(),
@@ -339,8 +356,8 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           deduped: result.deduped,
           projectId: ctx.projectId,
           episodeId,
-          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-          targetType: 'ProjectEditBible',
+          taskType: result.taskType,
+          targetType: result.targetType,
           targetId: result.editBibleId,
           sourceKind: input.sourceKind,
         })
@@ -379,8 +396,8 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           deduped: result.deduped,
           projectId: ctx.projectId,
           episodeId,
-          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-          targetType: 'ProjectEditBible',
+          taskType: result.taskType,
+          targetType: result.targetType,
           targetId: result.editBibleId,
           sourceKind: 'prompt_generated_outline',
         })
@@ -418,8 +435,8 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           deduped: result.deduped,
           projectId: ctx.projectId,
           episodeId,
-          taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-          targetType: 'ProjectEditBible',
+          taskType: result.taskType,
+          targetType: result.targetType,
           targetId: result.editBibleId,
           sourceKind: 'prompt_generated_script',
         })

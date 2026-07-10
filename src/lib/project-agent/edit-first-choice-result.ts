@@ -6,6 +6,11 @@ import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-fir
 import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
 import { approveEpisodePromptGeneratedScript, confirmEpisodeEditBible } from '@/lib/edit-bible'
 import { normalizeScriptIntakeChoiceBrief } from './script-intake'
+import type { NextRequest } from 'next/server'
+import type { Locale } from '@/i18n/routing'
+import type { ProjectAgentChoiceCardPartData } from './types'
+import { submitProjectEditStylePreviewsGenerationTask } from '@/lib/edit-script/task-submission'
+import { TASK_TYPE } from '@/lib/task/types'
 
 interface UnknownRecord {
   [key: string]: unknown
@@ -189,6 +194,9 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
   projectId: string
   userId: string
   episodeId: string | null
+  request?: NextRequest
+  locale?: Locale
+  persistedChoiceCard?: ProjectAgentChoiceCardPartData | null
 }): Promise<void> {
   if (params.output.ok !== true && params.output.ok !== undefined) return
   const decision = readString(params.output.decision)
@@ -214,6 +222,31 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
     if (!params.episodeId) {
       throw new Error('PROJECT_AGENT_BIBLE_REVIEW_EPISODE_ID_REQUIRED')
     }
+    if (!params.request || !params.locale) {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_SUBMISSION_CONTEXT_REQUIRED')
+    }
+    const operationPlan = params.persistedChoiceCard?.operationPlan
+    if (!operationPlan || operationPlan.operationId !== 'generate_edit_style_previews') {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_STYLE_PLAN_REQUIRED')
+    }
+    if (operationPlan.tasks.length < 1 || operationPlan.tasks.length !== operationPlan.quote.mediaTaskCount) {
+      throw new Error('PROJECT_AGENT_BIBLE_REVIEW_STYLE_PLAN_TASKS_INVALID')
+    }
+    const plannedStylePreviewIds = operationPlan.tasks.map((task) => {
+      if (task.taskType !== TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE || task.targetType !== 'ProjectEditStylePreview') {
+        throw new Error('PROJECT_AGENT_BIBLE_REVIEW_STYLE_PLAN_TARGET_INVALID')
+      }
+      return task.targetId
+    })
+    const imageModels = new Set(operationPlan.quote.items.map((item) => item.model))
+    if (imageModels.size !== 1) throw new Error('PROJECT_AGENT_BIBLE_REVIEW_STYLE_PLAN_MODEL_INVALID')
+    const plannedImageModel = operationPlan.quote.items[0]?.model
+    if (!plannedImageModel) throw new Error('PROJECT_AGENT_BIBLE_REVIEW_STYLE_PLAN_MODEL_REQUIRED')
+    const project = await prisma.project.findFirst({
+      where: { id: params.projectId, userId: params.userId },
+      select: { videoRatio: true },
+    })
+    if (!project) throw new Error('PROJECT_AGENT_BIBLE_REVIEW_PROJECT_NOT_FOUND')
     const updateResult = await prisma.project.updateMany({
       where: {
         id: params.projectId,
@@ -226,11 +259,46 @@ export async function applyEditFirstChoiceResultSideEffects(params: {
     if (updateResult.count !== 1) {
       throw new Error('PROJECT_AGENT_BIBLE_REVIEW_PROJECT_NOT_FOUND')
     }
-    await confirmEpisodeEditBible({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-    })
+    try {
+      const bible = await confirmEpisodeEditBible({
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+      })
+      const userApprovedPlan = decision === 'approve'
+      await submitProjectEditStylePreviewsGenerationTask({
+        request: params.request,
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+        bibleId: bible.id,
+        count: plannedStylePreviewIds.length,
+        plannedStylePreviewIds,
+        plannedImageModel,
+        confirmedMaxCost: operationPlan.quote.totalMaxFrozenCost ?? null,
+        source: 'assistant-production-plan-choice',
+        confirmed: userApprovedPlan,
+        locale: params.locale,
+      })
+    } catch (error) {
+      await prisma.$transaction([
+        prisma.project.update({
+          where: { id: params.projectId },
+          data: { videoRatio: project.videoRatio },
+        }),
+        prisma.projectEditBible.updateMany({
+          where: {
+            episodeId: params.episodeId,
+            status: 'confirmed',
+          },
+          data: {
+            status: 'ready_for_review',
+            lockedAt: null,
+          },
+        }),
+      ])
+      throw error
+    }
     return
   }
   if (params.choiceType !== 'asset_review') return

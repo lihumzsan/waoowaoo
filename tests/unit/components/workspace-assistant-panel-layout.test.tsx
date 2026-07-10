@@ -411,7 +411,7 @@ describe('workspace assistant panel layout', () => {
     expect(panelSource).toContain('resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)')
     expect(panelSource).toContain('showExternalTaskRunCard')
     expect(panelSource).toContain('<WorkspaceAssistantActiveRunCard')
-    expect(panelSource).toContain('tasks={(assistantRuntime.sessionState?.activeTasks ?? []).filter')
+    expect(panelSource).toContain('taskCount={(assistantRuntime.sessionState?.activeTasks ?? []).filter')
     expect(panelSource).not.toContain('<WorkspaceAssistantActiveRunCard operationId={assistantRuntime.pendingOperationId} />')
     expect(panelSource).not.toContain('!assistantRuntime.pendingOperationId')
     expect(rendererSource).toContain("data.reason === 'awaiting_external_task'")

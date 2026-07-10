@@ -35,6 +35,8 @@ import {
 } from '@/lib/project-agent/edit-first-choice-result'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
+import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
+import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   createProjectAgentRun,
   ensureProjectAgentRunSlotAvailable,
@@ -250,6 +252,8 @@ async function resolveProjectAgentControl(params: {
   scope: ProjectAgentControlScope
   messages: UIMessage[]
   run: ProjectAgentRunRecord
+  request: NextRequest
+  locale: string | null | undefined
 }): Promise<ProjectAgentResolvedControl> {
   const { controlAction, scope } = params
 
@@ -287,6 +291,7 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'choice_response') {
+    let persistedChoiceCard: ProjectAgentChoiceCardPartData | null = null
     if (controlAction.interruptionId) {
       const consumedChoice = await consumeProjectAgentChoiceInterruption({
         ...scope,
@@ -299,6 +304,12 @@ async function resolveProjectAgentControl(params: {
           code: 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
           message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
         })
+      }
+      if (consumedChoice.payload && typeof consumedChoice.payload === 'object' && !Array.isArray(consumedChoice.payload)) {
+        const card = (consumedChoice.payload as Record<string, unknown>).card
+        if (card && typeof card === 'object' && !Array.isArray(card)) {
+          persistedChoiceCard = card as unknown as ProjectAgentChoiceCardPartData
+        }
       }
     } else {
       const choiceActivity = await getCurrentProjectAgentActivity({
@@ -332,6 +343,9 @@ async function resolveProjectAgentControl(params: {
       projectId: scope.projectId,
       userId: scope.userId,
       episodeId: scope.episodeId ?? null,
+      request: params.request,
+      locale: normalizeProjectAgentLocale(params.locale),
+      persistedChoiceCard,
     })
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: controlAction.choiceType,
@@ -529,6 +543,8 @@ export const POST = apiHandler(async (
         scope,
         messages,
         run,
+        request,
+        locale: body.locale,
       })
       return await createProjectAgentChatResponse({
         request,

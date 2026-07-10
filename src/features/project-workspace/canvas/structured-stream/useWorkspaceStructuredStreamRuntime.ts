@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import {
   appendStructuredJsonChunk,
@@ -68,7 +68,6 @@ export interface StructuredStreamSnapshot {
   readonly errorMessage: string | null
 }
 
-const STREAM_RUNTIME_RETIRE_MS = 8000
 
 function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -351,7 +350,7 @@ function buildSourceScriptRuntimeEntries(
   ))
   const grouped = new Map<string, StructuredStreamSnapshot[]>()
   matchingSnapshots.forEach((snapshot) => {
-    if (snapshot.targetType !== 'ProjectEditBible' || !snapshot.targetId) return
+    if (snapshot.targetType !== 'ProjectEditSourceScript' || !snapshot.targetId) return
     const key = `${snapshot.episodeId ?? snapshot.targetId}:${snapshot.targetId}`
     grouped.set(key, [...(grouped.get(key) ?? []), snapshot])
   })
@@ -802,7 +801,6 @@ export function useWorkspaceStructuredStreamRuntime({
 }: UseWorkspaceStructuredStreamRuntimeInput): UseWorkspaceStructuredStreamRuntimeResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
-  const retireTimersRef = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
     return subscribeTaskEvents((event) => {
@@ -815,9 +813,6 @@ export function useWorkspaceStructuredStreamRuntime({
       const payload = readRecord(event.payload)
       const lifecycleType = readString(payload.lifecycleType)
       if (shouldClearStreamAccumulatorsForLifecycle(lifecycleType, payload)) {
-        const previousTimer = retireTimersRef.current.get(event.taskId)
-        if (previousTimer !== undefined) window.clearTimeout(previousTimer)
-        retireTimersRef.current.delete(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
         return
       }
@@ -827,20 +822,9 @@ export function useWorkspaceStructuredStreamRuntime({
       ) {
         return
       }
-      const previousTimer = retireTimersRef.current.get(event.taskId)
-      if (previousTimer !== undefined) window.clearTimeout(previousTimer)
-      const timer = window.setTimeout(() => {
-        retireTimersRef.current.delete(event.taskId)
-        setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
-      }, STREAM_RUNTIME_RETIRE_MS)
-      retireTimersRef.current.set(event.taskId, timer)
+      setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
     })
   }, [episodeId, subscribeTaskEvents])
-
-  useEffect(() => () => {
-    retireTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    retireTimersRef.current.clear()
-  }, [])
 
   const entries = useMemo(
     () => buildStreamRuntimeEntries(

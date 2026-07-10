@@ -118,6 +118,7 @@ export function invalidateByTarget(params: InvalidateByTargetParams) {
     params.targetType === 'ProjectPanel' ||
     params.targetType === 'ProjectStoryboard' ||
     params.targetType === 'ProjectVideoGroup' ||
+    params.targetType === 'ProjectEditSourceScript' ||
     params.targetType === 'ProjectEditBible' ||
     params.targetType === 'ProjectEditChapter' ||
     params.targetType === 'ProjectEditShotExecutionPlan' ||

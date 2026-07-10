@@ -24,7 +24,9 @@ export async function resolveBillingTransactionTargets(
   const videoGroupIds = idsFor(idsByType, 'ProjectVideoGroup')
   const stylePreviewIds = idsFor(idsByType, 'ProjectEditStylePreview')
   const episodeIds = idsFor(idsByType, 'ProjectEpisode')
+  const editSourceScriptIds = idsFor(idsByType, 'ProjectEditSourceScript')
   const editBibleIds = idsFor(idsByType, 'ProjectEditBible')
+  const editBibleRecordIds = Array.from(new Set([...editSourceScriptIds, ...editBibleIds]))
   const editScriptIds = idsFor(idsByType, 'ProjectEditScript')
   const editShotExecutionPlanIds = idsFor(idsByType, 'ProjectEditShotExecutionPlan')
   const projectIds = idsFor(idsByType, 'Project')
@@ -98,9 +100,9 @@ export async function resolveBillingTransactionTargets(
         select: { id: true, episodeNumber: true, name: true },
       })
       : Promise.resolve([]),
-    editBibleIds.length > 0
+    editBibleRecordIds.length > 0
       ? prisma.projectEditBible.findMany({
-        where: { id: { in: editBibleIds } },
+        where: { id: { in: editBibleRecordIds } },
         select: { id: true, episode: { select: { episodeNumber: true, name: true } } },
       })
       : Promise.resolve([]),
@@ -222,6 +224,12 @@ export async function resolveBillingTransactionTargets(
   }
 
   for (const bible of editBibles) {
+    assignTargetView(result, refsByKey, {
+      targetType: 'ProjectEditSourceScript',
+      targetId: bible.id,
+      labelKey: 'transactionTargets.projectEditSourceScript',
+      labelParams: { number: bible.episode.episodeNumber },
+    })
     assignTargetView(result, refsByKey, {
       targetType: 'ProjectEditBible',
       targetId: bible.id,

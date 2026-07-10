@@ -40,6 +40,15 @@ function readCount(value: unknown): number | undefined {
   return value
 }
 
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function createWorkerRequest(job: Job<TaskJobData>, path: string): NextRequest {
   const headers = new Headers()
   headers.set('accept-language', job.data.locale)
@@ -145,6 +154,9 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
   const bibleId = readText(payload.bibleId) || readText(job.data.targetId)
   const styleDirection = readText(payload.styleDirection)
   const count = readCount(payload.count)
+  const plannedStylePreviewIds = readStringArray(payload.plannedStylePreviewIds)
+  const plannedImageModel = readText(payload.plannedImageModel)
+  const confirmedMaxCost = readFiniteNumber(payload.confirmedMaxCost)
 
   if (!episodeId) throw new Error('episodeId is required')
   if (!bibleId) throw new Error('bibleId is required')
@@ -186,6 +198,9 @@ export async function handleEditStylePreviewsGenerateTask(job: Job<TaskJobData>)
           parentTaskId: job.data.taskId,
           operationConfirmed,
           operationRequestId: job.data.operationRequestId || job.data.trace?.requestId || null,
+          ...(plannedStylePreviewIds.length > 0 ? { plannedStylePreviewIds } : {}),
+          ...(plannedImageModel ? { plannedImageModel } : {}),
+          ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
           ...(styleDirection ? { styleDirection } : {}),
           ...(count ? { count } : {}),
         }),

@@ -11,6 +11,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - **AR-01 — 服务端权威。** thread/run 的 append、终态、锁和恢复由服务端管理；客户端和模型不得持有第二套 run 状态。
 - **AR-02 — 每回合有结算语义。** 一个 turn 必须明确是完成、等待用户、等待 Task、继续 Agent 还是失败；零输出、伪完成和停滞必须显式报错或进入明确状态。
 - **AR-03 — Task 终态驱动继续。** Task 成功/失败后的唤醒只由持久任务终态触发，并以幂等方式关联到对应 run。
+- **AR-04 — 用户界面只呈现产品语义。** 运行卡片可展示本地化操作名和任务数量，不得展示 taskType、targetType、targetId、operationId、原始工具参数或原始工具结果；这些字段只用于诊断日志和持久协议。
 - **AR-04 — 工具契约在 registry。** operation 的输入、confirmation、agentFlow、plan/commit 与输出 schema 必须在 registry 统一声明；不得以 operation id 特判或从文案反推控制流。
 - **AR-05 — 并发与心跳可证明。** 锁、心跳、超时取消和恢复必须由同一运行时状态协调；旧 run 不得覆盖新 run 的结果。
 

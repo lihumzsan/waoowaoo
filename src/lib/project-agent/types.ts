@@ -198,6 +198,7 @@ export interface ProjectAgentChoiceCardPartData {
   autoSubmitOnReady?: boolean
   title: string
   description?: string | null
+  operationPlan?: OperationPlanView | null
   groups: ProjectAgentChoiceCardGroup[]
   submitLabel: string
   submit: ProjectAgentChoiceCardSubmit

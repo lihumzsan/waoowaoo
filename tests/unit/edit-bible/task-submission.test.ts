@@ -176,8 +176,8 @@ describe('edit bible task submission', () => {
       text: '一个车站悬疑故事',
     }))
     expect(result).toEqual(expect.objectContaining({
-      taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
-      targetType: 'ProjectEditBible',
+      taskType: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+      targetType: 'ProjectEditSourceScript',
       targetId: 'bible-1',
     }))
   })

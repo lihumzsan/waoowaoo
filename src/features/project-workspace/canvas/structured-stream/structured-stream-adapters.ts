@@ -196,7 +196,7 @@ function numberKey(value: number | null | undefined, fallbackIndex: number): str
 export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   {
     key: 'sourceScript.structure',
-    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    taskTypes: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
     mode: 'object',
     path: ['structure'],
@@ -208,7 +208,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
   },
   {
     key: 'sourceScript.episodes',
-    taskTypes: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+    taskTypes: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
     stepIds: [AI_PROMPT_IDS.EDIT_BIBLE_OUTLINE_SCRIPT],
     mode: 'array',
     path: ['structure', 'episodes'],

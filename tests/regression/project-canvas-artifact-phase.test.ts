@@ -291,9 +291,9 @@ describe('project canvas artifact phase', () => {
       activeTaskTargets: [{
         taskId: 'task-bible-1',
         operationId: 'ingest_script',
-        targetType: 'ProjectEditBible',
+        targetType: 'ProjectEditSourceScript',
         targetId: 'bible-1',
-        types: [TASK_TYPE.EDIT_BIBLE_GENERATE],
+        types: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
         sourceKind: 'prompt_generated_outline',
       }],
       savedLayouts: [],
@@ -307,6 +307,66 @@ describe('project canvas artifact phase', () => {
     expect(node?.data.eyebrow).toBe('nodes.editSourceScript.eyebrow')
     expect(node?.data.body).toBe('nodes.editSourceScript.pendingBody')
     expect(node?.data.artifactPhase).toBe('running')
+  })
+
+  it('isolates source script, production plan, and visual style runtime targets', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      episodeName: 'Episode 1',
+      storyboards: [],
+      editFirstWorkflow: workflow('style_preview_generating'),
+      editBible: bible('confirmed', {
+        sourceKind: 'prompt_generated_script',
+        sourceText: '完整源剧本',
+        bible: { title: '制作规划' },
+        stylePreviews: [{
+          id: 'style-preview-1',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          bibleId: 'bible-1',
+          styleKey: 'style_a',
+          aspectRatio: '16:9',
+          title: '候选一',
+          summary: '候选摘要',
+          styleBible: {},
+          gridImagePrompt: 'prompt',
+          imageKey: null,
+          imageUrl: null,
+          status: 'pending',
+          taskId: null,
+          errorMessage: null,
+        }],
+      }),
+      activeTaskTargets: [{
+        taskId: 'task-style-1',
+        operationId: 'generate_edit_style_previews',
+        targetType: 'ProjectEditBible',
+        targetId: 'bible-1',
+        types: [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE],
+      }],
+      savedLayouts: [],
+      translate: t,
+    })
+
+    const sourceNode = projection.nodes.find((node) => node.data.kind === 'editSourceScript')
+    const bibleNode = projection.nodes.find((node) => node.data.kind === 'editBible')
+    const styleNode = projection.nodes.find((node) => node.data.kind === 'editStylePreview')
+    expect(sourceNode?.data.isRunning).toBe(false)
+    expect(bibleNode?.data.isRunning).toBe(false)
+    expect(styleNode).toMatchObject({
+      id: 'edit-style-preview:pending:bible-1',
+      data: {
+        title: 'nodes.editStylePreview.pendingTitle',
+        targetId: 'bible-1',
+        isRunning: false,
+        runtimeTargets: [{
+          targetType: 'ProjectEditBible',
+          targetId: 'bible-1',
+          types: [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE],
+        }],
+      },
+    })
   })
 
   it('labels a prompt-expanded script review node as source script instead of production plan', () => {

@@ -23,6 +23,7 @@ async function processTextTask(job: Job<TaskJobData>) {
   switch (job.data.type) {
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
       return await handleEditScriptStoryboardCameraPlanTask(job)
+    case TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE:
     case TASK_TYPE.EDIT_BIBLE_GENERATE:
       return await handleEditBibleGenerateTask(job)
     case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:

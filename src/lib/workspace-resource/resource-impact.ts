@@ -147,7 +147,8 @@ function globalAssetRefs(projectId: string): WorkspaceResourceRef[] {
 }
 
 function isEditPipelineTaskType(taskType: string | null): boolean {
-  return taskType === TASK_TYPE.EDIT_BIBLE_GENERATE ||
+  return taskType === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE ||
+    taskType === TASK_TYPE.EDIT_BIBLE_GENERATE ||
     taskType === TASK_TYPE.EDIT_SCRIPT_GENERATE ||
     taskType === TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
 }

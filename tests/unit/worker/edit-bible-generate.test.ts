@@ -207,15 +207,18 @@ vi.mock('@/lib/workers/handlers/llm-stream', () => ({
 
 import { handleEditBibleGenerateTask } from '@/lib/workers/handlers/edit-bible-generate'
 
-function buildJob(payload: Record<string, unknown>): Job<TaskJobData> {
+function buildJob(
+  payload: Record<string, unknown>,
+  type: TaskJobData['type'] = TASK_TYPE.EDIT_BIBLE_GENERATE,
+): Job<TaskJobData> {
   return {
     data: {
       taskId: 'task-bible-1',
-      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
+      type,
       locale: 'zh',
       projectId: 'project-1',
       episodeId: 'episode-1',
-      targetType: 'ProjectEditBible',
+      targetType: type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE ? 'ProjectEditSourceScript' : 'ProjectEditBible',
       targetId: 'bible-1',
       payload,
       userId: 'user-1',
@@ -348,7 +351,7 @@ describe('worker edit-bible-generate behavior', () => {
       sourceDocumentId: 'source-1',
       editBibleId: 'bible-1',
       analysisModel: 'analysis-model',
-    }))
+    }, TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE))
 
     expect(aiMock.executeAiStructuredTextStep).toHaveBeenCalledWith(expect.objectContaining({
       action: 'outline-script',
@@ -415,7 +418,7 @@ describe('worker edit-bible-generate behavior', () => {
       previousSourceDocumentId: 'source-previous',
       editBibleId: 'bible-1',
       analysisModel: 'analysis-model',
-    }))
+    }, TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE))
 
     expect(sourceDocumentMock.readEpisodeSourceDocumentById).toHaveBeenNthCalledWith(2, {
       projectId: 'project-1',

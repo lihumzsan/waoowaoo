@@ -89,6 +89,7 @@ export interface EditFirstWorkflowSnapshot {
   completedStylePreviewCount: number
   confirmedStylePreviewCount: number
   failedStylePreviewCount: number
+  activeStylePreviewTaskCount: number
   hasEditScript: boolean
   activeEditScriptTaskCount: number
   editScriptStatus: string | null
@@ -377,6 +378,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   if (snapshot.confirmedStylePreviewCount === 0) {
     if (snapshot.stylePreviewCount > terminalStylePreviewCount) {
       const hasCompletedAndFailedPreviews = snapshot.completedStylePreviewCount > 0 && snapshot.failedStylePreviewCount > 0
+      if (snapshot.activeStylePreviewTaskCount === 0 && !hasCompletedAndFailedPreviews) {
+        const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
+        return state({
+          stage: 'needs_style_choice',
+          nextAction,
+          allowedOperationIds: [nextAction.operationId],
+        })
+      }
       return state({
         stage: hasCompletedAndFailedPreviews ? 'needs_style_choice' : 'style_preview_generating',
         blocking: hasCompletedAndFailedPreviews
@@ -1129,6 +1138,18 @@ export async function resolveEditFirstWorkflowState(params: {
       },
     })
     : 0
+  const activeStylePreviewTaskCount = editBible
+    ? await prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEditBible',
+        targetId: editBible.id,
+        type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+        status: { in: ['queued', 'processing'] },
+      },
+    })
+    : 0
   const panelIds = editScriptPanels.map((panel) => panel.id)
   const activeStoryboardImageTaskCount = panelIds.length > 0
     ? await prisma.task.count({
@@ -1163,6 +1184,7 @@ export async function resolveEditFirstWorkflowState(params: {
     completedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
     confirmedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
     failedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'failed').length ?? 0,
+    activeStylePreviewTaskCount,
     hasEditScript: editScripts.length > 0,
     activeEditScriptTaskCount,
     editScriptStatus,

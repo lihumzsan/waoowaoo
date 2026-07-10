@@ -128,6 +128,15 @@ function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceTyp
   throw new Error('PROJECT_AGENT_PENDING_CHOICE_TYPE_INVALID')
 }
 
+function readPersistedChoiceCard(value: Prisma.JsonValue | undefined): ProjectAgentChoiceCardPartData | null {
+  const record = readRecord(value ?? null)
+  if (typeof record.cardId !== 'string' || typeof record.toolCallId !== 'string') return null
+  if (!isEditFirstChoiceType(record.choiceType)) return null
+  if (typeof record.title !== 'string' || typeof record.submitLabel !== 'string') return null
+  if (!Array.isArray(record.groups) || !record.submit || typeof record.submit !== 'object' || Array.isArray(record.submit)) return null
+  return record as unknown as ProjectAgentChoiceCardPartData
+}
+
 async function buildPendingChoiceInteraction(params: {
   scope: ProjectAgentSessionScopeInput
   workflow: EditFirstWorkflowState
@@ -141,6 +150,8 @@ async function buildPendingChoiceInteraction(params: {
   const choiceType = readChoiceType(payload.choiceType)
   const choiceCard = choiceType === 'script_intake'
     ? readPersistedScriptIntakeChoiceCard(payload.card)
+    : choiceType === 'bible_review'
+      ? readPersistedChoiceCard(payload.card)
     : await buildEditFirstAssistantChoiceCard({
         projectId: params.scope.projectId,
         userId: params.scope.userId,

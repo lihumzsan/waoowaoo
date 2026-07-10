@@ -195,6 +195,9 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
   readonly count?: number
   readonly source: string
   readonly confirmed: boolean
+  readonly plannedStylePreviewIds?: readonly string[]
+  readonly plannedImageModel?: string
+  readonly confirmedMaxCost?: number | null
   readonly locale: Locale
 }): Promise<EditStylePreviewsTaskSubmitResult> {
   const count = resolveStylePreviewCount(input.count)
@@ -249,6 +252,9 @@ export async function submitProjectEditStylePreviewsGenerationTask(input: {
         episodeId: target.episodeId,
         bibleId: target.bibleId,
         count,
+        ...(input.plannedStylePreviewIds ? { plannedStylePreviewIds: [...input.plannedStylePreviewIds] } : {}),
+        ...(input.plannedImageModel ? { plannedImageModel: input.plannedImageModel } : {}),
+        ...(typeof input.confirmedMaxCost === 'number' ? { confirmedMaxCost: input.confirmedMaxCost } : {}),
         ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
         displayMode: 'detail',
       },
