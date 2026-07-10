@@ -6,6 +6,7 @@ import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
 import { expectLifecycleEvents, listTaskEventTypes, waitForTaskTerminalState } from './helpers/tasks'
 import { startSystemWorkers, stopSystemWorkers, type SystemWorkers } from './helpers/workers'
+import { expectCompletedCanvasHandoff } from './helpers/canvas-terminal-handoff'
 
 type PollState = {
   status: 'processing' | 'completed'
@@ -83,7 +84,7 @@ describe('system - generate video', () => {
     resetAuthMockState()
   })
 
-  it('[P0:SYS-VIDEO-SUCCESS] queued external generation -> polling -> videoUrl persisted', async () => {
+  it('[P0:SYS-VIDEO-SUCCESS] [P0:SYS-CANVAS-TERMINAL-NO-GAP] queued video materializes before the Canvas terminal handoff', async () => {
     const seeded = await seedMinimalDomainState()
     await prisma.projectPanel.update({
       where: { id: seeded.panel.id },
@@ -101,6 +102,7 @@ describe('system - generate video', () => {
       'POST',
       {
         locale: 'zh',
+        episodeId: seeded.episode.id,
         storyboardId: seeded.storyboard.id,
         panelIndex: 0,
         confirmed: true,
@@ -132,5 +134,14 @@ describe('system - generate video', () => {
 
     const eventTypes = await listTaskEventTypes(json.taskId)
     expectLifecycleEvents(eventTypes, 'completed')
+    await expectCompletedCanvasHandoff({
+      projectId: seeded.project.id,
+      episodeId: seeded.episode.id,
+      taskId: json.taskId,
+      taskType: 'video_panel',
+      targetType: 'ProjectPanel',
+      targetId: seeded.panel.id,
+      persistedOutput: videoState.uploadedCosKey,
+    })
   })
 })
