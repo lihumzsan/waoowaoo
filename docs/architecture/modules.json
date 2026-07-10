@@ -163,6 +163,41 @@
         "scripts/guards/no-provider-guessing.mjs",
         "scripts/guards/no-legacy-ai-entry-imports.mjs"
       ]
+    },
+    {
+      "id": "test-governance",
+      "document": "docs/architecture/modules/test-governance.md",
+      "title": "测试治理",
+      "sourcePaths": [
+        ".github/workflows/verify.yml",
+        "scripts/test-history",
+        "scripts/test-verification",
+        "scripts/verify-push.sh",
+        "scripts/guards/changed-file-test-impact-guard.mjs",
+        "scripts/guards/test-behavior-quality-guard.mjs",
+        "scripts/guards/test-route-coverage-guard.mjs",
+        "scripts/guards/test-tasktype-coverage-guard.mjs",
+        "tests/history",
+        "tests/harness",
+        "tests/contracts/requirements-matrix.ts",
+        "tests/contracts/route-behavior-matrix.ts",
+        "tests/contracts/tasktype-behavior-matrix.ts"
+      ],
+      "testPaths": [
+        "tests/unit/test-history/catalog.test.ts",
+        "tests/unit/test-history/candidate-report.test.ts",
+        "tests/unit/test-harness/behavior-scenario.test.ts",
+        "tests/unit/test-harness/lifecycle-sequence.test.ts",
+        "tests/unit/test-verification/verify-vitest-report.test.ts",
+        "tests/unit/guards/verify-push-fail-closed.test.ts",
+        "tests/unit/guards/changed-file-test-impact-guard.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/changed-file-test-impact-guard.mjs",
+        "scripts/guards/test-behavior-quality-guard.mjs",
+        "scripts/guards/test-route-coverage-guard.mjs",
+        "scripts/guards/test-tasktype-coverage-guard.mjs"
+      ]
     }
   ]
 }

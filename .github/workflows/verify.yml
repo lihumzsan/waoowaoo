@@ -16,6 +16,8 @@ jobs:
       contents: read
 
     env:
+      TEST_IMPACT_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      TEST_IMPACT_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       NODE_ENV: test
       CI_MYSQL_PASSWORD: root
       REDIS_HOST: 127.0.0.1
@@ -34,6 +36,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve test impact range
+        shell: bash
+        run: |
+          base="$TEST_IMPACT_BASE_SHA"
+          if [[ "$base" =~ ^0+$ ]]; then
+            base="$(git rev-parse HEAD^)"
+          fi
+          git cat-file -e "${base}^{commit}"
+          git cat-file -e "${TEST_IMPACT_HEAD_SHA}^{commit}"
+          printf 'TEST_IMPACT_BASE_SHA=%s\n' "$base" >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-import { execSync } from 'node:child_process'
+// Architecture contract: docs/architecture/modules/test-governance.md (TG-04).
+
+import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
 const RULES = [
@@ -43,17 +45,97 @@ function normalizeChangedFiles(rawFiles) {
     .filter(Boolean)
 }
 
-function readGitChangedFiles() {
+function readGitDiff(cwd, args, source) {
   try {
-    const output = execSync('git diff --name-only --cached', {
-      cwd: process.cwd(),
+    const output = execFileSync('git', ['diff', '--name-only', ...args], {
+      cwd,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     })
-    return normalizeChangedFiles([output])
-  } catch {
-    return []
+    return {
+      files: normalizeChangedFiles([output]),
+      source,
+    }
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error)
+    throw new Error(`[changed-file-test-impact-guard] Unable to read ${source}: ${details}`)
   }
+}
+
+function parseRangeArgs(argv) {
+  let base = null
+  let head = null
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+    if (arg === '--base') {
+      if (!value) throw new Error('[changed-file-test-impact-guard] --base requires a Git commit')
+      base = value
+      index += 1
+      continue
+    }
+    if (arg === '--head') {
+      if (!value) throw new Error('[changed-file-test-impact-guard] --head requires a Git commit')
+      head = value
+      index += 1
+      continue
+    }
+    throw new Error(`[changed-file-test-impact-guard] Unknown range argument: ${arg}`)
+  }
+  if (!base || !head) {
+    throw new Error('[changed-file-test-impact-guard] Both --base and --head are required')
+  }
+  return { base, head }
+}
+
+/**
+ * @param {{ argv?: string[], cwd?: string, env?: Record<string, string | undefined> }} [input]
+ */
+export function resolveChangedFiles({
+  argv = [],
+  cwd = process.cwd(),
+  env = process.env,
+} = {}) {
+  if (argv.includes('--staged')) {
+    if (argv.length !== 1) {
+      throw new Error('[changed-file-test-impact-guard] --staged cannot be combined with files or a Git range')
+    }
+    return readGitDiff(cwd, ['--cached'], 'staged diff')
+  }
+
+  if (argv.includes('--base') || argv.includes('--head')) {
+    const { base, head } = parseRangeArgs(argv)
+    return readGitDiff(cwd, [`${base}...${head}`], `Git range ${base}...${head}`)
+  }
+
+  if (argv.some((arg) => arg.startsWith('--'))) {
+    throw new Error(`[changed-file-test-impact-guard] Unknown option: ${argv.find((arg) => arg.startsWith('--'))}`)
+  }
+  if (argv.length > 0) {
+    return {
+      files: normalizeChangedFiles(argv),
+      source: 'explicit file arguments',
+    }
+  }
+
+  const environmentFiles = normalizeChangedFiles([env.TEST_IMPACT_CHANGED_FILES || ''])
+  if (environmentFiles.length > 0) {
+    return {
+      files: environmentFiles,
+      source: 'TEST_IMPACT_CHANGED_FILES',
+    }
+  }
+
+  if (env.CI === 'true') {
+    const base = env.TEST_IMPACT_BASE_SHA
+    const head = env.TEST_IMPACT_HEAD_SHA
+    if (!base || !head) {
+      throw new Error('[changed-file-test-impact-guard] CI requires TEST_IMPACT_BASE_SHA and TEST_IMPACT_HEAD_SHA')
+    }
+    return readGitDiff(cwd, [`${base}...${head}`], `CI Git range ${base}...${head}`)
+  }
+
+  return readGitDiff(cwd, ['--cached'], 'local staged diff')
 }
 
 export function inspectChangedFiles(changedFiles) {
@@ -82,22 +164,15 @@ function fail(violations) {
 }
 
 function runCli() {
-  const inputFiles = process.argv.slice(2)
-  const changedFiles = inputFiles.length > 0
-    ? normalizeChangedFiles(inputFiles)
-    : normalizeChangedFiles([process.env.TEST_IMPACT_CHANGED_FILES || '', ...readGitChangedFiles()])
-
-  if (changedFiles.length === 0) {
-    console.log('[changed-file-test-impact-guard] SKIP no changed files detected')
-    process.exit(0)
-  }
+  const resolved = resolveChangedFiles({ argv: process.argv.slice(2) })
+  const changedFiles = resolved.files
 
   const violations = inspectChangedFiles(changedFiles)
   if (violations.length > 0) {
     fail(violations)
   }
 
-  console.log(`[changed-file-test-impact-guard] OK files=${changedFiles.length}`)
+  console.log(`[changed-file-test-impact-guard] OK source=${resolved.source} files=${changedFiles.length}`)
 }
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null

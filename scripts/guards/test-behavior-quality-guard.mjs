@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Architecture contract: docs/architecture/modules/test-governance.md (TG-03, TG-07).
+
 import fs from 'fs'
 import path from 'path'
 
