@@ -2,7 +2,6 @@
 set -uo pipefail
 
 FAILED_STEPS=()
-SKIPPED_STEPS=()
 
 cleanup() {
   npm run test:services:stop || true
@@ -46,18 +45,10 @@ run_npm_script() {
   run_step "${name}" npm run "${name}"
 }
 
-skip_step() {
-  local name="$1"
-  local reason="$2"
+if ! run_npm_script test:services:prepare; then
   echo
-  echo "==> ${name}"
-  echo "[skip] ${name}: ${reason}"
-  SKIPPED_STEPS+=("${name}: ${reason}")
-}
-
-services_ready=0
-if run_npm_script test:services:prepare; then
-  services_ready=1
+  echo "verify:push cannot continue because required test services are unavailable."
+  exit 1
 fi
 
 export TEST_SERVICES_EXTERNAL=1
@@ -70,35 +61,15 @@ run_npm_script test:guards
 
 run_npm_script test:unit:all
 run_npm_script test:integration:provider
-
-if [[ "${services_ready}" -eq 1 ]]; then
-  run_npm_script test:billing:integration
-  run_npm_script test:billing:concurrency
-  run_npm_script test:integration:api
-  run_npm_script test:integration:chain
-  run_npm_script test:integration:task
-  run_npm_script test:system
-  run_npm_script test:regression:cases
-else
-  skip_step test:billing:integration "test services failed to prepare"
-  skip_step test:billing:concurrency "test services failed to prepare"
-  skip_step test:integration:api "test services failed to prepare"
-  skip_step test:integration:chain "test services failed to prepare"
-  skip_step test:integration:task "test services failed to prepare"
-  skip_step test:system "test services failed to prepare"
-  skip_step test:regression:cases "test services failed to prepare"
-fi
+run_npm_script test:billing:integration
+run_npm_script test:billing:concurrency
+run_npm_script test:integration:api
+run_npm_script test:integration:chain
+run_npm_script test:integration:task
+run_npm_script test:system
+run_npm_script test:regression:cases
 
 run_npm_script build:verify
-
-echo
-if [[ "${#SKIPPED_STEPS[@]}" -gt 0 ]]; then
-  echo "Skipped steps:"
-  for step in "${SKIPPED_STEPS[@]}"; do
-    echo "  - ${step}"
-  done
-  echo
-fi
 
 if [[ "${#FAILED_STEPS[@]}" -gt 0 ]]; then
   echo "verify:push failed. Failed steps:"
