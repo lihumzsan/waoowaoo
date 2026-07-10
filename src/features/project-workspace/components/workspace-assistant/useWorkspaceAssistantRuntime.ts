@@ -91,6 +91,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   messageCount: number
   status: ChatStatus
   pending: boolean
+  canStopReply: boolean
   replyInFlight: boolean
   controlPending: boolean
   pendingApprovalId: string | null
@@ -105,6 +106,7 @@ interface UseWorkspaceAssistantRuntimeResult {
   pendingRunApproval: WorkspaceAssistantPendingApproval | null
   sendMessage: (input: WorkspaceAssistantSendMessageInput) => Promise<void>
   sendHiddenMessage: (text: string) => Promise<void>
+  stopReply: () => Promise<void>
   submitChoiceResponse: (params: {
     runId: string
     interruptionId: string | null
@@ -231,6 +233,15 @@ export function resolveWorkspaceAssistantReplyInFlight(input: {
     || input.controlRunActive
     || input.serverRunActive
     || input.chatTransportActive
+}
+
+export function canStopWorkspaceAssistantReply(input: {
+  chatStatus: ChatStatus
+  controlRequestActive: boolean
+}): boolean {
+  return input.chatStatus === 'submitted'
+    || input.chatStatus === 'streaming'
+    || input.controlRequestActive
 }
 
 export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
@@ -393,11 +404,13 @@ export function useWorkspaceAssistantRuntime({
   } | null>(null)
   const refetchAssistantThreadRef = useRef<(() => Promise<void>) | null>(null)
   const refreshSessionStateRef = useRef<(() => Promise<ProjectAgentSessionState | null>) | null>(null)
+  const controlAbortControllerRef = useRef<AbortController | null>(null)
   const replyActivitySequenceRef = useRef(0)
   const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [controlError, setControlError] = useState<Error | null>(null)
   const [respondedInterruptionIds, setRespondedInterruptionIds] = useState<ReadonlySet<string>>(() => new Set<string>())
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
+  const [controlRequestActive, setControlRequestActive] = useState(false)
   const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
   const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
 
@@ -625,6 +638,9 @@ export function useWorkspaceAssistantRuntime({
       operationId: params.operationId ?? null,
       intent: params.intent,
     })
+    const abortController = new AbortController()
+    controlAbortControllerRef.current = abortController
+    setControlRequestActive(true)
     let requestSucceeded = false
     try {
       const currentMessages = latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages
@@ -648,6 +664,7 @@ export function useWorkspaceAssistantRuntime({
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
+          signal: abortController.signal,
           body: JSON.stringify({
             context: contextPayload,
             assistantPermissionMode,
@@ -675,10 +692,18 @@ export function useWorkspaceAssistantRuntime({
       requestSucceeded = true
     } catch (error) {
       if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
+      if (abortController.signal.aborted) {
+        clearReplyActivity(activitySequence)
+        return
+      }
       setControlError(buildWorkspaceAssistantControlError(params.endpoint, error))
       clearReplyActivity(activitySequence)
       throw error
     } finally {
+      if (controlAbortControllerRef.current === abortController) {
+        controlAbortControllerRef.current = null
+        setControlRequestActive(false)
+      }
       await refreshSessionState().catch(() => undefined)
       if (requestSucceeded) {
         markReplyActivityRequestSettled(activitySequence)
@@ -763,6 +788,12 @@ export function useWorkspaceAssistantRuntime({
       },
     })
   }, [chat, sendControlRequest])
+
+  const stopReply = useCallback(async (): Promise<void> => {
+    setControlError(null)
+    controlAbortControllerRef.current?.abort()
+    await chat.stop()
+  }, [chat])
 
   useEffect(() => {
     if (assistantThread.isLoading) return
@@ -862,6 +893,10 @@ export function useWorkspaceAssistantRuntime({
   ])
   const controlPending = Boolean(activeControlRun && isWorkspaceAssistantRunBusyStatus(activeControlRun.status))
   const chatReplyInFlight = chat.status === 'submitted' || chat.status === 'streaming'
+  const canStopReply = canStopWorkspaceAssistantReply({
+    chatStatus: chat.status,
+    controlRequestActive,
+  })
   const serverRunActive = sessionState?.currentRun?.status === 'running'
   const replyInFlight = resolveWorkspaceAssistantReplyInFlight({
     requestActive: Boolean(replyActivity && !replyActivity.requestSettled),
@@ -882,6 +917,7 @@ export function useWorkspaceAssistantRuntime({
     messageCount: chat.messages.length,
     status: chat.status,
     pending: Boolean(pendingRun) || replyInFlight,
+    canStopReply,
     replyInFlight,
     controlPending,
     pendingApprovalId: pendingRunApproval?.approvalId ?? null,
@@ -896,6 +932,7 @@ export function useWorkspaceAssistantRuntime({
     pendingRunApproval,
     sendMessage,
     sendHiddenMessage,
+    stopReply,
     submitChoiceResponse,
     submitTaskFollowUp,
     addRunApprovalResponse,

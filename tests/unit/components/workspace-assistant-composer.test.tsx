@@ -17,10 +17,12 @@ describe('WorkspaceAssistantComposer', () => {
         value: '继续生成核心剪辑表',
         error: null,
         pending: false,
+        canStopReply: false,
         attachments: [],
         assistantPermissionMode: 'ask',
         onChange: () => undefined,
         onSubmit: async () => undefined,
+        onStopReply: async () => undefined,
         onAttachClick: () => undefined,
         onRemoveAttachment: () => undefined,
         onAssistantPermissionModeChange: () => undefined,
@@ -46,10 +48,36 @@ describe('WorkspaceAssistantComposer', () => {
     expect(html).not.toContain('通用助手会先读取项目状态')
   })
 
+  it('replaces send with a stop button while the assistant reply can be cancelled', () => {
+    const html = renderToStaticMarkup(
+      createElement(WorkspaceAssistantComposer, {
+        value: '',
+        error: null,
+        pending: true,
+        canStopReply: true,
+        attachments: [],
+        assistantPermissionMode: 'ask',
+        onChange: () => undefined,
+        onSubmit: async () => undefined,
+        onStopReply: async () => undefined,
+        onAttachClick: () => undefined,
+        onRemoveAttachment: () => undefined,
+        onAssistantPermissionModeChange: () => undefined,
+      }),
+    )
+
+    expect(html).toContain('aria-label="panel.stopGenerating"')
+    expect(html).toContain('title="panel.stopGenerating"')
+    expect(html).toContain('h-2.5 w-2.5 rounded-[2px] bg-current')
+    expect(html).not.toContain('aria-label="panel.send"')
+    expect(html).not.toContain('lucide-arrow-right')
+  })
+
   it('uses a short creative phrase instead of an instructional placeholder', () => {
     const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
       panel: {
         composerPlaceholder: string
+        stopGenerating: string
         permissionModeToggle: string
         permissionModeMenuTitle: string
         permissionModeDescriptionAsk: string
@@ -59,6 +87,7 @@ describe('WorkspaceAssistantComposer', () => {
     const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
       panel: {
         composerPlaceholder: string
+        stopGenerating: string
         permissionModeToggle: string
         permissionModeMenuTitle: string
         permissionModeDescriptionAsk: string
@@ -67,12 +96,14 @@ describe('WorkspaceAssistantComposer', () => {
     }
 
     expect(zhMessages.panel.composerPlaceholder).toBe('和 AI 一起创造')
+    expect(zhMessages.panel.stopGenerating).toBe('停止生成')
     expect(zhMessages.panel.composerPlaceholder).not.toContain('读取项目状态')
     expect(zhMessages.panel.permissionModeToggle).toContain('打开切换菜单')
     expect(zhMessages.panel.permissionModeMenuTitle).toBe('权限模式')
     expect(zhMessages.panel.permissionModeDescriptionAsk).toContain('只读查询直接执行')
     expect(zhMessages.panel.permissionModeDescriptionAuto).toContain('业务选择仍必须等用户决定')
     expect(enMessages.panel.composerPlaceholder).toBe('Create with AI')
+    expect(enMessages.panel.stopGenerating).toBe('Stop generating')
     expect(enMessages.panel.composerPlaceholder).not.toContain('read project state')
     expect(enMessages.panel.permissionModeToggle).toContain('Open mode menu')
     expect(enMessages.panel.permissionModeMenuTitle).toBe('Permission mode')

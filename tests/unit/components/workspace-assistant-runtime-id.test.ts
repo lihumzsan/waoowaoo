@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWorkspaceAssistantChatId,
+  canStopWorkspaceAssistantReply,
   createWorkspaceAssistantControlMessageId,
   createWorkspaceAssistantControlVisibleUserMessage,
   isWorkspaceAssistantOperationPendingStatus,
@@ -33,6 +34,25 @@ describe('workspace assistant runtime chat id', () => {
 
   it('keeps AI SDK automatic tool-loop sending disabled for the Agents SDK runtime', () => {
     expect(shouldSendWorkspaceAssistantAutomatically()).toBe(false)
+  })
+
+  it('allows stopping only while a local assistant response transport is active', () => {
+    expect(canStopWorkspaceAssistantReply({
+      chatStatus: 'submitted',
+      controlRequestActive: false,
+    })).toBe(true)
+    expect(canStopWorkspaceAssistantReply({
+      chatStatus: 'streaming',
+      controlRequestActive: false,
+    })).toBe(true)
+    expect(canStopWorkspaceAssistantReply({
+      chatStatus: 'ready',
+      controlRequestActive: true,
+    })).toBe(true)
+    expect(canStopWorkspaceAssistantReply({
+      chatStatus: 'ready',
+      controlRequestActive: false,
+    })).toBe(false)
   })
 
   it('uses server run status as the global assistant busy signal', () => {

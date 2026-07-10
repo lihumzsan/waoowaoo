@@ -918,11 +918,13 @@ export default function WorkspaceAssistantPanel({
                     value={composerText}
                     error={composerError}
                     pending={assistantRuntime.pending || assistantRuntime.storageLoading}
+                    canStopReply={assistantRuntime.canStopReply}
                     attachments={composerAttachments}
                     attachDisabled={composerAttachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
                     assistantPermissionMode={assistantPermissionMode}
                     onChange={setComposerText}
                     onSubmit={handleComposerSubmit}
+                    onStopReply={assistantRuntime.stopReply}
                     onAttachClick={() => setAttachmentDialogOpen(true)}
                     onRemoveAttachment={handleRemoveComposerAttachment}
                     onAssistantPermissionModeChange={setAssistantPermissionMode}

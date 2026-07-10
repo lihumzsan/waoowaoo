@@ -21,11 +21,13 @@ interface WorkspaceAssistantComposerProps {
   readonly value: string
   readonly error: string | null
   readonly pending: boolean
+  readonly canStopReply: boolean
   readonly attachments: readonly ProjectAssistantTextAttachment[]
   readonly attachDisabled?: boolean
   readonly assistantPermissionMode: AssistantPermissionMode
   readonly onChange: (value: string) => void
   readonly onSubmit: () => Promise<void>
+  readonly onStopReply: () => Promise<void>
   readonly onAttachClick: () => void
   readonly onRemoveAttachment: (attachmentId: string) => void
   readonly onAssistantPermissionModeChange: (mode: AssistantPermissionMode) => void
@@ -64,11 +66,13 @@ export function WorkspaceAssistantComposer({
   value,
   error,
   pending,
+  canStopReply,
   attachments,
   attachDisabled = false,
   assistantPermissionMode,
   onChange,
   onSubmit,
+  onStopReply,
   onAttachClick,
   onRemoveAttachment,
   onAssistantPermissionModeChange,
@@ -196,15 +200,27 @@ export function WorkspaceAssistantComposer({
               <AppIcon name="chevronDown" className={cx('h-3 w-3 text-[var(--glass-text-tertiary)] transition-transform', menuOpen && 'rotate-180')} aria-hidden="true" />
             </button>
           </div>
-          <button
-            type="button"
-            aria-label={t('panel.send')}
-            disabled={(!value.trim() && attachments.length === 0) || pending}
-            onClick={() => { void onSubmit() }}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          {canStopReply ? (
+            <button
+              type="button"
+              aria-label={t('panel.stopGenerating')}
+              title={t('panel.stopGenerating')}
+              onClick={() => { void onStopReply() }}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900"
+            >
+              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={t('panel.send')}
+              disabled={(!value.trim() && attachments.length === 0) || pending}
+              onClick={() => { void onSubmit() }}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--glass-text-primary)] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <AppIcon name="arrowRight" className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
       {menuOpen && createPortal(
