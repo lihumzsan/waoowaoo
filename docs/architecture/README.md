@@ -18,6 +18,7 @@ npm run architecture:impact -- <准备修改的文件或目录>
 | 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection |
 | route → queue → worker → DB 的任务提交、状态、重试、补偿 | [异步任务生命周期](modules/async-task-lifecycle.md) | task types、submitter、task service |
 | Agent run、工具调度、确认、心跳、恢复、任务完成后的继续执行 | [Assistant Run 生命周期](modules/assistant-run-lifecycle.md) | project-agent runtime、operation registry |
+| provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
 
 ## 权威层级
 

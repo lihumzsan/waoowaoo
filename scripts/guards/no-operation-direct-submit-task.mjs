@@ -21,6 +21,7 @@ function fail(title, details = []) {
   for (const detail of details) {
     process.stderr.write(`  - ${detail}\n`)
   }
+  process.stderr.write('  - TL-01: see docs/architecture/modules/async-task-lifecycle.md#不变量.\n')
   process.exit(1)
 }
 

@@ -88,7 +88,8 @@ for (const root of roots) {
 
 if (violations.length > 0) {
   console.error([
-    'Fixed workflow references are forbidden in assistant tooluse surfaces.',
+    'AR-04: fixed workflow references are forbidden in assistant tooluse surfaces.',
+    'See docs/architecture/modules/assistant-run-lifecycle.md#不变量.',
     ...violations,
   ].join('\n'))
   process.exit(1)

@@ -77,6 +77,11 @@ for (const module of manifest.modules) {
         errors.push(`${id}: ${label} contains an invalid path`)
       } else if (!fs.existsSync(path.join(root, entry))) {
         errors.push(`${id}: ${label} path does not exist: ${entry}`)
+      } else if (label === 'guardPaths') {
+        const guardContent = fs.readFileSync(path.join(root, entry), 'utf8')
+        if (!guardContent.includes('docs/architecture/modules/')) {
+          errors.push(`${id}: guard must link an architecture module: ${entry}`)
+        }
       }
     }
   }

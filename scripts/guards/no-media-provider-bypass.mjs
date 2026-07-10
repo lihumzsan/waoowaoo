@@ -6,17 +6,18 @@ import process from 'process'
 
 const root = process.cwd()
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
-const allowFactoryImportIn = new Set([
-  'src/lib/generator-api.ts',
-  'src/lib/generators/factory.ts',
-])
+const allowedProviderImportPrefixes = [
+  'src/lib/ai-providers/',
+  'src/lib/ai-exec/',
+  'src/lib/ai-registry/',
+]
 
 function fail(title, details = []) {
   console.error(`\n[no-media-provider-bypass] ${title}`)
   for (const line of details) {
     console.error(`  - ${line}`)
   }
-  console.error('  - See docs/architecture/modules/billing-approval.md#权威入口.')
+  console.error('  - See docs/architecture/modules/billing-approval.md#权威入口 and docs/architecture/modules/provider-gateway.md#权威入口.')
   process.exit(1)
 }
 
@@ -41,16 +42,19 @@ function walk(dir, out = []) {
   return out
 }
 
-const generatorApiPath = path.join(root, 'src/lib/generator-api.ts')
-if (!fs.existsSync(generatorApiPath)) {
-  fail('Missing src/lib/generator-api.ts')
+const mediaEngineRelativePath = 'src/lib/ai-exec/engine.ts'
+const mediaEnginePath = path.join(root, mediaEngineRelativePath)
+if (!fs.existsSync(mediaEnginePath)) {
+  fail(`Missing ${mediaEngineRelativePath}`)
 }
 
-const generatorApiContent = fs.readFileSync(generatorApiPath, 'utf8')
-const resolveModelSelectionHits = (generatorApiContent.match(/resolveModelSelection\s*\(/g) || []).length
-if (resolveModelSelectionHits < 2) {
-  fail('generator-api must route both image and video generation through resolveModelSelection', [
-    'expected >= 2 resolveModelSelection(...) calls in src/lib/generator-api.ts',
+const mediaEngineContent = fs.readFileSync(mediaEnginePath, 'utf8')
+if (!/export\s+async\s+function\s+executeMediaGeneration\s*\(/.test(mediaEngineContent)) {
+  fail('ai-exec media engine must expose executeMediaGeneration', [mediaEngineRelativePath])
+}
+if (!/resolveModelSelection\s*\(/.test(mediaEngineContent) || !/resolveAiProviderAdapter\s*\(/.test(mediaEngineContent)) {
+  fail('ai-exec media engine must resolve the selected model and provider adapter', [
+    `expected resolveModelSelection(...) and resolveAiProviderAdapter(...) in ${mediaEngineRelativePath}`,
   ])
 }
 
@@ -65,19 +69,23 @@ for (const fullPath of allFiles) {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
 
-    if (
-      relPath !== 'src/lib/generators/factory.ts' &&
-      (/\bcreateImageGeneratorByModel\s*\(/.test(line) || /\bcreateVideoGeneratorByModel\s*\(/.test(line))
-    ) {
+    if (/\bcreateImageGeneratorByModel\s*\(/.test(line) || /\bcreateVideoGeneratorByModel\s*\(/.test(line)) {
       violations.push(`${relPath}:${i + 1} forbidden provider-bypass factory call create*GeneratorByModel(...)`)
     }
 
-    if ((/\bgetImageApiKey\s*\(/.test(line) || /\bgetVideoApiKey\s*\(/.test(line)) && relPath !== 'src/lib/api-config.ts') {
+    if (/\bgetImageApiKey\s*\(/.test(line) || /\bgetVideoApiKey\s*\(/.test(line)) {
       violations.push(`${relPath}:${i + 1} forbidden direct getImageApiKey/getVideoApiKey usage outside api-config`)
     }
 
-    if (/from\s+['"]@\/lib\/generators\/factory['"]/.test(line) && !allowFactoryImportIn.has(relPath)) {
-      violations.push(`${relPath}:${i + 1} forbidden direct import from '@/lib/generators/factory' (must go through generator-api)`)
+    if (/from\s+['"]@\/lib\/generators\/factory['"]/.test(line)) {
+      violations.push(`${relPath}:${i + 1} forbidden direct import from '@/lib/generators/factory' (must go through ai-exec/engine)`)
+    }
+
+    if (
+      /from\s+['"]@\/lib\/ai-providers\/(?:ark|fal|google|openrouter|elevenlabs)\//.test(line)
+      && !allowedProviderImportPrefixes.some((prefix) => relPath.startsWith(prefix))
+    ) {
+      violations.push(`${relPath}:${i + 1} imports a provider implementation directly; use ai-exec/engine instead`)
     }
   }
 }

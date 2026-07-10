@@ -103,6 +103,7 @@ function runCli() {
   if (newViolations.length > 0) {
     failed = true
     console.error('\n[no-cross-provider-switch] NEW cross-provider literal switches introduced (forbidden):')
+    console.error('  PG-03: see docs/architecture/modules/provider-gateway.md#不变量.')
     for (const v of newViolations) console.error(`  - ${v}`)
     console.error('\n  Move the branch into src/lib/ai-providers/<providerKey>/<modality>.ts and route via ai-exec/engine.')
   }
@@ -116,7 +117,10 @@ function runCli() {
     console.error('\n[no-cross-provider-switch] Allowlist stale — these files are gone; rerun with --update-snapshot:')
     for (const f of missing) console.error(`  - ${f}`)
   }
-  if (failed) process.exit(1)
+  if (failed) {
+    console.error('  See docs/architecture/modules/provider-gateway.md#权威入口.')
+    process.exit(1)
+  }
   console.log(`[no-cross-provider-switch] OK scanned=${files.length} allowlist=${allowlist.size}`)
 }
 

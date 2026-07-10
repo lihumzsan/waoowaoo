@@ -11,6 +11,7 @@ function fail(title, details = []) {
   for (const line of details) {
     console.error(`  - ${line}`)
   }
+  console.error('  - TL-06: see docs/architecture/modules/async-task-lifecycle.md#不变量.')
   process.exit(1)
 }
 

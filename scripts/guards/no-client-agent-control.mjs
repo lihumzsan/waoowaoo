@@ -52,7 +52,8 @@ for (const root of roots) {
 
 if (violations.length > 0) {
   console.error([
-    'Agent control protocol must not leak into client code (use the structured chat control body).',
+    'AR-01: agent control protocol must not leak into client code (use the structured chat control body).',
+    'See docs/architecture/modules/assistant-run-lifecycle.md#不变量.',
     ...violations,
   ].join('\n'))
   process.exit(1)

@@ -111,6 +111,7 @@ function runCli() {
   if (newViolations.length > 0) {
     failed = true
     console.error('\n[no-legacy-ai-entry-imports] NEW legacy AI imports introduced (forbidden):')
+    console.error('  PG-02: see docs/architecture/modules/provider-gateway.md#不变量.')
     for (const v of newViolations) console.error(`  - ${v}`)
   }
   if (cleaned.length > 0) {
@@ -123,7 +124,10 @@ function runCli() {
     console.error('\n[no-legacy-ai-entry-imports] Allowlist stale — these files are gone; rerun with --update-snapshot:')
     for (const f of missing) console.error(`  - ${f}`)
   }
-  if (failed) process.exit(1)
+  if (failed) {
+    console.error('  See docs/architecture/modules/provider-gateway.md#权威入口.')
+    process.exit(1)
+  }
   console.log(`[no-legacy-ai-entry-imports] OK files=${files.length} allowlist=${allowlist.size}`)
 }
 

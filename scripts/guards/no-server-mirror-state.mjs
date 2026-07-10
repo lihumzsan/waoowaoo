@@ -30,6 +30,7 @@ function fail(title, details = []) {
   for (const line of details) {
     console.error(`  - ${line}`)
   }
+  console.error('  - CN-02: see docs/architecture/modules/canvas-node.md#不变量.')
   process.exit(1)
 }
 

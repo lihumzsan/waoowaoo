@@ -52,7 +52,8 @@ for (const root of roots) {
 
 if (violations.length > 0) {
   console.error([
-    'Server code must not infer agent continuation state from message history (use interruption/wait rows).',
+    'AR-01: server code must not infer agent continuation state from message history (use interruption/wait rows).',
+    'See docs/architecture/modules/assistant-run-lifecycle.md#不变量.',
     ...violations,
   ].join('\n'))
   process.exit(1)

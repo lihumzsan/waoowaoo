@@ -14,6 +14,7 @@ function fail(title, details = []) {
   for (const line of details) {
     console.error(`  - ${line}`)
   }
+  console.error('  - PG-02: see docs/architecture/modules/provider-gateway.md#不变量.')
   process.exit(1)
 }
 

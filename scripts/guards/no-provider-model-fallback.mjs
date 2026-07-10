@@ -60,6 +60,7 @@ for (const targetDir of targetDirs) {
 
 if (violations.length > 0) {
   console.error('[no-provider-model-fallback] implicit provider model fallback is forbidden:')
+  console.error('  PG-05: see docs/architecture/modules/provider-gateway.md#不变量.')
   for (const violation of violations) console.error(`  ${violation}`)
   process.exit(1)
 }
