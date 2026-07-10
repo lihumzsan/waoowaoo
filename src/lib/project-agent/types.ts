@@ -198,7 +198,6 @@ export interface ProjectAgentChoiceCardPartData {
   autoSubmitOnReady?: boolean
   title: string
   description?: string | null
-  operationPlan?: OperationPlanView | null
   groups: ProjectAgentChoiceCardGroup[]
   submitLabel: string
   submit: ProjectAgentChoiceCardSubmit
@@ -245,7 +244,7 @@ export interface TaskBatchSubmittedPartData {
 
 export interface EditStylePreviewGenerationPartData {
   operationId: 'generate_edit_style_previews'
-  agentRunId?: string | null
+  agentRunId: string
   projectId: string
   episodeId: string
   bibleId: string

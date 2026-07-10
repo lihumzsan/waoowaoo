@@ -1,6 +1,5 @@
 import type { UIMessage } from 'ai'
 import type { EditStylePreviewGenerationPartData } from '@/lib/project-agent/types'
-import type { ProjectEditBible } from '@/types/project'
 
 interface ActiveStylePreviewGenerationCard {
   key: string
@@ -24,9 +23,8 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   const data = isRecord(part.data) ? part.data : null
   if (!data || data.operationId !== 'generate_edit_style_previews') return null
   if (typeof data.projectId !== 'string' || typeof data.episodeId !== 'string' || typeof data.bibleId !== 'string') return null
-  const agentRunId = typeof data.agentRunId === 'string' && data.agentRunId.trim()
-    ? data.agentRunId.trim()
-    : null
+  const agentRunId = typeof data.agentRunId === 'string' ? data.agentRunId.trim() : ''
+  if (!agentRunId) return null
   if (!Array.isArray(data.items)) return null
   const items = data.items.flatMap((item): EditStylePreviewGenerationPartData['items'] => {
     if (!isRecord(item)) return []
@@ -44,7 +42,7 @@ function readStylePreviewGenerationPart(part: unknown): EditStylePreviewGenerati
   if (items.length === 0) return null
   return {
     operationId: 'generate_edit_style_previews',
-    ...(agentRunId ? { agentRunId } : {}),
+    agentRunId,
     projectId: data.projectId,
     episodeId: data.episodeId,
     bibleId: data.bibleId,
@@ -68,34 +66,4 @@ export function findActiveStylePreviewGenerationCard(
     }
   }
   return null
-}
-
-export function buildStylePreviewGenerationCardFromBible(
-  bible: ProjectEditBible | null | undefined,
-): ActiveStylePreviewGenerationCard | null {
-  if (!bible) return null
-  const stylePreviews = bible.stylePreviews ?? []
-  if (stylePreviews.some((preview) => preview.status === 'confirmed')) return null
-  const items = stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
-    if (!isStyleKey(preview.styleKey)) return []
-    return [{
-      id: preview.id,
-      styleKey: preview.styleKey,
-      title: preview.title,
-      summary: preview.summary,
-      ...(preview.taskId ? { taskId: preview.taskId } : {}),
-      ...(preview.aspectRatio ? { aspectRatio: preview.aspectRatio } : {}),
-    }]
-  })
-  if (items.length === 0) return null
-  return {
-    key: `bible:${bible.id}:style-previews`,
-    data: {
-      operationId: 'generate_edit_style_previews',
-      projectId: bible.projectId,
-      episodeId: bible.episodeId,
-      bibleId: bible.id,
-      items,
-    },
-  }
 }

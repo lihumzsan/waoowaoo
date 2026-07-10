@@ -757,7 +757,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
   })
 
-  it('allows a choice response run to finish when the model chooses not to call another tool', async () => {
+  it('fails explicitly when a choice response skips its authoritative next operation', async () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
@@ -771,9 +771,8 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_style_previews', [
       'generate_edit_style_previews',
-      'revise_bible',
     ])
 
     const response = await createProjectAgentChatResponse({
@@ -798,13 +797,12 @@ describe('project agent runtime deterministic tool injection', () => {
     await drainCapturedResponseStream()
 
     expect(response.status).toBe(200)
-    expect(loggerState.error).not.toHaveBeenCalledWith(expect.objectContaining({
-      action: 'assistant.choice_response.no_progress',
-    }))
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-choice_response',
-      status: 'completed',
-      stopReason: 'completed',
+      status: 'failed',
+      stopReason: 'choice_continuation_missing',
+      errorCode: 'PROJECT_AGENT_CHOICE_CONTINUATION_MISSING',
+      errorMessage: 'Choice response did not execute required workflow continuation: generate_edit_style_previews',
     }))
   })
 
@@ -822,9 +820,8 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
+    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_style_previews', [
       'generate_edit_style_previews',
-      'revise_bible',
     ])
 
     const response = await createProjectAgentChatResponse({
@@ -851,7 +848,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(response.status).toBe(200)
     expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
     expect(streamState.capturedEnabledToolNames).toContain('generate_edit_style_previews')
-    expect(streamState.capturedEnabledToolNames).toContain('revise_bible')
+    expect(streamState.capturedEnabledToolNames).not.toContain('revise_bible')
   })
 
   it('keeps follow-up bible operations available after bible generation from a choice response', async () => {

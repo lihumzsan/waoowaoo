@@ -10,6 +10,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 - **AR-01 — 服务端权威。** thread/run 的 append、终态、锁和恢复由服务端管理；客户端和模型不得持有第二套 run 状态。
 - **AR-02 — 每回合有结算语义。** 一个 turn 必须明确是完成、等待用户、等待 Task、继续 Agent 还是失败；零输出、伪完成和停滞必须显式报错或进入明确状态。
+- **AR-02A — Choice 续跑不可静默完成。** 用户提交结构化选择后，服务端必须重新读取 Workflow；若存在已启用的权威 `nextAction`，本回合必须执行该 operation、进入 approval/choice/Task 等等待态或显式失败，不得只输出成功文案后把 run 标记为完成。
 - **AR-03 — Task 终态驱动继续。** Task 成功/失败后的唤醒只由持久任务终态触发，并以幂等方式关联到对应 run。
 - **AR-03A — 失败不授权改写。** 已确认剧本的制作规划任务失败只允许 Assistant 解释并等待用户决定；失败终态不得自动授权重写剧本或提交新输入。
 - **AR-04 — 用户界面只呈现产品语义。** 运行卡片可展示本地化操作名和任务数量，不得展示 taskType、targetType、targetId、operationId、原始工具参数或原始工具结果；这些字段只用于诊断日志和持久协议。
@@ -31,11 +32,13 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `scripts/guards/no-client-agent-control.mjs` 阻止客户端成为 Agent 控制面。
 - `scripts/guards/no-assistant-fixed-workflow-surface.mjs` 阻止将固定流程伪装成 Agent 自主运行。
 - `scripts/guards/no-history-state-inference.mjs` 阻止从历史消息推断当前业务状态。
+- `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant 控制层直接提交 Task 并绕过 operation/Wait。
 
 ## 历史回归
 
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
+- 制作规划 choice 曾通过局部副作用提交视觉风格 Task，导致模型文案、候选记录、run/Wait 三套状态分离；Choice 只负责落用户决定，异步执行必须回到 registry 与 runtime。
 
 ## 修改检查表
 
@@ -44,3 +47,4 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 3. Task 终态如何幂等地唤醒正确 run？
 4. 并发、重放、心跳超时和取消是否有测试？
 5. 是否新增了按 operation id 或消息文本的控制流特判？若是，必须重做为 registry/状态机语义。
+6. Choice 落库后若 Workflow 存在 `nextAction`，run 是否证明已执行、等待或显式失败？

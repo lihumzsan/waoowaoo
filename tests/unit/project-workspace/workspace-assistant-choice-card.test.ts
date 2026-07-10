@@ -9,7 +9,6 @@ import {
   shouldShowChoiceCardManualSubmit,
 } from '@/features/project-workspace/components/workspace-assistant/choice-card-actions'
 import {
-  buildStylePreviewGenerationCardFromBible,
   findActiveStylePreviewGenerationCard,
 } from '@/features/project-workspace/components/workspace-assistant/active-style-preview-generation'
 
@@ -124,37 +123,27 @@ describe('workspace assistant choice card actions', () => {
     expect(active?.data.items.map((item) => item.id)).toEqual(['preview-1'])
   })
 
-  it('recovers a style preview generation card from bible state after refresh', () => {
-    const active = buildStylePreviewGenerationCardFromBible({
-      id: 'bible-1',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      userPrompt: 'prompt',
-      bibleText: 'bible',
-      status: 'style_preview_generating',
-      styleBible: null,
-      stylePreviews: [
-        {
-          id: 'preview-1',
+  it('rejects historical style cards that are not bound to an Agent run', () => {
+    const messages = [{
+      id: 'assistant-orphan',
+      role: 'assistant',
+      parts: [{
+        type: 'data-edit-style-preview-generation',
+        data: {
+          operationId: 'generate_edit_style_previews',
           projectId: 'project-1',
           episodeId: 'episode-1',
           bibleId: 'bible-1',
-          styleKey: 'style_a',
-          aspectRatio: '16:9',
-          title: '暗黑风格',
-          summary: '暗黑摘要',
-          styleBible: {},
-          gridImagePrompt: 'prompt',
-          imageKey: null,
-          imageUrl: null,
-          status: 'generating',
-          taskId: 'task-1',
-          errorMessage: null,
+          items: [{
+            id: 'preview-1',
+            styleKey: 'style_a',
+            title: '暗黑风格',
+            summary: '缺少 run 绑定',
+          }],
         },
-      ],
-    })
+      }],
+    }] as unknown as UIMessage[]
 
-    expect(active?.data.items).toHaveLength(1)
-    expect(active?.data.items[0]?.taskId).toBe('task-1')
+    expect(findActiveStylePreviewGenerationCard(messages)).toBeNull()
   })
 })

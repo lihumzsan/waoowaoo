@@ -255,12 +255,16 @@ function resolveStylePreviewAgentRunId(params: {
   run: ProjectAgentSessionRun | null
   activity: ProjectAgentSessionActivity | null
 }): string | null {
-  if (!params.run) return null
+  if (!params.run || !params.activity || params.activity.runId !== params.run.runId) return null
   if (
-    params.activity?.operationId === 'generate_edit_style_previews'
-    || params.activity?.sourceOperationId === 'generate_edit_style_previews'
+    params.activity.type === 'waiting_task'
+    && params.activity.operationId === 'generate_edit_style_previews'
   ) return params.run.runId
-  if (params.run.status === 'awaiting_choice' && params.run.controlKind === 'user_turn') return params.run.runId
+  if (
+    params.activity.type === 'awaiting_choice'
+    && params.activity.sourceOperationId === 'generate_edit_style_previews'
+    && params.activity.choiceType === 'style'
+  ) return params.run.runId
   return null
 }
 
@@ -314,6 +318,7 @@ async function buildActiveStylePreviewGeneration(params: {
     run: params.run,
     activity: params.activity,
   })
+  if (!agentRunId) return null
   const items = editBible.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
     // taskId 缺失（追加候选刚建行、尚未回填）也要收录，否则停靠卡会停在旧的候选数、看不到新生成的。
     if (!isStylePreviewKey(preview.styleKey)) return []
@@ -331,7 +336,7 @@ async function buildActiveStylePreviewGeneration(params: {
     key: `bible:${editBible.id}:style-previews`,
     data: {
       operationId: 'generate_edit_style_previews',
-      ...(agentRunId ? { agentRunId } : {}),
+      agentRunId,
       projectId: editBible.episode.projectId,
       episodeId: editBible.episodeId,
       bibleId: editBible.id,
@@ -410,7 +415,12 @@ export async function getProjectAgentSessionState(
       errorMessage: run.errorMessage ?? null,
     }
     : null
-  const activeStylePreviewGeneration = pendingInteraction?.kind === 'choice' && pendingInteraction.choiceType === 'style'
+  const stylePreviewInteractionPending = (
+    pendingInteraction?.kind === 'choice' && pendingInteraction.choiceType === 'style'
+  ) || (
+    pendingInteraction?.kind === 'approval' && pendingInteraction.operationId === 'generate_edit_style_previews'
+  )
+  const activeStylePreviewGeneration = stylePreviewInteractionPending
     ? null
     : await buildActiveStylePreviewGeneration({
         projectId: input.projectId,

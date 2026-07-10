@@ -447,6 +447,169 @@ describe('project agent session-state', () => {
     }))
   })
 
+  it('does not project planned style rows as generating while billing approval is pending', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([{
+      id: 'run-style-approval-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-style-approval-1',
+      status: 'awaiting_approval',
+      controlKind: 'choice_response',
+      stopReason: 'awaiting_approval',
+    }])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
+      id: 'style-approval-1',
+      runId: 'run-style-approval-1',
+      activityId: 'activity-style-approval-1',
+      type: 'approval',
+      status: 'pending',
+      operationId: 'generate_edit_style_previews',
+      approvalId: 'approval-style-1',
+      toolCallId: 'tool-style-1',
+      payload: {},
+    })
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-style-approval-1',
+      runId: 'run-style-approval-1',
+      type: 'awaiting_approval',
+      status: 'waiting',
+      operationId: 'generate_edit_style_previews',
+      sourceOperationId: null,
+      toolCallId: 'tool-style-1',
+      choiceType: null,
+    })
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      episode: { projectId: 'project-1' },
+      episodeId: 'episode-1',
+      stylePreviews: [{
+        id: 'style-preview-a',
+        styleKey: 'style_a',
+        title: '风格 A',
+        summary: '等待用户批准报价',
+        taskId: null,
+        aspectRatio: '16:9',
+        status: 'pending',
+      }],
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.pendingInteraction).toEqual(expect.objectContaining({
+      kind: 'approval',
+      operationId: 'generate_edit_style_previews',
+    }))
+    expect(state.activeStylePreviewGeneration).toBeNull()
+  })
+
+  it('projects style generation only after the approved task is bound to a run wait', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([{
+      id: 'run-style-task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-style-task-1',
+      status: 'awaiting_task',
+      controlKind: 'approval_response',
+      stopReason: 'awaiting_task_then_choice',
+    }])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-style-task-1',
+      runId: 'run-style-task-1',
+      type: 'waiting_task',
+      status: 'waiting',
+      operationId: 'generate_edit_style_previews',
+      sourceOperationId: null,
+      toolCallId: null,
+      choiceType: null,
+    })
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      episode: { projectId: 'project-1' },
+      episodeId: 'episode-1',
+      stylePreviews: [{
+        id: 'style-preview-a',
+        styleKey: 'style_a',
+        title: '风格 A',
+        summary: '已授权并等待任务回填',
+        taskId: null,
+        aspectRatio: '16:9',
+        status: 'pending',
+      }],
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.activeStylePreviewGeneration?.data).toEqual(expect.objectContaining({
+      agentRunId: 'run-style-task-1',
+      items: [expect.objectContaining({
+        id: 'style-preview-a',
+      })],
+    }))
+  })
+
+  it('does not expose a selectable style card without a run-bound wait or choice activity', async () => {
+    runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([{
+      id: 'run-completed-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-completed-1',
+      status: 'completed',
+      controlKind: 'choice_response',
+      stopReason: 'completed',
+    }])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce(null)
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce(null)
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      episode: { projectId: 'project-1' },
+      episodeId: 'episode-1',
+      stylePreviews: [{
+        id: 'style-preview-a',
+        styleKey: 'style_a',
+        title: '风格 A',
+        summary: '已完成但没有等待选择的 Agent run',
+        taskId: 'task-style-a',
+        aspectRatio: '16:9',
+        status: 'completed',
+      }],
+    })
+
+    const state = await getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+
+    expect(state.activeStylePreviewGeneration).toBeNull()
+  })
+
   it('returns failed run error details for assistant runtime failures', async () => {
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
       {

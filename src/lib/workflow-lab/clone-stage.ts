@@ -8,30 +8,31 @@ const WORKFLOW_LAB_STAGE_ORDER: Record<EditFirstWorkflowStage, number> = {
   ready_to_generate_bible: 4,
   bible_generating: 5,
   bible_ready_for_review: 6,
-  style_preview_generating: 7,
-  needs_style_choice: 8,
-  ready_to_generate_edit_script: 9,
-  edit_script_generating: 10,
-  ready_to_generate_assets: 11,
-  assets_generating: 12,
-  assets_ready_for_review: 13,
-  ready_to_generate_shot_execution_plan: 14,
-  ready_to_generate_storyboard: 15,
-  storyboard_generating: 16,
-  ready_to_generate_storyboard_images: 17,
-  storyboard_images_generating: 18,
-  ready_to_generate_videos: 19,
-  videos_generating: 20,
-  ready_to_render_chapters: 21,
-  chapters_rendering: 22,
-  ready_to_generate_bgm_score: 23,
-  ready_to_generate_audio_layers: 24,
-  bgm_score_generating: 25,
-  audio_layers_generating: 26,
-  ready_to_render_final: 27,
-  final_rendering: 28,
-  completed: 29,
-  failed: 30,
+  ready_to_generate_style_previews: 7,
+  style_preview_generating: 8,
+  needs_style_choice: 9,
+  ready_to_generate_edit_script: 10,
+  edit_script_generating: 11,
+  ready_to_generate_assets: 12,
+  assets_generating: 13,
+  assets_ready_for_review: 14,
+  ready_to_generate_shot_execution_plan: 15,
+  ready_to_generate_storyboard: 16,
+  storyboard_generating: 17,
+  ready_to_generate_storyboard_images: 18,
+  storyboard_images_generating: 19,
+  ready_to_generate_videos: 20,
+  videos_generating: 21,
+  ready_to_render_chapters: 22,
+  chapters_rendering: 23,
+  ready_to_generate_bgm_score: 24,
+  ready_to_generate_audio_layers: 25,
+  bgm_score_generating: 26,
+  audio_layers_generating: 27,
+  ready_to_render_final: 28,
+  final_rendering: 29,
+  completed: 30,
+  failed: 31,
 }
 
 export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold: EditFirstWorkflowStage): boolean {
@@ -64,7 +65,7 @@ export function shouldWorkflowLabCloneVideos(stage: EditFirstWorkflowStage): boo
 
 export function resolveWorkflowLabBibleStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
   if (!shouldWorkflowLabCloneBible(stage)) return sourceStatus
-  if (!shouldWorkflowLabCloneStylePreviews(stage)) return 'ready_for_review'
+  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_style_previews')) return 'ready_for_review'
   return 'confirmed'
 }
 

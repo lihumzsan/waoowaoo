@@ -760,6 +760,15 @@ export async function createProjectAgentChatResponse(input: {
     workflow: phase.editFirstWorkflow,
     operationId,
   }))
+  const requiredChoiceContinuationOperationId = control.kind === 'choice'
+    ? phase.editFirstWorkflow.nextAction?.operationId ?? null
+    : null
+  if (
+    requiredChoiceContinuationOperationId
+    && !initialEnabledOperationIds.includes(requiredChoiceContinuationOperationId)
+  ) {
+    throw new Error(`PROJECT_AGENT_CHOICE_CONTINUATION_NOT_ENABLED:${requiredChoiceContinuationOperationId}`)
+  }
   const selectedTools = operationIds.map((operationId) => {
     const operation = operations[operationId]
     if (!operation) {
@@ -942,6 +951,7 @@ export async function createProjectAgentChatResponse(input: {
     return activity ? [createDataChunk('data-agent-activity', toActivityPartData(activity))] : []
   }
   const stopController = createProjectAgentStopController()
+  const executedOperationIds = new Set<string>()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
   const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
@@ -969,7 +979,10 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: () => liveWorkflow.invalidate(),
+      onExecutionSettled: () => {
+        executedOperationIds.add(item.operation.id)
+        liveWorkflow.invalidate()
+      },
       approvalPreflightStore,
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
@@ -1248,6 +1261,24 @@ export async function createProjectAgentChatResponse(input: {
           chunks.push(createRuntimeStatusChunk('failed', 'completion_error'))
           runStatusFinalized = true
           throw completionError
+        }
+        if (
+          requiredChoiceContinuationOperationId
+          && !shouldPersistApprovalInterruption
+          && !latestStopPart
+          && !executedOperationIds.has(requiredChoiceContinuationOperationId)
+        ) {
+          const errorMessage = `Choice response did not execute required workflow continuation: ${requiredChoiceContinuationOperationId}`
+          await updateProjectAgentRunStatus({
+            runId: input.run.id,
+            status: 'failed',
+            stopReason: 'choice_continuation_missing',
+            errorCode: 'PROJECT_AGENT_CHOICE_CONTINUATION_MISSING',
+            errorMessage,
+          })
+          chunks.push(createRuntimeStatusChunk('failed', 'choice_continuation_missing'))
+          runStatusFinalized = true
+          return chunks
         }
         if (!shouldPersistApprovalInterruption) {
           chunks.push(...await settleTaskFollowUpActivity('completed'))

@@ -131,6 +131,47 @@ describe('project agent event reducer', () => {
     }))
   })
 
+  it('moves an await-user-choice run to awaiting_choice when its task wait completes', async () => {
+    tx.projectAgentWait.findUnique.mockResolvedValueOnce({
+      id: 'wait-style-1',
+      runId: 'run-style-1',
+      operationId: 'generate_edit_style_previews',
+      followUpMode: 'await_user_choice',
+    })
+
+    await reduceProjectAgentEvent({
+      tx: asReducerTx(tx),
+      scope,
+      event: {
+        kind: 'task.terminal',
+        runId: 'run-style-1',
+        activityId: 'activity-wait-style-1',
+        waitId: 'wait-style-1',
+        terminalStatus: 'completed',
+        terminalTaskIds: ['task-style-1'],
+        failedTaskIds: [],
+        nextActivityId: 'activity-choice-style-1',
+      },
+    })
+
+    expect(tx.projectAgentActivity.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'activity-choice-style-1' },
+      create: expect.objectContaining({
+        runId: 'run-style-1',
+        type: 'awaiting_choice',
+        sourceOperationId: 'generate_edit_style_previews',
+        choiceType: 'style',
+      }),
+    }))
+    expect(tx.projectAgentRun.updateMany).toHaveBeenCalledWith({
+      where: { id: 'run-style-1' },
+      data: expect.objectContaining({
+        status: 'awaiting_choice',
+        stopReason: 'awaiting_choice',
+      }),
+    })
+  })
+
   it('fails when a run already has an open activity', async () => {
     tx.projectAgentActivity.findFirst.mockResolvedValueOnce({
       id: 'activity-existing',

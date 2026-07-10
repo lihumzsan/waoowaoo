@@ -214,16 +214,13 @@ function buildAssistantBillingQuotePreview(params: {
 
 function BillingQuoteBlock(props: {
   preview: BillingActionQuotePreview | null
-  summaryLabel: string | null
 }) {
-  const t = useTranslations('assistantAgent')
   const preview = props.preview
   if (!preview) return null
-  const summaryLabel = props.summaryLabel ?? t('cards.billingTaskCount', { count: preview.mediaTaskCount })
   return (
     <div className="mt-4 flex items-center gap-3 text-xs">
       <span className="shrink-0 whitespace-nowrap tabular-nums text-[var(--glass-text-tertiary)]">
-        {summaryLabel}
+        {preview.fullLabel}
       </span>
       <span className="h-px flex-1 bg-slate-200" />
     </div>
@@ -248,7 +245,7 @@ export function ConfirmationActionCard(props: {
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{props.title}</div>
       <div className="mt-1 leading-5">{props.subtitle}</div>
-      <BillingQuoteBlock preview={quotePreview} summaryLabel={quoteActionLabel} />
+      <BillingQuoteBlock preview={quotePreview} />
       <div className="mt-3 flex gap-2">
         <BillingActionButton
           type="button"
@@ -284,7 +281,7 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
       <div className="text-sm font-semibold text-[var(--glass-text-primary)]">{title}</div>
       <div className="mt-1 leading-5">{t('cards.billingQuotePreview')}</div>
-      <BillingQuoteBlock preview={quotePreview} summaryLabel={quoteActionLabel} />
+      <BillingQuoteBlock preview={quotePreview} />
     </div>
   )
 }
@@ -380,11 +377,6 @@ export function AssistantChoiceCardView(props: {
   const canGoBack = activeGroupIndex > 0
   const isAspectRatioGroup = activeGroup ? isAspectRatioChoiceGroupKey(activeGroup.key) : false
   const isStylePreviewGroup = activeGroup?.key === 'stylePreviewId'
-  const choiceQuote = card.operationPlan?.quote ?? null
-  const choiceQuoteActionLabel = choiceQuote ? buildBillingActionSummaryLabel(choiceQuote, t) : null
-  const choiceQuotePreview = choiceQuote
-    ? buildAssistantBillingQuotePreview({ quote: choiceQuote, actionLabel: choiceQuoteActionLabel, t })
-    : null
 
   const readChoiceRunId = (): string => {
     const runId = card.runId?.trim()
@@ -443,9 +435,6 @@ export function AssistantChoiceCardView(props: {
             decision: 'approve',
             selections: submitSelections,
             labels,
-            ...(typeof card.operationPlan?.quote.totalMaxFrozenCost === 'number'
-              ? { confirmedMaxCost: card.operationPlan.quote.totalMaxFrozenCost }
-              : {}),
           },
         })
         props.onSubmitted?.(card.cardId)
@@ -665,7 +654,6 @@ export function AssistantChoiceCardView(props: {
         ) : null}
       </div>
       {card.description ? <div className="mt-1 line-clamp-2 leading-5">{card.description}</div> : null}
-      <BillingQuoteBlock preview={choiceQuotePreview} summaryLabel={choiceQuoteActionLabel} />
       {isConfirmOnly || isConfirmOrReply ? renderActiveGroup() : null}
       {isConfirmOnly ? (
         <div className="mt-3">

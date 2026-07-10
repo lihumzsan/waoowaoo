@@ -123,6 +123,7 @@ describe('workspace assistant renderers', () => {
     expect(html).toContain('继续执行')
     expect(html).toContain('取消操作')
     expect(html).toContain('生成 9 张图片')
+    expect(html).toContain('生成 9 张图片 · 预计消耗 3.4128 credits')
     expect(html).not.toContain('3 个媒体生成任务')
     expect(html).toContain('3.41')
     expect(html).toContain('text-white/70')

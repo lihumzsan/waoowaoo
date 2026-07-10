@@ -29,6 +29,7 @@ export type EditFirstWorkflowStage =
   | 'ready_to_generate_bible'
   | 'bible_generating'
   | 'bible_ready_for_review'
+  | 'ready_to_generate_style_previews'
   | 'style_preview_generating'
   | 'needs_style_choice'
   | 'ready_to_generate_edit_script'
@@ -381,7 +382,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
       if (snapshot.activeStylePreviewTaskCount === 0 && !hasCompletedAndFailedPreviews) {
         const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
         return state({
-          stage: 'needs_style_choice',
+          stage: 'ready_to_generate_style_previews',
           nextAction,
           allowedOperationIds: [nextAction.operationId],
         })
@@ -398,7 +399,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     if (snapshot.stylePreviewCount === 0) {
       const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
       return state({
-        stage: 'needs_style_choice',
+        stage: 'ready_to_generate_style_previews',
         nextAction,
         allowedOperationIds: [nextAction.operationId],
       })
@@ -751,6 +752,8 @@ export function resolveEditFirstWorkflowCapabilityOperationIds(
       return []
     case 'bible_ready_for_review':
       return ['revise_bible']
+    case 'ready_to_generate_style_previews':
+      return ['generate_edit_style_previews']
     case 'style_preview_generating':
       return []
     case 'needs_style_choice':

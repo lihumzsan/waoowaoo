@@ -34,6 +34,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/unit/task/service-operation-metadata.test.ts` 验证 operation metadata 语义。
 - `scripts/guards/task-submit-compensation-guard.mjs` 检查 route 的 create + submit 补偿标记。
 - `scripts/guards/no-operation-direct-submit-task.mjs` 阻止 operation 绕过统一提交边界。
+- `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant choice/runtime 绕过 operation registry 直接提交 Task。
 - `scripts/guards/task-target-states-no-polling-guard.mjs` 阻止以 polling 伪造目标状态。
 
 ## 历史回归

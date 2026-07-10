@@ -8,8 +8,6 @@ import type {
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
-import { planProjectEditStylePreviews } from '@/lib/edit-script/style-preview-operation-plan'
-import { toOperationPlanView } from '@/lib/operations/planning'
 export {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   EDIT_FIRST_CHOICE_TOOL_IDS,
@@ -213,9 +211,6 @@ async function buildScriptReviewChoiceCard(params: {
 }
 
 async function buildBibleReviewChoiceCard(params: {
-  projectId: string
-  userId: string
-  episodeId: string
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
@@ -224,27 +219,15 @@ async function buildBibleReviewChoiceCard(params: {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=${params.workflow.stage}`)
   }
   const isEnglish = params.locale === 'en'
-  const stylePreviewPlan = await planProjectEditStylePreviews({
-    projectId: params.projectId,
-    userId: params.userId,
-    episodeId: params.episodeId,
-    locale: params.locale,
-  })
-  const operationPlan = await toOperationPlanView(stylePreviewPlan)
-  const planVersion = createHash('sha256')
-    .update(operationPlan.tasks.map((task) => task.targetId).join('|'))
-    .digest('hex')
-    .slice(0, 12)
   return {
-    cardId: `edit-first-bible-review:${planVersion}`,
+    cardId: 'edit-first-bible-review',
     toolCallId: params.toolCallId,
     choiceType: 'bible_review',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     description: isEnglish
-      ? 'Review the production plan and choose the project aspect ratio. Confirming also authorizes the visual-style preview images quoted below; no second confirmation will be shown.'
-      : '请审核制作规划并选择项目画面比例。确认制作规划时也会一并授权下方列出的视觉风格候选图生成，不会再次弹出确认。',
-    operationPlan,
+      ? 'Review the story understanding, chapter split, durable facts, emotional curve, and choose the project aspect ratio. Confirm only when this production plan can drive chapter production.'
+      : '请审核系统对整集剧本的理解、章节切分、长期事实和情绪走势，并选择项目画面比例。确认后，这份制作规划将作为各章节制作的基线。',
     groups: [
       {
         key: 'aspectRatio',
@@ -388,9 +371,6 @@ export async function buildEditFirstAssistantChoiceCard(params: {
 
   if (params.choiceType === 'bible_review') {
     return await buildBibleReviewChoiceCard({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

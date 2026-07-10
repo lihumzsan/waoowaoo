@@ -96,14 +96,14 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
-  it('treats planned visual style rows as processing only while the parent task is active', () => {
+  it('keeps planned visual style rows in the pre-submission stage until a task is active', () => {
     const plannedOnly = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 3,
       activeStylePreviewTaskCount: 0,
     }))
-    expect(plannedOnly.stage).toBe('needs_style_choice')
+    expect(plannedOnly.stage).toBe('ready_to_generate_style_previews')
     expect(plannedOnly.nextAction?.operationId).toBe('generate_edit_style_previews')
     expect(plannedOnly.blocking.kind).not.toBe('processing')
 

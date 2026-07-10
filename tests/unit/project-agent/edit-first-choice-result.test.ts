@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NextRequest } from 'next/server'
-import { TASK_TYPE } from '@/lib/task/types'
 
 const prismaMock = vi.hoisted(() => ({
   project: {
@@ -13,11 +11,6 @@ const prismaMock = vi.hoisted(() => ({
   },
   $transaction: vi.fn(async (operations: readonly Promise<unknown>[]) => await Promise.all(operations)),
 }))
-
-const styleTaskSubmissionMock = vi.hoisted(() => vi.fn(async () => ({
-  taskId: 'style-parent-task-1',
-  status: 'queued',
-})))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
@@ -37,60 +30,9 @@ vi.mock('@/lib/edit-bible', () => ({
   confirmEpisodeEditBible: vi.fn(async () => ({ id: 'bible-1' })),
 }))
 
-vi.mock('@/lib/edit-script/task-submission', () => ({
-  submitProjectEditStylePreviewsGenerationTask: styleTaskSubmissionMock,
-}))
-
 const approveProjectEpisodeEditScriptAssetsMock = vi.mocked(approveProjectEpisodeEditScriptAssets)
 const approveEpisodePromptGeneratedScriptMock = vi.mocked(approveEpisodePromptGeneratedScript)
 const confirmEpisodeEditBibleMock = vi.mocked(confirmEpisodeEditBible)
-
-function request(): NextRequest {
-  return new Request('http://localhost/api/assistant', { method: 'POST' }) as NextRequest
-}
-
-function bibleReviewChoiceCard() {
-  return {
-    cardId: 'edit-first-bible-review:plan-1',
-    toolCallId: 'tool-call-1',
-    choiceType: 'bible_review' as const,
-    title: '确认制作规划',
-    groups: [],
-    submitLabel: '确认制作规划',
-    submit: { kind: 'submit_tool_output' as const },
-    operationPlan: {
-      operationId: 'generate_edit_style_previews',
-      kind: 'task_submission' as const,
-      taskCount: 1,
-      quote: {
-        showCredits: true,
-        billingMode: 'ENFORCE' as const,
-        billable: true,
-        taskCount: 1,
-        mediaTaskCount: 1,
-        totalMaxFrozenCost: 1.25,
-        currency: 'credits' as const,
-        items: [{
-          id: 'style-task-1',
-          taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-          targetType: 'ProjectEditStylePreview',
-          targetId: 'style-preview-1',
-          apiType: 'image' as const,
-          model: 'image-model',
-          quantity: 1,
-          unit: 'image' as const,
-          maxFrozenCost: 1.25,
-        }],
-      },
-      tasks: [{
-        id: 'style-task-1',
-        taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-        targetType: 'ProjectEditStylePreview',
-        targetId: 'style-preview-1',
-      }],
-    },
-  }
-}
 
 function readSyntheticToolResult(choiceResult: ReturnType<typeof buildEditFirstChoiceResult>): {
   callId: string
@@ -118,7 +60,6 @@ describe('buildEditFirstChoiceResult', () => {
     confirmEpisodeEditBibleMock.mockClear()
     prismaMock.project.updateMany.mockClear()
     prismaMock.project.updateMany.mockResolvedValue({ count: 1 })
-    styleTaskSubmissionMock.mockClear()
   })
 
   it('serializes script intake answers as a normalized brief without selecting the next operation', () => {
@@ -277,7 +218,7 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
-  it('persists approved bible review as the user decision without a second confirmation operation', async () => {
+  it('persists approved bible review without submitting billable visual-style tasks', async () => {
     await applyEditFirstChoiceResultSideEffects({
       choiceType: 'bible_review',
       output: {
@@ -290,9 +231,6 @@ describe('buildEditFirstChoiceResult', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      request: request(),
-      locale: 'zh',
-      persistedChoiceCard: bibleReviewChoiceCard(),
     })
 
     expect(prismaMock.project.updateMany).toHaveBeenCalledWith({
@@ -309,13 +247,6 @@ describe('buildEditFirstChoiceResult', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
     })
-    expect(styleTaskSubmissionMock).toHaveBeenCalledWith(expect.objectContaining({
-      bibleId: 'bible-1',
-      plannedStylePreviewIds: ['style-preview-1'],
-      plannedImageModel: 'image-model',
-      confirmedMaxCost: 1.25,
-      confirmed: true,
-    }))
   })
 
   it('persists approved script review as an explicit script approval edge', async () => {

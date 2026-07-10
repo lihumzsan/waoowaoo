@@ -61,6 +61,7 @@
     "ready_to_generate_bible": "Ready To Generate Production Plan",
     "bible_generating": "Generating Production Plan",
     "bible_ready_for_review": "Awaiting Production Plan Confirmation",
+    "ready_to_generate_style_previews": "Ready To Generate Visual Styles",
     "style_preview_generating": "Generating Style Options",
     "needs_style_choice": "Awaiting Style Choice",
     "ready_to_generate_edit_script": "Ready To Generate Core Edit Table",

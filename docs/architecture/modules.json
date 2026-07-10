@@ -77,6 +77,7 @@
         "src/lib/workspace-resource/materialized-resource.ts",
         "src/lib/query/materialized-resource-cache.ts",
         "src/lib/edit-bible/task-submission.ts",
+        "src/lib/edit-script/task-submission.ts",
         "src/lib/operations/submit-operation-task.ts"
       ],
       "testPaths": [
@@ -84,6 +85,7 @@
         "tests/regression/task-dedupe-recovery.test.ts",
         "tests/regression/task-enqueue-billing-rollback.test.ts",
         "tests/unit/edit-bible/task-submission.test.ts",
+        "tests/unit/edit-script/task-submission.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts"
@@ -91,6 +93,7 @@
       "guardPaths": [
         "scripts/guards/task-submit-compensation-guard.mjs",
         "scripts/guards/no-operation-direct-submit-task.mjs",
+        "scripts/guards/no-project-agent-direct-task-submit.mjs",
         "scripts/guards/task-target-states-no-polling-guard.mjs"
       ]
     },
@@ -104,14 +107,17 @@
       ],
       "testPaths": [
         "tests/unit/project-agent/runtime-routing.test.ts",
+        "tests/regression/project-agent-style-preview-lifecycle.test.ts",
         "tests/unit/project-agent/tool-adapter-gates.test.ts",
+        "tests/unit/guards/no-project-agent-direct-task-submit.test.ts",
         "tests/unit/components/workspace-assistant-renderers.test.ts",
         "tests/unit/operations/registry.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-client-agent-control.mjs",
         "scripts/guards/no-assistant-fixed-workflow-surface.mjs",
-        "scripts/guards/no-history-state-inference.mjs"
+        "scripts/guards/no-history-state-inference.mjs",
+        "scripts/guards/no-project-agent-direct-task-submit.mjs"
       ]
     },
     {
