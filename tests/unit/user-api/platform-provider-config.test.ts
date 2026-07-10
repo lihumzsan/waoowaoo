@@ -65,6 +65,7 @@ describe('platform provider config', () => {
     const models = await getUserModels('user-1')
     expect(models.map((model) => model.modelKey)).toContain('openrouter::anthropic/claude-sonnet-4.6')
     expect(models.map((model) => model.modelKey)).toContain('openrouter::openai/gpt-5.5')
+    expect(models.map((model) => model.modelKey)).toContain('openrouter::openai/gpt-5.6-terra')
     expect(models.map((model) => model.modelKey)).toContain('fal::gpt-image-2')
     expect(models.map((model) => model.modelKey)).toContain('fal::fal-ai/lyria3/pro')
 

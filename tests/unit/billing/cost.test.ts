@@ -15,6 +15,12 @@ describe('billing/cost provider catalog pricing', () => {
     expect(cost).toBeCloseTo(129.6, 8)
   })
 
+  it('charges GPT-5.6 Terra from its OpenRouter token tiers', () => {
+    const cost = calcText('openrouter::openai/gpt-5.6-terra', 1_000_000, 1_000_000)
+
+    expect(cost).toBeCloseTo(126, 8)
+  })
+
   it('discounts Google implicit cache hit input tokens', () => {
     const cost = calcTextWithCache('google::gemini-3.5-flash', 1_000_000, 0, {
       cachedInputTokens: 400_000,
