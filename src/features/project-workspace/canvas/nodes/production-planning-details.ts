@@ -29,7 +29,6 @@ export interface PlanningBeat {
   readonly title: string
   readonly summary: string
   readonly durationSec: number | null
-  readonly persistentFacts: readonly string[]
 }
 
 export interface PlanningLedgerEntityRef {
@@ -163,7 +162,6 @@ function readPlanningBeat(value: unknown): PlanningBeat | null {
     title,
     summary,
     durationSec: readPlanningNumberField(record, 'estimatedDurationSec'),
-    persistentFacts: readPlanningStringArray(record.persistentFactsIntroduced),
   }
 }
 

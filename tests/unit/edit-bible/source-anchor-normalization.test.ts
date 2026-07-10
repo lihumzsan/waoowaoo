@@ -32,7 +32,6 @@ describe('edit bible source-anchor normalization', () => {
             endQuote: '地下室。',
           },
           estimatedDurationSec: 30,
-          persistentFactsIntroduced: ['地下室被蓝光照亮'],
         }],
       },
     })
@@ -56,27 +55,29 @@ describe('edit bible source-anchor normalization', () => {
           sourceStart: 0,
           sourceEnd: 999,
           estimatedDurationSec: 30,
-          persistentFactsIntroduced: [],
         }],
       },
     })).toThrow()
   })
 
-  it('converts ledger and emotional cue anchors through the same resolver', () => {
+  it('derives ledger ranges from their bound beats and resolves emotional cue anchors', () => {
     const ledger = normalizeRawLedger({
-      sourceText,
-      blocks,
+      beatSheet: {
+        beats: [{
+          beatId: 'beat_001',
+          title: '时间倒流',
+          summary: '时间开始倒流。',
+          sourceStart: sourceText.indexOf('时间开始'),
+          sourceEnd: sourceText.length,
+          estimatedDurationSec: 30,
+        }],
+      },
       raw: {
         events: [{
           eventId: 'event_001',
+          beatId: 'beat_001',
           kind: 'plot',
           summary: '时间开始倒流。',
-          sourceAnchor: {
-            startBlockId: 'p0001',
-            startQuote: '时间开始',
-            endBlockId: 'p0001',
-            endQuote: '倒流。',
-          },
           entities: [{ entityType: 'world', entityName: '时间' }],
           persistentFacts: ['时间已经开始倒流'],
         }],
@@ -102,7 +103,24 @@ describe('edit bible source-anchor normalization', () => {
     })
 
     expect(ledger.events[0]?.sourceStart).toBe(sourceText.indexOf('时间开始'))
+    expect(ledger.events[0]).not.toHaveProperty('beatId')
     expect(curve.cues[0]?.sourceEnd).toBe(sourceText.indexOf('倒流。') + '倒流。'.length)
+  })
+
+  it('rejects a ledger event that references an unknown beat', () => {
+    expect(() => normalizeRawLedger({
+      beatSheet: { beats: [] },
+      raw: {
+        events: [{
+          eventId: 'event_001',
+          beatId: 'beat_missing',
+          kind: 'plot',
+          summary: '时间开始倒流。',
+          entities: [],
+          persistentFacts: [],
+        }],
+      },
+    })).toThrow('EDIT_BIBLE_LEDGER_BEAT_NOT_FOUND:event_001:beat_missing')
   })
 
   it('normalizes global bible entities without source-position metadata', () => {

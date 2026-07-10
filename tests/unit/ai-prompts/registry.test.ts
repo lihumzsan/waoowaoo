@@ -120,12 +120,18 @@ describe('ai prompt registry', () => {
   it('renders all edit bible prompt variables through the unified builder', () => {
     for (const promptId of editBibleJsonPromptIds) {
       const prompt = buildAiPrompt({
-        promptId,
-        locale: 'en',
-        variables: {
-          source_document: 'Mira opens the sealed observatory.',
-          source_length: '35',
-        },
+      promptId,
+      locale: 'en',
+      variables: {
+        source_document: 'Mira opens the sealed observatory.',
+        source_length: '35',
+        ...(promptId === AI_PROMPT_IDS.EDIT_BIBLE_LEDGER
+          ? {
+              beat_sheet: '{"beats":[]}',
+              entity_catalog: '{"characters":[],"locations":[]}',
+            }
+          : {}),
+      },
       })
 
       expect(prompt).toContain('Mira opens the sealed observatory.')

@@ -110,7 +110,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_LEDGER]: {
     pathStem: 'edit-bible/ledger',
-    variableKeys: ['source_document', 'source_length'],
+    variableKeys: ['source_document', 'source_length', 'beat_sheet', 'entity_catalog'],
   },
   [AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE]: {
     pathStem: 'edit-bible/emotional-curve',

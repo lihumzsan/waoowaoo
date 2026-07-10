@@ -63,7 +63,6 @@ export const editBibleBeatBaseSchema = z.object({
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   estimatedDurationSec: z.number().int().positive(),
-  persistentFactsIntroduced: z.array(z.string().trim().min(1)).default([]),
 })
 
 export const editBibleBeatSchema = editSourceRangeSchema.safeExtend(editBibleBeatBaseSchema.shape)
@@ -113,7 +112,7 @@ export const rawEditBibleEmotionalCurveSchema = z.object({
 export type RawEditBibleEmotionalCurve = z.infer<typeof rawEditBibleEmotionalCurveSchema>
 
 export const rawEditBibleLedgerEventSchema = ledgerEventBaseSchema.extend({
-  sourceAnchor: editSourceAnchorSchema,
+  beatId: z.string().trim().min(1),
 })
 
 export const rawEditBibleLedgerSchema = z.object({

@@ -309,7 +309,7 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'bible generation failed' },
-      nextAction: workflowAction('ingest_script', 'Regenerate bible'),
+      allowedOperationIds: [],
     })
   }
 

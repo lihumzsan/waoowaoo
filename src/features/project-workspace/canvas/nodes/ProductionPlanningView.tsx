@@ -153,7 +153,7 @@ function renderBeatSheet(planning: ProductionPlanningDetails, labels: Labels): R
     title: beat.title,
     subtitle: beat.summary,
     meta: beat.durationSec !== null ? `${beat.durationSec}s` : undefined,
-    detail: renderChips(labels('persistentFacts'), beat.persistentFacts) ?? <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] text-[var(--glass-text-secondary)]`}>{beat.summary}</p>,
+    detail: <p className={`${SELECTABLE_TEXT_CLASS} text-[11px] text-[var(--glass-text-secondary)]`}>{beat.summary}</p>,
   }))
   return <ShotGrid cards={cards} accent="slate" />
 }

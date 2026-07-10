@@ -64,6 +64,7 @@ async function runEditBibleStructuredStep<TData>(input: {
   readonly stepIndex: number
   readonly stepTotal: number
   readonly validate: (raw: unknown) => TData
+  readonly variables?: Record<string, string>
 }): Promise<TData> {
   const finalPromptContent = buildAiPromptContent({
     promptId: input.promptId,
@@ -71,6 +72,7 @@ async function runEditBibleStructuredStep<TData>(input: {
     variables: {
       source_document: input.sourceDocument,
       source_length: String(input.sourceDocument.length),
+      ...(input.variables ?? {}),
     },
     cacheVariableKeys: ['source_document'],
     minCacheChars: EDIT_BIBLE_PROMPT_CACHE_MIN_CHARS,
@@ -119,8 +121,16 @@ export async function generateEditBibleArtifacts(input: {
 }): Promise<EditBibleBundle> {
   const sourceBlocks = buildEditSourceBlocks(input.sourceDocument)
   const sourceDocumentForPrompt = formatEditSourceBlocksForPrompt(sourceBlocks)
-  const entries = [
-    ['bible', runEditBibleStructuredStep<EditBible>({
+  const runStep = async <TData>(key: keyof EditBibleDiagnostics, run: () => Promise<TData>): Promise<TData> => {
+    try {
+      return await run()
+    } catch (error: unknown) {
+      const normalizedError = toAppError(error, { fallbackCode: 'PLAN_VALIDATION_FAILED' })
+      throw new EditBibleExtractionError({ [key]: serializeExtractionError(error) }, normalizedError.code)
+    }
+  }
+
+  const bible = await runStep('bible', async () => await runEditBibleStructuredStep<EditBible>({
       ...input,
       sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_GLOBAL,
@@ -128,8 +138,8 @@ export async function generateEditBibleArtifacts(input: {
       stepIndex: 1,
       stepTotal: 4,
       validate: (raw) => normalizeRawEditBible({ raw }),
-    })],
-    ['beatSheet', runEditBibleStructuredStep<EditBibleBeatSheet>({
+    }))
+  const beatSheet = await runStep('beatSheet', async () => await runEditBibleStructuredStep<EditBibleBeatSheet>({
       ...input,
       sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
@@ -141,21 +151,33 @@ export async function generateEditBibleArtifacts(input: {
         sourceText: input.sourceDocument,
         blocks: sourceBlocks,
       }),
-    })],
-    ['ledger', runEditBibleStructuredStep<Ledger>({
+    }))
+  const ledger = await runStep('ledger', async () => await runEditBibleStructuredStep<Ledger>({
       ...input,
       sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
       stepTitle: 'Edit bible ledger',
       stepIndex: 3,
       stepTotal: 4,
+      variables: {
+        beat_sheet: JSON.stringify({
+          beats: beatSheet.beats.map((beat) => ({
+            beatId: beat.beatId,
+            title: beat.title,
+            summary: beat.summary,
+          })),
+        }),
+        entity_catalog: JSON.stringify({
+          characters: bible.characters.map((character) => ({ name: character.name, aliases: character.aliases })),
+          locations: bible.locations.map((location) => ({ name: location.name, aliases: location.aliases })),
+        }),
+      },
       validate: (raw) => normalizeRawLedger({
         raw,
-        sourceText: input.sourceDocument,
-        blocks: sourceBlocks,
+        beatSheet,
       }),
-    })],
-    ['emotionalCurve', runEditBibleStructuredStep<EditBibleEmotionalCurve>({
+    }))
+  const emotionalCurve = await runStep('emotionalCurve', async () => await runEditBibleStructuredStep<EditBibleEmotionalCurve>({
       ...input,
       sourceDocument: sourceDocumentForPrompt,
       promptId: AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
@@ -167,51 +189,7 @@ export async function generateEditBibleArtifacts(input: {
         sourceText: input.sourceDocument,
         blocks: sourceBlocks,
       }),
-    })],
-  ] as const
-  const settled = await Promise.allSettled(entries.map((entry) => entry[1]))
-  const diagnostics: EditBibleDiagnostics = {}
-  const extractionErrors: AppError[] = []
-  let bible: EditBible | null = null
-  let beatSheet: EditBibleBeatSheet | null = null
-  let ledger: Ledger | null = null
-  let emotionalCurve: EditBibleEmotionalCurve | null = null
-  settled.forEach((result, index) => {
-    const key = entries[index]?.[0]
-    if (!key) return
-    if (result.status === 'fulfilled') {
-      switch (key) {
-        case 'bible':
-          bible = result.value as EditBible
-          return
-        case 'beatSheet':
-          beatSheet = result.value as EditBibleBeatSheet
-          return
-        case 'ledger':
-          ledger = result.value as Ledger
-          return
-        case 'emotionalCurve':
-          emotionalCurve = result.value as EditBibleEmotionalCurve
-          return
-      }
-      return
-    }
-    const normalizedError = toAppError(result.reason, {
-      fallbackCode: 'PLAN_VALIDATION_FAILED',
-    })
-    extractionErrors.push(normalizedError)
-    diagnostics[key] = serializeExtractionError(result.reason)
-  })
-  if (Object.keys(diagnostics).length > 0) {
-    const primaryError = extractionErrors.find((error) => !error.retryable) ?? extractionErrors[0]
-    throw new EditBibleExtractionError(diagnostics, primaryError?.code ?? 'PLAN_VALIDATION_FAILED')
-  }
-  if (!bible || !beatSheet || !ledger || !emotionalCurve) {
-    throw new EditBibleExtractionError(
-      { error: 'EDIT_BIBLE_EXTRACTION_RESULT_INCOMPLETE' },
-      'PLAN_VALIDATION_FAILED',
-    )
-  }
+    }))
 
   try {
     return validateEditBibleBundle({

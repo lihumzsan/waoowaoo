@@ -84,6 +84,18 @@ describe('edit-first workflow state', () => {
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
   })
 
+  it('does not expose script ingestion after a confirmed script bible generation fails', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'failed',
+      sourceDocumentKind: 'paste',
+    }))
+
+    expect(state.stage).toBe('failed')
+    expect(state.nextAction).toBeNull()
+    expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([])
+  })
+
   it('treats planned visual style rows as processing only while the parent task is active', () => {
     const plannedOnly = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,

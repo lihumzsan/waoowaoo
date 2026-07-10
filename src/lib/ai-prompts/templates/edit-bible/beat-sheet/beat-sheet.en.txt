@@ -21,7 +21,6 @@ Your job is only to split and describe these beats. Do not organize them into ch
 - estimatedDurationSec is a reasonable screen-duration estimate for this beat as video. A typical beat is 15-45 seconds. Keep complex action or long dialogue within 60 seconds when possible; if it exceeds 60 seconds, split at a natural turn.
 - No single beat may exceed 120 seconds. If a source passage is clearly long, split it into multiple beats at natural story turns.
 - Merge very short sentences without an independent story change into a neighboring beat.
-- persistentFactsIntroduced should include only facts that remain true after this beat and must be remembered later. Do not include momentary actions, atmosphere adjectives, or camera language.
 
 # Input
 
@@ -46,10 +45,7 @@ Return JSON only. Do not use markdown or explanations.
         "endBlockId": "p0001",
         "endQuote": "verbatim source snippet at the beat end"
       },
-      "estimatedDurationSec": 30,
-      "persistentFactsIntroduced": [
-        "fact that remains true after this beat; use an empty array if none"
-      ]
+      "estimatedDurationSec": 30
     }
   ]
 }
@@ -61,5 +57,4 @@ Return JSON only. Do not use markdown or explanations.
 - Did the beat ranges cover all story-bearing text?
 - Did you split on natural story turns instead of fixed character counts?
 - Is every estimatedDurationSec reasonable, with no beat above 120 seconds?
-- Does persistentFactsIntroduced contain only facts that remain true later?
 - Is the response strict JSON only?

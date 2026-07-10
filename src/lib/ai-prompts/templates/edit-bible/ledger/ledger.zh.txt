@@ -13,13 +13,11 @@
 
 - 只记录影响后文连贯性的事件：长期事实、人物状态、关系、场景、道具、世界规则或情绪状态的变化。
 - 普通走路、看向某处、短暂停顿、环境氛围等不会持续影响后文的瞬时动作，不要记录。
-- 一个事件可以覆盖多句原文，但 sourceAnchor 必须精准贴合证据，不要跨进无关剧情。
-- 不要输出字符下标、sourceStart 或 sourceEnd。你只需要输出 sourceAnchor，由系统根据 blockId 与原文 quote 计算精确位置。
-- sourceAnchor.startBlockId/sourceAnchor.endBlockId 必须使用输入中的 `[p0001]` 这类块编号。
-- sourceAnchor.startQuote/sourceAnchor.endQuote 必须是对应块中逐字存在的原文短句；不要改写、概括或加入省略号。优先选择 6-30 个字且在该块内唯一的片段。
+- 每个事件必须绑定到下方“已确认节拍表”中的一个 beatId。事件证据范围由该节拍唯一决定，禁止跨越多个节拍，也不要输出 sourceAnchor、字符下标、sourceStart 或 sourceEnd。
 - eventId 用稳定递增的编号，例如 `event_001`、`event_002`。
 - kind 只能使用 `appearance`、`relationship`、`location`、`prop`、`plot`、`rule`、`emotion`，不得创造新类型。
 - entities 只写事件直接涉及的对象；entityType 只能是 `character`、`location`、`prop`、`world`。
+- character 和 location 的 entityName 必须逐字使用下方“已确认实体”中的名称或别名；没有匹配项时不要写该实体。
 - persistentFacts 写成事件发生后仍然成立的事实句；如果事件只是一次出场或短暂情绪、没有留下持久事实，输出空数组。
 - 只描述事件本身，不要写镜头语言，也不要给事件划分章节或段落。
 
@@ -30,6 +28,12 @@
 
 原文长度（UTF-16 code unit）：{{source_length}}
 
+已确认节拍表：
+{{beat_sheet}}
+
+已确认实体：
+{{entity_catalog}}
+
 # 输出 Schema
 
 只返回 JSON，不要 markdown，不要解释。
@@ -38,14 +42,9 @@
   "events": [
     {
       "eventId": "event_001",
+      "beatId": "beat_001",
       "kind": "appearance",
       "summary": "持续影响剧情的事实或状态变化",
-      "sourceAnchor": {
-        "startBlockId": "p0001",
-        "startQuote": "事件证据开始处的原文短句",
-        "endBlockId": "p0001",
-        "endQuote": "事件证据结束处的原文短句"
-      },
       "entities": [
         {
           "entityType": "character",
@@ -64,6 +63,6 @@
 - 是否只记录了会持续影响后文的事件。
 - 是否没有把瞬时动作、镜头描述或普通气氛写成事件。
 - kind 和 entityType 是否只使用允许的枚举值。
-- 每个 sourceAnchor 的 blockId 是否来自输入块编号，quote 是否逐字存在于对应块中。
+- 每个 beatId 是否来自已确认节拍表，且事件没有跨越多个节拍。
 - persistentFacts 是否都是事件之后仍然成立的事实。
 - 是否严格只输出 JSON。

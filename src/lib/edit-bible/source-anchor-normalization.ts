@@ -24,6 +24,12 @@ function omitSourceAnchor<TValue extends { readonly sourceAnchor: unknown }>(
   return rest
 }
 
+function omitBeatId<TValue extends { readonly beatId: unknown }>(value: TValue): Omit<TValue, 'beatId'> {
+  const { beatId, ...rest } = value
+  void beatId
+  return rest
+}
+
 export function normalizeRawEditBible(input: {
   readonly raw: unknown
 }): EditBible {
@@ -54,20 +60,18 @@ export function normalizeRawBeatSheet(input: {
 
 export function normalizeRawLedger(input: {
   readonly raw: unknown
-  readonly sourceText: string
-  readonly blocks: readonly EditSourceBlock[]
+  readonly beatSheet: EditBibleBeatSheet
 }): Ledger {
   const raw = rawEditBibleLedgerSchema.parse(input.raw)
+  const beatsById = new Map(input.beatSheet.beats.map((beat) => [beat.beatId, beat]))
   return ledgerSchema.parse({
     events: raw.events.map((event: RawEditBibleLedger['events'][number]) => {
-      const range = resolveEditSourceAnchor({
-        sourceText: input.sourceText,
-        blocks: input.blocks,
-        anchor: event.sourceAnchor,
-      })
+      const beat = beatsById.get(event.beatId)
+      if (!beat) throw new Error(`EDIT_BIBLE_LEDGER_BEAT_NOT_FOUND:${event.eventId}:${event.beatId}`)
       return {
-        ...omitSourceAnchor(event),
-        ...range,
+        ...omitBeatId(event),
+        sourceStart: beat.sourceStart,
+        sourceEnd: beat.sourceEnd,
       }
     }),
   })

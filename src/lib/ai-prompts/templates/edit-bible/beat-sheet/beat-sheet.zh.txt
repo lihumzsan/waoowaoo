@@ -21,7 +21,6 @@
 - estimatedDurationSec 是这段剧情拍成视频后合理的屏幕时长估计。通常每个 beat 在 15-45 秒之间；复杂动作或长对白尽量控制在 60 秒以内，超过 60 秒就在自然转折处拆成多个 beat。
 - 任何一个 beat 都不得超过 120 秒；如果一段原文明显过长，必须在自然剧情转折处拆成多个 beat。
 - 太短且没有独立剧情变化的句子，并入相邻 beat。
-- persistentFactsIntroduced 只写这个 beat 结束后仍然成立、后文需要记住的事实；瞬时动作、气氛形容和镜头语言不要写。
 
 # 输入
 
@@ -46,10 +45,7 @@
         "endBlockId": "p0001",
         "endQuote": "该 beat 结束处的原文短句"
       },
-      "estimatedDurationSec": 30,
-      "persistentFactsIntroduced": [
-        "这个 beat 结束后仍然成立的事实；没有则输出空数组"
-      ]
+      "estimatedDurationSec": 30
     }
   ]
 }
@@ -61,5 +57,4 @@
 - 是否覆盖了所有有剧情意义的原文。
 - 是否在自然剧情转折点切分，而不是按固定字数机械切分。
 - 每个 beat 的 estimatedDurationSec 是否合理，是否没有超过 120 秒。
-- persistentFactsIntroduced 是否只包含后文仍然成立的事实。
 - 是否严格只输出 JSON。

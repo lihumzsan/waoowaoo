@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
+import { AppError } from '@/lib/errors/app-error'
 import { prisma } from '@/lib/prisma'
 import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
@@ -594,10 +595,19 @@ export async function persistGeneratedEditBibleBundle(input: {
     bundle: input.bundle,
     sourceText: sourceDocument.normalizedText,
   })
-  const plans = splitEditBibleIntoChapterPlans({
-    bundle,
-    sourceText: sourceDocument.normalizedText,
-  })
+  let plans: readonly EditBibleChapterPlan[]
+  try {
+    plans = splitEditBibleIntoChapterPlans({
+      bundle,
+      sourceText: sourceDocument.normalizedText,
+    })
+  } catch (error: unknown) {
+    throw new AppError(
+      'PLAN_VALIDATION_FAILED',
+      error instanceof Error ? error.message : String(error),
+      { cause: error },
+    )
+  }
 
   return await prisma.$transaction(async (tx) => {
     const bible = await tx.projectEditBible.findFirst({

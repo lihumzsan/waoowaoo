@@ -76,11 +76,17 @@ function installValidOutputs() {
         endQuote: '5',
       },
       estimatedDurationSec: 30,
-      persistentFactsIntroduced: [],
     }],
   })
   structuredStepMock.outputs.set(AI_PROMPT_IDS.EDIT_BIBLE_LEDGER, {
-    events: [],
+    events: [{
+      eventId: 'event_001',
+      beatId: 'beat_001',
+      kind: 'plot',
+      summary: '主角意识到情感正在消失。',
+      entities: [],
+      persistentFacts: ['情感正在消失'],
+    }],
   })
   structuredStepMock.outputs.set(AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE, {
     cues: [{
@@ -103,6 +109,22 @@ describe('edit bible extraction', () => {
     vi.clearAllMocks()
     structuredStepMock.outputs.clear()
     installValidOutputs()
+  })
+
+  it('binds each ledger event to the selected beat range', async () => {
+    const bundle = await generateEditBibleArtifacts({
+      userId: 'user-1',
+      projectId: 'project-1',
+      model: 'analysis-model',
+      locale: 'zh',
+      sourceDocument: '12345',
+    })
+
+    expect(bundle.ledger.events[0]).toEqual(expect.objectContaining({
+      eventId: 'event_001',
+      sourceStart: 0,
+      sourceEnd: 5,
+    }))
   })
 
   it('reports source anchor errors at the failing extraction step boundary', async () => {

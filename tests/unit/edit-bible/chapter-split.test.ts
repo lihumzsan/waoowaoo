@@ -32,7 +32,6 @@ function buildBundle(): EditBibleBundle {
           sourceStart: 0,
           sourceEnd: 900,
           estimatedDurationSec: 60,
-          persistentFactsIntroduced: ['林秋已经进入车站'],
         },
         {
           beatId: 'beat-2',
@@ -41,7 +40,6 @@ function buildBundle(): EditBibleBundle {
           sourceStart: 900,
           sourceEnd: 1800,
           estimatedDurationSec: 60,
-          persistentFactsIntroduced: ['旧车站开始断电'],
         },
         {
           beatId: 'beat-3',
@@ -50,7 +48,6 @@ function buildBundle(): EditBibleBundle {
           sourceStart: 1800,
           sourceEnd: 5400,
           estimatedDurationSec: 80,
-          persistentFactsIntroduced: ['林秋到达站台'],
         },
       ],
     },
@@ -130,7 +127,6 @@ describe('edit bible chapter splitting', () => {
       sourceStart: 0,
       sourceEnd: 4000,
       estimatedDurationSec: 100,
-      persistentFactsIntroduced: [],
     }]
 
     expect(() => splitEditBibleIntoChapterPlans({

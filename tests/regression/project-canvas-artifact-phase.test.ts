@@ -139,7 +139,6 @@ describe('project canvas artifact phase', () => {
         sourceStart: 0,
         sourceEnd: 20,
         estimatedDurationSec: 45,
-        persistentFactsIntroduced: ['循环每十分钟发生。'],
       }],
     }
     const ledger = {
