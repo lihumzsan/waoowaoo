@@ -9,17 +9,6 @@ export type DiscoveredTestGap = {
 
 export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
   {
-    id: 'GAP-OP-001',
-    symptom: 'The planned non-approval media operation returns ok=false while its existing contract expects commit success.',
-    evidence: [
-      'tests/unit/project-agent/tool-adapter.test.ts: planned non-approval media operation',
-      'mutation dry run baseline on 2026-07-11',
-    ],
-    owner: 'operations-architecture',
-    rationale: 'The test refactor must not change the production operation contract before the post-test remediation phase.',
-    status: 'production-fix-required',
-  },
-  {
     id: 'GAP-SYS-001',
     symptom: 'Only image success/failure and video success are implemented as real P0 system journeys; seven required cross-layer journeys remain.',
     evidence: [
