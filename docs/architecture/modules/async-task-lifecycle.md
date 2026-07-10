@@ -15,6 +15,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-05 — 重试有唯一策略。** 错误分类决定是否重试；LLM 任务的模型输出校验失败可由队列重试，临时供应商错误同样可重试，鉴权、配置、余额和内容安全等永久失败不得重试。队列、worker 与 Agent 不能叠加隐式重试或把永久失败吞掉。
 - **TL-06 — 终态驱动下游。** Task 完成/失败是唤醒 Agent 和刷新 Canvas 的唯一业务边；不得用轮询、历史消息或局部 loading 推断替代。
 - **TL-06A — 终态立即撤销瞬时运行态。** 结构化流和 optimistic runtime 在 Task 终态到达时必须立即退出；历史 `task-submitted` 消息不得继续充当 active Task。源剧本生成和制作规划生成即使复用同一 worker，也必须使用不同 Task type 与 target。
+- **TL-06B — 目标失败只跟随最终终态。** 单次 worker attempt 失败且仍会重试时不得把业务目标写成 `failed`；只有 Task 确认进入最终失败终态后，统一目标失败同步才可落库诊断。
 
 ## 权威入口
 

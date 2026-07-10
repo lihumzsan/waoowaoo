@@ -7,9 +7,7 @@ import { withTextBilling } from '@/lib/billing'
 import {
   generateEditBibleArtifacts,
   markEditBibleScriptReadyForReview,
-  markEditBibleGenerationFailed,
   persistGeneratedEditBibleBundle,
-  readEditBibleExtractionDiagnostics,
 } from '@/lib/edit-bible'
 import { expandedSourceScriptOutputSchema, type ExpandedSourceScriptOutput } from '@/lib/edit-bible/schemas'
 import {
@@ -214,13 +212,6 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
       chapterCount: persisted.chapters.length,
       version: persisted.editBible.version,
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await markEditBibleGenerationFailed({
-      editBibleId,
-      diagnostics: readEditBibleExtractionDiagnostics(error) ?? { error: message },
-    })
-    throw error
   } finally {
     await streamCallbacks.flush()
   }

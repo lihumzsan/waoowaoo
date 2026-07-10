@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from './types'
 
@@ -7,10 +8,15 @@ type TaskTargetFailure = {
   readonly targetId: string
   readonly errorCode: string
   readonly errorMessage: string
+  readonly errorDetails?: Record<string, unknown> | null
 }
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value
+}
+
+function toInputJson(value: Record<string, unknown>): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
 export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<void> {
@@ -25,9 +31,7 @@ export async function syncTaskTargetFailure(input: TaskTargetFailure): Promise<v
       },
       data: {
         status: 'failed',
-        diagnosticsJson: {
-          error: truncate(input.errorMessage, 2000),
-        },
+        diagnosticsJson: toInputJson(input.errorDetails ?? { error: truncate(input.errorMessage, 2000) }),
       },
     })
     return

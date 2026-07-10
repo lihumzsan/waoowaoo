@@ -33,8 +33,6 @@ const editBibleMock = vi.hoisted(() => ({
     },
     chapters: [{ id: 'chapter-1' }],
   })),
-  markEditBibleGenerationFailed: vi.fn(async () => undefined),
-  readEditBibleExtractionDiagnostics: vi.fn(() => null),
 }))
 
 const sourceDocumentMock = vi.hoisted(() => ({
@@ -436,7 +434,7 @@ describe('worker edit-bible-generate behavior', () => {
     expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
   })
 
-  it('marks the bible failed when generation throws', async () => {
+  it('leaves target failure state to the task lifecycle when one attempt throws', async () => {
     editBibleMock.generateEditBibleArtifacts.mockRejectedValueOnce(new Error('model failed'))
 
     await expect(handleEditBibleGenerateTask(buildJob({
@@ -446,10 +444,6 @@ describe('worker edit-bible-generate behavior', () => {
       analysisModel: 'analysis-model',
     }))).rejects.toThrow('model failed')
 
-    expect(editBibleMock.markEditBibleGenerationFailed).toHaveBeenCalledWith({
-      editBibleId: 'bible-1',
-      diagnostics: { error: 'model failed' },
-    })
     expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()
   })
 })

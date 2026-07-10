@@ -16,6 +16,7 @@ import {
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
 import { TASK_EVENT_TYPE, type TaskBillingInfo, type TaskJobData } from '@/lib/task/types'
 import { shouldRetryTaskFailure, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
+import { syncTaskTargetFailure } from '@/lib/task/target-failure-sync'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
@@ -459,6 +460,14 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       })
       throw new UnrecoverableError('task already terminal')
     }
+    await syncTaskTargetFailure({
+      type: data.type,
+      targetType: data.targetType,
+      targetId: data.targetId,
+      errorCode: normalizedError.code,
+      errorMessage: normalizedError.message,
+      errorDetails: normalizedError.details,
+    })
     const failedPayload = withFlowFields(data, {
       error: normalizedError,
       displayMode: 'loading',
