@@ -156,7 +156,7 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
       effects: EFFECTS_DESTRUCTIVE_BULK_LONG_RUNNING,
       confirmation: {
         required: true,
-        summary: '将清理未选中的图片（会删除存储对象且不可逆）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将清理未选中的图片（会删除存储对象且不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

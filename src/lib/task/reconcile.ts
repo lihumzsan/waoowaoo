@@ -16,6 +16,7 @@ import {
   type TaskStatus,
 } from './types'
 import { commitTaskTerminal } from './terminal'
+import { enqueuePersistedApprovedTask } from './enqueue'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
 const RECONCILE_INTERVAL_MS = 60_000
@@ -119,8 +120,15 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
   }
 
   try {
-    await addTaskJob(envelope.data, { priority: envelope.priority })
-    await markTaskEnqueued(task.id)
+    if (task.operationExecutionId) {
+      await enqueuePersistedApprovedTask({
+        taskId: task.id,
+        operationExecutionId: task.operationExecutionId,
+      })
+    } else {
+      await addTaskJob(envelope.data, { priority: envelope.priority })
+      await markTaskEnqueued(task.id)
+    }
     return 'recovered'
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -158,7 +166,9 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
       priority: true,
       operationId: true,
       operationSource: true,
-      operationConfirmed: true,
+      approvalGrantId: true,
+      operationExecutionId: true,
+      operationPlanTaskId: true,
       operationRequestId: true,
       updatedAt: true,
     },

@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback(prismaMock)),
   projectAgentInterruption: {
+    findFirst: vi.fn(),
+  },
+  projectEditBible: {
     findFirst: vi.fn(),
   },
 }))
 
 const eventMock = vi.hoisted(() => ({
   appendProjectAgentEvents: vi.fn(async () => null),
+  appendProjectAgentEventsInTransaction: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -17,6 +22,10 @@ import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
 } from '@/lib/project-agent/interruptions'
+import {
+  assertProjectAgentChoiceOfferCurrent,
+  fingerprintProjectAgentChoiceResource,
+} from '@/lib/project-agent/choice-offer'
 
 const scope = {
   projectId: 'project-1',
@@ -26,6 +35,39 @@ const scope = {
   runId: 'run-1',
   interruptionId: 'interruption-1',
   response: { approved: true },
+}
+
+const choiceCard = {
+  cardId: 'card-1',
+  runId: 'run-1',
+  interruptionId: 'interruption-1',
+  toolCallId: 'tool-1',
+  choiceType: 'script_intake' as const,
+  variant: 'confirm_or_reply' as const,
+  title: 'Refine brief',
+  groups: [],
+  submitLabel: 'Continue',
+  submit: { kind: 'submit_tool_output' as const },
+}
+
+const choiceOffer = {
+  schemaVersion: 1,
+  card: choiceCard,
+  reviewedResource: fingerprintProjectAgentChoiceResource({
+    kind: 'script_intake_prompt',
+    snapshot: {
+      cardId: choiceCard.cardId,
+      choiceType: choiceCard.choiceType,
+      groups: choiceCard.groups,
+    },
+  }),
+}
+
+const choiceScope = {
+  ...scope,
+  cardId: 'card-1',
+  toolCallId: 'tool-1',
+  latestUserText: 'canonical brief',
 }
 
 describe('project agent interruption consumption', () => {
@@ -44,6 +86,8 @@ describe('project agent interruption consumption', () => {
       toolCallId: 'tool-1',
       payload: {},
       runState: 'serialized-run-state',
+      runVersion: 2,
+      eventSeq: BigInt(10),
     })
     eventMock.appendProjectAgentEvents.mockRejectedValueOnce(new Error(
       'PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED interruptionId=interruption-1 runId=run-1',
@@ -51,13 +95,13 @@ describe('project agent interruption consumption', () => {
 
     await expect(consumeProjectAgentApprovalInterruption(scope)).resolves.toBeNull()
     expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
-      events: [{
+      events: expect.arrayContaining([expect.objectContaining({
         event: expect.objectContaining({
           kind: 'interruption.resolved',
           interruptionId: 'interruption-1',
           outcome: 'consumed',
         }),
-      }],
+      })]),
     }))
   })
 
@@ -70,14 +114,16 @@ describe('project agent interruption consumption', () => {
       operationId: 'request_edit_bible_review_choice',
       approvalId: 'choice-1',
       toolCallId: 'tool-1',
-      payload: { choiceType: 'bible_review' },
+      payload: choiceOffer,
       runState: null,
+      runVersion: 2,
+      eventSeq: BigInt(10),
     })
-    eventMock.appendProjectAgentEvents.mockRejectedValueOnce(new Error(
+    eventMock.appendProjectAgentEventsInTransaction.mockRejectedValueOnce(new Error(
       'PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED interruptionId=interruption-1 runId=run-1',
     ))
 
-    await expect(consumeProjectAgentChoiceInterruption(scope)).resolves.toBeNull()
+    await expect(consumeProjectAgentChoiceInterruption(choiceScope)).resolves.toBeNull()
   })
 
   it('does not hide infrastructure failures as a duplicate decision', async () => {
@@ -89,11 +135,102 @@ describe('project agent interruption consumption', () => {
       operationId: 'request_edit_bible_review_choice',
       approvalId: 'choice-1',
       toolCallId: 'tool-1',
-      payload: { choiceType: 'bible_review' },
+      payload: choiceOffer,
       runState: null,
+      runVersion: 2,
+      eventSeq: BigInt(10),
     })
-    eventMock.appendProjectAgentEvents.mockRejectedValueOnce(new Error('DB_UNAVAILABLE'))
+    eventMock.appendProjectAgentEventsInTransaction.mockRejectedValueOnce(new Error('DB_UNAVAILABLE'))
 
-    await expect(consumeProjectAgentChoiceInterruption(scope)).rejects.toThrow('DB_UNAVAILABLE')
+    await expect(consumeProjectAgentChoiceInterruption(choiceScope)).rejects.toThrow('DB_UNAVAILABLE')
+  })
+
+  it('persists only the canonical decision and returns the same decision', async () => {
+    prismaMock.projectAgentInterruption.findFirst.mockResolvedValueOnce({
+      id: 'interruption-1',
+      runId: 'run-1',
+      activityId: 'activity-1',
+      status: 'pending',
+      operationId: 'request_script_intake_choice',
+      approvalId: 'choice-1',
+      toolCallId: 'tool-1',
+      payload: choiceOffer,
+      runState: null,
+      runVersion: 2,
+      eventSeq: BigInt(10),
+    })
+
+    const consumed = await consumeProjectAgentChoiceInterruption({
+      ...choiceScope,
+      response: {
+        ok: true,
+        ignored: 'must not be persisted',
+      },
+    })
+
+    expect(consumed?.parsedResponse).toEqual({
+      choiceType: 'script_intake',
+      decision: 'submit',
+      normalizedBrief: 'canonical brief',
+    })
+    expect(eventMock.appendProjectAgentEventsInTransaction).toHaveBeenCalledWith(
+      prismaMock,
+      expect.objectContaining({
+        events: [expect.objectContaining({
+          event: expect.objectContaining({
+            response: {
+              choiceType: 'script_intake',
+              decision: 'submit',
+              normalizedBrief: 'canonical brief',
+            },
+          }),
+        })],
+      }),
+    )
+  })
+
+  it('rejects a decision when the reviewed script resource changed', async () => {
+    const reviewedAt = new Date('2026-07-01T00:00:00.000Z')
+    const original = {
+      id: 'bible-1',
+      status: 'script_ready_for_review',
+      version: 1,
+      updatedAt: reviewedAt,
+      sourceDocument: {
+        id: 'source-1',
+        sourceKind: 'prompt_generated_script',
+        checksum: 'checksum-before',
+        version: 1,
+        normalizedText: 'original script',
+        updatedAt: reviewedAt,
+      },
+    }
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      ...original,
+      sourceDocument: {
+        ...original.sourceDocument,
+        checksum: 'checksum-after',
+        normalizedText: 'changed script',
+      },
+    })
+    const offer = {
+      schemaVersion: 1 as const,
+      card: {
+        ...choiceCard,
+        choiceType: 'script_review' as const,
+      },
+      reviewedResource: fingerprintProjectAgentChoiceResource({
+        kind: 'script_review_document',
+        snapshot: original,
+      }),
+    }
+
+    await expect(assertProjectAgentChoiceOfferCurrent({
+      tx: prismaMock as never,
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      offer,
+    })).rejects.toThrow('PROJECT_AGENT_CHOICE_OFFER_STALE')
   })
 })

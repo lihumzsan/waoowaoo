@@ -54,7 +54,6 @@ export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]
 
 export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
-  EDIT_STYLE_PREVIEWS_GENERATE: 'edit_style_previews_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
   IMAGE_CHARACTER: 'image_character',
@@ -135,7 +134,9 @@ export type TaskJobData = {
   userId: string
   operationId?: string | null
   operationSource?: string | null
-  operationConfirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
+  operationPlanTaskId?: string | null
   operationRequestId?: string | null
   trace?: {
     requestId?: string | null
@@ -222,6 +223,8 @@ export type CreateTaskInput = {
   billingInfo?: TaskBillingInfo | null
   operationId?: string | null
   operationSource?: string | null
-  operationConfirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
+  operationPlanTaskId?: string | null
   operationRequestId?: string | null
 }

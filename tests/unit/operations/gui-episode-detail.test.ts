@@ -66,8 +66,13 @@ import { createGuiOperations } from '@/lib/operations/domains/gui/gui-ops'
 interface EpisodeDetailResult {
   readonly episode: {
     readonly editScript: {
-      readonly shots: readonly { readonly shotId: string; readonly shotNumber: number }[]
-      readonly generationSegments: readonly { readonly shotIds: readonly string[] }[]
+      readonly shots: readonly {
+        readonly shotId: string
+        readonly shotNumber: number
+      }[]
+      readonly generationSegments: readonly {
+        readonly shotIds: readonly string[]
+      }[]
       readonly bibleId?: string | null
     } | null
   }
@@ -107,9 +112,7 @@ function corePlan() {
             performance: 'points to the timeline with a steady gesture',
           },
         ],
-        keyObjects: [
-          { name: 'Timeline', role: 'planning_reference' },
-        ],
+        keyObjects: [{ name: 'Timeline', role: 'planning_reference' }],
         dialogue: [],
         sound: 'Quiet room tone.',
       },
@@ -146,6 +149,8 @@ describe('gui get_episode_detail operation', () => {
       id: 'episode-1',
       projectId: 'project-1',
       name: 'Episode 1',
+      createdAt: new Date('2026-07-11T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-11T00:00:00.000Z'),
       novelText: null,
       audioUrl: null,
       srtContent: null,
@@ -166,52 +171,59 @@ describe('gui get_episode_detail operation', () => {
         status: 'completed',
       },
     })
-    prismaMock.projectEditChapter.findUnique.mockResolvedValue({ id: 'chapter-default' })
+    prismaMock.projectEditChapter.findUnique.mockResolvedValue({
+      id: 'chapter-default',
+    })
     prismaMock.projectEditChapter.findFirst.mockResolvedValue(null)
     prismaMock.projectEditChapter.findMany.mockResolvedValue([{ id: 'chapter-default', chapterIndex: 0 }])
     prismaMock.projectEditBible.findUnique.mockResolvedValue({
       id: 'bible-1',
       styleBibleJson: null,
     })
-    prismaMock.projectEditScript.findMany.mockResolvedValue([{
-      ...rawEditScriptRow(),
-      editBible: {
-        id: 'bible-1',
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        userPrompt: 'Create an edit plan.',
-        styleBibleJson: null,
-        bibleText: 'Bible text',
-        status: 'completed',
+    prismaMock.projectEditScript.findMany.mockResolvedValue([
+      {
+        ...rawEditScriptRow(),
+        editBible: {
+          id: 'bible-1',
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+          userPrompt: 'Create an edit plan.',
+          styleBibleJson: null,
+          bibleText: 'Bible text',
+          status: 'completed',
+        },
       },
-    }])
+    ])
     prismaMock.projectEditShotExecutionPlan.findMany.mockResolvedValue([])
   })
 
   it('returns the normalized edit script read model instead of the raw episode relation', async () => {
     const operations = createGuiOperations()
-    const result = await operations.get_episode_detail.execute(buildCtx(), {
+    const result = (await operations.get_episode_detail.execute!(buildCtx(), {
       episodeId: 'episode-1',
-    }) as EpisodeDetailResult
+    })) as EpisodeDetailResult
 
-    expect(result.episode.editScript?.shots).toEqual([
-      expect.objectContaining({ shotNumber: 1 }),
-    ])
+    expect(result.episode.editScript?.shots).toEqual([expect.objectContaining({ shotNumber: 1 })])
     expect(result.episode.editScript?.generationSegments).toEqual([
-      { shotIds: ['shot-1'], continuity: 'The host remains at the timeline station.' },
+      {
+        shotIds: ['shot-1'],
+        continuity: 'The host remains at the timeline station.',
+      },
     ])
     expect(result.episode.editScript?.bibleId).toBe('bible-1')
     expect(result.episode.editScript).not.toHaveProperty('corePlanJson')
     expect(prismaMock.projectEditScript.findFirst).not.toHaveBeenCalled()
     expect(prismaMock.projectEditChapter.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.projectEditScript.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-      },
-      include: expect.objectContaining({
-        requirements: expect.any(Object),
+    expect(prismaMock.projectEditScript.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          projectId: 'project-1',
+          episodeId: 'episode-1',
+        },
+        include: expect.objectContaining({
+          requirements: expect.any(Object),
+        }),
       }),
-    }))
+    )
   })
 })

@@ -40,7 +40,6 @@ function bible(status: string, overrides: Partial<ProjectEditBible> = {}): Proje
 
 function editBibleNode(input: {
   readonly status: string
-  readonly activeAssistantOperationId?: string
   readonly bibleOverrides?: Partial<ProjectEditBible>
   readonly workflowStage?: EditFirstWorkflowState['stage']
 }): WorkspaceCanvasFlowNode {
@@ -51,7 +50,6 @@ function editBibleNode(input: {
     storyboards: [],
     editFirstWorkflow: workflow(input.workflowStage ?? 'bible_ready_for_review'),
     editBible: bible(input.status, input.bibleOverrides),
-    activeAssistantOperationId: input.activeAssistantOperationId,
     savedLayouts: [],
     translate: t,
   })
@@ -62,7 +60,6 @@ function editBibleNode(input: {
 
 function sourceScriptNode(input: {
   readonly status: string
-  readonly activeAssistantOperationId?: string
   readonly bibleOverrides?: Partial<ProjectEditBible>
   readonly workflowStage?: EditFirstWorkflowState['stage']
 }): WorkspaceCanvasFlowNode {
@@ -73,7 +70,6 @@ function sourceScriptNode(input: {
     storyboards: [],
     editFirstWorkflow: workflow(input.workflowStage ?? 'script_ready_for_review'),
     editBible: bible(input.status, input.bibleOverrides),
-    activeAssistantOperationId: input.activeAssistantOperationId,
     savedLayouts: [],
     translate: t,
   })
@@ -270,8 +266,8 @@ describe('project canvas resource lifecycle', () => {
     expect(styleNode?.data.mediaLoadingContext).toEqual({ styleImageUrl })
   })
 
-  it('does not use assistant focus as the edit bible lifecycle authority', () => {
-    const node = editBibleNode({ status: 'ready_for_review', activeAssistantOperationId: 'ingest_script' })
+  it('uses the persisted resource as the edit bible lifecycle authority', () => {
+    const node = editBibleNode({ status: 'ready_for_review' })
 
     expect(node.data.lifecycle.phase).toBe('succeeded')
     expect(isWorkspaceCanvasLifecycleRunning(node.data.lifecycle)).toBe(false)
@@ -284,10 +280,8 @@ describe('project canvas resource lifecycle', () => {
       episodeName: 'Episode 1',
       storyboards: [],
       editFirstWorkflow: workflow('ready_to_ingest_script'),
-      activeAssistantOperationId: 'ingest_script',
       activeTaskTargets: [{
         taskId: 'task-bible-1',
-        operationId: 'ingest_script',
         targetType: 'ProjectEditSourceScript',
         targetId: 'bible-1',
         types: [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE],
@@ -331,16 +325,15 @@ describe('project canvas resource lifecycle', () => {
           imageKey: null,
           imageUrl: null,
           status: 'pending',
-          taskId: null,
+          taskId: 'task-style-1',
           errorMessage: null,
         }],
       }),
       activeTaskTargets: [{
         taskId: 'task-style-1',
-        operationId: 'generate_edit_style_previews',
-        targetType: 'ProjectEditBible',
-        targetId: 'bible-1',
-        types: [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE],
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'style-preview-1',
+        types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
       }],
       savedLayouts: [],
       translate: t,
@@ -352,15 +345,15 @@ describe('project canvas resource lifecycle', () => {
     expect(sourceNode?.data.lifecycle.phase).toBe('succeeded')
     expect(bibleNode?.data.lifecycle.phase).toBe('succeeded')
     expect(styleNode).toMatchObject({
-      id: 'edit-style-preview:pending:bible-1',
+      id: 'edit-style-preview:style-preview-1',
       data: {
-        title: 'nodes.editStylePreview.pendingTitle',
-        targetId: 'bible-1',
+        title: '候选一',
+        targetId: 'style-preview-1',
         lifecycle: expect.objectContaining({ phase: 'pending' }),
         runtimeTargets: [{
-          targetType: 'ProjectEditBible',
-          targetId: 'bible-1',
-          types: [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE],
+          targetType: 'ProjectEditStylePreview',
+          targetId: 'style-preview-1',
+          types: [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE],
         }],
       },
     })

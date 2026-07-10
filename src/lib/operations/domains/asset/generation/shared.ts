@@ -31,8 +31,6 @@ type ProjectAssetImagePlanMetadata = {
 
 export function omitOperationControls(input: Record<string, unknown>): Record<string, unknown> {
   const body = { ...input }
-  delete body.confirmed
-  delete body.confirmedMaxCost
   return body
 }
 

@@ -63,10 +63,12 @@ export interface EditFirstWorkflowAction {
   title: string
 }
 
-export type EditFirstReviewChoiceDecision =
+export type EditFirstWorkflowChoiceDecision =
+  | { readonly choiceType: 'script_intake'; readonly decision: 'submit'; readonly normalizedBrief: string }
   | { readonly choiceType: 'script_review'; readonly decision: 'approve' | 'revise' }
   | { readonly choiceType: 'bible_review'; readonly decision: 'approve' | 'revise' }
   | { readonly choiceType: 'asset_review'; readonly decision: 'approve' | 'revise' }
+  | { readonly choiceType: 'style'; readonly decision: 'select'; readonly stylePreviewId: string }
 
 export interface EditFirstWorkflowState {
   active: boolean
@@ -179,11 +181,14 @@ function state(params: {
  * mutating domain resources. The returned nextAction is the only command the
  * continuation may execute; the registered Operation owns every write.
  */
-export function resolveEditFirstWorkflowReviewChoice(
+export function resolveEditFirstWorkflowChoice(
   workflow: EditFirstWorkflowState,
-  choice: EditFirstReviewChoiceDecision,
+  choice: EditFirstWorkflowChoiceDecision,
 ): EditFirstWorkflowState {
   const transition = (() => {
+    if (choice.choiceType === 'script_intake' && workflow.stage === 'ready_to_ingest_script') {
+      return workflowAction('ingest_script', 'Generate source script')
+    }
     if (choice.choiceType === 'script_review' && workflow.stage === 'script_ready_for_review') {
       return choice.decision === 'approve'
         ? workflowAction('approve_script', 'Approve generated script')
@@ -198,6 +203,9 @@ export function resolveEditFirstWorkflowReviewChoice(
       return choice.decision === 'approve'
         ? workflowAction('approve_edit_script_assets', 'Approve required assets')
         : workflowAction('revise_edit_script_assets', 'Revise required assets')
+    }
+    if (choice.choiceType === 'style' && workflow.stage === 'needs_style_choice') {
+      return workflowAction('confirm_edit_style_preview', 'Confirm selected visual style')
     }
     return null
   })()
@@ -817,6 +825,7 @@ export async function resolveEditFirstWorkflowState(params: {
         },
         stylePreviews: {
           select: {
+            id: true,
             status: true,
           },
         },
@@ -1105,9 +1114,9 @@ export async function resolveEditFirstWorkflowState(params: {
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
-        targetType: 'ProjectEditBible',
-        targetId: editBible.id,
-        type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
+        targetType: 'ProjectEditStylePreview',
+        targetId: { in: editBible.stylePreviews.map((preview) => preview.id) },
+        type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
         status: { in: ['queued', 'processing'] },
       },
     })

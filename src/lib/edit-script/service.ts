@@ -13,9 +13,6 @@ import { buildDefaultTaskBillingInfo, withTextBilling } from '@/lib/billing'
 import { buildImageBillingPayloadFromUserConfig, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { getSignedUrl } from '@/lib/storage'
-import { submitTask } from '@/lib/task/submitter'
-import { cancelTask } from '@/lib/task/service'
-import { removeTaskJob } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import {
@@ -45,7 +42,6 @@ import type {
   EditAssetRequirement,
   EditAssetStatus,
   EditScriptVideoRatio,
-  EditStylePreviewGenerationPayload,
   EditStylePreviewCanonicalKey,
   EditStylePreviewKey,
   EditStylePreviewOption,
@@ -77,23 +73,6 @@ interface GenerateEditScriptInput {
   readonly locale: Locale
   readonly videoRatio?: '9:16' | '16:9' | '21:9'
   readonly onGenerationStepPersisted?: (step: EditScriptGenerationStep) => Promise<void>
-}
-
-interface GenerateEditStylePreviewsInput {
-  readonly request: NextRequest
-  readonly projectId: string
-  readonly episodeId: string
-  readonly userId: string
-  readonly locale: Locale
-  readonly bibleId?: string
-  readonly styleDirection?: string
-  readonly count?: number
-  readonly parentTaskId?: string | null
-  readonly operationConfirmed: boolean
-  readonly operationRequestId?: string | null
-  readonly plannedStylePreviewIds?: readonly string[]
-  readonly plannedImageModel?: string
-  readonly confirmedMaxCost?: number | null
 }
 
 export interface PreparedEditStylePreviewCandidate {
@@ -193,6 +172,7 @@ export interface PersistedEditStylePreview {
   readonly status: string
   readonly taskId: string | null
   readonly errorMessage: string | null
+  readonly updatedAt: Date
 }
 
 interface PersistedEditShotExecutionPlan {
@@ -428,6 +408,7 @@ function mapPersistedStylePreview(preview: PersistedEditStylePreview): EditStyle
     status: normalizeStylePreviewStatus(preview.status),
     taskId: preview.taskId,
     errorMessage: preview.errorMessage,
+    updatedAt: preview.updatedAt,
   }
 }
 
@@ -1397,46 +1378,6 @@ async function buildEditStylePreviewImageTaskPayload(input: {
   return { payload, billingInfo }
 }
 
-async function submitEditStylePreviewImageTask(input: {
-  readonly request: NextRequest
-  readonly userId: string
-  readonly projectId: string
-  readonly parentTaskId?: string | null
-  readonly episodeId: string
-  readonly locale: Locale
-  readonly stylePreviewId: string
-  readonly styleKey: EditStylePreviewKey
-  readonly imagePrompt: string
-  readonly imageModel: string
-  readonly plannedPayload?: Record<string, unknown>
-  readonly plannedBillingInfo?: TaskBillingInfo
-  readonly operationConfirmed: boolean
-  readonly operationRequestId?: string | null
-}) {
-  const planned = input.plannedPayload && input.plannedBillingInfo
-    ? { payload: input.plannedPayload, billingInfo: input.plannedBillingInfo }
-    : await buildEditStylePreviewImageTaskPayload(input)
-
-  return await submitTask({
-    requestId: input.request.headers.get('x-request-id'),
-    userId: input.userId,
-    locale: input.locale,
-    projectId: input.projectId,
-    parentTaskId: input.parentTaskId || null,
-    episodeId: input.episodeId,
-    type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-    targetType: 'ProjectEditStylePreview',
-    targetId: input.stylePreviewId,
-    operationId: 'generate_edit_style_preview_image',
-    operationSource: 'worker',
-    operationConfirmed: input.operationConfirmed,
-    operationRequestId: input.operationRequestId || null,
-    payload: planned.payload,
-    dedupeKey: `edit_style_preview_image:${input.projectId}:${input.episodeId}:${input.stylePreviewId}`,
-    billingInfo: planned.billingInfo,
-  })
-}
-
 export async function prepareProjectEditStylePreviewCandidates(input: {
   readonly projectId: string
   readonly episodeId: string
@@ -1495,6 +1436,7 @@ export async function prepareProjectEditStylePreviewCandidates(input: {
           status: true,
           taskId: true,
           errorMessage: true,
+          updatedAt: true,
         },
       },
     },
@@ -1648,128 +1590,6 @@ export async function markProjectEditStylePreviewGenerationFailed(input: {
       },
     }),
   ])
-}
-
-export async function generateProjectEditStylePreviews(input: GenerateEditStylePreviewsInput): Promise<EditStylePreviewGenerationPayload> {
-  const locale = assertLocale(input.locale)
-  const bible = await prisma.projectEditBible.findFirst({
-    where: {
-      episodeId: input.episodeId,
-      ...(input.bibleId ? { id: input.bibleId } : {}),
-      episode: {
-        projectId: input.projectId,
-        project: { userId: input.userId },
-      },
-    },
-    select: {
-      id: true,
-      status: true,
-    },
-  })
-  if (!bible) throw new ApiError('NOT_FOUND')
-  const count = resolveStylePreviewCount(input.count)
-  if (bible.status !== EDIT_BIBLE_STATUS.CONFIRMED) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_BIBLE_CONFIRMATION_REQUIRED',
-      message: `Edit Bible must be confirmed before style preview generation; current status is ${bible.status}`,
-    })
-  }
-  const submittedTaskIds: string[] = []
-  try {
-    const prepared = await prepareProjectEditStylePreviewCandidates({
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      userId: input.userId,
-      locale,
-      bibleId: bible.id,
-      count,
-      ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
-      ...(input.plannedStylePreviewIds ? { plannedStylePreviewIds: input.plannedStylePreviewIds } : {}),
-      ...(input.plannedImageModel ? { plannedImageModel: input.plannedImageModel } : {}),
-    })
-    const plannedMaxCost = prepared.candidates.reduce((total, candidate) => (
-      candidate.billingInfo.billable ? total + candidate.billingInfo.maxFrozenCost : total
-    ), 0)
-    if (
-      typeof input.confirmedMaxCost === 'number'
-      && Number.isFinite(input.confirmedMaxCost)
-      && plannedMaxCost > input.confirmedMaxCost
-    ) {
-      throw new Error(`EDIT_STYLE_PREVIEW_CONFIRMED_COST_EXCEEDED:confirmed=${String(input.confirmedMaxCost)}:actual=${String(plannedMaxCost)}`)
-    }
-
-    const submittedPreviews: Array<{
-      readonly preview: PersistedEditStylePreview
-      readonly taskId: string
-    }> = []
-    for (const candidate of prepared.candidates) {
-      const preview = candidate.preview
-      const result = await submitEditStylePreviewImageTask({
-        request: input.request,
-        userId: input.userId,
-        projectId: input.projectId,
-        parentTaskId: input.parentTaskId || null,
-        episodeId: input.episodeId,
-        locale,
-        stylePreviewId: preview.id,
-        styleKey: normalizeStylePreviewKey(preview.styleKey),
-        imagePrompt: preview.imagePrompt,
-        imageModel: candidate.imageModel,
-        plannedPayload: candidate.payload,
-        plannedBillingInfo: candidate.billingInfo,
-        operationConfirmed: input.operationConfirmed,
-        operationRequestId: input.operationRequestId || null,
-      })
-      submittedTaskIds.push(result.taskId)
-      await prisma.projectEditStylePreview.update({
-        where: { id: preview.id },
-        data: {
-          taskId: result.taskId,
-          status: 'generating',
-          errorMessage: null,
-        },
-      })
-      submittedPreviews.push({
-        preview,
-        taskId: result.taskId,
-      })
-    }
-
-    return {
-      success: true,
-      async: true,
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      bibleId: bible.id,
-      status: 'queued',
-      total: submittedPreviews.length,
-      taskIds: submittedPreviews.map((item) => item.taskId),
-      results: submittedPreviews.map((item) => ({
-        refId: item.preview.id,
-        taskId: item.taskId,
-      })),
-      stylePreviews: submittedPreviews.map((item) => ({
-        id: item.preview.id,
-        styleKey: normalizeStylePreviewKey(item.preview.styleKey),
-        aspectRatio: normalizeStylePreviewAspectRatio(item.preview.aspectRatio),
-        title: item.preview.title,
-        summary: item.preview.summary,
-        status: 'generating',
-        taskId: item.taskId,
-      })),
-    }
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : String(caught)
-    for (const taskId of submittedTaskIds) {
-      await cancelTask(taskId, 'Visual style batch submission did not complete')
-      await removeTaskJob(taskId).catch(() => false)
-    }
-    await markProjectEditStylePreviewGenerationFailed({
-      bibleId: bible.id,
-      message,
-    })
-    throw caught
-  }
 }
 
 export async function generateProjectEditScript(input: GenerateEditScriptInput): Promise<EditScriptPayload> {

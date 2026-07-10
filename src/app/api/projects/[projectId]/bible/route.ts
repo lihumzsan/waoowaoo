@@ -14,6 +14,7 @@ import {
   reviseEpisodeEditBible,
   submitProjectEditBibleGenerationTask,
 } from '@/lib/edit-bible'
+import { createEditBibleQueryDto } from '@/lib/workspace-resource/query-dto-version'
 
 const patchEditBibleRequestSchema = z.discriminatedUnion('action', [
   z.object({
@@ -50,7 +51,7 @@ export const GET = apiHandler(async (
       episodeId: parsed.data.episodeId,
     }),
   ])
-  return NextResponse.json({ editBible, chapters })
+  return NextResponse.json(createEditBibleQueryDto(editBible, chapters))
 })
 
 export const POST = apiHandler(async (

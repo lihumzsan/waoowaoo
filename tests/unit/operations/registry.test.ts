@@ -45,23 +45,65 @@ describe('project agent operation registry', () => {
     expect(registry.cancel_plan_run).toBeUndefined()
     expect(registry.retry_plan_step).toBeUndefined()
     expect(registry.update_storyboard_panel_prompt?.channels?.tool ?? true).toBe(true)
-    expect(registry.generate_panel_video?.channels).toEqual({ tool: false, api: true })
+    expect(registry.generate_panel_video?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
     expect(registry.generate_episode_videos?.channels?.api ?? false).toBe(true)
-    expect(registry.generate_episode_videos?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_video_group?.channels).toEqual({ tool: false, api: true })
-    expect(registry.generate_episode_video_groups?.channels).toEqual({ tool: false, api: true })
-    expect(registry.generate_episode_videos_auto?.channels).toEqual({ tool: false, api: true })
-    expect(registry.generate_asset_reference_video?.channels).toEqual({ tool: false, api: true })
-    expect(registry.generate_episode_asset_reference_videos?.channels).toEqual({ tool: false, api: true })
-    expect(registry.render_final_video?.channels).toEqual({ tool: true, api: true })
+    expect(registry.generate_episode_videos?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
+    expect(registry.generate_video_group?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
+    expect(registry.generate_episode_video_groups?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
+    expect(registry.generate_episode_videos_auto?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
+    expect(registry.generate_asset_reference_video?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
+    expect(registry.generate_episode_asset_reference_videos?.channels).toEqual({
+      tool: false,
+      api: true,
+    })
+    expect(registry.render_final_video?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
     expect(registry.ingest_script?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_style_previews?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_script?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_script_assets?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_shot_execution_plan?.channels).toEqual({ tool: true, api: true })
-    expect(registry.generate_edit_script_storyboard?.channels).toEqual({ tool: true, api: true })
+    expect(registry.generate_edit_style_previews?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
+    expect(registry.generate_edit_script?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
+    expect(registry.generate_edit_script_assets?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
+    expect(registry.generate_edit_shot_execution_plan?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
+    expect(registry.generate_edit_script_storyboard?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
-      expect(registry[operationId]?.channels).toEqual({ tool: true, api: true })
+      expect(registry[operationId]?.channels).toEqual({
+        tool: true,
+        api: true,
+      })
       expect(registry[operationId]?.intent).toBe('query')
     }
 
@@ -91,12 +133,20 @@ describe('project agent operation registry', () => {
 
     expect(contextOperation).toBeDefined()
     expect(contextOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
-    expect(contextOperation.summary).toContain('full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields')
-    expect(contextOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters')
+    expect(contextOperation.summary).toContain(
+      'full bible text, historical operation results, failure details, active task details, or asset/storyboard/panel fields',
+    )
+    expect(contextOperation.summary).toContain(
+      'Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, or system-derived tool parameters',
+    )
     expect(snapshotOperation).toBeDefined()
     expect(snapshotOperation.summary).toContain('only when the injected project_state_snapshot and conversation context are insufficient')
-    expect(snapshotOperation.summary).toContain('Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters')
-    expect(snapshotOperation.summary).toContain('Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed')
+    expect(snapshotOperation.summary).toContain(
+      'Do not call merely to confirm the current phase, progress, next action, projectId, episodeId, approval state, general status, or system-derived tool parameters',
+    )
+    expect(snapshotOperation.summary).toContain(
+      'Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed',
+    )
   })
 
   it('registers project music generation as a billable media approval operation', () => {
@@ -106,7 +156,10 @@ describe('project agent operation registry', () => {
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: true })
     expect(operation.groupPath).toEqual(['media', 'music'])
-    expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
+    expect(operation.confirmation).toMatchObject({
+      kind: 'billable_media',
+      required: true,
+    })
     expect(operation.effects).toEqual({
       writes: true,
       billable: true,
@@ -118,17 +171,29 @@ describe('project agent operation registry', () => {
     })
   })
 
+  it('gives every billable media operation exactly one plan-and-commit execution path', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const billable = Object.values(registry).filter((operation) => operation.confirmation.kind === 'billable_media')
+
+    expect(billable.length).toBeGreaterThan(0)
+    for (const operation of billable) {
+      expect(operation.plan, operation.id).toBeTypeOf('function')
+      expect(operation.commit, operation.id).toBeTypeOf('function')
+      expect(operation.execute, operation.id).toBeUndefined()
+    }
+  })
+
   it('requires real media approval for edit-first image and sound_effect generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    for (const operationId of [
-      'generate_edit_style_previews',
-      'generate_episode_soundscape',
-    ] as const) {
+    for (const operationId of ['generate_edit_style_previews', 'generate_episode_soundscape'] as const) {
       const operation = registry[operationId]
       expect(operation).toBeDefined()
       expect(operation.channels).toEqual({ tool: true, api: true })
       expect(operation.effects.bulk).toBe(true)
-      expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
+      expect(operation.confirmation).toMatchObject({
+        kind: 'billable_media',
+        required: true,
+      })
     }
   })
 
@@ -138,10 +203,10 @@ describe('project agent operation registry', () => {
       const operation = registry[operationId]
       expect(operation, operationId).toBeDefined()
       expect(operation.confirmation.required, operationId).toBe(operation.confirmation.kind !== 'none')
-      if (operation.effects.billable) {
-        expect(operation.confirmation.kind, operationId).toBe('billable_media')
-      } else {
-        expect(operation.confirmation.kind, operationId).toBe('none')
+      if (operation.confirmation.kind === 'billable_media') {
+        expect(operation.effects.billable, operationId).toBe(true)
+        expect(operation.plan, operationId).toBeTypeOf('function')
+        expect(operation.commit, operationId).toBeTypeOf('function')
       }
     }
   })
@@ -168,17 +233,21 @@ describe('project agent operation registry', () => {
         durationSec: 60,
         shotCount: 12,
         assetReviewStatus: 'pending',
-        requirements: [{
-          id: 'requirement-1',
-          kind: 'character',
-          name: '林默',
-          status: 'completed',
-          targetId: 'character-1',
-        }],
-        generationSegments: [{
-          shotIds: ['shot-1'],
-          continuity: '同一空间连续行动。',
-        }],
+        requirements: [
+          {
+            id: 'requirement-1',
+            kind: 'character',
+            name: '林默',
+            status: 'completed',
+            targetId: 'character-1',
+          },
+        ],
+        generationSegments: [
+          {
+            shotIds: ['shot-1'],
+            continuity: '同一空间连续行动。',
+          },
+        ],
       },
     })
 
@@ -192,7 +261,10 @@ describe('project agent operation registry', () => {
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: true })
     expect(operation.groupPath).toEqual(['media', 'video'])
-    expect(operation.confirmation).toMatchObject({ kind: 'none', required: false })
+    expect(operation.confirmation).toMatchObject({
+      kind: 'none',
+      required: false,
+    })
     expect(operation.prerequisites.episodeId).toBe('required')
     expect(operation.effects).toEqual({
       writes: true,

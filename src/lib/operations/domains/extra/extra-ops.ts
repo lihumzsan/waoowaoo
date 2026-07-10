@@ -49,11 +49,10 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交 AI 角色设计任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         userInstruction: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -83,7 +82,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           targetId: ctx.projectId,
           operationId: 'ai_create_character',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload,
           dedupeKey: `project_ai_create_character:${dedupeDigest}`,
         })
@@ -95,11 +93,10 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交 AI 场景设计任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         userInstruction: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -129,7 +126,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           targetId: ctx.projectId,
           operationId: 'ai_create_location',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload,
           dedupeKey: `project_ai_create_location:${dedupeDigest}`,
         })
@@ -141,11 +137,10 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交 AI 场景修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         locationId: z.string().min(1),
         imageIndex: z.number().int().min(0).optional(),
         currentDescription: z.string().min(1),
@@ -163,7 +158,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           targetId: input.locationId,
           operationId: 'ai_modify_location',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             ...input,
             imageIndex,
@@ -178,11 +172,10 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交参考图转角色任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -218,7 +211,6 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
           targetId,
           operationId: 'reference_to_character',
           source: ctx.source,
-          confirmed: body.confirmed === true,
           payload: body,
           dedupeKey: `reference_to_character:${targetId}:${count}:${styleBibleSignature}`,
         })

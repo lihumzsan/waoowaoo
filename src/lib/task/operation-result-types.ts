@@ -26,7 +26,8 @@ export interface RecentOperationResult {
   taskType: string
   status: OperationResultStatus
   source?: string | null
-  confirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
   targetType: string
   targetId: string
   episodeId?: string | null

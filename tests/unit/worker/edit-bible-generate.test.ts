@@ -327,6 +327,7 @@ describe('worker edit-bible-generate behavior', () => {
       episodeId: 'episode-1',
       editBibleId: 'bible-1',
       sourceDocumentId: 'source-1',
+      taskId: 'task-bible-1',
     }))
     expect(result).toEqual({
       editBibleId: 'bible-1',
@@ -378,6 +379,7 @@ describe('worker edit-bible-generate behavior', () => {
     expect(editBibleMock.markEditBibleScriptReadyForReview).toHaveBeenCalledWith({
       editBibleId: 'bible-1',
       sourceDocumentId: 'source-1',
+      taskId: 'task-bible-1',
     })
     expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
     expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()

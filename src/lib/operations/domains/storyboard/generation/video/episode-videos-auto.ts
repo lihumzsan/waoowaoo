@@ -4,10 +4,18 @@ import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import { assertOperationPlanConfirmedCost, compensateSubmittedTasks, resolveConfirmedMaxCostForExecution, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
+import { submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
 import { type GenerationSegmentVideoPlanItem } from '@/lib/video-groups/types'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
-import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupTask, parseShotIdsJson, planVideoGroupTask, readPlannedVideoGroupMetadataByTaskId, resolveEditChapterId, rollbackCommittedVideoGroups, type CommittedVideoGroupTask, type PlannedVideoGroupTaskMetadata } from './video-group-planning'
+import {
+  buildEpisodeGenerationSegmentVideoPlan,
+  commitPlannedVideoGroupTask,
+  parseShotIdsJson,
+  planVideoGroupTask,
+  readPlannedVideoGroupMetadataByTaskId,
+  resolveEditChapterId,
+  type PlannedVideoGroupTaskMetadata,
+} from './video-group-planning'
 
 function hasExistingVideoOutput(metadata: PlannedVideoGroupTaskMetadata): boolean {
   return Boolean(normalizeString(metadata.previous?.videoUrl) || normalizeString(metadata.previous?.videoMediaId))
@@ -33,23 +41,6 @@ async function resolveEpisodeVideoPlanningChapterIds(input: {
   })
   if (chapters.length === 0) throw new Error(`PROJECT_AGENT_EDIT_CHAPTERS_REQUIRED:${input.episodeId}`)
   return chapters.map((chapter) => chapter.id)
-}
-
-export async function executeGenerateEpisodeVideosAutoOperation(params: {
-  ctx: ProjectAgentOperationContext
-  input: UnknownObject
-  operationId: string
-}) {
-  const plan = await planGenerateEpisodeVideosAutoOperation(params)
-  await assertOperationPlanConfirmedCost({
-    plan,
-    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
-      ctx: params.ctx,
-      input: params.input,
-      plan,
-    }),
-  })
-  return await commitGenerateEpisodeVideosAutoPlan({ ...params, plan })
 }
 
 export async function planGenerateEpisodeVideosAutoOperation(params: {
@@ -83,9 +74,11 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
     readonly durationSec?: number
   }> = []
   const videoGroups: PlannedVideoGroupTaskMetadata[] = []
-  const generationSegmentItems: Array<GenerationSegmentVideoPlanItem & {
-    readonly chapterId: string
-  }> = []
+  const generationSegmentItems: Array<
+    GenerationSegmentVideoPlanItem & {
+      readonly chapterId: string
+    }
+  > = []
 
   for (const chapterId of chapterIds) {
     const planned = await buildEpisodeGenerationSegmentVideoPlan({
@@ -93,19 +86,19 @@ export async function planGenerateEpisodeVideosAutoOperation(params: {
       episodeId,
       chapterId,
     })
-    generationSegmentItems.push(...planned.plan.items.map((item) => ({
-      ...item,
-      shotIds: [...item.shotIds],
-      chapterId,
-    })))
+    generationSegmentItems.push(
+      ...planned.plan.items.map((item) => ({
+        ...item,
+        shotIds: [...item.shotIds],
+        chapterId,
+      })),
+    )
 
     for (const item of planned.plan.items) {
       if (!item.gridMode) throw new Error('PROJECT_AGENT_AUTO_VIDEO_GROUP_GRID_MODE_REQUIRED')
       const groupPlan = await planVideoGroupTask({
         ctx: params.ctx,
         input: {
-          confirmed: params.input.confirmed,
-          confirmedMaxCost: params.input.confirmedMaxCost,
           generationOptions: params.input.generationOptions,
         },
         operationId: params.operationId,
@@ -163,15 +156,17 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     const targetType = 'ProjectVideoGroup'
     const taskType = TASK_TYPE.VIDEO_GROUP
     if (!planTaskId || !refId) return []
-    return [{
-      planTaskId,
-      refId,
-      kind,
-      targetType,
-      taskType,
-      shotIds: parseShotIdsJson(item.shotIds),
-      durationSec: typeof item.durationSec === 'number' && Number.isInteger(item.durationSec) ? item.durationSec : undefined,
-    }]
+    return [
+      {
+        planTaskId,
+        refId,
+        kind,
+        targetType,
+        taskType,
+        shotIds: parseShotIdsJson(item.shotIds),
+        durationSec: typeof item.durationSec === 'number' && Number.isInteger(item.durationSec) ? item.durationSec : undefined,
+      },
+    ]
   })
   const itemByTaskId = new Map(items.map((item) => [item.planTaskId, item]))
   const generationSegmentItems: Array<{
@@ -181,18 +176,20 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     gridMode?: '2x2' | '3x3'
   }> = Array.isArray(metadata.generationSegmentItems)
     ? metadata.generationSegmentItems.flatMap((item) => {
-      if (!isRecord(item)) return []
-      const shotIds = parseShotIdsJson(item.shotIds)
-      const continuity = normalizeString(item.continuity)
-      const gridMode = item.gridMode === '2x2' || item.gridMode === '3x3' ? item.gridMode : undefined
-      if (shotIds.length === 0 || !continuity) return []
-      return [{
-        kind: 'group' as const,
-        shotIds,
-        continuity,
-        ...(gridMode ? { gridMode } : {}),
-      }]
-    })
+        if (!isRecord(item)) return []
+        const shotIds = parseShotIdsJson(item.shotIds)
+        const continuity = normalizeString(item.continuity)
+        const gridMode = item.gridMode === '2x2' || item.gridMode === '3x3' ? item.gridMode : undefined
+        if (shotIds.length === 0 || !continuity) return []
+        return [
+          {
+            kind: 'group' as const,
+            shotIds,
+            continuity,
+            ...(gridMode ? { gridMode } : {}),
+          },
+        ]
+      })
     : []
   const videoGroupMetadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
   if (params.plan.tasks.length === 0) {
@@ -214,36 +211,19 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
     task: PlannedTask
     result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
   }> = []
-  const committedGroups: CommittedVideoGroupTask[] = []
-  try {
-    for (const task of params.plan.tasks) {
-      const item = itemByTaskId.get(task.id)
-      if (!item) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PLAN_ITEM_MISSING:${task.id}`)
-      const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
-      if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
-      const committed = await commitPlannedVideoGroupTask({
-        ctx: params.ctx,
-        input: params.input,
-        operationId: params.operationId,
-        task,
-        metadata: groupMetadata,
-      })
-      committedGroups.push(committed)
-      submitted.push({ task, result: committed.result })
-    }
-  } catch (error) {
-    const failures: string[] = []
-    await compensateSubmittedTasks(submitted.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
-      failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
+  for (const task of params.plan.tasks) {
+    const item = itemByTaskId.get(task.id)
+    if (!item) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PLAN_ITEM_MISSING:${task.id}`)
+    const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
+    if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
+    const committed = await commitPlannedVideoGroupTask({
+      ctx: params.ctx,
+      input: params.input,
+      operationId: params.operationId,
+      task,
+      metadata: groupMetadata,
     })
-    await rollbackCommittedVideoGroups(committedGroups).catch((rollbackError: unknown) => {
-      failures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
-    })
-    if (failures.length > 0) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`PROJECT_AGENT_AUTO_VIDEO_BATCH_COMPENSATION_FAILED:${message}:${failures.join(';')}`)
-    }
-    throw error
+    submitted.push({ task, result: committed.result })
   }
 
   const taskIds = submitted.map((item) => item.result.taskId)

@@ -60,6 +60,7 @@ for (const absolutePath of walk(canvasRoot)) {
     /\.taskProgress\b/,
     /\bdata\.isRunning\b/,
     /\bdata\.streamPresentation\b/,
+    /\b__running\b/,
   ]) {
     if (pattern.test(content)) violations.push(`${relativePath} reads a legacy lifecycle field`)
   }
@@ -83,6 +84,35 @@ for (const absolutePath of walk(canvasRoot)) {
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
+}
+
+const canvasSurface = read('src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx')
+if (/status\s*:\s*[^\n]*===\s*['"]generating['"][\s\S]{0,80}\?\s*['"]ready['"]/.test(canvasSurface)) {
+  violations.push('ProjectWorkspaceCanvas rewrites persisted generating status to ready')
+}
+if (/activeAssistantOperationId\s*===\s*['"][^'"]+['"]/.test(canvasSurface)) {
+  violations.push('ProjectWorkspaceCanvas uses operationId as a private pending lifecycle switch')
+}
+
+const overlay = read('src/lib/query/task-target-overlay.ts')
+const targetStateMap = read('src/lib/query/hooks/useTaskTargetStateMap.ts')
+if (/TASK_TARGET_OVERLAY_TTL_MS|expiresAt/.test(overlay) || /runtime\.expiresAt/.test(targetStateMap)) {
+  violations.push('optimistic Task overlay must be cleared by lifecycle edges, not TTL')
+}
+
+const structuredRuntime = read('src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts')
+for (const required of ['streamRunId', 'stepAttempt', 'lastSeq', 'MAX_STREAM_ACCUMULATORS', 'MAX_TERMINAL_STREAM_RUNS']) {
+  if (!structuredRuntime.includes(required)) violations.push(`structured runtime identity/bound is missing ${required}`)
+}
+
+const sseHook = read('src/lib/query/hooks/useSSE.ts')
+if (!sseHook.includes('MAX_PROCESSED_SSE_EVENT_IDENTITIES')) {
+  violations.push('SSE client event identity dedupe must be explicitly bounded')
+}
+
+const episodeMutations = read('src/lib/query/mutations/useEpisodeMutations.ts')
+if (!episodeMutations.includes('restoreWorkspaceMaterializedResourceSnapshot')) {
+  violations.push('episode optimistic rollback must pass through the materialized resource version gate')
 }
 
 for (const rendererPath of walk(path.join(canvasRoot, 'nodes'))) {

@@ -156,53 +156,57 @@ describe('edit shot execution plan operation', () => {
 
   it('uses episode batch submission for assistant calls even when runtime scope injects editScriptId', async () => {
     const operation = createEditScriptOperations().generate_edit_shot_execution_plan
-    const result = await operation.execute(buildContext('assistant-panel'), {
-      confirmed: true,
+    const result = await operation.execute!(buildContext('assistant-panel'), {
       episodeId: 'episode-1',
       editScriptId: 'script-1',
     })
 
-    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanBatchTasks).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      batchKey: 'edit_shot_execution_plan_generate:batch-1',
-      source: 'assistant-panel',
-      confirmed: true,
-      locale: 'zh',
-    }))
+    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanBatchTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'project-1',
+        userId: 'user-1',
+        episodeId: 'episode-1',
+        batchKey: 'edit_shot_execution_plan_generate:batch-1',
+        source: 'assistant-panel',
+        locale: 'zh',
+      }),
+    )
     expect(taskSubmissionMock.submitProjectEditShotExecutionPlanTask).not.toHaveBeenCalled()
-    expect(result).toEqual(expect.objectContaining({
-      success: true,
-      async: true,
-      total: 2,
-      taskIds: ['task-2', 'task-3'],
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        async: true,
+        total: 2,
+        taskIds: ['task-2', 'task-3'],
+      }),
+    )
   })
 
   it('keeps explicit non-assistant scoped calls on the single-script path', async () => {
     const operation = createEditScriptOperations().generate_edit_shot_execution_plan
-    const result = await operation.execute(buildContext('project-ui'), {
-      confirmed: true,
+    const result = await operation.execute!(buildContext('project-ui'), {
       episodeId: 'episode-1',
       editScriptId: 'script-1',
     })
 
-    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanTask).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      editScriptId: 'script-1',
-      source: 'project-ui',
-      confirmed: true,
-      locale: 'zh',
-    }))
+    expect(taskSubmissionMock.submitProjectEditShotExecutionPlanTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'project-1',
+        userId: 'user-1',
+        episodeId: 'episode-1',
+        editScriptId: 'script-1',
+        source: 'project-ui',
+        locale: 'zh',
+      }),
+    )
     expect(taskSubmissionMock.submitProjectEditShotExecutionPlanBatchTasks).not.toHaveBeenCalled()
-    expect(result).toEqual(expect.objectContaining({
-      success: true,
-      async: true,
-      taskId: 'task-single',
-      editScriptId: 'script-1',
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        async: true,
+        taskId: 'task-single',
+        editScriptId: 'script-1',
+      }),
+    )
   })
 })

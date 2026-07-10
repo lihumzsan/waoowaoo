@@ -241,7 +241,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       },
       confirmation: {
         required: true,
-        summary: '将删除该场景记录（不可恢复）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除该场景记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

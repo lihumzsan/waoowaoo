@@ -162,6 +162,7 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
           await markEditBibleScriptReadyForReview({
             editBibleId,
             sourceDocumentId: effectiveSourceDocument.id,
+            taskId: job.data.taskId,
           })
           return null
         }
@@ -198,6 +199,7 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
       episodeId,
       editBibleId,
       sourceDocumentId,
+      taskId: job.data.taskId,
       bundle,
     })
 

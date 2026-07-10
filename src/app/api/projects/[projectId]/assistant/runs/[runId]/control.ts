@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { POST as chatPost } from '../../chat/route'
 
-type ProjectAgentRunControlKind = 'approval_response' | 'choice_response' | 'task_follow_up'
+type ProjectAgentRunControlKind = 'approval_response' | 'choice_response'
 type UnknownRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -50,19 +50,15 @@ function buildControlPayload(params: {
     return {
       type: 'choice_response',
       runId: params.runId,
-      interruptionId: params.body.interruptionId ?? null,
-      choiceType: params.body.choiceType,
-      toolCallId: params.body.toolCallId ?? null,
+      interruptionId: params.body.interruptionId,
+      cardId: params.body.cardId,
+      toolCallId: params.body.toolCallId,
       output: params.body.output,
     }
   }
 
-  return {
-    type: 'task_follow_up',
-    runId: params.runId,
-    waitId: params.body.waitId,
-    claimId: params.body.claimId,
-  }
+  const unreachable: never = params.kind
+  throw new Error(`PROJECT_AGENT_RUN_CONTROL_KIND_INVALID:${String(unreachable)}`)
 }
 
 function buildDelegatedChatBody(params: {

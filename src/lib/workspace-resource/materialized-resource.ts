@@ -6,15 +6,14 @@ import {
   type WorkspaceMaterializedResourceEnvelope,
 } from '@/lib/task/types'
 import {
-  createWorkspaceRevisionVersion,
-  createWorkspaceUpdatedAtVersion,
+  parseWorkspaceMaterializedResourceVersion,
   workspaceMaterializedResourceKey,
 } from './materialized-resource-version'
+import { createEditBibleQueryDto } from './query-dto-version'
 
 function isEditBibleQueryTask(taskType: string): boolean {
   return taskType === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
     || taskType === TASK_TYPE.EDIT_BIBLE_GENERATE
-    || taskType === TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE
     || taskType === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE
 }
 
@@ -38,6 +37,7 @@ export async function materializeWorkspaceResourcesForTask(
       readEpisodeEditChapters({ projectId: task.projectId, episodeId }),
     ])
     if (!editBible) throw new Error(`CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING:editBible:${task.taskId}`)
+    const data = createEditBibleQueryDto(editBible, chapters)
     return [{
       kind: 'editBible',
       taskId: task.taskId,
@@ -48,14 +48,8 @@ export async function materializeWorkspaceResourcesForTask(
         projectId: task.projectId,
         episodeId,
       }),
-      resourceVersion: createWorkspaceRevisionVersion(editBible.version),
-      data: {
-        editBible: {
-          ...editBible,
-          chapters,
-        },
-        chapters,
-      },
+      resourceVersion: data.resourceVersion,
+      data,
     }]
   }
 
@@ -63,10 +57,13 @@ export async function materializeWorkspaceResourcesForTask(
     projectId: task.projectId,
     episodeId,
   })
-  if (!('updatedAt' in episode) || !(episode.updatedAt instanceof Date)) {
+  const resourceVersion = parseWorkspaceMaterializedResourceVersion(
+    'episodeData',
+    episode.resourceVersion,
+  )
+  if (!resourceVersion || resourceVersion.scheme !== 'aggregate_updated_at') {
     throw new Error(`CANVAS_TERMINAL_RESOURCE_VERSION_MISSING:episodeData:${task.taskId}`)
   }
-  const updatedAt = episode.updatedAt.toISOString()
   return [{
     kind: 'episodeData',
     taskId: task.taskId,
@@ -77,7 +74,7 @@ export async function materializeWorkspaceResourcesForTask(
       projectId: task.projectId,
       episodeId,
     }),
-    resourceVersion: createWorkspaceUpdatedAtVersion(updatedAt),
+    resourceVersion,
     data: episode,
   }]
 }

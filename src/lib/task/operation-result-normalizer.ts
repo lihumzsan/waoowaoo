@@ -14,7 +14,8 @@ export interface OperationResultTaskRow {
   errorMessage: string | null
   operationId: string | null
   operationSource: string | null
-  operationConfirmed: boolean | null
+  approvalGrantId: string | null
+  operationExecutionId: string | null
   queuedAt: Date
   finishedAt: Date | null
   updatedAt: Date
@@ -147,7 +148,8 @@ export function normalizeTaskOperationResult(task: OperationResultTaskRow): Rece
     taskType: task.type,
     status: normalizeStatus(task.status),
     source: task.operationSource,
-    confirmed: task.operationConfirmed,
+    approvalGrantId: task.approvalGrantId,
+    operationExecutionId: task.operationExecutionId,
     targetType: task.targetType,
     targetId: task.targetId,
     episodeId: task.episodeId,

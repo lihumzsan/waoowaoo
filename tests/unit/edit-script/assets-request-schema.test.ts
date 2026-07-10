@@ -2,30 +2,53 @@ import { describe, expect, it } from 'vitest'
 import { generateEditAssetsRequestSchema } from '@/lib/edit-script/types'
 
 describe('edit script assets request schema', () => {
+  const approval = {
+    approvalGrantId: 'grant-1',
+    operationRequestId: 'request-1',
+  }
+
   it('rejects wildcard requirement ids and uses omitted requirementId for all requirements', () => {
-    expect(generateEditAssetsRequestSchema.safeParse({
-      confirmed: true,
-      episodeId: 'episode-1',
-      editScriptId: 'edit-1',
-      requirementId: '*',
-    }).success).toBe(false)
+    expect(
+      generateEditAssetsRequestSchema.safeParse({
+        ...approval,
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+        requirementId: '*',
+      }).success,
+    ).toBe(false)
 
-    expect(generateEditAssetsRequestSchema.safeParse({
-      confirmed: true,
-      episodeId: 'episode-1',
-      editScriptId: 'edit-1',
-    }).success).toBe(true)
+    expect(
+      generateEditAssetsRequestSchema.safeParse({
+        ...approval,
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+      }).success,
+    ).toBe(true)
 
-    expect(generateEditAssetsRequestSchema.safeParse({
-      confirmed: true,
-      episodeId: 'episode-1',
-      editScriptId: 'edit-1',
-      requirementId: 'req-1',
-    }).success).toBe(true)
+    expect(
+      generateEditAssetsRequestSchema.safeParse({
+        ...approval,
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+        requirementId: 'req-1',
+      }).success,
+    ).toBe(true)
 
-    expect(generateEditAssetsRequestSchema.safeParse({
-      episodeId: 'episode-1',
-      editScriptId: 'edit-1',
-    }).success).toBe(false)
+    expect(
+      generateEditAssetsRequestSchema.safeParse({
+        episodeId: 'episode-1',
+        editScriptId: 'edit-1',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects the deleted boolean confirmation protocol', () => {
+    expect(
+      generateEditAssetsRequestSchema.safeParse({
+        confirmed: true,
+        confirmedMaxCost: 2,
+        episodeId: 'episode-1',
+      }).success,
+    ).toBe(false)
   })
 })

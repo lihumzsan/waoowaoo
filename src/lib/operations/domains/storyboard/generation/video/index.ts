@@ -2,9 +2,7 @@ import { z } from 'zod'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import {
-  EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
-} from '@/lib/project-workflow/edit-first-tool-input-schema'
+import { EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -13,164 +11,179 @@ import {
 } from '@/lib/operations/output-schemas'
 import { VIDEO_GRID_MODES } from '@/lib/video-groups/types'
 import type { UnknownObject } from './shared'
-import {
-  commitGeneratePanelVideoPlan,
-  executeGeneratePanelVideoOperation,
-  planGeneratePanelVideoOperation,
-} from './panel-video'
+import { commitGeneratePanelVideoPlan, planGeneratePanelVideoOperation } from './panel-video'
 import {
   commitGenerateEpisodeVideoGroupsPlan,
   commitGenerateVideoGroupPlan,
-  executeGenerateEpisodeVideoGroupsOperation,
-  executeGenerateVideoGroupOperation,
   planGenerateEpisodeVideoGroupsOperation,
   planGenerateVideoGroupOperation,
 } from './continuous-video-groups'
-import {
-  commitGenerateEpisodeVideosAutoPlan,
-  executeGenerateEpisodeVideosAutoOperation,
-  planGenerateEpisodeVideosAutoOperation,
-} from './episode-videos-auto'
+import { commitGenerateEpisodeVideosAutoPlan, planGenerateEpisodeVideosAutoOperation } from './episode-videos-auto'
 import {
   commitGenerateAssetReferenceVideoPlan,
   commitGenerateEpisodeAssetReferenceVideosPlan,
-  executeGenerateAssetReferenceVideoOperation,
-  executeGenerateEpisodeAssetReferenceVideosOperation,
   planGenerateAssetReferenceVideoOperation,
   planGenerateEpisodeAssetReferenceVideosOperation,
 } from './asset-reference-video'
 
-const generatePanelVideoInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  panelId: z.string().min(1).optional(),
-  storyboardId: z.string().min(1).optional(),
-  panelIndex: z.number().int().min(0).max(2000).optional(),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough().refine((value) => Boolean(value.panelId || (value.storyboardId && typeof value.panelIndex === 'number')), {
-  message: 'panelId or (storyboardId + panelIndex) is required',
-  path: ['panelId'],
-})
+const generatePanelVideoInputSchema = z
+  .object({
+    panelId: z.string().min(1).optional(),
+    storyboardId: z.string().min(1).optional(),
+    panelIndex: z.number().int().min(0).max(2000).optional(),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
+  .refine((value) => Boolean(value.panelId || (value.storyboardId && typeof value.panelIndex === 'number')), {
+    message: 'panelId or (storyboardId + panelIndex) is required',
+    path: ['panelId'],
+  })
 
-const generateVideoGroupInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  gridMode: z.enum(VIDEO_GRID_MODES),
-  shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
+const generateVideoGroupInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    gridMode: z.enum(VIDEO_GRID_MODES),
+    shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
 
-const generateEpisodeVideoGroupsInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  gridMode: z.enum(VIDEO_GRID_MODES),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
+const generateEpisodeVideoGroupsInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    gridMode: z.enum(VIDEO_GRID_MODES),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
 
-const generateEpisodeVideosAutoInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
+const generateEpisodeVideosAutoInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
 
-const generateAssetReferenceVideoInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  segmentIndex: z.number().int().min(0).max(59),
-  referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
+const generateAssetReferenceVideoInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    segmentIndex: z.number().int().min(0).max(59),
+    referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
 
-const generateEpisodeAssetReferenceVideosInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
-  generationOptions: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
+const generateEpisodeAssetReferenceVideosInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
+    generationOptions: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
 
 export function createVideoGenerationOperations(): ProjectAgentOperationRegistryDraft {
   const generatePanelVideoOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      mutationBatchId: z.string().min(1),
-      panelId: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        mutationBatchId: z.string().min(1),
+        panelId: z.string().min(1),
+      })
+      .passthrough(),
   )
 
   const generateVideoGroupOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      groupId: z.string().min(1),
-      episodeId: z.string().min(1),
-      chapterId: z.string().min(1).optional(),
-      gridMode: z.enum(VIDEO_GRID_MODES),
-      shotIds: z.array(z.string().min(1)),
-      durationSec: z.number().int().positive(),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        groupId: z.string().min(1),
+        episodeId: z.string().min(1),
+        chapterId: z.string().min(1).optional(),
+        gridMode: z.enum(VIDEO_GRID_MODES),
+        shotIds: z.array(z.string().min(1)),
+        durationSec: z.number().int().positive(),
+      })
+      .passthrough(),
   )
 
   const generateEpisodeVideoGroupsOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
-    taskBatchSubmitOperationOutputSchemaBase.extend({
-      results: z.array(z.object({
-        refId: z.string().min(1),
-        taskId: z.string().min(1),
-        shotIds: z.array(z.string().min(1)),
-        durationSec: z.number().int().positive(),
-      }).passthrough()),
-      gridMode: z.enum(VIDEO_GRID_MODES),
-    }).passthrough(),
+    taskBatchSubmitOperationOutputSchemaBase
+      .extend({
+        results: z.array(
+          z
+            .object({
+              refId: z.string().min(1),
+              taskId: z.string().min(1),
+              shotIds: z.array(z.string().min(1)),
+              durationSec: z.number().int().positive(),
+            })
+            .passthrough(),
+        ),
+        gridMode: z.enum(VIDEO_GRID_MODES),
+      })
+      .passthrough(),
   )
 
   const generateEpisodeVideosAutoOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
-    taskBatchSubmitOperationOutputSchemaBase.extend({
-      results: z.array(z.object({
-        refId: z.string().min(1),
-        taskId: z.string().min(1),
-        kind: z.literal('group'),
-        shotIds: z.array(z.string().min(1)),
-        durationSec: z.number().int().positive().optional(),
-      }).passthrough()),
-      groupVideoModel: z.string().min(1),
-      plan: z.object({
-        items: z.array(z.object({
-          kind: z.literal('group'),
-          shotIds: z.array(z.string().min(1)),
-          gridMode: z.enum(VIDEO_GRID_MODES).optional(),
-          continuity: z.string().min(1),
-        })),
-      }),
-    }).passthrough(),
+    taskBatchSubmitOperationOutputSchemaBase
+      .extend({
+        results: z.array(
+          z
+            .object({
+              refId: z.string().min(1),
+              taskId: z.string().min(1),
+              kind: z.literal('group'),
+              shotIds: z.array(z.string().min(1)),
+              durationSec: z.number().int().positive().optional(),
+            })
+            .passthrough(),
+        ),
+        groupVideoModel: z.string().min(1),
+        plan: z.object({
+          items: z.array(
+            z.object({
+              kind: z.literal('group'),
+              shotIds: z.array(z.string().min(1)),
+              gridMode: z.enum(VIDEO_GRID_MODES).optional(),
+              continuity: z.string().min(1),
+            }),
+          ),
+        }),
+      })
+      .passthrough(),
   )
 
   const generateAssetReferenceVideoOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      groupId: z.string().min(1),
-      episodeId: z.string().min(1),
-      sourceMode: z.literal('asset_reference'),
-      segmentIndex: z.number().int().min(0),
-      shotIds: z.array(z.string().min(1)),
-      durationSec: z.number().int().positive(),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        groupId: z.string().min(1),
+        episodeId: z.string().min(1),
+        sourceMode: z.literal('asset_reference'),
+        segmentIndex: z.number().int().min(0),
+        shotIds: z.array(z.string().min(1)),
+        durationSec: z.number().int().positive(),
+      })
+      .passthrough(),
   )
 
   const generateEpisodeAssetReferenceVideosOutputSchema = refineTaskBatchSubmitOperationOutputSchema(
-    taskBatchSubmitOperationOutputSchemaBase.extend({
-      results: z.array(z.object({
-        refId: z.string().min(1),
-        taskId: z.string().min(1),
-        shotIds: z.array(z.string().min(1)),
-        durationSec: z.number().int().positive(),
-      }).passthrough()),
-      sourceMode: z.literal('asset_reference'),
-    }).passthrough(),
+    taskBatchSubmitOperationOutputSchemaBase
+      .extend({
+        results: z.array(
+          z
+            .object({
+              refId: z.string().min(1),
+              taskId: z.string().min(1),
+              shotIds: z.array(z.string().min(1)),
+              durationSec: z.number().int().positive(),
+            })
+            .passthrough(),
+        ),
+        sourceMode: z.literal('asset_reference'),
+      })
+      .passthrough(),
   )
 
   return {
@@ -191,26 +204,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将为单个分镜格生成视频（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将为单个分镜格生成收费视频；用户批准当前不可变计划后执行。',
       },
       inputSchema: generatePanelVideoInputSchema,
       outputSchema: generatePanelVideoOutputSchema,
-      plan: async (ctx, input) => planGeneratePanelVideoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_panel_video',
-      }),
-      commit: async (ctx, input, plan) => commitGeneratePanelVideoPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_panel_video',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGeneratePanelVideoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_panel_video',
-      }),
+      plan: async (ctx, input) =>
+        planGeneratePanelVideoOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_panel_video',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGeneratePanelVideoPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_panel_video',
+          plan,
+        }),
     }),
 
     generate_episode_videos: defineOperation({
@@ -230,27 +240,24 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将按核心剪辑计划中的生成分段提交缺失的连续视频片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑计划提交缺失的收费连续视频任务；用户批准当前不可变计划后执行。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEpisodeVideosAutoInputSchema,
       outputSchema: generateEpisodeVideosAutoOutputSchema,
-      plan: async (ctx, input) => planGenerateEpisodeVideosAutoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosAutoPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateEpisodeVideosAutoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateEpisodeVideosAutoOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_videos',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateEpisodeVideosAutoPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_videos',
+          plan,
+        }),
     }),
 
     generate_video_group: defineOperation({
@@ -271,26 +278,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将使用一组有序分镜参考图生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用有序分镜参考图生成收费连续视频；用户批准当前不可变计划后执行。',
       },
       inputSchema: generateVideoGroupInputSchema,
       outputSchema: generateVideoGroupOutputSchema,
-      plan: async (ctx, input) => planGenerateVideoGroupOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_video_group',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateVideoGroupPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_video_group',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateVideoGroupOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_video_group',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateVideoGroupOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_video_group',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateVideoGroupPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_video_group',
+          plan,
+        }),
     }),
 
     generate_episode_video_groups: defineOperation({
@@ -311,26 +315,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将按核心剪辑表顺序批量生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑表批量生成收费连续视频；用户批准当前不可变计划后执行。',
       },
       inputSchema: generateEpisodeVideoGroupsInputSchema,
       outputSchema: generateEpisodeVideoGroupsOutputSchema,
-      plan: async (ctx, input) => planGenerateEpisodeVideoGroupsOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_video_groups',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeVideoGroupsPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_video_groups',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateEpisodeVideoGroupsOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_video_groups',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateEpisodeVideoGroupsOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_video_groups',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateEpisodeVideoGroupsPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_video_groups',
+          plan,
+        }),
     }),
 
     generate_episode_videos_auto: defineOperation({
@@ -351,26 +352,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将按核心剪辑计划中的生成分段提交连续视频任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将按核心剪辑计划提交收费连续视频任务；用户批准当前不可变计划后执行。',
       },
       inputSchema: generateEpisodeVideosAutoInputSchema,
       outputSchema: generateEpisodeVideosAutoOutputSchema,
-      plan: async (ctx, input) => planGenerateEpisodeVideosAutoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos_auto',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeVideosAutoPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos_auto',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateEpisodeVideosAutoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_videos_auto',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateEpisodeVideosAutoOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_videos_auto',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateEpisodeVideosAutoPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_videos_auto',
+          plan,
+        }),
     }),
 
     generate_asset_reference_video: defineOperation({
@@ -391,26 +389,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将使用参考资产图和结构化生成分段事实直接生成一个视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用参考资产图与结构化分段生成收费视频；用户批准当前不可变计划后执行。',
       },
       inputSchema: generateAssetReferenceVideoInputSchema,
       outputSchema: generateAssetReferenceVideoOutputSchema,
-      plan: async (ctx, input) => planGenerateAssetReferenceVideoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_asset_reference_video',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateAssetReferenceVideoPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_asset_reference_video',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateAssetReferenceVideoOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_asset_reference_video',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateAssetReferenceVideoOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_asset_reference_video',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateAssetReferenceVideoPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_asset_reference_video',
+          plan,
+        }),
     }),
 
     generate_episode_asset_reference_videos: defineOperation({
@@ -431,26 +426,23 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将使用参考资产图和结构化生成分段事实批量直接生成视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将使用参考资产图与结构化分段批量生成收费视频；用户批准当前不可变计划后执行。',
       },
       inputSchema: generateEpisodeAssetReferenceVideosInputSchema,
       outputSchema: generateEpisodeAssetReferenceVideosOutputSchema,
-      plan: async (ctx, input) => planGenerateEpisodeAssetReferenceVideosOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_asset_reference_videos',
-      }),
-      commit: async (ctx, input, plan) => commitGenerateEpisodeAssetReferenceVideosPlan({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_asset_reference_videos',
-        plan,
-      }),
-      execute: async (ctx, input) => executeGenerateEpisodeAssetReferenceVideosOperation({
-        ctx,
-        input: input as UnknownObject,
-        operationId: 'generate_episode_asset_reference_videos',
-      }),
+      plan: async (ctx, input) =>
+        planGenerateEpisodeAssetReferenceVideosOperation({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_asset_reference_videos',
+        }),
+      commit: async (ctx, input, plan) =>
+        commitGenerateEpisodeAssetReferenceVideosPlan({
+          ctx,
+          input: input as UnknownObject,
+          operationId: 'generate_episode_asset_reference_videos',
+          plan,
+        }),
     }),
   }
 }

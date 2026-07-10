@@ -174,7 +174,7 @@ describe('workspace assistant renderers', () => {
       data: {
         cardId: 'edit-first-bible-review',
         runId: 'run-1',
-        interruptionId: null,
+        interruptionId: 'interruption-1',
         toolCallId: 'tool-call-1',
         choiceType: 'bible_review',
         variant: 'confirm_or_reply',
@@ -198,7 +198,6 @@ describe('workspace assistant renderers', () => {
         replyToolOutputKey: 'revisionNotes',
       },
       onSubmitChoiceResponse: async () => undefined,
-      onConfirmEditStylePreviewChoice: async () => undefined,
     } satisfies ComponentProps<typeof AssistantChoiceCardView>))
 
     expect(html).toContain('画面比例')
@@ -217,7 +216,7 @@ describe('workspace assistant renderers', () => {
       data: {
         cardId: 'script-intake-card',
         runId: 'run-1',
-        interruptionId: null,
+        interruptionId: 'interruption-2',
         toolCallId: 'tool-call-1',
         choiceType: 'script_intake',
         variant: 'confirm_or_reply',
@@ -241,7 +240,6 @@ describe('workspace assistant renderers', () => {
         replyToolOutputKey: 'freeText',
       },
       onSubmitChoiceResponse: async () => undefined,
-      onConfirmEditStylePreviewChoice: async () => undefined,
     } satisfies ComponentProps<typeof AssistantChoiceCardView>))
 
     expect(html).toContain('故事整体呈现怎样的视觉与情感基调？')

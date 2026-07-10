@@ -55,7 +55,6 @@ describe('submitOperationTask', () => {
       targetId: 'project-1',
       operationId: 'generate_project_music',
       source: 'assistant-confirmation',
-      confirmed: true,
       payload,
       dedupeKey: 'music:project-1',
       priority: 7,
@@ -82,7 +81,9 @@ describe('submitOperationTask', () => {
       billingInfoSource: undefined,
       operationId: 'generate_project_music',
       operationSource: 'assistant-confirmation',
-      operationConfirmed: true,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: 'req-1',
     })
     expect(resolveRequiredTaskLocaleMock).not.toHaveBeenCalled()
@@ -99,7 +100,6 @@ describe('submitOperationTask', () => {
       targetId: 'panel-1',
       operationId: 'regenerate_panel_image',
       source: 'assistant-tool',
-      confirmed: false,
       payload: { prompt: 'wide shot', meta: { source: 'panel' } },
     })
 
@@ -119,7 +119,9 @@ describe('submitOperationTask', () => {
       billingInfo: { billable: false, source: 'task', status: 'skipped' },
       operationId: 'regenerate_panel_image',
       operationSource: 'assistant-tool',
-      operationConfirmed: false,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: 'req-1',
     }))
     expect(resolveRequiredTaskLocaleMock).toHaveBeenCalledWith(expect.anything(), { prompt: 'wide shot', meta: { source: 'panel' } })

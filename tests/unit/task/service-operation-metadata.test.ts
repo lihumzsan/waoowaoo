@@ -44,7 +44,9 @@ describe('task service operation metadata', () => {
       payload: { prompt: 'theme' },
       operationId: 'generate_project_music',
       operationSource: 'assistant-confirmation',
-      operationConfirmed: true,
+      approvalGrantId: 'grant-1',
+      operationExecutionId: 'execution-1',
+      operationPlanTaskId: 'plan-task-1',
       operationRequestId: 'req-1',
     })
 
@@ -53,7 +55,9 @@ describe('task service operation metadata', () => {
       data: expect.objectContaining({
         operationId: 'generate_project_music',
         operationSource: 'assistant-confirmation',
-        operationConfirmed: true,
+        approvalGrantId: 'grant-1',
+        operationExecutionId: 'execution-1',
+        operationPlanTaskId: 'plan-task-1',
         operationRequestId: 'req-1',
       }),
     })

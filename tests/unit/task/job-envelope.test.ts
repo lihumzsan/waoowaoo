@@ -39,7 +39,9 @@ describe('task job envelope', () => {
       userId: 'user-1',
       operationId: 'generate_video_group',
       operationSource: 'assistant',
-      operationConfirmed: true,
+      approvalGrantId: 'grant-1',
+      operationExecutionId: 'execution-1',
+      operationPlanTaskId: 'plan-task-1',
       operationRequestId: 'operation-request-1',
       priority: 7,
     })
@@ -61,7 +63,9 @@ describe('task job envelope', () => {
         userId: 'user-1',
         operationId: 'generate_video_group',
         operationSource: 'assistant',
-        operationConfirmed: true,
+        approvalGrantId: 'grant-1',
+        operationExecutionId: 'execution-1',
+        operationPlanTaskId: 'plan-task-1',
         operationRequestId: 'operation-request-1',
         trace: { requestId: 'request-trace-1' },
       },
@@ -83,7 +87,9 @@ describe('task job envelope', () => {
       userId: 'user-1',
       operationId: null,
       operationSource: null,
-      operationConfirmed: null,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: null,
       priority: 0,
     })).toThrow('task locale is missing')
@@ -104,7 +110,9 @@ describe('task job envelope', () => {
       userId: 'user-1',
       operationId: null,
       operationSource: null,
-      operationConfirmed: null,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: null,
       priority: 0,
     })).toThrow('invalid task type: unknown_task_type')
@@ -135,9 +143,11 @@ describe('task job envelope', () => {
       userId: 'user-1',
       operationId: null,
       operationSource: null,
-      operationConfirmed: true,
+      approvalGrantId: 'grant-4',
+      operationExecutionId: 'execution-4',
+      operationPlanTaskId: 'plan-task-4',
       operationRequestId: null,
       priority: 0,
-    })).toThrow('billable task billingInfo does not match the durable Task contract')
+    })).toThrow('TASK_BILLING_INFO_INVALID:contract')
   })
 })

@@ -4,15 +4,18 @@ import { logError as _ulogError, logWarn as _ulogWarn } from '@/lib/logging/core
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
-import { apiFetch } from '@/lib/api-fetch'
 import {
   applyWorkspaceSSEEvent,
   isWorkspaceSSEEvent,
-  readNumericWorkspaceSSEEventId,
 } from '../workspace-sse-event-sync'
 import { queryKeys } from '../keys'
-
-const SSE_REPLAY_POLL_MS = 5000
+import {
+  advanceWorkspaceSseCursor,
+  EMPTY_WORKSPACE_SSE_CURSOR,
+  parseWorkspaceSseCursor,
+  serializeWorkspaceSseCursor,
+  type WorkspaceSseCursor,
+} from '@/lib/sse/protocol'
 
 type UseSSEOptions = {
   projectId?: string | null
@@ -21,24 +24,55 @@ type UseSSEOptions = {
   onEvent?: (event: SSEEvent) => void
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
+export const MAX_PROCESSED_SSE_EVENT_IDENTITIES = 2048
+
+export function addProcessedSseEventIdentity(
+  identities: Set<string>,
+  identity: string,
+): void {
+  identities.delete(identity)
+  identities.add(identity)
+  while (identities.size > MAX_PROCESSED_SSE_EVENT_IDENTITIES) {
+    const oldest = identities.values().next().value as string | undefined
+    if (!oldest) return
+    identities.delete(oldest)
+  }
+}
+
+function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
+  return `workspace-sse-cursor:v1:${projectId}:${episodeId ?? 'all'}`
+}
+
+function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
+  try {
+    return parseWorkspaceSseCursor(window.sessionStorage.getItem(cursorStorageKey(projectId, episodeId)))
+  } catch (error) {
+    _ulogError('[useSSE] invalid durable cursor', error)
+    throw error
+  }
+}
+
+function persistCursor(projectId: string, episodeId: string | null | undefined, cursor: WorkspaceSseCursor): void {
+  window.sessionStorage.setItem(cursorStorageKey(projectId, episodeId), serializeWorkspaceSseCursor(cursor))
 }
 
 export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
   const queryClient = useQueryClient()
   const sourceRef = useRef<EventSource | null>(null)
   const targetStatesInvalidateTimerRef = useRef<number | null>(null)
-  const lastEventIdRef = useRef(0)
+  const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
   const processedEventIdsRef = useRef<Set<string>>(new Set())
-  const replayInFlightRef = useRef(false)
   const isGlobalAssetProject = projectId === 'global-asset-hub'
 
-  const url = useMemo(() => {
+  const connection = useMemo(() => {
     if (!projectId) return null
+    const cursor = readStoredCursor(projectId, episodeId)
     const params = new URLSearchParams({ projectId })
     if (episodeId) params.set('episodeId', episodeId)
-    return `/api/sse?${params}`
+    if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0) {
+      params.set('cursor', serializeWorkspaceSseCursor(cursor))
+    }
+    return { url: `/api/sse?${params}`, cursor }
   }, [projectId, episodeId])
 
   const scheduleTargetStatesInvalidation = useCallback(() => {
@@ -62,26 +96,32 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     onEvent?.(payload)
   }, [episodeId, isGlobalAssetProject, onEvent, projectId, queryClient, scheduleTargetStatesInvalidation])
 
-  const handleParsedEvent = useCallback((payload: unknown) => {
+  const handleParsedEvent = useCallback((payload: unknown, transportCursor?: string) => {
     if (!isWorkspaceSSEEvent(payload)) return
-    if (processedEventIdsRef.current.has(payload.id)) return
+    const identity = `${payload.type}:${payload.id}`
+    if (processedEventIdsRef.current.has(identity)) return
     applyEvent(payload)
-    processedEventIdsRef.current.add(payload.id)
-    const numericEventId = readNumericWorkspaceSSEEventId(payload.id)
-    if (numericEventId !== null && numericEventId > lastEventIdRef.current) {
-      lastEventIdRef.current = numericEventId
+    addProcessedSseEventIdentity(processedEventIdsRef.current, identity)
+    const nextCursor = transportCursor
+      ? parseWorkspaceSseCursor(transportCursor)
+      : advanceWorkspaceSseCursor(cursorRef.current, payload)
+    cursorRef.current = nextCursor
+    if (projectId) {
+      persistCursor(projectId, episodeId, nextCursor)
     }
-  }, [applyEvent])
+  }, [applyEvent, episodeId, projectId])
 
   useEffect(() => {
-    if (!enabled || !url || !projectId) return
+    if (!enabled || !connection || !projectId) return
 
-    const source = new EventSource(url)
+    cursorRef.current = readStoredCursor(projectId, episodeId)
+    processedEventIdsRef.current = new Set()
+    const source = new EventSource(connection.url)
     sourceRef.current = source
 
     const handleEvent = (event: MessageEvent) => {
       try {
-        handleParsedEvent(JSON.parse(event.data || '{}'))
+        handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
       } catch (error) {
         _ulogError('[useSSE] failed to parse event', error)
       }
@@ -116,52 +156,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.close()
       sourceRef.current = null
     }
-  }, [enabled, url, projectId, episodeId, handleParsedEvent])
-
-  useEffect(() => {
-    if (!enabled || !projectId) return
-    let cancelled = false
-
-    const replayMissedEvents = async () => {
-      if (replayInFlightRef.current) return
-      replayInFlightRef.current = true
-      try {
-        const params = new URLSearchParams({
-          projectId,
-          lastEventId: String(lastEventIdRef.current),
-        })
-        if (episodeId) params.set('episodeId', episodeId)
-        const response = await apiFetch(`/api/sse/replay?${params.toString()}`)
-        if (!response.ok) {
-          _ulogWarn('[useSSE] replay request failed', { projectId, episodeId, status: response.status })
-          return
-        }
-        const payload = await response.json().catch(() => null) as unknown
-        if (!isRecord(payload) || !Array.isArray(payload.events)) return
-        for (const event of payload.events) {
-          if (cancelled) return
-          handleParsedEvent(event)
-        }
-      } catch (error) {
-        _ulogWarn('[useSSE] replay failed', {
-          projectId,
-          episodeId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      } finally {
-        replayInFlightRef.current = false
-      }
-    }
-
-    const timer = window.setInterval(() => {
-      void replayMissedEvents()
-    }, SSE_REPLAY_POLL_MS)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [enabled, episodeId, handleParsedEvent, projectId])
+  }, [connection, enabled, projectId, episodeId, handleParsedEvent])
 
   return {
     connected: !!sourceRef.current && sourceRef.current.readyState === EventSource.OPEN,

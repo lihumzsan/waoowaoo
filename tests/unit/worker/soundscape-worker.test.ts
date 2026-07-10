@@ -170,7 +170,9 @@ function buildJob(type: TaskJobData['type'], payload: Record<string, unknown>): 
         ? 'plan_episode_soundscape'
         : 'generate_episode_soundscape',
       operationSource: 'assistant-panel',
-      operationConfirmed: true,
+      approvalGrantId: 'grant-1',
+      operationExecutionId: 'execution-1',
+      operationPlanTaskId: `plan-${type}`,
       operationRequestId: 'request-1',
       trace: { requestId: 'request-1' },
     } satisfies TaskJobData,
@@ -286,7 +288,8 @@ describe('soundscape worker', () => {
     const { handleSoundscapeGenerateTask } = await import('@/lib/soundscape/generate')
 
     const unconfirmedJob = buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload)
-    unconfirmedJob.data.operationConfirmed = false
+    unconfirmedJob.data.approvalGrantId = null
+    unconfirmedJob.data.operationExecutionId = null
     await expect(handleSoundscapeGenerateTask(unconfirmedJob)).rejects.toThrow(
       'SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED',
     )

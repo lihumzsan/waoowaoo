@@ -123,6 +123,7 @@ interface PersistedBibleSnapshot {
   readonly version: number
   readonly status: string
   readonly lockedAt: Date | null
+  readonly generationTaskId: string | null
 }
 
 interface PersistedBibleStylePreview {
@@ -140,6 +141,7 @@ interface PersistedBibleStylePreview {
   readonly status: string
   readonly taskId: string | null
   readonly errorMessage: string | null
+  readonly updatedAt: Date
 }
 
 export interface EditBibleGenerationTarget {
@@ -147,6 +149,7 @@ export interface EditBibleGenerationTarget {
   readonly episodeId: string
   readonly sourceDocumentId: string
   readonly version: number
+  readonly baseVersion: number
   readonly rollback: () => Promise<void>
 }
 
@@ -160,6 +163,7 @@ export interface PersistedEditBibleBundle {
   readonly version: number
   readonly status: EditBibleStatus
   readonly lockedAt: Date | null
+  readonly updatedAt: Date
   readonly bible: EditBible | null
   readonly beatSheet: EditBibleBeatSheet | null
   readonly ledger: Ledger | null
@@ -175,6 +179,7 @@ export interface PersistedEditChapterPlan extends EditBibleChapterPlan {
   readonly status: string
   readonly renderStatus: string | null
   readonly outputMediaId: string | null
+  readonly updatedAt: Date
 }
 
 const persistedBibleSelect = {
@@ -190,6 +195,8 @@ const persistedBibleSelect = {
   version: true,
   status: true,
   lockedAt: true,
+  updatedAt: true,
+  generationTaskId: true,
   sourceDocument: {
     select: {
       sourceKind: true,
@@ -214,6 +221,7 @@ const persistedBibleSelect = {
       status: true,
       taskId: true,
       errorMessage: true,
+      updatedAt: true,
     },
   },
 } as const
@@ -295,6 +303,7 @@ function mapPersistedStylePreview(preview: PersistedBibleStylePreview): EditStyl
     status: normalizeStylePreviewStatus(preview.status),
     taskId: preview.taskId,
     errorMessage: preview.errorMessage,
+    updatedAt: preview.updatedAt,
   }
 }
 
@@ -311,6 +320,7 @@ function mapPersistedBible(record: {
   readonly version: number
   readonly status: string
   readonly lockedAt: Date | null
+  readonly updatedAt: Date
   readonly sourceDocument: {
     readonly sourceKind: string
     readonly normalizedText: string
@@ -334,6 +344,7 @@ function mapPersistedBible(record: {
     version: record.version,
     status: normalizeBibleStatus(record.status),
     lockedAt: record.lockedAt,
+    updatedAt: record.updatedAt,
     bible: parseBundlePart(record.bibleJson, (value) => editBibleSchema.parse(value)),
     beatSheet: parseBundlePart(record.beatSheetJson, (value) => editBibleBeatSheetSchema.parse(value)),
     ledger: parseBundlePart(record.ledgerJson, (value) => ledgerSchema.parse(value)),
@@ -364,14 +375,26 @@ async function assertEpisodeAccess(input: {
 
 async function restoreBibleSnapshot(input: {
   readonly editBibleId: string
+  readonly sourceDocumentId: string
+  readonly preparedVersion: number
   readonly snapshot: PersistedBibleSnapshot | null
 }) {
   if (!input.snapshot) {
-    await prisma.projectEditBible.deleteMany({ where: { id: input.editBibleId } })
+    await prisma.projectEditBible.deleteMany({
+      where: {
+        id: input.editBibleId,
+        sourceDocumentId: input.sourceDocumentId,
+        version: input.preparedVersion,
+      },
+    })
     return
   }
-  await prisma.projectEditBible.update({
-    where: { id: input.snapshot.id },
+  await prisma.projectEditBible.updateMany({
+    where: {
+      id: input.snapshot.id,
+      sourceDocumentId: input.sourceDocumentId,
+      version: input.preparedVersion,
+    },
     data: {
       sourceDocumentId: input.snapshot.sourceDocumentId,
       bibleJson: toNullableInputJsonValue(input.snapshot.bibleJson),
@@ -383,6 +406,7 @@ async function restoreBibleSnapshot(input: {
       version: input.snapshot.version,
       status: input.snapshot.status,
       lockedAt: input.snapshot.lockedAt,
+      generationTaskId: input.snapshot.generationTaskId,
     },
   })
 }
@@ -404,6 +428,13 @@ export async function prepareEditBibleGenerationTarget(input: {
     })
     if (!sourceDocument) throw new ApiError('NOT_FOUND')
 
+    await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM project_edit_bibles
+      WHERE episodeId = ${input.episodeId}
+      FOR UPDATE
+    `)
+
     const snapshot = await tx.projectEditBible.findUnique({
       where: { episodeId: input.episodeId },
       select: persistedBibleSelect,
@@ -416,6 +447,7 @@ export async function prepareEditBibleGenerationTarget(input: {
     }
 
     const version = (snapshot?.version ?? 0) + 1
+    const baseVersion = snapshot?.version ?? 0
     const bible = snapshot
       ? await tx.projectEditBible.update({
           where: { id: snapshot.id },
@@ -430,6 +462,7 @@ export async function prepareEditBibleGenerationTarget(input: {
             version,
             status: EDIT_BIBLE_STATUS.GENERATING,
             lockedAt: null,
+            generationTaskId: null,
           },
           select: { id: true },
         })
@@ -439,6 +472,7 @@ export async function prepareEditBibleGenerationTarget(input: {
             sourceDocumentId: input.sourceDocumentId,
             version,
             status: EDIT_BIBLE_STATUS.GENERATING,
+            generationTaskId: null,
           },
           select: { id: true },
         })
@@ -446,6 +480,7 @@ export async function prepareEditBibleGenerationTarget(input: {
     return {
       editBibleId: bible.id,
       version,
+      baseVersion,
       snapshot,
     }
   })
@@ -455,8 +490,11 @@ export async function prepareEditBibleGenerationTarget(input: {
     episodeId: input.episodeId,
     sourceDocumentId: input.sourceDocumentId,
     version: target.version,
+    baseVersion: target.baseVersion,
     rollback: async () => await restoreBibleSnapshot({
       editBibleId: target.editBibleId,
+      sourceDocumentId: input.sourceDocumentId,
+      preparedVersion: target.version,
       snapshot: target.snapshot,
     }),
   }
@@ -563,6 +601,7 @@ async function writeChapterPlans(input: {
         status: true,
         renderStatus: true,
         outputMediaId: true,
+        updatedAt: true,
       },
     })
     chapters.push({
@@ -571,6 +610,7 @@ async function writeChapterPlans(input: {
       status: record.status,
       renderStatus: record.renderStatus,
       outputMediaId: record.outputMediaId,
+      updatedAt: record.updatedAt,
     })
   }
   return chapters
@@ -581,46 +621,63 @@ export async function persistGeneratedEditBibleBundle(input: {
   readonly episodeId: string
   readonly editBibleId: string
   readonly sourceDocumentId: string
+  readonly taskId: string
   readonly bundle: EditBibleBundle
 }): Promise<{
   readonly editBible: PersistedEditBibleBundle
   readonly chapters: readonly PersistedEditChapterPlan[]
 }> {
-  const sourceDocument = await readEpisodeSourceDocumentById({
-    projectId: input.projectId,
-    episodeId: input.episodeId,
-    sourceDocumentId: input.sourceDocumentId,
-  })
-  const bundle = validateEditBibleBundle({
-    bundle: input.bundle,
-    sourceText: sourceDocument.normalizedText,
-  })
-  let plans: readonly EditBibleChapterPlan[]
-  try {
-    plans = splitEditBibleIntoChapterPlans({
-      bundle,
-      sourceText: sourceDocument.normalizedText,
-    })
-  } catch (error: unknown) {
-    throw new AppError(
-      'PLAN_VALIDATION_FAILED',
-      error instanceof Error ? error.message : String(error),
-      { cause: error },
-    )
-  }
-
   return await prisma.$transaction(async (tx) => {
-    const bible = await tx.projectEditBible.findFirst({
-      where: {
-        id: input.editBibleId,
-        episodeId: input.episodeId,
-        sourceDocumentId: input.sourceDocumentId,
-      },
+    const locked = await tx.$queryRaw<Array<{
+      id: string
+      episodeId: string
+      sourceDocumentId: string
+      generationTaskId: string | null
+      status: string
+    }>>(Prisma.sql`
+      SELECT id, episodeId, sourceDocumentId, generationTaskId, status
+      FROM project_edit_bibles
+      WHERE id = ${input.editBibleId}
+      FOR UPDATE
+    `)
+    const lockedBible = locked[0]
+    if (!lockedBible) throw new ApiError('NOT_FOUND')
+    if (
+      lockedBible.episodeId !== input.episodeId
+      || lockedBible.sourceDocumentId !== input.sourceDocumentId
+      || lockedBible.generationTaskId !== input.taskId
+    ) {
+      throw new Error(`EDIT_BIBLE_GENERATION_OWNERSHIP_STALE:${input.editBibleId}:${input.taskId}`)
+    }
+    if (lockedBible.status !== EDIT_BIBLE_STATUS.GENERATING) {
+      throw new Error(`EDIT_BIBLE_GENERATION_STATUS_INVALID:${lockedBible.status}`)
+    }
+    const bible = await tx.projectEditBible.findUniqueOrThrow({
+      where: { id: input.editBibleId },
       select: persistedBibleSelect,
     })
-    if (!bible) throw new ApiError('NOT_FOUND')
-    if (bible.status !== EDIT_BIBLE_STATUS.GENERATING) {
-      throw new Error(`EDIT_BIBLE_GENERATION_STATUS_INVALID:${bible.status}`)
+    const sourceDocument = await readEpisodeSourceDocumentById({
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      sourceDocumentId: input.sourceDocumentId,
+      client: tx,
+    })
+    const bundle = validateEditBibleBundle({
+      bundle: input.bundle,
+      sourceText: sourceDocument.normalizedText,
+    })
+    let plans: readonly EditBibleChapterPlan[]
+    try {
+      plans = splitEditBibleIntoChapterPlans({
+        bundle,
+        sourceText: sourceDocument.normalizedText,
+      })
+    } catch (error: unknown) {
+      throw new AppError(
+        'PLAN_VALIDATION_FAILED',
+        error instanceof Error ? error.message : String(error),
+        { cause: error },
+      )
     }
 
     await assertNoDownstreamChapterArtifacts({
@@ -638,8 +695,14 @@ export async function persistGeneratedEditBibleBundle(input: {
     await tx.projectEditStylePreview.deleteMany({
       where: { editBibleId: bible.id },
     })
-    const updated = await tx.projectEditBible.update({
-      where: { id: bible.id },
+    const updated = await tx.projectEditBible.updateMany({
+      where: {
+        id: bible.id,
+        episodeId: input.episodeId,
+        sourceDocumentId: input.sourceDocumentId,
+        generationTaskId: input.taskId,
+        status: EDIT_BIBLE_STATUS.GENERATING,
+      },
       data: {
         bibleJson: toInputJsonValue(bundle.bible),
         beatSheetJson: toInputJsonValue(bundle.beatSheet),
@@ -649,10 +712,16 @@ export async function persistGeneratedEditBibleBundle(input: {
         diagnosticsJson: Prisma.JsonNull,
         status: EDIT_BIBLE_STATUS.READY_FOR_REVIEW,
       },
+    })
+    if (updated.count !== 1) {
+      throw new Error(`EDIT_BIBLE_GENERATION_FINAL_CAS_FAILED:${bible.id}:${input.taskId}`)
+    }
+    const persisted = await tx.projectEditBible.findUniqueOrThrow({
+      where: { id: bible.id },
       select: persistedBibleSelect,
     })
     return {
-      editBible: mapPersistedBible(updated, input.projectId),
+      editBible: mapPersistedBible(persisted, input.projectId),
       chapters,
     }
   })
@@ -661,11 +730,13 @@ export async function persistGeneratedEditBibleBundle(input: {
 export async function markEditBibleScriptReadyForReview(input: {
   readonly editBibleId: string
   readonly sourceDocumentId: string
+  readonly taskId: string
 }) {
   const result = await prisma.projectEditBible.updateMany({
     where: {
       id: input.editBibleId,
       sourceDocumentId: input.sourceDocumentId,
+      generationTaskId: input.taskId,
       status: EDIT_BIBLE_STATUS.GENERATING,
     },
     data: {
@@ -708,19 +779,6 @@ export async function approveEpisodePromptGeneratedScript(input: {
   }
 }
 
-export async function markEditBibleGenerationFailed(input: {
-  readonly editBibleId: string
-  readonly diagnostics: EditBibleDiagnostics
-}) {
-  await prisma.projectEditBible.updateMany({
-    where: { id: input.editBibleId },
-    data: {
-      status: EDIT_BIBLE_STATUS.FAILED,
-      diagnosticsJson: toInputJsonValue(input.diagnostics),
-    },
-  })
-}
-
 export async function readEpisodeEditBible(input: {
   readonly projectId: string
   readonly episodeId: string
@@ -761,6 +819,7 @@ export async function readEpisodeEditChapters(input: {
       renderStatus: true,
       outputMediaId: true,
       status: true,
+      updatedAt: true,
     },
   })
   return chapters.map((chapter) => {
@@ -793,6 +852,7 @@ export async function readEpisodeEditChapters(input: {
       beatIds,
       eventIds,
       status: chapter.status,
+      updatedAt: chapter.updatedAt,
       renderStatus: chapter.renderStatus,
       outputMediaId: chapter.outputMediaId,
     }

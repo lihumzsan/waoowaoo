@@ -1,18 +1,26 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import { queryKeys } from '@/lib/query/keys'
-import { applyWorkspaceMaterializedResourcesToCache } from '@/lib/query/materialized-resource-cache'
+import {
+  applyWorkspaceMaterializedResourcesToCache,
+  restoreWorkspaceMaterializedResourceSnapshot,
+} from '@/lib/query/materialized-resource-cache'
 import type { WorkspaceMaterializedResourceEnvelope } from '@/lib/task/types'
 
-function editBibleData(version: number, title: string) {
+function editBibleData(version: number, title: string, updatedAt = `2026-07-11T00:0${String(version)}:00.000Z`) {
   return {
     editBible: {
       id: 'bible-1',
       version,
       title,
       chapters: [],
+      updatedAt,
     },
     chapters: [],
+    resourceVersion: {
+      scheme: 'revision_updated_at' as const,
+      value: { revision: version, updatedAt },
+    },
   }
 }
 
@@ -26,7 +34,7 @@ function editBibleEnvelope(params: {
     projectId: 'project-1',
     episodeId: 'episode-1',
     resourceKey: 'editBible:project-1:episode-1',
-    resourceVersion: { scheme: 'revision', value: params.version },
+    resourceVersion: editBibleData(params.version, params.title).resourceVersion,
     taskId: params.taskId,
     data: editBibleData(params.version, params.title),
   }
@@ -37,6 +45,7 @@ function episodeData(updatedAt: string, name: string) {
     id: 'episode-1',
     updatedAt,
     name,
+    resourceVersion: { scheme: 'aggregate_updated_at' as const, value: updatedAt },
   }
 }
 
@@ -50,7 +59,7 @@ function episodeEnvelope(params: {
     projectId: 'project-1',
     episodeId: 'episode-1',
     resourceKey: 'episodeData:project-1:episode-1',
-    resourceVersion: { scheme: 'updated_at', value: params.updatedAt },
+    resourceVersion: { scheme: 'aggregate_updated_at', value: params.updatedAt },
     taskId: params.taskId,
     data: episodeData(params.updatedAt, params.name),
   }
@@ -66,10 +75,33 @@ function apply(queryClient: QueryClient, envelope: WorkspaceMaterializedResource
 }
 
 describe('materialized resource cache version gate', () => {
+  it('does not let an optimistic rollback overwrite a newer formal resource snapshot', () => {
+    const queryClient = new QueryClient()
+    const queryKey = queryKeys.episodeData('project-1', 'episode-1')
+    const previous = episodeData('2026-07-11T00:01:00.000Z', 'optimistic baseline')
+    const terminal = episodeData('2026-07-11T00:02:00.000Z', 'new terminal snapshot')
+    queryClient.setQueryData(queryKey, terminal)
+
+    expect(restoreWorkspaceMaterializedResourceSnapshot({
+      queryClient,
+      kind: 'episodeData',
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      snapshot: previous,
+    })).toBe('newer-current-preserved')
+    expect(queryClient.getQueryData(queryKey)).toEqual(terminal)
+  })
   it('accepts consecutive editBible revisions and ignores duplicate or stale envelopes across tasks', () => {
     const queryClient = new QueryClient()
     const queryKey = queryKeys.project.editBible('project-1', 'episode-1')
-    queryClient.setQueryData(queryKey, { editBible: null, chapters: [] })
+    queryClient.setQueryData(queryKey, {
+      editBible: null,
+      chapters: [],
+      resourceVersion: {
+        scheme: 'revision_updated_at',
+        value: { revision: 0, updatedAt: '1970-01-01T00:00:00.000Z' },
+      },
+    })
 
     const first = apply(queryClient, editBibleEnvelope({
       taskId: 'task-1',
@@ -219,7 +251,10 @@ describe('materialized resource cache version gate', () => {
       projectId: mismatched.projectId,
       value: [{
         ...mismatched,
-        resourceVersion: { scheme: 'revision', value: 4 },
+        resourceVersion: {
+          scheme: 'revision_updated_at',
+          value: { revision: 4, updatedAt: '2026-07-11T00:04:00.000Z' },
+        },
       }],
     })
     expect(mismatchResult.errors).toEqual([

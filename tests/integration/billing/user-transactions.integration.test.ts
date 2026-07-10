@@ -86,11 +86,13 @@ describe('billing/user transactions integration', () => {
       targetId: panel.id,
     })
 
-    const freezeId = requireFreezeId(await freezeBalance(user.id, 1.25, {
-      source: 'task',
-      taskId: task.id,
-      idempotencyKey: 'user_transactions_panel_image',
-    }))
+    const freezeId = requireFreezeId(
+      await freezeBalance(user.id, 1.25, {
+        source: 'task',
+        taskId: task.id,
+        idempotencyKey: 'user_transactions_panel_image',
+      }),
+    )
 
     await confirmChargeWithRecord(
       freezeId,
@@ -115,7 +117,9 @@ describe('billing/user transactions integration', () => {
     )
 
     const operation = createUserBillingOperations().list_user_transactions
-    const result = await operation.execute(createOperationContext(user.id), { pageSize: 20 })
+    const result = await operation.execute!(createOperationContext(user.id), {
+      pageSize: 20,
+    })
     const payload = readRecord(result)
     const transactions = readArray(payload.transactions)
     expect(transactions).toHaveLength(1)
@@ -196,11 +200,13 @@ describe('billing/user transactions integration', () => {
         operationRequestId: 'request_user_transactions_batch_image',
       })
 
-      const freezeId = requireFreezeId(await freezeBalance(user.id, 1.14, {
-        source: 'task',
-        taskId: task.id,
-        idempotencyKey: `user_transactions_batch_image_${panelNumber}`,
-      }))
+      const freezeId = requireFreezeId(
+        await freezeBalance(user.id, 1.14, {
+          source: 'task',
+          taskId: task.id,
+          idempotencyKey: `user_transactions_batch_image_${panelNumber}`,
+        }),
+      )
 
       await confirmChargeWithRecord(
         freezeId,
@@ -225,7 +231,9 @@ describe('billing/user transactions integration', () => {
     }
 
     const operation = createUserBillingOperations().list_user_transactions
-    const result = await operation.execute(createOperationContext(user.id), { pageSize: 20 })
+    const result = await operation.execute!(createOperationContext(user.id), {
+      pageSize: 20,
+    })
     const payload = readRecord(result)
     const transactions = readArray(payload.transactions)
     expect(transactions).toHaveLength(1)
@@ -286,7 +294,9 @@ describe('billing/user transactions integration', () => {
     })
 
     const operation = createUserBillingOperations().list_user_transactions
-    const result = await operation.execute(createOperationContext(user.id), { pageSize: 20 })
+    const result = await operation.execute!(createOperationContext(user.id), {
+      pageSize: 20,
+    })
     const payload = readRecord(result)
     const transactions = readArray(payload.transactions)
     expect(transactions).toHaveLength(1)

@@ -19,7 +19,8 @@ export type EditStylePreviewKey = EditStylePreviewCanonicalKey | `${EditStylePre
 
 export type EditStylePreviewStatus = 'pending' | 'generating' | 'completed' | 'confirmed' | 'failed'
 
-export const editScriptAssetRequirementIdSchema = z.string()
+export const editScriptAssetRequirementIdSchema = z
+  .string()
   .trim()
   .min(1)
   .refine((value) => !value.includes('*'), {
@@ -42,6 +43,7 @@ export interface EditStylePreviewPayload {
   readonly status: EditStylePreviewStatus
   readonly taskId: string | null
   readonly errorMessage: string | null
+  readonly updatedAt: Date
 }
 
 export interface EditStylePreviewGenerationItem {
@@ -282,95 +284,145 @@ export interface EditShotExecutionPlanPayload {
   readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
 }
 
-export const editScriptCharacterSchema = z.object({
-  characterId: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-  visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-  role: z.enum(EDIT_CHARACTER_ROLES),
-  performance: z.string().trim().min(1),
-}).strict()
-
-export const editScriptKeyObjectSchema = z.object({
-  name: z.string().trim().min(1),
-  role: z.string().trim().min(1),
-}).strict()
-
-export const editScriptDialogueLineSchema = z.object({
-  characterId: z.string().trim().min(1),
-  line: z.string().trim().min(1),
-}).strict()
-
-export const editScriptShotSchema = z.object({
-  shotId: z.string().trim().min(1),
-  shotNumber: z.number().int().positive(),
-  shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
-  durationSec: z.number().int().min(1).max(5),
-  scene: z.object({
-    locationId: z.string().trim().min(1),
+export const editScriptCharacterSchema = z
+  .object({
+    characterId: z.string().trim().min(1),
     name: z.string().trim().min(1),
-    subScene: z.string().trim().min(1),
-  }).strict(),
-  action: z.string().trim().min(1),
-  characters: z.array(editScriptCharacterSchema).min(0).max(20),
-  keyObjects: z.array(editScriptKeyObjectSchema).min(0).max(20),
-  dialogue: z.array(editScriptDialogueLineSchema).min(0).max(20),
-  sound: z.string().trim().min(1),
-}).strict()
+    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+    role: z.enum(EDIT_CHARACTER_ROLES),
+    performance: z.string().trim().min(1),
+  })
+  .strict()
 
-export const editGenerationSegmentSchema = z.object({
-  shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
-  continuity: z.string().trim().min(1),
-}).strict()
+export const editScriptKeyObjectSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    role: z.string().trim().min(1),
+  })
+  .strict()
 
-export const editScriptCoreSchema = z.object({
-  shots: z.array(editScriptShotSchema).min(1).max(60),
-  generationSegments: z.array(editGenerationSegmentSchema).min(1).max(60),
-}).strict()
+export const editScriptDialogueLineSchema = z
+  .object({
+    characterId: z.string().trim().min(1),
+    line: z.string().trim().min(1),
+  })
+  .strict()
+
+export const editScriptShotSchema = z
+  .object({
+    shotId: z.string().trim().min(1),
+    shotNumber: z.number().int().positive(),
+    shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
+    durationSec: z.number().int().min(1).max(5),
+    scene: z
+      .object({
+        locationId: z.string().trim().min(1),
+        name: z.string().trim().min(1),
+        subScene: z.string().trim().min(1),
+      })
+      .strict(),
+    action: z.string().trim().min(1),
+    characters: z.array(editScriptCharacterSchema).min(0).max(20),
+    keyObjects: z.array(editScriptKeyObjectSchema).min(0).max(20),
+    dialogue: z.array(editScriptDialogueLineSchema).min(0).max(20),
+    sound: z.string().trim().min(1),
+  })
+  .strict()
+
+export const editGenerationSegmentSchema = z
+  .object({
+    shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
+    continuity: z.string().trim().min(1),
+  })
+  .strict()
+
+export const editScriptCoreSchema = z
+  .object({
+    shots: z.array(editScriptShotSchema).min(1).max(60),
+    generationSegments: z.array(editGenerationSegmentSchema).min(1).max(60),
+  })
+  .strict()
 
 export const editScriptStructureSchema = editScriptCoreSchema
 
-export const editShotExecutionPlanSchema = z.object({
-  shots: z.array(z.object({
-    shotId: z.string().trim().min(1),
-    shotNumber: z.number().int().positive(),
-    camera: z.object({
-      shotScale: z.string().trim().min(1),
-      lens: z.string().trim().min(1),
-      focus: z.string().trim().min(1),
-      height: z.string().trim().min(1),
-      angle: z.string().trim().min(1),
-      movement: z.string().trim().min(1),
-      composition: z.string().trim().min(1),
-      lighting: z.string().trim().min(1),
-    }).strict(),
-    blocking: z.object({
-      axis: z.object({
-        type: z.string().trim().min(1),
-        subjects: z.array(z.string().trim().min(1)).min(1).max(10),
-        screenDirection: z.string().trim().min(1),
-      }).strict(),
-      characters: z.array(z.object({
-        name: z.string().trim().min(1),
-        visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-        position: z.string().trim().min(1),
-        screenPosition: z.string().trim().min(1),
-        facing: z.string().trim().min(1),
-        eyeline: z.string().trim().min(1),
-      }).strict()).min(0).max(20),
-      objects: z.array(z.object({
-        name: z.string().trim().min(1),
-        position: z.string().trim().min(1),
-        screenPosition: z.string().trim().min(1),
-      }).strict()).min(0).max(20),
-      spatialNote: z.string().trim().min(1),
-    }).strict(),
-    videoPrompt: z.string().trim().min(1),
-  }).strict()).min(1).max(60),
-  generationSegmentExecutions: z.array(z.object({
-    shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
-    continuousVideoPrompt: z.string().trim().min(1),
-  }).strict()).min(1).max(60),
-}).strict()
+export const editShotExecutionPlanSchema = z
+  .object({
+    shots: z
+      .array(
+        z
+          .object({
+            shotId: z.string().trim().min(1),
+            shotNumber: z.number().int().positive(),
+            camera: z
+              .object({
+                shotScale: z.string().trim().min(1),
+                lens: z.string().trim().min(1),
+                focus: z.string().trim().min(1),
+                height: z.string().trim().min(1),
+                angle: z.string().trim().min(1),
+                movement: z.string().trim().min(1),
+                composition: z.string().trim().min(1),
+                lighting: z.string().trim().min(1),
+              })
+              .strict(),
+            blocking: z
+              .object({
+                axis: z
+                  .object({
+                    type: z.string().trim().min(1),
+                    subjects: z.array(z.string().trim().min(1)).min(1).max(10),
+                    screenDirection: z.string().trim().min(1),
+                  })
+                  .strict(),
+                characters: z
+                  .array(
+                    z
+                      .object({
+                        name: z.string().trim().min(1),
+                        visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+                        position: z.string().trim().min(1),
+                        screenPosition: z.string().trim().min(1),
+                        facing: z.string().trim().min(1),
+                        eyeline: z.string().trim().min(1),
+                      })
+                      .strict(),
+                  )
+                  .min(0)
+                  .max(20),
+                objects: z
+                  .array(
+                    z
+                      .object({
+                        name: z.string().trim().min(1),
+                        position: z.string().trim().min(1),
+                        screenPosition: z.string().trim().min(1),
+                      })
+                      .strict(),
+                  )
+                  .min(0)
+                  .max(20),
+                spatialNote: z.string().trim().min(1),
+              })
+              .strict(),
+            videoPrompt: z.string().trim().min(1),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(60),
+    generationSegmentExecutions: z
+      .array(
+        z
+          .object({
+            shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
+            continuousVideoPrompt: z.string().trim().min(1),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(60),
+  })
+  .strict()
 
 export const editScriptStylePolicySchema = z.object({
   directing: z.object({
@@ -397,11 +449,13 @@ export const editScriptStylePolicySchema = z.object({
 })
 
 export const editScriptStyleBibleSchema = z.object({
-  styleBible: z.object({
-    rawUserStyle: z.string().trim().nullable(),
-    styleSummary: z.string().trim().min(1),
-    stylePolicy: editScriptStylePolicySchema,
-  }).passthrough(),
+  styleBible: z
+    .object({
+      rawUserStyle: z.string().trim().nullable(),
+      styleSummary: z.string().trim().min(1),
+      stylePolicy: editScriptStylePolicySchema,
+    })
+    .passthrough(),
 })
 
 export const editStylePreviewOptionSchema = z.object({
@@ -412,41 +466,38 @@ export const editStylePreviewOptionSchema = z.object({
   gridImagePrompt: z.string().trim().min(1),
 })
 
-export const editStylePreviewKeySchema = z.string()
+export const editStylePreviewKeySchema = z
+  .string()
   .trim()
   .regex(/^style_[abc](?:_[2-9]\d*)?$/)
 
-export const editStylePreviewOptionsSchema = z.object({
-  stylePreviews: z.array(editStylePreviewOptionSchema).min(1).max(EDIT_STYLE_PREVIEW_MAX_COUNT),
-}).superRefine((value, context) => {
-  const actualKeys = new Set(value.stylePreviews.map((preview) => preview.styleKey))
-  if (actualKeys.size !== value.stylePreviews.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['stylePreviews'],
-      message: 'Style preview keys must be unique.',
-    })
-  }
-  for (const [index, preview] of value.stylePreviews.entries()) {
-    if (preview.styleKey !== EDIT_STYLE_PREVIEW_KEYS[index]) {
+export const editStylePreviewOptionsSchema = z
+  .object({
+    stylePreviews: z.array(editStylePreviewOptionSchema).min(1).max(EDIT_STYLE_PREVIEW_MAX_COUNT),
+  })
+  .superRefine((value, context) => {
+    const actualKeys = new Set(value.stylePreviews.map((preview) => preview.styleKey))
+    if (actualKeys.size !== value.stylePreviews.length) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['stylePreviews', index, 'styleKey'],
-        message: `Style preview key at index ${String(index)} must be ${EDIT_STYLE_PREVIEW_KEYS[index]}.`,
+        path: ['stylePreviews'],
+        message: 'Style preview keys must be unique.',
       })
     }
-  }
-})
+    for (const [index, preview] of value.stylePreviews.entries()) {
+      if (preview.styleKey !== EDIT_STYLE_PREVIEW_KEYS[index]) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['stylePreviews', index, 'styleKey'],
+          message: `Style preview key at index ${String(index)} must be ${EDIT_STYLE_PREVIEW_KEYS[index]}.`,
+        })
+      }
+    }
+  })
 
 export type EditStylePreviewOption = z.infer<typeof editStylePreviewOptionSchema>
 
 export type EditScriptStyleBible = z.infer<typeof editScriptStyleBibleSchema>['styleBible']
-
-export const confirmEditStylePreviewRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  stylePreviewId: z.string().trim().min(1),
-  aspectRatio: z.enum(EDIT_SCRIPT_VIDEO_RATIOS),
-})
 
 export const editAssetRequirementSchema = z.object({
   kind: z.enum(EDIT_ASSET_KINDS),
@@ -491,8 +542,8 @@ export const updateEditScriptAssetRequirementDescriptionRequestSchema = z.object
 })
 
 export const generateEditAssetsRequestSchema = z.object({
-  confirmed: z.boolean(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
+  approvalGrantId: z.string().trim().min(1),
+  operationRequestId: z.string().trim().min(1),
   episodeId: z.string().trim().min(1),
   chapterId: z.string().trim().min(1).optional(),
   editScriptId: z.string().trim().min(1).optional(),

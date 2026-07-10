@@ -37,11 +37,10 @@ vi.mock('@/lib/config-service', () => ({
 import {
   submitProjectEditShotExecutionPlanTask,
   submitProjectEditShotExecutionPlanBatchTasks,
-  submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
 
 function request(): NextRequest {
-  return new Request('http://localhost/api/projects/project-1/bible/style-preview', {
+  return new Request('http://localhost/api/test', {
     method: 'POST',
     headers: { 'accept-language': 'zh' },
   }) as unknown as NextRequest
@@ -57,109 +56,6 @@ function mockSubmitResult(taskId: string) {
     deduped: false,
   }
 }
-
-describe('edit style preview task submission', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    prismaMock.projectEditBible.findFirst.mockResolvedValue({
-      id: 'bible-1',
-      status: 'confirmed',
-    })
-    prismaMock.task.findFirst.mockResolvedValue(null)
-    submitOperationTaskMock.mockResolvedValue(mockSubmitResult('task-style-parent-1'))
-  })
-
-  it('submits visual style generation against ProjectEditBible', async () => {
-    const result = await submitProjectEditStylePreviewsGenerationTask({
-      request: request(),
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      bibleId: 'bible-1',
-      styleDirection: '更黑暗一些',
-      count: 2,
-      source: 'project-ui',
-      confirmed: true,
-      locale: 'zh',
-    })
-
-    expect(result).toEqual(expect.objectContaining({
-      success: true,
-      async: true,
-      taskId: 'task-style-parent-1',
-      episodeId: 'episode-1',
-      bibleId: 'bible-1',
-      taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-      targetType: 'ProjectEditBible',
-      targetId: 'bible-1',
-    }))
-    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      type: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-      targetType: 'ProjectEditBible',
-      targetId: 'bible-1',
-      operationId: 'generate_edit_style_previews',
-      dedupeKey: 'edit_style_previews_generate:project-1:bible-1',
-      payload: expect.objectContaining({
-        episodeId: 'episode-1',
-        bibleId: 'bible-1',
-        styleDirection: '更黑暗一些',
-        count: 2,
-        analysisModel: 'openrouter::anthropic/claude-sonnet-4.6',
-        maxInputTokens: 12_000,
-      }),
-    }))
-  })
-
-  it('carries the production-plan-approved exact visual style plan into the parent task', async () => {
-    await submitProjectEditStylePreviewsGenerationTask({
-      request: request(),
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      bibleId: 'bible-1',
-      count: 2,
-      plannedStylePreviewIds: ['style-preview-1', 'style-preview-2'],
-      plannedImageModel: 'fal::gpt-image-2',
-      confirmedMaxCost: 2.5,
-      source: 'assistant-production-plan-choice',
-      confirmed: true,
-      locale: 'zh',
-    })
-
-    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      confirmed: true,
-      source: 'assistant-production-plan-choice',
-      payload: expect.objectContaining({
-        plannedStylePreviewIds: ['style-preview-1', 'style-preview-2'],
-        plannedImageModel: 'fal::gpt-image-2',
-        confirmedMaxCost: 2.5,
-      }),
-    }))
-  })
-
-  it('rejects style preview generation until the Bible is confirmed', async () => {
-    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
-      id: 'bible-1',
-      status: 'ready_for_review',
-    })
-
-    await expect(submitProjectEditStylePreviewsGenerationTask({
-      request: request(),
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      bibleId: 'bible-1',
-      source: 'project-ui',
-      confirmed: true,
-      locale: 'zh',
-    })).rejects.toThrow('Edit Bible must be confirmed before style preview generation')
-
-    expect(submitOperationTaskMock).not.toHaveBeenCalled()
-  })
-})
 
 describe('edit shot execution plan task submission', () => {
   beforeEach(() => {
@@ -219,7 +115,6 @@ describe('edit shot execution plan task submission', () => {
       episodeId: 'episode-1',
       batchKey: 'edit_shot_execution_plan_generate:batch-1',
       source: 'project-agent',
-      confirmed: true,
       locale: 'zh',
       onSubmittedTask: (taskId) => {
         submittedTaskIds.push(taskId)
@@ -303,7 +198,6 @@ describe('edit shot execution plan task submission', () => {
       chapterId: 'chapter-ready',
       editScriptId: 'script-ready',
       source: 'assistant-panel',
-      confirmed: true,
       locale: 'zh',
     })).rejects.toThrow('Shot execution plan is already ready for this edit script.')
 
@@ -336,7 +230,6 @@ describe('edit shot execution plan task submission', () => {
       episodeId: 'episode-1',
       batchKey: 'edit_shot_execution_plan_generate:batch-1',
       source: 'project-agent',
-      confirmed: true,
       locale: 'zh',
     })).rejects.toThrow('No edit scripts require shot execution plan generation.')
 

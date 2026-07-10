@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto'
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { EditFirstReviewChoiceDecision } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowChoiceDecision } from '@/lib/project-workflow/edit-first'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import { normalizeScriptIntakeChoiceBrief } from './script-intake'
 
@@ -18,8 +17,19 @@ export interface EditFirstChoiceResult {
    * operation.
    */
   inputItems: AgentInputItem[]
-  reviewDecision: EditFirstReviewChoiceDecision | null
+  decision: EditFirstChoiceDecision
+  choiceDecision: EditFirstWorkflowChoiceDecision
 }
+
+export type EditFirstChoiceDecision =
+  | { choiceType: 'script_intake'; decision: 'submit'; normalizedBrief: string }
+  | { choiceType: 'script_review'; decision: 'approve' }
+  | { choiceType: 'script_review'; decision: 'revise'; revisionNotes: string }
+  | { choiceType: 'bible_review'; decision: 'approve'; aspectRatio: EditScriptVideoRatio }
+  | { choiceType: 'bible_review'; decision: 'revise'; revisionNotes: string }
+  | { choiceType: 'asset_review'; decision: 'approve' }
+  | { choiceType: 'asset_review'; decision: 'revise'; revisionNotes: string }
+  | { choiceType: 'style'; decision: 'select'; stylePreviewId: string }
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -43,11 +53,11 @@ function readChoiceAspectRatio(output: UnknownRecord): EditScriptVideoRatio | nu
 }
 
 function buildChoiceInputItems(params: {
-  toolCallId: string | null
+  toolCallId: string
   choiceType: EditFirstChoiceType
   result: UnknownRecord
 }): AgentInputItem[] {
-  const callId = params.toolCallId ?? `edit_first_choice_${randomUUID()}`
+  const callId = params.toolCallId
   const toolName = EDIT_FIRST_CHOICE_TOOL_IDS[params.choiceType]
   return [
     {
@@ -74,12 +84,11 @@ function buildChoiceInputItems(params: {
   ]
 }
 
-export function buildEditFirstChoiceResult(params: {
+export function parseEditFirstChoiceDecision(params: {
   choiceType: EditFirstChoiceType
-  toolCallId: string | null
   output: UnknownRecord
   latestUserText: string
-}): EditFirstChoiceResult | null {
+}): EditFirstChoiceDecision | null {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
 
   if (params.choiceType === 'script_intake') {
@@ -88,14 +97,7 @@ export function buildEditFirstChoiceResult(params: {
       output: params.output,
     })
     if (!normalizedBrief) return null
-    return {
-      reviewDecision: null,
-      inputItems: buildChoiceInputItems({
-        toolCallId: params.toolCallId,
-        choiceType: params.choiceType,
-        result: { decision: 'submit', normalizedBrief },
-      }),
-    }
+    return { choiceType: 'script_intake', decision: 'submit', normalizedBrief }
   }
 
   if (params.choiceType === 'bible_review') {
@@ -103,26 +105,12 @@ export function buildEditFirstChoiceResult(params: {
     if (decision === 'revise') {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
-      return {
-        reviewDecision: { choiceType: 'bible_review', decision: 'revise' },
-        inputItems: buildChoiceInputItems({
-          toolCallId: params.toolCallId,
-          choiceType: params.choiceType,
-          result: { decision: 'revise', revisionNotes },
-        }),
-      }
+      return { choiceType: 'bible_review', decision: 'revise', revisionNotes }
     }
     if (decision === 'approve') {
       const aspectRatio = readChoiceAspectRatio(params.output)
       if (!aspectRatio) return null
-      return {
-        reviewDecision: { choiceType: 'bible_review', decision: 'approve' },
-        inputItems: buildChoiceInputItems({
-          toolCallId: params.toolCallId,
-          choiceType: params.choiceType,
-          result: { decision: 'approve', aspectRatio },
-        }),
-      }
+      return { choiceType: 'bible_review', decision: 'approve', aspectRatio }
     }
     return null
   }
@@ -132,24 +120,10 @@ export function buildEditFirstChoiceResult(params: {
     if (decision === 'revise') {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
-      return {
-        reviewDecision: { choiceType: 'script_review', decision: 'revise' },
-        inputItems: buildChoiceInputItems({
-          toolCallId: params.toolCallId,
-          choiceType: params.choiceType,
-          result: { decision: 'revise', revisionNotes },
-        }),
-      }
+      return { choiceType: 'script_review', decision: 'revise', revisionNotes }
     }
     if (decision !== 'approve') return null
-    return {
-      reviewDecision: { choiceType: 'script_review', decision: 'approve' },
-      inputItems: buildChoiceInputItems({
-        toolCallId: params.toolCallId,
-        choiceType: params.choiceType,
-        result: { decision: 'approve' },
-      }),
-    }
+    return { choiceType: 'script_review', decision: 'approve' }
   }
 
   if (params.choiceType === 'asset_review') {
@@ -157,35 +131,66 @@ export function buildEditFirstChoiceResult(params: {
     if (decision === 'revise') {
       const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
       if (!revisionNotes) return null
-      return {
-        reviewDecision: { choiceType: 'asset_review', decision: 'revise' },
-        inputItems: buildChoiceInputItems({
-          toolCallId: params.toolCallId,
-          choiceType: params.choiceType,
-          result: { decision: 'revise', revisionNotes },
-        }),
-      }
+      return { choiceType: 'asset_review', decision: 'revise', revisionNotes }
     }
     if (decision !== 'approve') return null
-    return {
-      reviewDecision: { choiceType: 'asset_review', decision: 'approve' },
-      inputItems: buildChoiceInputItems({
-        toolCallId: params.toolCallId,
-        choiceType: params.choiceType,
-        result: { decision: 'approve' },
-      }),
-    }
+    return { choiceType: 'asset_review', decision: 'approve' }
   }
 
+  const selections = isRecord(params.output.selections) ? params.output.selections : null
   const stylePreviewId = readString(params.output.stylePreviewId)
-  const aspectRatio = readAspectRatio(params.output.aspectRatio)
-  if (!stylePreviewId || !aspectRatio) return null
+    ?? readString(selections?.stylePreviewId)
+  if (!stylePreviewId) return null
   return {
-    reviewDecision: null,
+    choiceType: 'style',
+    decision: 'select',
+    stylePreviewId,
+  }
+}
+
+export function buildEditFirstChoiceResultFromDecision(params: {
+  decision: EditFirstChoiceDecision
+  toolCallId: string
+}): EditFirstChoiceResult {
+  const decision = params.decision
+  const choiceDecision: EditFirstWorkflowChoiceDecision = decision.choiceType === 'script_review'
+    ? { choiceType: 'script_review', decision: decision.decision }
+    : decision.choiceType === 'bible_review'
+      ? { choiceType: 'bible_review', decision: decision.decision }
+      : decision.choiceType === 'asset_review'
+        ? { choiceType: 'asset_review', decision: decision.decision }
+        : decision.choiceType === 'style'
+          ? { choiceType: 'style', decision: decision.decision, stylePreviewId: decision.stylePreviewId }
+          : { choiceType: 'script_intake', decision: decision.decision, normalizedBrief: decision.normalizedBrief }
+  const result: UnknownRecord = decision.choiceType === 'style'
+    ? {
+        decision: decision.decision,
+        stylePreviewId: decision.stylePreviewId,
+        saved: true,
+      }
+    : { ...decision }
+  delete result.choiceType
+  return {
+    decision,
+    choiceDecision,
     inputItems: buildChoiceInputItems({
       toolCallId: params.toolCallId,
-      choiceType: params.choiceType,
-      result: { stylePreviewId, aspectRatio, saved: true },
+      choiceType: decision.choiceType,
+      result,
     }),
   }
+}
+
+export function buildEditFirstChoiceResult(params: {
+  choiceType: EditFirstChoiceType
+  toolCallId: string
+  output: UnknownRecord
+  latestUserText: string
+}): EditFirstChoiceResult | null {
+  const decision = parseEditFirstChoiceDecision(params)
+  if (!decision) return null
+  return buildEditFirstChoiceResultFromDecision({
+    decision,
+    toolCallId: params.toolCallId,
+  })
 }

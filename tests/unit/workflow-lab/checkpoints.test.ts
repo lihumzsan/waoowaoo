@@ -25,6 +25,8 @@ function buildMessages(): UIMessage[] {
           type: 'data-assistant-choice-card',
           data: {
             cardId: 'edit-first-style:bible-source',
+            runId: 'run-source',
+            interruptionId: 'choice-interruption-source',
             toolCallId: 'tool-1',
             choiceType: 'style',
             title: 'Choose style',
@@ -43,11 +45,7 @@ function buildMessages(): UIMessage[] {
               },
             ],
             submitLabel: 'Confirm',
-            submit: {
-              kind: 'confirm_edit_style_preview',
-              projectId: 'project-source',
-              episodeId: 'episode-source',
-            },
+            submit: { kind: 'submit_tool_output' },
           },
         },
       ],
@@ -160,7 +158,7 @@ describe('workflow lab checkpoints', () => {
     expect(approvalSlice[3]?.parts.map((part) => part.type)).toEqual(['text'])
   })
 
-  it('rewrites exact project, episode, and artifact ids inside restored assistant messages', () => {
+  it('rewrites exact artifact ids without restoring project or episode ids in Choice submit data', () => {
     const messages = sliceWorkflowLabMessagesAtCheckpoint({
       messages: buildMessages(),
       checkpoint: listWorkflowLabCheckpointsFromMessages({
@@ -184,8 +182,8 @@ describe('workflow lab checkpoints', () => {
       }),
     })
 
-    expect(JSON.stringify(rewritten)).toContain('project-lab')
-    expect(JSON.stringify(rewritten)).toContain('episode-lab')
+    expect(JSON.stringify(rewritten)).not.toContain('project-source')
+    expect(JSON.stringify(rewritten)).not.toContain('episode-source')
     expect(JSON.stringify(rewritten)).toContain('preview-lab')
     expect(JSON.stringify(rewritten)).toContain('edit-first-style:bible-lab')
     expect(JSON.stringify(rewritten)).not.toContain('bible-source')

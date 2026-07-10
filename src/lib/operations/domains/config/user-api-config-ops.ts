@@ -37,7 +37,7 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
       },
       confirmation: {
         required: true,
-        summary: '将覆盖更新用户 API 配置（可能影响后续调用与计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将覆盖更新用户 API 配置（可能影响后续调用与计费）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
+import { restoreWorkspaceMaterializedResourceSnapshot } from '../materialized-resource-cache'
 import {
   invalidateQueryTemplates,
   requestBlobWithError,
@@ -67,7 +68,13 @@ export function useUpdateProjectEpisodeField(projectId: string) {
     },
     onError: (_error, _variables, context) => {
       if (context?.previousEpisode && context.episodeId) {
-        queryClient.setQueryData(queryKeys.episodeData(projectId, context.episodeId), context.previousEpisode)
+        restoreWorkspaceMaterializedResourceSnapshot({
+          queryClient,
+          kind: 'episodeData',
+          projectId,
+          episodeId: context.episodeId,
+          snapshot: context.previousEpisode,
+        })
       }
       if (context?.previousProject) {
         queryClient.setQueryData(queryKeys.projectData(projectId), context.previousProject)

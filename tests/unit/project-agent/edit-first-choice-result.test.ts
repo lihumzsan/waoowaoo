@@ -42,6 +42,16 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { name, parsed } = readSyntheticToolResult(choiceResult)
+    expect(choiceResult?.choiceDecision).toEqual({
+      choiceType: 'script_intake',
+      decision: 'submit',
+      normalizedBrief: [
+        '恐怖故事',
+        '- 民俗恐怖',
+        '- 偏远旧村',
+        '主角是返乡参加葬礼的姐姐。',
+      ].join('\n'),
+    })
     expect(name).toBe('request_script_intake_choice')
     expect(parsed.decision).toBe('submit')
     expect(parsed.normalizedBrief).toBe([
@@ -68,7 +78,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'bible_review', decision: 'approve' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'bible_review', decision: 'approve' })
     expect(parsed.decision).toBe('approve')
     expect(parsed.aspectRatio).toBe('16:9')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -87,7 +97,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'bible_review', decision: 'revise' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'bible_review', decision: 'revise' })
     expect(parsed.nextOperationId).toBeUndefined()
     expect(parsed.revisionNotes).toBe('更克苏鲁一些')
   })
@@ -104,7 +114,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { name, parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'script_review', decision: 'approve' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'script_review', decision: 'approve' })
     expect(name).toBe('request_edit_script_review_choice')
     expect(parsed.decision).toBe('approve')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -123,7 +133,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'script_review', decision: 'revise' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'script_review', decision: 'revise' })
     expect(parsed.decision).toBe('revise')
     expect(parsed.revisionNotes).toBe('结尾更冷峻，不要解释因果悖论')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -132,17 +142,21 @@ describe('buildEditFirstChoiceResult', () => {
   it('serializes style selection without selecting the next operation', () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'style',
-      toolCallId: null,
+      toolCallId: 'tool-call-style',
       latestUserText: '生成一部民俗恐怖短片',
       output: {
         ok: true,
         stylePreviewId: 'style-1',
-        aspectRatio: '9:16',
       },
     })
 
     const { callId, parsed } = readSyntheticToolResult(choiceResult)
-    expect(callId).toMatch(/^edit_first_choice_/)
+    expect(callId).toBe('tool-call-style')
+    expect(choiceResult?.choiceDecision).toEqual({
+      choiceType: 'style',
+      decision: 'select',
+      stylePreviewId: 'style-1',
+    })
     expect(parsed.stylePreviewId).toBe('style-1')
     expect(parsed.nextOperationId).toBeUndefined()
   })
@@ -159,7 +173,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'asset_review', decision: 'approve' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'asset_review', decision: 'approve' })
     expect(parsed.decision).toBe('approve')
     expect(parsed.nextOperationId).toBeUndefined()
   })
@@ -177,7 +191,7 @@ describe('buildEditFirstChoiceResult', () => {
     })
 
     const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(choiceResult?.reviewDecision).toEqual({ choiceType: 'asset_review', decision: 'revise' })
+    expect(choiceResult?.choiceDecision).toEqual({ choiceType: 'asset_review', decision: 'revise' })
     expect(parsed.decision).toBe('revise')
     expect(parsed.revisionNotes).toBe('把祠堂场景调得更旧，空间关系更压迫')
     expect(parsed.nextOperationId).toBeUndefined()
@@ -209,7 +223,7 @@ describe('buildEditFirstChoiceResult', () => {
   it('rejects a style selection without a preview id', () => {
     expect(buildEditFirstChoiceResult({
       choiceType: 'style',
-      toolCallId: null,
+      toolCallId: 'tool-call-1',
       latestUserText: '生成一部民俗恐怖短片',
       output: {
         ok: true,
@@ -221,7 +235,7 @@ describe('buildEditFirstChoiceResult', () => {
   it('rejects asset review revision without notes', () => {
     expect(buildEditFirstChoiceResult({
       choiceType: 'asset_review',
-      toolCallId: null,
+      toolCallId: 'tool-call-1',
       latestUserText: '继续',
       output: {
         ok: true,

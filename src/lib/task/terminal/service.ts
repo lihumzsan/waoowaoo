@@ -7,7 +7,7 @@ import {
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { resolveProjectAgentWaitsForTaskTerminalInTransaction } from '@/lib/project-agent/waits'
-import { syncTaskTargetFailureInTransaction } from '@/lib/task/target-failure-sync'
+import { projectTaskTargetTerminalInTransaction } from '@/lib/task/target-failure-sync'
 import { parseTaskBillingInfo } from '@/lib/task/billing-info'
 import {
   parseReadyTaskHandlerCheckpointOutput,
@@ -177,18 +177,22 @@ export async function commitTaskTerminal(
         userId: task.userId,
         billingInfo: currentBillingInfo,
       }) as TaskBillingInfo | null
-      if (intent.kind === 'failed') {
-        await syncTaskTargetFailureInTransaction(tx, {
-          taskId: task.id,
-          type: taskType,
-          targetType: task.targetType,
-          targetId: task.targetId,
-          errorCode,
-          errorMessage,
-          errorDetails: intent.errorDetails,
-        })
-      }
     }
+
+    await projectTaskTargetTerminalInTransaction(tx, {
+      kind: intent.kind,
+      taskId: task.id,
+      type: taskType,
+      targetType: task.targetType,
+      targetId: task.targetId,
+      ...(intent.kind === 'failed'
+        ? {
+            errorCode,
+            errorMessage,
+            errorDetails: intent.errorDetails,
+          }
+        : {}),
+    })
 
     const finishedAt = new Date()
     const status = terminalStatus(intent)

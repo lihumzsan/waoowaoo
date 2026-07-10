@@ -30,6 +30,8 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
       id: stylePreviewId,
       projectId: job.data.projectId,
       episodeId: job.data.episodeId ?? undefined,
+      taskId: job.data.taskId,
+      status: { in: ['pending', 'generating'] },
     },
     select: {
       id: true,
@@ -43,14 +45,15 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
     displayMode: 'detail',
   })
 
-  await prisma.projectEditStylePreview.update({
-    where: { id: preview.id },
+  const started = await prisma.projectEditStylePreview.updateMany({
+    where: { id: preview.id, taskId: job.data.taskId, status: { in: ['pending', 'generating'] } },
     data: {
       status: 'generating',
       taskId: job.data.taskId,
       errorMessage: null,
     },
   })
+  if (started.count !== 1) throw new Error(`EDIT_STYLE_PREVIEW_TASK_OWNERSHIP_STALE:${preview.id}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 45, {
     stage: 'edit_style_preview_image_generate',
@@ -68,14 +71,15 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
     options: imageRuntimeOptions,
   })
 
-  await prisma.projectEditStylePreview.update({
-    where: { id: preview.id },
+  const completed = await prisma.projectEditStylePreview.updateMany({
+    where: { id: preview.id, taskId: job.data.taskId, status: 'generating' },
     data: {
       imageKey,
       status: 'completed',
       errorMessage: null,
     },
   })
+  if (completed.count !== 1) throw new Error(`EDIT_STYLE_PREVIEW_TASK_OWNERSHIP_STALE:${preview.id}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 95, {
     stage: 'edit_style_preview_image_persist',

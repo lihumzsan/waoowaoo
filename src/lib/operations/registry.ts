@@ -1,10 +1,6 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
-export type {
-  ProjectAgentOperationContext,
-  ProjectAgentOperationDefinition,
-  ProjectAgentOperationRegistry,
-} from './types'
+export type { ProjectAgentOperationContext, ProjectAgentOperationDefinition, ProjectAgentOperationRegistry } from './types'
 
 function mustTrimmedString(value: unknown, label: string): string {
   if (typeof value !== 'string') throw new Error(`PROJECT_AGENT_OPERATION_${label}_INVALID`)
@@ -52,49 +48,39 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if (!effects || typeof effects !== 'object' || Array.isArray(effects)) {
       throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_MISSING:${operationId}`)
     }
-    const keys = [
-      'writes',
-      'billable',
-      'destructive',
-      'overwrite',
-      'bulk',
-      'externalSideEffects',
-      'longRunning',
-    ] as const
+    const keys = ['writes', 'billable', 'destructive', 'overwrite', 'bulk', 'externalSideEffects', 'longRunning'] as const
     for (const key of keys) {
       if (effects[key] !== true && effects[key] !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_INVALID:${operationId}:${key}`)
       }
     }
-    const agentFlow = op.agentFlow as {
-      onTaskComplete?: unknown
-      onTaskFailed?: unknown
-      interruptsFor?: unknown
-    } | undefined
+    const agentFlow = op.agentFlow as
+      | {
+          onTaskComplete?: unknown
+          onTaskFailed?: unknown
+          interruptsFor?: unknown
+        }
+      | undefined
     if (agentFlow !== undefined) {
       if (!agentFlow || typeof agentFlow !== 'object' || Array.isArray(agentFlow)) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INVALID:${operationId}`)
       }
       if (
-        agentFlow.onTaskComplete !== undefined
-        && agentFlow.onTaskComplete !== 'resume_agent'
-        && agentFlow.onTaskComplete !== 'await_user_choice'
-        && agentFlow.onTaskComplete !== 'complete'
+        agentFlow.onTaskComplete !== undefined &&
+        agentFlow.onTaskComplete !== 'resume_agent' &&
+        agentFlow.onTaskComplete !== 'await_user_choice' &&
+        agentFlow.onTaskComplete !== 'complete'
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
       }
-      if (
-        agentFlow.onTaskFailed !== undefined
-        && agentFlow.onTaskFailed !== 'resume_agent'
-        && agentFlow.onTaskFailed !== 'fail'
-      ) {
+      if (agentFlow.onTaskFailed !== undefined && agentFlow.onTaskFailed !== 'resume_agent' && agentFlow.onTaskFailed !== 'fail') {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_FAILED_INVALID:${operationId}`)
       }
       if (
-        agentFlow.interruptsFor !== undefined
-        && agentFlow.interruptsFor !== null
-        && agentFlow.interruptsFor !== 'approval'
-        && agentFlow.interruptsFor !== 'choice'
+        agentFlow.interruptsFor !== undefined &&
+        agentFlow.interruptsFor !== null &&
+        agentFlow.interruptsFor !== 'approval' &&
+        agentFlow.interruptsFor !== 'choice'
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INTERRUPTS_FOR_INVALID:${operationId}`)
       }
@@ -112,7 +98,23 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
     }
-    const toolInputSchema = op.toolInputSchema as { properties?: unknown; required?: unknown; additionalProperties?: unknown } | undefined
+    if (confirmation.kind === 'billable_media') {
+      if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
+        throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)
+      }
+      if (op.execute !== undefined) {
+        throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_EXECUTOR_FORBIDDEN:${operationId}`)
+      }
+    } else if (typeof op.execute !== 'function') {
+      throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_EXECUTOR_REQUIRED:${operationId}`)
+    }
+    const toolInputSchema = op.toolInputSchema as
+      | {
+          properties?: unknown
+          required?: unknown
+          additionalProperties?: unknown
+        }
+      | undefined
     if (channels.tool === true) {
       if (!toolInputSchema || typeof toolInputSchema !== 'object' || Array.isArray(toolInputSchema)) {
         throw new Error(`PROJECT_AGENT_OPERATION_TOOL_INPUT_SCHEMA_MISSING:${operationId}`)

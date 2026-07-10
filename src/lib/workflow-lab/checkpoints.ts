@@ -2,13 +2,13 @@ import type { UIMessage } from 'ai'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
-  isEditFirstChoiceType,
   type EditFirstChoiceType,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import type {
   ProjectAgentChoiceCardPartData,
   ProjectAgentInterruptionPartData,
 } from '@/lib/project-agent/types'
+import { projectAgentChoiceCardSchema } from '@/lib/project-agent/choice-offer'
 import type { WorkflowLabCheckpointSummary } from './types'
 
 const FIXED_CHOICE_STAGE_BY_TYPE: Partial<Record<EditFirstChoiceType, EditFirstWorkflowStage>> = {
@@ -43,27 +43,14 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function readChoiceType(value: unknown): EditFirstChoiceType | null {
-  if (isEditFirstChoiceType(value)) return value
-  return null
-}
-
 function readChoiceWorkflowStage(choiceCard: ProjectAgentChoiceCardPartData): EditFirstWorkflowStage | null {
   return FIXED_CHOICE_STAGE_BY_TYPE[choiceCard.choiceType] ?? null
 }
 
 function readChoiceCard(part: unknown): ProjectAgentChoiceCardPartData | null {
   if (!isRecord(part) || part.type !== 'data-assistant-choice-card') return null
-  const data = isRecord(part.data) ? part.data : null
-  const cardId = readString(data?.cardId)
-  const toolCallId = readString(data?.toolCallId)
-  const choiceType = readChoiceType(data?.choiceType)
-  const title = readString(data?.title)
-  const submitLabel = readString(data?.submitLabel)
-  if (!cardId || !toolCallId || !choiceType || !title || !submitLabel || !Array.isArray(data?.groups)) {
-    return null
-  }
-  return data as unknown as ProjectAgentChoiceCardPartData
+  const parsed = projectAgentChoiceCardSchema.safeParse(part.data)
+  return parsed.success ? parsed.data : null
 }
 
 function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartData | null {

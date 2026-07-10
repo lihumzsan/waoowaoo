@@ -108,11 +108,13 @@ export function applyWorkspaceSSEEvent(params: {
     normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
+    normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED ||
     (normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING &&
       typeof payloadRecord?.progress !== 'number')
   const shouldInvalidateTargetStates =
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
+    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
+    normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED
 
   const materializedResult = (
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED
@@ -124,10 +126,12 @@ export function applyWorkspaceSSEEvent(params: {
         projectId,
         value: payloadRecord?.materializedResources,
       })
-    : { applied: [], errors: [] }
+    : { outcome: 'missing' as const, applied: [], ignored: [], errors: [] }
   const missingCompletedHandoff = normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED
     && Boolean(resolvedEpisodeId)
-    && materializedResult.applied.length === 0
+    && (materializedResult.outcome === 'missing'
+      || materializedResult.outcome === 'invalid'
+      || materializedResult.outcome === 'identity-conflict')
   const terminalHandoffError = materializedResult.errors[0]
     ?? (missingCompletedHandoff ? 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING' : null)
 
@@ -189,14 +193,19 @@ export function applyWorkspaceSSEEvent(params: {
 
   if (
     normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED
+    normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
+    normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED
   ) {
     for (const lifecycleTarget of lifecycleTargets) {
       applyTaskTargetTerminalStateToCache(queryClient, {
         projectId,
         targetType: lifecycleTarget.targetType,
         targetId: lifecycleTarget.targetId,
-        phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED ? 'completed' : 'failed',
+        phase: normalizedLifecycleType === TASK_EVENT_TYPE.COMPLETED
+          ? 'completed'
+          : normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED
+            ? 'canceled'
+            : 'failed',
         taskId: typeof event.taskId === 'string' ? event.taskId : null,
         taskType: typeof event.taskType === 'string' ? event.taskType : null,
         progressGroupId,

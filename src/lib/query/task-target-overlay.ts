@@ -3,8 +3,6 @@ import { queryKeys } from './keys'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import type { TaskIntent } from '@/lib/task/intent'
 
-export const TASK_TARGET_OVERLAY_TTL_MS = 30_000
-
 export type TaskTargetOverlayPhase = 'queued' | 'processing'
 
 export type TaskTargetOverlayState = {
@@ -21,7 +19,6 @@ export type TaskTargetOverlayState = {
   stageLabel: string | null
   updatedAt: string | null
   lastError: null
-  expiresAt: number
 }
 
 export type TaskTargetOverlayMap = Record<string, TaskTargetOverlayState>
@@ -34,16 +31,6 @@ function normalizeOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed || null
-}
-
-function pruneExpiredOverlay(prev: TaskTargetOverlayMap | undefined, now: number) {
-  const next: TaskTargetOverlayMap = { ...(prev || {}) }
-  for (const [overlayKey, value] of Object.entries(next)) {
-    if ((value?.expiresAt || 0) <= now) {
-      delete next[overlayKey]
-    }
-  }
-  return next
 }
 
 export function upsertTaskTargetOverlay(
@@ -71,7 +58,7 @@ export function upsertTaskTargetOverlay(
   queryClient.setQueryData<TaskTargetOverlayMap>(
     queryKeys.tasks.targetStateOverlay(params.projectId),
     (prev) => {
-      const next = pruneExpiredOverlay(prev, now)
+      const next: TaskTargetOverlayMap = { ...(prev || {}) }
       const existing = next[key]
       const runningTaskId = incomingTaskId
       const runningTaskType = normalizeOptionalString(params.runningTaskType)
@@ -92,7 +79,6 @@ export function upsertTaskTargetOverlay(
         stageLabel: params.stageLabel ?? null,
         updatedAt: params.updatedAt || new Date(now).toISOString(),
         lastError: null,
-        expiresAt: now + TASK_TARGET_OVERLAY_TTL_MS,
       }
       return next
     },
@@ -178,7 +164,8 @@ export function applyTaskLifecycleToOverlay(
 
   if (
     params.lifecycleType === TASK_EVENT_TYPE.COMPLETED ||
-    params.lifecycleType === TASK_EVENT_TYPE.FAILED
+    params.lifecycleType === TASK_EVENT_TYPE.FAILED ||
+    params.lifecycleType === TASK_EVENT_TYPE.CANCELED
   ) {
     const key = toOverlayKey(params.targetType, params.targetId)
     queryClient.setQueryData<TaskTargetOverlayMap>(

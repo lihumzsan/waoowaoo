@@ -4,7 +4,7 @@ import {
   normalizeOperationExecutionToolError,
   withOperationErrorDetails,
 } from '@/lib/adapters/operation-error-normalizer'
-import { planOperation, toOperationPlanView, type OperationPlanView } from '@/lib/operations/planning'
+import { persistOperationPlanView, planOperation, type OperationPlanView } from '@/lib/operations/planning'
 import type {
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
@@ -147,7 +147,11 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
       operationId: params.operation.id,
       toolCallId: params.toolCallId,
       input: params.input,
-      operationPlan: await toOperationPlanView(plan),
+      operationPlan: await persistOperationPlanView({
+        plan,
+        normalizedInput: parsed.data,
+        episodeId: params.context.episodeId ?? null,
+      }),
     })
     return true
   } catch (error) {

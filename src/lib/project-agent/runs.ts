@@ -309,6 +309,61 @@ export async function updateProjectAgentRunStatus(params: {
   })
 }
 
+export async function settleProjectAgentRunWithMessage(params: {
+  runFence: ProjectAgentRunFence
+  status: ProjectAgentRunStatus
+  expectedStatuses?: readonly ProjectAgentRunStatus[]
+  stopReason?: string | null
+  errorCode?: string | null
+  errorMessage?: string | null
+  message: UIMessage
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const run = await tx.projectAgentRun.findUnique({
+      where: { id: params.runFence.runId },
+      select: {
+        projectId: true,
+        userId: true,
+        episodeId: true,
+        assistantId: true,
+      },
+    })
+    if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runFence.runId}`)
+    await appendProjectAssistantThreadMessagesInTransaction(tx, {
+      projectId: run.projectId,
+      userId: run.userId,
+      episodeId: run.episodeId,
+      assistantId: run.assistantId as ProjectAssistantId,
+      messages: [params.message],
+    })
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: run.projectId,
+        userId: run.userId,
+        episodeId: run.episodeId,
+        assistantId: run.assistantId as ProjectAssistantId,
+        scopeRef: buildProjectAssistantScopeRef({
+          projectId: run.projectId,
+          episodeId: run.episodeId,
+        }),
+      },
+      events: [{
+        runFence: params.runFence,
+        idempotencyKey: `run-message-settlement:${params.runFence.runId}:${params.message.id}`,
+        event: {
+          kind: 'run.status_changed',
+          runId: params.runFence.runId,
+          status: params.status,
+          expectedStatuses: params.expectedStatuses ? [...params.expectedStatuses] : undefined,
+          stopReason: params.stopReason,
+          errorCode: params.errorCode,
+          errorMessage: params.errorMessage,
+        },
+      }],
+    })
+  })
+}
+
 export async function safelyUpdateProjectAgentRunStatus(params: {
   runFence: ProjectAgentRunFence | null | undefined
   status: ProjectAgentRunStatus

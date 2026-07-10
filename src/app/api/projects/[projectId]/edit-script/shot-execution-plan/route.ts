@@ -51,7 +51,6 @@ export const POST = apiHandler(async (
     chapterId: parsed.data.chapterId,
     userId: authResult.session.user.id,
     source: 'project-ui',
-    confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
     ...(parsed.data.editScriptId ? { editScriptId: parsed.data.editScriptId } : {}),
   })

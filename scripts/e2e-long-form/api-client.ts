@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { E2eApprovalAction, E2eChoiceAction, E2eTaskFollowUpAction } from './types'
+import type { E2eApprovalAction, E2eChoiceAction } from './types'
 import { E2eHttpClient } from './http-client'
 
 interface ProjectResponse {
@@ -12,15 +12,6 @@ interface EpisodeResponse {
   readonly episode?: {
     readonly id?: string | null
   } | null
-}
-
-export interface FollowUpResponse {
-  readonly success?: boolean
-  readonly followUps?: Array<{
-    readonly runId?: string | null
-    readonly waitId?: string | null
-    readonly claimId?: string | null
-  }>
 }
 
 function readProjectId(payload: ProjectResponse): string {
@@ -93,17 +84,6 @@ export class E2eApiClient {
     return data
   }
 
-  async claimTaskFollowUp(input: {
-    readonly projectId: string
-    readonly episodeId: string
-  }): Promise<FollowUpResponse> {
-    const { data } = await this.http.postJson<FollowUpResponse>(
-      `/api/projects/${encodeURIComponent(input.projectId)}/assistant/waits`,
-      { action: 'claim', episodeId: input.episodeId },
-    )
-    return data
-  }
-
   async submitChoice(input: {
     readonly projectId: string
     readonly episodeId: string
@@ -149,23 +129,4 @@ export class E2eApiClient {
     )
   }
 
-  async submitTaskFollowUp(input: {
-    readonly projectId: string
-    readonly episodeId: string
-    readonly locale: 'zh' | 'en'
-    readonly assistantPermissionMode: 'ask' | 'auto'
-    readonly action: E2eTaskFollowUpAction
-  }): Promise<void> {
-    await this.http.postStream(
-      `/api/projects/${encodeURIComponent(input.projectId)}/assistant/runs/${encodeURIComponent(input.action.runId)}/task-follow-up`,
-      {
-        context: { episodeId: input.episodeId },
-        episodeId: input.episodeId,
-        locale: input.locale,
-        assistantPermissionMode: input.assistantPermissionMode,
-        waitId: input.action.waitId,
-        claimId: input.action.claimId,
-      },
-    )
-  }
 }

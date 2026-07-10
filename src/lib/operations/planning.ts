@@ -16,7 +16,11 @@ import type {
   ProjectAgentOperationId,
 } from './types'
 import { createProjectAgentOperationRegistryForApi } from './registry'
-import { submitOperationTask } from './submit-operation-task'
+import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
+import {
+  attachPersistedPlanIdentity,
+  persistOperationPlanSnapshot,
+} from './operation-plan-snapshot'
 
 export type OperationPlanKind = 'task_submission'
 
@@ -71,6 +75,11 @@ export interface BillingQuoteView {
 }
 
 export interface OperationPlanView {
+  planSnapshotId?: string
+  inputHash?: string
+  planHash?: string
+  quoteHash?: string
+  expiresAt?: string
   operationId: ProjectAgentOperationId
   kind: OperationPlanKind
   taskCount: number
@@ -83,33 +92,17 @@ export interface OperationPlanView {
   }>
 }
 
-export type ConfirmedOperationPlanInput = Readonly<{
-  confirmed: true
-  confirmedMaxCost?: number
-}>
-
 function shouldExposeCredits(): boolean {
   return shouldExposeBillingCredits()
 }
 
 type BillableTaskBillingInfo = Extract<TaskBillingInfo, { billable: true }>
 type QuoteVisibleMediaApiType = Extract<BillableTaskBillingInfo['apiType'], BillableMediaApiType>
-type ConfirmedCostMediaApiType = Extract<BillableTaskBillingInfo['apiType'], 'image' | 'video' | 'sound_effect'>
 
 function isQuoteVisibleMediaBillingInfo(
   info: TaskBillingInfo | null | undefined,
 ): info is BillableTaskBillingInfo & { apiType: QuoteVisibleMediaApiType } {
   return requiresBillableMediaApproval(info)
-}
-
-function isConfirmedCostMediaBillingInfo(
-  info: TaskBillingInfo | null | undefined,
-): info is BillableTaskBillingInfo & { apiType: ConfirmedCostMediaApiType } {
-  return info?.billable === true && (
-    info.apiType === 'image'
-    || info.apiType === 'video'
-    || info.apiType === 'sound_effect'
-  )
 }
 
 function toPositiveMoney(value: number): number {
@@ -153,13 +146,6 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
       }
     }),
   }
-}
-
-function confirmedCostMediaTotal(plan: OperationPlan): number {
-  return toPositiveMoney(plan.tasks.reduce((total, task) => {
-    if (!isConfirmedCostMediaBillingInfo(task.billingInfo)) return total
-    return total + task.billingInfo.maxFrozenCost
-  }, 0))
 }
 
 export function createPlannedTask(params: {
@@ -236,94 +222,42 @@ export async function toOperationPlanView(plan: OperationPlan): Promise<Operatio
   }
 }
 
-export async function assertOperationPlanConfirmedCost(params: {
+export async function persistOperationPlanView(params: {
   plan: OperationPlan
-  confirmedMaxCost?: number | null
-}): Promise<void> {
-  if (!shouldExposeCredits()) return
-  const actual = confirmedCostMediaTotal(params.plan)
-  if (actual <= 0) return
-  const confirmedMaxCost = params.confirmedMaxCost
-  if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_CONFIRMED_MAX_COST_REQUIRED',
-      message: 'confirmedMaxCost is required for billable fixed-price media operations',
-    })
-  }
-  if (actual > confirmedMaxCost) {
-    throw new ApiError('CONFLICT', {
-      code: 'OPERATION_QUOTE_EXCEEDED_CONFIRMED_MAX_COST',
-      message: 'planned media generation cost exceeds the confirmed maximum cost',
-      actual,
-      confirmedMaxCost,
-    })
-  }
-}
-
-export async function assertOperationPlanConfirmed(params: {
-  plan: OperationPlan
-  input: unknown
-}): Promise<void> {
+  normalizedInput: unknown
+  episodeId?: string | null
+}): Promise<OperationPlanView> {
   const quote = await quoteOperationPlan(params.plan)
-  if (!quote.billable) return
-  const confirmed = !!params.input
-    && typeof params.input === 'object'
-    && !Array.isArray(params.input)
-    && (params.input as { confirmed?: unknown }).confirmed === true
-  if (!confirmed) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_CONFIRMATION_REQUIRED',
-      message: 'the exact billable operation plan must be explicitly confirmed before commit',
-      operationId: params.plan.operationId,
-    })
-  }
+  const snapshot = await persistOperationPlanSnapshot({
+    plan: params.plan,
+    normalizedInput: params.normalizedInput,
+    quote,
+    episodeId: params.episodeId ?? null,
+  })
+  return attachPersistedPlanIdentity(await toOperationPlanView(params.plan), snapshot)
 }
 
 export async function submitPlannedOperationTask(params: {
   ctx: ProjectAgentOperationContext
   task: PlannedTask
   operationId: string
-  confirmed: boolean
 }) {
-  return await submitOperationTask({
-    request: params.ctx.request,
-    userId: params.ctx.userId,
-    locale: params.task.locale,
-    projectId: params.ctx.projectId,
-    episodeId: params.task.episodeId ?? null,
-    type: params.task.taskType,
-    targetType: params.task.target.targetType,
-    targetId: params.task.target.targetId,
-    payload: params.task.payload,
-    dedupeKey: params.task.dedupeKey ?? null,
-    priority: params.task.priority ?? 0,
-    billingInfo: params.task.billingInfo,
-    billingInfoSource: 'planned',
-    operationId: params.operationId,
-    source: params.ctx.source,
-    confirmed: params.confirmed,
-    decoratePayload: false,
-  })
-}
-
-export function readConfirmedMaxCost(input: unknown): number | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
-  const value = (input as { confirmedMaxCost?: unknown }).confirmedMaxCost
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-export async function resolveConfirmedMaxCostForExecution(params: {
-  ctx: ProjectAgentOperationContext
-  input: unknown
-  plan: OperationPlan
-}): Promise<number | null> {
-  const explicit = readConfirmedMaxCost(params.input)
-  if (explicit !== null) return explicit
-  if (params.ctx.source === 'assistant-panel') {
-    const quote = await quoteOperationPlan(params.plan)
-    return quote.totalMaxFrozenCost ?? null
+  const authorization = params.ctx.executionAuthorization
+  if (!authorization) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_EXECUTION_AUTHORIZATION_REQUIRED',
+      operationId: params.operationId,
+    })
   }
-  return null
+  const results = await submitApprovedOperationPlanTasks({
+    ...authorization,
+    operationSource: params.ctx.source,
+  })
+  const result = results.get(params.task.id)
+  if (!result) {
+    throw new Error(`OPERATION_PLAN_TASK_RESULT_MISSING:${params.operationId}:${params.task.id}`)
+  }
+  return result
 }
 
 export async function commitOperationPlan<Input, Output>(params: {
@@ -331,7 +265,6 @@ export async function commitOperationPlan<Input, Output>(params: {
   ctx: ProjectAgentOperationContext
   input: Input
   plan: OperationPlan
-  confirmedMaxCost?: number | null
 }): Promise<Output> {
   if (!params.operation.commit) {
     throw new ApiError('INVALID_PARAMS', {
@@ -339,14 +272,6 @@ export async function commitOperationPlan<Input, Output>(params: {
       message: `operation commit unavailable: ${params.operation.id}`,
     })
   }
-  await assertOperationPlanConfirmed({
-    plan: params.plan,
-    input: params.input,
-  })
-  await assertOperationPlanConfirmedCost({
-    plan: params.plan,
-    confirmedMaxCost: params.confirmedMaxCost ?? readConfirmedMaxCost(params.input),
-  })
   return await params.operation.commit(params.ctx, params.input, params.plan)
 }
 
@@ -412,5 +337,9 @@ export async function planProjectAgentOperationFromApi(params: {
     },
     input: parsed.data,
   })
-  return await toOperationPlanView(plan)
+  return await persistOperationPlanView({
+    plan,
+    normalizedInput: parsed.data,
+    episodeId: params.context?.episodeId ?? null,
+  })
 }

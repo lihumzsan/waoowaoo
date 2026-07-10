@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import {
   buildScriptIntakeChoiceCard,
+  buildScriptIntakeChoiceOfferCandidate,
   normalizeScriptIntakeChoiceBrief,
-  readPersistedScriptIntakeChoiceCard,
   validateScriptIntakePlannerOutput,
   type ScriptIntakePlannerOutput,
 } from '@/lib/project-agent/script-intake'
@@ -89,7 +89,15 @@ describe('script intake choice', () => {
     expect(card.groups[0]?.label).toBe('目标时长')
     expect(card.groups[0]?.options.map((option) => option.label)).toEqual(['1分钟', '3分钟', '5分钟', '10分钟'])
     expect(card.groups[0]?.options.some((option) => option.value === 'ai_fill')).toBe(false)
-    expect(readPersistedScriptIntakeChoiceCard(card)?.cardId).toBe(card.cardId)
+    const candidate = buildScriptIntakeChoiceOfferCandidate({
+      locale: 'zh',
+      workflow: workflow('ready_to_ingest_script'),
+      toolCallId: 'tool-call-1',
+      seedText: '恐怖故事',
+      plan,
+    })
+    expect(candidate.card.cardId).toBe(card.cardId)
+    expect(candidate.reviewedResource.kind).toBe('script_intake_prompt')
   })
 
   it('normalizes model-provided runtime questions to the fixed runtime options', () => {

@@ -6,17 +6,25 @@ import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-se
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { hasPanelImageOutput } from '@/lib/task/has-output'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
-import { createMutationBatch } from '@/lib/mutation-batch/service'
+import { createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
-import { assertNoLegacyArtStyle, createReferenceSignature, formatReferenceImageNote, normalizeReferenceImageNotes, normalizeString, normalizeStringArray, resolveCandidateCount, resolveLocaleFromContext } from './shared'
+import {
+  assertNoLegacyArtStyle,
+  createReferenceSignature,
+  formatReferenceImageNote,
+  normalizeReferenceImageNotes,
+  normalizeString,
+  normalizeStringArray,
+  resolveCandidateCount,
+  resolveLocaleFromContext,
+} from './shared'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 
 export type RegeneratePanelImageInput = {
-  confirmed?: boolean
-  confirmedMaxCost?: number
   panelId?: string
   storyboardId?: string
   panelIndex?: number
@@ -83,28 +91,26 @@ export async function planRegeneratePanelImageOperation(
     }
   }
 
-  const extraImageAudit = sanitizeImageInputsForTaskPayload(
-    Array.isArray(input.extraImageUrls) ? input.extraImageUrls : [],
-  )
+  const extraImageAudit = sanitizeImageInputsForTaskPayload(Array.isArray(input.extraImageUrls) ? input.extraImageUrls : [])
   if (extraImageAudit.issues.some((issue) => (issue as { reason?: unknown }).reason === 'relative_path_rejected')) {
     throw new Error('PROJECT_AGENT_REFERENCE_IMAGE_INVALID')
   }
   const rawReferenceNotes = normalizeReferenceImageNotes(input.referenceImageNotes)
-  const notesByPanelId = new Map(rawReferenceNotes
-    .filter((note) => note.referencePanelId)
-    .map((note) => [note.referencePanelId!, note]))
-  const notesByUrl = new Map(rawReferenceNotes
-    .filter((note) => note.url)
-    .map((note) => [note.url!, note]))
+  const notesByPanelId = new Map(rawReferenceNotes.filter((note) => note.referencePanelId).map((note) => [note.referencePanelId!, note]))
+  const notesByUrl = new Map(rawReferenceNotes.filter((note) => note.url).map((note) => [note.url!, note]))
   const referenceImageNotes = [
-    ...referencePanelIds.map((referencePanelId, index) => formatReferenceImageNote(
-      notesByPanelId.get(referencePanelId),
-      `source=storyboard; label=previous storyboard panel ${index + 1}; usage=Use this previous storyboard panel as continuity reference for staging, placement, and spatial relationship.`,
-    )),
-    ...extraImageAudit.normalized.map((url, index) => formatReferenceImageNote(
-      notesByUrl.get(url),
-      `source=custom; label=extra reference ${index + 1}; usage=Use this extra image only as directed by the user reference note.`,
-    )),
+    ...referencePanelIds.map((referencePanelId, index) =>
+      formatReferenceImageNote(
+        notesByPanelId.get(referencePanelId),
+        `source=storyboard; label=previous storyboard panel ${index + 1}; usage=Use this previous storyboard panel as continuity reference for staging, placement, and spatial relationship.`,
+      ),
+    ),
+    ...extraImageAudit.normalized.map((url, index) =>
+      formatReferenceImageNote(
+        notesByUrl.get(url),
+        `source=custom; label=extra reference ${index + 1}; usage=Use this extra image only as directed by the user reference note.`,
+      ),
+    ),
   ].slice(0, 16)
   const referenceSignature = createReferenceSignature({
     referenceMode: input.referenceMode === 'storyboard' ? 'storyboard' : 'asset',
@@ -124,7 +130,11 @@ export async function planRegeneratePanelImageOperation(
     ...(referenceImageNotes.length > 0 ? { referenceImageNotes } : {}),
     meta: {
       locale,
-      ...(extraImageAudit.issues.length > 0 ? { outboundImageInputAudit: { extraImageUrls: extraImageAudit.issues } } : {}),
+      ...(extraImageAudit.issues.length > 0
+        ? {
+            outboundImageInputAudit: { extraImageUrls: extraImageAudit.issues },
+          }
+        : {}),
     },
   }
 
@@ -166,7 +176,11 @@ export async function planRegeneratePanelImageOperation(
           hasOutputAtStart,
         }),
         dedupeKey: `image_panel:${panelId}:${candidateCount}:${styleBibleSignature}:${referenceSignature}`,
-        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          payload: billingPayload,
+          allowedApiTypes: ['image'],
+        }),
       }),
     ],
     metadata: {
@@ -180,6 +194,7 @@ export async function commitRegeneratePanelImageOperation(
   input: RegeneratePanelImageInput,
   plan: OperationPlan,
 ) {
+  const transaction = requireOperationExecutionTransaction(ctx)
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
   const panelId = typeof plan.metadata?.panelId === 'string' ? plan.metadata.panelId : task.target.targetId
@@ -187,10 +202,9 @@ export async function commitRegeneratePanelImageOperation(
     ctx,
     task,
     operationId: 'regenerate_panel_image',
-    confirmed: input.confirmed === true,
   })
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatch = await createMutationBatchInTransaction(transaction, {
     projectId: ctx.projectId,
     userId: ctx.userId,
     source: ctx.source,

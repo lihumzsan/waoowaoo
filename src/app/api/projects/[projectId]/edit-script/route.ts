@@ -67,7 +67,6 @@ export const POST = apiHandler(async (
     chapterId: parsed.data.chapterId,
     videoRatio: parsed.data.videoRatio,
     source: 'project-ui',
-    confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
   })
 

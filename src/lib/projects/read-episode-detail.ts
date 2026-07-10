@@ -3,6 +3,7 @@ import { readProjectEditScripts, readProjectEditShotExecutionPlans } from '@/lib
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { normalizeFinalVideoSummary } from '@/lib/operations/domains/gui/final-video-summary'
 import { prisma } from '@/lib/prisma'
+import { createEpisodeDataQueryDto } from '@/lib/workspace-resource/query-dto-version'
 
 export async function readProjectEpisodeDetail(input: {
   readonly projectId: string
@@ -68,11 +69,11 @@ export async function readProjectEpisodeDetail(input: {
     readProjectEditScripts(input),
     readProjectEditShotExecutionPlans(input),
   ])
-  return {
+  return createEpisodeDataQueryDto({
     ...episodeWithSignedUrls,
     editScript: editScripts.length === 1 ? editScripts[0] : null,
     editScripts,
     editShotExecutionPlans,
     finalVideo: normalizeFinalVideoSummary(episode.finalOutput, episode.musicScore, episode.soundscape),
-  }
+  })
 }

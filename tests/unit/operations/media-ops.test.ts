@@ -1,16 +1,51 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE } from '@/lib/task/types'
+import type { Prisma } from '@prisma/client'
 
-const submitTaskMock = vi.hoisted(() => vi.fn(async () => ({
-  success: true,
-  taskId: 'task-1',
-  async: true,
-  status: 'queued',
-  runId: null,
-  deduped: false,
-})))
+const submitTaskMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    success: true,
+    taskId: 'task-1',
+    async: true,
+    status: 'queued',
+    runId: null,
+    deduped: false,
+  })),
+)
+const submitApprovedPlanMock = vi.hoisted(() =>
+  vi.fn(
+    async () =>
+      new Map([
+        [
+          'regenerate-group:CharacterAppearance:appearance-1',
+          {
+            success: true,
+            taskId: 'task-1',
+            async: true,
+            status: 'queued',
+            runId: null,
+            deduped: false,
+          },
+        ],
+        [
+          'regenerate-single:image_character:appearance-1:0',
+          {
+            success: true,
+            taskId: 'task-1',
+            async: true,
+            status: 'queued',
+            runId: null,
+            deduped: false,
+          },
+        ],
+      ]),
+  ),
+)
 vi.mock('@/lib/task/submitter', () => ({
   submitTask: submitTaskMock,
+}))
+vi.mock('@/lib/task/approved-plan-submitter', () => ({
+  submitApprovedOperationPlanTasks: submitApprovedPlanMock,
 }))
 
 vi.mock('@/lib/task/resolve-locale', () => ({
@@ -18,7 +53,18 @@ vi.mock('@/lib/task/resolve-locale', () => ({
 }))
 
 vi.mock('@/lib/billing', () => ({
-  buildDefaultTaskBillingInfo: vi.fn(() => ({ mode: 'default' })),
+  buildDefaultTaskBillingInfo: vi.fn((taskType: string) => ({
+    billable: true,
+    source: 'task',
+    taskType,
+    apiType: 'image',
+    model: 'img::character',
+    quantity: 1,
+    unit: 'image',
+    maxFrozenCost: 1,
+    action: taskType,
+    status: 'quoted',
+  })),
 }))
 
 const configMock = vi.hoisted(() => ({
@@ -80,6 +126,11 @@ function buildCtx() {
     context: {},
     source: 'assistant-panel',
     writer: null,
+    executionAuthorization: {
+      approvalGrantId: 'approval-grant-1',
+      operationExecutionId: 'operation-execution-1',
+      transaction: prismaMock as unknown as Prisma.TransactionClient,
+    },
   }
 }
 
@@ -91,34 +142,51 @@ describe('media operations', () => {
   it('regenerate_group -> submits REGENERATE_GROUP task', async () => {
     const ops = createMediaOperations()
     const ctx = buildCtx()
-    await ops.regenerate_group.execute(ctx as never, {
+    const plan = await ops.regenerate_group.plan?.(ctx as never, {
       type: 'character',
       id: 'character-1',
       appearanceId: 'appearance-1',
       count: 2,
     })
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.REGENERATE_GROUP,
-      projectId: 'project-1',
-      operationId: 'regenerate_group',
-      operationSource: 'assistant-panel',
-      operationConfirmed: false,
-      operationRequestId: undefined,
-    }))
+    if (!plan || !ops.regenerate_group.commit) throw new Error('EXPECTED_REGENERATE_GROUP_PLAN_COMMIT')
+    await ops.regenerate_group.commit(
+      ctx as never,
+      {
+        type: 'character',
+        id: 'character-1',
+        appearanceId: 'appearance-1',
+        count: 2,
+      },
+      plan,
+    )
+    expect(plan?.tasks[0]).toEqual(expect.objectContaining({ taskType: TASK_TYPE.REGENERATE_GROUP }))
   })
 
   it('regenerate_single_image -> submits IMAGE_CHARACTER task', async () => {
     const ops = createMediaOperations()
     const ctx = buildCtx()
-    await ops.regenerate_single_image.execute(ctx as never, {
+    const plan = await ops.regenerate_single_image.plan?.(ctx as never, {
       type: 'character',
       id: 'character-1',
       appearanceId: 'appearance-1',
       imageIndex: 0,
     })
-    expect(submitTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_TYPE.IMAGE_CHARACTER,
-      targetType: 'CharacterAppearance',
-    }))
+    if (!plan || !ops.regenerate_single_image.commit) throw new Error('EXPECTED_REGENERATE_SINGLE_PLAN_COMMIT')
+    await ops.regenerate_single_image.commit(
+      ctx as never,
+      {
+        type: 'character',
+        id: 'character-1',
+        appearanceId: 'appearance-1',
+        imageIndex: 0,
+      },
+      plan,
+    )
+    expect(plan?.tasks[0]).toEqual(
+      expect.objectContaining({
+        taskType: TASK_TYPE.IMAGE_CHARACTER,
+        target: { targetType: 'CharacterAppearance', targetId: 'appearance-1' },
+      }),
+    )
   })
 })

@@ -84,6 +84,7 @@ const prismaMock = vi.hoisted(() => ({
   projectVideoGroup: {
     findUnique: vi.fn(),
     update: vi.fn(async () => undefined),
+    updateMany: vi.fn(async () => ({ count: 1 })),
   },
   project: {
     findUnique: vi.fn(),
@@ -452,16 +453,16 @@ describe('worker video processor behavior', () => {
         aspectRatio: '9:16',
       }),
     }))
-    expect(prismaMock.projectVideoGroup.update).toHaveBeenLastCalledWith(expect.objectContaining({
-      where: { id: 'group-1' },
+    expect(prismaMock.projectVideoGroup.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'group-1', taskId: 'task-1' }),
       data: expect.objectContaining({
         status: 'completed',
         videoUrl: '/m/video-public-1',
         videoMediaId: 'video-media-1',
       }),
     }))
-    expect(prismaMock.projectVideoGroup.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'group-1' },
+    expect(prismaMock.projectVideoGroup.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'group-1', taskId: 'task-1' }),
       data: expect.objectContaining({
         referenceImageUrl: null,
         referenceImageMediaId: null,
@@ -488,7 +489,7 @@ describe('worker video processor behavior', () => {
     }))).rejects.toThrow('VIDEO_GROUP_PROMPT_MISSING:group-1')
 
     expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
-    expect(prismaMock.projectVideoGroup.update).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaMock.projectVideoGroup.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'group-1' },
       data: expect.objectContaining({
         status: 'failed',
@@ -543,8 +544,8 @@ describe('worker video processor behavior', () => {
         aspectRatio: '9:16',
       }),
     }))
-    expect(prismaMock.projectVideoGroup.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'group-asset-1' },
+    expect(prismaMock.projectVideoGroup.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'group-asset-1', taskId: 'task-1' }),
       data: expect.objectContaining({
         status: 'processing',
         referenceImageUrl: 'https://example.com/hero.png',

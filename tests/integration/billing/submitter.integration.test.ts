@@ -47,11 +47,10 @@ describe('billing/submitter integration', () => {
       userId: user.id,
       locale: 'en',
       projectId: 'project-a',
-      type: TASK_TYPE.MUSIC_GENERATE,
+      type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       targetType: 'Project',
       targetId: 'project-a',
-      payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 5 },
-      operationConfirmed: true,
+      payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-a' },
     })
 
     expect(result.success).toBe(true)
@@ -66,9 +65,9 @@ describe('billing/submitter integration', () => {
     const user = await createTestUser()
     await seedBalance(user.id, 0)
 
-    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {
-      musicModel: 'google::lyria-3-pro-preview',
-      durationSeconds: 10,
+    const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_BIBLE_GENERATE, {
+      analysisModel: 'openai::gpt-4.1',
+      episodeId: 'episode-b',
     })
     expect(billingInfo?.billable).toBe(true)
 
@@ -77,19 +76,18 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-b',
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
         targetType: 'Project',
         targetId: 'project-b',
-        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 10 },
+        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-b' },
         billingInfo,
-        operationConfirmed: true,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -162,18 +160,17 @@ describe('billing/submitter integration', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-e',
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
         targetType: 'Project',
         targetId: 'project-e',
-        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 6 },
-        operationConfirmed: true,
+        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-e' },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' } satisfies Pick<ApiError, 'code'>)
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })

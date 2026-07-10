@@ -1,14 +1,12 @@
 import { z } from 'zod'
-import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
-import { reviseProjectEditScriptAssets } from '@/lib/edit-script/asset-revision'
-import { approveProjectEpisodeEditScriptAssets } from '@/lib/edit-script/service'
+import { commitProjectEditScriptAssetRevisions, planProjectEditScriptAssetRevisions } from '@/lib/edit-script/asset-revision'
+import { approveProjectEpisodeEditScriptAssets, confirmProjectEditStylePreview } from '@/lib/edit-script/service'
 import {
   submitProjectEditShotExecutionPlanBatchTasks,
   submitProjectEditScriptGenerationTask,
   submitProjectEditShotExecutionPlanTask,
-  submitProjectEditStylePreviewsGenerationTask,
 } from '@/lib/edit-script/task-submission'
 import { assertChapterReplanHasNoRunningVideoGroups } from '@/lib/edit-script/replan-guard'
 import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
@@ -20,29 +18,17 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft }
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
-import {
-  buildEditFirstAssistantChoiceCard,
-} from '@/lib/project-agent/choice-card'
-import {
-  buildScriptIntakeChoiceCard,
-  planScriptIntakeQuestions,
-} from '@/lib/project-agent/script-intake'
-import type {
-  EditFirstChoiceType,
-} from '@/lib/project-agent/edit-first-choice-tools'
-import {
-  EDIT_FIRST_CHOICE_TYPES,
-  EDIT_FIRST_CHOICE_TOOL_IDS,
-} from '@/lib/project-agent/edit-first-choice-tools'
+import { buildEditFirstAssistantChoiceOfferCandidate } from '@/lib/project-agent/choice-card'
+import { buildScriptIntakeChoiceOfferCandidate, planScriptIntakeQuestions } from '@/lib/project-agent/script-intake'
+import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
+import { EDIT_FIRST_CHOICE_TYPES, EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import {
-  refineTaskSubmitOperationOutputSchema,
-  taskSubmitOperationOutputSchemaBase,
-} from '@/lib/operations/output-schemas'
+import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
+  EDIT_FIRST_CONFIRM_STYLE_PREVIEW_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA,
@@ -52,97 +38,130 @@ import {
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
-import {
-  assertOperationPlanConfirmedCost,
-  compensateSubmittedTasks,
-  resolveConfirmedMaxCostForExecution,
-  type OperationPlan,
-} from '@/lib/operations/planning'
-import {
-  planProjectEditStylePreviews,
-  readEditStylePreviewPlanMetadata,
-} from '@/lib/edit-script/style-preview-operation-plan'
+import { compensateSubmittedTasks, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import { planProjectEditStylePreviews, readEditStylePreviewPlanMetadata } from '@/lib/edit-script/style-preview-operation-plan'
 import {
   commitProjectEditScriptAssetsOperation,
   planProjectEditScriptAssetsOperation,
 } from '@/lib/edit-script/asset-generation-operation-plan'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
-function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
-}
-
-const confirmedInputFields = {
-  confirmed: z.boolean().optional(),
+const scopedInputFields = {
   episodeId: z.string().trim().min(1).optional(),
   chapterId: z.string().trim().min(1).optional(),
 } as const
 
-const generateEditStylePreviewsInputSchema = z.object({
-  ...confirmedInputFields,
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  bibleId: z.string().trim().min(1).optional(),
-  styleDirection: z.string().trim().min(1).max(2000).optional().describe('Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.'),
-  count: z.number().int().min(1).max(3).optional().describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
-}).passthrough()
+const generateEditStylePreviewsInputSchema = z
+  .object({
+    ...scopedInputFields,
+    bibleId: z.string().trim().min(1).optional(),
+    styleDirection: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2000)
+      .optional()
+      .describe(
+        'Optional user-requested direction for generating or regenerating the visual style candidates, such as darker, more abstract, more graphic, or a specific non-real-person art direction.',
+      ),
+    count: z
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .optional()
+      .describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
+  })
+  .passthrough()
 
-const requestEditChoiceInputSchema = z.object({
-  episodeId: z.string().trim().min(1).optional(),
-}).passthrough()
+const confirmEditStylePreviewInputSchema = z
+  .object({
+    episodeId: z.string().trim().min(1).optional(),
+  })
+  .strict()
 
-const requestScriptIntakeChoiceInputSchema = z.object({
-  episodeId: z.string().trim().min(1).optional(),
-  seedText: z.string().trim().min(1).max(2000),
-}).passthrough()
+const requestEditChoiceInputSchema = z
+  .object({
+    episodeId: z.string().trim().min(1).optional(),
+  })
+  .passthrough()
 
-const generateEditScriptInputSchema = z.object({
-  ...confirmedInputFields,
-  prompt: z.never().optional(),
-  videoRatio: editScriptVideoRatioSchema.optional(),
-}).passthrough()
+const requestScriptIntakeChoiceInputSchema = z
+  .object({
+    episodeId: z.string().trim().min(1).optional(),
+    seedText: z.string().trim().min(1).max(2000),
+  })
+  .passthrough()
 
-const replanChapterInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  episodeId: z.string().trim().min(1).optional(),
-  chapterId: z.string().trim().min(1),
-  videoRatio: editScriptVideoRatioSchema.optional(),
-}).passthrough()
+const generateEditScriptInputSchema = z
+  .object({
+    ...scopedInputFields,
+    prompt: z.never().optional(),
+    videoRatio: editScriptVideoRatioSchema.optional(),
+  })
+  .passthrough()
 
-const planChaptersInputSchema = z.object({
-  ...confirmedInputFields,
-  chapterIds: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
-  videoRatio: editScriptVideoRatioSchema.optional(),
-}).passthrough()
+const replanChapterInputSchema = z
+  .object({
+    episodeId: z.string().trim().min(1).optional(),
+    chapterId: z.string().trim().min(1),
+    videoRatio: editScriptVideoRatioSchema.optional(),
+  })
+  .passthrough()
 
-const generateEditScriptAssetsInputSchema = z.object({
-  ...confirmedInputFields,
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  editScriptId: z.string().trim().min(1).optional(),
-  requirementId: editScriptAssetRequirementIdSchema
-    .describe('Optional exact requirement id from editScript.requirements[].id. Omit requirementId to process every requirement. Never pass "*" or any wildcard.')
-    .optional(),
-}).passthrough()
+const planChaptersInputSchema = z
+  .object({
+    ...scopedInputFields,
+    chapterIds: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
+    videoRatio: editScriptVideoRatioSchema.optional(),
+  })
+  .passthrough()
 
-const reviseEditScriptAssetsInputSchema = z.object({
-  ...confirmedInputFields,
-  editScriptId: z.string().trim().min(1).optional(),
-  requirementId: editScriptAssetRequirementIdSchema
-    .describe('Optional exact requirement id from editScript.requirements[].id. Omit requirementId to revise every required asset. Never pass "*" or any wildcard.')
-    .optional(),
-  revisionNotes: z.string().trim().min(1).describe('Concrete user asset review notes to apply when revising required character/location assets.'),
-}).passthrough()
+const generateEditScriptAssetsInputSchema = z
+  .object({
+    ...scopedInputFields,
+    editScriptId: z.string().trim().min(1).optional(),
+    requirementId: editScriptAssetRequirementIdSchema
+      .describe(
+        'Optional exact requirement id from editScript.requirements[].id. Omit requirementId to process every requirement. Never pass "*" or any wildcard.',
+      )
+      .optional(),
+  })
+  .passthrough()
 
-const generateEditShotExecutionPlanInputSchema = z.object({
-  ...confirmedInputFields,
-  editScriptId: z.string().trim().min(1).optional(),
-}).passthrough()
+const reviseEditScriptAssetsInputSchema = z
+  .object({
+    ...scopedInputFields,
+    editScriptId: z.string().trim().min(1).optional(),
+    requirementId: editScriptAssetRequirementIdSchema
+      .describe(
+        'Optional exact requirement id from editScript.requirements[].id. Omit requirementId to revise every required asset. Never pass "*" or any wildcard.',
+      )
+      .optional(),
+    revisionNotes: z
+      .string()
+      .trim()
+      .min(1)
+      .describe('Concrete user asset review notes to apply when revising required character/location assets.'),
+  })
+  .passthrough()
 
-const generateEditScriptStoryboardInputSchema = z.object({
-  ...confirmedInputFields,
-  editScriptId: z.string().trim().min(1).optional(),
-}).passthrough()
+const generateEditShotExecutionPlanInputSchema = z
+  .object({
+    ...scopedInputFields,
+    editScriptId: z.string().trim().min(1).optional(),
+  })
+  .passthrough()
+
+const generateEditScriptStoryboardInputSchema = z
+  .object({
+    ...scopedInputFields,
+    editScriptId: z.string().trim().min(1).optional(),
+  })
+  .passthrough()
 
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
+type ConfirmEditStylePreviewInput = z.infer<typeof confirmEditStylePreviewInputSchema>
 type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
 type RequestScriptIntakeChoiceInput = z.infer<typeof requestScriptIntakeChoiceInputSchema>
 type GenerateEditScriptInput = z.infer<typeof generateEditScriptInputSchema>
@@ -153,107 +172,157 @@ type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSch
 type GenerateEditShotExecutionPlanInput = z.infer<typeof generateEditShotExecutionPlanInputSchema>
 type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
-async function submitPlannedEditStylePreviewParentTask(
+async function submitPlannedEditStylePreviewTasks(
   ctx: ProjectAgentOperationContext,
   input: GenerateEditStylePreviewsInput,
   plan: OperationPlan,
 ) {
+  const transaction = ctx.executionAuthorization?.transaction
+  if (!transaction) throw new Error('OPERATION_EXECUTION_TRANSACTION_REQUIRED')
   const metadata = readEditStylePreviewPlanMetadata(plan)
   const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-  const confirmedMaxCost = await resolveConfirmedMaxCostForExecution({ ctx, input, plan })
-  return await submitProjectEditStylePreviewsGenerationTask({
-    request: ctx.request,
-    projectId: ctx.projectId,
-    userId: ctx.userId,
+  const submitted = await Promise.all(
+    plan.tasks.map(async (task) => ({
+      task,
+      result: await submitPlannedOperationTask({
+        ctx,
+        task,
+        operationId: 'generate_edit_style_previews',
+      }),
+    })),
+  )
+  await Promise.all(
+    submitted.map(({ task, result }) =>
+      transaction.projectEditStylePreview.update({
+        where: { id: task.target.targetId },
+        data: {
+          taskId: result.taskId,
+          status: 'generating',
+          errorMessage: null,
+        },
+      }),
+    ),
+  )
+  const first = submitted[0]
+  if (!first) throw new Error('EDIT_STYLE_PREVIEW_PLAN_EMPTY')
+  return {
+    ...first.result,
     episodeId,
     bibleId: metadata.bibleId,
-    count: metadata.count,
-    plannedStylePreviewIds: metadata.stylePreviewIds,
-    plannedImageModel: metadata.imageModel,
-    confirmedMaxCost,
-    locale: resolveLocale(ctx.context.locale),
-    source: ctx.source,
-    confirmed: input.confirmed === true,
-    ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
-  })
+    taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+    targetType: first.task.target.targetType,
+    targetId: first.task.target.targetId,
+    taskIds: submitted.map(({ result }) => result.taskId),
+    total: submitted.length,
+  }
 }
 
-const requestEditFirstChoiceOutputSchema = z.object({
-  emitted: z.literal(true),
-  choiceType: z.enum(EDIT_FIRST_CHOICE_TYPES),
-  cardId: z.string().min(1),
-  workflowStage: z.string().min(1),
-}).passthrough()
+const requestEditFirstChoiceOutputSchema = z
+  .object({
+    emitted: z.literal(true),
+    choiceType: z.enum(EDIT_FIRST_CHOICE_TYPES),
+    cardId: z.string().min(1),
+    workflowStage: z.string().min(1),
+  })
+  .passthrough()
 
 const editStylePreviewsTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-  taskSubmitOperationOutputSchemaBase.extend({
-    episodeId: z.string().min(1),
-    bibleId: z.string().min(1),
-    taskType: z.literal(TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE),
-    targetType: z.literal('ProjectEditBible'),
-    targetId: z.string().min(1),
-  }).passthrough(),
+  taskSubmitOperationOutputSchemaBase
+    .extend({
+      episodeId: z.string().min(1),
+      bibleId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE),
+      targetType: z.literal('ProjectEditStylePreview'),
+      targetId: z.string().min(1),
+      taskIds: z.array(z.string().min(1)).min(1),
+      total: z.number().int().positive(),
+    })
+    .passthrough(),
 )
 
-const editScriptSummaryOutputSchema = z.object({
-  id: z.string().min(1).optional(),
-  projectId: z.string().min(1).optional(),
-  episodeId: z.string().min(1).optional(),
-  chapterId: z.string().min(1).optional(),
-  bibleId: z.string().min(1).optional(),
-  sourceDocumentId: z.string().min(1).optional(),
-  durationSec: z.number().int().positive(),
-  shotCount: z.number().int().min(0),
-  status: z.string().optional(),
-  assetReviewStatus: z.enum(['pending', 'approved']).optional(),
-  requirements: z.array(z.object({
+const confirmEditStylePreviewOutputSchema = z
+  .object({
+    id: z.string().min(1),
+    projectId: z.string().min(1),
+    episodeId: z.string().min(1),
+    status: z.literal('confirmed'),
+    aspectRatio: editScriptVideoRatioSchema,
+  })
+  .passthrough()
+
+const editScriptSummaryOutputSchema = z
+  .object({
     id: z.string().min(1).optional(),
-    kind: z.enum(['character', 'location']),
-    name: z.string().min(1),
+    projectId: z.string().min(1).optional(),
+    episodeId: z.string().min(1).optional(),
+    chapterId: z.string().min(1).optional(),
+    bibleId: z.string().min(1).optional(),
+    sourceDocumentId: z.string().min(1).optional(),
+    durationSec: z.number().int().positive(),
+    shotCount: z.number().int().min(0),
     status: z.string().optional(),
-    targetId: z.string().nullable().optional(),
-  }).passthrough()),
-  generationSegments: z.array(z.object({
-    shotIds: z.array(z.string().min(1)),
-    continuity: z.string().min(1),
-  }).passthrough()),
-}).passthrough()
+    assetReviewStatus: z.enum(['pending', 'approved']).optional(),
+    requirements: z.array(
+      z
+        .object({
+          id: z.string().min(1).optional(),
+          kind: z.enum(['character', 'location']),
+          name: z.string().min(1),
+          status: z.string().optional(),
+          targetId: z.string().nullable().optional(),
+        })
+        .passthrough(),
+    ),
+    generationSegments: z.array(
+      z
+        .object({
+          shotIds: z.array(z.string().min(1)),
+          continuity: z.string().min(1),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough()
 
 type EditScriptSummaryOutput = z.infer<typeof editScriptSummaryOutputSchema>
 
-const editScriptAssetGenerationOutputSchema = z.object({
-  success: z.literal(true),
-  async: z.boolean(),
-  noop: z.boolean().optional(),
-  total: z.number().int().min(0),
-  processedRequirementCount: z.number().int().min(0),
-  remainingRequirementCount: z.number().int().min(0),
-  taskIds: z.array(z.string().min(1)),
-  results: z.array(z.object({
-    refId: z.string().min(1),
-    taskId: z.string().min(1),
-    taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
-    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
-    targetId: z.string().min(1),
-  })),
-  submittedTasks: z.array(z.object({
-    requirementId: z.string().min(1),
-    kind: z.enum(['character', 'location']),
-    name: z.string().min(1),
-    taskId: z.string().min(1),
-    status: z.string().min(1),
-    runId: z.string().nullable(),
-    deduped: z.boolean(),
-    taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
-    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
-    targetId: z.string().min(1),
-  })),
-  editScript: editScriptSummaryOutputSchema,
-}).passthrough()
+const editScriptAssetGenerationOutputSchema = z
+  .object({
+    success: z.literal(true),
+    async: z.boolean(),
+    noop: z.boolean().optional(),
+    total: z.number().int().min(0),
+    processedRequirementCount: z.number().int().min(0),
+    remainingRequirementCount: z.number().int().min(0),
+    taskIds: z.array(z.string().min(1)),
+    results: z.array(
+      z.object({
+        refId: z.string().min(1),
+        taskId: z.string().min(1),
+        taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
+        targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+        targetId: z.string().min(1),
+      }),
+    ),
+    submittedTasks: z.array(
+      z.object({
+        requirementId: z.string().min(1),
+        kind: z.enum(['character', 'location']),
+        name: z.string().min(1),
+        taskId: z.string().min(1),
+        status: z.string().min(1),
+        runId: z.string().nullable(),
+        deduped: z.boolean(),
+        taskType: z.enum([TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION]),
+        targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+        targetId: z.string().min(1),
+      }),
+    ),
+    editScript: editScriptSummaryOutputSchema,
+  })
+  .passthrough()
 
-function toEditScriptAssetGenerationOutput(
-  result: Awaited<ReturnType<typeof commitProjectEditScriptAssetsOperation>>,
-) {
+function toEditScriptAssetGenerationOutput(result: Awaited<ReturnType<typeof commitProjectEditScriptAssetsOperation>>) {
   return editScriptAssetGenerationOutputSchema.parse({
     success: result.success,
     async: result.async,
@@ -268,55 +337,65 @@ function toEditScriptAssetGenerationOutput(
   })
 }
 
-const editScriptAssetRevisionOutputSchema = z.object({
-  success: z.literal(true),
-  async: z.boolean(),
-  noop: z.boolean().optional(),
-  total: z.number().int().min(0),
-  revisionNotes: z.string().min(1),
-  taskIds: z.array(z.string().min(1)),
-  results: z.array(z.object({
-    refId: z.string().min(1),
-    taskId: z.string().min(1),
-    taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
-    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
-    targetId: z.string().min(1),
-  })),
-  submittedTasks: z.array(z.object({
-    requirementId: z.string().min(1),
-    kind: z.enum(['character', 'location']),
-    name: z.string().min(1),
-    taskId: z.string().min(1),
-    status: z.string().min(1),
-    runId: z.string().nullable(),
-    deduped: z.boolean(),
-    taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
-    targetType: z.enum(['CharacterAppearance', 'LocationImage']),
-    targetId: z.string().min(1),
-  })),
-  editScript: editScriptSummaryOutputSchema,
-}).passthrough()
+const editScriptAssetRevisionOutputSchema = z
+  .object({
+    success: z.literal(true),
+    async: z.boolean(),
+    noop: z.boolean().optional(),
+    total: z.number().int().min(0),
+    revisionNotes: z.string().min(1),
+    taskIds: z.array(z.string().min(1)),
+    results: z.array(
+      z.object({
+        refId: z.string().min(1),
+        taskId: z.string().min(1),
+        taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
+        targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+        targetId: z.string().min(1),
+      }),
+    ),
+    submittedTasks: z.array(
+      z.object({
+        requirementId: z.string().min(1),
+        kind: z.enum(['character', 'location']),
+        name: z.string().min(1),
+        taskId: z.string().min(1),
+        status: z.string().min(1),
+        runId: z.string().nullable(),
+        deduped: z.boolean(),
+        taskType: z.literal(TASK_TYPE.MODIFY_ASSET_IMAGE),
+        targetType: z.enum(['CharacterAppearance', 'LocationImage']),
+        targetId: z.string().min(1),
+      }),
+    ),
+    editScript: editScriptSummaryOutputSchema,
+  })
+  .passthrough()
 
 const editScriptAssetApprovalOutputSchema = z.object({
   approvedCount: z.number().int().min(1),
   scripts: z.array(z.unknown()).min(1),
 })
 
-const planChaptersOutputSchema = z.object({
-  success: z.literal(true),
-  async: z.literal(true),
-  episodeId: z.string().min(1),
-  batchKey: z.string().min(1),
-  total: z.number().int().min(1),
-  taskIds: z.array(z.string().min(1)),
-  results: z.array(z.object({
-    refId: z.string().min(1),
-    taskId: z.string().min(1),
-    taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
-    targetType: z.literal('ProjectEditChapter'),
-    targetId: z.string().min(1),
-  })),
-}).passthrough()
+const planChaptersOutputSchema = z
+  .object({
+    success: z.literal(true),
+    async: z.literal(true),
+    episodeId: z.string().min(1),
+    batchKey: z.string().min(1),
+    total: z.number().int().min(1),
+    taskIds: z.array(z.string().min(1)),
+    results: z.array(
+      z.object({
+        refId: z.string().min(1),
+        taskId: z.string().min(1),
+        taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
+        targetType: z.literal('ProjectEditChapter'),
+        targetId: z.string().min(1),
+      }),
+    ),
+  })
+  .passthrough()
 
 const EFFECTS_SYNC_AI_WRITE = {
   writes: true,
@@ -333,6 +412,16 @@ const EFFECTS_NONE = {
   billable: false,
   destructive: false,
   overwrite: false,
+  bulk: false,
+  externalSideEffects: false,
+  longRunning: false,
+} as const
+
+const EFFECTS_DOMAIN_WRITE = {
+  writes: true,
+  billable: false,
+  destructive: false,
+  overwrite: true,
   bulk: false,
   externalSideEffects: false,
   longRunning: false,
@@ -392,8 +481,14 @@ async function resolvePlanChaptersTargets(input: {
   readonly chapterIds?: readonly string[]
 }): Promise<readonly { readonly id: string; readonly chapterIndex: number }[]> {
   const [editBible, chapters, editScripts] = await Promise.all([
-    readEpisodeEditBible({ projectId: input.projectId, episodeId: input.episodeId }),
-    readEpisodeEditChapters({ projectId: input.projectId, episodeId: input.episodeId }),
+    readEpisodeEditBible({
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+    }),
+    readEpisodeEditChapters({
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+    }),
     prisma.projectEditScript.findMany({
       where: {
         projectId: input.projectId,
@@ -412,10 +507,12 @@ async function resolvePlanChaptersTargets(input: {
   if (!editBible.styleBible) {
     throw new Error(`EDIT_BIBLE_STYLE_BIBLE_REQUIRED:${editBible.id}`)
   }
-  const readyScriptChapterIds = new Set(editScripts
-    .filter((script) => script.status === 'ready' || script.status === 'completed')
-    .map((script) => script.chapterId)
-    .filter((chapterId): chapterId is string => Boolean(chapterId)))
+  const readyScriptChapterIds = new Set(
+    editScripts
+      .filter((script) => script.status === 'ready' || script.status === 'completed')
+      .map((script) => script.chapterId)
+      .filter((chapterId): chapterId is string => Boolean(chapterId)),
+  )
   const selectedIds = input.chapterIds ? new Set(input.chapterIds) : null
   const targets = chapters
     .filter((chapter) => !selectedIds || selectedIds.has(chapter.id))
@@ -435,11 +532,16 @@ async function resolvePlanChaptersTargets(input: {
 }
 
 const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
-  script_intake: 'Request one structured creative intake choice before script expansion when the user has not provided a complete script and the brief lacks the basic conditions needed for direct expansion. Pass only the exact user seed text.',
-  script_review: 'Request generated script confirmation before generating the global episode plan. This tool has a fixed choice type; do not pass a choiceType argument.',
-  bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
-  style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
-  asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  script_intake:
+    'Request one structured creative intake choice before script expansion when the user has not provided a complete script and the brief lacks the basic conditions needed for direct expansion. Pass only the exact user seed text.',
+  script_review:
+    'Request generated script confirmation before generating the global episode plan. This tool has a fixed choice type; do not pass a choiceType argument.',
+  bible_review:
+    'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  style:
+    'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
+  asset_review:
+    'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
 }
 
 function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
@@ -473,8 +575,8 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
       if (!runId) {
         throw new Error('REQUEST_EDIT_CHOICE_RUN_ID_REQUIRED')
       }
-      const card = isScriptIntake
-        ? buildScriptIntakeChoiceCard({
+      const candidate = isScriptIntake
+        ? buildScriptIntakeChoiceOfferCandidate({
             locale,
             workflow,
             toolCallId,
@@ -486,7 +588,7 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
               seedText: (input as RequestScriptIntakeChoiceInput).seedText,
             }),
           })
-        : await buildEditFirstAssistantChoiceCard({
+        : await buildEditFirstAssistantChoiceOfferCandidate({
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId,
@@ -495,7 +597,7 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
             choiceType,
             toolCallId,
           })
-      const interruptionId = await createProjectAgentChoiceInterruption({
+      const offer = await createProjectAgentChoiceInterruption({
         runFence: (() => {
           if (!ctx.context.runFence) throw new Error('PROJECT_AGENT_RUN_FENCE_REQUIRED')
           return ctx.context.runFence
@@ -508,24 +610,14 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
         operationId,
         toolCallId,
         previousActivityId: ctx.context.currentActivityId ?? null,
-        payload: toInputJsonValue({
-          choiceType,
-          cardId: card.cardId,
-          card: {
-            ...card,
-            runId,
-          },
-        }),
+        card: candidate.card,
+        reviewedResource: candidate.reviewedResource,
       })
-      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', {
-        ...card,
-        runId,
-        interruptionId,
-      })
+      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', offer.card)
       return requestEditFirstChoiceOutputSchema.parse({
         emitted: true,
         choiceType,
-        cardId: card.cardId,
+        cardId: offer.card.cardId,
         workflowStage: workflow.stage,
       })
     },
@@ -534,67 +626,80 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
 
 export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft {
   const editScriptTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      episodeId: z.string().min(1),
-      chapterId: z.string().min(1),
-      taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
-      targetType: z.literal('ProjectEditChapter'),
-      targetId: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        episodeId: z.string().min(1),
+        chapterId: z.string().min(1),
+        taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_GENERATE),
+        targetType: z.literal('ProjectEditChapter'),
+        targetId: z.string().min(1),
+      })
+      .passthrough(),
   )
   const editShotExecutionPlanTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      episodeId: z.string().min(1),
-      editScriptId: z.string().min(1),
-      taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
-      targetType: z.literal('ProjectEditScript'),
-      targetId: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        episodeId: z.string().min(1),
+        editScriptId: z.string().min(1),
+        taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
+        targetType: z.literal('ProjectEditScript'),
+        targetId: z.string().min(1),
+      })
+      .passthrough(),
   )
-  const editShotExecutionPlanBatchTaskSubmitOutputSchema = z.object({
-    success: z.literal(true),
-    async: z.literal(true),
-    episodeId: z.string().min(1),
-    batchKey: z.string().min(1),
-    total: z.number().int().min(1),
-    taskIds: z.array(z.string().min(1)),
-    results: z.array(z.object({
-      refId: z.string().min(1),
-      taskId: z.string().min(1),
-      taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
-      targetType: z.literal('ProjectEditScript'),
-      targetId: z.string().min(1),
-    })),
-    submittedTasks: z.array(z.object({
-      chapterId: z.string().min(1),
-      editScriptId: z.string().min(1),
-      taskId: z.string().min(1),
-      status: z.string().min(1),
-      runId: z.string().nullable(),
-      deduped: z.boolean(),
-      taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
-      targetType: z.literal('ProjectEditScript'),
-      targetId: z.string().min(1),
-    })),
-  }).passthrough()
+  const editShotExecutionPlanBatchTaskSubmitOutputSchema = z
+    .object({
+      success: z.literal(true),
+      async: z.literal(true),
+      episodeId: z.string().min(1),
+      batchKey: z.string().min(1),
+      total: z.number().int().min(1),
+      taskIds: z.array(z.string().min(1)),
+      results: z.array(
+        z.object({
+          refId: z.string().min(1),
+          taskId: z.string().min(1),
+          taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
+          targetType: z.literal('ProjectEditScript'),
+          targetId: z.string().min(1),
+        }),
+      ),
+      submittedTasks: z.array(
+        z.object({
+          chapterId: z.string().min(1),
+          editScriptId: z.string().min(1),
+          taskId: z.string().min(1),
+          status: z.string().min(1),
+          runId: z.string().nullable(),
+          deduped: z.boolean(),
+          taskType: z.literal(TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
+          targetType: z.literal('ProjectEditScript'),
+          targetId: z.string().min(1),
+        }),
+      ),
+    })
+    .passthrough()
   const editShotExecutionPlanOperationOutputSchema = z.union([
     editShotExecutionPlanTaskSubmitOutputSchema,
     editShotExecutionPlanBatchTaskSubmitOutputSchema,
   ])
   const editScriptStoryboardTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      episodeId: z.string().min(1),
-      editScriptId: z.string().min(1),
-      taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN),
-      targetType: z.literal('ProjectEditScript'),
-      targetId: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        episodeId: z.string().min(1),
+        editScriptId: z.string().min(1),
+        taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN),
+        targetType: z.literal('ProjectEditScript'),
+        targetId: z.string().min(1),
+      })
+      .passthrough(),
   )
 
   return {
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
-      summary: 'Generate Bible-based visual style preview image tasks after the episode Bible has been confirmed. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present.',
+      summary:
+        'Generate Bible-based visual style preview image tasks after the episode Bible has been confirmed. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
@@ -609,33 +714,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
       outputSchema: editStylePreviewsTaskSubmitOutputSchema,
-      plan: async (ctx, input: GenerateEditStylePreviewsInput) => await planProjectEditStylePreviews({
-        projectId: ctx.projectId,
-        userId: ctx.userId,
-        episodeId: resolveEpisodeId(input, ctx.context.episodeId),
-        locale: resolveLocale(ctx.context.locale),
-        ...(input.bibleId ? { bibleId: input.bibleId } : {}),
-        ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
-        ...(input.count ? { count: input.count } : {}),
-      }),
-      commit: async (ctx, input: GenerateEditStylePreviewsInput, plan) => {
-        const result = await submitPlannedEditStylePreviewParentTask(ctx, input, plan)
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_edit_style_previews',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId: result.episodeId,
-          taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-          targetType: 'ProjectEditBible',
-          targetId: result.bibleId,
-        })
-        return editStylePreviewsTaskSubmitOutputSchema.parse(result)
-      },
-      execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
-        const plan = await planProjectEditStylePreviews({
+      plan: async (ctx, input: GenerateEditStylePreviewsInput) =>
+        await planProjectEditStylePreviews({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId: resolveEpisodeId(input, ctx.context.episodeId),
@@ -643,12 +723,9 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...(input.bibleId ? { bibleId: input.bibleId } : {}),
           ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
           ...(input.count ? { count: input.count } : {}),
-        })
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        const result = await submitPlannedEditStylePreviewParentTask(ctx, input, plan)
+        }),
+      commit: async (ctx, input: GenerateEditStylePreviewsInput, plan) => {
+        const result = await submitPlannedEditStylePreviewTasks(ctx, input, plan)
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
           operationId: 'generate_edit_style_previews',
           taskId: result.taskId,
@@ -657,11 +734,50 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           deduped: result.deduped,
           projectId: ctx.projectId,
           episodeId: result.episodeId,
-          taskType: TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
-          targetType: 'ProjectEditBible',
-          targetId: result.bibleId,
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+          targetType: 'ProjectEditStylePreview',
+          targetId: result.targetId,
         })
         return editStylePreviewsTaskSubmitOutputSchema.parse(result)
+      },
+    }),
+    confirm_edit_style_preview: defineOperation({
+      id: 'confirm_edit_style_preview',
+      summary:
+        'Persist the exact visual style candidate selected by the user in the consumed style Choice. This is the only operation allowed to write the selected style.',
+      intent: 'act',
+      channels: { tool: true, api: false },
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_DOMAIN_WRITE,
+      confirmation: {
+        kind: 'none',
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_CONFIRM_STYLE_PREVIEW_TOOL_INPUT_SCHEMA,
+      inputSchema: confirmEditStylePreviewInputSchema,
+      outputSchema: confirmEditStylePreviewOutputSchema,
+      execute: async (ctx, input: ConfirmEditStylePreviewInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const choiceDecision = ctx.context.choiceDecision
+        if (choiceDecision?.choiceType !== 'style' || choiceDecision.decision !== 'select') {
+          throw new Error('EDIT_STYLE_PREVIEW_CHOICE_DECISION_REQUIRED')
+        }
+        const project = await prisma.project.findFirst({
+          where: { id: ctx.projectId, userId: ctx.userId },
+          select: { videoRatio: true },
+        })
+        const aspectRatio = editScriptVideoRatioSchema.safeParse(project?.videoRatio)
+        if (!aspectRatio.success) {
+          throw new Error('EDIT_STYLE_PREVIEW_PROJECT_VIDEO_RATIO_REQUIRED')
+        }
+        const confirmed = await confirmProjectEditStylePreview({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          stylePreviewId: choiceDecision.stylePreviewId,
+          aspectRatio: aspectRatio.data,
+        })
+        return confirmEditStylePreviewOutputSchema.parse(confirmed)
       },
     }),
     [EDIT_FIRST_CHOICE_TOOL_IDS.script_intake]: buildRequestEditChoiceOperation('script_intake'),
@@ -693,7 +809,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...(chapterId ? { chapterId } : {}),
           ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
           source: ctx.source,
-          confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
         })
 
@@ -716,7 +831,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     replan_chapter: defineOperation({
       id: 'replan_chapter',
-      summary: 'Regenerate the core edit plan for one explicit chapter from the confirmed episode Bible, selected Style Bible, and chapter source slice.',
+      summary:
+        'Regenerate the core edit plan for one explicit chapter from the confirmed episode Bible, selected Style Bible, and chapter source slice.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
@@ -749,7 +865,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           chapterId: input.chapterId,
           ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
           source: ctx.source,
-          confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
           batchKey,
           operationId: 'replan_chapter',
@@ -818,7 +933,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
               targetId: chapter.id,
               operationId: 'plan_chapters',
               source: ctx.source,
-              confirmed: input.confirmed === true,
               payload,
               dedupeKey: `edit_script_generate:${ctx.projectId}:${episodeId}:${chapter.id}`,
               batchKey,
@@ -862,14 +976,15 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_script_assets: defineOperation({
       id: 'generate_edit_script_assets',
-      summary: 'Create or reuse required character/location assets from the current core edit plan and submit missing image generation tasks.',
+      summary:
+        'Create or reuse required character/location assets from the current core edit plan and submit missing image generation tasks.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交收费生成任务；用户批准当前不可变计划后执行。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,
@@ -884,38 +999,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         })
       },
       commit: async (ctx, input: GenerateEditScriptAssetsInput, plan) => {
-        return toEditScriptAssetGenerationOutput(await commitProjectEditScriptAssetsOperation({
-          ctx,
-          input,
-          plan,
-        }))
-      },
-      execute: async (ctx, input: GenerateEditScriptAssetsInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const plan = await planProjectEditScriptAssetsOperation(ctx, {
-          episodeId,
-          ...(input.chapterId ? { chapterId: input.chapterId } : {}),
-          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
-          ...(input.requirementId ? { requirementId: input.requirementId } : {}),
-        })
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        const output = toEditScriptAssetGenerationOutput(await commitProjectEditScriptAssetsOperation({
-          ctx,
-          input,
-          plan,
-        }))
-        if (output.taskIds.length > 0) {
-          writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
-            operationId: 'generate_edit_script_assets',
-            total: output.total,
-            taskIds: output.taskIds,
-            results: output.results,
-          })
-        }
-        return output
+        return toEditScriptAssetGenerationOutput(
+          await commitProjectEditScriptAssetsOperation({
+            ctx,
+            input,
+            plan,
+          }),
+        )
       },
     }),
     approve_edit_script_assets: defineOperation({
@@ -933,11 +1023,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       outputSchema: editScriptAssetApprovalOutputSchema,
       execute: async (ctx, input) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        return editScriptAssetApprovalOutputSchema.parse(await approveProjectEpisodeEditScriptAssets({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-        }))
+        return editScriptAssetApprovalOutputSchema.parse(
+          await approveProjectEpisodeEditScriptAssets({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+          }),
+        )
       },
     }),
     revise_edit_script_assets: defineOperation({
@@ -949,24 +1041,26 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将根据用户审核意见返工所需资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将根据用户审核意见返工所需资产图片并产生媒体费用；用户批准当前不可变计划后执行。',
       },
       toolInputSchema: EDIT_FIRST_REVISE_ASSETS_CHAPTER_TOOL_INPUT_SCHEMA,
       inputSchema: reviseEditScriptAssetsInputSchema,
       outputSchema: editScriptAssetRevisionOutputSchema,
-      execute: async (ctx, input: ReviseEditScriptAssetsInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await reviseProjectEditScriptAssets({
-          request: ctx.request,
+      plan: async (ctx, input: ReviseEditScriptAssetsInput) =>
+        await planProjectEditScriptAssetRevisions({
           projectId: ctx.projectId,
           userId: ctx.userId,
-          episodeId,
+          episodeId: resolveEpisodeId(input, ctx.context.episodeId),
           chapterId: input.chapterId,
           locale: resolveLocale(ctx.context.locale),
           revisionNotes: input.revisionNotes,
-          operationConfirmed: input.confirmed === true,
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           ...(input.requirementId ? { requirementId: input.requirementId } : {}),
+        }),
+      commit: async (ctx, _input: ReviseEditScriptAssetsInput, plan) => {
+        const result = await commitProjectEditScriptAssetRevisions({
+          ctx,
+          plan,
         })
         const output = editScriptAssetRevisionOutputSchema.parse({
           success: result.success,
@@ -1017,7 +1111,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
               episodeId,
               batchKey,
               source: ctx.source,
-              confirmed: input.confirmed === true,
               locale: resolveLocale(ctx.context.locale),
               onSubmittedTask: (taskId) => {
                 submittedTaskIds.push(taskId)
@@ -1045,7 +1138,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           chapterId: input.chapterId,
           source: ctx.source,
-          confirmed: input.confirmed === true,
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
         })
@@ -1068,7 +1160,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     }),
     generate_edit_script_storyboard: defineOperation({
       id: 'generate_edit_script_storyboard',
-      summary: 'Generate storyboard panels from the ready core edit plan, shot execution plan, required assets, spatial profiles, and Style Bible.',
+      summary:
+        'Generate storyboard panels from the ready core edit plan, shot execution plan, required assets, spatial profiles, and Style Bible.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,

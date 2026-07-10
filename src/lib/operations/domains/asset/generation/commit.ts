@@ -1,41 +1,45 @@
 import { ensureAssetGenerateCommitReady } from '@/lib/assets/services/asset-actions'
-import { createMutationBatch } from '@/lib/mutation-batch/service'
+import { createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { readProjectAssetImagePlanMetadata } from './shared'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 
 export async function commitAssetImageOperation(params: {
   ctx: ProjectAgentOperationContext
-  input: { confirmed?: boolean }
+  input: Record<string, unknown>
   plan: OperationPlan
   operationId: string
 }) {
   const task = params.plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const transaction = requireOperationExecutionTransaction(params.ctx)
   const metadata = readProjectAssetImagePlanMetadata(params.plan)
   if (params.operationId === 'generate_character_image' || params.operationId === 'generate_location_image') {
-    await ensureAssetGenerateCommitReady({
-      request: params.ctx.request,
-      kind: metadata.assetKind,
-      assetId: metadata.assetId,
-      body: task.payload,
-      access: {
-        scope: 'project',
-        userId: params.ctx.userId,
-        projectId: params.ctx.projectId,
+    await ensureAssetGenerateCommitReady(
+      {
+        request: params.ctx.request,
+        kind: metadata.assetKind,
+        assetId: metadata.assetId,
+        body: task.payload,
+        access: {
+          scope: 'project',
+          userId: params.ctx.userId,
+          projectId: params.ctx.projectId,
+        },
       },
-    })
+      transaction,
+    )
   }
   const result = await submitPlannedOperationTask({
     ctx: params.ctx,
     task,
     operationId: params.operationId,
-    confirmed: params.input.confirmed === true,
   })
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatch = await createMutationBatchInTransaction(transaction, {
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
     source: params.ctx.source,

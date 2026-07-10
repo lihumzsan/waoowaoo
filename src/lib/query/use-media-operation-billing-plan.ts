@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  confirmOperationPlan,
+  issueOperationApprovalGrant,
   fetchOperationPlanView,
 } from './operation-plan-client'
 
@@ -14,6 +14,6 @@ export function useMediaOperationBillingPlan(projectId: string | null, episodeId
       input,
       context: episodeId ? { episodeId } : undefined,
     })
-    return confirmOperationPlan(plan)
+    return await issueOperationApprovalGrant(plan)
   }
 }

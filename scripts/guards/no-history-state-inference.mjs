@@ -12,6 +12,8 @@ const roots = [
   'src/lib/project-agent',
   'src/lib/operations',
   'src/lib/adapters',
+  'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx',
+  'src/features/project-workspace/components/workspace-assistant',
 ]
 
 const banned = [
@@ -20,6 +22,11 @@ const banned = [
   'findRespondedAgentApprovalIds',
   'projectAgentApprovalResponse',
   'projectAgentChoiceResponse',
+  'collectAssistantAsyncTaskSubmissions',
+  'findLatestAssistantExternalTaskWait',
+  'findActiveStylePreviewGenerationCard',
+  'WORKSPACE_ASSISTANT_THREAD_CATCH_UP_DELAYS_MS',
+  'shouldPollWorkspaceAssistantSessionState',
 ]
 
 export function inspectHistoryStateInference(filePath, content) {
@@ -48,6 +55,24 @@ for (const root of roots) {
     const content = fs.readFileSync(filePath, 'utf8')
     violations.push(...inspectHistoryStateInference(path.relative(process.cwd(), filePath), content))
   }
+}
+
+for (const retiredPath of [
+  'src/features/project-workspace/components/workspace-assistant/async-task-follow-up.ts',
+  'src/features/project-workspace/components/workspace-assistant/active-style-preview-generation.ts',
+]) {
+  if (fs.existsSync(path.resolve(process.cwd(), retiredPath))) {
+    violations.push(`${retiredPath} restores retired message-history inference`)
+  }
+}
+
+const runtimePath = 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts'
+const runtime = fs.readFileSync(path.resolve(process.cwd(), runtimePath), 'utf8')
+if (/activeControlRun\s*\?\?\s*serverOperationRun/.test(runtime)) {
+  violations.push(`${runtimePath} lets client control state override an existing server run`)
+}
+if (/setTimeout\([\s\S]{0,240}refreshSessionState/.test(runtime)) {
+  violations.push(`${runtimePath} restores timer-driven session-state correctness polling`)
 }
 
 if (violations.length > 0) {

@@ -2,26 +2,9 @@ import { TASK_TYPE } from '@/lib/task/types'
 import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution, type OperationPlan } from '@/lib/operations/planning'
+import type { OperationPlan } from '@/lib/operations/planning'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
 import { buildEpisodeGenerationSegmentVideoPlan, commitPlannedVideoGroupBatch, commitPlannedVideoGroupTask, planAssetReferenceGenerationSegmentTask, readPlannedVideoGroupMetadataList, resolveEditChapterId } from './video-group-planning'
-
-export async function executeGenerateAssetReferenceVideoOperation(params: {
-  ctx: ProjectAgentOperationContext
-  input: UnknownObject
-  operationId: string
-}) {
-  const plan = await planGenerateAssetReferenceVideoOperation(params)
-  await assertOperationPlanConfirmedCost({
-    plan,
-    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
-      ctx: params.ctx,
-      input: params.input,
-      plan,
-    }),
-  })
-  return await commitGenerateAssetReferenceVideoPlan({ ...params, plan })
-}
 
 export async function planGenerateAssetReferenceVideoOperation(params: {
   ctx: ProjectAgentOperationContext
@@ -118,23 +101,6 @@ export async function commitGenerateAssetReferenceVideoPlan(params: {
     shotIds: groupMetadata.shotIds,
     durationSec: groupMetadata.durationSec,
   }
-}
-
-export async function executeGenerateEpisodeAssetReferenceVideosOperation(params: {
-  ctx: ProjectAgentOperationContext
-  input: UnknownObject
-  operationId: string
-}) {
-  const plan = await planGenerateEpisodeAssetReferenceVideosOperation(params)
-  await assertOperationPlanConfirmedCost({
-    plan,
-    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
-      ctx: params.ctx,
-      input: params.input,
-      plan,
-    }),
-  })
-  return await commitGenerateEpisodeAssetReferenceVideosPlan({ ...params, plan })
 }
 
 export async function planGenerateEpisodeAssetReferenceVideosOperation(params: {

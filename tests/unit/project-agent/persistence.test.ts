@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   projectAssistantThread: {
     findUnique: vi.fn(),
     upsert: vi.fn(),
+    update: vi.fn(),
     deleteMany: vi.fn(),
   },
 }))
@@ -24,6 +26,7 @@ describe('project assistant persistence', () => {
     prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) => (
       await callback(prismaMock)
     ))
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'thread-1' }])
   })
 
   it('buildProjectAssistantScopeRef -> uses episode scope when episode is present', () => {
@@ -151,6 +154,17 @@ describe('project assistant persistence', () => {
       createdAt: new Date('2026-04-13T00:00:00.000Z'),
       updatedAt: new Date('2026-04-13T00:00:00.000Z'),
     })
+    prismaMock.projectAssistantThread.update.mockResolvedValueOnce({
+      id: 'thread-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      messagesJson: [],
+      createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
+    })
 
     await appendProjectAssistantThreadMessages({
       projectId: 'project-1',
@@ -171,8 +185,8 @@ describe('project assistant persistence', () => {
       ],
     })
 
-    expect(prismaMock.projectAssistantThread.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      update: expect.objectContaining({
+    expect(prismaMock.projectAssistantThread.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
         messagesJson: [
           {
             id: 'user-1',
@@ -229,7 +243,7 @@ describe('project assistant persistence', () => {
         parts: [{ type: 'text', text: '已保存' }],
       },
     ])
-    expect(prismaMock.projectAssistantThread.upsert).not.toHaveBeenCalled()
+    expect(prismaMock.projectAssistantThread.update).not.toHaveBeenCalled()
   })
 
   it('loadProjectAssistantThread -> fails explicitly on corrupted stored messages', async () => {

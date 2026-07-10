@@ -37,18 +37,17 @@ describe('regression - enqueue compensation', () => {
         userId: user.id,
         locale: 'en',
         projectId: 'project-regression-enqueue',
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
         targetType: 'Project',
         targetId: 'project-regression-enqueue',
-        payload: { musicModel: 'google::lyria-3-pro-preview', durationSeconds: 6 },
-        operationConfirmed: true,
+        payload: { analysisModel: 'openai::gpt-4.1', episodeId: 'episode-regression' },
       }),
     ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' })
 
     const task = await prisma.task.findFirst({
       where: {
         userId: user.id,
-        type: TASK_TYPE.MUSIC_GENERATE,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       },
       orderBy: { createdAt: 'desc' },
     })

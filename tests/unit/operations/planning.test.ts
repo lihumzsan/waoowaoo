@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  assertOperationPlanConfirmed,
-  assertOperationPlanConfirmedCost,
   quoteOperationPlan,
   toOperationPlanView,
   type OperationPlan,
@@ -154,84 +152,12 @@ describe('operation planning billing quote', () => {
     expect(view.quote.items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'maxFrozenCost'))).toBe(true)
   })
 
-  it('rejects commit when the planned image and video cost exceeds the confirmed maximum', async () => {
-    await expect(assertOperationPlanConfirmedCost({
-      plan: buildPlan(),
-      confirmedMaxCost: 9.74,
-    })).rejects.toMatchObject({
-      code: 'CONFLICT',
-      details: {
-        code: 'OPERATION_QUOTE_EXCEEDED_CONFIRMED_MAX_COST',
-        actual: 9.75,
-        confirmedMaxCost: 9.74,
-      },
-    })
-  })
-
-  it('rejects a billable plan before commit when the real confirmation input is missing', async () => {
-    await expect(assertOperationPlanConfirmed({
-      plan: buildPlan(),
-      input: { confirmedMaxCost: 12.25 },
-    })).rejects.toMatchObject({
-      code: 'INVALID_PARAMS',
-      details: expect.objectContaining({
-        code: 'OPERATION_CONFIRMATION_REQUIRED',
-        operationId: 'regenerate_panel_image',
-      }),
-    })
-
-    await expect(assertOperationPlanConfirmed({
-      plan: buildPlan(),
-      input: { confirmed: true, confirmedMaxCost: 12.25 },
-    })).resolves.toBeUndefined()
-  })
-
-  it('does not require confirmed maximum cost for music-only fixed-price media plans', async () => {
-    const basePlan = buildPlan()
-    const musicOnlyPlan: OperationPlan = {
-      ...basePlan,
-      tasks: basePlan.tasks.filter((task) => task.taskType === TASK_TYPE.MUSIC_GENERATE),
-    }
-
-    const quote = await quoteOperationPlan(musicOnlyPlan)
-    expect(quote.billable).toBe(true)
-    expect(quote.mediaTaskCount).toBe(1)
-    expect(quote.totalMaxFrozenCost).toBe(2.5)
-    await expect(assertOperationPlanConfirmedCost({
-      plan: musicOnlyPlan,
-      confirmedMaxCost: null,
-    })).resolves.toBeUndefined()
-  })
-
-  it('exposes plan and commit only for the migrated fixed-price media operations in this batch', () => {
+  it('requires every billable_media operation to expose the immutable plan and commit contract', () => {
     const registry = createProjectAgentOperationRegistryForApi()
-    const mediaOperationIds = [
-      'generate_edit_script_storyboard_images',
-      'generate_edit_script_assets',
-      'generate_edit_style_previews',
-      'regenerate_panel_image',
-      'generate_panel_video',
-      'generate_episode_videos',
-      'generate_video_group',
-      'generate_episode_video_groups',
-      'generate_episode_videos_auto',
-      'generate_asset_reference_video',
-      'generate_episode_asset_reference_videos',
-      'generate_project_music',
-      'generate_episode_bgm_score',
-      'generate_episode_soundscape',
-      'generate_character_image',
-      'generate_location_image',
-      'api_assets_generate',
-    ]
-
-    for (const operationId of mediaOperationIds) {
-      const operation = registry[operationId]
-      expect(operation?.plan).toBeTypeOf('function')
-      expect(operation?.commit).toBeTypeOf('function')
+    for (const [operationId, operation] of Object.entries(registry)) {
+      if (operation.confirmation.kind !== 'billable_media') continue
+      expect(operation.plan, operationId).toBeTypeOf('function')
+      expect(operation.commit, operationId).toBeTypeOf('function')
     }
-
-    expect(registry.generate_edit_shot_execution_plan?.plan).toBeUndefined()
-    expect(registry.generate_edit_script_storyboard?.plan).toBeUndefined()
   })
 })

@@ -58,6 +58,7 @@ async function submitPreparedEditBibleGenerationTask(input: {
   readonly episodeId: string
   readonly sourceDocumentId: string
   readonly editBibleId: string
+  readonly targetVersion: number
   readonly sourceChecksum: string
   readonly sourceVersion: number
   readonly sourceKind: EditSourceDocumentKind
@@ -99,10 +100,24 @@ async function submitPreparedEditBibleGenerationTask(input: {
     targetId: input.editBibleId,
     operationId: input.operationId,
     source: input.source,
-    confirmed: input.confirmed,
     payload,
     dedupeKey: `${dedupeNamespace}:${input.projectId}:${input.episodeId}:${input.sourceChecksum}:${input.operationId}`,
     locale: input.locale,
+    onTaskCreatedInTransaction: async (tx, task) => {
+      const owned = await tx.projectEditBible.updateMany({
+        where: {
+          id: input.editBibleId,
+          sourceDocumentId: input.sourceDocumentId,
+          version: input.targetVersion,
+          generationTaskId: null,
+          status: EDIT_BIBLE_STATUS.GENERATING,
+        },
+        data: { generationTaskId: task.id },
+      })
+      if (owned.count !== 1) {
+        throw new Error(`EDIT_BIBLE_TASK_OWNERSHIP_CAS_FAILED:${input.editBibleId}:${task.id}`)
+      }
+    },
   })
 
   return {
@@ -158,6 +173,7 @@ export async function submitProjectEditBibleGenerationTask(input: {
       episodeId: input.episodeId,
       sourceDocumentId: sourceDocument.id,
       editBibleId: target.editBibleId,
+      targetVersion: target.version,
       sourceChecksum: sourceDocument.checksum,
       sourceVersion: sourceDocument.version,
       sourceKind: input.sourceKind,
@@ -236,6 +252,7 @@ export async function submitApprovedScriptEditBibleGenerationTask(input: {
       episodeId: input.episodeId,
       sourceDocumentId: sourceDocument.id,
       editBibleId: target.editBibleId,
+      targetVersion: target.version,
       sourceChecksum: sourceDocument.checksum,
       sourceVersion: sourceDocument.version,
       sourceKind: sourceDocument.sourceKind,
@@ -314,6 +331,7 @@ export async function submitProjectEditScriptRevisionTask(input: {
       episodeId: input.episodeId,
       sourceDocumentId: sourceDocument.id,
       editBibleId: target.editBibleId,
+      targetVersion: target.version,
       sourceChecksum: sourceDocument.checksum,
       sourceVersion: sourceDocument.version,
       sourceKind: sourceDocument.sourceKind,

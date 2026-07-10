@@ -4,37 +4,26 @@ import { apiHandler, ApiError, getRequestId } from '@/lib/api-errors'
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 import { isErrorResponse, requireProjectAuthLight, requireUserAuth } from '@/lib/api-auth'
 import type { SSEEvent } from '@/lib/task/types'
+import { getProjectChannel } from '@/lib/task/publisher'
+import {
+  advanceWorkspaceSseCursor,
+  parseWorkspaceSseBootstrap,
+  parseWorkspaceSseCursor,
+  parseWorkspaceSseEventMessage,
+  serializeWorkspaceSseCursor,
+} from '@/lib/sse/protocol'
+import {
+  WorkspaceSseServerSession,
+} from '@/lib/sse/server-session'
 import { getSharedSubscriber } from '@/lib/sse/shared-subscriber'
 
-function formatSSE(event: SSEEvent) {
+function formatSSE(event: SSEEvent, transportCursor: string) {
   const dataLine = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
-  if (typeof event.id === 'string' && event.id.length > 0) {
-    return `id: ${event.id}\n${dataLine}`
-  }
-  return dataLine
+  return `id: ${transportCursor}\n${dataLine}`
 }
 
 function formatHeartbeat() {
   return `event: heartbeat\ndata: {"ts":"${new Date().toISOString()}"}\n\n`
-}
-
-function isSSEEventLike(value: unknown): value is SSEEvent {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
-  if (
-    typeof record.id !== 'string'
-    || typeof record.type !== 'string'
-    || typeof record.projectId !== 'string'
-    || typeof record.userId !== 'string'
-    || typeof record.ts !== 'string'
-  ) return false
-  if (record.type === 'mutation.batch') {
-    return typeof record.mutationBatchId === 'string' && Array.isArray(record.targets)
-  }
-  if (record.type === 'resource.changed') {
-    return Array.isArray(record.affectedResources)
-  }
-  return typeof record.taskId === 'string'
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -54,6 +43,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const requestId = getRequestId(request)
   const encoder = new TextEncoder()
   const signal = request.signal
+  const requestCursor = request.headers.get('last-event-id')
+    || request.nextUrl.searchParams.get('cursor')
+  const initialCursor = parseWorkspaceSseCursor(requestCursor)
   let closeStream: (() => Promise<void>) | null = null
 
   const stream = new ReadableStream<Uint8Array>({
@@ -61,6 +53,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       let closed = false
       let timer: ReturnType<typeof setInterval> | null = null
       let unsubscribe: (() => Promise<void>) | null = null
+      let cleanupPromise: Promise<void> | null = null
       const logger = createScopedLogger({
         module: 'sse',
         action: 'sse.stream',
@@ -71,106 +64,146 @@ export const GET = apiHandler(async (request: NextRequest) => {
         action: 'sse.connect',
         message: 'sse connection established',
         details: {
-          lastEventId: request.headers.get('last-event-id') || '0'}})
+          lastEventId: requestCursor || '0'}})
 
       const safeEnqueue = (chunk: string) => {
         if (closed) return
         controller.enqueue(encoder.encode(chunk))
       }
 
-      const close = async () => {
+      let transportCursor = initialCursor
+      const serverSession = new WorkspaceSseServerSession((event) => {
+        transportCursor = advanceWorkspaceSseCursor(transportCursor, event)
+        safeEnqueue(formatSSE(event, serializeWorkspaceSseCursor(transportCursor)))
+      })
+
+      const cleanup = async () => {
+        if (cleanupPromise) return await cleanupPromise
+        cleanupPromise = (async () => {
+          serverSession.close()
+          if (timer) {
+            clearInterval(timer)
+            timer = null
+          }
+          const removeListener = unsubscribe
+          unsubscribe = null
+          try {
+            await removeListener?.()
+          } catch (error) {
+            logger.error({
+              action: 'sse.unsubscribe.failed',
+              message: 'failed to release sse subscriber listener',
+              error: error instanceof Error
+                ? { name: error.name, message: error.message, stack: error.stack }
+                : { message: String(error) },
+            })
+          }
+          signal.removeEventListener('abort', abortHandler)
+        })()
+        return await cleanupPromise
+      }
+
+      const fail = async (error: unknown) => {
         if (closed) return
         closed = true
-        try {
-          await unsubscribe?.()
-        } catch {}
-        logger.info({
-          action: 'sse.disconnect',
-          message: 'sse connection closed'})
-        if (timer) {
-          clearInterval(timer)
-          timer = null
+        await cleanup()
+        controller.error(error)
+      }
+
+      const close = async () => {
+        const shouldCloseController = !closed
+        closed = true
+        await cleanup()
+        if (shouldCloseController) {
+          logger.info({
+            action: 'sse.disconnect',
+            message: 'sse connection closed'})
+          try {
+            controller.close()
+          } catch {}
         }
-        try {
-          controller.close()
-        } catch {}
       }
       closeStream = close
 
-      signal.addEventListener('abort', () => {
+      const abortHandler = () => {
         void close()
-      })
-
-      const bootstrap = await executeProjectAgentOperationFromApi({
-        request,
-        operationId: 'get_sse_bootstrap',
-        projectId,
-        userId: session.user.id,
-        input: {
-          episodeId: episodeId || null,
-          lastEventId: request.headers.get('last-event-id'),
-          includeRecoverableSnapshot: true,
-        },
-        source: 'project-ui',
-      })
-
-      const channel = (bootstrap && typeof bootstrap === 'object' && !Array.isArray(bootstrap) && typeof (bootstrap as { channel?: unknown }).channel === 'string')
-        ? (bootstrap as { channel: string }).channel
-        : ''
-      const events = (bootstrap && typeof bootstrap === 'object' && !Array.isArray(bootstrap) && Array.isArray((bootstrap as { events?: unknown }).events))
-        ? (bootstrap as { events: SSEEvent[] }).events
-        : []
-      const mode = (bootstrap && typeof bootstrap === 'object' && !Array.isArray(bootstrap) && typeof (bootstrap as { mode?: unknown }).mode === 'string')
-        ? (bootstrap as { mode: string }).mode
-        : 'unknown'
-
-      if (!channel) {
-        throw new ApiError('EXTERNAL_ERROR', {
-          code: 'SSE_BOOTSTRAP_INVALID',
-          message: 'get_sse_bootstrap missing channel',
-        })
+      }
+      signal.addEventListener('abort', abortHandler)
+      if (signal.aborted) {
+        await close()
+        return
       }
 
-      logger.info({
-        action: mode.startsWith('replay') ? 'sse.replay' : 'sse.active_snapshot',
-        message: 'sse bootstrap sent',
-        details: { mode, count: events.length },
-      })
-
-      for (const event of events) {
-        safeEnqueue(formatSSE(event))
-      }
-
-      unsubscribe = await sharedSubscriber.addChannelListener(channel, (message) => {
-        try {
-          const payload = JSON.parse(message) as unknown
-          if (!isSSEEventLike(payload)) {
+      try {
+        const expectedChannel = getProjectChannel(projectId)
+        const removeListener = await sharedSubscriber.addChannelListener(expectedChannel, (message) => {
+          try {
+            const payload = parseWorkspaceSseEventMessage(message)
+            if (payload.projectId !== projectId) {
+              throw new Error(`SSE_MESSAGE_PROJECT_MISMATCH:${payload.projectId}:${projectId}`)
+            }
+            if (projectId === 'global-asset-hub' && payload.userId !== session.user.id) {
+              logger.error({
+                action: 'sse.message.user_mismatch',
+                message: 'sse message userId mismatch',
+                details: { eventUserId: payload.userId, sessionUserId: session.user.id },
+              })
+              return
+            }
+            serverSession.receiveLiveEvent(payload)
+          } catch (error) {
             logger.error({
               action: 'sse.message.invalid',
-              message: 'invalid sse message payload',
-              details: { message },
+              message: 'invalid sse message',
+              details: {
+                message,
+                error: error instanceof Error ? error.message : String(error),
+              },
             })
-            return
+            void fail(error)
           }
-          if (projectId === 'global-asset-hub' && payload.userId !== session.user.id) {
-            logger.error({
-              action: 'sse.message.user_mismatch',
-              message: 'sse message userId mismatch',
-              details: { eventUserId: payload.userId, sessionUserId: session.user.id },
-            })
-            return
-          }
-          safeEnqueue(formatSSE(payload))
-        } catch {
-          logger.error({
-            action: 'sse.message.invalid',
-            message: 'invalid sse message json',
-            details: { message },
+        })
+        if (closed) {
+          await removeListener()
+          return
+        }
+        unsubscribe = removeListener
+
+        const bootstrap = await executeProjectAgentOperationFromApi({
+          request,
+          operationId: 'get_sse_bootstrap',
+          projectId,
+          userId: session.user.id,
+          input: {
+            episodeId: episodeId || null,
+            lastEventId: requestCursor,
+            includeRecoverableSnapshot: true,
+          },
+          source: 'project-ui',
+        })
+
+        if (closed) return
+        const { channel, events, mode } = parseWorkspaceSseBootstrap(bootstrap)
+
+        if (channel !== expectedChannel) {
+          throw new ApiError('EXTERNAL_ERROR', {
+            code: 'SSE_BOOTSTRAP_CHANNEL_MISMATCH',
+            message: 'get_sse_bootstrap returned a different channel',
           })
         }
-      })
 
-      timer = setInterval(() => safeEnqueue(formatHeartbeat()), 15_000)
+        logger.info({
+          action: mode.startsWith('replay') ? 'sse.replay' : 'sse.active_snapshot',
+          message: 'sse bootstrap sent',
+          details: { mode, count: events.length },
+        })
+
+        serverSession.completeBootstrap(events)
+        if (closed) return
+        timer = setInterval(() => safeEnqueue(formatHeartbeat()), 15_000)
+      } catch (error) {
+        await fail(error)
+      }
     },
     cancel() {
       void closeStream?.()

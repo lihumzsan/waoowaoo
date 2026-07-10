@@ -30,7 +30,7 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       confirmation: {
         required: true,
-        summary: '将修改分镜格提示词或演技指导。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将修改分镜格提示词或演技指导。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: updateStoryboardPanelPromptInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,
@@ -49,7 +49,7 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       confirmation: {
         required: true,
-        summary: '将确认候选图并覆盖当前分镜图。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将确认候选图并覆盖当前分镜图。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: selectStoryboardPanelCandidateInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,
@@ -68,7 +68,7 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       confirmation: {
         required: true,
-        summary: '将清空该分镜格的候选图。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将清空该分镜格的候选图。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: cancelStoryboardPanelCandidatesInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,

@@ -262,7 +262,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将删除角色及其形象数据。确认继续后请重新调用并传入 confirmed=true。',
+	        summary: '将删除角色及其形象数据。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
 	        confirmed: z.boolean().optional(),
@@ -385,7 +385,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将删除该角色形象及其图片。确认继续后请重新调用并传入 confirmed=true。',
+	        summary: '将删除该角色形象及其图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 			      inputSchema: z.object({
 			        confirmed: z.boolean().optional(),
@@ -464,7 +464,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将确认角色形象选择并删除未选中的候选图片。确认继续后请重新调用并传入 confirmed=true。',
+	        summary: '将确认角色形象选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
 		        confirmed: z.boolean().optional(),
@@ -647,7 +647,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      effects: EFFECTS_WRITE_DESTRUCTIVE,
 	      confirmation: {
 	        required: true,
-	        summary: '将删除场景及其图片记录。确认继续后请重新调用并传入 confirmed=true。',
+	        summary: '将删除场景及其图片记录。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 			      inputSchema: z.object({
 			        confirmed: z.boolean().optional(),
@@ -678,7 +678,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将确认场景选择并删除未选中的候选图片。确认继续后请重新调用并传入 confirmed=true。',
+	        summary: '将确认场景选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
 		        confirmed: z.boolean().optional(),
@@ -800,7 +800,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       },
       confirmation: {
         required: true,
-        summary: '将撤回一次资产渲染选择/变更。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将撤回一次资产渲染选择/变更。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),
@@ -955,7 +955,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       },
       confirmation: {
         required: true,
-        summary: '将删除剧集及其关联数据。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除剧集及其关联数据。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

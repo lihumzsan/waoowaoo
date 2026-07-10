@@ -23,7 +23,9 @@ export type TaskJobEnvelopeSource = {
   userId: string
   operationId: string | null
   operationSource: string | null
-  operationConfirmed: boolean | null
+  approvalGrantId: string | null
+  operationExecutionId: string | null
+  operationPlanTaskId: string | null
   operationRequestId: string | null
   priority: number
 }
@@ -90,7 +92,9 @@ export function buildTaskJobEnvelope(source: TaskJobEnvelopeSource): TaskJobEnve
     userId: source.userId,
     operationId: source.operationId,
     operationSource: source.operationSource,
-    operationConfirmed: source.operationConfirmed,
+    approvalGrantId: source.approvalGrantId,
+    operationExecutionId: source.operationExecutionId,
+    operationPlanTaskId: source.operationPlanTaskId,
     operationRequestId: source.operationRequestId,
     trace: {
       requestId: readTraceRequestId(payload, source.operationRequestId),

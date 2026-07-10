@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryKeys } from '@/lib/query/keys'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE } from '@/lib/task/types'
+import {
+  addProcessedSseEventIdentity,
+  MAX_PROCESSED_SSE_EVENT_IDENTITIES,
+} from '@/lib/query/hooks/useSSE'
 
 type InvalidateArg = { queryKey?: readonly unknown[]; exact?: boolean; type?: 'active' | 'all' | 'inactive' }
 
@@ -18,6 +22,7 @@ const runtime = vi.hoisted(() => ({
   effectCleanup: null as EffectCleanup,
   scheduledTimers: [] as Array<() => void>,
   scheduledIntervals: [] as Array<() => void>,
+  sessionStorage: new Map<string, string>(),
 }))
 
 const overlayMock = vi.hoisted(() => ({
@@ -55,8 +60,8 @@ class FakeEventSource {
     set.delete(handler)
   }
 
-  emit(type: string, payload: unknown) {
-    const event = { data: JSON.stringify(payload) } as MessageEvent
+  emit(type: string, payload: unknown, lastEventId = '') {
+    const event = { data: JSON.stringify(payload), lastEventId } as MessageEvent
     if (this.onmessage) this.onmessage(event)
     const set = this.listeners.get(type)
     if (!set) return
@@ -99,11 +104,21 @@ function hasInvalidation(predicate: (arg: InvalidateArg) => boolean) {
 }
 
 describe('sse invalidation behavior', () => {
+  it('bounds client event identity dedupe memory', () => {
+    const identities = new Set<string>()
+    for (let index = 0; index < MAX_PROCESSED_SSE_EVENT_IDENTITIES + 20; index += 1) {
+      addProcessedSseEventIdentity(identities, `event-${String(index)}`)
+    }
+    expect(identities.size).toBe(MAX_PROCESSED_SSE_EVENT_IDENTITIES)
+    expect(identities.has('event-0')).toBe(false)
+    expect(identities.has(`event-${String(MAX_PROCESSED_SSE_EVENT_IDENTITIES + 19)}`)).toBe(true)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     runtime.effectCleanup = null
     runtime.scheduledTimers = []
     runtime.scheduledIntervals = []
+    runtime.sessionStorage.clear()
     FakeEventSource.instances = []
     apiFetchMock.apiFetch.mockReset()
 
@@ -113,6 +128,7 @@ describe('sse invalidation behavior', () => {
       clearTimeout: typeof clearTimeout
       setInterval: typeof setInterval
       clearInterval: typeof clearInterval
+      sessionStorage: Storage
     } }).window = {
       setTimeout: ((cb: () => void) => {
         runtime.scheduledTimers.push(cb)
@@ -124,6 +140,14 @@ describe('sse invalidation behavior', () => {
         return runtime.scheduledIntervals.length as unknown as ReturnType<typeof setInterval>
       }) as unknown as typeof setInterval,
       clearInterval: (() => undefined) as unknown as typeof clearInterval,
+      sessionStorage: {
+        getItem: (key: string) => runtime.sessionStorage.get(key) ?? null,
+        setItem: (key: string, value: string) => { runtime.sessionStorage.set(key, value) },
+        removeItem: (key: string) => { runtime.sessionStorage.delete(key) },
+        clear: () => runtime.sessionStorage.clear(),
+        key: (index: number) => Array.from(runtime.sessionStorage.keys())[index] ?? null,
+        get length() { return runtime.sessionStorage.size },
+      },
     }
   })
 
@@ -250,6 +274,10 @@ describe('sse invalidation behavior', () => {
       id: 'episode-1',
       name: 'Materialized episode',
       updatedAt: '2026-04-24T00:00:01.000Z',
+      resourceVersion: {
+        scheme: 'aggregate_updated_at',
+        value: '2026-04-24T00:00:01.000Z',
+      },
     }
     const runtimeClear = vi.fn(() => {
       expect(runtime.queryClient.setQueryData).toHaveBeenCalledWith(
@@ -284,7 +312,7 @@ describe('sse invalidation behavior', () => {
           episodeId: 'episode-1',
           resourceKey: 'episodeData:project-1:episode-1',
           resourceVersion: {
-            scheme: 'updated_at',
+            scheme: 'aggregate_updated_at',
             value: '2026-04-24T00:00:01.000Z',
           },
           taskId: 'task-materialized-1',
@@ -437,38 +465,8 @@ describe('sse invalidation behavior', () => {
     })).toBe(true)
   })
 
-  it('applies replayed image panel completion events even when the stored cursor already advanced', async () => {
+  it('persists a mixed-domain transport cursor and reconnects from that exact watermark', async () => {
     const { useSSE } = await import('@/lib/query/hooks/useSSE')
-
-    apiFetchMock.apiFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        success: true,
-        events: [{
-          id: '11',
-          type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
-          taskId: 'task-image-1',
-          taskType: 'image_panel',
-          targetType: 'ProjectPanel',
-          targetId: 'panel-1',
-          projectId: 'project-1',
-          userId: 'user-1',
-          ts: '2026-04-24T00:00:01.000Z',
-          episodeId: 'episode-1',
-          payload: {
-            lifecycleType: TASK_EVENT_TYPE.COMPLETED,
-            imageUrl: 'https://example.test/panel.jpg',
-            affectedResources: [
-              { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
-              { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
-              { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
-              { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
-              { kind: 'projectData', projectId: 'project-1' },
-            ],
-          },
-        }],
-      }),
-    })
 
     useSSE({
       projectId: 'project-1',
@@ -494,30 +492,28 @@ describe('sse invalidation behavior', () => {
         lifecycleType: TASK_EVENT_TYPE.PROCESSING,
         progress: 99,
       },
-    })
+    }, 'v1;t=12;m=0:-')
+    source.emit(WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH, {
+      id: 'mb:1777046400000:batch-2',
+      type: WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH,
+      mutationBatchId: 'batch-2',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:03.000Z',
+      episodeId: 'episode-1',
+      operationId: 'update_storyboard_panel_prompt',
+      targets: [{ targetType: 'ProjectPanel', targetId: 'panel-1' }],
+    }, 'v1;t=12;m=1777046400000:batch-2')
 
-    expect(runtime.scheduledIntervals).toHaveLength(1)
-    runtime.scheduledIntervals[0]?.()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(runtime.scheduledIntervals).toHaveLength(0)
+    expect(runtime.sessionStorage.get('workspace-sse-cursor:v1:project-1:episode-1'))
+      .toBe('v1;t=12;m=1777046400000:batch-2')
 
-    expect(apiFetchMock.apiFetch).toHaveBeenCalledWith('/api/sse/replay?projectId=project-1&lastEventId=12&episodeId=episode-1')
-    expect(hasInvalidation((arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.episodeData('project-1', 'episode-1')[0]
-        && key[1] === 'project-1'
-        && key[2] === 'episode-1'
-    })).toBe(true)
-    expect(hasInvalidation((arg) => {
-      const key = arg.queryKey || []
-      return Array.isArray(key)
-        && key[0] === queryKeys.storyboards.all('episode-1')[0]
-        && key[1] === 'episode-1'
-    })).toBe(true)
-    expect(runtime.queryClient.refetchQueries).toHaveBeenCalledWith({
-      queryKey: queryKeys.storyboards.all('episode-1'),
-      type: 'active',
-    })
+    runtime.effectCleanup?.()
+    useSSE({ projectId: 'project-1', episodeId: 'episode-1', enabled: true })
+    expect(FakeEventSource.instances[1]?.url).toBe(
+      '/api/sse?projectId=project-1&episodeId=episode-1&cursor=v1%3Bt%3D12%3Bm%3D1777046400000%3Abatch-2',
+    )
   })
 
   it('resource.changed 事件按资源名称触发 query invalidation', async () => {

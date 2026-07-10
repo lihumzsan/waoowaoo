@@ -223,6 +223,7 @@ model ProjectEditBible {
   version            Int            @default(1)
   status             String         @default("pending")
   lockedAt           DateTime?
+  generationTaskId   String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @default(now()) @updatedAt
   episode            ProjectEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
@@ -231,6 +232,7 @@ model ProjectEditBible {
 
   @@index([episodeId])
   @@index([sourceDocumentId])
+  @@index([generationTaskId])
   @@map("project_edit_bibles")
 }
 
@@ -558,6 +560,7 @@ model ProjectAgentWait {
   resolvedAt      DateTime?
   run             ProjectAgentRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
   activity        ProjectAgentActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  continuationCheckpoint ProjectAgentContinuationCheckpoint?
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -569,6 +572,22 @@ model ProjectAgentWait {
   @@index([followUpCommandId])
   @@index([claimId])
   @@map("project_agent_waits")
+}
+
+model ProjectAgentContinuationCheckpoint {
+  commandId   String   @id @db.VarChar(191)
+  waitId      String   @unique
+  runId       String
+  status      String   @default("running") @db.VarChar(32)
+  outcome     String?  @db.VarChar(32)
+  messageId   String?  @db.VarChar(191)
+  messageJson Json?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  wait        ProjectAgentWait @relation(fields: [waitId], references: [id], onDelete: Cascade)
+
+  @@index([runId, startedAt])
+  @@map("project_agent_continuation_checkpoints")
 }
 
 model ProjectAgentRun {
@@ -1083,10 +1102,12 @@ model Task {
   dedupeKey        String?   @unique
   batchKey         String?
   externalId       String?
-  operationId        String?   @db.VarChar(128)
-  operationSource    String?   @db.VarChar(64)
-  operationConfirmed Boolean?
-  operationRequestId String?   @db.VarChar(128)
+  operationId          String?   @db.VarChar(128)
+  operationSource      String?   @db.VarChar(64)
+  operationRequestId   String?   @db.VarChar(128)
+  approvalGrantId      String?   @db.VarChar(191)
+  operationExecutionId String?   @db.VarChar(191)
+  operationPlanTaskId  String?   @db.VarChar(191)
   payload          Json?
   executionFingerprint String? @db.VarChar(64)
   result           Json?
@@ -1109,6 +1130,8 @@ model Task {
   childTasks Task[]      @relation("TaskChildren")
   events     TaskEvent[]
   executionCheckpoints TaskExecutionCheckpoint[]
+  approvalGrant ApprovalGrant? @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  operationExecution OperationExecution? @relation(fields: [operationExecutionId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([type])
@@ -1118,9 +1141,100 @@ model Task {
   @@index([parentTaskId])
   @@index([projectId, status, updatedAt])
   @@index([projectId, operationId, updatedAt])
+  @@index([approvalGrantId])
+  @@index([operationExecutionId])
+  @@unique([operationExecutionId, operationPlanTaskId])
   @@index([userId])
   @@index([heartbeatAt])
   @@map("tasks")
+}
+
+model OperationPlanSnapshot {
+  id              String   @id @default(uuid())
+  contractVersion Int      @default(1)
+  userId          String
+  scopeKind       String   @db.VarChar(32)
+  scopeId         String   @db.VarChar(191)
+  projectId       String?
+  episodeId       String?
+  operationId     String   @db.VarChar(128)
+  normalizedInput Json
+  inputHash       String   @db.VarChar(64)
+  planSnapshot    Json
+  planHash        String   @db.VarChar(64)
+  quoteSnapshot   Json
+  quoteHash       String   @db.VarChar(64)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  approvalGrants  ApprovalGrant[]
+  executions      OperationExecution[]
+
+  @@index([userId, scopeKind, scopeId, operationId, createdAt])
+  @@index([expiresAt])
+  @@map("operation_plan_snapshots")
+}
+
+model ApprovalGrant {
+  id                  String   @id @default(uuid())
+  contractVersion     Int      @default(1)
+  userId              String
+  scopeKind           String   @db.VarChar(32)
+  scopeId             String   @db.VarChar(191)
+  projectId           String?
+  episodeId           String?
+  operationId         String   @db.VarChar(128)
+  planSnapshotId      String
+  requestId           String   @db.VarChar(128)
+  inputHash           String   @db.VarChar(64)
+  planHash            String   @db.VarChar(64)
+  quoteHash           String   @db.VarChar(64)
+  quoteCeiling        Decimal? @db.Decimal(18, 6)
+  currency            String?  @db.VarChar(16)
+  issuedAt            DateTime @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  consumedAt          DateTime?
+  consumedExecutionId String?  @db.VarChar(191)
+  version             Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  planSnapshot        OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  executions          OperationExecution[]
+  tasks               Task[]
+
+  @@unique([planSnapshotId])
+  @@index([userId, scopeKind, scopeId, operationId])
+  @@index([consumedExecutionId])
+  @@index([expiresAt])
+  @@map("approval_grants")
+}
+
+model OperationExecution {
+  id              String   @id @default(uuid())
+  contractVersion Int      @default(1)
+  userId          String
+  scopeKind       String   @db.VarChar(32)
+  scopeId         String   @db.VarChar(191)
+  projectId       String?
+  episodeId       String?
+  operationId     String   @db.VarChar(128)
+  planSnapshotId  String
+  approvalGrantId String
+  requestId       String   @db.VarChar(128)
+  status          String   @db.VarChar(32)
+  output          Json?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  planSnapshot    OperationPlanSnapshot @relation(fields: [planSnapshotId], references: [id], onDelete: Restrict)
+  approvalGrant   ApprovalGrant @relation(fields: [approvalGrantId], references: [id], onDelete: Restrict)
+  tasks           Task[]
+
+  @@unique([approvalGrantId])
+  @@unique([planSnapshotId, requestId])
+  @@index([userId, scopeKind, scopeId, operationId, createdAt])
+  @@index([status, updatedAt])
+  @@map("operation_executions")
 }
 
 model TaskExecutionCheckpoint {

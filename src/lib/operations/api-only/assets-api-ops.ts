@@ -9,8 +9,6 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft }
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import {
-  assertOperationPlanConfirmedCost,
-  resolveConfirmedMaxCostForExecution,
   submitPlannedOperationTask,
   type OperationPlan,
 } from '@/lib/operations/planning'
@@ -156,14 +154,11 @@ async function commitAssetGenerateOperation(
     ctx,
     task,
     operationId: 'api_assets_generate',
-    confirmed: input.confirmed === true,
   })
 }
 
 function buildAssetGenerateSchema() {
   return z.object({
-    confirmed: z.boolean().optional(),
-    confirmedMaxCost: z.number().nonnegative().optional(),
     assetId: z.string().min(1),
     scope: scopeSchema,
     kind: mutableKindSchema,
@@ -287,10 +282,6 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       commit: async (ctx, input, plan) => commitAssetGenerateOperation(ctx, input, plan),
       execute: async (ctx, input) => {
         const plan = await planAssetGenerateOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
         return await commitAssetGenerateOperation(ctx, input, plan)
       },
     }),

@@ -50,6 +50,7 @@ export async function createOutboxCommandInTransaction(
       aggregateType: input.aggregateType,
       aggregateId: input.aggregateId,
       payload: toInputJson(input.payload),
+      availableAt: input.availableAt,
     },
     update: {},
   })

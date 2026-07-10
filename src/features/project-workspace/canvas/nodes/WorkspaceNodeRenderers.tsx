@@ -502,7 +502,7 @@ function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['da
   const displayImageUrl = toDisplayImageUrl(data.previewImageUrl)
   const styleImageUrl = mediaLoadingStyleImageUrl(data)
   const displayStyleImageUrl = toDisplayImageUrl(styleImageUrl)
-  const running = data.__running === true
+  const running = nodeIsRunning(data)
   const frameStyle: React.CSSProperties = { aspectRatio: String(shotPreviewAspectRatio(data)) }
 
   return (
@@ -680,7 +680,7 @@ export function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode[
     : typeof data.previewDisplayHeight === 'number' && Number.isFinite(data.previewDisplayHeight) && data.previewDisplayHeight > 0
       ? data.previewDisplayHeight
       : 118
-  const running = data.__running === true
+  const running = nodeIsRunning(data)
   const loadingRingSize = Math.max(48, Math.min(96, Math.round(previewHeight * 0.5)))
   if (running && !displayVideoUrl && !displayImageUrl) {
     return (
@@ -821,7 +821,7 @@ export function ImageContent({
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
-  if (data.__running === true) return <MediaPreview data={data} />
+  if (nodeIsRunning(data)) return <MediaPreview data={data} />
   const details = data.imageDetails
   return (
     <div className="space-y-2">
@@ -870,7 +870,7 @@ export function VideoContent({
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
-  if (data.__running === true) return <MediaPreview data={data} />
+  if (nodeIsRunning(data)) return <MediaPreview data={data} />
   const details = data.videoDetails
   return (
     <div className="space-y-2">
@@ -914,7 +914,7 @@ export function FinalContent({
 }) {
   const details = data.finalDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const running = data.__running === true
+  const running = nodeIsRunning(data)
   const displayOutputUrl = details.renderStatus === 'completed'
     ? toDisplayImageUrl(details.outputUrl) ?? details.outputUrl
     : null
@@ -1030,7 +1030,7 @@ export function BgmScoreContent({
   const errorSection = renderTextSection(labels('error'), details.errorMessage)
 
   const wideContent = (
-    <div className={`grid gap-3 rounded-[18px] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
+    <div className={`grid gap-3 rounded-[18px] lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)] ${nodeIsRunning(data) ? 'workspace-node-loading-surface' : ''}`}>
       <div className="space-y-2">
         {mixSection}
         {statsSection}
@@ -1051,7 +1051,7 @@ export function BgmScoreContent({
     </div>
   )
   const standardContent = (
-    <div className={`space-y-2 rounded-[18px] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
+    <div className={`space-y-2 rounded-[18px] ${nodeIsRunning(data) ? 'workspace-node-loading-surface' : ''}`}>
       {mixSection}
       {statsSection}
       {missingPromptSection}
@@ -1152,7 +1152,7 @@ export function SoundscapeContent({
   const errorSection = renderTextSection(labels('error'), details.errorMessage)
 
   return (
-    <div className={`space-y-2 rounded-[18px] ${data.__running === true ? 'workspace-node-loading-surface' : ''}`}>
+    <div className={`space-y-2 rounded-[18px] ${nodeIsRunning(data) ? 'workspace-node-loading-surface' : ''}`}>
       {mixSection}
       {statsSection}
       <WorkspaceCanvasMotionPresence visible={expanded} className="space-y-2">
@@ -1369,7 +1369,7 @@ export function EditScriptContent({
 }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const details = data.editScriptDetails
-  if (data.__running === true && !details) {
+  if (nodeIsRunning(data) && !details) {
     return (
       <div className="space-y-4">
         <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
@@ -1738,7 +1738,7 @@ export function EditAssetGroupContent({
 function StyleBiblePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
   const sourceImageUrl = data.previewImageUrl ?? null
   const displayImageUrl = toDisplayImageUrl(sourceImageUrl)
-  const running = data.__running === true
+  const running = nodeIsRunning(data)
   if (!sourceImageUrl || !displayImageUrl) return null
 
   return (
@@ -2025,7 +2025,7 @@ export function EditAssetContent({
   readonly labels: ReturnType<typeof useTranslations>
   readonly expanded: boolean
 }) {
-  if (data.__running === true) return <MediaPreview data={data} />
+  if (nodeIsRunning(data)) return <MediaPreview data={data} />
   const details = data.editAssetDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   return (
@@ -2123,7 +2123,7 @@ export function VideoPlanContent({
     setIntrinsicOutputAspectRatio(null)
   }, [displayOutputUrl])
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const running = data.__running === true
+  const running = nodeIsRunning(data)
   const canUseNodeActions = Boolean(data.onAction) && data.readOnly !== true
   const referenceAspectRatio = details.sourceImages.find((cell) => (
     typeof cell?.aspectRatio === 'number' && Number.isFinite(cell.aspectRatio) && cell.aspectRatio > 0

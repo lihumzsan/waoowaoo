@@ -1,41 +1,15 @@
 import type { UIMessage, UIMessageStreamWriter } from 'ai'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
-import {
-  type ProjectAgentToolResult,
-} from '@/lib/operations/types'
-import { commitOperationPlan, planOperation, resolveConfirmedMaxCostForExecution, toOperationPlanView } from '@/lib/operations/planning'
-import {
-  shouldRequireAssistantToolApproval,
-  type AssistantPermissionMode,
-} from '@/lib/project-agent/permission-mode'
+import { type ProjectAgentToolResult } from '@/lib/operations/types'
+import { commitOperationPlan, planOperation, toOperationPlanView } from '@/lib/operations/planning'
+import { invokeApprovedOperationPlan } from '@/lib/operations/planned-operation-invocation'
+import { shouldRequireAssistantToolApproval, type AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import type { ProjectAgentContext, ProjectAgentOperationPlanPreviewPartData } from '@/lib/project-agent/types'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
-import {
-  buildToolError,
-  normalizeOperationExecutionToolError,
-  withOperationErrorDetails,
-} from '@/lib/adapters/operation-error-normalizer'
+import { buildToolError, normalizeOperationExecutionToolError, withOperationErrorDetails } from '@/lib/adapters/operation-error-normalizer'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import {
-  resolveOperationEffectiveEpisodeId,
-  resolveOperationScopeInput,
-} from '@/lib/operations/environment-input'
-
-function attachConfirmedMaxCost(input: unknown, confirmedMaxCost: number | undefined): unknown {
-  if (typeof confirmedMaxCost !== 'number' || !Number.isFinite(confirmedMaxCost)) return input
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return {
-      value: input,
-      confirmedMaxCost,
-    }
-  }
-  return {
-    ...(input as Record<string, unknown>),
-    confirmedMaxCost,
-  }
-}
+import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from '@/lib/operations/environment-input'
 
 export async function executeProjectAgentOperationFromTool(params: {
   request: NextRequest
@@ -106,9 +80,7 @@ export async function executeProjectAgentOperationFromTool(params: {
     }
   }
 
-  const confirmedMaxCost = params.context.confirmedMaxCostByOperationId?.[params.operationId]
-  const scopedInputWithCost = attachConfirmedMaxCost(scopedInput, confirmedMaxCost)
-  const parsed = operation.inputSchema.safeParse(scopedInputWithCost)
+  const parsed = operation.inputSchema.safeParse(scopedInput)
   if (!parsed.success) {
     return {
       ok: false,
@@ -127,7 +99,8 @@ export async function executeProjectAgentOperationFromTool(params: {
     mode: params.assistantPermissionMode,
     operation,
   })
-  if (requiresConfirmation && !isConfirmedOperationInput(params.input)) {
+  const approvedInvocation = params.context.approvedInvocationByOperationId?.[params.operationId] ?? null
+  if (operation.confirmation.kind === 'billable_media' && requiresConfirmation && !approvedInvocation) {
     return {
       ok: false,
       confirmationRequired: true,
@@ -153,7 +126,17 @@ export async function executeProjectAgentOperationFromTool(params: {
   }
   let result: unknown
   try {
-    if (!requiresConfirmation && operation.plan && operation.commit) {
+    if (operation.confirmation.kind === 'billable_media') {
+      if (!approvedInvocation) {
+        throw new Error(`PROJECT_AGENT_APPROVAL_GRANT_REQUIRED:${params.operationId}`)
+      }
+      result = await invokeApprovedOperationPlan({
+        operation,
+        ctx: operationContext,
+        normalizedInput: parsedInput,
+        invocation: approvedInvocation,
+      })
+    } else if (operation.plan && operation.commit) {
       const plan = await planOperation({
         operation,
         ctx: operationContext,
@@ -172,13 +155,9 @@ export async function executeProjectAgentOperationFromTool(params: {
         ctx: operationContext,
         input: parsedInput,
         plan,
-        confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
-          ctx: operationContext,
-          input: parsedInput,
-          plan,
-        }),
       })
     } else {
+      if (!operation.execute) throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
       result = await operation.execute(operationContext, parsedInput)
     }
   } catch (error) {

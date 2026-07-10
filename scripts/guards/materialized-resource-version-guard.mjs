@@ -15,6 +15,10 @@ function read(relativePath) {
 const cache = read('src/lib/query/materialized-resource-cache.ts')
 const materializer = read('src/lib/workspace-resource/materialized-resource.ts')
 const versionContract = read('src/lib/workspace-resource/materialized-resource-version.ts')
+const queryDtoVersion = read('src/lib/workspace-resource/query-dto-version.ts')
+const episodeReader = read('src/lib/projects/read-episode-detail.ts')
+const editBibleRoute = read('src/app/api/projects/[projectId]/bible/route.ts')
+const eventSync = read('src/lib/query/workspace-sse-event-sync.ts')
 const taskTypes = read('src/lib/task/types.ts')
 const violations = []
 
@@ -33,24 +37,47 @@ for (const required of [
 if (/resourceVersion\s*:\s*String\s*\(/.test(materializer)) {
   violations.push('materializer must use the typed revision version contract')
 }
-if (/resourceVersion[\s\S]{0,180}:\s*task\.taskId/.test(materializer)) {
+if (/resourceVersion\s*:\s*task\.taskId/.test(materializer)) {
   violations.push('taskId must never be used as a resourceVersion fallback')
 }
 for (const required of [
-  'createWorkspaceRevisionVersion',
-  'createWorkspaceUpdatedAtVersion',
+  'episode.resourceVersion',
   'CANVAS_TERMINAL_RESOURCE_VERSION_MISSING',
 ]) {
   if (!materializer.includes(required)) violations.push(`materializer is missing version contract: ${required}`)
 }
 
 for (const required of [
-  "REVISION: 'revision'",
-  "UPDATED_AT: 'updated_at'",
+  "REVISION_UPDATED_AT: 'revision_updated_at'",
+  "AGGREGATE_UPDATED_AT: 'aggregate_updated_at'",
   'compareWorkspaceMaterializedResourceVersions',
   'readWorkspaceMaterializedResourceVersionFromData',
 ]) {
   if (!versionContract.includes(required)) violations.push(`version contract is incomplete: ${required}`)
+}
+
+for (const required of [
+  'createEpisodeDataQueryDto',
+  'createEditBibleQueryDto',
+  'collectLatestPersistenceTimestamp',
+]) {
+  if (!queryDtoVersion.includes(required)) violations.push(`formal Query DTO version constructor is incomplete: ${required}`)
+}
+if (!episodeReader.includes('createEpisodeDataQueryDto')) {
+  violations.push('episode detail must construct its aggregate resourceVersion at the formal Query DTO boundary')
+}
+if (!editBibleRoute.includes('createEditBibleQueryDto')) {
+  violations.push('edit Bible GET must construct its resourceVersion at the formal Query DTO boundary')
+}
+for (const required of [
+  "materializedResult.outcome === 'missing'",
+  "materializedResult.outcome === 'identity-conflict'",
+  "normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED",
+]) {
+  if (!eventSync.includes(required)) violations.push(`SSE terminal handoff outcome is incomplete: ${required}`)
+}
+if (/missingCompletedHandoff[\s\S]{0,160}applied\.length\s*===\s*0/.test(eventSync)) {
+  violations.push('duplicate/stale materialized envelopes must not be treated as missing handoff')
 }
 
 if (/type WorkspaceMaterializedResourceEnvelope\s*=\s*\{[\s\S]*resourceVersion\s*:\s*string/.test(taskTypes)) {

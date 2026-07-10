@@ -77,12 +77,7 @@ describe('workflow lab style-choice restoration', () => {
         options: [{ value: preview.id, label: preview.title }],
       }],
       submitLabel: 'Confirm',
-      submit: {
-        kind: 'confirm_edit_style_preview',
-        projectId: project.id,
-        episodeId: episode.id,
-        aspectRatio: '9:16',
-      },
+      submit: { kind: 'submit_tool_output' },
     }
     const messages: UIMessage[] = [{
       id: 'user-message',
@@ -154,10 +149,7 @@ describe('workflow lab style-choice restoration', () => {
       runId: run.id,
       interruptionId: null,
       toolCallId: activity.toolCallId,
-      submit: {
-        projectId: result.labProject.id,
-        episodeId: result.labEpisode.id,
-      },
+      submit: { kind: 'submit_tool_output' },
     })
     expect(persistedCard.groups[0]?.options[0]?.value).toBe(targetPreview.id)
 

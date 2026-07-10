@@ -22,20 +22,32 @@ const executeState = vi.hoisted(() => ({
 }))
 
 const eventState = vi.hoisted(() => ({
-  appendProjectAgentEvents: vi.fn(async (params: { events: Array<{ event: { kind: string; runId?: string; activityId?: string; operationId?: string | null; toolCallId?: string | null } }> }) => {
-    const activityEvent = params.events.map((item) => item.event).find((event) => 'activityId' in event)
-    if (!activityEvent?.activityId || !activityEvent.runId) return null
-    return {
-      activityId: activityEvent.activityId,
-      runId: activityEvent.runId,
-      type: activityEvent.kind === 'activity.started' ? 'operation' : 'operation',
-      status: activityEvent.kind === 'activity.failed' ? 'failed' : activityEvent.kind === 'activity.completed' ? 'completed' : 'running',
-      operationId: activityEvent.operationId ?? 'generate_edit_script_storyboard_images',
-      sourceOperationId: null,
-      toolCallId: activityEvent.toolCallId ?? null,
-      choiceType: null,
-    }
-  }),
+  appendProjectAgentEvents: vi.fn(
+    async (params: {
+      events: Array<{
+        event: {
+          kind: string
+          runId?: string
+          activityId?: string
+          operationId?: string | null
+          toolCallId?: string | null
+        }
+      }>
+    }) => {
+      const activityEvent = params.events.map((item) => item.event).find((event) => 'activityId' in event)
+      if (!activityEvent?.activityId || !activityEvent.runId) return null
+      return {
+        activityId: activityEvent.activityId,
+        runId: activityEvent.runId,
+        type: activityEvent.kind === 'activity.started' ? 'operation' : 'operation',
+        status: activityEvent.kind === 'activity.failed' ? 'failed' : activityEvent.kind === 'activity.completed' ? 'completed' : 'running',
+        operationId: activityEvent.operationId ?? 'generate_edit_script_storyboard_images',
+        sourceOperationId: null,
+        toolCallId: activityEvent.toolCallId ?? null,
+        choiceType: null,
+      }
+    },
+  ),
 }))
 
 const prismaState = vi.hoisted(() => ({
@@ -58,7 +70,9 @@ vi.mock('@/lib/project-agent/event', () => ({
 function buildOperation(
   operationId: ProjectAgentOperationDefinition['id'] = 'generate_edit_script_storyboard_images',
   intent: ProjectAgentOperationDefinition['intent'] = 'act',
-): ProjectAgentOperationDefinition {
+): ProjectAgentOperationDefinition & {
+  execute: NonNullable<ProjectAgentOperationDefinition['execute']>
+} {
   const inputSchema = z.object({
     episodeId: z.string().min(1),
     confirmed: z.boolean().optional(),
@@ -154,17 +168,18 @@ describe('createProjectAgentOperationTool', () => {
         toolCallId: 'call-1',
       },
     })
-    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script_storyboard_images',
-      projectId: 'project-1',
-      userId: 'user-1',
-      toolCallId: 'call-1',
-      assistantPermissionMode: 'ask',
-      input: {
-        episodeId: 'episode-1',
-        confirmed: true,
-      },
-    }))
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'generate_edit_script_storyboard_images',
+        projectId: 'project-1',
+        userId: 'user-1',
+        toolCallId: 'call-1',
+        assistantPermissionMode: 'ask',
+        input: {
+          episodeId: 'episode-1',
+        },
+      }),
+    )
     expect(onExecutionSettled).toHaveBeenCalledWith({ ok: true })
   })
 
@@ -180,7 +195,7 @@ describe('createProjectAgentOperationTool', () => {
       plan: vi.fn(async () => {
         throw new Error('CAPABILITY_VALUE_NOT_ALLOWED: duration value 3 is not allowed')
       }),
-    }
+    } as ProjectAgentOperationDefinition
     const tool = createProjectAgentOperationTool({
       request: new Request('http://localhost') as unknown as NextRequest,
       operation,
@@ -220,9 +235,11 @@ describe('createProjectAgentOperationTool', () => {
     })
     expect(operation.plan).toHaveBeenCalledTimes(1)
     expect(executeState.executeProjectAgentOperationFromTool).not.toHaveBeenCalled()
-    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'data-agent-operation-start',
-    }))
+    expect(writer.write).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'data-agent-operation-start',
+      }),
+    )
     expect(onExecutionSettled).toHaveBeenCalledWith({ ok: false })
   })
 
@@ -259,16 +276,18 @@ describe('createProjectAgentOperationTool', () => {
       },
     })
 
-    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script_storyboard_images',
-      projectId: 'project-1',
-      userId: 'user-1',
-      assistantPermissionMode: 'auto',
-      toolCallId: 'call-1',
-      input: {
-        episodeId: 'episode-1',
-      },
-    }))
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operationId: 'generate_edit_script_storyboard_images',
+        projectId: 'project-1',
+        userId: 'user-1',
+        assistantPermissionMode: 'auto',
+        toolCallId: 'call-1',
+        input: {
+          episodeId: 'episode-1',
+        },
+      }),
+    )
   })
 
   it('emits running activity for read-only query tools without an operation-start marker', async () => {
@@ -313,12 +332,16 @@ describe('createProjectAgentOperationTool', () => {
         toolCallId: 'call-1',
       }),
     })
-    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'data-agent-operation-start',
-    }))
-    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(expect.objectContaining({
-      operationId: 'get_project_context',
-    }))
+    expect(writer.write).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'data-agent-operation-start',
+      }),
+    )
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        operationId: 'get_project_context',
+      }),
+    )
   })
 
   it('does not wrap choice interruptions in a separate operation activity', async () => {
@@ -365,19 +388,25 @@ describe('createProjectAgentOperationTool', () => {
     })
 
     expect(eventState.appendProjectAgentEvents).not.toHaveBeenCalled()
-    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'data-agent-activity',
-    }))
-    expect(writer.write).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'data-agent-operation-start',
-    }))
-    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
-      toolCallId: 'call-choice-1',
-      input: {
-        episodeId: 'episode-1',
-      },
-    }))
+    expect(writer.write).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'data-agent-activity',
+      }),
+    )
+    expect(writer.write).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'data-agent-operation-start',
+      }),
+    )
+    expect(executeState.executeProjectAgentOperationFromTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+        toolCallId: 'call-choice-1',
+        input: {
+          episodeId: 'episode-1',
+        },
+      }),
+    )
   })
 
   it('fails long-running assistant operations that do not return an async task signal', async () => {
@@ -433,14 +462,16 @@ describe('createProjectAgentOperationTool', () => {
     expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
 
     executeState.executeProjectAgentOperationFromTool.mockRejectedValueOnce(new Error('PROVIDER_THROWN'))
-    await expect(tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
-      toolCall: {
-        type: 'function_call',
-        callId: 'call-2',
-        name: 'generate_edit_script_storyboard_images',
-        arguments: JSON.stringify({ episodeId: 'episode-1' }),
-      },
-    })).resolves.toContain('PROVIDER_THROWN')
+    await expect(
+      tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
+        toolCall: {
+          type: 'function_call',
+          callId: 'call-2',
+          name: 'generate_edit_script_storyboard_images',
+          arguments: JSON.stringify({ episodeId: 'episode-1' }),
+        },
+      }),
+    ).resolves.toContain('PROVIDER_THROWN')
     expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
   })
 })

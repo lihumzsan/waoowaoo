@@ -23,9 +23,7 @@ export const POST = apiHandler(async (
     })
   }
 
-  const input: Record<string, unknown> = {
-    confirmed: body.confirmed === true,
-  }
+  const input: Record<string, unknown> = {}
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
   if (typeof body.bgmVolume === 'number') input.bgmVolume = body.bgmVolume
 

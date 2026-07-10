@@ -80,16 +80,9 @@ export interface E2eApprovalAction {
   readonly reason: string | null
 }
 
-export interface E2eTaskFollowUpAction {
-  readonly runId: string
-  readonly waitId: string
-  readonly claimId: string
-}
-
 export type E2eNextAction =
   | { readonly kind: 'choice'; readonly action: E2eChoiceAction }
   | { readonly kind: 'approval'; readonly action: E2eApprovalAction }
-  | { readonly kind: 'task_follow_up'; readonly action: E2eTaskFollowUpAction }
   | { readonly kind: 'wait' }
 
 export interface E2eFailure {

@@ -7,7 +7,6 @@ import {
 import type { NextRequest } from 'next/server'
 import { buildToolError } from '@/lib/adapters/operation-error-normalizer'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
-import { isConfirmedOperationInput } from '@/lib/operations/confirmation'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import type {
   OperationAgentFlow,
@@ -48,20 +47,6 @@ function normalizeToolInputForExecution(value: unknown): unknown {
     out[key] = normalizeToolInputForExecution(child)
   }
   return out
-}
-
-function injectConfirmedInput(input: unknown, requiresApproval: boolean): unknown {
-  if (!requiresApproval || isConfirmedOperationInput(input)) return input
-  if (isRecord(input)) {
-    return {
-      ...input,
-      confirmed: true,
-    }
-  }
-  return {
-    value: input,
-    confirmed: true,
-  }
 }
 
 function readToolCallId(details: unknown): string | null {
@@ -182,7 +167,7 @@ export function createProjectAgentOperationTool(
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
-      const normalizedInput = injectConfirmedInput(normalizeToolInputForExecution(toolInput), requiresApproval)
+      const normalizedInput = normalizeToolInputForExecution(toolInput)
       const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
         operationId: params.operation.id,
         toolCallId,

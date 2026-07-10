@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import type { ChatStatus } from 'ai'
 import { useLocale, useTranslations } from 'next-intl'
-import { useQueryClient } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
 import {
   AssistantRuntimeProvider,
@@ -19,7 +17,6 @@ import {
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
 import { useWorkspaceAssistantRuntime, type WorkspaceAssistantChoiceType } from './workspace-assistant/useWorkspaceAssistantRuntime'
-import { apiFetch } from '@/lib/api-fetch'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { TextAttachmentUploadDialog } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
@@ -35,17 +32,6 @@ import {
   reserveWorkspaceAssistantMessageKey,
   WORKSPACE_ASSISTANT_SEND_MESSAGE_EVENT,
 } from './workspace-assistant/assistant-send-event'
-import {
-  collectAssistantAsyncTaskSubmissions,
-} from './workspace-assistant/async-task-follow-up'
-import {
-  extractWorkspaceResourceChangesFromWriteResult,
-  syncWorkspaceResourceChanges,
-} from '@/lib/query/resource-change-sync'
-import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
-import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import { queryKeys } from '@/lib/query/keys'
-import { useWorkspaceProvider } from '../WorkspaceProvider'
 import type { WorkspaceAssistantSelectionContext } from '../canvas/ProjectWorkspaceCanvas'
 import {
   isAssistantPermissionMode,
@@ -238,18 +224,6 @@ function WorkspaceAssistantRunFailureNotice({
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function readAssistantToolOutput(part: unknown): unknown | null {
-  if (!isRecord(part)) return null
-  const type = typeof part.type === 'string' ? part.type : ''
-  if (type !== 'dynamic-tool' && !type.startsWith('tool-')) return null
-  if (part.state !== 'output-available') return null
-  return 'output' in part ? part.output : null
-}
-
 function readStoredAssistantPanelWidth(): number {
   if (typeof window === 'undefined') return WORKSPACE_ASSISTANT_PANEL_WIDTH_PX
   const storedValue = window.localStorage.getItem(WORKSPACE_ASSISTANT_WIDTH_STORAGE_KEY)
@@ -274,13 +248,9 @@ export default function WorkspaceAssistantPanel({
   autoStartKey,
   onAutoStartConsumed,
   onActiveOperationChange,
-  onStyleBibleConfirmed,
 }: WorkspaceAssistantPanelProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
-  const queryClient = useQueryClient()
-  const { subscribeTaskEvents } = useWorkspaceProvider()
-  const confirmEditStylePreview = useConfirmProjectEditStylePreview(projectId)
   const [assistantPanelWidth, setAssistantPanelWidth] = useState(readStoredAssistantPanelWidth)
   const [isResizing, setIsResizing] = useState(false)
   const resizeStateRef = useRef<{
@@ -309,39 +279,6 @@ export default function WorkspaceAssistantPanel({
     selectedAssetId: selection?.selectedAssetId ?? null,
     assistantPermissionMode,
   })
-  const assistantRuntimeRef = useRef(assistantRuntime)
-  const syncedAssistantToolOutputKeysRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    assistantRuntimeRef.current = assistantRuntime
-  }, [assistantRuntime])
-  useEffect(() => {
-    const pendingSyncs: Promise<unknown>[] = []
-    for (const message of assistantRuntime.messages) {
-      message.parts.forEach((part, partIndex) => {
-        const output = readAssistantToolOutput(part)
-        if (output === null) return
-        const partRecord: Record<string, unknown> | null = isRecord(part) ? part : null
-        const toolCallId = typeof partRecord?.toolCallId === 'string' ? partRecord.toolCallId : null
-        const key = toolCallId
-          ? `${message.id}:${toolCallId}`
-          : `${message.id}:part:${String(partIndex)}`
-        if (syncedAssistantToolOutputKeysRef.current.has(key)) return
-        const changes = extractWorkspaceResourceChangesFromWriteResult({
-          result: output,
-          projectId,
-          fallbackEpisodeId: episodeId ?? null,
-        })
-        if (changes.length === 0) return
-        syncedAssistantToolOutputKeysRef.current.add(key)
-        pendingSyncs.push(syncWorkspaceResourceChanges({
-          queryClient,
-          changes,
-        }))
-      })
-    }
-    if (pendingSyncs.length === 0) return
-    void Promise.all(pendingSyncs)
-  }, [assistantRuntime.messages, episodeId, projectId, queryClient])
   const consumedMessageKeysRef = useRef<Set<string>>(new Set())
   const sendAssistantMessageOnce = useCallback(async (
     key: string,
@@ -432,9 +369,9 @@ export default function WorkspaceAssistantPanel({
   }
   const handleSubmitChoiceResponse = async (params: {
     runId: string
-    interruptionId: string | null
+    interruptionId: string
     choiceType: WorkspaceAssistantChoiceType
-    toolCallId: string | null
+    toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
   }) => {
@@ -446,40 +383,6 @@ export default function WorkspaceAssistantPanel({
       output: params.output,
       visibleUserText: params.visibleUserText,
     })
-  }
-  const handleStylePreviewSelected = useCallback(async (params: {
-    runId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => {
-    onStyleBibleConfirmed?.()
-    await assistantRuntimeRef.current.submitChoiceResponse({
-      runId: params.runId,
-      interruptionId: null,
-      choiceType: 'style',
-      toolCallId: null,
-      output: {
-        ok: true,
-        stylePreviewId: params.stylePreviewId,
-        aspectRatio: params.aspectRatio,
-      },
-    })
-  }, [onStyleBibleConfirmed])
-  const handleConfirmEditStylePreviewChoice = async (params: {
-    projectId: string
-    episodeId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => {
-    if (params.projectId !== projectId) {
-      throw new Error('ASSISTANT_CHOICE_PROJECT_MISMATCH')
-    }
-    await confirmEditStylePreview.mutateAsync({
-      episodeId: params.episodeId,
-      stylePreviewId: params.stylePreviewId,
-      aspectRatio: params.aspectRatio,
-    })
-    onStyleBibleConfirmed?.()
   }
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
@@ -497,15 +400,10 @@ export default function WorkspaceAssistantPanel({
   }, [stylePreviewDockCardKey])
   const currentActivity = assistantRuntime.sessionState?.currentActivity ?? null
   const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
-  const taskSubmissions = useMemo(
-    () => collectAssistantAsyncTaskSubmissions(assistantRuntime.messages),
-    [assistantRuntime.messages],
-  )
   const activeAssistantTaskTargets = useMemo(() => {
     const operationId = activeExternalTaskOperationId ?? assistantRuntime.pendingOperationId ?? null
     const fromActiveTasks = (assistantRuntime.sessionState?.activeTasks ?? []).flatMap((task) => {
-      const submission = taskSubmissions.get(task.taskId)
-      const taskOperationId = task.operationId ?? submission?.operationId ?? null
+      const taskOperationId = task.operationId
       if (operationId && taskOperationId !== operationId) return []
       const target = buildWorkspaceAssistantActiveTaskTarget({
         taskId: task.taskId,
@@ -513,7 +411,7 @@ export default function WorkspaceAssistantPanel({
         taskType: task.taskType,
         targetType: task.targetType,
         targetId: task.targetId,
-        sourceKind: submission?.kind === 'single' ? submission.data.sourceKind ?? null : null,
+        sourceKind: null,
       })
       return target ? [target] : []
     })
@@ -522,7 +420,6 @@ export default function WorkspaceAssistantPanel({
     activeExternalTaskOperationId,
     assistantRuntime.pendingOperationId,
     assistantRuntime.sessionState?.activeTasks,
-    taskSubmissions,
   ])
   const activeExternalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
     activeExternalTaskOperationId && currentActivity
@@ -562,8 +459,6 @@ export default function WorkspaceAssistantPanel({
     hideChoiceCards: true,
     hideStylePreviewGenerationCards: shouldDockStylePreviewGenerationCard,
     onSubmitChoiceResponse: handleSubmitChoiceResponse,
-    onConfirmEditStylePreviewChoice: handleConfirmEditStylePreviewChoice,
-    onStylePreviewSelected: handleStylePreviewSelected,
     onPreviewImage: setPreviewImageUrl,
   })
   const awaitingUserInput = resolveWorkspaceAssistantAwaitingUserInput({
@@ -730,7 +625,6 @@ export default function WorkspaceAssistantPanel({
                           name="edit-style-preview-generation"
                           status={{ type: 'complete' }}
                           data={displayedStylePreviewGenerationCard.data}
-                          onStyleSelected={handleStylePreviewSelected}
                           onPreviewImage={setPreviewImageUrl}
                         />
                       )
@@ -745,7 +639,6 @@ export default function WorkspaceAssistantPanel({
                     <AssistantChoiceCardView
                       data={displayedActiveChoiceCard.data}
                       onSubmitChoiceResponse={handleSubmitChoiceResponse}
-                      onConfirmEditStylePreviewChoice={handleConfirmEditStylePreviewChoice}
                     />
                   </div>
                 ) : null}

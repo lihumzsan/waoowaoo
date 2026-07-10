@@ -2,7 +2,6 @@ import { TASK_EVENT_TYPE, TASK_TYPE } from './types'
 
 const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.IMAGE_PANEL]: 'progress.taskType.imagePanel',
-  [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE]: 'progress.taskType.editStylePreviewsGenerate',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'progress.taskType.editStylePreviewImage',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'progress.taskType.editScriptStoryboardCameraPlan',
   [TASK_TYPE.IMAGE_CHARACTER]: 'progress.taskType.imageCharacter',
@@ -41,10 +40,6 @@ const STAGE_LABELS: Record<string, string> = {
   generate_character_image: 'progress.stage.generateCharacterImage',
   generate_location_image: 'progress.stage.generateLocationImage',
   generate_panel_candidate: 'progress.stage.generatePanelCandidate',
-  edit_style_previews_prepare: 'progress.stage.editStylePreviewsPrepare',
-  edit_style_previews_generate_text: 'progress.stage.editStylePreviewsGenerateText',
-  edit_style_previews_submit_images: 'progress.stage.editStylePreviewsSubmitImages',
-  edit_style_previews_wait_images: 'progress.stage.editStylePreviewsWaitImages',
   edit_style_preview_image_prepare: 'progress.stage.editStylePreviewImagePrepare',
   edit_style_preview_image_generate: 'progress.stage.editStylePreviewImageGenerate',
   edit_style_preview_image_persist: 'progress.stage.editStylePreviewImagePersist',

@@ -23,13 +23,10 @@ import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
   declinePendingProjectAgentInterruptionsForUserTurn,
-  reopenProjectAgentInterruption,
 } from '@/lib/project-agent/interruptions'
 import {
-  appendProjectAgentEvents,
-  getCurrentProjectAgentActivity,
-} from '@/lib/project-agent/event'
-import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
+  buildEditFirstChoiceResultFromDecision,
+} from '@/lib/project-agent/edit-first-choice-result'
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
@@ -38,7 +35,6 @@ import {
   getProjectAgentRun,
   listBlockingProjectAgentRunsForThreadClear,
   safelyUpdateProjectAgentRunStatus,
-  updateProjectAgentRunStatus,
   supersedePendingRunsInScope,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
@@ -88,6 +84,15 @@ function mapProjectAgentError(error: unknown): ApiError {
       || error.message === 'PROJECT_ASSISTANT_TEXT_ATTACHMENT_INVALID'
     ) {
       return new ApiError('INVALID_PARAMS', {
+        code: error.message,
+        message: error.message,
+      })
+    }
+    if (
+      error.message === 'PROJECT_AGENT_CHOICE_OFFER_STALE'
+      || error.message === 'PROJECT_AGENT_CHOICE_OFFER_IDENTITY_MISMATCH'
+    ) {
+      return new ApiError('CONFLICT', {
         code: error.message,
         message: error.message,
       })
@@ -186,16 +191,8 @@ function buildControlVisibleUserMessage(params: {
   controlAction: ProjectAgentControlAction
   text: string
 }): UIMessage {
-  const idSuffix = params.controlAction.type === 'approval_response'
-    ? params.controlAction.interruptionId
-    : params.controlAction.type === 'choice_response'
-      ? params.controlAction.interruptionId
-        ?? readNonEmptyString(params.controlAction.output.cardId)
-        ?? params.controlAction.toolCallId
-        ?? params.controlAction.choiceType
-      : params.controlAction.waitId
   return {
-    id: `workspace-control-user:${params.controlAction.type}:${params.controlAction.runId}:${idSuffix}`,
+    id: `workspace-control-user:${params.controlAction.type}:${params.controlAction.runId}:${params.controlAction.interruptionId}`,
     role: 'user',
     parts: [{
       type: 'text',
@@ -286,78 +283,37 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'choice_response') {
-    let consumedInterruptionId: string | null = null
-    if (controlAction.interruptionId) {
-      const consumedChoice = await consumeProjectAgentChoiceInterruption({
-        ...scope,
-        runId: controlAction.runId,
-        interruptionId: controlAction.interruptionId,
-        response: controlAction.output as Prisma.InputJsonObject,
-      })
-      if (!consumedChoice) {
-        throw new ApiError('CONFLICT', {
-          code: 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
-          message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
-        })
-      }
-      consumedInterruptionId = consumedChoice.id
-    } else {
-      const choiceActivity = await getCurrentProjectAgentActivity({
-        projectId: scope.projectId,
-        userId: scope.userId,
-        episodeId: scope.episodeId,
-        assistantId: scope.assistantId,
-        runId: controlAction.runId,
-      })
-      if (!choiceActivity || choiceActivity.type !== 'awaiting_choice') {
-        throw new ApiError('CONFLICT', {
-          code: 'PROJECT_AGENT_CHOICE_ACTIVITY_NOT_PENDING',
-          message: 'the choice activity is not pending for this control action',
-        })
-      }
-      await appendProjectAgentEvents({
-        scope,
-        events: [{
-          runFence: createProjectAgentRunFence(params.run),
-          idempotencyKey: `activity-completed:${choiceActivity.activityId}:choice-response`,
-          event: {
-            kind: 'activity.completed',
-            runId: controlAction.runId,
-            activityId: choiceActivity.activityId,
-          },
-        }],
+    const latestUserText = readLatestVisibleUserText(params.messages)
+    const consumedChoice = await consumeProjectAgentChoiceInterruption({
+      ...scope,
+      runId: controlAction.runId,
+      interruptionId: controlAction.interruptionId,
+      cardId: controlAction.cardId,
+      toolCallId: controlAction.toolCallId,
+      response: controlAction.output as Prisma.InputJsonObject,
+      latestUserText,
+    })
+    if (!consumedChoice) {
+      throw new ApiError('CONFLICT', {
+        code: 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
+        message: 'the choice interruption is not pending (already consumed, superseded, or unknown)',
       })
     }
-    try {
-      const choiceResult = buildEditFirstChoiceResult({
-        choiceType: controlAction.choiceType,
-        toolCallId: controlAction.toolCallId,
-        output: controlAction.output,
-        latestUserText: readLatestVisibleUserText(params.messages),
-      })
-      if (!choiceResult) {
-        throw new Error('PROJECT_AGENT_CHOICE_RESPONSE_INVALID')
-      }
-      return {
-        kind: 'choice',
-        interruptionId: controlAction.interruptionId,
-        choiceType: controlAction.choiceType,
-        toolCallId: controlAction.toolCallId,
-        cardId: readNonEmptyString(controlAction.output.cardId),
-        choiceResult,
-      }
-    } catch (error) {
-      if (consumedInterruptionId) {
-        await reopenProjectAgentInterruption(consumedInterruptionId)
-      }
-      throw error
+    return {
+      kind: 'choice',
+      interruptionId: consumedChoice.id,
+      choiceType: consumedChoice.offer.card.choiceType,
+      toolCallId: consumedChoice.offer.card.toolCallId,
+      cardId: consumedChoice.offer.card.cardId,
+      choiceResult: buildEditFirstChoiceResultFromDecision({
+        decision: consumedChoice.parsedResponse,
+        toolCallId: consumedChoice.offer.card.toolCallId,
+      }),
     }
   }
 
-  throw new ApiError('INVALID_PARAMS', {
-    code: 'PROJECT_AGENT_TASK_FOLLOW_UP_SERVER_ONLY',
-    message: 'task follow-up is delivered only by the durable server outbox',
-  })
+  const unreachable: never = controlAction
+  throw new Error(`PROJECT_AGENT_CONTROL_UNREACHABLE:${String(unreachable)}`)
 }
 
 export const runtime = 'nodejs'
@@ -398,31 +354,6 @@ async function resolveProjectAgentRunForRequest(params: {
     })
   }
   return run
-}
-
-async function transitionConsumedControlToRunning(params: {
-  controlAction: ProjectAgentControlAction
-  run: ProjectAgentRunRecord
-}): Promise<void> {
-  if (params.controlAction.type === 'task_follow_up') {
-    // Wait consumption starts the follow-up activity and transitions the run in
-    // the same ProjectAgentEvent transaction.
-    return
-  }
-  if (
-    params.controlAction.type === 'approval_response'
-    || (params.controlAction.type === 'choice_response' && params.controlAction.interruptionId)
-  ) {
-    // Interruption consumption and the awaiting_* -> running transition are
-    // projected atomically by the interruption.resolved event reducer.
-    return
-  }
-  await updateProjectAgentRunStatus({
-    runFence: createProjectAgentRunFence(params.run),
-    status: 'running',
-    expectedStatuses: ['awaiting_choice'],
-    stopReason: params.controlAction.type,
-  })
 }
 
 export const DELETE = apiHandler(async (
@@ -541,10 +472,6 @@ export const POST = apiHandler(async (
         run,
       })
       if (controlAction) {
-        await transitionConsumedControlToRunning({
-          controlAction,
-          run,
-        })
         const refreshedRun = await getProjectAgentRun({ ...scope, runId: run.id })
         if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
         run = refreshedRun

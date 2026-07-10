@@ -352,31 +352,15 @@ function ProjectWorkspaceCanvasContent({
   const editScriptGenerationActive = scopedEditScript?.chapterId
     ? editScriptGenerationActiveChapterIds.has(scopedEditScript.chapterId)
     : editScriptGenerationActiveChapterIds.size > 0
-  const projectedEditScript = useMemo(() => (
-    scopedEditScript
-      ? {
-          ...scopedEditScript,
-          status: scopedEditScript.chapterId && editScriptGenerationActiveChapterIds.has(scopedEditScript.chapterId)
-            ? 'generating'
-            : scopedEditScript.status === 'generating'
-              ? 'ready'
-              : scopedEditScript.status,
-        }
-      : scopedEditScript
-  ), [scopedEditScript, editScriptGenerationActiveChapterIds])
+  const projectedEditScript = scopedEditScript
   const projectedEditScripts = useMemo((): readonly ProjectEditScript[] => {
     if (workspaceScope.kind === 'chapter') return projectedEditScript ? [projectedEditScript] : []
     const byId = new Map<string, ProjectEditScript>()
-    editScripts.forEach((script) => byId.set(script.id, script.chapterId && editScriptGenerationActiveChapterIds.has(script.chapterId)
-      ? { ...script, status: 'generating' }
-      : script))
+    editScripts.forEach((script) => byId.set(script.id, script))
     if (projectedEditScript) byId.set(projectedEditScript.id, projectedEditScript)
     return Array.from(byId.values())
-  }, [editScriptGenerationActiveChapterIds, editScripts, projectedEditScript, workspaceScope])
+  }, [editScripts, projectedEditScript, workspaceScope])
   const effectiveEditScriptPending = editScriptPending
-    || activeAssistantOperationId === 'generate_edit_script'
-    || activeAssistantOperationId === 'plan_chapters'
-    || activeAssistantOperationId === 'replan_chapter'
     || (editScriptGenerationActive && !scopedEditScript)
   const clearFocusHighlightedNode = useCallback((nodeId: string) => {
     const timer = focusHighlightClearTimersRef.current.get(nodeId)
@@ -518,7 +502,6 @@ function ProjectWorkspaceCanvasContent({
     editScript: projectedEditScript,
     editScripts: projectedEditScripts,
     editShotExecutionPlan: scopedEditShotExecutionPlan,
-    activeAssistantOperationId,
     activeTaskTargets: activeAssistantTaskTargets,
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,
@@ -835,7 +818,6 @@ function ProjectWorkspaceCanvasContent({
       editScript: projectedEditScript,
       editScripts: projectedEditScripts,
       editShotExecutionPlan: scopedEditShotExecutionPlan,
-      activeAssistantOperationId,
       activeTaskTargets: activeAssistantTaskTargets,
       editScriptPending: effectiveEditScriptPending,
       finalVideo,

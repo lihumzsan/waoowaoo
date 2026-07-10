@@ -1,13 +1,23 @@
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
-import { createMutationBatch } from '@/lib/mutation-batch/service'
+import { createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import { hasPanelVideoOutput } from '@/lib/task/has-output'
 import type { TaskSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import { assertOperationPlanConfirmedCost, createPlannedTask, requirePlannedTaskBillingInfo, resolveConfirmedMaxCostForExecution, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
-import { applySystemVideoDuration, assertNoManagedVideoModelInput, buildVideoTaskPayload, isRecord, normalizeString, requirePanelSystemVideoDurationSec, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
+import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import {
+  applySystemVideoDuration,
+  assertNoManagedVideoModelInput,
+  buildVideoTaskPayload,
+  isRecord,
+  normalizeString,
+  requirePanelSystemVideoDurationSec,
+  validateVideoTaskPayloadOrThrow,
+  type UnknownObject,
+} from './shared'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 
 export type PlannedPanelVideoMetadata = {
   panelId: string
@@ -34,7 +44,10 @@ export async function planGeneratePanelVideoOperation(params: {
   operationId: string
 }): Promise<OperationPlan> {
   assertNoManagedVideoModelInput(params.input)
-  const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
+  const { payload, localeForTask } = buildVideoTaskPayload({
+    ctx: params.ctx,
+    input: params.input,
+  })
   let panelId = normalizeString(payload.panelId)
   let previousVideoUrl: string | null = null
   let previousLastVideoGenerationOptions: unknown = null
@@ -47,7 +60,13 @@ export async function planGeneratePanelVideoOperation(params: {
     }
     const panel = await prisma.projectPanel.findFirst({
       where: { storyboardId, panelIndex: Number(panelIndex) },
-      select: { id: true, videoUrl: true, duration: true, lastVideoGenerationOptions: true, storyboard: { select: { episodeId: true } } },
+      select: {
+        id: true,
+        videoUrl: true,
+        duration: true,
+        lastVideoGenerationOptions: true,
+        storyboard: { select: { episodeId: true } },
+      },
     })
     panelId = panel?.id || ''
     previousVideoUrl = panel?.videoUrl ?? null
@@ -61,7 +80,12 @@ export async function planGeneratePanelVideoOperation(params: {
   if (normalizeString(payload.panelId)) {
     const panel = await prisma.projectPanel.findUnique({
       where: { id: panelId },
-      select: { videoUrl: true, duration: true, lastVideoGenerationOptions: true, storyboard: { select: { episodeId: true } } },
+      select: {
+        videoUrl: true,
+        duration: true,
+        lastVideoGenerationOptions: true,
+        storyboard: { select: { episodeId: true } },
+      },
     })
     if (!panel) {
       throw new Error('PROJECT_AGENT_PANEL_NOT_FOUND')
@@ -97,7 +121,11 @@ export async function planGeneratePanelVideoOperation(params: {
           hasOutputAtStart: await hasPanelVideoOutput(panelId),
         }),
         dedupeKey: `video_panel:${panelId}`,
-        billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_PANEL, payload, allowedApiTypes: ['video'] }),
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.VIDEO_PANEL,
+          payload,
+          allowedApiTypes: ['video'],
+        }),
       }),
     ],
     metadata: {
@@ -115,6 +143,7 @@ export async function commitGeneratePanelVideoPlan(params: {
   operationId: string
   plan: OperationPlan
 }) {
+  const transaction = requireOperationExecutionTransaction(params.ctx)
   const task = params.plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
   const metadata = readPlannedPanelVideoMetadata(params.plan)
@@ -122,10 +151,9 @@ export async function commitGeneratePanelVideoPlan(params: {
     ctx: params.ctx,
     task,
     operationId: params.operationId,
-    confirmed: params.input.confirmed === true,
   })
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatch = await createMutationBatchInTransaction(transaction, {
     projectId: params.ctx.projectId,
     userId: params.ctx.userId,
     source: params.ctx.source,
@@ -168,21 +196,4 @@ export async function commitGeneratePanelVideoPlan(params: {
     targetId: metadata.panelId,
     mutationBatchId: mutationBatch.id,
   }
-}
-
-export async function executeGeneratePanelVideoOperation(params: {
-  ctx: ProjectAgentOperationContext
-  input: UnknownObject
-  operationId: string
-}) {
-  const plan = await planGeneratePanelVideoOperation(params)
-  await assertOperationPlanConfirmedCost({
-    plan,
-    confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
-      ctx: params.ctx,
-      input: params.input,
-      plan,
-    }),
-  })
-  return await commitGeneratePanelVideoPlan({ ...params, plan })
 }

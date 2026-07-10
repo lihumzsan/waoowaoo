@@ -5,8 +5,12 @@ import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 import { getProjectModelConfig } from '@/lib/config-service'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import type { ProjectAgentChoiceCardPartData, ProjectAgentChoiceCardGroup } from './types'
+import type { ProjectAgentChoiceCardDefinition, ProjectAgentChoiceCardGroup } from './types'
 import type { ProjectAgentLocale } from './locale'
+import {
+  fingerprintProjectAgentChoiceResource,
+  type ProjectAgentChoiceReviewedResource,
+} from './choice-offer'
 
 const SCRIPT_INTAKE_AI_FILL_VALUE = 'ai_fill'
 const SCRIPT_INTAKE_MAX_SEED_LENGTH = 2000
@@ -50,34 +54,6 @@ export const scriptIntakePlannerOutputSchema = z.object({
 }).strict()
 
 export type ScriptIntakePlannerOutput = z.infer<typeof scriptIntakePlannerOutputSchema>
-
-const scriptIntakeChoiceCardSchema = z.object({
-  cardId: z.string().min(1),
-  runId: z.string().min(1).optional().nullable(),
-  interruptionId: z.string().min(1).optional().nullable(),
-  toolCallId: z.string().min(1),
-  choiceType: z.literal('script_intake'),
-  variant: z.literal('confirm_or_reply'),
-  title: z.string().min(1),
-  description: z.string().optional().nullable(),
-  groups: z.array(z.object({
-    key: z.string().min(1),
-    label: z.string().min(1),
-    required: z.boolean(),
-    options: z.array(scriptIntakeOptionSchema.extend({
-      imageUrl: z.string().optional().nullable(),
-      meta: z.string().optional().nullable(),
-    })),
-  })),
-  submitLabel: z.string().min(1),
-  submit: z.object({
-    kind: z.literal('submit_tool_output'),
-  }),
-  replyLabel: z.string().optional().nullable(),
-  replyPlaceholder: z.string().optional().nullable(),
-  replySubmitLabel: z.string().optional().nullable(),
-  replyToolOutputKey: z.string().optional().nullable(),
-}).passthrough()
 
 function readString(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -204,7 +180,7 @@ export function buildScriptIntakeChoiceCard(params: {
   readonly toolCallId: string
   readonly seedText: string
   readonly plan: ScriptIntakePlannerOutput
-}): ProjectAgentChoiceCardPartData {
+}): ProjectAgentChoiceCardDefinition {
   if (params.workflow.stage !== 'ready_to_ingest_script') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_intake:stage=${params.workflow.stage}`)
   }
@@ -240,10 +216,28 @@ export function buildScriptIntakeChoiceCard(params: {
   }
 }
 
-export function readPersistedScriptIntakeChoiceCard(value: unknown): ProjectAgentChoiceCardPartData | null {
-  const parsed = scriptIntakeChoiceCardSchema.safeParse(value)
-  if (!parsed.success) return null
-  return parsed.data as ProjectAgentChoiceCardPartData
+export function buildScriptIntakeChoiceOfferCandidate(params: {
+  readonly locale: ProjectAgentLocale
+  readonly workflow: EditFirstWorkflowState
+  readonly toolCallId: string
+  readonly seedText: string
+  readonly plan: ScriptIntakePlannerOutput
+}): {
+  card: ProjectAgentChoiceCardDefinition
+  reviewedResource: ProjectAgentChoiceReviewedResource
+} {
+  const card = buildScriptIntakeChoiceCard(params)
+  return {
+    card,
+    reviewedResource: fingerprintProjectAgentChoiceResource({
+      kind: 'script_intake_prompt',
+      snapshot: {
+        cardId: card.cardId,
+        choiceType: card.choiceType,
+        groups: card.groups,
+      },
+    }),
+  }
 }
 
 export async function planScriptIntakeQuestions(input: {

@@ -1,9 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
-import { isEditFirstChoiceType, type EditFirstChoiceType } from './edit-first-choice-tools'
-import { buildEditFirstAssistantChoiceCard } from './choice-card'
-import { readPersistedScriptIntakeChoiceCard } from './script-intake'
+import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import { parseProjectAgentChoiceOffer } from './choice-offer'
 import type {
   EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
@@ -122,45 +121,21 @@ function readOperationPlanView(value: Prisma.JsonValue | undefined): OperationPl
   return record as unknown as OperationPlanView
 }
 
-function readChoiceType(value: Prisma.JsonValue | undefined): EditFirstChoiceType {
-  if (isEditFirstChoiceType(value)) return value
-  throw new Error('PROJECT_AGENT_PENDING_CHOICE_TYPE_INVALID')
-}
-
-function readPersistedChoiceCard(value: Prisma.JsonValue | undefined): ProjectAgentChoiceCardPartData | null {
-  const record = readRecord(value ?? null)
-  if (typeof record.cardId !== 'string' || typeof record.toolCallId !== 'string') return null
-  if (!isEditFirstChoiceType(record.choiceType)) return null
-  if (typeof record.title !== 'string' || typeof record.submitLabel !== 'string') return null
-  if (!Array.isArray(record.groups) || !record.submit || typeof record.submit !== 'object' || Array.isArray(record.submit)) return null
-  return record as unknown as ProjectAgentChoiceCardPartData
-}
-
 async function buildPendingChoiceInteraction(params: {
-  scope: ProjectAgentSessionScopeInput
-  workflow: EditFirstWorkflowState
   interruption: ProjectAgentInterruptionSnapshot
 }): Promise<Extract<ProjectAgentSessionPendingInteraction, { kind: 'choice' }>> {
   if (!params.interruption.runId) throw new Error('PROJECT_AGENT_PENDING_CHOICE_RUN_ID_MISSING')
-  if (!params.scope.episodeId) throw new Error('PROJECT_AGENT_PENDING_CHOICE_EPISODE_ID_MISSING')
   const toolCallId = params.interruption.toolCallId?.trim()
   if (!toolCallId) throw new Error('PROJECT_AGENT_PENDING_CHOICE_TOOL_CALL_ID_MISSING')
-  const payload = readRecord(params.interruption.payload)
-  const choiceType = readChoiceType(payload.choiceType)
-  const choiceCard = choiceType === 'script_intake'
-    ? readPersistedScriptIntakeChoiceCard(payload.card)
-    : choiceType === 'bible_review'
-      ? readPersistedChoiceCard(payload.card)
-    : await buildEditFirstAssistantChoiceCard({
-        projectId: params.scope.projectId,
-        userId: params.scope.userId,
-        episodeId: params.scope.episodeId,
-        locale: params.scope.locale,
-        workflow: params.workflow,
-        choiceType,
-        toolCallId,
-      })
-  if (!choiceCard) throw new Error('PROJECT_AGENT_PENDING_SCRIPT_INTAKE_CARD_INVALID')
+  const offer = parseProjectAgentChoiceOffer(params.interruption.payload)
+  const choiceCard = offer.card
+  if (
+    choiceCard.runId !== params.interruption.runId
+    || choiceCard.interruptionId !== params.interruption.id
+    || choiceCard.toolCallId !== toolCallId
+  ) {
+    throw new Error('PROJECT_AGENT_PENDING_CHOICE_OFFER_IDENTITY_MISMATCH')
+  }
   return {
     kind: 'choice',
     runId: params.interruption.runId,
@@ -168,12 +143,8 @@ async function buildPendingChoiceInteraction(params: {
     approvalId: params.interruption.approvalId,
     operationId: params.interruption.operationId,
     toolCallId,
-    choiceType,
-    choiceCard: {
-      ...choiceCard,
-      runId: params.interruption.runId,
-      interruptionId: params.interruption.id,
-    },
+    choiceType: choiceCard.choiceType,
+    choiceCard,
   }
 }
 
@@ -198,8 +169,6 @@ async function buildPendingInteraction(params: {
   }
   if (params.interruption.type === 'choice') {
     return await buildPendingChoiceInteraction({
-      scope: params.scope,
-      workflow: params.workflow,
       interruption: params.interruption,
     })
   }

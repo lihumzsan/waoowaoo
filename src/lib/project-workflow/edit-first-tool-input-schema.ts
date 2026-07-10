@@ -84,6 +84,8 @@ export const EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputS
   styleDirection: nullableStringProperty('Pass only when the user explicitly asks to regenerate or adjust visual style candidates; otherwise pass null.'),
 })
 
+export const EDIT_FIRST_CONFIRM_STYLE_PREVIEW_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({})
+
 export const EDIT_FIRST_REVISE_ASSETS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   revisionNotes: stringProperty('Concrete user asset review notes to apply to the current required assets. Do not include system ids.'),
 })

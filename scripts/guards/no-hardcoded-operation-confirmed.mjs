@@ -4,11 +4,8 @@ import process from 'node:process'
 
 const root = process.cwd()
 const sourceRoot = path.join(root, 'src')
-const allowedReadProjections = new Set([
-  'src/lib/project-context/assembler.ts',
-  'src/lib/task/reconcile.ts',
-])
-const assignmentPattern = /operationConfirmed\s*:\s*true\b/g
+const assignmentPattern = /\boperationConfirmed\b/g
+const legacyInstructionPattern = /confirmed\s*=\s*true/g
 
 async function listSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -25,21 +22,25 @@ for (const filePath of await listSourceFiles(sourceRoot)) {
   const relativePath = path.relative(root, filePath).split(path.sep).join('/')
   const source = await readFile(filePath, 'utf8')
   for (const match of source.matchAll(assignmentPattern)) {
-    if (allowedReadProjections.has(relativePath)) continue
     const index = match.index ?? 0
     const line = source.slice(0, index).split('\n').length
     violations.push(`${relativePath}:${line}`)
+  }
+  for (const match of source.matchAll(legacyInstructionPattern)) {
+    const index = match.index ?? 0
+    const line = source.slice(0, index).split('\n').length
+    violations.push(`${relativePath}:${line}: legacy model instruction confirmed=true`)
   }
 }
 
 if (violations.length > 0) {
   console.error([
-    'BA-03: hardcoded operationConfirmed: true bypasses approval provenance.',
-    'Propagate approval from the confirmed operation or approved plan; do not manufacture a boolean at the task boundary.',
+    'BA-03: legacy operationConfirmed boolean provenance is forbidden.',
+    'Use immutable OperationPlanSnapshot → ApprovalGrant → OperationExecution provenance.',
     'See docs/architecture/modules/billing-approval.md#不变量.',
     ...violations.map((violation) => `- ${violation}`),
   ].join('\n'))
   process.exit(1)
 }
 
-console.log('No hardcoded operationConfirmed approval bypasses found.')
+console.log('No legacy operationConfirmed approval provenance found.')

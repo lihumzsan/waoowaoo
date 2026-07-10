@@ -41,6 +41,9 @@ const terminalMock = vi.hoisted(() => ({
     outboxCommandIds: [],
   })),
 }))
+const approvedEnqueueMock = vi.hoisted(() => ({
+  enqueuePersistedApprovedTask: vi.fn(async () => undefined),
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/queues', () => ({
@@ -51,6 +54,7 @@ vi.mock('@/lib/task/service', () => serviceMock)
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/task/target-failure-sync', () => targetFailureMock)
 vi.mock('@/lib/task/terminal', () => terminalMock)
+vi.mock('@/lib/task/enqueue', () => approvedEnqueueMock)
 
 import { reconcileActiveTasks, runTaskReconciliationCycle } from '@/lib/task/reconcile'
 
@@ -77,7 +81,9 @@ function buildQueuedTask(payload: unknown = {
     priority: 7,
     operationId: 'generate_video_group',
     operationSource: 'assistant',
-    operationConfirmed: true,
+    approvalGrantId: null,
+    operationExecutionId: null,
+    operationPlanTaskId: null,
     operationRequestId: 'operation-request-1',
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
   }
@@ -122,11 +128,32 @@ describe('task reconcile queue lifecycle', () => {
       userId: 'user-1',
       operationId: 'generate_video_group',
       operationSource: 'assistant',
-      operationConfirmed: true,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: 'operation-request-1',
       trace: { requestId: 'request-1' },
     }, { priority: 7 })
     expect(serviceMock.markTaskEnqueued).toHaveBeenCalledWith('task-1')
+  })
+
+  it('recovers an approved queued task only through the completed execution gate', async () => {
+    prismaMock.task.findMany.mockResolvedValue([{
+      ...buildQueuedTask(),
+      approvalGrantId: 'grant-1',
+      operationExecutionId: 'execution-1',
+      operationPlanTaskId: 'plan-task-1',
+    }])
+
+    const result = await reconcileActiveTasks()
+
+    expect(result.recoveredTaskIds).toEqual(['task-1'])
+    expect(approvedEnqueueMock.enqueuePersistedApprovedTask).toHaveBeenCalledWith({
+      taskId: 'task-1',
+      operationExecutionId: 'execution-1',
+    })
+    expect(queuesMock.addTaskJob).not.toHaveBeenCalled()
+    expect(serviceMock.markTaskEnqueued).not.toHaveBeenCalled()
   })
 
   it('records BullMQ failedReason when a terminal job missed its Task handoff', async () => {

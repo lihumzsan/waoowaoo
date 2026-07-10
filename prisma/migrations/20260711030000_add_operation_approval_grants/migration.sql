@@ -1,0 +1,92 @@
+ALTER TABLE `tasks`
+  DROP COLUMN `operationConfirmed`,
+  ADD COLUMN `approvalGrantId` VARCHAR(191) NULL,
+  ADD COLUMN `operationExecutionId` VARCHAR(191) NULL,
+  ADD COLUMN `operationPlanTaskId` VARCHAR(191) NULL;
+
+CREATE TABLE `operation_plan_snapshots` (
+  `id` VARCHAR(191) NOT NULL,
+  `contractVersion` INTEGER NOT NULL DEFAULT 1,
+  `userId` VARCHAR(191) NOT NULL,
+  `scopeKind` VARCHAR(32) NOT NULL,
+  `scopeId` VARCHAR(191) NOT NULL,
+  `projectId` VARCHAR(191) NULL,
+  `episodeId` VARCHAR(191) NULL,
+  `operationId` VARCHAR(128) NOT NULL,
+  `normalizedInput` JSON NOT NULL,
+  `inputHash` VARCHAR(64) NOT NULL,
+  `planSnapshot` JSON NOT NULL,
+  `planHash` VARCHAR(64) NOT NULL,
+  `quoteSnapshot` JSON NOT NULL,
+  `quoteHash` VARCHAR(64) NOT NULL,
+  `expiresAt` DATETIME(3) NOT NULL,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX `operation_plan_snapshots_user_scope_operation_created_idx`(`userId`, `scopeKind`, `scopeId`, `operationId`, `createdAt`),
+  INDEX `operation_plan_snapshots_expiresAt_idx`(`expiresAt`),
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `approval_grants` (
+  `id` VARCHAR(191) NOT NULL,
+  `contractVersion` INTEGER NOT NULL DEFAULT 1,
+  `userId` VARCHAR(191) NOT NULL,
+  `scopeKind` VARCHAR(32) NOT NULL,
+  `scopeId` VARCHAR(191) NOT NULL,
+  `projectId` VARCHAR(191) NULL,
+  `episodeId` VARCHAR(191) NULL,
+  `operationId` VARCHAR(128) NOT NULL,
+  `planSnapshotId` VARCHAR(191) NOT NULL,
+  `requestId` VARCHAR(128) NOT NULL,
+  `inputHash` VARCHAR(64) NOT NULL,
+  `planHash` VARCHAR(64) NOT NULL,
+  `quoteHash` VARCHAR(64) NOT NULL,
+  `quoteCeiling` DECIMAL(18, 6) NULL,
+  `currency` VARCHAR(16) NULL,
+  `issuedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `expiresAt` DATETIME(3) NOT NULL,
+  `revokedAt` DATETIME(3) NULL,
+  `consumedAt` DATETIME(3) NULL,
+  `consumedExecutionId` VARCHAR(191) NULL,
+  `version` INTEGER NOT NULL DEFAULT 0,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+  UNIQUE INDEX `approval_grants_planSnapshotId_key`(`planSnapshotId`),
+  INDEX `approval_grants_user_scope_operation_idx`(`userId`, `scopeKind`, `scopeId`, `operationId`),
+  INDEX `approval_grants_consumedExecutionId_idx`(`consumedExecutionId`),
+  INDEX `approval_grants_expiresAt_idx`(`expiresAt`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `approval_grants_planSnapshotId_fkey` FOREIGN KEY (`planSnapshotId`) REFERENCES `operation_plan_snapshots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE `operation_executions` (
+  `id` VARCHAR(191) NOT NULL,
+  `contractVersion` INTEGER NOT NULL DEFAULT 1,
+  `userId` VARCHAR(191) NOT NULL,
+  `scopeKind` VARCHAR(32) NOT NULL,
+  `scopeId` VARCHAR(191) NOT NULL,
+  `projectId` VARCHAR(191) NULL,
+  `episodeId` VARCHAR(191) NULL,
+  `operationId` VARCHAR(128) NOT NULL,
+  `planSnapshotId` VARCHAR(191) NOT NULL,
+  `approvalGrantId` VARCHAR(191) NOT NULL,
+  `requestId` VARCHAR(128) NOT NULL,
+  `status` VARCHAR(32) NOT NULL,
+  `output` JSON NULL,
+  `completedAt` DATETIME(3) NULL,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+  UNIQUE INDEX `operation_executions_approvalGrantId_key`(`approvalGrantId`),
+  UNIQUE INDEX `operation_executions_planSnapshotId_requestId_key`(`planSnapshotId`, `requestId`),
+  INDEX `operation_executions_user_scope_operation_created_idx`(`userId`, `scopeKind`, `scopeId`, `operationId`, `createdAt`),
+  INDEX `operation_executions_status_updatedAt_idx`(`status`, `updatedAt`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `operation_executions_planSnapshotId_fkey` FOREIGN KEY (`planSnapshotId`) REFERENCES `operation_plan_snapshots`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `operation_executions_approvalGrantId_fkey` FOREIGN KEY (`approvalGrantId`) REFERENCES `approval_grants`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE `tasks`
+  ADD INDEX `tasks_approvalGrantId_idx`(`approvalGrantId`),
+  ADD INDEX `tasks_operationExecutionId_idx`(`operationExecutionId`),
+  ADD UNIQUE INDEX `tasks_operationExecutionId_operationPlanTaskId_key`(`operationExecutionId`, `operationPlanTaskId`),
+  ADD CONSTRAINT `tasks_approvalGrantId_fkey` FOREIGN KEY (`approvalGrantId`) REFERENCES `approval_grants`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  ADD CONSTRAINT `tasks_operationExecutionId_fkey` FOREIGN KEY (`operationExecutionId`) REFERENCES `operation_executions`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

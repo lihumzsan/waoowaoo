@@ -15,6 +15,7 @@ import {
   parseOutboxCommandPayload,
 } from '@/lib/outbox/types'
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
+import { enqueuePersistedApprovedTask } from '@/lib/task/enqueue'
 import { runProjectAgentWaitContinuationCommand } from '@/lib/project-agent/server-follow-up'
 
 const logger = createScopedLogger({ module: 'worker.outbox' })
@@ -53,6 +54,9 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
       throw new OutboxPermanentError(`OUTBOX_ROW_CONTRACT_MISMATCH:${outboxId}`)
     }
     switch (payload.kind) {
+      case OUTBOX_COMMAND_KIND.TASK_ENQUEUE:
+        await enqueuePersistedApprovedTask(payload)
+        break
       case OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST:
         await publishPersistedTaskEventById(payload.eventId, payload.taskId)
         break

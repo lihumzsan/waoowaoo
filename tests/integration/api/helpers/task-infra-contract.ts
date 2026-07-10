@@ -44,6 +44,7 @@ export const addChannelListenerMock = vi.fn<(channel: string, listener: (message
 )
 export const subscriberState = {
   listener: null as ((message: string) => void) | null,
+  unsubscribe: vi.fn(async () => undefined),
 }
 
 export const baseTask: TaskRecord = {
@@ -64,6 +65,7 @@ export function resetTaskInfraMocks() {
   vi.clearAllMocks()
   authState.authenticated = true
   subscriberState.listener = null
+  subscriberState.unsubscribe.mockClear()
 
   queryTasksMock.mockResolvedValue([baseTask])
   dismissFailedTasksMock.mockResolvedValue(1)
@@ -89,7 +91,7 @@ export function resetTaskInfraMocks() {
   ])
   addChannelListenerMock.mockImplementation(async (_channel: string, listener: (message: string) => void) => {
     subscriberState.listener = listener
-    return async () => undefined
+    return subscriberState.unsubscribe
   })
   listEventsAfterMock.mockResolvedValue([])
   listRecentTerminalLifecycleEventsMock.mockResolvedValue([])

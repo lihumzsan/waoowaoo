@@ -154,8 +154,7 @@ function isEditPipelineTaskType(taskType: string | null): boolean {
 }
 
 function isEditStylePreviewTaskType(taskType: string | null): boolean {
-  return taskType === TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE ||
-    taskType === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE
+  return taskType === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE
 }
 
 function isAssetTaskType(taskType: string | null): boolean {

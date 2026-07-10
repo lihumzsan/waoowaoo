@@ -41,6 +41,9 @@ const terminalMock = vi.hoisted(() => ({
     outboxCommandIds: [],
   })),
 }))
+const approvedEnqueueMock = vi.hoisted(() => ({
+  enqueuePersistedApprovedTask: vi.fn(async () => undefined),
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/task/queues', () => ({
@@ -50,6 +53,7 @@ vi.mock('@/lib/task/queues', () => ({
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/task/service', () => billingMock)
 vi.mock('@/lib/task/terminal', () => terminalMock)
+vi.mock('@/lib/task/enqueue', () => approvedEnqueueMock)
 
 import { reconcileActiveTasks } from '@/lib/task/reconcile'
 
@@ -79,7 +83,9 @@ describe('task reconcile target sync', () => {
         priority: 6,
         operationId: 'generate_video_group',
         operationSource: 'assistant',
-        operationConfirmed: true,
+        approvalGrantId: null,
+        operationExecutionId: null,
+        operationPlanTaskId: null,
         operationRequestId: 'operation-request-1',
         updatedAt: new Date('2026-05-20T10:00:00.000Z'),
       },
@@ -193,7 +199,9 @@ describe('task reconcile target sync', () => {
       userId: 'user-1',
       operationId: 'generate_video_group',
       operationSource: 'assistant',
-      operationConfirmed: true,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: 'operation-request-1',
       trace: { requestId: 'request-1' },
     }, { priority: 6 })

@@ -167,8 +167,6 @@ export async function planLocationImageGenerationOperation(
 
 export function buildGenerateCharacterImageInputSchema() {
   return z.object({
-    confirmed: z.boolean().optional(),
-    confirmedMaxCost: z.number().nonnegative().optional(),
     characterId: z.string().min(1).optional(),
     characterName: z.string().min(1).optional(),
     appearanceId: z.string().min(1).optional(),
@@ -183,8 +181,6 @@ export function buildGenerateCharacterImageInputSchema() {
 
 export function buildGenerateLocationImageInputSchema() {
   return z.object({
-    confirmed: z.boolean().optional(),
-    confirmedMaxCost: z.number().nonnegative().optional(),
     locationId: z.string().min(1).optional(),
     locationName: z.string().min(1).optional(),
     count: z.number().int().positive().max(6).optional(),

@@ -13,6 +13,7 @@ const sourceDocumentMock = vi.hoisted(() => ({
     scriptStructureJson: null,
     rawFileMediaId: null,
     version: 1,
+    baseVersion: 0,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
     estimatedInputTokens: 120,
@@ -69,7 +70,7 @@ const billingMock = vi.hoisted(() => ({
 }))
 
 const submitMock = vi.hoisted(() => ({
-  submitOperationTask: vi.fn(async () => ({
+  submitOperationTask: vi.fn(async (_input: Record<string, unknown>) => ({
     success: true,
     async: true,
     taskId: 'task-1',
@@ -133,6 +134,7 @@ describe('edit bible task submission', () => {
       scriptStructureJson: null,
       rawFileMediaId: null,
       version: 1,
+      baseVersion: 0,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       updatedAt: new Date('2026-01-01T00:00:00Z'),
       estimatedInputTokens: 120,
@@ -180,6 +182,24 @@ describe('edit bible task submission', () => {
       targetType: 'ProjectEditSourceScript',
       targetId: 'bible-1',
     }))
+    const updateMany = vi.fn(async () => ({ count: 1 }))
+    const submission = submitMock.submitOperationTask.mock.calls[0]?.[0] as unknown as {
+      onTaskCreatedInTransaction: (
+        tx: { projectEditBible: { updateMany: typeof updateMany } },
+        task: { id: string },
+      ) => Promise<void>
+    }
+    await submission.onTaskCreatedInTransaction({ projectEditBible: { updateMany } }, { id: 'task-1' })
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'bible-1',
+        sourceDocumentId: 'source-1',
+        version: 1,
+        generationTaskId: null,
+        status: 'generating',
+      },
+      data: { generationTaskId: 'task-1' },
+    })
   })
 
   it('stores pasted scripts directly without prompt expansion', async () => {
@@ -273,6 +293,7 @@ describe('edit bible task submission', () => {
       scriptStructureJson: null,
       rawFileMediaId: null,
       version: 1,
+      baseVersion: 0,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       updatedAt: new Date('2026-01-01T00:00:00Z'),
       estimatedInputTokens: 48,

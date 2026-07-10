@@ -161,7 +161,6 @@
   },
   "actionTypes": {
     "image_panel": "Storyboard Image",
-    "edit_style_previews_generate": "Generate Style Previews",
     "edit_style_preview_image": "Style Preview Image",
     "edit_script_storyboard_camera_plan": "Storyboard Camera Plan",
     "image_character": "Character Image",

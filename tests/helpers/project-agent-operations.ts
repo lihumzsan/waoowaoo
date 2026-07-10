@@ -48,9 +48,13 @@ export function makeTestOperation<Input, Output>(params: {
   outputSchema: RuntimeSchema<Output>
   plan?: ProjectAgentOperationDefinition<Input, Output>['plan']
   commit?: ProjectAgentOperationDefinition<Input, Output>['commit']
-  execute: (ctx: ProjectAgentOperationContext, input: Input) => Promise<Output>
+  execute?: (ctx: ProjectAgentOperationContext, input: Input) => Promise<Output>
 }): ProjectAgentOperationDefinition<Input, Output> {
-  return {
+  const confirmation = params.confirmation ?? {
+    kind: 'none' as const,
+    required: false,
+  }
+  const common = {
     id: params.id,
     summary: params.summary ?? `Test operation: ${params.id}`,
     intent: params.intent ?? 'query',
@@ -58,7 +62,7 @@ export function makeTestOperation<Input, Output>(params: {
     channels: params.channels ?? { tool: true, api: true },
     prerequisites: params.prerequisites ?? { episodeId: 'optional' },
     effects: params.effects ?? EFFECTS_NONE,
-    confirmation: params.confirmation ?? { kind: 'none', required: false },
+    confirmation,
     ...(params.agentFlow ? { agentFlow: params.agentFlow } : {}),
     toolInputSchema: createProjectAgentToolInputSchema({
       operationId: params.id,
@@ -68,6 +72,16 @@ export function makeTestOperation<Input, Output>(params: {
     outputSchema: params.outputSchema,
     ...(params.plan ? { plan: params.plan } : {}),
     ...(params.commit ? { commit: params.commit } : {}),
-    execute: params.execute,
   }
+  if (confirmation.kind === 'billable_media') {
+    if (!params.plan || !params.commit || params.execute) {
+      throw new Error(`TEST_BILLABLE_OPERATION_MUST_BE_PLAN_COMMIT_ONLY:${params.id}`)
+    }
+    return common as ProjectAgentOperationDefinition<Input, Output>
+  }
+  if (!params.execute) throw new Error(`TEST_DIRECT_OPERATION_EXECUTOR_REQUIRED:${params.id}`)
+  return {
+    ...common,
+    execute: params.execute,
+  } as ProjectAgentOperationDefinition<Input, Output>
 }

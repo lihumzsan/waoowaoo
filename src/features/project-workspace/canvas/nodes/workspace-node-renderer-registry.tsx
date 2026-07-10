@@ -1,5 +1,5 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
-import { MediaPreview } from './WorkspaceNodeRenderers'
+import { MediaPreview, nodeIsRunning } from './WorkspaceNodeRenderers'
 import { BgmScoreNodeRenderer } from './renderers/bgm-score'
 import { EditAssetGroupNodeRenderer } from './renderers/edit-asset-group'
 import { EditBibleNodeRenderer } from './renderers/edit-bible'
@@ -41,7 +41,7 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
 
 export function NodeContent({ data, labels, expanded }: WorkspaceCanvasNodeRendererProps) {
   if (
-    data.__running === true
+    nodeIsRunning(data)
     && (data.kind === 'imageAsset' || data.kind === 'videoClip' || data.kind === 'editRequiredAsset')
   ) {
     return <MediaPreview data={data} />

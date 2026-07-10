@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFollowUpAction, readNextActionFromSessionState } from '../../../scripts/e2e-long-form/actions'
+import { readNextActionFromSessionState } from '../../../scripts/e2e-long-form/actions'
 import type { E2eRunnerConfig } from '../../../scripts/e2e-long-form/types'
 
 const baseConfig: E2eRunnerConfig = {
@@ -86,21 +86,6 @@ describe('long-form E2E action reader', () => {
       ok: true,
       stylePreviewId: 'style-1',
       aspectRatio: '9:16',
-    })
-  })
-
-  it('builds task follow-up action from a claimed wait response', () => {
-    expect(readFollowUpAction({
-      success: true,
-      followUps: [{
-        runId: 'run-1',
-        waitId: 'wait-1',
-        claimId: 'claim-1',
-      }],
-    })).toEqual({
-      runId: 'run-1',
-      waitId: 'wait-1',
-      claimId: 'claim-1',
     })
   })
 })

@@ -85,7 +85,7 @@ describe('executeProjectAgentOperationFromTool', () => {
 
   it('[approval required without SDK approval] -> returns a defensive error without executing', async () => {
     const writer = buildWriter()
-    const execute = vi.fn(async () => ({ ok: true }))
+    const commit = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       confirm_op: makeTestOperation({
         id: 'confirm_op',
@@ -103,7 +103,14 @@ describe('executeProjectAgentOperationFromTool', () => {
         },
         inputSchema: z.object({ confirmed: z.boolean().optional() }),
         outputSchema: z.object({ ok: z.boolean() }),
-        execute,
+        plan: async () => ({
+          kind: 'task_submission',
+          operationId: 'confirm_op',
+          projectId: 'project-1',
+          userId: 'user-1',
+          tasks: [],
+        }),
+        commit,
       }),
     }
 
@@ -126,7 +133,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
     expect(result.error.message).toBe('PROJECT_AGENT_OPERATION_APPROVAL_REQUIRED')
     expect(result.error.details).toEqual({ approval: 'ai-sdk-tool-approval' })
-    expect(execute).not.toHaveBeenCalled()
+    expect(commit).not.toHaveBeenCalled()
   })
 
   it('[confirmed input] -> executes operation when confirmation required', async () => {
@@ -165,10 +172,12 @@ describe('executeProjectAgentOperationFromTool', () => {
     if (!result.ok) return
     expect(result.data).toEqual({ ok: true })
     expect(execute).toHaveBeenCalledTimes(1)
-    expect(execute).toHaveBeenCalledWith(expect.any(Object), { confirmed: true })
+    expect(execute).toHaveBeenCalledWith(expect.any(Object), {
+      confirmed: true,
+    })
   })
 
-  it('[planned media mislabeled as non-approval] -> writes the quote and refuses an unconfirmed commit', async () => {
+  it('[planned non-approval operation] -> commits through its declared non-billable path', async () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.BILLING_MODE = 'ENFORCE'
     const writer = buildWriter()
@@ -177,34 +186,39 @@ describe('executeProjectAgentOperationFromTool', () => {
       operationId: 'music_preview_op',
       projectId: 'project-1',
       userId: 'user-1',
-      tasks: [{
-        id: 'music-task-1',
-        taskType: TASK_TYPE.MUSIC_GENERATE,
-        target: {
-          targetType: 'Project',
-          targetId: 'project-1',
-        },
-        payload: {
-          prompt: 'quiet cue',
-          durationSeconds: 30,
-        },
-        billingInfo: {
-          billable: true,
-          source: 'task',
+      tasks: [
+        {
+          id: 'music-task-1',
           taskType: TASK_TYPE.MUSIC_GENERATE,
-          apiType: 'music',
-          model: 'music-model',
-          quantity: 1,
-          unit: 'call',
-          maxFrozenCost: 2.5,
-          action: TASK_TYPE.MUSIC_GENERATE,
-          status: 'quoted',
+          target: {
+            targetType: 'Project',
+            targetId: 'project-1',
+          },
+          payload: {
+            prompt: 'quiet cue',
+            durationSeconds: 30,
+          },
+          billingInfo: {
+            billable: true,
+            source: 'task',
+            taskType: TASK_TYPE.MUSIC_GENERATE,
+            apiType: 'music',
+            model: 'music-model',
+            quantity: 1,
+            unit: 'call',
+            maxFrozenCost: 2.5,
+            action: TASK_TYPE.MUSIC_GENERATE,
+            status: 'quoted',
+          },
+          locale: 'zh',
         },
-        locale: 'zh',
-      }],
+      ],
     }
     const planMock = vi.fn(async () => plan)
-    const commitMock = vi.fn(async () => ({ ok: true, taskCount: plan.tasks.length }))
+    const commitMock = vi.fn(async () => ({
+      ok: true,
+      taskCount: plan.tasks.length,
+    }))
     const execute = vi.fn(async () => ({ ok: false, taskCount: 0 }))
     registryState.registry = {
       music_preview_op: makeTestOperation({
@@ -219,7 +233,10 @@ describe('executeProjectAgentOperationFromTool', () => {
         },
         confirmation: { kind: 'none', required: false },
         inputSchema: z.object({ prompt: z.string().min(1) }),
-        outputSchema: z.object({ ok: z.boolean(), taskCount: z.number().int() }),
+        outputSchema: z.object({
+          ok: z.boolean(),
+          taskCount: z.number().int(),
+        }),
         plan: planMock,
         commit: commitMock,
         execute,
@@ -239,16 +256,9 @@ describe('executeProjectAgentOperationFromTool', () => {
       toolCallId: 'tool-call-music',
     })
 
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error).toEqual(expect.objectContaining({
-      code: 'OPERATION_EXECUTION_FAILED',
-      details: expect.objectContaining({
-        reasonCode: 'OPERATION_CONFIRMATION_REQUIRED',
-      }),
-    }))
+    expect(result.ok).toBe(true)
     expect(planMock).toHaveBeenCalledTimes(1)
-    expect(commitMock).not.toHaveBeenCalled()
+    expect(commitMock).toHaveBeenCalledTimes(1)
     expect(execute).not.toHaveBeenCalled()
     expect(writer.write).toHaveBeenCalledWith({
       type: 'data-agent-operation-plan-preview',
@@ -334,14 +344,16 @@ describe('executeProjectAgentOperationFromTool', () => {
     if (result.ok) return
     expect(result.error.code).toBe('OPERATION_EXECUTION_FAILED')
     expect(result.error.message).toBe('video model is managed by system configuration')
-    expect(result.error.details).toEqual(expect.objectContaining({
-      apiErrorCode: 'FORBIDDEN',
-      httpStatus: 403,
-      code: 'TASK_MODEL_MANAGED_BY_CONFIG',
-      reasonCode: 'TASK_MODEL_MANAGED_BY_CONFIG',
-      field: 'videoModel',
-      message: 'video model is managed by system configuration',
-    }))
+    expect(result.error.details).toEqual(
+      expect.objectContaining({
+        apiErrorCode: 'FORBIDDEN',
+        httpStatus: 403,
+        code: 'TASK_MODEL_MANAGED_BY_CONFIG',
+        reasonCode: 'TASK_MODEL_MANAGED_BY_CONFIG',
+        field: 'videoModel',
+        message: 'video model is managed by system configuration',
+      }),
+    )
   })
 
   it('[interrupting operation error] -> marks the failed interaction boundary in details', async () => {
@@ -455,7 +467,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {
-          throw (() => 'boom')
+          throw () => 'boom'
         }),
       }),
     }
@@ -487,7 +499,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
-        execute: vi.fn(async () => ({ missing: true } as unknown as { ok: boolean })),
+        execute: vi.fn(async () => ({ missing: true }) as unknown as { ok: boolean }),
       }),
     }
 

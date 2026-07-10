@@ -8,6 +8,10 @@ import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
+import {
+  buildProjectAgentChoiceOffer,
+  resolveCurrentProjectAgentChoiceReviewedResource,
+} from '@/lib/project-agent/choice-offer'
 import { createInitialProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
   resolveEditFirstWorkflowState,
@@ -253,7 +257,7 @@ async function createLabChoiceState(params: {
     projectId: params.projectId,
     episodeId: params.episodeId,
   })
-  const interruptionId = params.choiceType === 'style' ? null : crypto.randomUUID()
+  const interruptionId = crypto.randomUUID()
   const card: ProjectAgentChoiceCardPartData = {
     ...params.card,
     runId,
@@ -261,6 +265,19 @@ async function createLabChoiceState(params: {
     toolCallId,
   }
   const runFence = createInitialProjectAgentRunFence(runId)
+  const reviewedResource = await resolveCurrentProjectAgentChoiceReviewedResource({
+    tx: params.tx,
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+    card,
+  })
+  const offer = buildProjectAgentChoiceOffer({
+    runId,
+    interruptionId,
+    card,
+    reviewedResource,
+  })
   const baseEvents = [{
     runFence,
     idempotencyKey: `workflow-lab:run-started:${runId}`,
@@ -271,45 +288,23 @@ async function createLabChoiceState(params: {
       controlKind: 'user_turn' as const,
     },
   }]
-  const choiceEvents = params.choiceType === 'style'
-    ? [{
-        runFence,
-        idempotencyKey: `workflow-lab:activity-started:${activityId}`,
-        event: {
-          kind: 'activity.started' as const,
-          runId,
-          activityId,
-          type: 'awaiting_choice' as const,
-          operationId: null,
-          sourceOperationId: 'generate_edit_style_previews',
-          toolCallId,
-          choiceType: params.choiceType,
-        },
-      }]
-    : (() => {
-        if (!interruptionId) throw new Error('WORKFLOW_LAB_CHOICE_INTERRUPTION_ID_REQUIRED')
-        return [{
-          runFence,
-          idempotencyKey: `workflow-lab:interruption-raised:${interruptionId}`,
-          event: {
-            kind: 'interruption.raised' as const,
-            runId,
-            activityId,
-            interruptionId,
-            interruptionKind: 'choice' as const,
-            operationId: params.operationId,
-            approvalId: `choice:${crypto.randomUUID()}`,
-            toolCallId,
-            choiceType: params.choiceType,
-            payload: serializeWorkflowLabValue({
-              choiceType: params.choiceType,
-              cardId: card.cardId,
-              card,
-            }),
-            runState: null,
-          },
-        }]
-      })()
+  const choiceEvents = [{
+    runFence,
+    idempotencyKey: `workflow-lab:interruption-raised:${interruptionId}`,
+    event: {
+      kind: 'interruption.raised' as const,
+      runId,
+      activityId,
+      interruptionId,
+      interruptionKind: 'choice' as const,
+      operationId: params.operationId,
+      approvalId: `choice:${crypto.randomUUID()}`,
+      toolCallId,
+      choiceType: params.choiceType,
+      payload: serializeWorkflowLabValue(offer),
+      runState: null,
+    },
+  }]
 
   await appendProjectAgentEventsInTransaction(params.tx, {
     scope: {

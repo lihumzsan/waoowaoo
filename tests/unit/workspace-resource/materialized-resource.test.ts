@@ -8,14 +8,21 @@ const bibleMock = vi.hoisted(() => ({
     episodeId: string
     version: number
     status: string
+    updatedAt: Date
+    stylePreviews: readonly unknown[]
   } | null> => ({
     id: 'bible-1',
     projectId: 'project-1',
     episodeId: 'episode-1',
     version: 3,
     status: 'ready_for_review',
+    updatedAt: new Date('2026-07-10T00:00:03.000Z'),
+    stylePreviews: [],
   })),
-  readEpisodeEditChapters: vi.fn(async () => [{ id: 'chapter-1' }]),
+  readEpisodeEditChapters: vi.fn(async () => [{
+    id: 'chapter-1',
+    updatedAt: new Date('2026-07-10T00:00:04.000Z'),
+  }]),
 }))
 
 const episodeMock = vi.hoisted(() => ({
@@ -23,6 +30,14 @@ const episodeMock = vi.hoisted(() => ({
     id: 'episode-1',
     name: 'Episode',
     updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+    storyboards: [{
+      id: 'storyboard-1',
+      updatedAt: new Date('2026-07-10T00:00:02.000Z'),
+    }],
+    resourceVersion: {
+      scheme: 'aggregate_updated_at' as const,
+      value: '2026-07-10T00:00:02.000Z',
+    },
   })),
 }))
 
@@ -30,6 +45,10 @@ vi.mock('@/lib/edit-bible', () => bibleMock)
 vi.mock('@/lib/projects/read-episode-detail', () => episodeMock)
 
 import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
+import {
+  createEditBibleQueryDto,
+  createEpisodeDataQueryDto,
+} from '@/lib/workspace-resource/query-dto-version'
 
 function task(type: TaskJobData['type']): TaskJobData {
   return {
@@ -54,11 +73,17 @@ describe('workspace terminal resource materialization', () => {
       kind: 'editBible',
       taskId: 'task-1',
       resourceKey: 'editBible:project-1:episode-1',
-      resourceVersion: { scheme: 'revision', value: 3 },
-      data: {
-        editBible: expect.objectContaining({ id: 'bible-1', chapters: [{ id: 'chapter-1' }] }),
-        chapters: [{ id: 'chapter-1' }],
+      resourceVersion: {
+        scheme: 'revision_updated_at',
+        value: { revision: 3, updatedAt: '2026-07-10T00:00:04.000Z' },
       },
+      data: expect.objectContaining({
+        editBible: expect.objectContaining({
+          id: 'bible-1',
+          chapters: [expect.objectContaining({ id: 'chapter-1' })],
+        }),
+        chapters: [expect.objectContaining({ id: 'chapter-1' })],
+      }),
     })])
     expect(episodeMock.readProjectEpisodeDetail).not.toHaveBeenCalled()
   })
@@ -70,12 +95,66 @@ describe('workspace terminal resource materialization', () => {
       kind: 'episodeData',
       taskId: 'task-1',
       resourceVersion: {
-        scheme: 'updated_at',
-        value: '2026-07-10T00:00:00.000Z',
+        scheme: 'aggregate_updated_at',
+        value: '2026-07-10T00:00:02.000Z',
       },
       data: expect.objectContaining({ id: 'episode-1' }),
     })])
     expect(bibleMock.readEpisodeEditBible).not.toHaveBeenCalled()
+  })
+
+  it('advances episodeData version when a child row changes without touching the episode', () => {
+    const initial = createEpisodeDataQueryDto({
+      id: 'episode-1',
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      storyboards: [{
+        id: 'storyboard-1',
+        updatedAt: new Date('2026-07-10T00:00:01.000Z'),
+        panels: [{ id: 'panel-1', updatedAt: new Date('2026-07-10T00:00:02.000Z') }],
+      }],
+    })
+    const childUpdated = createEpisodeDataQueryDto({
+      id: 'episode-1',
+      updatedAt: new Date('2026-07-10T00:00:00.000Z'),
+      storyboards: [{
+        id: 'storyboard-1',
+        updatedAt: new Date('2026-07-10T00:00:01.000Z'),
+        panels: [{ id: 'panel-1', updatedAt: new Date('2026-07-10T00:00:03.000Z') }],
+      }],
+    })
+
+    expect(initial.resourceVersion).toEqual({
+      scheme: 'aggregate_updated_at',
+      value: '2026-07-10T00:00:02.000Z',
+    })
+    expect(childUpdated.resourceVersion).toEqual({
+      scheme: 'aggregate_updated_at',
+      value: '2026-07-10T00:00:03.000Z',
+    })
+  })
+
+  it('advances editBible version when a style preview changes at the same bible revision', () => {
+    const initial = createEditBibleQueryDto({
+      id: 'bible-1',
+      version: 7,
+      updatedAt: new Date('2026-07-10T00:00:01.000Z'),
+      stylePreviews: [{ id: 'preview-1', updatedAt: new Date('2026-07-10T00:00:02.000Z') }],
+    }, [])
+    const previewUpdated = createEditBibleQueryDto({
+      id: 'bible-1',
+      version: 7,
+      updatedAt: new Date('2026-07-10T00:00:01.000Z'),
+      stylePreviews: [{ id: 'preview-1', updatedAt: new Date('2026-07-10T00:00:03.000Z') }],
+    }, [])
+
+    expect(initial.resourceVersion.value).toEqual({
+      revision: 7,
+      updatedAt: '2026-07-10T00:00:02.000Z',
+    })
+    expect(previewUpdated.resourceVersion.value).toEqual({
+      revision: 7,
+      updatedAt: '2026-07-10T00:00:03.000Z',
+    })
   })
 
   it('fails explicitly when a required editBible resource is absent', async () => {
@@ -90,6 +169,8 @@ describe('workspace terminal resource materialization', () => {
       id: 'episode-1',
       name: 'Episode without version',
       updatedAt: null as unknown as Date,
+      storyboards: [],
+      resourceVersion: null as never,
     })
 
     await expect(materializeWorkspaceResourcesForTask(task(TASK_TYPE.VIDEO_PANEL)))

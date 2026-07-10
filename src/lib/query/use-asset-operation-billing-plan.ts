@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  confirmOperationPlan,
+  issueOperationApprovalGrant,
   fetchAssetOperationPlanView,
 } from './operation-plan-client'
 
@@ -16,6 +16,6 @@ export function useAssetOperationBillingPlan() {
       action,
       input,
     })
-    return confirmOperationPlan(plan)
+    return await issueOperationApprovalGrant(plan)
   }
 }

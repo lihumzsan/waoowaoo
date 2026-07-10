@@ -95,6 +95,10 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '生成视觉风格候选图，供用户挑选整片风格。用户要求重做、调整，或要更黑暗/更抽象/指定某种非真人画风时也用它；非真人画风可以是动漫 3D 或风格化 3D。重新生成会在已有候选后面追加新的候选。',
     en: 'Generate visual style preview images for the user to pick the film\'s style. Also use it when the user asks to redo or adjust the style, wants it darker or more abstract, or specifies a non-real-person art direction; a non-real-person direction can be anime 3D or stylized 3D. Regenerating appends new candidates after the existing ones.',
   },
+  confirm_edit_style_preview: {
+    zh: '确认用户刚刚在视觉风格选择卡片中选定的候选。stylePreviewId 必须原样使用 choice result 返回的值；本操作是写入选定风格的唯一入口。',
+    en: 'Confirm the candidate the user just selected in the visual-style choice card. Use the exact stylePreviewId from the choice result; this operation is the only writer for the selected style.',
+  },
   generate_edit_script_assets: {
     zh: '为当前剧本创建或复用所需的角色与场景资产，并为还缺图片的资产提交生成任务。需要处理哪些资产由系统自动确定，你不用先去查、也不用自己指定。',
     en: 'Create or reuse the character and location assets the current script needs, and submit generation tasks for assets that still lack images. The system decides which assets to handle — you do not need to look them up first or specify them yourself.',
@@ -200,6 +204,10 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
   generate_edit_style_previews: {
     zh: '生成视觉风格',
     en: 'Generate visual styles',
+  },
+  confirm_edit_style_preview: {
+    zh: '确认视觉风格',
+    en: 'Confirm visual style',
   },
   plan_chapters: {
     zh: '批量规划章节',

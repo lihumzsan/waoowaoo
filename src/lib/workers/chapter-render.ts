@@ -3,7 +3,6 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { Job } from 'bullmq'
-import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { generateUniqueKey, uploadObject } from '@/lib/storage'
@@ -20,8 +19,6 @@ import {
   runCommand,
   writeVideoSourceToFile,
 } from './final-video-render'
-
-const logger = createScopedLogger({ module: 'worker.chapter-render' })
 
 type ChapterRenderPayload = {
   readonly episodeId?: unknown
@@ -199,25 +196,6 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
       width: dimensions.width,
       height: dimensions.height,
     }
-  } catch (error) {
-    try {
-      await markChapterRenderStatus({
-        chapterId,
-        renderStatus: 'failed',
-        taskId: job.data.taskId,
-      })
-    } catch (statusError) {
-      logger.warn({
-        action: 'chapter_render.mark_failed_status_failed',
-        message: 'failed to mark chapter render status after render error',
-        details: {
-          chapterId,
-          taskId: job.data.taskId,
-          error: statusError instanceof Error ? statusError.message : String(statusError),
-        },
-      })
-    }
-    throw error
   } finally {
     await rm(workspaceDir, { recursive: true, force: true })
   }

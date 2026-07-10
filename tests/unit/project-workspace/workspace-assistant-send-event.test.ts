@@ -22,4 +22,14 @@ describe('workspace assistant send event dedupe', () => {
   it('ignores blank keys', () => {
     expect(reserveWorkspaceAssistantMessageKey('   ', new Set<string>())).toBeNull()
   })
+
+  it('bounds consumed message identities for a long-lived tab', () => {
+    const localKeys = new Set<string>()
+    const prefix = `bounded:${crypto.randomUUID()}`
+    for (let index = 0; index < 600; index += 1) {
+      expect(reserveWorkspaceAssistantMessageKey(`${prefix}:${String(index)}`, localKeys)).not.toBeNull()
+    }
+    expect(localKeys.size).toBe(512)
+    expect(reserveWorkspaceAssistantMessageKey(`${prefix}:0`, localKeys)).toBe(`${prefix}:0`)
+  })
 })

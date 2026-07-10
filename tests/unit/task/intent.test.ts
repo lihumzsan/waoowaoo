@@ -6,7 +6,7 @@ describe('resolveTaskIntent', () => {
   it('maps generate task types', () => {
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_CHARACTER)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.IMAGE_LOCATION)).toBe('generate')
-    expect(resolveTaskIntent(TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE)).toBe('generate')
+    expect(resolveTaskIntent(TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)).toBe('generate')
     expect(resolveTaskIntent(TASK_TYPE.VIDEO_PANEL)).toBe('generate')
   })
 

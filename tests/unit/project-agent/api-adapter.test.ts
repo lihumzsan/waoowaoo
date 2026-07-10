@@ -10,10 +10,24 @@ const registryState = vi.hoisted(() => ({
   registry: {} as ProjectAgentOperationRegistry,
 }))
 
+const approvedInvocationState = vi.hoisted(() => ({
+  invokeApprovedOperationPlan: vi.fn(async () => ({ ok: true })),
+}))
+
 vi.mock('@/lib/operations/registry', () => ({
   createProjectAgentOperationRegistry: () => registryState.registry,
   createProjectAgentOperationRegistryForApi: () => registryState.registry,
 }))
+
+vi.mock('@/lib/operations/planned-operation-invocation', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/operations/planned-operation-invocation')>(
+    '@/lib/operations/planned-operation-invocation',
+  )
+  return {
+    ...actual,
+    invokeApprovedOperationPlan: approvedInvocationState.invokeApprovedOperationPlan,
+  }
+})
 
 import { executeProjectAgentOperationFromApi } from '@/lib/adapters/api/execute-project-agent-operation'
 
@@ -27,25 +41,27 @@ function buildBillablePlan() {
     operationId: 'planned_billable_op',
     projectId: 'project-1',
     userId: 'user-1',
-    tasks: [{
-      id: 'planned-task-1',
-      taskType: TASK_TYPE.IMAGE_PANEL,
-      target: { targetType: 'ProjectPanel', targetId: 'panel-1' },
-      payload: {},
-      billingInfo: {
-        billable: true as const,
-        source: 'task' as const,
+    tasks: [
+      {
+        id: 'planned-task-1',
         taskType: TASK_TYPE.IMAGE_PANEL,
-        apiType: 'image' as const,
-        model: 'image-model',
-        quantity: 1,
-        unit: 'image' as const,
-        maxFrozenCost: 1,
-        action: TASK_TYPE.IMAGE_PANEL,
-        status: 'quoted' as const,
+        target: { targetType: 'ProjectPanel', targetId: 'panel-1' },
+        payload: {},
+        billingInfo: {
+          billable: true as const,
+          source: 'task' as const,
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          apiType: 'image' as const,
+          model: 'image-model',
+          quantity: 1,
+          unit: 'image' as const,
+          maxFrozenCost: 1,
+          action: TASK_TYPE.IMAGE_PANEL,
+          status: 'quoted' as const,
+        },
+        locale: 'zh' as const,
       },
-      locale: 'zh' as const,
-    }],
+    ],
   }
 }
 
@@ -115,7 +131,7 @@ describe('executeProjectAgentOperationFromApi', () => {
         effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
-        execute: vi.fn(async () => ({ value: 'unexpected-shape' } as unknown as { ok: boolean })),
+        execute: vi.fn(async () => ({ value: 'unexpected-shape' }) as unknown as { ok: boolean }),
       }),
     }
 
@@ -204,9 +220,8 @@ describe('executeProjectAgentOperationFromApi', () => {
     expect(execute).toHaveBeenCalledWith(expect.any(Object), {})
   })
 
-  it('[planned billable operation without confirmation] -> rejects before commit and execute', async () => {
+  it('[planned billable operation without grant] -> rejects before commit and execute', async () => {
     const commit = vi.fn(async () => ({ ok: true }))
-    const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       planned_billable_op: makeTestOperation({
         id: 'planned_billable_op',
@@ -214,32 +229,33 @@ describe('executeProjectAgentOperationFromApi', () => {
         intent: 'act',
         effects: EFFECTS_BILLABLE,
         confirmation: { kind: 'billable_media', required: true },
-        inputSchema: z.object({ confirmed: z.boolean().optional() }),
+        inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         plan: vi.fn(async () => buildBillablePlan()),
         commit,
-        execute,
       }),
     }
 
-    await expect(executeProjectAgentOperationFromApi({
-      request: buildRequest(),
-      operationId: 'planned_billable_op',
-      projectId: 'project-1',
-      userId: 'user-1',
-      input: {},
-      source: 'project-ui',
-    })).rejects.toMatchObject({
-      details: expect.objectContaining({ code: 'OPERATION_CONFIRMATION_REQUIRED' }),
+    await expect(
+      executeProjectAgentOperationFromApi({
+        request: buildRequest(),
+        operationId: 'planned_billable_op',
+        projectId: 'project-1',
+        userId: 'user-1',
+        input: {},
+        source: 'project-ui',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
+      }),
     })
     expect(commit).not.toHaveBeenCalled()
-    expect(execute).not.toHaveBeenCalled()
   })
 
-  it('[planned billable operation with confirmation] -> commits the exact plan without calling execute', async () => {
+  it('[planned billable operation with grant] -> invokes the approved immutable plan', async () => {
     const plan = vi.fn(async () => buildBillablePlan())
     const commit = vi.fn(async () => ({ ok: true }))
-    const execute = vi.fn(async () => ({ ok: false }))
     registryState.registry = {
       planned_billable_op: makeTestOperation({
         id: 'planned_billable_op',
@@ -247,11 +263,10 @@ describe('executeProjectAgentOperationFromApi', () => {
         intent: 'act',
         effects: EFFECTS_BILLABLE,
         confirmation: { kind: 'billable_media', required: true },
-        inputSchema: z.object({ confirmed: z.boolean(), confirmedMaxCost: z.number() }),
+        inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         plan,
         commit,
-        execute,
       }),
     }
 
@@ -260,16 +275,25 @@ describe('executeProjectAgentOperationFromApi', () => {
       operationId: 'planned_billable_op',
       projectId: 'project-1',
       userId: 'user-1',
-      input: { confirmed: true, confirmedMaxCost: 1 },
+      input: {
+        approvalGrantId: 'approval-grant-1',
+        operationRequestId: 'operation-request-1',
+      },
       source: 'project-ui',
     })
 
     expect(result).toEqual({ ok: true })
-    expect(plan).toHaveBeenCalledTimes(1)
-    expect(commit).toHaveBeenCalledWith(expect.any(Object), { confirmed: true, confirmedMaxCost: 1 }, expect.objectContaining({
-      operationId: 'planned_billable_op',
-    }))
-    expect(execute).not.toHaveBeenCalled()
+    expect(approvedInvocationState.invokeApprovedOperationPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        normalizedInput: {},
+        invocation: {
+          approvalGrantId: 'approval-grant-1',
+          requestId: 'operation-request-1',
+        },
+      }),
+    )
+    expect(plan).not.toHaveBeenCalled()
+    expect(commit).not.toHaveBeenCalled()
   })
 
   it('[execution throws undefined] -> throws ApiError EXTERNAL_ERROR with fallback message', async () => {

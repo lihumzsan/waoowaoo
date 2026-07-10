@@ -29,6 +29,7 @@ import {
   buildEditFirstAssistantChoiceCard,
   readEditFirstAspectRatio,
 } from '@/lib/project-agent/choice-card'
+import { parseProjectAgentChoiceDecision } from '@/lib/project-agent/choice-offer'
 
 function workflow(
   stage: EditFirstWorkflowState['stage'],
@@ -59,7 +60,62 @@ describe('edit-first assistant choice cards', () => {
     expect(readEditFirstAspectRatio('继续')).toBeNull()
   })
 
+  it('accepts only selections that were present in the persisted Choice Offer', () => {
+    const offer = {
+      schemaVersion: 1 as const,
+      card: {
+        cardId: 'style-card-1',
+        runId: 'run-1',
+        interruptionId: 'interruption-1',
+        toolCallId: 'tool-1',
+        choiceType: 'style' as const,
+        title: 'Style',
+        groups: [{
+          key: 'stylePreviewId',
+          label: 'Style',
+          required: true,
+          options: [{ value: 'preview-1', label: 'Preview 1' }],
+        }],
+        submitLabel: 'Continue',
+        submit: { kind: 'submit_tool_output' as const },
+      },
+      reviewedResource: {
+        kind: 'style_preview_set' as const,
+        fingerprint: '0'.repeat(64),
+      },
+    }
+
+    expect(parseProjectAgentChoiceDecision({
+      offer,
+      response: { ok: true, decision: 'select', selections: { stylePreviewId: 'preview-1' } },
+      latestUserText: '',
+    })).toEqual({ choiceType: 'style', decision: 'select', stylePreviewId: 'preview-1' })
+    expect(() => parseProjectAgentChoiceDecision({
+      offer,
+      response: { ok: true, decision: 'select', selections: { stylePreviewId: 'preview-outside-offer' } },
+      latestUserText: '',
+    })).toThrow('PROJECT_AGENT_CHOICE_SELECTION_NOT_OFFERED:stylePreviewId:preview-outside-offer')
+  })
+
   it('builds a bible review card after bible generation', async () => {
+    prismaState.bibleFindFirst.mockResolvedValueOnce({
+      id: 'bible-1',
+      status: 'bible_ready_for_review',
+      version: 2,
+      bibleJson: { logline: 'story' },
+      beatSheetJson: { beats: [] },
+      ledgerJson: { facts: [] },
+      emotionalCurveJson: { points: [] },
+      styleBibleJson: null,
+      diagnosticsJson: null,
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      sourceDocument: {
+        id: 'source-1',
+        checksum: 'checksum-1',
+        version: 1,
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    })
     const card = await buildEditFirstAssistantChoiceCard({
       projectId: 'project-1',
       userId: 'user-1',
@@ -71,7 +127,7 @@ describe('edit-first assistant choice cards', () => {
     })
 
     expect(card).toMatchObject({
-      cardId: 'edit-first-bible-review',
+      cardId: expect.stringMatching(/^edit-first-bible-review:[a-f0-9]{12}$/),
       toolCallId: 'tool-call-1',
       choiceType: 'bible_review',
       variant: 'confirm_or_reply',
@@ -114,12 +170,14 @@ describe('edit-first assistant choice cards', () => {
       id: 'bible-1',
       status: 'script_ready_for_review',
       version: 2,
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
       sourceDocument: {
         id: 'source-script',
         sourceKind: 'prompt_generated_script',
         checksum: 'checksum-script',
         version: 3,
         normalizedText: '扩写后的完整剧本正文',
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
       },
     })
 
@@ -163,11 +221,13 @@ describe('edit-first assistant choice cards', () => {
 
   it('builds a style card from the available completed style previews', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
+      id: 'project-1',
       videoRatio: '16:9',
     })
     prismaState.bibleFindFirst.mockResolvedValueOnce({
       id: 'bible-1',
       status: 'confirmed',
+      version: 2,
       stylePreviews: [
         {
           id: 'style-a',
@@ -175,6 +235,8 @@ describe('edit-first assistant choice cards', () => {
           title: '硬核写实科幻风格',
           summary: '高精度数字化质感。',
           imageKey: 'a.png',
+          status: 'completed',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
         },
         {
           id: 'style-b',
@@ -182,6 +244,8 @@ describe('edit-first assistant choice cards', () => {
           title: '史诗胶片宽银幕风格',
           summary: '浓郁胶片颗粒。',
           imageKey: 'b.png',
+          status: 'completed',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
         },
         {
           id: 'style-c',
@@ -189,6 +253,8 @@ describe('edit-first assistant choice cards', () => {
           title: '极简克制艺术风格',
           summary: '低反差极简画面。',
           imageKey: null,
+          status: 'completed',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
         },
       ],
     })
@@ -224,12 +290,7 @@ describe('edit-first assistant choice cards', () => {
           required: true,
         },
       ],
-      submit: {
-        kind: 'confirm_edit_style_preview',
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        aspectRatio: '16:9',
-      },
+      submit: { kind: 'submit_tool_output' },
     })
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b', 'style-c'])
     expect(card.groups[0]?.options[0]?.imageUrl).toBe('/signed/a.png')
@@ -238,11 +299,13 @@ describe('edit-first assistant choice cards', () => {
 
   it('renders style card options from the actual completed preview count', async () => {
     prismaState.projectFindFirst.mockResolvedValueOnce({
+      id: 'project-1',
       videoRatio: '16:9',
     })
     prismaState.bibleFindFirst.mockResolvedValueOnce({
       id: 'bible-1',
       status: 'confirmed',
+      version: 2,
       stylePreviews: [
         {
           id: 'style-a',
@@ -250,6 +313,8 @@ describe('edit-first assistant choice cards', () => {
           title: '暗黑手绘插画',
           summary: '更黑暗。',
           imageKey: 'a.png',
+          status: 'completed',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
         },
         {
           id: 'style-b',
@@ -257,6 +322,8 @@ describe('edit-first assistant choice cards', () => {
           title: '黑白插画',
           summary: '更克制。',
           imageKey: 'b.png',
+          status: 'completed',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
         },
       ],
     })
@@ -299,6 +366,7 @@ describe('edit-first assistant choice cards', () => {
           name: '老李',
           status: 'completed',
           targetId: 'character-1',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
           errorMessage: null,
         },
         {
@@ -307,6 +375,7 @@ describe('edit-first assistant choice cards', () => {
           name: '地下室',
           status: 'completed',
           targetId: 'location-1',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
           errorMessage: null,
         },
       ],
@@ -360,6 +429,7 @@ describe('edit-first assistant choice cards', () => {
         name: '地下室',
         status: 'generating',
         targetId: null,
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
         errorMessage: null,
       }],
     }])

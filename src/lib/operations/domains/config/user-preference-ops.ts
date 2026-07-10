@@ -103,7 +103,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       },
       confirmation: {
         required: true,
-        summary: '将覆盖更新用户偏好设置（例如模型等）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将覆盖更新用户偏好设置（例如模型等）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),

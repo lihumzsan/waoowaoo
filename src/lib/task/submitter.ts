@@ -23,6 +23,8 @@ import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-poli
 import { buildTaskJobEnvelope } from './job-envelope'
 import { commitTaskTerminal } from './terminal'
 import { observeTaskJob } from './reconcile'
+import { assertTaskApprovalAuthorization } from './approval-authorization'
+import type { Prisma } from '@prisma/client'
 
 export function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -117,8 +119,14 @@ export async function submitTask(params: {
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
-  operationConfirmed?: boolean | null
+  approvalGrantId?: string | null
+  operationExecutionId?: string | null
+  operationPlanTaskId?: string | null
   operationRequestId?: string | null
+  onTaskCreatedInTransaction?: (
+    tx: Prisma.TransactionClient,
+    task: { id: string },
+  ) => Promise<void>
 }): Promise<SubmitTaskResult> {
   const logger = createScopedLogger({
     module: 'task.submitter',
@@ -155,13 +163,23 @@ export async function submitTask(params: {
     ? params.billingInfo || computedBillingInfo || null
     : computedBillingInfo || params.billingInfo || null
 
-  if (requiresBillableMediaApproval(resolvedBillingInfo) && params.operationConfirmed !== true) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'BILLABLE_MEDIA_APPROVAL_REQUIRED',
-      message: `billable media approval is required before submitting task: ${params.type}`,
-      taskType: params.type,
-      apiType: resolvedBillingInfo.apiType,
-      operationId: params.operationId || null,
+  if (requiresBillableMediaApproval(resolvedBillingInfo)) {
+    await assertTaskApprovalAuthorization({
+      approvalGrantId: params.approvalGrantId,
+      operationExecutionId: params.operationExecutionId,
+      operationPlanTaskId: params.operationPlanTaskId,
+      userId: params.userId,
+      projectId: params.projectId,
+      episodeId: params.episodeId ?? null,
+      operationId: params.operationId ?? null,
+      type: params.type,
+      targetType: params.targetType,
+      targetId: params.targetId,
+      payload: params.payload ?? null,
+      dedupeKey: params.dedupeKey ?? null,
+      priority: params.priority ?? 0,
+      locale: params.locale,
+      billingInfo: resolvedBillingInfo,
     })
   }
 
@@ -180,9 +198,13 @@ export async function submitTask(params: {
     billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
-    operationConfirmed: params.operationConfirmed ?? null,
+    approvalGrantId: params.approvalGrantId ?? null,
+    operationExecutionId: params.operationExecutionId ?? null,
+    operationPlanTaskId: params.operationPlanTaskId ?? null,
     operationRequestId,
-  })
+  }, params.onTaskCreatedInTransaction
+    ? { onTaskCreatedInTransaction: params.onTaskCreatedInTransaction }
+    : undefined)
   const runId: string | null = null
 
   let preparedBillingInfo = (task.billingInfo || resolvedBillingInfo || null) as TaskBillingInfo | null
@@ -293,7 +315,9 @@ export async function submitTask(params: {
         userId: params.userId,
         operationId: params.operationId || null,
         operationSource: params.operationSource || null,
-        operationConfirmed: params.operationConfirmed ?? null,
+        approvalGrantId: params.approvalGrantId ?? null,
+        operationExecutionId: params.operationExecutionId ?? null,
+        operationPlanTaskId: params.operationPlanTaskId ?? null,
         operationRequestId,
         priority: task.priority,
       })

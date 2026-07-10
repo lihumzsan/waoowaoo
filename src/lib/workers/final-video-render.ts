@@ -513,13 +513,6 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       width: dimensions.width,
       height: dimensions.height,
     }
-  } catch (error) {
-    await upsertEpisodeFinalOutput({
-      episodeId,
-      renderStatus: 'failed',
-      taskId: job.data.taskId,
-    })
-    throw error
   } finally {
     await rm(workspaceDir, { recursive: true, force: true })
   }

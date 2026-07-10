@@ -755,7 +755,7 @@ export function handleBillingError(error: unknown): NextResponse | null {
   return null
 }
 
-type TaskBillingPreparation = {
+export type TaskBillingPreparation = {
   id: string
   userId: string
   projectId: string
@@ -855,6 +855,16 @@ export async function prepareTaskBilling(task: TaskBillingPreparation) {
   return await prepareTaskBillingSnapshot(task, mode, freezeBalance)
 }
 
+export async function prepareTaskBillingInTransaction(
+  tx: Prisma.TransactionClient,
+  task: TaskBillingPreparation,
+  mode: Awaited<ReturnType<typeof getBillingMode>>,
+): Promise<TaskBillingInfo | { billable: false } | null> {
+  return await prepareTaskBillingSnapshot(task, mode, async (userId, amount, options) => (
+    await freezeBalanceInTransaction(tx, userId, amount, options)
+  ))
+}
+
 type LockedTaskBillingRow = {
   id: string
   userId: string
@@ -890,15 +900,13 @@ export async function authorizeTaskBilling(taskId: string): Promise<TaskBillingI
         billingTaskType: info.taskType,
       })
     }
-    const prepared = await prepareTaskBillingSnapshot({
+    const prepared = await prepareTaskBillingInTransaction(tx, {
       id: task.id,
       userId: task.userId,
       projectId: task.projectId,
       episodeId: task.episodeId,
       billingInfo: info,
-    }, mode, async (userId, amount, options) => (
-      await freezeBalanceInTransaction(tx, userId, amount, options)
-    ))
+    }, mode)
     await tx.task.update({
       where: { id: task.id },
       data: {

@@ -21,7 +21,9 @@ export function createTaskExecutionFingerprint(input: CreateTaskInput): string {
     batchKey: input.batchKey ?? null,
     operationId: input.operationId ?? null,
     operationSource: input.operationSource ?? null,
-    operationConfirmed: input.operationConfirmed ?? null,
+    approvalGrantId: input.approvalGrantId ?? null,
+    operationExecutionId: input.operationExecutionId ?? null,
+    operationPlanTaskId: input.operationPlanTaskId ?? null,
     operationRequestId: input.operationRequestId ?? null,
   }
   return createHash('sha256').update(JSON.stringify(canonicalize(immutableInput))).digest('hex')

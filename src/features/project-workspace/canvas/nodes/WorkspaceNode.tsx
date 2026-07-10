@@ -71,7 +71,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
     || Boolean(tertiaryAction && data.tertiaryActionLabel)
     || nodeShowsMetaFooter(data.kind)
   )
-  const runningData = isRunning ? { ...data, __running: true } : data
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -175,7 +174,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
               className={`workspace-canvas-node-content space-y-4 px-5 py-5 ${isRunning ? 'opacity-90' : ''}`}
               data-expanded={expanded ? 'true' : 'false'}
             >
-              <NodeContent data={runningData} labels={labels} expanded={expanded} />
+              <NodeContent data={data} labels={labels} expanded={expanded} />
               {nodeUsesInlineTaskProgress(data.kind) ? (
                 <EstimatedTaskProgressInline taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)} />
               ) : null}

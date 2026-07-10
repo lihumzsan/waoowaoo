@@ -170,7 +170,6 @@ export {
     useCreateProjectEditBible,
     useCreateProjectEditScript,
     useConfirmProjectEditBible,
-    useConfirmProjectEditStylePreview,
     useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
     useReviseProjectEditBible,

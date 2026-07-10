@@ -6,7 +6,7 @@ import type {
   TaskTargetStateQuery,
 } from './hooks/useTaskTargetStateMap'
 
-type TerminalPhase = 'completed' | 'failed'
+type TerminalPhase = 'completed' | 'failed' | 'canceled'
 
 interface ApplyTaskTargetTerminalStateInput {
   readonly projectId: string

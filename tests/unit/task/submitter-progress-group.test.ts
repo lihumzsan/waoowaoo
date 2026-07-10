@@ -83,7 +83,6 @@ describe('submitTask progress group', () => {
       },
       operationId: 'generate_edit_script_storyboard_images',
       operationSource: 'project-ui',
-      operationConfirmed: true,
     })
 
     const expectedProgressGroupId = 'operation:generate_edit_script_storyboard_images:request-1'
@@ -98,7 +97,7 @@ describe('submitTask progress group', () => {
           progressGroupId: expectedProgressGroupId,
         },
       }),
-    }))
+    }), undefined)
     expect(publisherMock.publishTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: TASK_EVENT_TYPE.CREATED,
       payload: expect.objectContaining({
@@ -112,7 +111,9 @@ describe('submitTask progress group', () => {
     expect(queueMock.addTaskJob).toHaveBeenCalledWith(expect.objectContaining({
       operationId: 'generate_edit_script_storyboard_images',
       operationSource: 'project-ui',
-      operationConfirmed: true,
+      approvalGrantId: null,
+      operationExecutionId: null,
+      operationPlanTaskId: null,
       operationRequestId: 'request-1',
       payload: expect.objectContaining({
         ui: {
@@ -155,9 +156,8 @@ describe('submitTask progress group', () => {
       },
       operationId: 'generate_episode_soundscape',
       operationSource: 'worker',
-      operationConfirmed: false,
     })).rejects.toMatchObject({
-      message: expect.stringContaining('billable media approval is required'),
+      message: expect.stringContaining('must reference its approved plan'),
     })
 
     expect(serviceMock.createTask).not.toHaveBeenCalled()

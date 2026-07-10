@@ -198,7 +198,6 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
               targetId: appearance.id,
               operationId: 'create_asset_hub_character',
               source: ctx.source,
-              confirmed: body.confirmed === true,
               payload,
               dedupeKey: `asset_hub_reference_to_character:${appearance.id}:${count}`,
             })
@@ -330,7 +329,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       },
       confirmation: {
         required: true,
-        summary: '将删除该角色记录（不可恢复）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将删除该角色记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

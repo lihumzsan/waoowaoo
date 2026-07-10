@@ -65,7 +65,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       },
       confirmation: {
         required: true,
-        summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),
@@ -94,7 +94,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       },
       confirmation: {
         required: true,
-        summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

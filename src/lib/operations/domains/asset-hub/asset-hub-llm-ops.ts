@@ -37,11 +37,10 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交资产中心角色设计任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         userInstruction: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -65,7 +64,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: ctx.userId,
           operationId: 'asset_hub_ai_design_character',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             userInstruction,
             analysisModel: userConfig.analysisModel,
@@ -83,11 +81,10 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交资产中心场景设计任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         userInstruction: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
@@ -111,7 +108,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: ctx.userId,
           operationId: 'asset_hub_ai_design_location',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             userInstruction,
             analysisModel: userConfig.analysisModel,
@@ -129,11 +125,10 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交资产中心角色形象修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         characterId: z.string().min(1),
         appearanceIndex: z.number().int().min(0).max(50),
         currentDescription: z.string().min(1),
@@ -163,7 +158,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: input.characterId,
           operationId: 'asset_hub_ai_modify_character',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             ...input,
             analysisModel: userConfig.analysisModel,
@@ -180,11 +174,10 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交资产中心场景修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         locationId: z.string().min(1),
         imageIndex: z.number().int().min(0).max(200),
         currentDescription: z.string().min(1),
@@ -214,7 +207,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: input.locationId,
           operationId: 'asset_hub_ai_modify_location',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             ...input,
             analysisModel: userConfig.analysisModel,
@@ -231,11 +223,10 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交资产中心道具修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         propId: z.string().min(1),
         variantId: z.string().optional(),
         currentDescription: z.string().min(1),
@@ -279,7 +270,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: variantId || propId,
           operationId: 'asset_hub_ai_modify_prop',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             ...input,
             propId,
@@ -299,8 +289,8 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交参考图转角色任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
@@ -351,7 +341,6 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           targetId: appearanceId || characterId || ctx.userId,
           operationId: 'asset_hub_reference_to_character',
           source: ctx.source,
-          confirmed: body.confirmed === true,
           payload,
           dedupeKey: `asset_hub_reference_to_character:${appearanceId || characterId || ctx.userId}:${count}`,
         })

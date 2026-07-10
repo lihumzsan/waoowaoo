@@ -1,8 +1,9 @@
 import { Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { createScopedLogger } from '@/lib/logging/core'
-import { QueueType, TaskType, TASK_TYPE, type TaskJobData } from './types'
+import { QueueType, TaskType, type TaskJobData } from './types'
 import { getTaskMaxAttempts, TASK_RETRY_BACKOFF_BASE_MS } from './retry-policy'
+import { getTaskDefinition } from './definition'
 
 export const QUEUE_NAME = {
   IMAGE: 'waoowaoo-image',
@@ -61,45 +62,8 @@ export function getAllQueues() {
   return [getImageQueue(), getVideoQueue(), getMusicQueue(), getTextQueue()]
 }
 
-const TASK_QUEUE_TYPE = {
-  [TASK_TYPE.IMAGE_PANEL]: 'image',
-  [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE]: 'text',
-  [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'image',
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'text',
-  [TASK_TYPE.IMAGE_CHARACTER]: 'image',
-  [TASK_TYPE.IMAGE_LOCATION]: 'image',
-  [TASK_TYPE.MUSIC_GENERATE]: 'music',
-  [TASK_TYPE.MUSIC_SCORE_PLAN]: 'music',
-  [TASK_TYPE.SOUNDSCAPE_PLAN]: 'music',
-  [TASK_TYPE.SOUNDSCAPE_GENERATE]: 'music',
-  [TASK_TYPE.FINAL_VIDEO_RENDER]: 'video',
-  [TASK_TYPE.CHAPTER_RENDER]: 'video',
-  [TASK_TYPE.VIDEO_PANEL]: 'video',
-  [TASK_TYPE.VIDEO_GROUP]: 'video',
-  [TASK_TYPE.MODIFY_ASSET_IMAGE]: 'image',
-  [TASK_TYPE.REGENERATE_GROUP]: 'image',
-  [TASK_TYPE.ASSET_HUB_IMAGE]: 'image',
-  [TASK_TYPE.ASSET_HUB_MODIFY]: 'image',
-  [TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE]: 'text',
-  [TASK_TYPE.EDIT_BIBLE_GENERATE]: 'text',
-  [TASK_TYPE.EDIT_SCRIPT_GENERATE]: 'text',
-  [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: 'text',
-  [TASK_TYPE.AI_MODIFY_APPEARANCE]: 'text',
-  [TASK_TYPE.AI_MODIFY_LOCATION]: 'text',
-  [TASK_TYPE.AI_MODIFY_PROP]: 'text',
-  [TASK_TYPE.AI_CREATE_CHARACTER]: 'text',
-  [TASK_TYPE.AI_CREATE_LOCATION]: 'text',
-  [TASK_TYPE.REFERENCE_TO_CHARACTER]: 'text',
-  [TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER]: 'text',
-  [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: 'text',
-  [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: 'text',
-  [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: 'text',
-  [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: 'text',
-  [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: 'text',
-} satisfies Record<TaskType, QueueType>
-
 export function getQueueTypeByTaskType(type: TaskType): QueueType {
-  return TASK_QUEUE_TYPE[type]
+  return getTaskDefinition(type).queue
 }
 
 export function getQueueByType(type: QueueType) {

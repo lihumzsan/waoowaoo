@@ -9,12 +9,10 @@ import {
   mergeWorkspaceAssistantStreamedMessage,
   resolveWorkspaceAssistantPendingOperationId,
   shouldClearWorkspaceAssistantControlPending,
-  shouldPollWorkspaceAssistantSessionState,
   shouldSendWorkspaceAssistantAutomatically,
 } from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
 import {
   mergeWorkspaceAssistantPersistedMessages,
-  shouldRefetchWorkspaceAssistantThreadForRunTransition,
 } from '@/features/project-workspace/components/workspace-assistant/thread-sync'
 
 describe('workspace assistant runtime chat id', () => {
@@ -79,67 +77,6 @@ describe('workspace assistant runtime chat id', () => {
     expect(isWorkspaceAssistantOperationPendingStatus('awaiting_choice')).toBe(false)
     expect(isWorkspaceAssistantOperationPendingStatus('awaiting_approval')).toBe(false)
     expect(isWorkspaceAssistantOperationPendingStatus('completed')).toBe(false)
-  })
-
-  it('polls session-state only while server-side progress can change without user input', () => {
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'submitted',
-      controlPending: false,
-      sessionState: null,
-    })).toBe(true)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: true,
-      sessionState: null,
-    })).toBe(true)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'running' },
-        activeWaits: [],
-      },
-    })).toBe(true)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'awaiting_task' },
-        activeWaits: [],
-      },
-    })).toBe(false)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'awaiting_task' },
-        activeWaits: [{ status: 'pending' }],
-      },
-    })).toBe(true)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'awaiting_approval' },
-        activeWaits: [],
-      },
-    })).toBe(false)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'awaiting_choice' },
-        activeWaits: [],
-      },
-    })).toBe(false)
-    expect(shouldPollWorkspaceAssistantSessionState({
-      chatStatus: 'ready',
-      controlPending: false,
-      sessionState: {
-        currentRun: { status: 'completed' },
-        activeWaits: [{ status: 'resolved' }],
-      },
-    })).toBe(true)
   })
 
   it('never reports a pending operation while a denial is being delivered', () => {
@@ -292,29 +229,6 @@ describe('workspace assistant runtime chat id', () => {
         parts: [{ type: 'text', text: 'streaming' }],
       },
     ])
-  })
-
-  it('refetches the persisted thread when server run lifecycle edges can commit messages', () => {
-    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
-      previousRun: null,
-      currentRun: { runId: 'run-1', status: 'running' },
-    })).toBe(true)
-    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
-      previousRun: { runId: 'run-1', status: 'running' },
-      currentRun: { runId: 'run-1', status: 'completed' },
-    })).toBe(true)
-    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
-      previousRun: { runId: 'run-1', status: 'running' },
-      currentRun: { runId: 'run-1', status: 'awaiting_choice' },
-    })).toBe(true)
-    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
-      previousRun: { runId: 'run-1', status: 'awaiting_task' },
-      currentRun: null,
-    })).toBe(true)
-    expect(shouldRefetchWorkspaceAssistantThreadForRunTransition({
-      previousRun: { runId: 'run-1', status: 'running' },
-      currentRun: { runId: 'run-1', status: 'running' },
-    })).toBe(false)
   })
 
 })

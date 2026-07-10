@@ -5,6 +5,8 @@ import { type TaskBillingInfo, type TaskType } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import type { Locale } from '@/i18n/routing'
+import type { OperationExecutionAuthorization } from './planned-operation-invocation'
+import type { Prisma } from '@prisma/client'
 
 export function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -21,7 +23,8 @@ export async function submitOperationTask(params: {
   targetId: string
   operationId: string
   source: string
-  confirmed: boolean
+  executionAuthorization?: OperationExecutionAuthorization | null
+  operationPlanTaskId?: string | null
   payload: Record<string, unknown>
   dedupeKey?: string | null
   batchKey?: string | null
@@ -30,6 +33,10 @@ export async function submitOperationTask(params: {
   billingInfo?: TaskBillingInfo | null
   billingInfoSource?: 'auto' | 'planned'
   decoratePayload?: boolean
+  onTaskCreatedInTransaction?: (
+    tx: Prisma.TransactionClient,
+    task: { id: string },
+  ) => Promise<void>
 }) {
   const locale = params.locale ?? resolveRequiredTaskLocale(params.request, params.payload)
   const billingInfo = params.billingInfo !== undefined
@@ -65,7 +72,10 @@ export async function submitOperationTask(params: {
     billingInfoSource: params.billingInfoSource,
     operationId: params.operationId,
     operationSource: params.source,
-    operationConfirmed: params.confirmed,
+    approvalGrantId: params.executionAuthorization?.approvalGrantId ?? null,
+    operationExecutionId: params.executionAuthorization?.operationExecutionId ?? null,
+    operationPlanTaskId: params.operationPlanTaskId ?? null,
     operationRequestId: getRequestId(params.request),
+    onTaskCreatedInTransaction: params.onTaskCreatedInTransaction,
   })
 }

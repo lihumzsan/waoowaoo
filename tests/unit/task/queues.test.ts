@@ -81,11 +81,10 @@ describe('task queues', () => {
     expect(QueueMock).toHaveBeenCalledTimes(1)
   })
 
-  it('routes style preview parent generation to the text queue', async () => {
+  it('routes direct style preview image generation to the image queue', async () => {
     const queuesModule = await import('@/lib/task/queues')
     const taskTypes = await import('@/lib/task/types')
 
-    expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE)).toBe('text')
     expect(queuesModule.getQueueTypeByTaskType(taskTypes.TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE)).toBe('image')
   })
 

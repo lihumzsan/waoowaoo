@@ -3,17 +3,41 @@ import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { FAL_PLATFORM_DEFAULT_MUSIC_MODEL_KEY } from '@/lib/ai-providers/fal/models'
 import { OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY } from '@/lib/ai-providers/openrouter/models'
+import type { Prisma } from '@prisma/client'
 
-const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
-  taskId: 'task-1',
-  runId: 'run-1',
-  status: 'queued',
-  deduped: false,
-})))
+const submitOperationTaskMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    taskId: 'task-1',
+    runId: 'run-1',
+    status: 'queued',
+    deduped: false,
+  })),
+)
+const submitApprovedPlanMock = vi.hoisted(() =>
+  vi.fn(
+    async () =>
+      new Map([
+        [
+          'generate_project_music:project-1',
+          {
+            taskId: 'task-1',
+            runId: 'run-1',
+            status: 'queued',
+            deduped: false,
+          },
+        ],
+      ]),
+  ),
+)
 
 const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => 'fal::fal-ai/lyria3/pro'))
 
-vi.mock('@/lib/operations/submit-operation-task', () => ({ submitOperationTask: submitOperationTaskMock }))
+vi.mock('@/lib/operations/submit-operation-task', () => ({
+  submitOperationTask: submitOperationTaskMock,
+}))
+vi.mock('@/lib/task/approved-plan-submitter', () => ({
+  submitApprovedOperationPlanTasks: submitApprovedPlanMock,
+}))
 vi.mock('@/lib/model-access/system-model-resolver', () => ({
   resolveSystemModelKey: resolveSystemModelKeyMock,
 }))
@@ -56,6 +80,11 @@ function buildContext(): ProjectAgentOperationContext {
     context: { episodeId: 'episode-1', locale: 'zh' },
     source: 'test',
     writer: null,
+    executionAuthorization: {
+      approvalGrantId: 'approval-grant-1',
+      operationExecutionId: 'operation-execution-1',
+      transaction: {} as Prisma.TransactionClient,
+    },
   }
 }
 
@@ -73,38 +102,48 @@ describe('cloud music generation runtime options', () => {
   afterEach(() => restoreEnv())
 
   it('uses platform music model and platform output format without pre-confirm cost', async () => {
-    const result = await createMusicGenerationOperations().generate_project_music.execute(buildContext(), {
+    const operation = createMusicGenerationOperations().generate_project_music
+    const input = {
       prompt: 'quiet tension cue',
       durationSeconds: 30,
-    })
+    }
+    if (!operation.plan) throw new Error('EXPECTED_MUSIC_PLAN')
+    const plan = await operation.plan(buildContext(), input)
+    if (!operation.commit) throw new Error('EXPECTED_MUSIC_COMMIT')
+    const result = await operation.commit(buildContext(), input, plan)
 
     expect(result).toMatchObject({
       taskId: 'task-1',
       musicModel: 'fal::fal-ai/lyria3/pro',
     })
-    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({
-        prompt: 'quiet tension cue',
-        durationSeconds: 30,
-        musicModel: 'fal::fal-ai/lyria3/pro',
-        outputFormat: 'mp3',
+    expect(plan.tasks[0]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          prompt: 'quiet tension cue',
+          durationSeconds: 30,
+          musicModel: 'fal::fal-ai/lyria3/pro',
+          outputFormat: 'mp3',
+        }),
       }),
-    }))
+    )
   })
 
   it('rejects user-selected music models in cloud mode', async () => {
-    await expect(createMusicGenerationOperations().generate_project_music.execute(buildContext(), {
-      confirmed: true,
-      prompt: 'quiet tension cue',
-      durationSeconds: 30,
-      musicModel: 'fal::other-model',
-    })).rejects.toMatchObject({
+    const operation = createMusicGenerationOperations().generate_project_music
+    if (!operation.plan) throw new Error('EXPECTED_MUSIC_PLAN')
+    await expect(
+      operation.plan(buildContext(), {
+        prompt: 'quiet tension cue',
+        durationSeconds: 30,
+        musicModel: 'fal::other-model',
+      }),
+    ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({
         code: 'TASK_MODEL_MANAGED_BY_PLATFORM',
         field: 'musicModel',
       }),
     })
-    expect(submitOperationTaskMock.mock.calls).toEqual([])
+    expect(submitApprovedPlanMock.mock.calls).toEqual([])
   })
 })

@@ -58,7 +58,7 @@ describe('project config operations in cloud deployment', () => {
   })
 
   it('returns a non-configurable project config without reading project model fields', async () => {
-    const result = await createConfigOperations().get_project_config.execute(buildContext(), {})
+    const result = await createConfigOperations().get_project_config.execute!(buildContext(), {})
 
     expect(result).toMatchObject({
       configurable: false,
@@ -92,23 +92,27 @@ describe('project config operations in cloud deployment', () => {
     prismaMock.project.findUnique.mockResolvedValue(projectRow)
     prismaMock.project.update.mockResolvedValue(updatedProject)
 
-    const result = await createConfigOperations().update_project_config.execute(buildContext(), {
+    const result = await createConfigOperations().update_project_config.execute!(buildContext(), {
       videoRatio: '9:16',
     })
 
-    expect(prismaMock.project.update.mock.calls).toEqual([[
-      {
-        where: { id: 'project-1' },
-        data: { videoRatio: '9:16' },
-      },
-    ]])
+    expect(prismaMock.project.update.mock.calls).toEqual([
+      [
+        {
+          where: { id: 'project-1' },
+          data: { videoRatio: '9:16' },
+        },
+      ],
+    ])
     expect(result).toEqual({ project: updatedProject })
   })
 
   it('rejects platform-managed model config writes in cloud mode', async () => {
-    await expect(createConfigOperations().update_project_config.execute(buildContext(), {
-      editModel: 'openrouter::anthropic/claude-sonnet-4.6',
-    })).rejects.toMatchObject({
+    await expect(
+      createConfigOperations().update_project_config.execute!(buildContext(), {
+        editModel: 'openrouter::anthropic/claude-sonnet-4.6',
+      }),
+    ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({
         code: 'PROJECT_CONFIG_MANAGED_BY_PLATFORM',

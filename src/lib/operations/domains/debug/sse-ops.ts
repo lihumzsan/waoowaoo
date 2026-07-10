@@ -2,29 +2,19 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { listEventsAfter, getProjectChannel, listRecentTerminalLifecycleEvents } from '@/lib/task/publisher'
 import { listMutationBatchReplayEvents } from '@/lib/mutation-batch/service'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_STATUS, type TaskSSEEvent } from '@/lib/task/types'
+import {
+  TASK_EVENT_TYPE,
+  TASK_SSE_EVENT_TYPE,
+  TASK_STATUS,
+  WORKSPACE_SSE_EVENT_TYPE,
+  type MutationBatchSSEEvent,
+  type TaskSSEEvent,
+} from '@/lib/task/types'
 import { coerceTaskIntent } from '@/lib/task/intent'
 import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-
-function parseReplayCursorId(value: string | null | undefined): number {
-  if (!value) return 0
-  const trimmed = value.trim()
-  if (!trimmed || !/^\d+$/.test(trimmed)) return 0
-  const parsed = Number.parseInt(trimmed, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-}
-
-function parseMutationReplayCursor(value: string | null | undefined): Date | null {
-  if (!value) return null
-  const trimmed = value.trim()
-  const match = /^mb:(\d+):/.exec(trimmed)
-  if (!match) return null
-  const timestamp = Number.parseInt(match[1], 10)
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
-  return new Date(timestamp)
-}
+import { parseWorkspaceSseCursor } from '@/lib/sse/protocol'
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -37,6 +27,29 @@ function uniqueTaskEvents(events: TaskSSEEvent[]): TaskSSEEvent[] {
     eventsById.set(event.id, event)
   }
   return Array.from(eventsById.values())
+}
+
+function buildRecoveryMutationCheckpoint(params: {
+  projectId: string
+  userId: string
+  episodeId: string | null
+}): MutationBatchSSEEvent {
+  const checkpointAt = new Date()
+  const checkpointId = `recovery:${params.projectId}:${checkpointAt.getTime()}`
+  return {
+    id: `mb:${checkpointAt.getTime()}:${checkpointId}`,
+    type: WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH,
+    mutationBatchId: checkpointId,
+    projectId: params.projectId,
+    userId: params.userId,
+    ts: checkpointAt.toISOString(),
+    operationId: null,
+    episodeId: params.episodeId,
+    targets: [{
+      targetType: params.projectId === 'global-asset-hub' ? 'GlobalAsset' : 'ProjectEpisode',
+      targetId: params.episodeId ?? params.projectId,
+    }],
+  }
 }
 
 async function listActiveLifecycleSnapshot(params: {
@@ -156,21 +169,31 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
         const channel = getProjectChannel(ctx.projectId)
-        const lastEventId = parseReplayCursorId(input.lastEventId || null)
-        const lastMutationEventAt = parseMutationReplayCursor(input.lastEventId || null)
+        const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
         const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
 
-        if (lastMutationEventAt) {
+        if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0) {
           const replayLimit = input.replayLimit ?? 5000
           const episodeId = input.episodeId ? input.episodeId.trim() : null
-          const mutationEvents = await listMutationBatchReplayEvents({
-            projectId: ctx.projectId,
-            userId: ctx.userId,
-            after: lastMutationEventAt,
-            episodeId,
-            limit: replayLimit,
-          })
-          const activeTaskEvents = includeRecoverableSnapshot
+          const [taskEvents, mutationEvents] = await Promise.all([
+            cursor.taskEventId > 0
+              ? listEventsAfter(ctx.projectId, cursor.taskEventId, replayLimit)
+              : Promise.resolve([]),
+            cursor.mutationEventAtMs > 0 && cursor.mutationBatchId
+              ? listMutationBatchReplayEvents({
+                  projectId: ctx.projectId,
+                  userId: ctx.userId,
+                  after: {
+                    createdAt: new Date(cursor.mutationEventAtMs),
+                    batchId: cursor.mutationBatchId,
+                  },
+                  episodeId,
+                  limit: replayLimit,
+                })
+              : Promise.resolve([]),
+          ])
+          const userTaskEvents = taskEvents.filter((event) => event.userId === ctx.userId)
+          const activeTaskEvents = includeRecoverableSnapshot && cursor.taskEventId === 0
             ? await listActiveLifecycleSnapshot({
                 projectId: ctx.projectId,
                 episodeId,
@@ -178,22 +201,25 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
                 limit: input.snapshotLimit ?? 500,
               })
             : []
+          const recoveryCheckpoint = cursor.mutationEventAtMs === 0
+            ? [buildRecoveryMutationCheckpoint({
+                projectId: ctx.projectId,
+                userId: ctx.userId,
+                episodeId,
+              })]
+            : []
+          const events = [...userTaskEvents, ...mutationEvents, ...activeTaskEvents, ...recoveryCheckpoint]
+            .sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
           return {
             channel,
-            mode: includeRecoverableSnapshot ? 'mutation_replay_with_active_snapshot' : 'mutation_replay',
+            mode: cursor.taskEventId > 0 && cursor.mutationEventAtMs > 0
+              ? 'composite_replay'
+              : cursor.taskEventId > 0
+                ? 'missed_event_replay'
+                : includeRecoverableSnapshot
+                  ? 'mutation_replay_with_active_snapshot'
+                  : 'mutation_replay',
             fromEventId: input.lastEventId,
-            events: [...mutationEvents, ...activeTaskEvents],
-          }
-        }
-
-        if (lastEventId > 0) {
-          const replayLimit = input.replayLimit ?? 5000
-          const missed = await listEventsAfter(ctx.projectId, lastEventId, replayLimit)
-          const events = missed.filter((event) => event.userId === ctx.userId)
-          return {
-            channel,
-            mode: 'missed_event_replay',
-            fromEventId: lastEventId,
             events,
           }
         }
@@ -217,7 +243,11 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         return {
           channel,
           mode: 'recoverable_snapshot',
-          events,
+          events: [...events, buildRecoveryMutationCheckpoint({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId: input.episodeId ? input.episodeId.trim() : null,
+          })],
         }
       },
     }),

@@ -449,7 +449,8 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
   if (!approvedPlanHash) throw new Error('SOUNDSCAPE_GENERATE_PLAN_HASH_REQUIRED')
   if (
     job.data.operationId !== 'generate_episode_soundscape'
-    || job.data.operationConfirmed !== true
+    || !job.data.approvalGrantId
+    || !job.data.operationExecutionId
   ) {
     throw new Error('SOUNDSCAPE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
   }

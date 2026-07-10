@@ -91,7 +91,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       },
       confirmation: {
         required: true,
-        summary: '将批量 dismiss 失败任务（不可逆）。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将批量 dismiss 失败任务（不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
@@ -173,7 +173,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       },
       confirmation: {
         required: true,
-        summary: '将取消该任务。确认继续后请重新调用并传入 confirmed=true。',
+        summary: '将取消该任务。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
         confirmed: z.boolean().optional(),

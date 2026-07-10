@@ -278,7 +278,7 @@ describe('project agent live operation enablement', () => {
     })).toBe(true)
   })
 
-  it('keeps stage capability rules like bible revision during review', () => {
+  it('keeps review mutations disabled until the persistent choice is consumed', () => {
     const toolset = resolveProjectAgentToolset({
       registry: registry(),
       context: { episodeId: 'episode-1' },
@@ -289,7 +289,7 @@ describe('project agent live operation enablement', () => {
       toolset,
       workflow: review,
       operationId: 'revise_bible',
-    })).toBe(true)
+    })).toBe(false)
     expect(isProjectAgentOperationEnabled({
       toolset,
       workflow: review,

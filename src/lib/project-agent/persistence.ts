@@ -96,6 +96,41 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
 ): Promise<ProjectAssistantThreadSnapshot> {
   const appendedMessages = await validateMessages(input.messages)
   const scopeRef = buildProjectAssistantScopeRef(input)
+  // Materialize the unique aggregate row before taking the lock. The no-op
+  // update makes concurrent first appends serialize on the same unique key;
+  // without this, two transactions can both read an absent/old JSON array and
+  // the last writer silently drops the other message.
+  await tx.projectAssistantThread.upsert({
+    where: {
+      projectId_userId_assistantId_scopeRef: {
+        projectId: input.projectId,
+        userId: input.userId,
+        assistantId: input.assistantId,
+        scopeRef,
+      },
+    },
+    update: {},
+    create: {
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId || null,
+      assistantId: input.assistantId,
+      scopeRef,
+      messagesJson: serializeMessages([]),
+    },
+  })
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM project_assistant_threads
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${input.assistantId}
+      AND scopeRef = ${scopeRef}
+    FOR UPDATE
+  `)
+  if (locked.length !== 1) {
+    throw new Error(`PROJECT_ASSISTANT_THREAD_LOCK_FAILED:${input.projectId}:${scopeRef}`)
+  }
   const existingRecord = await tx.projectAssistantThread.findUnique({
     where: {
       projectId_userId_assistantId_scopeRef: {
@@ -112,25 +147,13 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
     return toThreadSnapshot(existingRecord, existingMessages)
   }
 
-  const record = await tx.projectAssistantThread.upsert({
-    where: {
-      projectId_userId_assistantId_scopeRef: {
-        projectId: input.projectId,
-        userId: input.userId,
-        assistantId: input.assistantId,
-        scopeRef,
-      },
-    },
-    update: {
+  if (!existingRecord) {
+    throw new Error(`PROJECT_ASSISTANT_THREAD_NOT_FOUND_AFTER_LOCK:${input.projectId}:${scopeRef}`)
+  }
+  const record = await tx.projectAssistantThread.update({
+    where: { id: existingRecord.id },
+    data: {
       episodeId: input.episodeId || null,
-      messagesJson: serializeMessages(nextMessages),
-    },
-    create: {
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId || null,
-      assistantId: input.assistantId,
-      scopeRef,
       messagesJson: serializeMessages(nextMessages),
     },
   })

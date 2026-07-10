@@ -34,7 +34,7 @@ import type {
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
-import { projectEditBibleQueryOptions, useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
+import { projectEditBibleQueryOptions } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   buildChoiceCardCustomOptionValue,
@@ -45,7 +45,6 @@ import {
   type ChoiceCardCustomOptions,
   type ChoiceCardSelections,
 } from './choice-card-actions'
-import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
 import type { ProjectEditStylePreview } from '@/types/project'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
@@ -305,10 +304,6 @@ export function WorkspaceAssistantActiveRunCard(props: {
   )
 }
 
-function isEditScriptVideoRatio(value: string | undefined): value is EditScriptVideoRatio {
-  return typeof value === 'string' && EDIT_SCRIPT_VIDEO_RATIOS.includes(value as EditScriptVideoRatio)
-}
-
 function isAspectRatioChoiceGroupKey(key: string): boolean {
   return key === 'aspectRatio'
 }
@@ -338,17 +333,11 @@ export function AssistantChoiceCardView(props: {
   data: ProjectAgentChoiceCardPartData
   onSubmitChoiceResponse: (params: {
     runId: string
-    interruptionId: string | null
+    interruptionId: string
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
-    toolCallId: string | null
+    toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
-  }) => Promise<void>
-  onConfirmEditStylePreviewChoice: (params: {
-    projectId: string
-    episodeId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
   onSubmitted?: (cardId: string) => void
 }) {
@@ -393,7 +382,7 @@ export function AssistantChoiceCardView(props: {
     try {
       await props.onSubmitChoiceResponse({
         runId: readChoiceRunId(),
-        interruptionId: card.interruptionId ?? null,
+        interruptionId: card.interruptionId,
         choiceType: card.choiceType,
         toolCallId: card.toolCallId,
         output: {
@@ -422,51 +411,21 @@ export function AssistantChoiceCardView(props: {
     setError(null)
     try {
       const labels = resolveChoiceCardSelectionLabels(submitGroups, submitSelections)
-      if (card.submit.kind === 'submit_tool_output') {
-        await props.onSubmitChoiceResponse({
-          runId: readChoiceRunId(),
-          interruptionId: card.interruptionId ?? null,
+      await props.onSubmitChoiceResponse({
+        runId: readChoiceRunId(),
+        interruptionId: card.interruptionId,
+        choiceType: card.choiceType,
+        toolCallId: card.toolCallId,
+        output: {
+          ok: true,
           choiceType: card.choiceType,
-          toolCallId: card.toolCallId,
-          output: {
-            ok: true,
-            choiceType: card.choiceType,
-            cardId: card.cardId,
-            decision: 'approve',
-            selections: submitSelections,
-            labels,
-          },
-        })
-        props.onSubmitted?.(card.cardId)
-      } else {
-        const stylePreviewId = submitSelections.stylePreviewId
-        const aspectRatio = card.submit.aspectRatio ?? submitSelections.aspectRatio
-        if (!stylePreviewId || !isEditScriptVideoRatio(aspectRatio)) {
-          throw new Error('ASSISTANT_CHOICE_CARD_INVALID_STYLE_SELECTION')
-        }
-        await props.onConfirmEditStylePreviewChoice({
-          projectId: card.submit.projectId,
-          episodeId: card.submit.episodeId,
-          stylePreviewId,
-          aspectRatio,
-        })
-        await props.onSubmitChoiceResponse({
-          runId: readChoiceRunId(),
-          interruptionId: card.interruptionId ?? null,
-          choiceType: card.choiceType,
-          toolCallId: card.toolCallId,
-          output: {
-            ok: true,
-            choiceType: card.choiceType,
-            cardId: card.cardId,
-            stylePreviewId,
-            aspectRatio,
-            selections: submitSelections,
-            labels,
-          },
-        })
-        props.onSubmitted?.(card.cardId)
-      }
+          cardId: card.cardId,
+          decision: card.choiceType === 'style' ? 'select' : 'approve',
+          selections: submitSelections,
+          labels,
+        },
+      })
+      props.onSubmitted?.(card.cardId)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
     } finally {
@@ -846,17 +805,10 @@ function StylePreviewLoadingSurface() {
 }
 
 export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<EditStylePreviewGenerationPartData> & {
-  onStyleSelected?: (params: {
-    runId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => Promise<void>
   onPreviewImage?: (imageUrl: string) => void
 }) {
   const t = useTranslations('assistantAgent')
   const data: EditStylePreviewGenerationPartData = props.data
-  const confirmStylePreview = useConfirmProjectEditStylePreview(data.projectId)
-  const [selectingPreviewId, setSelectingPreviewId] = useState<string | null>(null)
   const [localPreviewImageUrl, setLocalPreviewImageUrl] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
   // 第一性原理：候选清单的唯一事实来源是 editBible.stylePreviews（实时查询）。
@@ -913,29 +865,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   const hasConfirmedPreview = displayedItems.some((item) => previewsById.get(item.id)?.status === 'confirmed')
   const hasGeneratingPreview = cardStatuses.some((status) => status === 'generating')
 
-  const handleSelectStylePreview = async (
-    item: EditStylePreviewGenerationPartData['items'][number],
-    preview: ProjectEditStylePreview,
-  ) => {
-    if (!isEditStylePreviewChoiceReady(preview)) return
-    const runId = data.agentRunId?.trim()
-    if (!runId) throw new Error('ASSISTANT_STYLE_PREVIEW_AGENT_RUN_ID_MISSING')
-    setSelectingPreviewId(item.id)
-    try {
-      await confirmStylePreview.mutateAsync({
-        episodeId: data.episodeId,
-        stylePreviewId: item.id,
-        aspectRatio: preview.aspectRatio,
-      })
-      await props.onStyleSelected?.({
-        runId,
-        stylePreviewId: item.id,
-        aspectRatio: preview.aspectRatio,
-      })
-    } finally {
-      setSelectingPreviewId(null)
-    }
-  }
   const openPreviewImage = (imageUrl: string) => {
     if (props.onPreviewImage) {
       props.onPreviewImage(imageUrl)
@@ -977,10 +906,8 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
             taskState,
             loading: editBibleQuery.isLoading || taskTargetStateQuery.isLoading,
           })
-          const ready = cardStatus === 'completed' && isEditStylePreviewChoiceReady(preview)
           const failed = cardStatus === 'failed'
           const inProgress = cardStatus === 'generating' || cardStatus === 'loading'
-          const selecting = selectingPreviewId === item.id
           const confirmed = preview?.status === 'confirmed'
           const imageUrl = preview?.imageUrl ?? null
           const errorMessage = truncateStylePreviewErrorMessage(preview?.errorMessage || taskState?.lastError?.message)
@@ -1058,16 +985,6 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
                     <AppIcon name="badgeCheck" className="h-3.5 w-3.5 text-[var(--glass-accent-from)]" />
                     {t('cards.stylePreviewConfirmed')}
                   </div>
-                ) : ready ? (
-                  <button
-                    type="button"
-                    disabled={selecting || confirmStylePreview.isPending}
-                    onClick={() => { void handleSelectStylePreview(item, preview) }}
-                    className="group/btn absolute bottom-3 right-3 z-30 inline-flex items-center gap-1 rounded-full bg-white/92 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {selecting ? t('cards.choiceSubmitting') : t('cards.stylePreviewSelect')}
-                    {!selecting ? <AppIcon name="chevronRight" className="h-3.5 w-3.5 text-[var(--glass-accent-from)] transition-transform group-hover/btn:translate-x-0.5" /> : null}
-                  </button>
                 ) : null}
               </div>
               <div className="p-3">
@@ -1167,22 +1084,11 @@ interface WorkspaceAssistantMessagePartComponentsOptions {
   hideStylePreviewGenerationCards?: boolean
   onSubmitChoiceResponse: (params: {
     runId: string
-    interruptionId: string | null
+    interruptionId: string
     choiceType: ProjectAgentChoiceCardPartData['choiceType']
-    toolCallId: string | null
+    toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
-  }) => Promise<void>
-  onConfirmEditStylePreviewChoice: (params: {
-    projectId: string
-    episodeId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
-  }) => Promise<void>
-  onStylePreviewSelected?: (params: {
-    runId: string
-    stylePreviewId: string
-    aspectRatio: EditScriptVideoRatio
   }) => Promise<void>
   onPreviewImage?: (imageUrl: string) => void
 }
@@ -1191,8 +1097,6 @@ export function useWorkspaceAssistantMessagePartComponents({
   hideChoiceCards = false,
   hideStylePreviewGenerationCards = false,
   onSubmitChoiceResponse,
-  onConfirmEditStylePreviewChoice,
-  onStylePreviewSelected,
   onPreviewImage,
 }: WorkspaceAssistantMessagePartComponentsOptions): MessagePartComponents {
   return useMemo<MessagePartComponents>(() => ({
@@ -1214,7 +1118,6 @@ export function useWorkspaceAssistantMessagePartComponents({
               <AssistantChoiceCardView
                 data={props.data}
                 onSubmitChoiceResponse={onSubmitChoiceResponse}
-                onConfirmEditStylePreviewChoice={onConfirmEditStylePreviewChoice}
               />
             ),
         'edit-style-preview-generation': hideStylePreviewGenerationCards
@@ -1222,7 +1125,6 @@ export function useWorkspaceAssistantMessagePartComponents({
           : (props) => (
               <EditStylePreviewGenerationDataCard
                 {...props}
-                onStyleSelected={onStylePreviewSelected}
                 onPreviewImage={onPreviewImage}
               />
             ),
@@ -1237,9 +1139,7 @@ export function useWorkspaceAssistantMessagePartComponents({
   }), [
     hideChoiceCards,
     hideStylePreviewGenerationCards,
-    onConfirmEditStylePreviewChoice,
     onPreviewImage,
-    onStylePreviewSelected,
     onSubmitChoiceResponse,
   ])
 }

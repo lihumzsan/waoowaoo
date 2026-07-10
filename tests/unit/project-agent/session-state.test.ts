@@ -134,32 +134,11 @@ const eventMock = vi.hoisted(() => ({
   })),
 }))
 
-const choiceCardMock = vi.hoisted(() => ({
-  buildEditFirstAssistantChoiceCard: vi.fn(async () => ({
-    cardId: 'edit-first-bible-review',
-    runId: null,
-    interruptionId: null,
-    toolCallId: 'tool-choice-1',
-    choiceType: 'bible_review',
-    title: '确认制作规划',
-    groups: [],
-    submitLabel: '确认',
-    submit: { kind: 'submit_tool_output' },
-  })),
-}))
-
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/project-workflow/edit-first', () => workflowMock)
 vi.mock('@/lib/project-agent/runs', () => runsMock)
 vi.mock('@/lib/project-agent/interruptions', () => interruptionsMock)
 vi.mock('@/lib/project-agent/waits', () => waitsMock)
-vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/project-agent/choice-card')>()
-  return {
-    ...actual,
-    buildEditFirstAssistantChoiceCard: choiceCardMock.buildEditFirstAssistantChoiceCard,
-  }
-})
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
@@ -310,16 +289,21 @@ describe('project agent session-state', () => {
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: {
-        choiceType: 'bible_review',
-        cardId: 'edit-first-bible-review:plan-1',
+        schemaVersion: 1,
         card: {
           cardId: 'edit-first-bible-review:plan-1',
+          runId: 'run-choice-1',
+          interruptionId: 'choice-interruption-1',
           toolCallId: 'tool-choice-1',
           choiceType: 'bible_review',
           title: '确认制作规划',
           groups: [],
           submitLabel: '确认制作规划',
           submit: { kind: 'submit_tool_output' },
+        },
+        reviewedResource: {
+          kind: 'bible_review_plan',
+          fingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
         },
       },
     })
@@ -333,16 +317,21 @@ describe('project agent session-state', () => {
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: {
-        choiceType: 'bible_review',
-        cardId: 'edit-first-bible-review:plan-1',
+        schemaVersion: 1,
         card: {
           cardId: 'edit-first-bible-review:plan-1',
+          runId: 'run-choice-1',
+          interruptionId: 'choice-interruption-1',
           toolCallId: 'tool-choice-1',
           choiceType: 'bible_review',
           title: '确认制作规划',
           groups: [],
           submitLabel: '确认制作规划',
           submit: { kind: 'submit_tool_output' },
+        },
+        reviewedResource: {
+          kind: 'bible_review_plan',
+          fingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
         },
       },
     })
@@ -355,7 +344,6 @@ describe('project agent session-state', () => {
       locale: 'zh',
     })
 
-    expect(choiceCardMock.buildEditFirstAssistantChoiceCard).not.toHaveBeenCalled()
     expect(state.pendingInteraction).toEqual(expect.objectContaining({
       kind: 'choice',
       runId: 'run-choice-1',

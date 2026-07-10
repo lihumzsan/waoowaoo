@@ -23,7 +23,6 @@ const TASK_INTENT_SET = new Set<string>(TASK_INTENTS)
 
 const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.IMAGE_PANEL]: 'generate',
-  [TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE]: 'generate',
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'generate',
   [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: 'generate',
   [TASK_TYPE.IMAGE_CHARACTER]: 'generate',

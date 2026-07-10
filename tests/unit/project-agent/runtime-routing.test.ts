@@ -51,8 +51,9 @@ const loggerState = vi.hoisted(() => ({
 }))
 
 const runState = vi.hoisted(() => ({
-  safelyUpdateProjectAgentRunStatus: vi.fn(async () => undefined),
+  safelyUpdateProjectAgentRunStatus: vi.fn(async (_input?: unknown) => undefined),
   cancelRunningProjectAgentRun: vi.fn(async () => true),
+  settleProjectAgentRunWithMessage: vi.fn(),
 }))
 
 const runHeartbeatState = vi.hoisted(() => ({
@@ -69,7 +70,7 @@ const runHeartbeatState = vi.hoisted(() => ({
 }))
 
 const persistenceState = vi.hoisted(() => ({
-  appendProjectAssistantThreadMessages: vi.fn(async () => undefined),
+  appendProjectAssistantThreadMessages: vi.fn(async (_input?: unknown) => undefined),
 }))
 
 const runLockState = vi.hoisted(() => ({
@@ -202,7 +203,7 @@ vi.mock('@openai/agents', () => {
 
     getInterruptions() {
       return [{
-        name: 'ingest_script',
+        name: 'generate_edit_style_previews',
         rawItem: {
           id: 'approval-1',
           callId: 'tool-generate-bible-1',
@@ -242,6 +243,7 @@ vi.mock('@openai/agents', () => {
         'ingest_script',
         'plan_chapters',
         'replan_chapter',
+        'confirm_bible',
       ])
       const executable = agent.tools.find((tool) => (
         streamState.capturedEnabledToolNames.includes(tool.name)
@@ -383,6 +385,7 @@ vi.mock('@/lib/project-agent/runs', () => ({
   safelyUpdateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
   updateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
   cancelRunningProjectAgentRun: runState.cancelRunningProjectAgentRun,
+  settleProjectAgentRunWithMessage: runState.settleProjectAgentRunWithMessage,
 }))
 
 vi.mock('@/lib/project-agent/run-heartbeat', () => ({
@@ -407,6 +410,13 @@ vi.mock('@/lib/project-agent/event', () => ({
 vi.mock('@/lib/project-agent/run-budget', () => ({
   buildProjectAgentOperationTargetKey: vi.fn(({ operationId }: { operationId: string }) => `${operationId}:test-target`),
   enforceProjectAgentOperationRunBudget: vi.fn(async () => null),
+}))
+
+vi.mock('@/lib/operations/planned-operation-invocation', () => ({
+  issueApprovalGrant: vi.fn(async () => ({
+    approvalGrantId: 'approval-grant-1',
+    operationRequestId: 'operation-request-1',
+  })),
 }))
 
 import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
@@ -465,20 +475,35 @@ function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
     || (intent === 'act' && !EDIT_FIRST_WORKFLOW_OPERATION_IDS.includes(id as EditFirstWorkflowOperationId))
     ? 'billable_media'
     : 'none'
-  return makeTestOperation({
+  const common = {
     id,
     summary: id,
     intent,
     groupPath: id.startsWith('get_') || id.startsWith('list_') ? ['project', 'read'] : ['edit-script'],
-    prerequisites: { episodeId: 'optional' },
+    prerequisites: { episodeId: 'optional' as const },
     effects: approvalKind === 'billable_media' ? EFFECTS_BILLABLE : EFFECTS_NONE,
     confirmation: approvalKind === 'none'
-      ? { kind: 'none', required: false }
-      : { kind: approvalKind, required: true, summary: 'billable operation' },
+      ? { kind: 'none' as const, required: false }
+      : { kind: 'billable_media' as const, required: true, summary: 'billable operation' },
     inputSchema: z.object({}),
     outputSchema: z.unknown(),
-    execute: async () => ({}),
-  })
+  }
+  return approvalKind === 'billable_media'
+    ? makeTestOperation({
+        ...common,
+        plan: async () => ({
+          kind: 'task_submission',
+          operationId: id,
+          projectId: 'project-1',
+          userId: 'user-1',
+          tasks: [],
+        }),
+        commit: async () => ({}),
+      })
+    : makeTestOperation({
+        ...common,
+        execute: async () => ({}),
+      })
 }
 
 function createRegistry(): ProjectAgentOperationRegistry {
@@ -597,6 +622,24 @@ describe('project agent runtime deterministic tool injection', () => {
     loggerState.error.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
     runState.cancelRunningProjectAgentRun.mockClear()
+    runState.settleProjectAgentRunWithMessage.mockReset()
+    runState.settleProjectAgentRunWithMessage.mockImplementation(async (input: {
+      runFence: { runId: string }
+      status: string
+      stopReason: string
+      errorCode?: string
+      errorMessage?: string
+      message: PersistedAssistantMessage
+    }) => {
+      await persistenceState.appendProjectAssistantThreadMessages({ messages: [input.message] })
+      await runState.safelyUpdateProjectAgentRunStatus({
+        runFence: input.runFence,
+        status: input.status,
+        stopReason: input.stopReason,
+        errorCode: input.errorCode,
+        errorMessage: input.errorMessage,
+      })
+    })
     runHeartbeatState.stop.mockClear()
     runHeartbeatState.ownershipLossOnStart = null
     runHeartbeatState.startProjectAgentRunHeartbeat.mockClear()
@@ -609,6 +652,9 @@ describe('project agent runtime deterministic tool injection', () => {
   })
 
   it('injects edit-first choice and bible tools without an LLM router', async () => {
+    streamState.simulateSecondTurnAfterFirstWorkflowTool = true
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValue(buildWorkflow('completed', []))
+
     const response = await runAssistant({})
     await drainCapturedResponseStream()
     await vi.waitFor(() => {
@@ -635,9 +681,10 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.capturedTools.ingest_script.needsApproval).toBeUndefined()
     expect(streamState.capturedTools[EDIT_FIRST_CHOICE_TOOL_IDS.bible_review].needsApproval).toBeUndefined()
     expect(streamState.capturedSystem).toContain('[project_state_snapshot]')
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+    expect(createProjectAgentWait).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-user_turn',
-      status: 'completed',
+      operationId: 'ingest_script',
+      taskIds: ['task-generated-1'],
     }))
     expect(readLastPersistedAssistantMessage()).toEqual(expect.objectContaining({
       id: 'workspace-assistant-run:user_turn:run-user_turn:req-1',
@@ -646,7 +693,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(readLastPersistedRuntimeContext()).toEqual(expect.objectContaining({
       modelKey: 'openrouter::openai/gpt-5.5',
     }))
-    expectLastPersistedRunStatus('completed', 'completed')
+    expectLastPersistedRunStatus('awaiting_task', 'awaiting_task')
     expect(loggerState.info).toHaveBeenCalledWith(expect.objectContaining({
       action: 'assistant.toolset.resolved',
       details: expect.objectContaining({
@@ -728,6 +775,10 @@ describe('project agent runtime deterministic tool injection', () => {
   })
 
   it('feeds the choice back as an in-band tool result while using workflow availability for next tools', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_bible',
+    ])
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-1',
@@ -773,11 +824,11 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(runInputItems.some((item) => item.type === 'function_call_result' && item.callId === 'tool-choice-1')).toBe(true)
     expect(streamState.capturedToolNames).toContain('ingest_script')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
-    expect(streamState.capturedEnabledToolNames).toContain('ingest_script')
+    expect(streamState.capturedEnabledToolNames).toContain('confirm_bible')
     expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
   })
 
-  it('fails explicitly when the authoritative choice continuation returns ok false', async () => {
+  it('fails explicitly when a run stops before the next authoritative workflow action', async () => {
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-review',
@@ -791,9 +842,13 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_style_previews', [
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
+      'revise_bible',
     ])
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValue(buildWorkflow('bible_ready_for_review', [
+      'confirm_bible',
+    ]))
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
     const { executeProjectAgentOperationFromTool } = await import('@/lib/adapters/tools/execute-project-agent-operation')
     vi.mocked(executeProjectAgentOperationFromTool).mockResolvedValueOnce({
@@ -824,15 +879,18 @@ describe('project agent runtime deterministic tool injection', () => {
       ],
     })
     await drainCapturedResponseStream()
+    await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-choice_response',
-      status: 'failed',
-      stopReason: 'choice_continuation_missing',
-      errorCode: 'PROJECT_AGENT_CHOICE_CONTINUATION_MISSING',
-      errorMessage: 'Choice response did not execute required workflow continuation: generate_edit_style_previews',
-    }))
+    await vi.waitFor(() => {
+      expect(runState.settleProjectAgentRunWithMessage).toHaveBeenCalledWith(expect.objectContaining({
+        runFence: expect.objectContaining({ runId: 'run-choice_response' }),
+        status: 'failed',
+        stopReason: 'workflow_continuation_missing',
+        errorCode: 'PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING',
+        errorMessage: 'Assistant run stopped before reaching a stable workflow boundary: confirm_bible',
+      }))
+    })
   })
 
   it('does not expose bible review choice again after that choice was already approved', async () => {
@@ -849,8 +907,9 @@ describe('project agent runtime deterministic tool injection', () => {
       },
     })
     expect(choiceResult).not.toBeNull()
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_generate_style_previews', [
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
       'generate_edit_style_previews',
+      'revise_bible',
     ])
 
     const response = await createProjectAgentChatResponse({
@@ -876,11 +935,15 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     expect(streamState.capturedEnabledToolNames).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
-    expect(streamState.capturedEnabledToolNames).toContain('generate_edit_style_previews')
+    expect(streamState.capturedEnabledToolNames).toContain('confirm_bible')
     expect(streamState.capturedEnabledToolNames).not.toContain('revise_bible')
   })
 
-  it('keeps follow-up bible operations available after bible generation from a choice response', async () => {
+  it('does not complete after the first operation when the refreshed workflow still has a next action', async () => {
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', [
+      'generate_edit_style_previews',
+      'revise_bible',
+    ])
     const choiceResult = buildEditFirstChoiceResult({
       choiceType: 'bible_review',
       toolCallId: 'tool-choice-1',
@@ -896,7 +959,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(choiceResult).not.toBeNull()
 
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
-    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValueOnce(buildWorkflow('bible_ready_for_review', [
+    workflowRefreshState.resolveEditFirstWorkflowState.mockResolvedValue(buildWorkflow('ready_to_generate_style_previews', [
       'generate_edit_style_previews',
       'revise_bible',
     ]))
@@ -920,13 +983,24 @@ describe('project agent runtime deterministic tool injection', () => {
         { id: 'u1', role: 'user', parts: [{ type: 'text', text: '恐怖片' }] },
       ],
     })
-    await flushAsyncWork()
+    await drainCapturedResponseStream()
+    await vi.waitFor(() => {
+      expect(runState.settleProjectAgentRunWithMessage).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'failed',
+        stopReason: 'workflow_continuation_missing',
+        errorCode: 'PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING',
+        errorMessage: 'Assistant run stopped before reaching a stable workflow boundary: confirm_bible',
+      }))
+    })
 
     expect(response.status).toBe(200)
-    expect(streamState.executedToolNames).toEqual(['ingest_script'])
+    expect(streamState.executedToolNames).toEqual(['confirm_bible'])
     expect(streamState.capturedEnabledToolNamesAfterExecution).not.toContain(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)
     expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('generate_edit_style_previews')
     expect(streamState.capturedEnabledToolNamesAfterExecution).toContain('revise_bible')
+    expect(runState.settleProjectAgentRunWithMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: 'completed',
+    }))
   })
 
   it('keeps the interrupted approval operation available when resuming after workflow state changed', async () => {
@@ -947,10 +1021,15 @@ describe('project agent runtime deterministic tool injection', () => {
           activityId: 'activity-approval-1',
           type: 'approval',
           status: 'consumed',
-          operationId: 'ingest_script',
+          operationId: 'generate_edit_style_previews',
           approvalId: 'approval-1',
           toolCallId: 'tool-generate-bible-1',
           runState: 'serialized-state',
+          payload: {
+            operationPlan: {
+              planSnapshotId: 'plan-snapshot-1',
+            },
+          },
         },
         approved: true,
         reason: null,
@@ -962,13 +1041,13 @@ describe('project agent runtime deterministic tool injection', () => {
     await flushAsyncWork()
 
     expect(response.status).toBe(200)
-    expect(streamState.capturedToolNames).toContain('ingest_script')
+    expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).toContain('generate_edit_style_previews')
     expect(streamState.capturedToolNames).toEqual(expect.arrayContaining([...EDIT_FIRST_CHOICE_OPERATION_IDS]))
   })
 
   it('binds async task waits after approval resume instead of returning to awaiting approval', async () => {
-    phaseState.editFirstWorkflow = buildWorkflow('ready_to_ingest_script', ['ingest_script'])
+    phaseState.editFirstWorkflow = buildWorkflow('bible_ready_for_review', ['generate_edit_style_previews'])
     streamState.simulateSecondTurnAfterFirstWorkflowTool = true
 
     const response = await createProjectAgentChatResponse({
@@ -986,10 +1065,15 @@ describe('project agent runtime deterministic tool injection', () => {
           activityId: 'activity-approval-1',
           type: 'approval',
           status: 'consumed',
-          operationId: 'ingest_script',
+          operationId: 'generate_edit_style_previews',
           approvalId: 'approval-1',
           toolCallId: 'tool-generate-bible-1',
           runState: 'serialized-state',
+          payload: {
+            operationPlan: {
+              planSnapshotId: 'plan-snapshot-1',
+            },
+          },
         },
         approved: true,
         reason: null,
@@ -1006,13 +1090,12 @@ describe('project agent runtime deterministic tool injection', () => {
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
-      operationId: 'ingest_script',
+      operationId: 'generate_edit_style_previews',
       taskIds: ['task-generated-1'],
     }))
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-approval_response',
+    // createProjectAgentWait owns the atomic running -> awaiting_task edge.
+    expect(runState.safelyUpdateProjectAgentRunStatus).not.toHaveBeenCalledWith(expect.objectContaining({
       status: 'awaiting_task',
-      stopReason: 'awaiting_task',
     }))
     expect(runState.safelyUpdateProjectAgentRunStatus).not.toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-approval_response',
@@ -1223,7 +1306,7 @@ describe('project agent runtime deterministic tool injection', () => {
       }),
     }))
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-user_turn',
+      runFence: expect.objectContaining({ runId: 'run-user_turn' }),
       status: 'failed',
       stopReason: 'stream_error',
       errorCode: 'PROJECT_AGENT_STREAM_FAILED',
@@ -1244,36 +1327,31 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(response.status).toBe(200)
     await expect(drainCapturedResponseStream()).rejects.toThrow('ABORTED_STREAM')
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith({
-      runId: 'run-user_turn',
+    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runFence: expect.objectContaining({ runId: 'run-user_turn' }),
       status: 'cancelled',
-      expectedStatuses: ['running'],
       stopReason: 'run_lock_lost',
-    })
+    }))
     expectLastPersistedRunStatus('cancelled', 'run_lock_lost')
   })
 
-  it('logs assistant message persistence failures during stream settlement', async () => {
+  it('does not mark the run completed when assistant message settlement fails', async () => {
     persistenceState.appendProjectAssistantThreadMessages.mockRejectedValueOnce(new Error('DB_DOWN'))
 
     const response = await runAssistant({ text: '生成剧本' })
 
     expect(response.status).toBe(200)
     await drainCapturedResponseStream()
+    await flushAsyncWork()
     await vi.waitFor(() => {
       expect(loggerState.error).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'assistant.agents.stream.persist.failed',
-        requestId: 'req-1',
-        projectId: 'project-1',
-        userId: 'user-1',
-        details: expect.objectContaining({
-          runId: 'run-user_turn',
-          episodeId: 'episode-1',
-          edge: 'settle',
-          error: 'DB_DOWN',
-        }),
+        action: 'assistant.agents.settlement.failed',
+        details: expect.objectContaining({ error: 'DB_DOWN' }),
       }))
     })
+    expect(runState.safelyUpdateProjectAgentRunStatus).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: 'completed',
+    }))
     expect(runHeartbeatState.stop).toHaveBeenCalled()
   })
 
@@ -1288,10 +1366,11 @@ describe('project agent runtime deterministic tool injection', () => {
     const reader = stream.getReader()
     await reader.cancel()
 
-    expect(runState.cancelRunningProjectAgentRun).toHaveBeenCalledWith({
-      runId: 'run-user_turn',
+    expect(runState.settleProjectAgentRunWithMessage).toHaveBeenCalledWith(expect.objectContaining({
+      runFence: expect.objectContaining({ runId: 'run-user_turn' }),
+      status: 'cancelled',
       stopReason: 'stream_cancelled',
-    })
+    }))
     expectLastPersistedRunStatus('cancelled', 'stream_cancelled')
     expect(runHeartbeatState.stop).toHaveBeenCalled()
   })
@@ -1310,7 +1389,7 @@ describe('project agent runtime deterministic tool injection', () => {
     expect(streamState.executedToolNames).toEqual(['plan_chapters'])
     expect(streamState.capturedEnabledToolNamesAfterExecution).toEqual([])
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-user_turn',
+      runFence: expect.objectContaining({ runId: 'run-user_turn' }),
       status: 'failed',
       stopReason: 'run_failed',
       errorCode: 'PROJECT_AGENT_RUN_FAILED',
@@ -1334,7 +1413,7 @@ describe('project agent runtime deterministic tool injection', () => {
     )
 
     expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith({
-      runId: 'run-user_turn',
+      runFence: expect.objectContaining({ runId: 'run-user_turn' }),
       status: 'cancelled',
       expectedStatuses: ['running'],
       stopReason: 'run_lock_lost',

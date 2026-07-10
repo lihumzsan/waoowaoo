@@ -24,11 +24,10 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交 AI 形象修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         characterId: z.string().min(1),
         appearanceId: z.string().min(1),
         currentDescription: z.string().min(1),
@@ -45,7 +44,6 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
           targetId: input.appearanceId,
           operationId: 'ai_modify_appearance',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: input as unknown as Record<string, unknown>,
           dedupeKey: `ai_modify_appearance:${input.appearanceId}`,
         }),
@@ -56,11 +54,10 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        required: true,
-        summary: '将提交 AI 道具修改任务（可能计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: 'none',
+        required: false,
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         propId: z.string().min(1),
         variantId: z.string().optional(),
         currentDescription: z.string().min(1),
@@ -95,7 +92,6 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
           targetId: variantId || propId,
           operationId: 'ai_modify_prop',
           source: ctx.source,
-          confirmed: input.confirmed === true,
           payload: {
             ...(input as unknown as Record<string, unknown>),
             propId,

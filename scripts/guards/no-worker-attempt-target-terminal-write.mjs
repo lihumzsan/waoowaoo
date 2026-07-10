@@ -7,7 +7,7 @@ import process from 'process'
 const root = process.cwd()
 const workersRoot = path.join(root, 'src/lib/workers')
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx'])
-const TARGET_TERMINAL_WRITE = /status\s*:\s*['"](?:failed|cancelled|canceled)['"]/
+const TARGET_TERMINAL_WRITE = /(?:status|renderStatus)\s*:\s*['"](?:failed|cancelled|canceled)['"]/
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out

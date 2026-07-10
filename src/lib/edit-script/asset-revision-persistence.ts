@@ -1,12 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
-import type {
-  EditAssetKind,
-  EditAssetRequirement,
-  EditAssetStatus,
-  EditScriptPayload,
-} from './types'
+import type { EditAssetKind, EditAssetRequirement, EditAssetStatus, EditScriptPayload } from './types'
 import { normalizeEditScriptStructure } from './normalize'
 
 export interface PersistedEditScriptRequirementForRevision {
@@ -34,11 +29,7 @@ interface PersistedEditScriptForRevision {
 }
 
 function readShotIds(value: Prisma.JsonValue): readonly string[] {
-  return Array.isArray(value)
-    ? value
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter((item) => item.length > 0)
-    : []
+  return Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0) : []
 }
 
 export function normalizeEditScriptAssetKindForRevision(value: string): EditAssetKind | null {
@@ -46,9 +37,7 @@ export function normalizeEditScriptAssetKindForRevision(value: string): EditAsse
 }
 
 function normalizeAssetStatus(value: string): EditAssetStatus {
-  return value === 'pending' || value === 'generating' || value === 'completed' || value === 'failed'
-    ? value
-    : 'failed'
+  return value === 'pending' || value === 'generating' || value === 'completed' || value === 'failed' ? value : 'failed'
 }
 
 export function mapPersistedEditScriptForRevision(script: PersistedEditScriptForRevision): EditScriptPayload {
@@ -87,9 +76,10 @@ export async function getPersistedEditScriptForRevision(
   episodeId: string,
   chapterId?: string,
   editScriptId?: string,
+  client: Pick<Prisma.TransactionClient, 'projectEditScript'> = prisma,
 ): Promise<PersistedEditScriptForRevision | null> {
   const resolvedChapterId = chapterId ?? (await resolveDefaultEditChapter(episodeId)).id
-  return await prisma.projectEditScript.findFirst({
+  return await client.projectEditScript.findFirst({
     where: {
       projectId,
       episodeId,
@@ -98,10 +88,7 @@ export async function getPersistedEditScriptForRevision(
     },
     include: {
       requirements: {
-        orderBy: [
-          { kind: 'asc' },
-          { name: 'asc' },
-        ],
+        orderBy: [{ kind: 'asc' }, { name: 'asc' }],
       },
     },
   })

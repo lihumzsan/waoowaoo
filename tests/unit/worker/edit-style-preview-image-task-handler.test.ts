@@ -21,7 +21,7 @@ const prismaMock = vi.hoisted(() => ({
   projectEditStylePreview: {
     findFirst: vi.fn(),
     findMany: vi.fn(),
-    update: vi.fn(async () => ({})),
+    updateMany: vi.fn(async () => ({ count: 1 })),
   },
   projectEditBible: {
     update: vi.fn(async () => ({})),
@@ -89,6 +89,7 @@ describe('worker edit-style-preview-image-task-handler', () => {
       { status: 'completed' },
       { status: 'completed' },
     ])
+    prismaMock.projectEditStylePreview.updateMany.mockResolvedValue({ count: 1 })
   })
 
   it('generates a 3x3 style preview image without mutating the parent bible status', async () => {
@@ -114,8 +115,8 @@ describe('worker edit-style-preview-image-task-handler', () => {
         quality: 'high',
       },
     }))
-    expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledWith({
-      where: { id: 'preview-1' },
+    expect(prismaMock.projectEditStylePreview.updateMany).toHaveBeenCalledWith({
+      where: { id: 'preview-1', taskId: 'task-style-preview-1', status: 'generating' },
       data: {
         imageKey: 'edit-style-preview/preview-1.png',
         status: 'completed',
@@ -192,17 +193,29 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))).rejects.toThrow('IMAGE_PROVIDER_FAILED')
 
-    expect(prismaMock.projectEditStylePreview.update).toHaveBeenCalledWith({
-      where: { id: 'preview-1' },
+    expect(prismaMock.projectEditStylePreview.updateMany).toHaveBeenCalledWith({
+      where: { id: 'preview-1', taskId: 'task-style-preview-1', status: { in: ['pending', 'generating'] } },
       data: {
         status: 'generating',
         taskId: 'task-style-preview-1',
         errorMessage: null,
       },
     })
-    expect(prismaMock.projectEditStylePreview.update).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaMock.projectEditStylePreview.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: 'failed' }),
     }))
     expect(prismaMock.projectEditBible.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects an old Task before provider submission when preview ownership moved', async () => {
+    prismaMock.projectEditStylePreview.findFirst.mockResolvedValueOnce(null)
+
+    await expect(handleEditStylePreviewImageTask(buildJob({
+      imageModel: 'storyboard-image-model',
+      prompt: 'single image, 3x3 grid',
+    }))).rejects.toThrow('EDIT_STYLE_PREVIEW_NOT_FOUND:preview-1')
+
+    expect(handlerSharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditStylePreview.updateMany).not.toHaveBeenCalled()
   })
 })

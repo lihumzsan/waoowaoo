@@ -221,8 +221,6 @@ export function buildVideoTaskPayload(params: {
       locale,
     },
   }
-  delete payload.confirmed
-  delete payload.confirmedMaxCost
 
   return {
     payload,

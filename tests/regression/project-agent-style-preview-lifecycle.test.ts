@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { buildEditFirstAssistantChoiceCard } from '@/lib/project-agent/choice-card'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {  resolveEditFirstWorkflowStateFromSnapshot,
   type EditFirstWorkflowSnapshot,
@@ -62,26 +61,12 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot>): EditFirstWorkf
 }
 
 describe('regression - production plan to visual-style lifecycle', () => {
-  it('does not authorize visual-style generation before production plan ratio confirmation', async () => {
+  it('does not authorize visual-style generation before production plan ratio confirmation', () => {
     const workflow = resolveEditFirstWorkflowStateFromSnapshot(snapshot({}))
-    const card = await buildEditFirstAssistantChoiceCard({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      locale: 'zh',
-      workflow,
-      choiceType: 'bible_review',
-      toolCallId: 'tool-review-1',
-    })
 
     expect(workflow.stage).toBe('bible_ready_for_review')
     expect(workflow.allowedOperationIds).toEqual([])
-    expect(card.groups).toEqual([expect.objectContaining({
-      key: 'aspectRatio',
-      required: true,
-    })])
-    expect(card).not.toHaveProperty('operationPlan')
-    expect(card.submit).toEqual({ kind: 'submit_tool_output' })
+    expect(workflow.nextAction).toBeNull()
   })
 
   it('routes confirmed production plans through the independent billable style operation', () => {
@@ -102,5 +87,24 @@ describe('regression - production plan to visual-style lifecycle', () => {
     expect(operation?.agentFlow).toEqual(expect.objectContaining({
       onTaskComplete: 'await_user_choice',
     }))
+  })
+
+  it('declares style confirmation as one non-billable registry write after Choice', () => {
+    const operation = createProjectAgentOperationRegistry().confirm_edit_style_preview
+
+    expect(operation).toMatchObject({
+      id: 'confirm_edit_style_preview',
+      intent: 'act',
+      channels: { tool: true, api: false },
+      prerequisites: { episodeId: 'required' },
+      effects: {
+        writes: true,
+        billable: false,
+        externalSideEffects: false,
+        longRunning: false,
+      },
+      confirmation: { kind: 'none', required: false },
+    })
+    expect(operation?.toolInputSchema.required).toEqual(['stylePreviewId'])
   })
 })

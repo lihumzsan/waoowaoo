@@ -20,6 +20,34 @@ function getOverlay(
 }
 
 describe('task-target-overlay', () => {
+  it('clears the matching optimistic runtime immediately when the task is canceled', () => {
+    const queryClient = new QueryClient()
+    upsertTaskTargetOverlay(queryClient, {
+      projectId: 'project-1',
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      phase: 'processing',
+      runningTaskId: 'task-canceled',
+      runningTaskType: 'video_panel',
+    })
+
+    applyTaskLifecycleToOverlay(queryClient, {
+      projectId: 'project-1',
+      lifecycleType: TASK_EVENT_TYPE.CANCELED,
+      targetType: 'ProjectPanel',
+      targetId: 'panel-1',
+      taskId: 'task-canceled',
+      taskType: 'video_panel',
+      intent: 'generate',
+      hasOutputAtStart: false,
+      progress: 40,
+      stage: null,
+      stageLabel: null,
+      eventTs: '2026-07-11T00:02:00.000Z',
+    })
+
+    expect(queryClient.getQueryData(queryKeys.tasks.targetStateOverlay('project-1'))).toEqual({})
+  })
   it('does not create a running overlay when onMutate has no real taskId', () => {
     const queryClient = new QueryClient()
     const projectId = 'project-1'

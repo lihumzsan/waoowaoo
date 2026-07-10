@@ -5,6 +5,7 @@ import {
   OPENROUTER_PLATFORM_DEFAULT_ANALYSIS_MODEL_KEY,
   OPENROUTER_PLATFORM_DEFAULT_VIDEO_MODEL_KEY,
 } from '@/lib/ai-providers/openrouter/models'
+import type { Prisma } from '@prisma/client'
 
 const prismaMock = vi.hoisted(() => ({
   project: {
@@ -15,24 +16,51 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-const submitOperationTaskMock = vi.hoisted(() => vi.fn(async () => ({
-  taskId: 'task-1',
-  runId: 'run-1',
-  status: 'queued',
-  deduped: false,
-})))
+const submitOperationTaskMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    taskId: 'task-1',
+    runId: 'run-1',
+    status: 'queued',
+    deduped: false,
+  })),
+)
+const submitApprovedPlanMock = vi.hoisted(() =>
+  vi.fn(
+    async () =>
+      new Map([
+        [
+          'generate_panel_video:panel-1',
+          {
+            taskId: 'task-1',
+            runId: 'run-1',
+            status: 'queued',
+            deduped: false,
+          },
+        ],
+      ]),
+  ),
+)
 
-const createMutationBatchMock = vi.hoisted(() => vi.fn(async () => ({
-  id: 'mutation-batch-1',
-})))
+const createMutationBatchMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    id: 'mutation-batch-1',
+  })),
+)
 
 const hasPanelVideoOutputMock = vi.hoisted(() => vi.fn(async () => false))
 const PLATFORM_VIDEO_MODEL = 'openrouter::bytedance/seedance-2.0-fast'
 const resolveSystemModelKeyMock = vi.hoisted(() => vi.fn(async () => PLATFORM_VIDEO_MODEL))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/operations/submit-operation-task', () => ({ submitOperationTask: submitOperationTaskMock }))
-vi.mock('@/lib/mutation-batch/service', () => ({ createMutationBatch: createMutationBatchMock }))
+vi.mock('@/lib/operations/submit-operation-task', () => ({
+  submitOperationTask: submitOperationTaskMock,
+}))
+vi.mock('@/lib/task/approved-plan-submitter', () => ({
+  submitApprovedOperationPlanTasks: submitApprovedPlanMock,
+}))
+vi.mock('@/lib/mutation-batch/service', () => ({
+  createMutationBatchInTransaction: createMutationBatchMock,
+}))
 vi.mock('@/lib/task/has-output', () => ({
   hasPanelVideoOutput: hasPanelVideoOutputMock,
   hasVideoGroupOutput: vi.fn(async () => false),
@@ -78,6 +106,11 @@ function buildContext(): ProjectAgentOperationContext {
     context: { episodeId: 'episode-1', locale: 'zh' },
     source: 'test',
     writer: null,
+    executionAuthorization: {
+      approvalGrantId: 'approval-grant-1',
+      operationExecutionId: 'operation-execution-1',
+      transaction: {} as Prisma.TransactionClient,
+    },
   }
 }
 
@@ -109,63 +142,74 @@ describe('cloud video generation runtime options', () => {
   afterEach(() => restoreEnv())
 
   it('uses platform video model and runtime options when submitting a panel video task', async () => {
-    const result = await createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
-      confirmed: true,
-      confirmedMaxCost: 999,
+    const operation = createVideoGenerationOperations().generate_panel_video
+    const input = {
       panelId: 'panel-1',
       generationOptions: {
         resolution: '480p',
         generateAudio: true,
       },
-    })
+    }
+    if (!operation.plan) throw new Error('EXPECTED_VIDEO_PLAN')
+    const plan = await operation.plan(buildContext(), input)
+    if (!operation.commit) throw new Error('EXPECTED_VIDEO_COMMIT')
+    const result = await operation.commit(buildContext(), input, plan)
 
     expect(result).toMatchObject({
       taskId: 'task-1',
       panelId: 'panel-1',
       mutationBatchId: 'mutation-batch-1',
     })
-    expect(submitOperationTaskMock).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({
-        videoModel: PLATFORM_VIDEO_MODEL,
-        generationOptions: expect.objectContaining({
-          resolution: '480p',
-          generateAudio: true,
-          duration: 5,
-          generationMode: 'normal',
+    expect(plan.tasks[0]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          videoModel: PLATFORM_VIDEO_MODEL,
+          generationOptions: expect.objectContaining({
+            resolution: '480p',
+            generateAudio: true,
+            duration: 5,
+            generationMode: 'normal',
+          }),
         }),
       }),
-    }))
+    )
   })
 
   it('rejects aspectRatio in generationOptions because video ratio is project-owned', async () => {
-    await expect(createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
-      confirmed: true,
-      panelId: 'panel-1',
-      generationOptions: {
-        aspectRatio: '16:9',
-      },
-    })).rejects.toMatchObject({
+    const operation = createVideoGenerationOperations().generate_panel_video
+    if (!operation.plan) throw new Error('EXPECTED_VIDEO_PLAN')
+    await expect(
+      operation.plan(buildContext(), {
+        panelId: 'panel-1',
+        generationOptions: {
+          aspectRatio: '16:9',
+        },
+      }),
+    ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({
         code: 'TASK_VIDEO_RATIO_MANAGED_BY_PROJECT',
         field: 'generationOptions.aspectRatio',
       }),
     })
-    expect(submitOperationTaskMock.mock.calls).toEqual([])
+    expect(submitApprovedPlanMock.mock.calls).toEqual([])
   })
 
   it('rejects caller-supplied video model fields before task submission', async () => {
-    await expect(createVideoGenerationOperations().generate_panel_video.execute(buildContext(), {
-      confirmed: true,
-      panelId: 'panel-1',
-      videoModel: 'hunyuan',
-    })).rejects.toMatchObject({
+    const operation = createVideoGenerationOperations().generate_panel_video
+    if (!operation.plan) throw new Error('EXPECTED_VIDEO_PLAN')
+    await expect(
+      operation.plan(buildContext(), {
+        panelId: 'panel-1',
+        videoModel: 'hunyuan',
+      }),
+    ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({
         code: 'TASK_MODEL_MANAGED_BY_CONFIG',
         field: 'videoModel',
       }),
     })
-    expect(submitOperationTaskMock.mock.calls).toEqual([])
+    expect(submitApprovedPlanMock.mock.calls).toEqual([])
   })
 })

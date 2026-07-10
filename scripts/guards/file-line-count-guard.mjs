@@ -3,6 +3,8 @@ import fs from 'fs'
 import path from 'path'
 
 const ROOT = process.cwd()
+const BASELINE_PATH = path.join(ROOT, 'scripts/guards/file-line-count-baseline.json')
+const baseline = JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
 
 const RULES = [
   {
@@ -57,7 +59,7 @@ const countLines = (absPath) => {
   return raw.split('\n').length
 }
 
-const violations = []
+const overLimit = new Map()
 
 for (const rule of RULES) {
   const absDir = path.join(ROOT, rule.dir)
@@ -65,13 +67,40 @@ for (const rule of RULES) {
   for (const file of files) {
     const lineCount = countLines(file.absPath)
     if (lineCount > rule.limit) {
-      violations.push({
+      overLimit.set(file.relPath, {
         label: rule.label,
         relPath: file.relPath,
         lineCount,
         limit: rule.limit,
       })
     }
+  }
+}
+
+const violations = []
+for (const [relPath, violation] of overLimit) {
+  const acceptedLineCount = baseline[relPath]
+  if (typeof acceptedLineCount !== 'number') {
+    violations.push({ ...violation, reason: 'new over-limit file' })
+    continue
+  }
+  if (violation.lineCount > acceptedLineCount) {
+    violations.push({
+      ...violation,
+      reason: `grew beyond baseline ${String(acceptedLineCount)}`,
+    })
+  }
+}
+for (const [relPath, acceptedLineCount] of Object.entries(baseline)) {
+  const current = overLimit.get(relPath)
+  if (!current || current.lineCount < acceptedLineCount) {
+    violations.push({
+      label: 'baseline',
+      relPath,
+      lineCount: current?.lineCount ?? 0,
+      limit: acceptedLineCount,
+      reason: 'baseline must be lowered or removed after improvement',
+    })
   }
 }
 
@@ -83,7 +112,7 @@ if (violations.length === 0) {
 process.stderr.write('[file-line-count-guard] FAIL: file size budget exceeded\n')
 for (const violation of violations) {
   process.stderr.write(
-    `- [${violation.label}] ${violation.relPath}: ${violation.lineCount} > ${violation.limit}\n`,
+    `- [${violation.label}] ${violation.relPath}: ${violation.lineCount} > ${violation.limit} (${violation.reason})\n`,
   )
 }
 process.exit(1)

@@ -5,10 +5,12 @@ import type {
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type { EditFirstChoiceDecision } from './edit-first-choice-result'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { AssistantPermissionMode } from './permission-mode'
 import type { BillingReceiptView } from '@/lib/billing/task-billing-view'
 import type { OperationPlanView } from '@/lib/operations/planning'
+import type { PlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import type {
   ProjectAgentRunControlKind,
@@ -30,10 +32,11 @@ export interface ProjectAgentContext {
   runId?: string | null
   runFence?: ProjectAgentRunFence | null
   currentActivityId?: string | null
+  choiceDecision?: EditFirstChoiceDecision | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null
   selectedAssetId?: string | null
-  confirmedMaxCostByOperationId?: Record<string, number>
+  approvedInvocationByOperationId?: Record<string, PlannedOperationInvocation>
 }
 
 export interface ProjectAgentRunPartData {
@@ -170,16 +173,9 @@ export interface AgentRuntimeContextPartData {
   }>
 }
 
-export type ProjectAgentChoiceCardSubmit =
-  | {
-    kind: 'submit_tool_output'
-  }
-  | {
-    kind: 'confirm_edit_style_preview'
-    projectId: string
-    episodeId: string
-    aspectRatio?: '9:16' | '16:9' | '21:9'
-  }
+export interface ProjectAgentChoiceCardSubmit {
+  kind: 'submit_tool_output'
+}
 
 export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm' | 'confirm_or_reply'
 
@@ -200,8 +196,8 @@ export interface ProjectAgentChoiceCardGroup {
 
 export interface ProjectAgentChoiceCardPartData {
   cardId: string
-  runId?: string | null
-  interruptionId?: string | null
+  runId: string
+  interruptionId: string
   toolCallId: string
   choiceType: EditFirstChoiceType
   variant?: ProjectAgentChoiceCardVariant
@@ -216,6 +212,11 @@ export interface ProjectAgentChoiceCardPartData {
   replySubmitLabel?: string | null
   replyToolOutputKey?: string | null
 }
+
+export type ProjectAgentChoiceCardDefinition = Omit<
+  ProjectAgentChoiceCardPartData,
+  'runId' | 'interruptionId'
+>
 
 export interface TaskSubmittedPartData {
   operationId: string

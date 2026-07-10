@@ -18,9 +18,7 @@ export interface OperationPackDefaults {
 }
 
 function normalizeGroupPath(groupPath: OperationGroupPath): OperationGroupPath {
-  const normalized = groupPath
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0)
+  const normalized = groupPath.map((segment) => segment.trim()).filter((segment) => segment.length > 0)
   if (normalized.length === 0) {
     throw new Error('PROJECT_AGENT_OPERATION_GROUP_PATH_EMPTY')
   }
@@ -55,22 +53,24 @@ function mergePrerequisites(
 
 function mergeConfirmation(
   operation: {
-    confirmation?: Omit<OperationConfirmation, 'kind'> & { kind?: OperationApprovalKind }
+    confirmation?: Omit<OperationConfirmation, 'kind'> & {
+      kind?: OperationApprovalKind
+    }
     effects: { billable: boolean; destructive: boolean; overwrite: boolean }
   },
   defaults: OperationPackDefaults,
 ): OperationConfirmation {
   const base = operation.confirmation ?? defaults.confirmation
   const required = base.required === true
-  const kind = base.kind ?? (
-    !required
+  const kind =
+    base.kind ??
+    (!required
       ? 'none'
       : operation.effects.destructive || operation.effects.overwrite
         ? 'destructive'
         : operation.effects.billable
           ? 'billable_media'
-          : 'destructive'
-  )
+          : 'destructive')
   return {
     kind,
     required,
@@ -143,7 +143,7 @@ export function withOperationPack(
       defaultsGroupPath: normalizedDefaults.groupPath,
     })
     const channels = normalizeChannels(operation.channels ?? normalizedDefaults.channels)
-    out[operationId] = {
+    const normalized = {
       ...operation,
       summary: normalizeOperationSummary(operation),
       groupPath,
@@ -158,6 +158,7 @@ export function withOperationPack(
           })
         : createEmptyToolInputSchema(),
     }
+    out[operationId] = normalized as ProjectAgentOperationRegistry[string]
   }
   return out
 }

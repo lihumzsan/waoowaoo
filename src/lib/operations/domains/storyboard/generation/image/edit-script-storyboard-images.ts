@@ -5,16 +5,21 @@ import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
-import { createMutationBatch } from '@/lib/mutation-batch/service'
+import { createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
+import {
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
+  submitPlannedOperationTask,
+  type OperationPlan,
+  type PlannedTask,
+} from '@/lib/operations/planning'
 import { normalizeString, normalizeStringArray, resolveLocaleFromContext } from './shared'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 
 export type GenerateEditScriptStoryboardImagesInput = {
-  confirmed?: boolean
-  confirmedMaxCost?: number
   episodeId?: string
   storyboardId?: string
 }
@@ -36,11 +41,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
         },
       },
     },
-    orderBy: [
-      { storyboardId: 'asc' },
-      { panelIndex: 'asc' },
-      { panelIndex: 'asc' },
-    ],
+    orderBy: [{ storyboardId: 'asc' }, { panelIndex: 'asc' }, { panelIndex: 'asc' }],
     select: {
       id: true,
       storyboardId: true,
@@ -107,20 +108,26 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
       basePayload: body,
       aspectRatio: projectModelConfig.videoRatio,
     })
-    plannedTasks.push(createPlannedTask({
-      id: `generate_edit_script_storyboard_images:panel:${panel.id}`,
-      taskType: TASK_TYPE.IMAGE_PANEL,
-      targetType: 'ProjectPanel',
-      targetId: panel.id,
-      locale: taskLocale,
-      episodeId,
-      payload: withTaskUiPayload(billingPayload, {
-        intent: 'generate',
-        hasOutputAtStart: false,
+    plannedTasks.push(
+      createPlannedTask({
+        id: `generate_edit_script_storyboard_images:panel:${panel.id}`,
+        taskType: TASK_TYPE.IMAGE_PANEL,
+        targetType: 'ProjectPanel',
+        targetId: panel.id,
+        locale: taskLocale,
+        episodeId,
+        payload: withTaskUiPayload(billingPayload, {
+          intent: 'generate',
+          hasOutputAtStart: false,
+        }),
+        dedupeKey: `edit_first_panel_image:${panel.id}:${styleBibleSignature}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.IMAGE_PANEL,
+          payload: billingPayload,
+          allowedApiTypes: ['image'],
+        }),
       }),
-      dedupeKey: `edit_first_panel_image:${panel.id}:${styleBibleSignature}`,
-      billingInfo: requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.IMAGE_PANEL, payload: billingPayload, allowedApiTypes: ['image'] }),
-    }))
+    )
   }
 
   return {
@@ -142,15 +149,13 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
   input: GenerateEditScriptStoryboardImagesInput,
   plan: OperationPlan,
 ) {
-  const episodeId = typeof plan.metadata?.episodeId === 'string'
-    ? plan.metadata.episodeId
-    : normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
-  const storyboardIds = Array.isArray(plan.metadata?.storyboardIds)
-    ? normalizeStringArray(plan.metadata.storyboardIds)
-    : []
-  const panelIds = Array.isArray(plan.metadata?.panelIds)
-    ? normalizeStringArray(plan.metadata.panelIds)
-    : []
+  const transaction = requireOperationExecutionTransaction(ctx)
+  const episodeId =
+    typeof plan.metadata?.episodeId === 'string'
+      ? plan.metadata.episodeId
+      : normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
+  const storyboardIds = Array.isArray(plan.metadata?.storyboardIds) ? normalizeStringArray(plan.metadata.storyboardIds) : []
+  const panelIds = Array.isArray(plan.metadata?.panelIds) ? normalizeStringArray(plan.metadata.panelIds) : []
 
   if (plan.tasks.length === 0) {
     return {
@@ -170,22 +175,16 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
     task: PlannedTask
     result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
   }> = []
-  try {
-    for (const task of plan.tasks) {
-      const result = await submitPlannedOperationTask({
-        ctx,
-        task,
-        operationId: 'generate_edit_script_storyboard_images',
-        confirmed: input.confirmed === true,
-      })
-      taskResults.push({ task, result })
-    }
-  } catch (error) {
-    await compensateSubmittedTasks(taskResults.map((item) => item.result.taskId))
-    throw error
+  for (const task of plan.tasks) {
+    const result = await submitPlannedOperationTask({
+      ctx,
+      task,
+      operationId: 'generate_edit_script_storyboard_images',
+    })
+    taskResults.push({ task, result })
   }
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatch = await createMutationBatchInTransaction(transaction, {
     projectId: ctx.projectId,
     userId: ctx.userId,
     source: ctx.source,
@@ -215,7 +214,7 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
     targetTotal: panelIds.length,
     taskIds,
     results: resultRefs,
-    billingReceipt: taskResults.length === 1 ? taskResults[0]?.result.billingReceiptView ?? null : null,
+    billingReceipt: taskResults.length === 1 ? (taskResults[0]?.result.billingReceiptView ?? null) : null,
     mutationBatchId: mutationBatch.id,
   })
 

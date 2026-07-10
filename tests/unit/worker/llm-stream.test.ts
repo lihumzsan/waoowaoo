@@ -158,9 +158,12 @@ describe('createWorkerLLMStreamCallbacks', () => {
       expect.anything(),
       expect.objectContaining({
         delta: 'hello',
+        seq: 1,
       }),
       expect.objectContaining({
         stepId: 'edit_bible_generate',
+        stepAttempt: 1,
+        streamRunId: context.streamRunId,
       }),
     )
   })

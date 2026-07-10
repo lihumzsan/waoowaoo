@@ -62,6 +62,7 @@ const ROUTE_FILES = [
   'src/app/api/deployment/route.ts',
   'src/app/api/files/[...path]/route.ts',
   'src/app/api/mutation-batches/[batchId]/revert/route.ts',
+  'src/app/api/operation-approval-grants/route.ts',
   'src/app/api/payments/recharge/config/route.ts',
   'src/app/api/payments/stripe/checkout/route.ts',
   'src/app/api/payments/stripe/webhook/route.ts',
@@ -78,7 +79,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/character/confirm-selection/route.ts',
   'src/app/api/projects/[projectId]/character/route.ts',
   'src/app/api/projects/[projectId]/bible/route.ts',
-  'src/app/api/projects/[projectId]/bible/style-preview/route.ts',
   'src/app/api/projects/[projectId]/chapters/route.ts',
   'src/app/api/projects/[projectId]/edit-script/route.ts',
   'src/app/api/projects/[projectId]/edit-script/assets/generate/route.ts',
@@ -113,7 +113,6 @@ const ROUTE_FILES = [
   'src/app/api/projects/[projectId]/data/route.ts',
   'src/app/api/projects/[projectId]/route.ts',
   'src/app/api/projects/route.ts',
-  'src/app/api/sse/replay/route.ts',
   'src/app/api/sse/route.ts',
   'src/app/api/system/boot-id/route.ts',
   'src/app/api/task-target-states/route.ts',
@@ -140,7 +139,6 @@ function resolveCategory(routeFile: string): RouteCategory {
   if (
     routeFile.startsWith('src/app/api/tasks/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
-    || routeFile === 'src/app/api/sse/replay/route.ts'
   ) {
     return 'tasks'
   }
@@ -178,7 +176,6 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
   if (
     routeFile.startsWith('src/app/api/tasks/')
     || routeFile === 'src/app/api/task-target-states/route.ts'
-    || routeFile === 'src/app/api/sse/replay/route.ts'
     || routeFile === 'src/app/api/sse/route.ts'
   ) {
     return 'task-infra-routes'

@@ -189,7 +189,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(execute).toHaveBeenCalledTimes(1)
   })
 
-  it('[ask confirmation-marked operation without approval] -> returns CONFIRMATION_REQUIRED and does not execute', async () => {
+  it('[ask non-billable destructive operation] -> executes without inventing a boolean approval protocol', async () => {
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
       confirm_op: makeTestOperation({
@@ -215,11 +215,8 @@ describe('executeProjectAgentOperationFromTool gates', () => {
       input: {},
     })
 
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.confirmationRequired).toBe(true)
-    expect(result.error.code).toBe('CONFIRMATION_REQUIRED')
-    expect(execute).not.toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
   })
 
   it('[ask low-risk read operation without approval] -> allows execution', async () => {

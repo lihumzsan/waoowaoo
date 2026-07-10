@@ -194,11 +194,12 @@ describe('task target state map behavior', () => {
     expect(state?.runningTaskId).toBe('task-overlay-video-group')
   })
 
-  it('allows newer overlay to override completed state for immediate rerun feedback', async () => {
+  it('allows a distinct rerun task overlay to supersede an older completed task', async () => {
     runtime.apiStates = [
       {
         targetType: 'ProjectPanel',
         targetId: 'panel-2',
+        taskId: 'task-completed-old',
         phase: 'completed',
         runningTaskId: null,
         runningTaskType: null,
@@ -241,11 +242,12 @@ describe('task target state map behavior', () => {
     expect(state?.runningTaskType).toBe('VIDEO_PANEL')
   })
 
-  it('keeps server terminal state authoritative when overlay is older than completion', async () => {
+  it('keeps terminal state authoritative over an overlay for the same task identity', async () => {
     runtime.apiStates = [
       {
         targetType: 'ProjectPanel',
         targetId: 'panel-3',
+        taskId: 'task-overlay-old',
         phase: 'completed',
         runningTaskId: null,
         runningTaskType: null,

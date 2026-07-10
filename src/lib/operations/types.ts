@@ -3,6 +3,7 @@ import type { FlexibleSchema } from '@ai-sdk/provider-utils'
 import type { NextRequest } from 'next/server'
 import type { ProjectAgentContext, WorkspaceAssistantPartType } from '@/lib/project-agent/types'
 import type { OperationPlan } from './planning'
+import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 
 export type ProjectAgentOperationId = string
 
@@ -19,6 +20,7 @@ export interface ProjectAgentOperationContext {
   source: string
   writer?: UIMessageStreamWriter<UIMessage> | null
   toolCallId?: string | null
+  executionAuthorization?: OperationExecutionAuthorization | null
 }
 
 type BivariantOperationExecute<Input, Output> = {
@@ -84,9 +86,7 @@ export interface OperationAgentFlow {
   interruptsFor?: 'approval' | 'choice' | null
 }
 
-export type RuntimeSchemaSafeParseResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: { issues: unknown } }
+export type RuntimeSchemaSafeParseResult<T> = { success: true; data: T } | { success: false; error: { issues: unknown } }
 
 export type RuntimeSchema<T> = FlexibleSchema<T> & {
   safeParse: (input: unknown) => RuntimeSchemaSafeParseResult<T>
@@ -135,7 +135,7 @@ export type ProjectAgentToolResult<T> =
       error: ProjectAgentToolError
     }
 
-export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = unknown> {
+interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknown> {
   id: ProjectAgentOperationId
   /**
    * Command-style summary used for tool prompt, logs, and review.
@@ -147,7 +147,6 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   channels?: OperationChannels
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
-  confirmation?: Omit<OperationConfirmation, 'kind'> & { kind?: OperationApprovalKind }
   agentFlow?: OperationAgentFlow
   /**
    * Model-facing OpenAI Agents SDK tool input schema.
@@ -157,19 +156,51 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   toolInputSchema?: ProjectAgentToolInputSchema
   inputSchema: RuntimeSchema<Input>
   outputSchema: RuntimeSchema<Output>
+}
+
+type DirectOperationBehavior<Input, Output> = {
+  confirmation?: Omit<OperationConfirmation, 'kind'> & {
+    kind?: Exclude<OperationApprovalKind, 'billable_media'>
+  }
   plan?: BivariantOperationPlan<Input>
   commit?: BivariantOperationCommit<Input, Output>
   execute: BivariantOperationExecute<Input, Output>
 }
 
-export interface ProjectAgentOperationDefinition<Input = unknown, Output = unknown>
-  extends ProjectAgentOperationDefinitionBase<Input, Output> {
+type BillablePlannedOperationBehavior<Input, Output> = {
+  confirmation: Omit<OperationConfirmation, 'kind'> & {
+    kind: 'billable_media'
+    required: true
+  }
+  plan: BivariantOperationPlan<Input>
+  commit: BivariantOperationCommit<Input, Output>
+  execute?: never
+}
+
+export type ProjectAgentOperationDefinitionBase<Input = unknown, Output = unknown> = ProjectAgentOperationDefinitionFields<Input, Output> &
+  (DirectOperationBehavior<Input, Output> | BillablePlannedOperationBehavior<Input, Output>)
+
+type NormalizedOperationFields = {
   groupPath: OperationGroupPath
   channels: OperationChannels
   prerequisites: OperationPrerequisites
-  confirmation: OperationConfirmation
   toolInputSchema: ProjectAgentToolInputSchema
 }
+
+type NormalizedDirectOperationBehavior<Input, Output> = DirectOperationBehavior<Input, Output> & {
+  confirmation: OperationConfirmation & { kind: 'none' | 'destructive' }
+}
+
+type NormalizedBillableOperationBehavior<Input, Output> = BillablePlannedOperationBehavior<Input, Output> & {
+  confirmation: OperationConfirmation & {
+    kind: 'billable_media'
+    required: true
+  }
+}
+
+export type ProjectAgentOperationDefinition<Input = unknown, Output = unknown> = ProjectAgentOperationDefinitionFields<Input, Output> &
+  NormalizedOperationFields &
+  (NormalizedDirectOperationBehavior<Input, Output> | NormalizedBillableOperationBehavior<Input, Output>)
 
 export type ProjectAgentOperationRegistryDraft = Record<ProjectAgentOperationId, ProjectAgentOperationDefinitionBase>
 

@@ -110,14 +110,14 @@ describe('handleChapterRenderTask', () => {
     expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalled()
   })
 
-  it('preserves the original render error when failed-status write also fails', async () => {
+  it('leaves failed target projection to the unified Task terminal service', async () => {
     finalRenderMock.buildEditScript.mockRejectedValueOnce(new Error('original render failure'))
-    prismaMock.projectEditChapter.update
-      .mockResolvedValueOnce({ id: 'chapter-1' })
-      .mockRejectedValueOnce(new Error('status write failed'))
 
     await expect(handleChapterRenderTask(chapterJob())).rejects.toThrow('original render failure')
 
-    expect(prismaMock.projectEditChapter.update).toHaveBeenCalledTimes(2)
+    expect(prismaMock.projectEditChapter.update).toHaveBeenCalledTimes(1)
+    expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ renderStatus: 'failed' }),
+    }))
   })
 })

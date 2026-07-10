@@ -4,19 +4,42 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
-import { compensateSubmittedTasks, createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
-import { inferVideoGridModeForShotCount, resolveVideoGroupShots, totalVideoGroupDuration, validateVideoGroupShotIds } from '@/lib/video-groups/core'
-import { type GenerationSegmentVideoPlan, type GenerationSegmentVideoPlanItem, type VideoGridMode, type VideoGroupShot } from '@/lib/video-groups/types'
+import {
+  createPlannedTask,
+  requirePlannedTaskBillingInfo,
+  submitPlannedOperationTask,
+  type OperationPlan,
+  type PlannedTask,
+} from '@/lib/operations/planning'
+import {
+  inferVideoGridModeForShotCount,
+  resolveVideoGroupShots,
+  totalVideoGroupDuration,
+  validateVideoGroupShotIds,
+} from '@/lib/video-groups/core'
+import {
+  type GenerationSegmentVideoPlan,
+  type GenerationSegmentVideoPlanItem,
+  type VideoGridMode,
+  type VideoGroupShot,
+} from '@/lib/video-groups/types'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
+import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
-import { applySystemVideoDuration, buildVideoTaskPayload, isRecord, normalizeString, normalizeStringList, validateVideoTaskPayloadOrThrow, type UnknownObject } from './shared'
+import {
+  applySystemVideoDuration,
+  buildVideoTaskPayload,
+  isRecord,
+  normalizeString,
+  normalizeStringList,
+  validateVideoTaskPayloadOrThrow,
+  type UnknownObject,
+} from './shared'
 
 export function parseShotIdsJson(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-    .filter((item) => item.length > 0)
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0)
 }
 
 function parseShotNumbersJson(value: unknown): number[] {
@@ -46,12 +69,7 @@ export async function resolveEditChapterId(episodeId: string, chapterId?: string
   return chapter.id
 }
 
-async function findExistingVideoGroup(params: {
-  episodeId: string
-  chapterId: string
-  gridMode: string
-  shotIds: readonly string[]
-}) {
+async function findExistingVideoGroup(params: { episodeId: string; chapterId: string; gridMode: string; shotIds: readonly string[] }) {
   const candidates = await prisma.projectVideoGroup.findMany({
     where: {
       episodeId: params.episodeId,
@@ -122,7 +140,11 @@ export async function buildEpisodeGenerationSegmentVideoPlan(params: {
 }> {
   const chapterId = await resolveEditChapterId(params.episodeId, params.chapterId)
   const editScript = await prisma.projectEditScript.findFirst({
-    where: { projectId: params.ctx.projectId, episodeId: params.episodeId, chapterId },
+    where: {
+      projectId: params.ctx.projectId,
+      episodeId: params.episodeId,
+      chapterId,
+    },
     select: {
       id: true,
       corePlanJson: true,
@@ -153,7 +175,11 @@ async function resolveVideoGroupInput(params: {
       select: { id: true },
     }),
     prisma.projectEditScript.findFirst({
-      where: { episodeId: params.episodeId, projectId: params.projectId, chapterId },
+      where: {
+        episodeId: params.episodeId,
+        projectId: params.projectId,
+        chapterId,
+      },
       select: { id: true, corePlanJson: true },
     }),
     prisma.projectPanel.findMany({
@@ -213,7 +239,9 @@ async function buildGenerationSegmentPrompt(input: {
   })
   const segment = sourceSnapshot.generationSegments.find((candidate) => sameShotIds(candidate.shotIds, input.shotIds))
   if (!segment) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_GENERATION_SEGMENT_NOT_FOUND:${input.shotIds.join(',')}`)
-  const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) => sameShotIds(candidate.shotIds, input.shotIds))
+  const segmentExecution = sourceSnapshot.shotExecutionPlan.generationSegmentExecutions.find((candidate) =>
+    sameShotIds(candidate.shotIds, input.shotIds),
+  )
   if (!segmentExecution) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_SEGMENT_EXECUTION_NOT_FOUND:${input.shotIds.join(',')}`)
   return segmentExecution.continuousVideoPrompt
 }
@@ -273,12 +301,21 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
   const shotIds = parseShotIdsJson(value.shotIds)
   const shotNumbers = parseShotNumbersJson(value.shotNumbers)
   const durationSec = Number(value.durationSec)
-  if (!planTaskId || !projectId || !groupId || !episodeId || !chapterId || !gridMode || shotIds.length === 0 || shotNumbers.length !== shotIds.length || !Number.isInteger(durationSec) || durationSec <= 0) {
+  if (
+    !planTaskId ||
+    !projectId ||
+    !groupId ||
+    !episodeId ||
+    !chapterId ||
+    !gridMode ||
+    shotIds.length === 0 ||
+    shotNumbers.length !== shotIds.length ||
+    !Number.isInteger(durationSec) ||
+    durationSec <= 0
+  ) {
     throw new Error('PROJECT_AGENT_VIDEO_GROUP_PLAN_METADATA_INVALID')
   }
-  const prompt = Object.prototype.hasOwnProperty.call(value, 'prompt')
-    ? normalizeString(value.prompt) || null
-    : undefined
+  const prompt = Object.prototype.hasOwnProperty.call(value, 'prompt') ? normalizeString(value.prompt) || null : undefined
   const sourceMode = value.sourceMode === 'asset_reference' ? 'asset_reference' : null
   if (sourceMode === 'asset_reference' && !prompt) {
     throw new Error('PROJECT_AGENT_ASSET_REFERENCE_PROMPT_REQUIRED')
@@ -293,7 +330,7 @@ function readPlannedVideoGroupTaskMetadata(value: unknown): PlannedVideoGroupTas
     shotIds,
     shotNumbers,
     durationSec,
-    previous: isRecord(value.previous) ? value.previous as ExistingVideoGroupRecord : null,
+    previous: isRecord(value.previous) ? (value.previous as ExistingVideoGroupRecord) : null,
     sourceMode,
     ...(prompt !== undefined ? { prompt } : {}),
     referenceImageUrls: normalizeStringList(value.referenceImageUrls),
@@ -311,10 +348,10 @@ export function readPlannedVideoGroupMetadataByTaskId(plan: OperationPlan): Map<
   return new Map(readPlannedVideoGroupMetadataList(plan).map((metadata) => [metadata.planTaskId, metadata]))
 }
 
-async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMetadata): Promise<void> {
+async function prepareVideoGroupRecordForPlan(tx: Prisma.TransactionClient, metadata: PlannedVideoGroupTaskMetadata): Promise<void> {
   const resetReferenceImage = metadata.sourceMode === 'asset_reference'
   if (metadata.previous) {
-    await prisma.projectVideoGroup.update({
+    await tx.projectVideoGroup.update({
       where: { id: metadata.groupId },
       data: {
         durationSec: metadata.durationSec,
@@ -325,16 +362,18 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
         errorCode: null,
         errorMessage: null,
         ...(metadata.prompt !== undefined ? { prompt: metadata.prompt } : {}),
-        ...(resetReferenceImage ? {
-          referenceImageUrl: null,
-          referenceImageMediaId: null,
-        } : {}),
+        ...(resetReferenceImage
+          ? {
+              referenceImageUrl: null,
+              referenceImageMediaId: null,
+            }
+          : {}),
       },
     })
     return
   }
 
-  await prisma.projectVideoGroup.create({
+  await tx.projectVideoGroup.create({
     data: {
       id: metadata.groupId,
       projectId: metadata.projectId,
@@ -348,55 +387,6 @@ async function prepareVideoGroupRecordForPlan(metadata: PlannedVideoGroupTaskMet
       status: 'queued',
     },
   })
-}
-
-async function rollbackVideoGroupTaskRecord(params: {
-  groupId: string
-  previous: ExistingVideoGroupRecord | null
-}) {
-  try {
-    if (!params.previous) {
-      await prisma.projectVideoGroup.delete({ where: { id: params.groupId } })
-      return
-    }
-    await prisma.projectVideoGroup.update({
-      where: { id: params.groupId },
-      data: {
-        status: params.previous.status,
-        taskId: params.previous.taskId,
-        errorCode: params.previous.errorCode,
-        errorMessage: params.previous.errorMessage,
-        durationSec: params.previous.durationSec,
-        shotIds: params.previous.shotIds as Prisma.InputJsonValue,
-        shotNumbers: params.previous.shotNumbers as Prisma.InputJsonValue,
-        prompt: params.previous.prompt,
-        referenceImageUrl: params.previous.referenceImageUrl,
-        referenceImageMediaId: params.previous.referenceImageMediaId,
-        videoUrl: params.previous.videoUrl,
-        videoMediaId: params.previous.videoMediaId,
-      },
-    })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`PROJECT_AGENT_VIDEO_GROUP_RECORD_ROLLBACK_FAILED:${params.groupId}:${message}`)
-  }
-}
-
-export async function rollbackCommittedVideoGroups(committed: readonly CommittedVideoGroupTask[]): Promise<void> {
-  const failures: string[] = []
-  for (const item of committed) {
-    try {
-      await rollbackVideoGroupTaskRecord({
-        groupId: item.metadata.groupId,
-        previous: item.metadata.previous,
-      })
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error))
-    }
-  }
-  if (failures.length > 0) {
-    throw new Error(`PROJECT_AGENT_VIDEO_GROUP_BATCH_RECORD_ROLLBACK_FAILED:${failures.join(';')}`)
-  }
 }
 
 export async function planAssetReferenceGenerationSegmentTask(params: {
@@ -425,7 +415,10 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
     throw new Error(`PROJECT_AGENT_ASSET_REFERENCE_DURATION_UNSUPPORTED:${durationSec}`)
   }
 
-  const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
+  const { payload, localeForTask } = buildVideoTaskPayload({
+    ctx: params.ctx,
+    input: params.input,
+  })
   delete payload.prompt
   applySystemVideoDuration(payload, durationSec)
   payload.episodeId = params.episodeId
@@ -460,7 +453,11 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
   })
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotIds.join('-')}:${groupId}`
-  const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
+  const billingInfo = requirePlannedTaskBillingInfo({
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    payload,
+    allowedApiTypes: ['video'],
+  })
   return {
     task: createPlannedTask({
       id: planTaskId,
@@ -514,7 +511,10 @@ export async function planVideoGroupTask(params: {
     shotIds: params.shotIds,
   })
   const durationSec = totalVideoGroupDuration(resolved.selectedShots)
-  const { payload, localeForTask } = buildVideoTaskPayload({ ctx: params.ctx, input: params.input })
+  const { payload, localeForTask } = buildVideoTaskPayload({
+    ctx: params.ctx,
+    input: params.input,
+  })
   applySystemVideoDuration(payload, durationSec)
   payload.episodeId = params.episodeId
   payload.chapterId = resolved.chapterId
@@ -545,7 +545,11 @@ export async function planVideoGroupTask(params: {
   })
   const groupId = previous?.id ?? randomUUID()
   const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotIds.join('-')}:${groupId}`
-  const billingInfo = requirePlannedTaskBillingInfo({ taskType: TASK_TYPE.VIDEO_GROUP, payload, allowedApiTypes: ['video'] })
+  const billingInfo = requirePlannedTaskBillingInfo({
+    taskType: TASK_TYPE.VIDEO_GROUP,
+    payload,
+    allowedApiTypes: ['video'],
+  })
   return {
     task: createPlannedTask({
       id: planTaskId,
@@ -583,41 +587,30 @@ export async function commitPlannedVideoGroupTask(params: {
   task: PlannedTask
   metadata: PlannedVideoGroupTaskMetadata
 }): Promise<CommittedVideoGroupTask> {
-  await prepareVideoGroupRecordForPlan(params.metadata)
-  let submittedTaskId: string | null = null
-  try {
-    const result = await submitPlannedOperationTask({
-      ctx: params.ctx,
-      task: params.task,
-      operationId: params.operationId,
-      confirmed: params.input.confirmed === true,
-    })
-    submittedTaskId = result.taskId
-    await prisma.projectVideoGroup.update({
-      where: { id: params.metadata.groupId },
-      data: {
-        taskId: result.taskId,
-        status: result.status,
-        ...(params.metadata.sourceMode === 'asset_reference' ? {
-          prompt: params.metadata.prompt ?? null,
-          referenceImageUrl: params.metadata.referenceImageUrls?.[0] ?? null,
-          referenceImageMediaId: null,
-        } : {}),
-      },
-    })
-    return {
-      metadata: params.metadata,
-      result,
-    }
-  } catch (error) {
-    if (submittedTaskId) {
-      await compensateSubmittedTasks([submittedTaskId])
-    }
-    await rollbackVideoGroupTaskRecord({
-      groupId: params.metadata.groupId,
-      previous: params.metadata.previous,
-    })
-    throw error
+  const transaction = requireOperationExecutionTransaction(params.ctx)
+  await prepareVideoGroupRecordForPlan(transaction, params.metadata)
+  const result = await submitPlannedOperationTask({
+    ctx: params.ctx,
+    task: params.task,
+    operationId: params.operationId,
+  })
+  await transaction.projectVideoGroup.update({
+    where: { id: params.metadata.groupId },
+    data: {
+      taskId: result.taskId,
+      status: result.status,
+      ...(params.metadata.sourceMode === 'asset_reference'
+        ? {
+            prompt: params.metadata.prompt ?? null,
+            referenceImageUrl: params.metadata.referenceImageUrls?.[0] ?? null,
+            referenceImageMediaId: null,
+          }
+        : {}),
+    },
+  })
+  return {
+    metadata: params.metadata,
+    result,
   }
 }
 
@@ -629,31 +622,18 @@ export async function commitPlannedVideoGroupBatch(params: {
 }): Promise<CommittedVideoGroupTask[]> {
   const metadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
   const committed: CommittedVideoGroupTask[] = []
-  try {
-    for (const task of params.plan.tasks) {
-      const metadata = metadataByTaskId.get(task.id)
-      if (!metadata) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PLAN_TASK_METADATA_MISSING:${task.id}`)
-      committed.push(await commitPlannedVideoGroupTask({
+  for (const task of params.plan.tasks) {
+    const metadata = metadataByTaskId.get(task.id)
+    if (!metadata) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PLAN_TASK_METADATA_MISSING:${task.id}`)
+    committed.push(
+      await commitPlannedVideoGroupTask({
         ctx: params.ctx,
         input: params.input,
         operationId: params.operationId,
         task,
         metadata,
-      }))
-    }
-  } catch (error) {
-    const failures: string[] = []
-    await compensateSubmittedTasks(committed.map((item) => item.result.taskId)).catch((compensationError: unknown) => {
-      failures.push(compensationError instanceof Error ? compensationError.message : String(compensationError))
-    })
-    await rollbackCommittedVideoGroups(committed).catch((rollbackError: unknown) => {
-      failures.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError))
-    })
-    if (failures.length > 0) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`PROJECT_AGENT_VIDEO_GROUP_BATCH_COMPENSATION_FAILED:${message}:${failures.join(';')}`)
-    }
-    throw error
+      }),
+    )
   }
   return committed
 }

@@ -333,8 +333,8 @@ async function handleAssetReferenceVideoGroupTask(params: {
     throw new Error(`ASSET_REFERENCE_VIDEO_MULTI_REFERENCE_UNSUPPORTED:${modelId}`)
   }
 
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const started = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: { in: ['queued', 'pending', 'generating', 'processing'] } },
     data: {
       status: 'processing',
       taskId: job.data.taskId,
@@ -344,6 +344,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
       referenceImageMediaId: null,
     },
   })
+  if (started.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 12, { stage: 'asset_reference_video_prepare', groupId })
   const [project, editScript] = await Promise.all([
@@ -371,13 +372,14 @@ async function handleAssetReferenceVideoGroupTask(params: {
   }
   const prompt = await requireProjectVideoGroupPrompt(groupId)
   const generationPrompt = prompt
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const promptPersisted = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       prompt,
       durationSec,
     },
   })
+  if (promptPersisted.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 30, { stage: 'asset_reference_video_normalize', groupId })
   const normalizedReferenceImages = await Promise.all(
@@ -434,8 +436,8 @@ async function handleAssetReferenceVideoGroupTask(params: {
     durationMs: durationSec * 1000,
   })
   await assertTaskActive(job, 'persist_asset_reference_video')
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const completed = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       status: 'completed',
       taskId: null,
@@ -445,6 +447,7 @@ async function handleAssetReferenceVideoGroupTask(params: {
       errorMessage: null,
     },
   })
+  if (completed.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   return {
     groupId,
@@ -484,8 +487,8 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   if (!chapterId) throw new Error('VIDEO_GROUP_CHAPTER_REQUIRED')
   const shotIds = parseShotIds(payload.shotIds)
 
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const started = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: { in: ['queued', 'pending', 'generating', 'processing'] } },
     data: {
       status: 'processing',
       taskId: job.data.taskId,
@@ -493,6 +496,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
       errorMessage: null,
     },
   })
+  if (started.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 12, { stage: 'video_group_prepare', groupId })
   const [project, editScript, panels, prompt] = await Promise.all([
@@ -541,14 +545,15 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     }
     return panel
   })
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const metadataPersisted = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       referenceImageUrl: null,
       referenceImageMediaId: null,
       durationSec: totalVideoGroupDuration(shots),
     },
   })
+  if (metadataPersisted.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   await reportTaskProgress(job, 26, { stage: 'video_group_prompt', groupId })
   const generationPrompt = prompt
@@ -604,8 +609,8 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     durationMs: totalVideoGroupDuration(shots) * 1000,
   })
   await assertTaskActive(job, 'persist_video_group')
-  await prisma.projectVideoGroup.update({
-    where: { id: groupId },
+  const completed = await prisma.projectVideoGroup.updateMany({
+    where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       status: 'completed',
       taskId: null,
@@ -615,6 +620,7 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
       errorMessage: null,
     },
   })
+  if (completed.count !== 1) throw new Error(`VIDEO_GROUP_TASK_OWNERSHIP_STALE:${groupId}:${job.data.taskId}`)
 
   return {
     groupId,

@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { prisma } from '@/lib/prisma'
 import { E2eApiClient } from './api-client'
-import { readFollowUpAction, readNextActionFromSessionState } from './actions'
+import { readNextActionFromSessionState } from './actions'
 import { readE2eDiagnostics } from './diagnostics'
 import type { E2eDiagnostics } from './diagnostics-types'
 import { authenticateE2eClient, E2eHttpClient } from './http-client'
@@ -112,20 +112,9 @@ async function readAndApplyNextAction(input: {
     return true
   }
 
-  const claimed = await input.api.claimTaskFollowUp({
-    projectId: input.scope.projectId,
-    episodeId: input.scope.episodeId,
-  })
-  const followUp = readFollowUpAction(claimed)
-  if (!followUp) return false
-  await input.api.submitTaskFollowUp({
-    projectId: input.scope.projectId,
-    episodeId: input.scope.episodeId,
-    locale: input.config.locale,
-    assistantPermissionMode: input.config.assistantPermissionMode,
-    action: followUp,
-  })
-  return true
+  // Task terminal continuation is server-owned by the durable Outbox worker.
+  // The E2E runner only observes Session State until that command settles.
+  return false
 }
 
 async function finalizeRun(input: {

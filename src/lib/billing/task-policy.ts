@@ -15,7 +15,6 @@ type AnyPayload = Record<string, unknown> | null | undefined
 
 const BILLABLE_TASK_TYPES = new Set<TaskType>([
   TASK_TYPE.IMAGE_PANEL,
-  TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE,
   TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
   TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
   TASK_TYPE.IMAGE_CHARACTER,
@@ -268,7 +267,6 @@ export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayl
       return buildSoundEffectTaskInfo(taskType, payload)
     case TASK_TYPE.SOUNDSCAPE_PLAN:
       return buildTextTaskInfo(taskType, payload)
-    case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
     case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
     case TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE:
     case TASK_TYPE.EDIT_BIBLE_GENERATE:

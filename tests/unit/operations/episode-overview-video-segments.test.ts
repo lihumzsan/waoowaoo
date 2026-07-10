@@ -8,7 +8,9 @@ const editBibleMock = vi.hoisted(() => ({
   confirmEditBibleInputSchema: { extend: vi.fn(() => ({ parse: vi.fn() })) },
   getEditBibleInputSchema: { parse: vi.fn((input: unknown) => input) },
   getEditChaptersInputSchema: { parse: vi.fn((input: unknown) => input) },
-  ingestEditBibleScriptInputSchema: { extend: vi.fn(() => ({ parse: vi.fn() })) },
+  ingestEditBibleScriptInputSchema: {
+    extend: vi.fn(() => ({ parse: vi.fn() })),
+  },
   readEpisodeEditBible: vi.fn(),
   readEpisodeEditChapters: vi.fn(),
   reviseEditBibleInputSchema: { extend: vi.fn(() => ({ parse: vi.fn() })) },
@@ -72,7 +74,10 @@ function getEpisodeOverviewOperation(): ProjectAgentOperationDefinitionBase<Reco
 
 describe('get_episode_overview video segment summary', () => {
   it('distinguishes completed video segments from missing chapter renders', async () => {
-    editBibleMock.readEpisodeEditBible.mockResolvedValueOnce({ id: 'bible-1', status: 'confirmed' })
+    editBibleMock.readEpisodeEditBible.mockResolvedValueOnce({
+      id: 'bible-1',
+      status: 'confirmed',
+    })
     editBibleMock.readEpisodeEditChapters.mockResolvedValueOnce([
       {
         id: 'chapter-1',
@@ -96,7 +101,7 @@ describe('get_episode_overview video segment summary', () => {
       },
     ])
 
-    const result = await getEpisodeOverviewOperation().execute(buildCtx(), {})
+    const result = await getEpisodeOverviewOperation().execute!(buildCtx(), {})
 
     expect(result.chapterSummary).toMatchObject({
       total: 1,

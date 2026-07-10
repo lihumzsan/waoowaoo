@@ -261,7 +261,6 @@ export function useRenderFinalVideo(projectId: string | null, episodeId: string 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    confirmed: true,
                     episodeId,
                 }),
             })

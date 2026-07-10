@@ -1,11 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
-import {
-  commitOperationPlan,
-  planOperation,
-  resolveConfirmedMaxCostForExecution,
-} from '@/lib/operations/planning'
+import { commitOperationPlan, planOperation } from '@/lib/operations/planning'
+import { invokeApprovedOperationPlan, splitPlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import {
   extractPrismaMissingColumn,
@@ -36,7 +33,8 @@ export async function executeProjectAgentOperationFromApi(params: {
     })
   }
 
-  const parsed = operation.inputSchema.safeParse(params.input)
+  const splitInput = splitPlannedOperationInvocation(params.input)
+  const parsed = operation.inputSchema.safeParse(splitInput.businessInput)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {
       message: 'INVALID_PARAMS',
@@ -45,42 +43,57 @@ export async function executeProjectAgentOperationFromApi(params: {
   }
 
   const operationContext = {
-      request: params.request,
-      userId: params.userId,
-      projectId: params.projectId,
-      context: {
-        ...(params.context?.locale ? { locale: params.context.locale } : {}),
-        ...(params.context?.episodeId ? { episodeId: params.context.episodeId } : {}),
-        ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
-        ...(params.context?.selectedPanelId ? { selectedPanelId: params.context.selectedPanelId } : {}),
-        ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
-      },
-      source: params.source || 'project-ui',
-      writer: null,
-      toolCallId: null,
-    }
+    request: params.request,
+    userId: params.userId,
+    projectId: params.projectId,
+    context: {
+      ...(params.context?.locale ? { locale: params.context.locale } : {}),
+      ...(params.context?.episodeId ? { episodeId: params.context.episodeId } : {}),
+      ...(params.context?.selectedScopeRef ? { selectedScopeRef: params.context.selectedScopeRef } : {}),
+      ...(params.context?.selectedPanelId ? { selectedPanelId: params.context.selectedPanelId } : {}),
+      ...(params.context?.selectedAssetId ? { selectedAssetId: params.context.selectedAssetId } : {}),
+    },
+    source: params.source || 'project-ui',
+    writer: null,
+    toolCallId: null,
+  }
 
   try {
-    const result = operation.plan && operation.commit
-      ? await (async () => {
-          const plan = await planOperation({
-            operation,
-            ctx: operationContext,
-            input: parsed.data,
-          })
-          return await commitOperationPlan({
-            operation,
-            ctx: operationContext,
-            input: parsed.data,
-            plan,
-            confirmedMaxCost: await resolveConfirmedMaxCostForExecution({
+    const result =
+      operation.confirmation.kind === 'billable_media'
+        ? await (async () => {
+            if (!splitInput.invocation) {
+              throw new ApiError('INVALID_PARAMS', {
+                code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
+                message: 'approve the immutable operation plan before execution',
+              })
+            }
+            return await invokeApprovedOperationPlan({
+              operation,
               ctx: operationContext,
-              input: parsed.data,
-              plan,
-            }),
-          })
-        })()
-      : await operation.execute(operationContext, parsed.data)
+              normalizedInput: parsed.data,
+              invocation: splitInput.invocation,
+            })
+          })()
+        : operation.plan && operation.commit
+          ? await (async () => {
+              const plan = await planOperation({
+                operation,
+                ctx: operationContext,
+                input: parsed.data,
+              })
+              return await commitOperationPlan({
+                operation,
+                ctx: operationContext,
+                input: parsed.data,
+                plan,
+              })
+            })()
+          : operation.execute
+            ? await operation.execute(operationContext, parsed.data)
+            : (() => {
+                throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
+              })()
     const outputParsed = operation.outputSchema.safeParse(result)
     if (!outputParsed.success) {
       throw new ApiError('EXTERNAL_ERROR', {

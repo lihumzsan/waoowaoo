@@ -15,6 +15,7 @@ export interface MaterializedResourceIgnored {
 }
 
 export interface MaterializedResourceApplyResult {
+  readonly outcome: 'applied' | 'duplicate' | 'stale' | 'identity-conflict' | 'missing' | 'invalid'
   readonly applied: readonly WorkspaceMaterializedResourceEnvelope[]
   readonly ignored: readonly MaterializedResourceIgnored[]
   readonly errors: readonly string[]
@@ -59,7 +60,7 @@ function readEnvelope(value: unknown, index: number): EnvelopeReadResult {
       error: `CANVAS_TERMINAL_RESOURCE_VERSION_INVALID:${kind}:${index}`,
     }
   }
-  if (kind === 'editBible' && resourceVersion.scheme === 'revision') {
+  if (kind === 'editBible' && resourceVersion.scheme === 'revision_updated_at') {
     return {
       error: null,
       envelope: {
@@ -73,7 +74,7 @@ function readEnvelope(value: unknown, index: number): EnvelopeReadResult {
       },
     }
   }
-  if (kind === 'episodeData' && resourceVersion.scheme === 'updated_at') {
+  if (kind === 'episodeData' && resourceVersion.scheme === 'aggregate_updated_at') {
     return {
       error: null,
       envelope: {
@@ -139,7 +140,9 @@ export function applyWorkspaceMaterializedResourcesToCache(input: {
   readonly projectId: string
   readonly value: unknown
 }): MaterializedResourceApplyResult {
-  if (!Array.isArray(input.value)) return { applied: [], ignored: [], errors: [] }
+  if (!Array.isArray(input.value) || input.value.length === 0) {
+    return { outcome: 'missing', applied: [], ignored: [], errors: [] }
+  }
   const applied: WorkspaceMaterializedResourceEnvelope[] = []
   const ignored: MaterializedResourceIgnored[] = []
   const errors: string[] = []
@@ -196,5 +199,49 @@ export function applyWorkspaceMaterializedResourcesToCache(input: {
     applied.push(envelope)
   })
 
-  return { applied, ignored, errors }
+  const hasIdentityConflict = errors.some((error) => (
+    error.startsWith('CANVAS_TERMINAL_RESOURCE_ENVELOPE_SCOPE_MISMATCH:')
+  ))
+  const outcome: MaterializedResourceApplyResult['outcome'] = hasIdentityConflict
+    ? 'identity-conflict'
+    : errors.length > 0
+      ? 'invalid'
+      : applied.length > 0
+        ? 'applied'
+        : ignored.some((item) => item.reason === 'stale')
+          ? 'stale'
+          : 'duplicate'
+
+  return { outcome, applied, ignored, errors }
+}
+
+export function restoreWorkspaceMaterializedResourceSnapshot(input: {
+  readonly queryClient: QueryClient
+  readonly kind: WorkspaceMaterializedResourceKind
+  readonly projectId: string
+  readonly episodeId: string
+  readonly snapshot: unknown
+}): 'restored' | 'newer-current-preserved' {
+  const snapshotVersion = readWorkspaceMaterializedResourceVersionFromData(input.kind, input.snapshot)
+  if (!snapshotVersion) {
+    throw new Error(`CANVAS_OPTIMISTIC_ROLLBACK_VERSION_INVALID:${input.kind}:snapshot`)
+  }
+  const queryKey = input.kind === 'editBible'
+    ? queryKeys.project.editBible(input.projectId, input.episodeId)
+    : queryKeys.episodeData(input.projectId, input.episodeId)
+  const current = input.queryClient.getQueryData(queryKey)
+  if (current !== undefined) {
+    const currentVersion = readWorkspaceMaterializedResourceVersionFromData(input.kind, current)
+    if (!currentVersion) {
+      throw new Error(`CANVAS_OPTIMISTIC_ROLLBACK_VERSION_INVALID:${input.kind}:current`)
+    }
+    const order = compareWorkspaceMaterializedResourceVersions({
+      kind: input.kind,
+      incoming: snapshotVersion,
+      current: currentVersion,
+    })
+    if (order === 'older') return 'newer-current-preserved'
+  }
+  replaceWorkspaceMaterializedResourceSnapshot(input.queryClient, queryKey, input.snapshot)
+  return 'restored'
 }

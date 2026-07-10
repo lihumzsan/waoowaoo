@@ -12,7 +12,6 @@ import { handleEditBibleGenerateTask } from './handlers/edit-bible-generate'
 import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
-import { handleEditStylePreviewsGenerateTask } from './handlers/edit-style-previews-generate'
 import {
   handleEditScriptStoryboardCameraPlanTask,
 } from './handlers/edit-script-storyboard-consistency-task-handler'
@@ -26,8 +25,6 @@ async function processTextTask(job: Job<TaskJobData>) {
     case TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE:
     case TASK_TYPE.EDIT_BIBLE_GENERATE:
       return await handleEditBibleGenerateTask(job)
-    case TASK_TYPE.EDIT_STYLE_PREVIEWS_GENERATE:
-      return await handleEditStylePreviewsGenerateTask(job)
     case TASK_TYPE.EDIT_SCRIPT_GENERATE:
       return await handleEditScriptGenerateTask(job)
     case TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE:

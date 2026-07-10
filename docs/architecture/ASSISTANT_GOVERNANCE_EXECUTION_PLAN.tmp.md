@@ -1100,3 +1100,71 @@ ApprovalGrant 上线后 execution fingerprint 还必须一次性用 `approvalGra
 用户要求的“删除 PlanRun runtime”已经在 `8751505cc` 完成：生产 runtime、公开 API、Operation pack、Assistant/Project Context/Projection 读取和专用测试均已删除，`no-plan-run-runtime` guard 已挂入 `test:guards`。当前只保留 Prisma 历史模型和 migration。
 
 这些历史表不是可执行面。删除表会造成数据删除和 schema 风险，且当前与 Task terminal migration 冲突；没有新的明确数据删除授权时不得顺手 drop。后续若要删除，必须先只读统计 PlanRun/Step/Event/Artifact 数量与非终态数据，决定归档/保留策略并单独执行可恢复的 migration。
+
+## 21. 2026-07-11 Assistant Goal 独占执行记录（进行中）
+
+> 本节记录当前 Goal 的实际执行事实。未完成或未运行的验证必须保留“未验证”字样；在所有工作包闭环前不得删除本临时文档或把 Goal 标记完成。
+
+### 21.1 所有权与并行边界
+
+| 工作包 | 唯一 owner | 允许修改的核心 | 明确禁止重叠 |
+|---|---|---|---|
+| Choice / Workflow / Style Operation | Choice agent，主 agent 复核 | Choice Offer、canonical decision、Workflow nextAction、Style Operation、对应 UI | Approval transaction、Task terminal、SSE cursor |
+| ApprovalGrant / OperationExecution | Approval agent | planned invocation、approved batch、19 个 billable commit/projector | continuation、Choice、SSE、Task terminal/reconcile |
+| SSE / Resource Version / Canvas | SSE agent | materialized DTO/version/cache、SSE client projection、Canvas resolver | Approval、Choice、Task terminal/reconcile |
+| Continuation / Run settlement | 主 agent | server follow-up、Wait checkpoint、Thread append、Run final settlement | Approval business commit、queue/reconcile |
+| Task target ownership / old style parent deletion | Choice agent 第二工作包 | TaskDefinition terminal projector、EditBible ownership、旧 parent Task 全触点 | Approval transaction、SSE、continuation |
+
+共享工作区不使用 agent 私自 commit 作为隔离手段；每个 owner 只修改表中边界，主 agent 最终逐文件审查关键 diff 并统一验证。
+
+### 21.2 Choice / Workflow 当前结果与动机
+
+**原问题**：Style Choice 先由浏览器 PATCH Bible/Project，再消费持久 Choice。该写入会改变 Offer fingerprint，导致随后 consume 稳定报 stale；旧 style generation card 还使用空 interruption/tool identity 形成第二执行入口。
+
+**已实施结果**：
+
+1. 所有 Choice card 只使用 `submit_tool_output`，Panel、renderer、旧 generation card 不再写 Style/Bible/Project。
+2. 删除专用 Style Preview PATCH route 和客户端 mutation hook；领域写入只保留 registry Operation `confirm_edit_style_preview`。
+3. Workflow 将持久 style decision 映射到该 Operation；Operation 只允许 Assistant tool channel，通用 API 不能绕过 consumed Choice。
+4. run/interruption/card/tool identity 改为必填；随机 toolCallId fallback 删除。
+5. canonicalizer 已移入 Choice authority。调用者不能再注入 `parseResponse`；任何 required selection 必须存在于持久 Offer options，未提供或越权值原地失败。
+6. runtime 结算不再只检查“第一个 Choice operation 是否执行”。每次 Operation 后读取 live Workflow；只要最新 `nextAction` 仍存在，Run 就不能 completed，只能继续到稳定边界或显式 `PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING` 失败。
+
+**删除的旧入口**：浏览器 Style PATCH、generation card 确认按钮、null identity submit、caller-defined Choice parser、首个 operation 已执行即 completed 的结算判断。
+
+**验证**：Choice/Workflow agent 已报告 11 files / 102 tests；主 agent 追加持久 Offer 越权 selection 负向测试及 public task-follow-up 删除后的 API contract。最终全量仍未验证。
+
+### 21.3 Continuation 与最终消息 settlement 当前结果与动机
+
+**原问题**：旧 checkpoint 只在模型和工具全部完成后创建。模型已返回或工具已产生副作用、但 checkpoint 前崩溃时，Outbox retry 会再次执行模型/工具；普通 Run 又先写 terminal，再尝试追加消息，消息 DB_DOWN 被记录日志后仍显示 completed。
+
+**已实施结果**：
+
+1. `ProjectAgentContinuationCheckpoint` 增加 `running → settled` 状态，final 字段在 running 时为空。
+2. `beginProjectAgentWaitContinuationExecution` 必须在 `createProjectAgentChatResponse` 前持久化 at-most-once execution fence。
+3. retry 若看到同 command 的 `running`，不会再次调用模型或工具；它以稳定 message identity 写入显式 outcome-unknown 失败并完成 Wait/Activity/Run settlement。该选择牺牲自动重跑，换取不重复执行未知副作用；没有 provider idempotency 时这是唯一可证明的语义。
+4. 正常模型完成后，assistant message 与 checkpoint `settled` 在同一事务提交；finalize 只接受 settled checkpoint。
+5. public control protocol 删除 `task_follow_up`；Outbox worker 是唯一 continuation caller，浏览器/API 无法恢复第二入口。
+6. Thread append 先 materialize 唯一 aggregate row，再 `FOR UPDATE` 锁行读改写，防止用户消息、普通 Run 和 continuation 并发覆盖整个 `messagesJson`。
+7. 新增 `settleProjectAgentRunWithMessage`，普通 Run 的 final assistant message 与 terminal Event 同事务提交。消息失败时 terminal 不前进，不再“logger.error 后 200/completed”。
+
+**删除/隔离的旧入口**：公开 task-follow-up action、消息失败吞错语义、terminal-before-message 普通 Run 路径。另删除一段误混入本 Goal 的未完成媒体 provider-invocation 草稿；该草稿要求所有 worker 传 invocation key，但调用者未迁移，会让全部 Task 媒体调用原地失败。
+
+**验证**：server-follow-up + continuation guard 2 files / 7 tests；runtime routing 在 Approval agent 改动 test helper 前曾为 26/26，通过后需重新运行。真实 MySQL continuation/Thread 并发/terminal rollback 测试已补充，但当前本机 MySQL `127.0.0.1:3307` 未启动，仍属未验证。
+
+### 21.4 SSE / materialized resource 当前结果与残余边界
+
+**已实施结果**：正式 Query DTO 构造器生成版本；cache apply 返回 `applied/duplicate/stale/identity-conflict/missing/invalid` 穷尽结果；合法 duplicate/stale terminal replay 不再伪装 handoff missing；canceled 进入 target、overlay 与 structured runtime cleanup。
+
+**验证**：SSE agent 报告 9 files / 128 tests、Bible route 5/5、相关 guard 通过。
+
+**仍未闭环**：当前聚合 timestamp 能覆盖现存子记录 create/update，但物理删除和同一数据库时间精度内的多次写入不能形成严格全序。最终必须选择并验证持久 `resourceRevision`（所有子资源写入口同事务 bump）或等价数据库单调版本；不能用 taskId、事件到达顺序或内容 hash猜先后。本项在该边界解决前只算风险降低，不算 R2-04 完成。
+
+### 21.5 尚在执行、不得宣称完成
+
+1. ApprovalGrant 的 Operation business writes + Grant consume + Task/freeze + Execution completed + enqueue Outbox 单事务；真实 EditScript assets POST 契约；19 个 billable Operation 移除 execute 第二形态。
+2. TaskDefinition success/failure/cancel handoff 穷尽、EditBible 成功 ownership 锁、取消 projector、旧 `EDIT_STYLE_PREVIEWS_GENERATE` parent/poller 全量删除。
+3. Canvas `__running`、operationId 特判、TTL 正确性、structured stream attempt/seq 与无界 Set 删除。
+4. Session/Assistant UI 的历史消息推断、local active Run 越权、1.5 秒/5 秒 timer 正确性删除。
+5. `resourceRevision` 严格版本方案。
+6. 全量 typecheck、guards、unit、integration、system、regression、provider、build:verify 和 migration 发布门禁复核。

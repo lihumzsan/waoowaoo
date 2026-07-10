@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSignedUrl } from '@/lib/storage'
 import type { ProjectAgentLocale } from './locale'
 import type {
-  ProjectAgentChoiceCardPartData,
+  ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCardOption,
 } from './types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
@@ -18,6 +18,15 @@ export type {
   EditFirstChoiceType,
 } from './edit-first-choice-tools'
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import {
+  fingerprintProjectAgentChoiceResource,
+  type ProjectAgentChoiceReviewedResource,
+} from './choice-offer'
+
+export interface ProjectAgentChoiceOfferCandidate {
+  card: ProjectAgentChoiceCardDefinition
+  reviewedResource: ProjectAgentChoiceReviewedResource
+}
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = EDIT_SCRIPT_VIDEO_RATIOS
@@ -41,7 +50,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   episodeId: string
   locale: ProjectAgentLocale
   toolCallId: string
-}): Promise<ProjectAgentChoiceCardPartData> {
+}): Promise<ProjectAgentChoiceOfferCandidate> {
   const [project, editBible] = await Promise.all([
     prisma.project.findFirst({
       where: {
@@ -49,6 +58,7 @@ async function buildStyleAndRatioChoiceCard(params: {
         userId: params.userId,
       },
       select: {
+        id: true,
         videoRatio: true,
       },
     }),
@@ -65,6 +75,7 @@ async function buildStyleAndRatioChoiceCard(params: {
       select: {
         id: true,
         status: true,
+        version: true,
         stylePreviews: {
           where: {
             status: {
@@ -80,6 +91,8 @@ async function buildStyleAndRatioChoiceCard(params: {
             title: true,
             summary: true,
             imageKey: true,
+            status: true,
+            updatedAt: true,
           },
         },
       },
@@ -100,7 +113,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 
   const isEnglish = params.locale === 'en'
-  return {
+  const card: ProjectAgentChoiceCardDefinition = {
     cardId: `edit-first-style:${editBible.id}`,
     toolCallId: params.toolCallId,
     choiceType: 'style',
@@ -123,12 +136,22 @@ async function buildStyleAndRatioChoiceCard(params: {
       },
     ],
     submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
-    submit: {
-      kind: 'confirm_edit_style_preview',
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      aspectRatio: selectedAspectRatio,
-    },
+    submit: { kind: 'submit_tool_output' },
+  }
+  return {
+    card,
+    reviewedResource: fingerprintProjectAgentChoiceResource({
+      kind: 'style_preview_set',
+      snapshot: {
+        project,
+        bible: {
+          id: editBible.id,
+          status: editBible.status,
+          version: editBible.version,
+        },
+        stylePreviews: editBible.stylePreviews,
+      },
+    }),
   }
 }
 
@@ -139,7 +162,7 @@ async function buildScriptReviewChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
-}): Promise<ProjectAgentChoiceCardPartData> {
+}): Promise<ProjectAgentChoiceOfferCandidate> {
   if (params.workflow.stage !== 'script_ready_for_review') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:stage=${params.workflow.stage}`)
   }
@@ -155,6 +178,7 @@ async function buildScriptReviewChoiceCard(params: {
       id: true,
       status: true,
       version: true,
+      updatedAt: true,
       sourceDocument: {
         select: {
           id: true,
@@ -162,6 +186,7 @@ async function buildScriptReviewChoiceCard(params: {
           checksum: true,
           version: true,
           normalizedText: true,
+          updatedAt: true,
         },
       },
     },
@@ -187,7 +212,7 @@ async function buildScriptReviewChoiceCard(params: {
     ].join('|'))
     .digest('hex')
     .slice(0, 12)
-  return {
+  const card: ProjectAgentChoiceCardDefinition = {
     cardId: `edit-first-script-review:${params.episodeId}:${cardVersion}`,
     toolCallId: params.toolCallId,
     choiceType: 'script_review',
@@ -208,19 +233,72 @@ async function buildScriptReviewChoiceCard(params: {
     replySubmitLabel: isEnglish ? 'Submit script changes' : '提交剧本修改意见',
     replyToolOutputKey: 'revisionNotes',
   }
+  return {
+    card,
+    reviewedResource: fingerprintProjectAgentChoiceResource({
+      kind: 'script_review_document',
+      snapshot: {
+        id: editBible.id,
+        status: editBible.status,
+        version: editBible.version,
+        updatedAt: editBible.updatedAt,
+        sourceDocument: editBible.sourceDocument,
+      },
+    }),
+  }
 }
 
 async function buildBibleReviewChoiceCard(params: {
+  projectId: string
+  userId: string
+  episodeId: string
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
-}): Promise<ProjectAgentChoiceCardPartData> {
+}): Promise<ProjectAgentChoiceOfferCandidate> {
   if (params.workflow.stage !== 'bible_ready_for_review') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=${params.workflow.stage}`)
   }
+  const editBible = await prisma.projectEditBible.findFirst({
+    where: {
+      episodeId: params.episodeId,
+      episode: {
+        projectId: params.projectId,
+        project: { userId: params.userId },
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      bibleJson: true,
+      beatSheetJson: true,
+      ledgerJson: true,
+      emotionalCurveJson: true,
+      styleBibleJson: true,
+      diagnosticsJson: true,
+      updatedAt: true,
+      sourceDocument: {
+        select: {
+          id: true,
+          checksum: true,
+          version: true,
+          updatedAt: true,
+        },
+      },
+    },
+  })
+  if (!editBible) throw new Error('EDIT_FIRST_CHOICE_BIBLE_NOT_FOUND')
+  if (editBible.status !== 'bible_ready_for_review') {
+    throw new Error(`EDIT_FIRST_BIBLE_REVIEW_NOT_READY:${editBible.status}`)
+  }
   const isEnglish = params.locale === 'en'
-  return {
-    cardId: 'edit-first-bible-review',
+  const reviewedResource = fingerprintProjectAgentChoiceResource({
+    kind: 'bible_review_plan',
+    snapshot: editBible,
+  })
+  const card: ProjectAgentChoiceCardDefinition = {
+    cardId: `edit-first-bible-review:${reviewedResource.fingerprint.slice(0, 12)}`,
     toolCallId: params.toolCallId,
     choiceType: 'bible_review',
     variant: 'confirm_or_reply',
@@ -247,6 +325,7 @@ async function buildBibleReviewChoiceCard(params: {
     replySubmitLabel: isEnglish ? 'Submit change request' : '提交修改意见',
     replyToolOutputKey: 'revisionNotes',
   }
+  return { card, reviewedResource }
 }
 
 function buildAssetReviewVersion(input: readonly {
@@ -277,7 +356,7 @@ async function buildAssetReviewChoiceCard(params: {
   locale: ProjectAgentLocale
   workflow: EditFirstWorkflowState
   toolCallId: string
-}): Promise<ProjectAgentChoiceCardPartData> {
+}): Promise<ProjectAgentChoiceOfferCandidate> {
   if (params.workflow.stage !== 'assets_ready_for_review') {
     throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=${params.workflow.stage}`)
   }
@@ -305,6 +384,7 @@ async function buildAssetReviewChoiceCard(params: {
           name: true,
           status: true,
           targetId: true,
+          updatedAt: true,
           errorMessage: true,
         },
       },
@@ -322,7 +402,7 @@ async function buildAssetReviewChoiceCard(params: {
   }
   const isEnglish = params.locale === 'en'
   const version = buildAssetReviewVersion(editScripts)
-  return {
+  const card: ProjectAgentChoiceCardDefinition = {
     cardId: `edit-first-asset-review:${params.episodeId}:${version}`,
     toolCallId: params.toolCallId,
     choiceType: 'asset_review',
@@ -354,6 +434,13 @@ async function buildAssetReviewChoiceCard(params: {
     replySubmitLabel: isEnglish ? 'Submit changes' : '提交调整意见',
     replyToolOutputKey: 'revisionNotes',
   }
+  return {
+    card,
+    reviewedResource: fingerprintProjectAgentChoiceResource({
+      kind: 'asset_review_set',
+      snapshot: editScripts,
+    }),
+  }
 }
 
 export async function buildEditFirstAssistantChoiceCard(params: {
@@ -364,13 +451,28 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   workflow: EditFirstWorkflowState
   choiceType: EditFirstChoiceType
   toolCallId: string
-}): Promise<ProjectAgentChoiceCardPartData> {
+}): Promise<ProjectAgentChoiceCardDefinition> {
+  return (await buildEditFirstAssistantChoiceOfferCandidate(params)).card
+}
+
+export async function buildEditFirstAssistantChoiceOfferCandidate(params: {
+  projectId: string
+  userId: string
+  episodeId: string
+  locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
+  choiceType: EditFirstChoiceType
+  toolCallId: string
+}): Promise<ProjectAgentChoiceOfferCandidate> {
   if (params.choiceType === 'script_intake') {
     throw new Error('SCRIPT_INTAKE_CHOICE_CARD_REQUIRES_PERSISTED_PAYLOAD')
   }
 
   if (params.choiceType === 'bible_review') {
     return await buildBibleReviewChoiceCard({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,

@@ -1,5 +1,4 @@
-import type { FollowUpResponse } from './api-client'
-import type { E2eChoiceAction, E2eNextAction, E2eRunnerConfig, E2eTaskFollowUpAction } from './types'
+import type { E2eChoiceAction, E2eNextAction, E2eRunnerConfig } from './types'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -134,16 +133,4 @@ export function readNextActionFromSessionState(config: E2eRunnerConfig, payload:
     }
   }
   throw new Error(`E2E_PENDING_INTERACTION_UNSUPPORTED:${kind}`)
-}
-
-export function readFollowUpAction(response: FollowUpResponse): E2eTaskFollowUpAction | null {
-  const first = response.followUps?.[0]
-  if (!first) return null
-  const runId = readOptionalString(first.runId)
-  const waitId = readOptionalString(first.waitId)
-  const claimId = readOptionalString(first.claimId)
-  if (!runId || !waitId || !claimId) {
-    throw new Error('E2E_FOLLOW_UP_INVALID')
-  }
-  return { runId, waitId, claimId }
 }

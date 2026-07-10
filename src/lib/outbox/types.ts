@@ -1,4 +1,5 @@
 export const OUTBOX_COMMAND_KIND = {
+  TASK_ENQUEUE: 'task.enqueue',
   TASK_LIFECYCLE_BROADCAST: 'task.lifecycle.broadcast',
   PROJECT_AGENT_CONTINUE_WAIT: 'project_agent.continue_wait',
 } as const
@@ -12,6 +13,13 @@ export type TaskLifecycleBroadcastCommand = {
   taskId: string
 }
 
+export type TaskEnqueueCommand = {
+  kind: typeof OUTBOX_COMMAND_KIND.TASK_ENQUEUE
+  version: 1
+  taskId: string
+  operationExecutionId: string
+}
+
 export type ProjectAgentContinueWaitCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT
   version: 1
@@ -22,6 +30,7 @@ export type ProjectAgentContinueWaitCommand = {
 }
 
 export type OutboxCommandPayload =
+  | TaskEnqueueCommand
   | TaskLifecycleBroadcastCommand
   | ProjectAgentContinueWaitCommand
 
@@ -30,6 +39,7 @@ export type CreateOutboxCommandInput = {
   aggregateType: 'task' | 'project_agent_wait'
   aggregateId: string
   payload: OutboxCommandPayload
+  availableAt?: Date
 }
 
 export class OutboxPermanentError extends Error {
@@ -89,6 +99,13 @@ export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload 
   if (version !== 1) throw new Error(`OUTBOX_COMMAND_VERSION_UNSUPPORTED:${String(version)}`)
 
   switch (kind) {
+    case OUTBOX_COMMAND_KIND.TASK_ENQUEUE:
+      return {
+        kind,
+        version,
+        taskId: readRequiredString(record, 'taskId'),
+        operationExecutionId: readRequiredString(record, 'operationExecutionId'),
+      }
     case OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST:
       return {
         kind,

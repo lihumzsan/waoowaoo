@@ -48,10 +48,10 @@ import {
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
   createProjectAgentWait,
+  type ProjectAgentTaskFollowUpSettlementOutcome,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
-import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
 import {
   safelyReleaseProjectAgentRunLock,
   type ProjectAgentRunLock,
@@ -70,9 +70,10 @@ import {
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
-  cancelRunningProjectAgentRun,
+  settleProjectAgentRunWithMessage,
   updateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
+  type ProjectAgentRunStatus,
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
 import {
@@ -81,7 +82,7 @@ import {
   resolveProjectAgentToolset,
 } from './toolset'
 import {
-  resolveEditFirstWorkflowReviewChoice,
+  resolveEditFirstWorkflowChoice,
   resolveEditFirstWorkflowState,
   type EditFirstWorkflowState,
 } from '@/lib/project-workflow/edit-first'
@@ -102,6 +103,7 @@ import {
 import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
 import type { OperationPlanView } from '@/lib/operations/planning'
+import { issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
 import {
   createProjectAgentApprovalPreflightStore,
   type ProjectAgentApprovalPreflightStore,
@@ -178,12 +180,10 @@ export type ProjectAgentResolvedControl =
     followUp: ProjectAgentWaitFollowUp
   }
 
-export type ProjectAgentTaskFollowUpSettlement =
-  | 'completed'
-  | 'failed'
-  | 'awaiting_task'
-  | 'awaiting_choice'
-  | 'awaiting_approval'
+export interface ProjectAgentTaskFollowUpSettlement {
+  outcome: ProjectAgentTaskFollowUpSettlementOutcome
+  message: UIMessage
+}
 
 function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -395,19 +395,6 @@ export function buildTaskFollowUpInputItem(
   } satisfies AgentInputItem
 }
 
-function toActivityPartData(activity: ProjectAgentActivitySnapshot): ProjectAgentActivityPartData {
-  return {
-    activityId: activity.activityId,
-    runId: activity.runId,
-    type: activity.type,
-    status: activity.status,
-    operationId: activity.operationId,
-    sourceOperationId: activity.sourceOperationId,
-    toolCallId: activity.toolCallId,
-    choiceType: activity.choiceType,
-  }
-}
-
 function formatRuntimeStateValue(value: string | null | undefined): string {
   const normalized = value?.trim().replace(/\s+/g, ' ') ?? ''
   return normalized || 'none'
@@ -549,14 +536,12 @@ function readApprovalInput(item: RunToolApprovalItem): unknown {
   return null
 }
 
-function readConfirmedMaxCostFromInterruptionPayload(value: unknown): number | null {
+function readPlanSnapshotIdFromInterruptionPayload(value: unknown): string | null {
   if (!isRecord(value)) return null
   const operationPlan = value.operationPlan
   if (!isRecord(operationPlan)) return null
-  const quote = operationPlan.quote
-  if (!isRecord(quote)) return null
-  const cost = quote.totalMaxFrozenCost
-  return typeof cost === 'number' && Number.isFinite(cost) ? cost : null
+  const planSnapshotId = operationPlan.planSnapshotId
+  return typeof planSnapshotId === 'string' && planSnapshotId.trim() ? planSnapshotId.trim() : null
 }
 
 async function buildApprovalOperationPlanView(params: {
@@ -733,16 +718,31 @@ export async function createProjectAgentChatResponse(input: {
 
   const control = input.control
   const contextBase = normalizeProjectAgentContext(input.context)
-  const approvedConfirmedMaxCost = control.kind === 'approval' && control.approved
-    ? readConfirmedMaxCostFromInterruptionPayload(control.interruption.payload)
+  const approvedPlanSnapshotId = control.kind === 'approval' && control.approved
+    ? readPlanSnapshotIdFromInterruptionPayload(control.interruption.payload)
+    : null
+  const approvedInvocation = approvedPlanSnapshotId && control.kind === 'approval'
+    ? await issueApprovalGrant({
+        userId: input.userId,
+        planSnapshotId: approvedPlanSnapshotId,
+        requestId: `assistant-approval:${control.interruption.id}`,
+      })
     : null
   const context: ProjectAgentContext = {
     ...contextBase,
     runId: input.run.id,
     runFence,
     currentActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
-    ...(approvedConfirmedMaxCost !== null && control.kind === 'approval'
-      ? { confirmedMaxCostByOperationId: { [control.interruption.operationId]: approvedConfirmedMaxCost } }
+    choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
+    ...(approvedInvocation && control.kind === 'approval'
+      ? {
+          approvedInvocationByOperationId: {
+            [control.interruption.operationId]: {
+              approvalGrantId: approvedInvocation.approvalGrantId,
+              requestId: approvedInvocation.operationRequestId,
+            },
+          },
+        }
       : {}),
   }
   const resolvedPhase = await resolveProjectPhase({
@@ -750,12 +750,12 @@ export async function createProjectAgentChatResponse(input: {
     userId: input.userId,
     episodeId: context.episodeId || null,
   })
-  const phase = control.kind === 'choice' && control.choiceResult.reviewDecision
+  const phase = control.kind === 'choice'
     ? {
         ...resolvedPhase,
-        editFirstWorkflow: resolveEditFirstWorkflowReviewChoice(
+        editFirstWorkflow: resolveEditFirstWorkflowChoice(
           resolvedPhase.editFirstWorkflow,
-          control.choiceResult.reviewDecision,
+          control.choiceResult.choiceDecision,
         ),
       }
     : resolvedPhase
@@ -820,14 +820,14 @@ export async function createProjectAgentChatResponse(input: {
     workflow: phase.editFirstWorkflow,
     operationId,
   }))
-  const requiredChoiceContinuationOperationId = control.kind === 'choice'
+  const initialChoiceContinuationOperationId = control.kind === 'choice'
     ? phase.editFirstWorkflow.nextAction?.operationId ?? null
     : null
   if (
-    requiredChoiceContinuationOperationId
-    && !initialEnabledOperationIds.includes(requiredChoiceContinuationOperationId)
+    initialChoiceContinuationOperationId
+    && !initialEnabledOperationIds.includes(initialChoiceContinuationOperationId)
   ) {
-    throw new Error(`PROJECT_AGENT_CHOICE_CONTINUATION_NOT_ENABLED:${requiredChoiceContinuationOperationId}`)
+    throw new Error(`PROJECT_AGENT_CHOICE_CONTINUATION_NOT_ENABLED:${initialChoiceContinuationOperationId}`)
   }
   const selectedTools = operationIds.map((operationId) => {
     const operation = operations[operationId]
@@ -977,42 +977,7 @@ export async function createProjectAgentChatResponse(input: {
   })
 
   let latestStopPart: ProjectAgentStopPartData | null = null
-  let taskFollowUpActivityFinalized = false
-  const settleTaskFollowUpActivity = async (status: 'completed' | 'failed', error?: unknown): Promise<ProjectAgentUiChunk[]> => {
-    if (control.kind !== 'task_follow_up' || !control.followUp.followUpActivityId || taskFollowUpActivityFinalized) return []
-    taskFollowUpActivityFinalized = true
-    const errorMessage = error instanceof Error ? error.message : (error === undefined ? '' : String(error))
-    const activity = await appendProjectAgentEvents({
-      scope: {
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: context.episodeId || null,
-        assistantId: 'workspace-command',
-      },
-      events: [{
-        runFence,
-        idempotencyKey: status === 'completed'
-          ? `activity-completed:${control.followUp.followUpActivityId}:runtime`
-          : `activity-failed:${control.followUp.followUpActivityId}:runtime`,
-        event: status === 'completed'
-          ? {
-              kind: 'activity.completed',
-              runId: input.run.id,
-              activityId: control.followUp.followUpActivityId,
-            }
-          : {
-              kind: 'activity.failed',
-              runId: input.run.id,
-              activityId: control.followUp.followUpActivityId,
-              errorCode: 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
-              errorMessage: errorMessage || 'Project agent task follow-up failed',
-            },
-      }],
-    })
-    return activity ? [createDataChunk('data-agent-activity', toActivityPartData(activity))] : []
-  }
   const stopController = createProjectAgentStopController()
-  const executedOperationIds = new Set<string>()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
   const tools: Tool<ProjectAgentAgentsRunContext>[] = selectedTools.map((item) => (
@@ -1041,8 +1006,7 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: (outcome) => {
-        if (outcome.ok) executedOperationIds.add(item.operation.id)
+      onExecutionSettled: () => {
         liveWorkflow.invalidate()
       },
       approvalPreflightStore,
@@ -1123,9 +1087,15 @@ export async function createProjectAgentChatResponse(input: {
       signal: runAbortController.signal,
     })
     let runStatusFinalized = false
-    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlement | null = null
+    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlementOutcome | null = null
+    let pendingRunSettlement: {
+      status: ProjectAgentRunStatus
+      stopReason: string
+      errorCode?: string
+      errorMessage?: string
+    } | null = null
     let assistantMessagePersisted = false
-    let assistantMessagePersistenceFailureLogged = false
+    let preparedAssistantMessage: UIMessage | null = null
     let latestRunStatusForPersistence: Pick<ProjectAgentRunPartData, 'status' | 'stopReason'> | null = null
     const persistedAssistantChunks: ProjectAgentUiChunk[] = []
     const recordAssistantChunk = (chunk: ProjectAgentUiChunk): void => {
@@ -1148,10 +1118,10 @@ export async function createProjectAgentChatResponse(input: {
         stopReason,
       })
     }
-    const persistAssistantMessageOnce = async (): Promise<void> => {
-      if (assistantMessagePersisted) return
+    const buildAssistantMessageOnce = async (): Promise<UIMessage> => {
+      if (preparedAssistantMessage) return preparedAssistantMessage
       recordLatestRunStatusForPersistence()
-      const message = await buildAssistantMessageFromChunks({
+      preparedAssistantMessage = await buildAssistantMessageFromChunks({
         messageId: createPersistedAssistantMessageId({
           runId: input.run.id,
           controlKind: input.run.controlKind,
@@ -1159,6 +1129,11 @@ export async function createProjectAgentChatResponse(input: {
         }),
         chunks: persistedAssistantChunks,
       })
+      return preparedAssistantMessage
+    }
+    const persistAssistantMessageOnce = async (): Promise<void> => {
+      if (assistantMessagePersisted) return
+      const message = await buildAssistantMessageOnce()
       await appendProjectAssistantThreadMessages({
         projectId: input.projectId,
         userId: input.userId,
@@ -1168,27 +1143,22 @@ export async function createProjectAgentChatResponse(input: {
       })
       assistantMessagePersisted = true
     }
-    const persistAssistantMessageOrLog = async (edge: 'error' | 'cancel' | 'settle'): Promise<void> => {
-      try {
+    const persistAssistantMessageOrSettleRun = async (): Promise<void> => {
+      if (!pendingRunSettlement) {
         await persistAssistantMessageOnce()
-      } catch (error) {
-        if (input.settleTaskFollowUp) throw error
-        if (assistantMessagePersistenceFailureLogged) return
-        assistantMessagePersistenceFailureLogged = true
-        projectAgentLogger.error({
-          action: 'assistant.agents.stream.persist.failed',
-          message: 'Failed to persist project agent assistant message',
-          requestId,
-          projectId: input.projectId,
-          userId: input.userId,
-          details: {
-            runId: input.run.id,
-            episodeId: context.episodeId || null,
-            edge,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        })
+        return
       }
+      if (assistantMessagePersisted) {
+        throw new Error(`PROJECT_AGENT_RUN_MESSAGE_SETTLEMENT_ORDER_INVALID:${input.run.id}`)
+      }
+      const message = await buildAssistantMessageOnce()
+      await settleProjectAgentRunWithMessage({
+        runFence,
+        ...pendingRunSettlement,
+        message,
+      })
+      assistantMessagePersisted = true
+      pendingRunSettlement = null
     }
     const recordLatestRunStatusForPersistence = (): void => {
       if (!latestRunStatusForPersistence) return
@@ -1300,14 +1270,12 @@ export async function createProjectAgentChatResponse(input: {
         } catch (error) {
           if (input.settleTaskFollowUp) throw error
           const errorMessage = error instanceof Error ? error.message : String(error)
-          chunks.push(...await settleTaskFollowUpActivity('failed', error))
-          await updateProjectAgentRunStatus({
-            runFence,
+          pendingRunSettlement = {
             status: 'failed',
             stopReason: 'wait_binding_failed',
             errorCode: 'PROJECT_AGENT_WAIT_BINDING_FAILED',
             errorMessage,
-          })
+          }
           chunks.push(createRuntimeStatusChunk('failed', 'wait_binding_failed'))
           runStatusFinalized = true
           return chunks
@@ -1318,38 +1286,32 @@ export async function createProjectAgentChatResponse(input: {
 
         if (completionError && !shouldPersistApprovalInterruption) {
           if (input.settleTaskFollowUp) throw completionError
-          chunks.push(...await settleTaskFollowUpActivity('failed', completionError))
-          await updateProjectAgentRunStatus({
-            runFence,
+          pendingRunSettlement = {
             status: 'failed',
             stopReason: 'completion_error',
             errorCode: 'PROJECT_AGENT_RUN_COMPLETION_FAILED',
             errorMessage: completionError instanceof Error ? completionError.message : String(completionError),
-          })
+          }
           chunks.push(createRuntimeStatusChunk('failed', 'completion_error'))
           runStatusFinalized = true
           throw completionError
         }
-        if (
-          requiredChoiceContinuationOperationId
-          && !shouldPersistApprovalInterruption
-          && !latestStopPart
-          && !executedOperationIds.has(requiredChoiceContinuationOperationId)
-        ) {
-          const errorMessage = `Choice response did not execute required workflow continuation: ${requiredChoiceContinuationOperationId}`
-          await updateProjectAgentRunStatus({
-            runFence,
+        const unresolvedWorkflowAction = !shouldPersistApprovalInterruption && !latestStopPart
+          ? (await liveWorkflow.get()).nextAction
+          : null
+        if (unresolvedWorkflowAction) {
+          const errorMessage = `Assistant run stopped before reaching a stable workflow boundary: ${unresolvedWorkflowAction.operationId}`
+          pendingRunSettlement = {
             status: 'failed',
-            stopReason: 'choice_continuation_missing',
-            errorCode: 'PROJECT_AGENT_CHOICE_CONTINUATION_MISSING',
+            stopReason: 'workflow_continuation_missing',
+            errorCode: 'PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING',
             errorMessage,
-          })
-          chunks.push(createRuntimeStatusChunk('failed', 'choice_continuation_missing'))
+          }
+          chunks.push(createRuntimeStatusChunk('failed', 'workflow_continuation_missing'))
           runStatusFinalized = true
           return chunks
         }
         if (!shouldPersistApprovalInterruption) {
-          chunks.push(...await settleTaskFollowUpActivity('completed'))
           if (latestStopPart?.reason === 'awaiting_external_task') {
             chunks.push(createRuntimeStatusChunk('awaiting_task', waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task'))
             if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_task'
@@ -1360,22 +1322,20 @@ export async function createProjectAgentChatResponse(input: {
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             if (input.settleTaskFollowUp) taskFollowUpSettlement = 'failed'
-            else await updateProjectAgentRunStatus({
-                runFence,
+            else pendingRunSettlement = {
                 status: 'failed',
                 stopReason: 'tool_error',
                 errorCode: latestStopPart.codes[0] ?? 'PROJECT_AGENT_TOOL_ERROR',
                 errorMessage: latestStopPart.operationIds.join(','),
-              })
+              }
             chunks.push(createRuntimeStatusChunk('failed', 'tool_error'))
             runStatusFinalized = true
           } else {
             if (input.settleTaskFollowUp) taskFollowUpSettlement = 'completed'
-            else await updateProjectAgentRunStatus({
-                runFence,
+            else pendingRunSettlement = {
                 status: 'completed',
                 stopReason: 'completed',
-              })
+              }
             chunks.push(createRuntimeStatusChunk('completed', 'completed'))
             runStatusFinalized = true
           }
@@ -1403,46 +1363,63 @@ export async function createProjectAgentChatResponse(input: {
         })
         if (runStatusFinalized) {
           recordLatestRunStatusForPersistence()
-          await persistAssistantMessageOrLog('error')
+          await persistAssistantMessageOrSettleRun()
           return
         }
         if (input.settleTaskFollowUp) {
-          await persistAssistantMessageOrLog('error')
           return
         }
-        await settleTaskFollowUpActivity('failed', error)
         const failureTerminal = resolveProjectAgentRunFailureTerminal({
           ownershipLoss,
           stopReason: 'stream_error',
           errorCode: 'PROJECT_AGENT_STREAM_FAILED',
           errorMessage,
         })
-        await updateProjectAgentRunStatus({
-          runFence,
-          ...failureTerminal,
-        })
+        pendingRunSettlement = failureTerminal
         recordAssistantChunk(createRuntimeStatusChunk(
           failureTerminal.status,
           failureTerminal.stopReason,
         ))
-        await persistAssistantMessageOrLog('error')
+        await persistAssistantMessageOrSettleRun()
         runStatusFinalized = true
       },
       onCancel: async () => {
-        await cancelRunningProjectAgentRun({
-          runFence,
+        if (input.settleTaskFollowUp) {
+          throw new Error('PROJECT_AGENT_CONTINUATION_STREAM_CANCELLED')
+        }
+        pendingRunSettlement = {
+          status: 'cancelled',
           stopReason: 'stream_cancelled',
-        })
+        }
         recordAssistantChunk(createRuntimeStatusChunk('cancelled', 'stream_cancelled'))
-        await persistAssistantMessageOrLog('cancel')
+        await persistAssistantMessageOrSettleRun()
+        runStatusFinalized = true
       },
       onSettled: async () => {
         try {
-          await persistAssistantMessageOrLog('settle')
           if (input.settleTaskFollowUp) {
             if (!taskFollowUpSettlement) throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_SETTLEMENT_MISSING')
-            await input.settleTaskFollowUp(taskFollowUpSettlement)
+            await input.settleTaskFollowUp({
+              outcome: taskFollowUpSettlement,
+              message: await buildAssistantMessageOnce(),
+            })
+          } else {
+            await persistAssistantMessageOrSettleRun()
           }
+        } catch (error) {
+          projectAgentLogger.error({
+            action: 'assistant.agents.settlement.failed',
+            message: 'Project agent message and run settlement failed',
+            requestId,
+            projectId: input.projectId,
+            userId: input.userId,
+            details: {
+              runId: input.run.id,
+              episodeId: context.episodeId || null,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+          throw error
         } finally {
           await stopHeartbeatOnce()
           await releaseRunLockOnce()

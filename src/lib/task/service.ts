@@ -3,7 +3,6 @@ import { prisma } from '@/lib/prisma'
 import { RETRY_POLICY, withRetry } from '@/lib/retry'
 import { locales } from '@/i18n/routing'
 import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskStatus } from './types'
-import { syncTaskTargetFailure } from './target-failure-sync'
 import type { TaskJobObservation } from './reconcile'
 import { commitTaskTerminal, type TaskTerminalCommitResult } from './terminal'
 import { createTaskExecutionFingerprint } from './execution-identity'
@@ -135,7 +134,15 @@ async function resolveObservedOrphanTask(
   return null
 }
 
-export async function createTask(input: CreateTaskInput) {
+export async function createTask(
+  input: CreateTaskInput,
+  options?: {
+    onTaskCreatedInTransaction?: (
+      tx: Prisma.TransactionClient,
+      task: { id: string },
+    ) => Promise<void>
+  },
+) {
   const model = taskModel
 
   if (input.dedupeKey) {
@@ -199,7 +206,9 @@ export async function createTask(input: CreateTaskInput) {
     batchKey: input.batchKey || null,
     operationId: input.operationId || null,
     operationSource: input.operationSource || null,
-    operationConfirmed: input.operationConfirmed ?? null,
+    approvalGrantId: input.approvalGrantId ?? null,
+    operationExecutionId: input.operationExecutionId ?? null,
+    operationPlanTaskId: input.operationPlanTaskId ?? null,
     operationRequestId: input.operationRequestId || null,
     payload: toNullableJson(input.payload ?? null),
     executionFingerprint: createTaskExecutionFingerprint(input),
@@ -208,7 +217,13 @@ export async function createTask(input: CreateTaskInput) {
   }
 
   try {
-    const task = await model.create({ data: createData })
+    const task = options?.onTaskCreatedInTransaction
+      ? await prisma.$transaction(async (tx) => {
+          const created = await tx.task.create({ data: createData })
+          await options.onTaskCreatedInTransaction!(tx, created)
+          return created
+        })
+      : await model.create({ data: createData })
     return { task, deduped: false as const }
   } catch (error: unknown) {
     if (input.dedupeKey && isPrismaKnownError(error) && error.code === 'P2002') {
@@ -541,7 +556,6 @@ export async function sweepStaleTasks(params: {
 
   if (staleProcessing.length === 0) return []
 
-  const finishedAt = new Date()
   const timedOut: Array<typeof staleProcessing[number] & {
     errorCode: string
     errorMessage: string

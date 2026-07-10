@@ -1,5 +1,3 @@
-import { isEditFirstChoiceType, type EditFirstChoiceType } from './edit-first-choice-tools'
-
 type UnknownRecord = Record<string, unknown>
 
 /**
@@ -17,16 +15,10 @@ export type ProjectAgentControlAction =
   | {
     type: 'choice_response'
     runId: string
-    interruptionId: string | null
-    choiceType: EditFirstChoiceType
-    toolCallId: string | null
+    interruptionId: string
+    cardId: string
+    toolCallId: string
     output: UnknownRecord
-  }
-  | {
-    type: 'task_follow_up'
-    runId: string
-    waitId: string
-    claimId: string
   }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -63,31 +55,18 @@ export function parseProjectAgentControlAction(value: unknown): ProjectAgentCont
   if (value.type === 'choice_response') {
     const runId = readNonEmptyString(value.runId)
     const interruptionId = readNonEmptyString(value.interruptionId)
-    if (!runId || !isEditFirstChoiceType(value.choiceType) || !isRecord(value.output)) {
+    const cardId = readNonEmptyString(value.cardId)
+    const toolCallId = readNonEmptyString(value.toolCallId)
+    if (!runId || !interruptionId || !cardId || !toolCallId || !isRecord(value.output)) {
       throw new Error('PROJECT_AGENT_CONTROL_INVALID')
     }
     return {
       type: 'choice_response',
       runId,
       interruptionId,
-      choiceType: value.choiceType,
-      toolCallId: readNonEmptyString(value.toolCallId),
+      cardId,
+      toolCallId,
       output: value.output,
-    }
-  }
-
-  if (value.type === 'task_follow_up') {
-    const runId = readNonEmptyString(value.runId)
-    const waitId = readNonEmptyString(value.waitId)
-    const claimId = readNonEmptyString(value.claimId)
-    if (!runId || !waitId || !claimId) {
-      throw new Error('PROJECT_AGENT_CONTROL_INVALID')
-    }
-    return {
-      type: 'task_follow_up',
-      runId,
-      waitId,
-      claimId,
     }
   }
 

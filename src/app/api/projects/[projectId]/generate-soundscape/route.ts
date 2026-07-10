@@ -23,12 +23,11 @@ export const POST = apiHandler(async (
     })
   }
 
-  const input: Record<string, unknown> = {
-    confirmed: body.confirmed === true,
-  }
+  const input: Record<string, unknown> = {}
   if (typeof body.episodeId === 'string') input.episodeId = body.episodeId
   if (typeof body.soundEffectModel === 'string') input.soundEffectModel = body.soundEffectModel
-  if (typeof body.confirmedMaxCost === 'number') input.confirmedMaxCost = body.confirmedMaxCost
+  if (typeof body.approvalGrantId === 'string') input.approvalGrantId = body.approvalGrantId
+  if (typeof body.operationRequestId === 'string') input.operationRequestId = body.operationRequestId
 
   const result = await executeProjectAgentOperationFromApi({
     request,

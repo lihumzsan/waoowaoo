@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {  resolveEditFirstWorkflowStateFromSnapshot,
+import {
+  resolveEditFirstWorkflowChoice,
+  resolveEditFirstWorkflowStateFromSnapshot,
   type EditFirstWorkflowSnapshot,
 } from '@/lib/project-workflow/edit-first'
 
@@ -111,6 +113,26 @@ describe('edit-first workflow state', () => {
     }))
     expect(submitted.stage).toBe('style_preview_generating')
     expect(submitted.blocking.kind).toBe('processing')
+  })
+
+  it('maps a consumed style decision to the sole style-confirmation operation', () => {
+    const awaitingChoice = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 2,
+      completedStylePreviewCount: 2,
+    }))
+
+    const decided = resolveEditFirstWorkflowChoice(awaitingChoice, {
+      choiceType: 'style',
+      decision: 'select',
+      stylePreviewId: 'style-2',
+    })
+
+    expect(awaitingChoice.stage).toBe('needs_style_choice')
+    expect(decided.nextAction?.operationId).toBe('confirm_edit_style_preview')
+    expect(decided.allowedOperationIds).toEqual(['confirm_edit_style_preview'])
+    expect(decided.blocking.kind).toBe('none')
   })
 
   it('requires script review before generating the episode plan from a generated prompt script', () => {
@@ -248,7 +270,9 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('assets_ready_for_review')
     expect(state.blocking.kind).toBe('needs_user_choice')
-    expect(state.allowedOperationIds).toEqual(['revise_edit_script_assets'])
+    // The persistent choice offer is the only authority while review is pending.
+    // A revise operation becomes enabled only after that offer is consumed.
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('generates shot execution plan after core plan, assets, and spatial profiles are ready', () => {

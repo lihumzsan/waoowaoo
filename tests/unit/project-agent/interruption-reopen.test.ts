@@ -29,6 +29,8 @@ describe('project agent interruption reopen', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
+      runVersion: 2,
+      eventSeq: BigInt(7),
       status: 'consumed',
       consumedAt: new Date('2026-07-10T12:00:00.000Z'),
     })
@@ -37,6 +39,11 @@ describe('project agent interruption reopen', () => {
 
     expect(eventMock.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
       events: [{
+        runFence: {
+          runId: 'run-1',
+          runVersion: 2,
+          eventSeq: '7',
+        },
         idempotencyKey: 'interruption-reopened:interruption-1:2026-07-10T12:00:00.000Z',
         event: expect.objectContaining({
           kind: 'interruption.reopened',
@@ -51,6 +58,8 @@ describe('project agent interruption reopen', () => {
     prismaMock.projectAgentInterruption.findUnique.mockResolvedValueOnce({
       id: 'interruption-1',
       runId: 'run-1',
+      runVersion: 2,
+      eventSeq: BigInt(7),
       status: 'pending',
       consumedAt: null,
     })

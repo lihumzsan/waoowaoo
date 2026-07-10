@@ -14,67 +14,57 @@ import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
-import {
-  assertOperationPlanConfirmedCost,
-  createPlannedTask,
-  requirePlannedTaskBillingInfo,
-  resolveConfirmedMaxCostForExecution,
-  submitPlannedOperationTask,
-  type OperationPlan,
-} from '@/lib/operations/planning'
-import {
-  refineTaskSubmitOperationOutputSchema,
-  taskSubmitOperationOutputSchemaBase,
-} from '@/lib/operations/output-schemas'
+import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
 import { SOUNDSCAPE_OUTPUT_FORMAT } from '@/lib/soundscape/types'
-import {
-  buildSoundscapePlanFingerprint,
-  parseSoundscapePlanStrict,
-} from '@/lib/soundscape/plan-contract'
+import { buildSoundscapePlanFingerprint, parseSoundscapePlanStrict } from '@/lib/soundscape/plan-contract'
 import { buildSoundscapeTimelineSignature } from '@/lib/soundscape/timeline'
+import { submitOperationTask } from '@/lib/operations/submit-operation-task'
 
 const vocalModeSchema = z.enum(['instrumental', 'vocal'])
 const outputFormatSchema = z.enum(['mp3', 'wav'])
 
-const musicGenerationInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  musicModel: z.string().min(1).optional(),
-  prompt: z.string().min(1),
-  durationSeconds: z.number().int().min(1).max(600),
-  vocalMode: vocalModeSchema.optional(),
-  genre: z.string().min(1).optional(),
-  mood: z.string().min(1).optional(),
-  bpm: z.number().int().min(20).max(300).optional(),
-  outputFormat: outputFormatSchema.optional(),
-}).passthrough()
+const musicGenerationInputSchema = z
+  .object({
+    musicModel: z.string().min(1).optional(),
+    prompt: z.string().min(1),
+    durationSeconds: z.number().int().min(1).max(600),
+    vocalMode: vocalModeSchema.optional(),
+    genre: z.string().min(1).optional(),
+    mood: z.string().min(1).optional(),
+    bpm: z.number().int().min(20).max(300).optional(),
+    outputFormat: outputFormatSchema.optional(),
+  })
+  .passthrough()
 
 type MusicGenerationInput = z.infer<typeof musicGenerationInputSchema>
 
-const bgmScoreGenerationInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  musicModel: z.string().min(1).optional(),
-  outputFormat: outputFormatSchema.optional(),
-}).passthrough()
+const bgmScoreGenerationInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    musicModel: z.string().min(1).optional(),
+    outputFormat: outputFormatSchema.optional(),
+  })
+  .passthrough()
 
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
 
-const soundscapePlanningInputSchema = z.object({
-  episodeId: z.string().min(1).optional(),
-  soundEffectModel: z.string().min(1).optional(),
-}).passthrough()
+const soundscapePlanningInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    soundEffectModel: z.string().min(1).optional(),
+  })
+  .passthrough()
 
 type SoundscapePlanningInput = z.infer<typeof soundscapePlanningInputSchema>
 
-const soundscapeGenerationInputSchema = z.object({
-  confirmed: z.boolean().optional(),
-  confirmedMaxCost: z.number().nonnegative().optional(),
-  episodeId: z.string().min(1).optional(),
-  soundEffectModel: z.string().min(1).optional(),
-}).passthrough()
+const soundscapeGenerationInputSchema = z
+  .object({
+    episodeId: z.string().min(1).optional(),
+    soundEffectModel: z.string().min(1).optional(),
+  })
+  .passthrough()
 
 type SoundscapeGenerationInput = z.infer<typeof soundscapeGenerationInputSchema>
 
@@ -144,7 +134,11 @@ function hashPayload(payload: Record<string, unknown>): string {
 async function resolveMusicModel(input: MusicGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
   if (isPlatformProviderCredentialMode()) {
-    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
+    const systemModel = await resolveSystemModelKey({
+      userId,
+      projectId,
+      purpose: 'music',
+    })
     assertPlatformMusicModelInput(requested, systemModel)
     return systemModel
   }
@@ -159,7 +153,11 @@ async function resolveMusicModel(input: MusicGenerationInput, projectId: string,
 async function resolveBgmScoreMusicModel(input: BgmScoreGenerationInput, projectId: string, userId: string): Promise<string> {
   const requested = normalizeString(input.musicModel)
   if (isPlatformProviderCredentialMode()) {
-    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'music' })
+    const systemModel = await resolveSystemModelKey({
+      userId,
+      projectId,
+      purpose: 'music',
+    })
     assertPlatformMusicModelInput(requested, systemModel)
     return systemModel
   }
@@ -178,7 +176,11 @@ async function resolveSoundscapeSoundEffectModel(
 ): Promise<string> {
   const requested = normalizeString(input.soundEffectModel)
   if (isPlatformProviderCredentialMode()) {
-    const systemModel = await resolveSystemModelKey({ userId, projectId, purpose: 'sound-effect' })
+    const systemModel = await resolveSystemModelKey({
+      userId,
+      projectId,
+      purpose: 'sound-effect',
+    })
     assertPlatformSoundEffectModelInput(requested, systemModel)
     return systemModel
   }
@@ -207,7 +209,11 @@ async function resolveBgmScoreEpisodeDurationSeconds(episodeId: string, projectI
 
 async function resolveAnalysisModel(projectId: string, userId: string): Promise<string> {
   if (isPlatformProviderCredentialMode()) {
-    return await resolveSystemModelKey({ userId, projectId, purpose: 'analysis' })
+    return await resolveSystemModelKey({
+      userId,
+      projectId,
+      purpose: 'analysis',
+    })
   }
   const projectModelConfig = await getProjectModelConfig(projectId, userId)
   const analysisModel = normalizeString(projectModelConfig.analysisModel)
@@ -215,18 +221,13 @@ async function resolveAnalysisModel(projectId: string, userId: string): Promise<
   return requireModelKey(analysisModel)
 }
 
-async function planGenerateProjectMusicOperation(
-  ctx: ProjectAgentOperationContext,
-  input: MusicGenerationInput,
-): Promise<OperationPlan> {
+async function planGenerateProjectMusicOperation(ctx: ProjectAgentOperationContext, input: MusicGenerationInput): Promise<OperationPlan> {
   const musicModel = await resolveMusicModel(input, ctx.projectId, ctx.userId)
   const episodeId = normalizeString((input as Record<string, unknown>).episodeId) || null
   const durationSeconds = isCloudDeployment()
     ? Number(resolveCloudMusicOption('durationSeconds', input.durationSeconds))
     : input.durationSeconds
-  const outputFormat = isCloudDeployment()
-    ? resolveCloudMusicOption('outputFormat', input.outputFormat)
-    : input.outputFormat
+  const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
   const payload: Record<string, unknown> = {
     prompt: input.prompt.trim(),
     durationSeconds,
@@ -267,24 +268,15 @@ async function planGenerateProjectMusicOperation(
   }
 }
 
-async function commitGenerateProjectMusicOperation(
-  ctx: ProjectAgentOperationContext,
-  input: MusicGenerationInput,
-  plan: OperationPlan,
-) {
+async function commitGenerateProjectMusicOperation(ctx: ProjectAgentOperationContext, input: MusicGenerationInput, plan: OperationPlan) {
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const musicModel = typeof plan.metadata?.musicModel === 'string'
-    ? plan.metadata.musicModel
-    : ''
-  const episodeId = typeof plan.metadata?.episodeId === 'string'
-    ? plan.metadata.episodeId
-    : null
+  const musicModel = typeof plan.metadata?.musicModel === 'string' ? plan.metadata.musicModel : ''
+  const episodeId = typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : null
   const result = await submitPlannedOperationTask({
     ctx,
     task,
     operationId: 'generate_project_music',
-    confirmed: input.confirmed === true,
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -319,9 +311,7 @@ async function planGenerateEpisodeBgmScoreOperation(
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
   const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
-  const outputFormat = isCloudDeployment()
-    ? resolveCloudMusicOption('outputFormat', input.outputFormat)
-    : input.outputFormat
+  const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
   const payload: Record<string, unknown> = {
     episodeId,
     durationSeconds,
@@ -358,10 +348,7 @@ async function planGenerateEpisodeBgmScoreOperation(
   }
 }
 
-async function planEpisodeSoundscapeOperation(
-  ctx: ProjectAgentOperationContext,
-  input: SoundscapePlanningInput,
-): Promise<OperationPlan> {
+async function planEpisodeSoundscapeOperation(ctx: ProjectAgentOperationContext, input: SoundscapePlanningInput): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const soundEffectModel = await resolveSoundscapeSoundEffectModel(input, ctx.projectId, ctx.userId)
@@ -428,7 +415,10 @@ async function planGenerateEpisodeSoundscapeOperation(
   }
   const timelineSignature = normalizeString(soundscape.timelineSignature)
   if (!timelineSignature) throw new Error('SOUNDSCAPE_TIMELINE_SIGNATURE_REQUIRED')
-  const clips = await loadEpisodeChapterOutputClips({ episodeId, projectId: ctx.projectId })
+  const clips = await loadEpisodeChapterOutputClips({
+    episodeId,
+    projectId: ctx.projectId,
+  })
   const currentTimelineSignature = buildSoundscapeTimelineSignature(clips)
   if (currentTimelineSignature !== timelineSignature) {
     throw new Error(`SOUNDSCAPE_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
@@ -491,18 +481,16 @@ async function commitGenerateEpisodeBgmScoreOperation(
 ) {
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const musicModel = typeof plan.metadata?.musicModel === 'string'
-    ? plan.metadata.musicModel
-    : ''
-  const episodeId = (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
-    || normalizeString(input.episodeId)
-    || normalizeString(ctx.context.episodeId)
+  const musicModel = typeof plan.metadata?.musicModel === 'string' ? plan.metadata.musicModel : ''
+  const episodeId =
+    (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '') ||
+    normalizeString(input.episodeId) ||
+    normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const result = await submitPlannedOperationTask({
     ctx,
     task,
     operationId: 'generate_episode_bgm_score',
-    confirmed: input.confirmed === true,
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -535,18 +523,28 @@ async function commitPlanEpisodeSoundscapeOperation(
 ) {
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string'
-    ? plan.metadata.soundEffectModel
-    : ''
-  const episodeId = (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
-    || normalizeString(input.episodeId)
-    || normalizeString(ctx.context.episodeId)
+  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string' ? plan.metadata.soundEffectModel : ''
+  const episodeId =
+    (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '') ||
+    normalizeString(input.episodeId) ||
+    normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
-  const result = await submitPlannedOperationTask({
-    ctx,
-    task,
+  const result = await submitOperationTask({
+    request: ctx.request,
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    episodeId: task.episodeId,
+    type: task.taskType,
+    targetType: task.target.targetType,
+    targetId: task.target.targetId,
     operationId: 'plan_episode_soundscape',
-    confirmed: false,
+    source: ctx.source,
+    payload: task.payload,
+    dedupeKey: task.dedupeKey,
+    priority: task.priority,
+    locale: task.locale,
+    billingInfo: task.billingInfo,
+    billingInfoSource: 'planned',
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -579,18 +577,16 @@ async function commitGenerateEpisodeSoundscapeOperation(
 ) {
   const task = plan.tasks[0]
   if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
-  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string'
-    ? plan.metadata.soundEffectModel
-    : ''
-  const episodeId = (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
-    || normalizeString(input.episodeId)
-    || normalizeString(ctx.context.episodeId)
+  const soundEffectModel = typeof plan.metadata?.soundEffectModel === 'string' ? plan.metadata.soundEffectModel : ''
+  const episodeId =
+    (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '') ||
+    normalizeString(input.episodeId) ||
+    normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const result = await submitPlannedOperationTask({
     ctx,
     task,
     operationId: 'generate_episode_soundscape',
-    confirmed: input.confirmed === true,
   })
 
   writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -618,14 +614,18 @@ async function commitGenerateEpisodeSoundscapeOperation(
 
 export function createMusicGenerationOperations(): ProjectAgentOperationRegistryDraft {
   const musicTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      musicModel: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        musicModel: z.string().min(1),
+      })
+      .passthrough(),
   )
   const soundscapeTaskSubmitOutput = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase.extend({
-      soundEffectModel: z.string().min(1),
-    }).passthrough(),
+    taskSubmitOperationOutputSchemaBase
+      .extend({
+        soundEffectModel: z.string().min(1),
+      })
+      .passthrough(),
   )
 
   return {
@@ -651,14 +651,6 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: musicTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateProjectMusicOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateProjectMusicOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planGenerateProjectMusicOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitGenerateProjectMusicOperation(ctx, input, plan)
-      },
     }),
     generate_episode_bgm_score: defineOperation({
       id: 'generate_episode_bgm_score',
@@ -684,14 +676,6 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: musicTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateEpisodeBgmScoreOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateEpisodeBgmScoreOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planGenerateEpisodeBgmScoreOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitGenerateEpisodeBgmScoreOperation(ctx, input, plan)
-      },
     }),
     plan_episode_soundscape: defineOperation({
       id: 'plan_episode_soundscape',
@@ -714,8 +698,6 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: soundscapePlanningInputSchema,
       outputSchema: soundscapeTaskSubmitOutput,
-      plan: async (ctx, input) => planEpisodeSoundscapeOperation(ctx, input),
-      commit: async (ctx, input, plan) => commitPlanEpisodeSoundscapeOperation(ctx, input, plan),
       execute: async (ctx, input) => {
         const plan = await planEpisodeSoundscapeOperation(ctx, input)
         return await commitPlanEpisodeSoundscapeOperation(ctx, input, plan)
@@ -745,14 +727,6 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       outputSchema: soundscapeTaskSubmitOutput,
       plan: async (ctx, input) => planGenerateEpisodeSoundscapeOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateEpisodeSoundscapeOperation(ctx, input, plan),
-      execute: async (ctx, input) => {
-        const plan = await planGenerateEpisodeSoundscapeOperation(ctx, input)
-        await assertOperationPlanConfirmedCost({
-          plan,
-          confirmedMaxCost: await resolveConfirmedMaxCostForExecution({ ctx, input, plan }),
-        })
-        return await commitGenerateEpisodeSoundscapeOperation(ctx, input, plan)
-      },
     }),
   }
 }

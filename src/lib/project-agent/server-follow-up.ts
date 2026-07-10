@@ -5,8 +5,11 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { createProjectAgentChatResponse } from './runtime'
 import {
   claimProjectAgentWaitContinuation,
+  beginProjectAgentWaitContinuationExecution,
+  checkpointProjectAgentWaitFollowUp,
   finalizeProjectAgentWaitFollowUp,
   extendProjectAgentWaitContinuationClaim,
+  loadProjectAgentWaitContinuationCheckpoint,
   releaseProjectAgentWaitContinuationClaim,
   startProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUp,
@@ -28,7 +31,7 @@ const logger = createScopedLogger({ module: 'project-agent.server-follow-up' })
 
 function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessage {
   return {
-    id: `workspace-server-task-follow-up:${followUp.waitId}:${followUp.claimId}`,
+    id: `workspace-server-task-follow-up:${followUp.waitId}:${followUp.commandId}`,
     role: 'user',
     metadata: {
       custom: {
@@ -46,6 +49,32 @@ function buildServerFollowUpMessage(followUp: ProjectAgentWaitFollowUp): UIMessa
         `failedCount=${String(followUp.failedCount)}`,
         '[/task_update]',
       ].join(' '),
+    }],
+  }
+}
+
+function buildContinuationOutcomeUnknownMessage(params: {
+  runId: string
+  commandId: string
+}): UIMessage {
+  return {
+    id: `workspace-continuation-outcome-unknown:${params.commandId}`,
+    role: 'assistant',
+    metadata: {
+      custom: {
+        projectAgentRunId: params.runId,
+        projectAgentContinuationCommandId: params.commandId,
+      },
+    },
+    parts: [{
+      type: 'data-agent-run',
+      data: {
+        runId: params.runId,
+        requestId: params.commandId,
+        status: 'failed',
+        controlKind: 'task_follow_up',
+        stopReason: 'continuation_outcome_unknown',
+      },
     }],
   }
 }
@@ -121,6 +150,49 @@ async function runClaimedFollowUp(params: {
       userId: params.userId,
     })
     if (!consumed) return false
+    const executionStart = await beginProjectAgentWaitContinuationExecution({
+      runId: run.id,
+      waitId: params.followUp.waitId,
+      commandId: params.commandId,
+      claimOwner: params.claimOwner,
+      projectId: params.projectId,
+      userId: params.userId,
+    })
+    if (executionStart === 'settled') {
+      await finalizeProjectAgentWaitFollowUp({
+        runId: run.id,
+        waitId: params.followUp.waitId,
+        commandId: params.commandId,
+        claimOwner: params.claimOwner,
+        projectId: params.projectId,
+        userId: params.userId,
+      })
+      return true
+    }
+    if (executionStart === 'already_started') {
+      await checkpointProjectAgentWaitFollowUp({
+        runId: run.id,
+        waitId: params.followUp.waitId,
+        commandId: params.commandId,
+        claimOwner: params.claimOwner,
+        projectId: params.projectId,
+        userId: params.userId,
+        outcome: 'failed',
+        message: buildContinuationOutcomeUnknownMessage({
+          runId: run.id,
+          commandId: params.commandId,
+        }),
+      })
+      await finalizeProjectAgentWaitFollowUp({
+        runId: run.id,
+        waitId: params.followUp.waitId,
+        commandId: params.commandId,
+        claimOwner: params.claimOwner,
+        projectId: params.projectId,
+        userId: params.userId,
+      })
+      return true
+    }
     const refreshedRun = await getProjectAgentRun({
       projectId: params.projectId,
       userId: params.userId,
@@ -144,6 +216,7 @@ async function runClaimedFollowUp(params: {
       method: 'POST',
       headers: {
         'x-project-agent-server-follow-up': '1',
+        'x-request-id': params.commandId,
       },
     })
     const response = await createProjectAgentChatResponse({
@@ -161,7 +234,17 @@ async function runClaimedFollowUp(params: {
         followUp: consumed,
       },
       runLock: lock,
-      settleTaskFollowUp: async (outcome) => {
+      settleTaskFollowUp: async (settlement) => {
+        await checkpointProjectAgentWaitFollowUp({
+          runId: continuationRunId,
+          waitId: params.followUp.waitId,
+          commandId: params.commandId,
+          claimOwner: params.claimOwner,
+          projectId: params.projectId,
+          userId: params.userId,
+          outcome: settlement.outcome,
+          message: settlement.message,
+        })
         await finalizeProjectAgentWaitFollowUp({
           runId: continuationRunId,
           waitId: params.followUp.waitId,
@@ -169,7 +252,6 @@ async function runClaimedFollowUp(params: {
           claimOwner: params.claimOwner,
           projectId: params.projectId,
           userId: params.userId,
-          outcome,
         })
       },
     })
@@ -213,6 +295,22 @@ export async function runProjectAgentWaitContinuationCommand(
     throw new OutboxPermanentError(
       `PROJECT_AGENT_CONTINUATION_STALE:${command.waitId}:${command.runId}:${String(command.expectedRunVersion)}:${command.expectedEventSeq}`,
     )
+  }
+  const checkpoint = await loadProjectAgentWaitContinuationCheckpoint({
+    waitId: command.waitId,
+    runId: command.runId,
+    commandId: outboxId,
+  })
+  if (checkpoint) {
+    await finalizeProjectAgentWaitFollowUp({
+      runId: command.runId,
+      waitId: command.waitId,
+      commandId: outboxId,
+      claimOwner,
+      projectId: claim.projectId,
+      userId: claim.userId,
+    })
+    return
   }
   let ran = false
   let claimLeaseLost = false

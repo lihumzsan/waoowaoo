@@ -117,12 +117,15 @@ function shouldTraceMergeTarget(targetType: string) {
   return targetType === 'ProjectPanel'
 }
 
+function normalizedIdentity(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 function logMergeDecision(params: {
   projectId: string | null | undefined
   key: string
   decision:
   | 'overlay_applied'
-  | 'overlay_expired'
   | 'overlay_phase_ignored'
   | 'overlay_task_type_mismatch'
   | 'server_terminal_authoritative'
@@ -168,12 +171,6 @@ function logMergeDecision(params: {
     currentPhase: params.currentPhase,
     whitelist: params.whitelist,
   })
-}
-
-function dateMillis(value: string | null | undefined): number | null {
-  if (!value) return null
-  const time = new Date(value).getTime()
-  return Number.isFinite(time) ? time : null
 }
 
 /** 将数组分成固定大小的块 */
@@ -320,27 +317,11 @@ export function useTaskTargetStateMap(
     }
 
     const overlay = overlayQuery.data || {}
-    const now = Date.now()
     for (const target of normalizedTargets) {
       const key = taskTargetPairKey(target.targetType, target.targetId)
       const queryKey = taskRuntimeTargetQueryKey(target)
       const runtime = overlay[key]
       if (!runtime) continue
-      if (runtime.expiresAt && runtime.expiresAt <= now) {
-        if (shouldTraceMergeTarget(target.targetType)) {
-          logMergeDecision({
-            projectId,
-            key,
-            decision: 'overlay_expired',
-            runtimePhase: runtime.phase,
-            runtimeTaskId: runtime.runningTaskId,
-            runtimeTaskType: runtime.runningTaskType,
-            currentPhase: map.get(queryKey)?.phase || null,
-            whitelist: target.types || [],
-          })
-        }
-        continue
-      }
       if (runtime.phase !== 'queued' && runtime.phase !== 'processing') {
         if (shouldTraceMergeTarget(target.targetType)) {
           logMergeDecision({
@@ -392,9 +373,9 @@ export function useTaskTargetStateMap(
           continue
         }
         if (current.phase === 'completed' || current.phase === 'failed' || current.phase === 'canceled') {
-          const runtimeUpdatedAt = dateMillis(runtime.updatedAt)
-          const currentUpdatedAt = dateMillis(current.updatedAt)
-          if (runtimeUpdatedAt !== null && currentUpdatedAt !== null && runtimeUpdatedAt <= currentUpdatedAt) {
+          const terminalTaskId = normalizedIdentity(current.taskId)
+          const overlayTaskId = normalizedIdentity(runtime.runningTaskId)
+          if (!terminalTaskId || terminalTaskId === overlayTaskId) {
             if (shouldTraceMergeTarget(target.targetType)) {
               logMergeDecision({
                 projectId,

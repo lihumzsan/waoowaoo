@@ -4,8 +4,17 @@ import { prisma } from '@/lib/prisma'
 import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import { buildProjectAssistantScopeRef } from './persistence'
-import { appendProjectAgentEvents } from './event'
-import { isEditFirstChoiceType } from './edit-first-choice-tools'
+import { appendProjectAgentEvents, appendProjectAgentEventsInTransaction } from './event'
+import type { ProjectAgentChoiceCardDefinition } from './types'
+import {
+  assertProjectAgentChoiceOfferCurrent,
+  buildProjectAgentChoiceOffer,
+  parseProjectAgentChoiceDecision,
+  parseProjectAgentChoiceOffer,
+  type ProjectAgentChoiceOffer,
+  type ProjectAgentChoiceReviewedResource,
+} from './choice-offer'
+import type { EditFirstChoiceDecision } from './edit-first-choice-result'
 import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
@@ -43,6 +52,7 @@ export interface ProjectAgentChoiceInterruptionRecord {
   operationId: string
   toolCallId: string | null
   payload: Prisma.JsonValue
+  offer: ProjectAgentChoiceOffer
 }
 
 export interface ProjectAgentInterruptionSnapshot {
@@ -180,25 +190,84 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
   runFence: ProjectAgentRunFence
   runId: string
   operationId: string
-  toolCallId: string | null
-  payload: Prisma.InputJsonValue
+  toolCallId: string
+  card: ProjectAgentChoiceCardDefinition
+  reviewedResource: ProjectAgentChoiceReviewedResource
   previousActivityId?: string | null
-}): Promise<string> {
+}): Promise<ProjectAgentChoiceOffer> {
   const activityId = randomUUID()
   const interruptionId = randomUUID()
-  const superseded = await supersedePendingProjectAgentInterruptions(params)
-  if (superseded.length > 0) {
-    projectAgentInterruptionLogger.warn({
-      action: 'assistant.choice-interruption.superseded-by-new',
-      message: 'Pending project agent interruptions superseded by a new choice interruption',
+  const offer = buildProjectAgentChoiceOffer({
+    runId: params.runId,
+    interruptionId,
+    card: params.card,
+    reviewedResource: params.reviewedResource,
+  })
+  const { assistantId, scopeRef } = buildScope(params)
+  let supersededIds: string[] = []
+  await prisma.$transaction(async (tx) => {
+    const lockedRun = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM project_agent_runs
+      WHERE id = ${params.runId}
+      FOR UPDATE
+    `)
+    if (lockedRun.length !== 1) {
+      throw new Error(`PROJECT_AGENT_CHOICE_RUN_LOCK_FAILED:${params.runId}`)
+    }
+    await assertProjectAgentChoiceOfferCurrent({
+      tx,
       projectId: params.projectId,
       userId: params.userId,
-      details: { supersededIds: superseded.map((record) => record.id) },
+      episodeId: params.episodeId,
+      offer,
     })
-  }
-  await appendProjectAgentEvents({
-    scope: params,
-    events: [
+    const pending = await tx.projectAgentInterruption.findMany({
+      where: {
+        projectId: params.projectId,
+        userId: params.userId,
+        assistantId,
+        scopeRef,
+        status: 'pending',
+      },
+      select: {
+        id: true,
+        runId: true,
+        activityId: true,
+        runVersion: true,
+        eventSeq: true,
+      },
+    })
+    if (pending.some((record) => !record.runId)) {
+      throw new Error('PROJECT_AGENT_PENDING_INTERRUPTION_RUN_ID_MISSING')
+    }
+    supersededIds = pending.map((record) => record.id)
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId ?? null,
+        assistantId,
+        scopeRef,
+      },
+      events: [
+      ...pending.map((record) => ({
+        runFence: record.runId === params.runId
+          ? params.runFence
+          : createProjectAgentRunFence({
+              id: record.runId as string,
+              runVersion: record.runVersion,
+              eventSeq: record.eventSeq,
+            }),
+        idempotencyKey: `interruption-resolved:${record.id}:superseded`,
+        event: {
+          kind: 'interruption.resolved' as const,
+          runId: record.runId as string,
+          activityId: record.activityId,
+          interruptionId: record.id,
+          outcome: 'superseded' as const,
+        },
+      })),
       ...(params.previousActivityId
         ? [{
             runFence: params.runFence,
@@ -222,20 +291,24 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
           operationId: params.operationId,
           approvalId: `choice:${randomUUID()}`,
           toolCallId: params.toolCallId,
-          choiceType: (() => {
-            if (typeof params.payload === 'object' && params.payload && !Array.isArray(params.payload)) {
-              const choiceType = (params.payload as Record<string, unknown>).choiceType
-              if (isEditFirstChoiceType(choiceType)) return choiceType
-            }
-            return null
-          })(),
-          payload: params.payload,
+          choiceType: offer.card.choiceType,
+          payload: offer as unknown as Prisma.InputJsonValue,
           runState: null,
         },
       },
-    ],
+      ],
+    })
   })
-  return interruptionId
+  if (supersededIds.length > 0) {
+    projectAgentInterruptionLogger.warn({
+      action: 'assistant.choice-interruption.superseded-by-new',
+      message: 'Pending project agent interruptions superseded by a new choice interruption',
+      projectId: params.projectId,
+      userId: params.userId,
+      details: { supersededIds },
+    })
+  }
+  return offer
 }
 
 /**
@@ -396,51 +469,89 @@ export async function getLatestProjectAgentInterruptionForRun(params: ProjectAge
 export async function consumeProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
   runId: string
   interruptionId: string
+  cardId: string
+  toolCallId: string
   response: Prisma.InputJsonValue
-}): Promise<ProjectAgentChoiceInterruptionRecord | null> {
+  latestUserText: string
+}): Promise<(ProjectAgentChoiceInterruptionRecord & { parsedResponse: EditFirstChoiceDecision }) | null> {
   const { assistantId, scopeRef } = buildScope(params)
-  const record = await prisma.projectAgentInterruption.findFirst({
-    where: {
-      id: params.interruptionId,
-      runId: params.runId,
-      projectId: params.projectId,
-      userId: params.userId,
-      assistantId,
-      scopeRef,
-      type: 'choice',
-    },
-  })
-  if (!record || record.status !== 'pending') return null
-
   try {
-    await appendProjectAgentEvents({
-      scope: params,
-      events: [{
-        runFence: createProjectAgentRunFence(record),
-        event: {
-          kind: 'interruption.resolved',
+    return await prisma.$transaction(async (tx) => {
+      const record = await tx.projectAgentInterruption.findFirst({
+        where: {
+          id: params.interruptionId,
           runId: params.runId,
-          activityId: record.activityId,
-          interruptionId: record.id,
-          outcome: 'consumed',
-          response: params.response,
+          projectId: params.projectId,
+          userId: params.userId,
+          assistantId,
+          scopeRef,
+          type: 'choice',
         },
-      }],
+      })
+      if (!record || record.status !== 'pending') return null
+      const offer = parseProjectAgentChoiceOffer(record.payload)
+      if (
+        offer.card.interruptionId !== record.id
+        || offer.card.runId !== params.runId
+        || offer.card.cardId !== params.cardId
+        || offer.card.toolCallId !== params.toolCallId
+        || record.toolCallId !== params.toolCallId
+      ) {
+        throw new Error('PROJECT_AGENT_CHOICE_OFFER_IDENTITY_MISMATCH')
+      }
+      await assertProjectAgentChoiceOfferCurrent({
+        tx,
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+        offer,
+      })
+      const parsedResponse = parseProjectAgentChoiceDecision({
+        offer,
+        response: params.response,
+        latestUserText: params.latestUserText,
+      })
+      await appendProjectAgentEventsInTransaction(tx, {
+        scope: {
+          projectId: params.projectId,
+          userId: params.userId,
+          episodeId: params.episodeId ?? null,
+          assistantId,
+          scopeRef,
+        },
+        events: [{
+          runFence: createProjectAgentRunFence({
+            id: params.runId,
+            runVersion: record.runVersion,
+            eventSeq: record.eventSeq,
+          }),
+          event: {
+            kind: 'interruption.resolved',
+            runId: params.runId,
+            activityId: record.activityId,
+            interruptionId: record.id,
+            outcome: 'consumed',
+            response: JSON.parse(JSON.stringify(parsedResponse)) as Prisma.InputJsonValue,
+          },
+        }],
+      })
+
+      return {
+        id: record.id,
+        runId: record.runId,
+        activityId: record.activityId,
+        type: 'choice' as const,
+        status: 'consumed' as const,
+        operationId: record.operationId,
+        toolCallId: record.toolCallId,
+        payload: record.payload,
+        offer,
+        parsedResponse,
+      }
     })
   } catch (error) {
     if (isInterruptionConsumeRace(error)) return null
     throw error
-  }
-
-  return {
-    id: record.id,
-    runId: record.runId,
-    activityId: record.activityId,
-    type: 'choice',
-    status: 'consumed',
-    operationId: record.operationId,
-    toolCallId: record.toolCallId,
-    payload: record.payload,
   }
 }
 
@@ -475,7 +586,11 @@ export async function reopenProjectAgentInterruption(interruptionId: string): Pr
       assistantId: interruption.assistantId as ProjectAssistantId,
     },
     events: [{
-      runFence: createProjectAgentRunFence(interruption),
+      runFence: createProjectAgentRunFence({
+        id: interruption.runId,
+        runVersion: interruption.runVersion,
+        eventSeq: interruption.eventSeq,
+      }),
       idempotencyKey: `interruption-reopened:${interruption.id}:${interruption.consumedAt.toISOString()}`,
       event: {
         kind: 'interruption.reopened',

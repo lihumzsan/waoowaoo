@@ -38,7 +38,8 @@ describe('project agent Agents SDK runtime guard', () => {
 
     expect(route).toContain('parseProjectAgentControlAction')
     expect(route).toContain('consumeProjectAgentApprovalInterruption')
-    expect(route).toContain('consumeProjectAgentWaitFollowUp')
+    expect(route).not.toContain("kind: 'task_follow_up'")
+    expect(route).not.toContain('consumeProjectAgentWaitFollowUp')
     expect(route).not.toContain('findLatestProjectAgentApprovalResponse')
     expect(route).not.toContain('projectAgentApprovalResponse')
     expect(route).not.toContain('projectAgentChoiceResponse')

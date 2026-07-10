@@ -72,7 +72,7 @@ function buildContext() {
 
 async function executeRegister(input: RegisterInput | unknown) {
   const operation = createAuthOperations().auth_register_user
-  return await operation.execute(buildContext(), input)
+  return await operation.execute!(buildContext(), input)
 }
 
 describe('auth register operation', () => {
@@ -84,7 +84,10 @@ describe('auth register operation', () => {
     delete process.env.DEPLOYMENT_EDITION
     delete process.env.PROVIDER_CREDENTIAL_MODE
     prismaMock.user.findUnique.mockResolvedValue(null)
-    prismaMock.__tx.user.create.mockResolvedValue({ id: 'user-1', name: 'alice' })
+    prismaMock.__tx.user.create.mockResolvedValue({
+      id: 'user-1',
+      name: 'alice',
+    })
     prismaMock.__tx.userBalance.create.mockResolvedValue({
       userId: 'user-1',
       balance: 0,
@@ -98,7 +101,9 @@ describe('auth register operation', () => {
       totalSpent: 0,
     })
     prismaMock.__tx.balanceTransaction.findFirst.mockResolvedValue(null)
-    prismaMock.__tx.balanceTransaction.create.mockResolvedValue({ id: 'transaction-1' })
+    prismaMock.__tx.balanceTransaction.create.mockResolvedValue({
+      id: 'transaction-1',
+    })
     prismaMock.__tx.inviteCode.findUnique.mockResolvedValue({
       id: 'invite-1',
       amount: 100,
@@ -108,7 +113,9 @@ describe('auth register operation', () => {
       redeemedCount: 0,
     })
     prismaMock.__tx.inviteCode.updateMany.mockResolvedValue({ count: 1 })
-    prismaMock.__tx.inviteRedemption.create.mockResolvedValue({ id: 'redemption-1' })
+    prismaMock.__tx.inviteRedemption.create.mockResolvedValue({
+      id: 'redemption-1',
+    })
     prismaMock.$transaction.mockImplementation(
       async (callback: (tx: typeof prismaMock.__tx) => Promise<unknown>) => await callback(prismaMock.__tx),
     )
@@ -202,7 +209,10 @@ describe('auth register operation', () => {
   })
 
   it('[并发唯一键冲突] -> 返回和重复用户名一致的友好错误', async () => {
-    prismaMock.__tx.user.create.mockRejectedValue({ code: 'P2002', message: 'Unique constraint failed' })
+    prismaMock.__tx.user.create.mockRejectedValue({
+      code: 'P2002',
+      message: 'Unique constraint failed',
+    })
 
     const promise = executeRegister({ name: 'alice', password: 'secret1' })
 
@@ -214,7 +224,10 @@ describe('auth register operation', () => {
   })
 
   it('[有效注册] -> 归一化用户名并创建用户与初始余额', async () => {
-    const result = await executeRegister({ name: ' alice ', password: 'secret1' })
+    const result = await executeRegister({
+      name: ' alice ',
+      password: 'secret1',
+    })
 
     expect(result).toEqual({
       message: AUTH_REGISTER_RESULT_CODES.success,
@@ -253,7 +266,10 @@ describe('auth register operation', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
-    const result = await executeRegister({ name: 'alice', password: 'secret1' }) as RegisterResult
+    const result = (await executeRegister({
+      name: 'alice',
+      password: 'secret1',
+    })) as RegisterResult
 
     expect(result).toEqual({
       message: AUTH_REGISTER_RESULT_CODES.success,
@@ -290,7 +306,11 @@ describe('auth register operation', () => {
     process.env.DEPLOYMENT_EDITION = 'cloud'
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
 
-    const result = await executeRegister({ name: 'alice', password: 'secret1', inviteCode: ' beta-1 ' }) as RegisterResult
+    const result = (await executeRegister({
+      name: 'alice',
+      password: 'secret1',
+      inviteCode: ' beta-1 ',
+    })) as RegisterResult
 
     expect(result).toEqual({
       message: AUTH_REGISTER_RESULT_CODES.success,
@@ -331,7 +351,12 @@ describe('auth register operation', () => {
     })
     expect(prismaMock.__tx.userBalance.upsert).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
-      create: { userId: 'user-1', balance: 100, frozenAmount: 0, totalSpent: 0 },
+      create: {
+        userId: 'user-1',
+        balance: 100,
+        frozenAmount: 0,
+        totalSpent: 0,
+      },
       update: { balance: { increment: 100 } },
     })
     expect(prismaMock.__tx.balanceTransaction.create).toHaveBeenCalledWith({
@@ -354,7 +379,11 @@ describe('auth register operation', () => {
     process.env.PROVIDER_CREDENTIAL_MODE = 'platform-key'
     prismaMock.__tx.inviteCode.findUnique.mockResolvedValue(null)
 
-    const promise = executeRegister({ name: 'alice', password: 'secret1', inviteCode: 'missing-code' })
+    const promise = executeRegister({
+      name: 'alice',
+      password: 'secret1',
+      inviteCode: 'missing-code',
+    })
 
     await expect(promise).rejects.toMatchObject({
       code: 'INVALID_PARAMS',

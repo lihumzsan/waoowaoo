@@ -8,6 +8,7 @@ export {
   handleBillingError,
   authorizeTaskBilling,
   prepareTaskBilling,
+  prepareTaskBillingInTransaction,
   rollbackTaskBilling,
   rollbackTaskBillingInTransaction,
   settleTaskBilling,

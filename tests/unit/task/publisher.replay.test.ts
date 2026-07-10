@@ -194,7 +194,7 @@ describe('task publisher replay', () => {
     expect(message?.type).toBe('task.stream')
   })
 
-  it('publishes terminal lifecycle events with explicit affected resources', async () => {
+  it('rejects terminal lifecycle publication outside the terminal service', async () => {
     taskFindManyMock.mockResolvedValueOnce([
       {
         id: 'task-1',
@@ -216,7 +216,7 @@ describe('task publisher replay', () => {
     })
     redisPublishMock.mockResolvedValueOnce(1)
 
-    const message = await publishTaskEvent({
+    await expect(publishTaskEvent({
       taskId: 'task-1',
       projectId: 'project-1',
       userId: 'user-1',
@@ -228,36 +228,9 @@ describe('task publisher replay', () => {
       payload: {
         imageUrl: 'https://example.test/panel.png',
       },
-    })
-
-    const expectedAffectedResources = [
-      { kind: 'storyboards', projectId: 'project-1', episodeId: 'episode-1' },
-      { kind: 'editScript', projectId: 'project-1', episodeId: 'episode-1' },
-      { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
-      { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
-      { kind: 'projectData', projectId: 'project-1' },
-    ]
-
-    expect(taskEventCreateMock).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        taskId: 'task-1',
-        eventType: TASK_EVENT_TYPE.COMPLETED,
-        payload: expect.objectContaining({
-          lifecycleType: TASK_EVENT_TYPE.COMPLETED,
-          affectedResources: expectedAffectedResources,
-        }),
-      }),
-    }))
-    expect(message?.payload?.affectedResources).toEqual(expectedAffectedResources)
-    expect(redisPublishMock).toHaveBeenCalledTimes(1)
-    expect(scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
-    expect(redisPublishMock.mock.invocationCallOrder[0]).toBeLessThan(
-      scheduleResolvedProjectAgentWaitFollowUpsForTaskEventMock.mock.invocationCallOrder[0] ?? 0,
-    )
+    })).rejects.toThrow('TASK_TERMINAL_EVENT_REQUIRES_TERMINAL_SERVICE:task-1')
+    expect(taskEventCreateMock).not.toHaveBeenCalled()
+    expect(redisPublishMock).not.toHaveBeenCalled()
   })
 
   it('replays lifecycle + stream rows in listEventsAfter', async () => {
@@ -351,7 +324,7 @@ describe('task publisher replay', () => {
       where: {
         projectId: 'project-1',
         userId: 'user-1',
-        eventType: { in: ['task.completed', 'task.failed'] },
+        eventType: { in: ['task.completed', 'task.failed', 'task.canceled'] },
         task: { episodeId: 'episode-1' },
       },
       orderBy: { id: 'desc' },

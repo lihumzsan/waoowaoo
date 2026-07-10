@@ -4,7 +4,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { ProjectEditBible, ProjectEditChapter, ProjectEditScript, ProjectEditShotExecutionPlan, ProjectEditStylePreview } from '@/types/project'
+import type { ProjectEditBible, ProjectEditChapter, ProjectEditScript, ProjectEditShotExecutionPlan } from '@/types/project'
 import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import { useMediaOperationBillingPlan } from '../use-media-operation-billing-plan'
@@ -61,12 +61,6 @@ interface ReviseEditBibleInput {
   beatSheet?: unknown
   ledger?: unknown
   emotionalCurve?: unknown
-}
-
-interface ConfirmEditStylePreviewInput {
-  episodeId: string
-  stylePreviewId: string
-  aspectRatio: EditScriptVideoRatio
 }
 
 interface CreateEditShotExecutionPlanInput {
@@ -328,37 +322,6 @@ export function useReviseProjectEditBible(projectId: string | null) {
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, editBible.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
-      ])
-    },
-  })
-}
-
-export function useConfirmProjectEditStylePreview(projectId: string | null) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: ConfirmEditStylePreviewInput) => {
-      if (!projectId) throw new Error('Project ID is required')
-      const response = await apiFetch(`/api/projects/${projectId}/bible/style-preview`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to confirm edit style preview')
-      }
-      const data = await response.json() as { stylePreview?: ProjectEditStylePreview | null }
-      if (!data.stylePreview) throw new Error('EDIT_STYLE_PREVIEW_RESPONSE_EMPTY')
-      return data.stylePreview
-    },
-    onSuccess: async (stylePreview) => {
-      if (!projectId) return
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(projectId, stylePreview.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, stylePreview.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editShotExecutionPlan(projectId, stylePreview.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, stylePreview.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, stylePreview.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
       ])
     },
   })

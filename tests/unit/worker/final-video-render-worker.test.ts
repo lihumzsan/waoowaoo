@@ -348,10 +348,7 @@ describe('final video render worker', () => {
       where: { episodeId: 'episode-1' },
       update: expect.objectContaining({ renderStatus: 'processing', renderTaskId: 'task-1' }),
     }))
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
-    }))
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
     expect(reportTaskProgressMock).toHaveBeenCalledWith(expect.anything(), 10, {
       stage: 'final_render_prepare',
     })
@@ -411,10 +408,7 @@ describe('final video render worker', () => {
     expect(generateMusicMock).not.toHaveBeenCalled()
     expect(storageMock.getObjectBuffer).not.toHaveBeenCalledWith('music/bgm-score.m4a')
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
-    }))
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
   })
 
   it('fails explicitly when soundscape state is missing before final render', async () => {
@@ -489,10 +483,7 @@ describe('final video render worker', () => {
     }))).rejects.toThrow('FINAL_VIDEO_RENDER_BGM_NOT_READY:generating')
 
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'failed', renderTaskId: 'task-1' }),
-    }))
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
   })
 
   it('mixes preserved source audio with normalized ducked BGM for final renders', async () => {

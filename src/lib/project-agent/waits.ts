@@ -1,9 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { Prisma } from '@prisma/client'
+import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
 import type { ProjectAssistantId } from './types'
-import { buildProjectAssistantScopeRef } from './persistence'
+import {
+  appendProjectAssistantThreadMessagesInTransaction,
+  buildProjectAssistantScopeRef,
+} from './persistence'
 import { appendProjectAgentEvents, appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
@@ -18,6 +23,22 @@ import {
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
+export type ProjectAgentTaskFollowUpSettlementOutcome =
+  | 'completed'
+  | 'failed'
+  | 'awaiting_task'
+  | 'awaiting_choice'
+  | 'awaiting_approval'
+
+export interface ProjectAgentContinuationCheckpoint {
+  commandId: string
+  waitId: string
+  runId: string
+  outcome: ProjectAgentTaskFollowUpSettlementOutcome
+  messageId: string
+}
+
+export type ProjectAgentContinuationExecutionStart = 'started' | 'already_started' | 'settled'
 
 /**
  * What happens when every task behind the wait reaches a terminal state.
@@ -135,7 +156,6 @@ export interface ProjectAgentSessionWait {
   claimId: string | null
 }
 
-const WAIT_CLAIM_TTL_MS = 2 * 60 * 1000
 export const PROJECT_AGENT_EVENT_IDEMPOTENCY_KEY_MAX_LENGTH = 191
 
 function normalizeTaskIds(taskIds: string[]): string[] {
@@ -528,73 +548,6 @@ async function applyWaitTerminalStatus(input: {
   })
 }
 
-async function resolveNewProjectAgentWaitFromCurrentTasks(input: {
-  waitId: string
-  runId: string
-  runFence: ProjectAgentRunFence
-  activityId: string
-  projectId: string
-  userId: string
-  episodeId?: string | null
-  assistantId?: ProjectAssistantId
-  taskIds: string[]
-  followUpMode: ProjectAgentWaitFollowUpMode
-}): Promise<void> {
-  const tasks = await prisma.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
-    SELECT id, status
-    FROM tasks
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND id IN (${Prisma.join(input.taskIds)})
-  `)
-  const result = applyProjectAgentWaitTaskSnapshot({
-    taskIds: input.taskIds,
-    tasks,
-  })
-  if (result.terminalTaskIds.length === 0) return
-
-  if (!result.terminalStatus) {
-    await appendProjectAgentEvents({
-      scope: input,
-      events: [{
-        runFence: input.runFence,
-        idempotencyKey: buildProjectAgentTaskProgressedIdempotencyKey({
-          waitId: input.waitId,
-          terminalTaskIds: result.terminalTaskIds,
-          failedTaskIds: result.failedTaskIds,
-          canceledTaskIds: result.canceledTaskIds,
-        }),
-        event: {
-          kind: 'task.progressed',
-          runId: input.runId,
-          activityId: input.activityId,
-          waitId: input.waitId,
-          terminalTaskIds: result.terminalTaskIds,
-          failedTaskIds: result.failedTaskIds,
-          canceledTaskIds: result.canceledTaskIds,
-        },
-      }],
-    })
-    return
-  }
-
-  await applyWaitTerminalStatus({
-    runFence: input.runFence,
-    waitId: input.waitId,
-    runId: input.runId,
-    activityId: input.activityId,
-    projectId: input.projectId,
-    userId: input.userId,
-    episodeId: input.episodeId,
-    assistantId: input.assistantId,
-    followUpMode: input.followUpMode,
-    terminalStatus: result.terminalStatus,
-    terminalTaskIds: result.terminalTaskIds,
-    failedTaskIds: result.failedTaskIds,
-    canceledTaskIds: result.canceledTaskIds,
-  })
-}
-
 export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
   tx: Prisma.TransactionClient,
   input: {
@@ -761,119 +714,6 @@ export async function resolveProjectAgentWaitsForTaskEvent(input: {
   })
 }
 
-async function reconcilePendingProjectAgentWaitsForScope(input: ProjectAgentWaitScopeInput): Promise<void> {
-  const { assistantId, scopeRef } = buildWaitScope(input)
-  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
-    SELECT
-      id,
-      runId,
-      activityId,
-      projectId,
-      userId,
-      assistantId,
-      scopeRef,
-      episodeId,
-      operationId,
-      taskIds,
-      followUpMode,
-      status,
-      runVersion,
-      eventSeq,
-      terminalStatus,
-      terminalTaskIds,
-      failedTaskIds,
-      canceledTaskIds,
-      followUpKey,
-      claimId,
-      claimedAt,
-      claimExpiresAt,
-      followedAt,
-      createdAt,
-      resolvedAt
-    FROM project_agent_waits
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status = 'pending'
-    ORDER BY createdAt ASC
-  `
-
-  for (const row of rows) {
-    if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
-    if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
-    await resolveNewProjectAgentWaitFromCurrentTasks({
-      runFence: createProjectAgentRunFence({
-        id: row.runId,
-        runVersion: row.runVersion,
-        eventSeq: row.eventSeq,
-      }),
-      waitId: row.id,
-      runId: row.runId,
-      activityId: row.activityId,
-      projectId: row.projectId,
-      userId: row.userId,
-      episodeId: row.episodeId,
-      assistantId: row.assistantId as ProjectAssistantId,
-      taskIds: parseStringArray(row.taskIds),
-      followUpMode: normalizeWaitFollowUpMode(row.followUpMode),
-    })
-  }
-}
-
-export async function listResolvedProjectAgentWaitFollowUps(input: ProjectAgentWaitScopeInput & {
-  limit?: number
-}): Promise<ProjectAgentWaitFollowUp[]> {
-  const { assistantId, scopeRef } = buildWaitScope(input)
-  const limit = Math.min(Math.max(Math.floor(input.limit ?? 10), 1), 50)
-  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>(Prisma.sql`
-    SELECT
-      id,
-      runId,
-      activityId,
-      projectId,
-      userId,
-      assistantId,
-      scopeRef,
-      episodeId,
-      operationId,
-      taskIds,
-      followUpMode,
-      status,
-      runVersion,
-      eventSeq,
-      terminalStatus,
-      terminalTaskIds,
-      failedTaskIds,
-      canceledTaskIds,
-      followUpKey,
-      claimId,
-      followedAt,
-      createdAt,
-      resolvedAt
-    FROM project_agent_waits
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status = 'resolved'
-      AND followedAt IS NULL
-      AND followUpKey IS NOT NULL
-    ORDER BY resolvedAt ASC
-    LIMIT ${limit}
-  `)
-
-  const followUps: ProjectAgentWaitFollowUp[] = []
-  for (const row of rows) {
-    const followUp = await buildWaitFollowUpFromRow(row, {
-      claimId: row.claimId,
-      followUpActivityId: null,
-    })
-    if (followUp) followUps.push(followUp)
-  }
-  return followUps
-}
-
 export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeInput & {
   limit?: number
 }): Promise<ProjectAgentSessionWait[]> {
@@ -937,101 +777,6 @@ export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeI
   })
 }
 
-export async function claimResolvedProjectAgentWaitFollowUps(input: ProjectAgentWaitScopeInput & {
-  limit?: number
-  claimTtlMs?: number
-  followUpMode?: ProjectAgentWaitFollowUpMode
-}): Promise<ProjectAgentWaitFollowUp[]> {
-  const { assistantId, scopeRef } = buildWaitScope(input)
-  const limit = Math.min(Math.max(Math.floor(input.limit ?? 1), 1), 10)
-  const claimTtlMs = Math.min(Math.max(Math.floor(input.claimTtlMs ?? WAIT_CLAIM_TTL_MS), 30_000), 10 * 60 * 1000)
-  const claimId = randomUUID()
-  const claimExpiresAt = new Date(Date.now() + claimTtlMs)
-
-  await prisma.$executeRaw`
-    UPDATE project_agent_waits
-    SET status = 'resolved',
-        claimId = NULL,
-        claimedAt = NULL,
-        claimExpiresAt = NULL,
-        updatedAt = NOW(3)
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status = 'claimed'
-      AND followedAt IS NULL
-      AND claimExpiresAt < NOW(3)
-  `
-
-  await prisma.$executeRaw`
-    UPDATE project_agent_waits
-    SET status = 'claimed',
-        claimId = ${claimId},
-        claimedAt = NOW(3),
-        claimExpiresAt = ${claimExpiresAt},
-        updatedAt = NOW(3)
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status = 'resolved'
-      AND followedAt IS NULL
-      AND followUpKey IS NOT NULL
-      ${input.followUpMode ? Prisma.sql`AND followUpMode = ${input.followUpMode}` : Prisma.empty}
-    ORDER BY resolvedAt ASC
-    LIMIT ${limit}
-  `
-
-  const rows = await prisma.$queryRaw<ProjectAgentWaitRow[]>`
-    SELECT
-      id,
-      runId,
-      activityId,
-      projectId,
-      userId,
-      assistantId,
-      scopeRef,
-      episodeId,
-      operationId,
-      taskIds,
-      followUpMode,
-      status,
-      runVersion,
-      eventSeq,
-      terminalStatus,
-      terminalTaskIds,
-      failedTaskIds,
-      canceledTaskIds,
-      followUpKey,
-      claimId,
-      claimedAt,
-      claimExpiresAt,
-      followedAt,
-      createdAt,
-      resolvedAt
-    FROM project_agent_waits
-    WHERE projectId = ${input.projectId}
-      AND userId = ${input.userId}
-      AND assistantId = ${assistantId}
-      AND scopeRef = ${scopeRef}
-      AND status = 'claimed'
-      AND claimId = ${claimId}
-    ORDER BY resolvedAt ASC
-  `
-
-  const followUps: ProjectAgentWaitFollowUp[] = []
-  for (const row of rows) {
-    if (!row.claimId) continue
-    const followUp = await buildWaitFollowUpFromRow(row, {
-      claimId: row.claimId,
-      followUpActivityId: null,
-    })
-    if (followUp) followUps.push(followUp)
-  }
-  return followUps
-}
-
 export type ProjectAgentContinuationClaimResult =
   | {
       status: 'claimed'
@@ -1074,12 +819,18 @@ export async function claimProjectAgentWaitContinuation(input: {
       && current.claimExpiresAt
       && current.claimExpiresAt.getTime() >= Date.now()
     ) return { status: 'busy' }
+    const expectedRunVersion = current.followUpCommandId === input.commandId
+      ? current.runVersion
+      : input.expectedRunVersion
+    const expectedEventSeq = current.followUpCommandId === input.commandId
+      ? current.eventSeq
+      : eventSeq
     const claimed = await tx.projectAgentWait.updateMany({
       where: {
         id: input.waitId,
         runId: input.runId,
-        runVersion: input.expectedRunVersion,
-        eventSeq,
+        runVersion: expectedRunVersion,
+        eventSeq: expectedEventSeq,
         followedAt: null,
         OR: [
           { status: 'resolved' },
@@ -1214,16 +965,47 @@ export async function startProjectAgentWaitFollowUp(input: {
     return null
   }
   const followUpActivityId = input.commandId
-  await appendProjectAgentEvents({
-    scope: {
-      projectId: row.projectId,
-      userId: row.userId,
-      episodeId: row.episodeId,
-      assistantId: row.assistantId as ProjectAssistantId,
-    },
-    events: [
-      {
-        runFence,
+  const startedRow = await prisma.$transaction(async (tx) => {
+    const current = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
+    if (
+      !current
+      || current.runId !== input.runId
+      || current.projectId !== input.projectId
+      || current.userId !== input.userId
+      || current.status !== 'claimed'
+      || current.followUpCommandId !== input.commandId
+      || current.claimId !== input.claimOwner
+      || !current.claimExpiresAt
+      || current.claimExpiresAt.getTime() <= Date.now()
+      || current.followedAt !== null
+    ) return null
+
+    const existingActivity = await tx.projectAgentActivity.findUnique({
+      where: { id: followUpActivityId },
+      select: { runId: true, type: true },
+    })
+    if (existingActivity) {
+      if (existingActivity.runId !== input.runId || existingActivity.type !== 'task_follow_up') {
+        throw new Error(`PROJECT_AGENT_CONTINUATION_ACTIVITY_IDENTITY_CONFLICT:${followUpActivityId}`)
+      }
+      return current as ProjectAgentWaitRow
+    }
+
+    const currentFence = createProjectAgentRunFence({
+      id: input.runId,
+      runVersion: current.runVersion,
+      eventSeq: current.eventSeq,
+    })
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: current.projectId,
+        userId: current.userId,
+        episodeId: current.episodeId,
+        assistantId: current.assistantId as ProjectAssistantId,
+        scopeRef: current.scopeRef,
+      },
+      events: [{
+        runFence: currentFence,
         idempotencyKey: `activity-started:${followUpActivityId}`,
         event: {
           kind: 'activity.started',
@@ -1231,14 +1013,245 @@ export async function startProjectAgentWaitFollowUp(input: {
           activityId: followUpActivityId,
           type: 'task_follow_up',
           operationId: null,
-          sourceOperationId: row.operationId,
+          sourceOperationId: current.operationId,
         },
+      }],
+    })
+    const synced = await tx.projectAgentWait.updateMany({
+      where: {
+        id: current.id,
+        status: 'claimed',
+        followUpCommandId: input.commandId,
+        claimId: input.claimOwner,
+        claimExpiresAt: { gt: new Date() },
+        runVersion: current.runVersion,
+        eventSeq: current.eventSeq,
+        followedAt: null,
       },
-    ],
+      data: {
+        runVersion: currentFence.runVersion,
+        eventSeq: BigInt(currentFence.eventSeq),
+      },
+    })
+    if (synced.count !== 1) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_START_CAS_FAILED:${current.id}:${input.commandId}`)
+    }
+    return {
+      ...current,
+      runVersion: currentFence.runVersion,
+      eventSeq: BigInt(currentFence.eventSeq),
+    } as ProjectAgentWaitRow
   })
-  return await buildWaitFollowUpFromRow(row, {
+  if (!startedRow) return null
+  return await buildWaitFollowUpFromRow(startedRow, {
     claimId: input.claimOwner,
     followUpActivityId,
+  })
+}
+
+function normalizeProjectAgentTaskFollowUpSettlementOutcome(
+  value: string,
+): ProjectAgentTaskFollowUpSettlementOutcome {
+  switch (value) {
+    case 'completed':
+    case 'failed':
+    case 'awaiting_task':
+    case 'awaiting_choice':
+    case 'awaiting_approval':
+      return value
+    default:
+      throw new Error(`PROJECT_AGENT_CONTINUATION_OUTCOME_INVALID:${value}`)
+  }
+}
+
+function serializeContinuationMessage(message: UIMessage): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(message)) as Prisma.InputJsonValue
+}
+
+export async function loadProjectAgentWaitContinuationCheckpoint(input: {
+  waitId: string
+  runId: string
+  commandId: string
+}): Promise<ProjectAgentContinuationCheckpoint | null> {
+  const checkpoint = await prisma.projectAgentContinuationCheckpoint.findUnique({
+    where: { commandId: input.commandId },
+  })
+  if (!checkpoint) return null
+  if (checkpoint.waitId !== input.waitId || checkpoint.runId !== input.runId) {
+    throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_IDENTITY_MISMATCH:${input.commandId}`)
+  }
+  if (checkpoint.status === 'running') return null
+  if (
+    checkpoint.status !== 'settled'
+    || checkpoint.outcome === null
+    || checkpoint.messageId === null
+    || checkpoint.messageJson === null
+  ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STATE_INVALID:${input.commandId}`)
+  return {
+    commandId: checkpoint.commandId,
+    waitId: checkpoint.waitId,
+    runId: checkpoint.runId,
+    outcome: normalizeProjectAgentTaskFollowUpSettlementOutcome(checkpoint.outcome),
+    messageId: checkpoint.messageId,
+  }
+}
+
+export async function beginProjectAgentWaitContinuationExecution(input: {
+  runId: string
+  waitId: string
+  commandId: string
+  claimOwner: string
+  projectId: string
+  userId: string
+}): Promise<ProjectAgentContinuationExecutionStart> {
+  return await prisma.$transaction(async (tx) => {
+    const lockedWait = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM project_agent_waits
+      WHERE id = ${input.waitId}
+      FOR UPDATE
+    `)
+    if (lockedWait.length !== 1) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_EXECUTION_STALE:${input.waitId}`)
+    }
+    const wait = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
+    if (
+      !wait
+      || wait.runId !== input.runId
+      || wait.projectId !== input.projectId
+      || wait.userId !== input.userId
+      || wait.status !== 'claimed'
+      || wait.followUpCommandId !== input.commandId
+      || wait.claimId !== input.claimOwner
+      || !wait.claimExpiresAt
+      || wait.claimExpiresAt.getTime() <= Date.now()
+      || wait.followedAt !== null
+    ) throw new Error(`PROJECT_AGENT_CONTINUATION_EXECUTION_STALE:${input.waitId}`)
+
+    const existing = await tx.projectAgentContinuationCheckpoint.findUnique({
+      where: { commandId: input.commandId },
+    })
+    if (existing) {
+      if (existing.waitId !== input.waitId || existing.runId !== input.runId) {
+        throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_IDENTITY_MISMATCH:${input.commandId}`)
+      }
+      if (existing.status === 'running') return 'already_started'
+      if (existing.status === 'settled') return 'settled'
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STATE_INVALID:${input.commandId}`)
+    }
+    const checkpointForWait = await tx.projectAgentContinuationCheckpoint.findUnique({
+      where: { waitId: input.waitId },
+    })
+    if (checkpointForWait) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_WAIT_CHECKPOINT_CONFLICT:${input.waitId}`)
+    }
+    await tx.projectAgentContinuationCheckpoint.create({
+      data: {
+        commandId: input.commandId,
+        waitId: input.waitId,
+        runId: input.runId,
+        status: 'running',
+      },
+    })
+    return 'started'
+  })
+}
+
+export async function checkpointProjectAgentWaitFollowUp(input: {
+  runId: string
+  waitId: string
+  commandId: string
+  claimOwner: string
+  projectId: string
+  userId: string
+  outcome: ProjectAgentTaskFollowUpSettlementOutcome
+  message: UIMessage
+}): Promise<ProjectAgentContinuationCheckpoint> {
+  if (!input.message.id.trim()) throw new Error('PROJECT_AGENT_CONTINUATION_MESSAGE_ID_REQUIRED')
+  const messageJson = serializeContinuationMessage(input.message)
+  return await prisma.$transaction(async (tx) => {
+    const lockedWait = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM project_agent_waits
+      WHERE id = ${input.waitId}
+      FOR UPDATE
+    `)
+    if (lockedWait.length !== 1) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STALE:${input.waitId}`)
+    }
+    const wait = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
+    if (
+      !wait
+      || wait.runId !== input.runId
+      || wait.projectId !== input.projectId
+      || wait.userId !== input.userId
+      || wait.status !== 'claimed'
+      || wait.followUpCommandId !== input.commandId
+      || wait.claimId !== input.claimOwner
+      || !wait.claimExpiresAt
+      || wait.claimExpiresAt.getTime() <= Date.now()
+      || wait.followedAt !== null
+    ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STALE:${input.waitId}`)
+
+    const existing = await tx.projectAgentContinuationCheckpoint.findUnique({
+      where: { commandId: input.commandId },
+    })
+    if (!existing) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_EXECUTION_NOT_STARTED:${input.commandId}`)
+    }
+    if (existing.waitId !== input.waitId || existing.runId !== input.runId) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_IDENTITY_MISMATCH:${input.commandId}`)
+    }
+    if (existing.status === 'settled') {
+      if (
+        existing.outcome !== input.outcome
+        || existing.messageId !== input.message.id
+        || !isDeepStrictEqual(existing.messageJson, messageJson)
+      ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_CONFLICT:${input.commandId}`)
+      return {
+        commandId: existing.commandId,
+        waitId: existing.waitId,
+        runId: existing.runId,
+        outcome: normalizeProjectAgentTaskFollowUpSettlementOutcome(existing.outcome),
+        messageId: existing.messageId,
+      }
+    }
+    if (existing.status !== 'running') {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STATE_INVALID:${input.commandId}`)
+    }
+
+    await appendProjectAssistantThreadMessagesInTransaction(tx, {
+      projectId: wait.projectId,
+      userId: wait.userId,
+      episodeId: wait.episodeId,
+      assistantId: wait.assistantId as ProjectAssistantId,
+      messages: [input.message],
+    })
+    const updated = await tx.projectAgentContinuationCheckpoint.updateMany({
+      where: {
+        commandId: input.commandId,
+        waitId: input.waitId,
+        runId: input.runId,
+        status: 'running',
+      },
+      data: {
+        status: 'settled',
+        outcome: input.outcome,
+        messageId: input.message.id,
+        messageJson,
+        completedAt: new Date(),
+      },
+    })
+    if (updated.count !== 1) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_CAS_FAILED:${input.commandId}`)
+    }
+    return {
+      commandId: input.commandId,
+      waitId: input.waitId,
+      runId: input.runId,
+      outcome: input.outcome,
+      messageId: input.message.id,
+    }
   })
 }
 
@@ -1249,66 +1262,107 @@ export async function finalizeProjectAgentWaitFollowUp(input: {
   claimOwner: string
   projectId: string
   userId: string
-  outcome: 'completed' | 'failed' | 'awaiting_task' | 'awaiting_choice' | 'awaiting_approval'
 }): Promise<void> {
-  const wait = await prisma.projectAgentWait.findUnique({ where: { id: input.waitId } })
-  if (
-    !wait
-    || wait.runId !== input.runId
-    || wait.projectId !== input.projectId
-    || wait.userId !== input.userId
-    || wait.status !== 'claimed'
-    || wait.followUpCommandId !== input.commandId
-    || wait.claimId !== input.claimOwner
-  ) throw new Error(`PROJECT_AGENT_CONTINUATION_FINALIZE_STALE:${input.waitId}`)
-  const run = await prisma.projectAgentRun.findUnique({
-    where: { id: input.runId },
-    select: { id: true, runVersion: true, eventSeq: true },
-  })
-  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
-  const terminalRunEvent = input.outcome === 'completed'
-    ? {
-        runFence: createProjectAgentRunFence(run),
-        idempotencyKey: `run-completed:${input.runId}:continuation:${input.commandId}`,
-        event: {
-          kind: 'run.completed' as const,
-          runId: input.runId,
-          stopReason: 'completed',
-        },
-      }
-    : input.outcome === 'failed'
+  await prisma.$transaction(async (tx) => {
+    const wait = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
+    if (
+      !wait
+      || wait.runId !== input.runId
+      || wait.projectId !== input.projectId
+      || wait.userId !== input.userId
+      || wait.status !== 'claimed'
+      || wait.followUpCommandId !== input.commandId
+      || wait.claimId !== input.claimOwner
+      || !wait.claimExpiresAt
+      || wait.claimExpiresAt.getTime() <= Date.now()
+    ) throw new Error(`PROJECT_AGENT_CONTINUATION_FINALIZE_STALE:${input.waitId}`)
+    const checkpoint = await tx.projectAgentContinuationCheckpoint.findUnique({
+      where: { commandId: input.commandId },
+    })
+    if (
+      !checkpoint
+      || checkpoint.waitId !== wait.id
+      || checkpoint.runId !== input.runId
+      || checkpoint.status !== 'settled'
+      || checkpoint.outcome === null
+      || checkpoint.messageId === null
+      || checkpoint.messageJson === null
+    ) {
+      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_MISSING:${input.commandId}`)
+    }
+    const outcome = normalizeProjectAgentTaskFollowUpSettlementOutcome(checkpoint.outcome)
+    const run = await tx.projectAgentRun.findUnique({
+      where: { id: input.runId },
+      select: { id: true, runVersion: true, eventSeq: true },
+    })
+    if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
+    const runFence = createProjectAgentRunFence(run)
+    const activityEvent = outcome === 'failed'
       ? {
-          runFence: createProjectAgentRunFence(run),
-          idempotencyKey: `run-failed:${input.runId}:continuation:${input.commandId}`,
+          runFence,
+          idempotencyKey: `activity-failed:${input.commandId}:continuation`,
           event: {
-            kind: 'run.failed' as const,
+            kind: 'activity.failed' as const,
             runId: input.runId,
-            stopReason: 'tool_error',
-            errorCode: 'PROJECT_AGENT_TOOL_ERROR',
+            activityId: input.commandId,
+            errorCode: 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
             errorMessage: 'Project agent continuation reached a tool error',
           },
         }
-      : null
-  await appendProjectAgentEvents({
-    scope: {
-      projectId: wait.projectId,
-      userId: wait.userId,
-      episodeId: wait.episodeId,
-      assistantId: wait.assistantId as ProjectAssistantId,
-    },
-    events: [{
-      runFence: createProjectAgentRunFence(run),
-      idempotencyKey: `wait-followed:${wait.id}:${input.commandId}`,
-      event: {
-        kind: 'wait.followed',
-        runId: input.runId,
-        activityId: input.commandId,
-        waitId: wait.id,
-        claimId: input.claimOwner,
-        commandId: input.commandId,
-        sourceOperationId: wait.operationId,
+      : {
+          runFence,
+          idempotencyKey: `activity-completed:${input.commandId}:continuation`,
+          event: {
+            kind: 'activity.completed' as const,
+            runId: input.runId,
+            activityId: input.commandId,
+          },
+        }
+    const terminalRunEvent = outcome === 'completed'
+      ? {
+          runFence,
+          idempotencyKey: `run-completed:${input.runId}:continuation:${input.commandId}`,
+          event: {
+            kind: 'run.completed' as const,
+            runId: input.runId,
+            stopReason: 'completed',
+          },
+        }
+      : outcome === 'failed'
+        ? {
+            runFence,
+            idempotencyKey: `run-failed:${input.runId}:continuation:${input.commandId}`,
+            event: {
+              kind: 'run.failed' as const,
+              runId: input.runId,
+              stopReason: 'tool_error',
+              errorCode: 'PROJECT_AGENT_TOOL_ERROR',
+              errorMessage: 'Project agent continuation reached a tool error',
+            },
+          }
+        : null
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: wait.projectId,
+        userId: wait.userId,
+        episodeId: wait.episodeId,
+        assistantId: wait.assistantId as ProjectAssistantId,
+        scopeRef: wait.scopeRef,
       },
-    }, ...(terminalRunEvent ? [terminalRunEvent] : [])],
+      events: [activityEvent, {
+        runFence,
+        idempotencyKey: `wait-followed:${wait.id}:${input.commandId}`,
+        event: {
+          kind: 'wait.followed' as const,
+          runId: input.runId,
+          activityId: input.commandId,
+          waitId: wait.id,
+          claimId: input.claimOwner,
+          commandId: input.commandId,
+          sourceOperationId: wait.operationId,
+        },
+      }, ...(terminalRunEvent ? [terminalRunEvent] : [])],
+    })
   })
 }
 

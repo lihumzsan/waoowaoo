@@ -20,22 +20,36 @@
         "src/app/api/projects/[projectId]/edit-script/assets/generate",
         "src/app/api/projects/[projectId]/edit-script/storyboard/generate",
         "src/lib/operations/planning.ts",
+        "src/lib/operations/operation-plan-snapshot.ts",
+        "src/lib/operations/planned-operation-invocation.ts",
         "src/lib/operations/confirmation.ts",
         "src/lib/operations/submit-operation-task.ts",
         "src/lib/edit-script/style-preview-operation-plan.ts",
         "src/lib/project-agent/edit-first-choice-result.ts",
-        "src/lib/task/submitter.ts"
+        "src/lib/task/submitter.ts",
+        "src/lib/task/approved-plan-submitter.ts",
+        "src/lib/task/enqueue.ts",
+        "src/lib/mutation-batch/service.ts",
+        "src/lib/edit-script/asset-generation-operation-plan.ts",
+        "src/lib/edit-script/asset-revision.ts",
+        "src/lib/operations/domains"
       ],
       "testPaths": [
         "tests/unit/billing/media-approval-policy.test.ts",
         "tests/unit/operations/planning.test.ts",
         "tests/unit/edit-script/style-preview-operation-plan.test.ts",
         "tests/unit/project-agent/edit-first-choice-result.test.ts",
-        "tests/unit/worker/soundscape-worker.test.ts"
+        "tests/unit/worker/soundscape-worker.test.ts",
+        "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
+        "tests/integration/task/task-target-terminal-ownership.integration.test.ts",
+        "tests/integration/api/contract/edit-script-assets-generation.route.test.ts",
+        "tests/unit/operations/registry.test.ts",
+        "tests/unit/guards/approval-plan-batch-authority.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-hardcoded-operation-confirmed.mjs",
-        "scripts/guards/no-media-provider-bypass.mjs"
+        "scripts/guards/no-media-provider-bypass.mjs",
+        "scripts/guards/approval-plan-batch-authority-guard.mjs"
       ]
     },
     {
@@ -46,7 +60,15 @@
         "src/features/project-workspace/canvas",
         "src/lib/workspace-resource/materialized-resource.ts",
         "src/lib/workspace-resource/materialized-resource-version.ts",
+        "src/lib/workspace-resource/query-dto-version.ts",
         "src/lib/query/materialized-resource-cache.ts",
+        "src/lib/query/workspace-sse-event-sync.ts",
+        "src/lib/query/task-target-overlay.ts",
+        "src/lib/query/hooks/useTaskTargetStateMap.ts",
+        "src/lib/query/hooks/useSSE.ts",
+        "src/lib/query/mutations/useEpisodeMutations.ts",
+        "src/lib/projects/read-episode-detail.ts",
+        "src/app/api/projects/[projectId]/bible/route.ts",
         "src/lib/edit-bible/source-script-segments.ts",
         "src/lib/ai-prompts/templates/edit-bible/outline-script"
       ],
@@ -61,6 +83,9 @@
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
         "tests/unit/optimistic/sse-invalidation.test.ts",
         "tests/unit/query/materialized-resource-cache.test.ts",
+        "tests/unit/query/workspace-sse-event-sync.test.ts",
+        "tests/unit/optimistic/task-target-overlay.test.ts",
+        "tests/unit/optimistic/task-target-state-map.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts"
       ],
       "guardPaths": [
@@ -80,7 +105,12 @@
         "src/instrumentation.ts",
         "src/lib/workspace-resource/materialized-resource.ts",
         "src/lib/workspace-resource/materialized-resource-version.ts",
+        "src/lib/workspace-resource/query-dto-version.ts",
         "src/lib/query/materialized-resource-cache.ts",
+        "src/lib/query/workspace-sse-event-sync.ts",
+        "src/lib/query/hooks/useSSE.ts",
+        "src/lib/sse",
+        "src/app/api/sse/route.ts",
         "src/lib/edit-bible/task-submission.ts",
         "src/lib/edit-script/task-submission.ts",
         "src/lib/operations/submit-operation-task.ts"
@@ -88,6 +118,7 @@
       "testPaths": [
         "tests/integration/task/create-task-dedupe.integration.test.ts",
         "tests/integration/task/task-reconcile-queue.integration.test.ts",
+        "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
         "tests/regression/task-dedupe-recovery.test.ts",
         "tests/regression/task-enqueue-billing-rollback.test.ts",
         "tests/unit/edit-bible/task-submission.test.ts",
@@ -95,9 +126,16 @@
         "tests/unit/task/job-envelope.test.ts",
         "tests/unit/task/reconcile-queue-lifecycle.test.ts",
         "tests/unit/task/service-operation-metadata.test.ts",
+        "tests/unit/task/target-failure-sync.test.ts",
+        "tests/unit/task/terminal-cancel-projector.test.ts",
+        "tests/unit/guards/edit-bible-task-ownership.test.ts",
         "tests/unit/query/materialized-resource-cache.test.ts",
+        "tests/unit/query/workspace-sse-event-sync.test.ts",
         "tests/unit/workspace-resource/materialized-resource.test.ts",
-        "tests/unit/optimistic/sse-invalidation.test.ts"
+        "tests/unit/optimistic/sse-invalidation.test.ts",
+        "tests/unit/sse/server-session.test.ts",
+        "tests/unit/operations/sse-ops.test.ts",
+        "tests/contracts/task-definition-conformance.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/task-submit-compensation-guard.mjs",
@@ -106,7 +144,9 @@
         "scripts/guards/task-target-states-no-polling-guard.mjs",
         "scripts/guards/single-task-reconciler-guard.mjs",
         "scripts/guards/no-worker-attempt-target-terminal-write.mjs",
-        "scripts/guards/materialized-resource-version-guard.mjs"
+        "scripts/guards/materialized-resource-version-guard.mjs",
+        "scripts/guards/sse-durable-watermark-guard.mjs",
+        "scripts/guards/edit-bible-task-ownership-guard.mjs"
       ]
     },
     {
@@ -116,29 +156,52 @@
       "sourcePaths": [
         "src/lib/project-agent",
         "src/lib/operations",
-        "src/lib/workflow-lab"
+        "src/lib/project-workflow/edit-first.ts",
+        "src/lib/workflow-lab",
+        "src/app/api/projects/[projectId]/assistant/chat",
+        "src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts",
+        "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx",
+        "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
+        "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts",
+        "src/features/project-workspace/components/workspace-assistant/thread-sync.ts",
+        "src/features/project-workspace/components/workspace-assistant/assistant-send-event.ts"
       ],
       "testPaths": [
         "tests/integration/api/contract/project-assistant-chat.route.test.ts",
         "tests/unit/project-agent/runtime-routing.test.ts",
+        "tests/unit/project-agent/server-follow-up.test.ts",
+        "tests/unit/project-agent/waits-follow-up.test.ts",
+        "tests/integration/task/project-agent-continuation-settlement.integration.test.ts",
+        "tests/unit/guards/single-project-agent-continuation.test.ts",
         "tests/unit/project-agent/run-state-machine.test.ts",
         "tests/unit/project-agent/run-heartbeat.test.ts",
         "tests/unit/project-agent/interruption-consume.test.ts",
         "tests/unit/project-agent/interruption-reopen.test.ts",
+        "tests/unit/project-agent/choice-card.test.ts",
+        "tests/unit/project-agent/edit-first-choice-result.test.ts",
+        "tests/unit/project-workflow/edit-first.test.ts",
+        "tests/unit/project-agent/script-intake.test.ts",
+        "tests/unit/project-agent/session-state.test.ts",
+        "tests/contracts/assistant-choice-offer-conformance.test.ts",
         "tests/integration/api/specific/workflow-lab-service.integration.test.ts",
         "tests/integration/api/specific/workflow-lab-style-choice.integration.test.ts",
         "tests/regression/project-agent-style-preview-lifecycle.test.ts",
         "tests/unit/project-agent/tool-adapter-gates.test.ts",
         "tests/unit/guards/no-project-agent-direct-task-submit.test.ts",
         "tests/unit/components/workspace-assistant-renderers.test.ts",
-        "tests/unit/operations/registry.test.ts"
+        "tests/unit/components/workspace-assistant-runtime-id.test.ts",
+        "tests/unit/operations/registry.test.ts",
+        "tests/unit/operations/confirm-edit-style-preview-operation.test.ts",
+        "tests/integration/task/approved-operation-plan-batch.integration.test.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-client-agent-control.mjs",
         "scripts/guards/no-assistant-fixed-workflow-surface.mjs",
         "scripts/guards/no-history-state-inference.mjs",
         "scripts/guards/no-project-agent-direct-task-submit.mjs",
+        "scripts/guards/single-project-agent-continuation.mjs",
         "scripts/guards/no-plan-run-runtime.mjs",
+        "scripts/guards/assistant-choice-offer-authority-guard.mjs",
         "scripts/guards/project-agent-run-state-machine-guard.mjs"
       ]
     },

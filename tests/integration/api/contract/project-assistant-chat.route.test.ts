@@ -50,14 +50,12 @@ const prismaMock = vi.hoisted(() => ({
 
 const waitMock = vi.hoisted(() => ({
   createProjectAgentWait: vi.fn(async (): Promise<string> => 'wait-1'),
-  listResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
-  claimResolvedProjectAgentWaitFollowUps: vi.fn(async (): Promise<unknown[]> => []),
   consumeProjectAgentWaitFollowUp: vi.fn(async (): Promise<unknown> => null),
 }))
 
 const interruptionMock = vi.hoisted(() => ({
   consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
-  consumeProjectAgentChoiceInterruption: vi.fn(async (): Promise<unknown> => null),
+  consumeProjectAgentChoiceInterruption: vi.fn(async (_input: unknown): Promise<unknown> => null),
   getPendingProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
   declinePendingProjectAgentInterruptionsForUserTurn: vi.fn(async (): Promise<unknown[]> => []),
   reopenProjectAgentInterruption: vi.fn(async (): Promise<void> => undefined),
@@ -73,6 +71,9 @@ const runMock = vi.hoisted(() => ({
     episodeId: 'episode-1',
     requestId: 'request-1',
     status: 'running',
+    runVersion: 1,
+    eventSeq: '1',
+    terminalEventSeq: null,
     controlKind: 'user_turn',
     heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
@@ -85,6 +86,9 @@ const runMock = vi.hoisted(() => ({
     episodeId: 'episode-1',
     requestId: 'request-1',
     status: 'running',
+    runVersion: 1,
+    eventSeq: '1',
+    terminalEventSeq: null,
     controlKind: 'approval_response',
     heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
@@ -237,6 +241,54 @@ import { GET as chatLogGet } from '@/app/api/projects/[projectId]/assistant/chat
 import { POST as approvalPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route'
 import { POST as choicePost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route'
 import { GET as runGet } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/route'
+import { parseEditFirstChoiceDecision } from '@/lib/project-agent/edit-first-choice-result'
+
+function mockConsumedChoice(params: {
+  choiceType: keyof typeof EDIT_FIRST_CHOICE_TOOL_IDS
+  interruptionId: string
+  cardId: string
+  toolCallId: string
+}): void {
+  interruptionMock.consumeProjectAgentChoiceInterruption.mockImplementationOnce(async (rawInput: unknown) => {
+    const input = rawInput as {
+      response: Record<string, unknown>
+      latestUserText: string
+    }
+    const offer = {
+      schemaVersion: 1 as const,
+      card: {
+        cardId: params.cardId,
+        runId: 'run-1',
+        interruptionId: params.interruptionId,
+        toolCallId: params.toolCallId,
+        choiceType: params.choiceType,
+        title: 'Choice',
+        groups: [],
+        submitLabel: 'Continue',
+        submit: { kind: 'submit_tool_output' as const },
+      },
+      reviewedResource: {
+        kind: 'script_intake_prompt' as const,
+        fingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
+      },
+    }
+    return {
+      id: params.interruptionId,
+      runId: 'run-1',
+      type: 'choice',
+      status: 'consumed',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS[params.choiceType],
+      toolCallId: params.toolCallId,
+      payload: offer,
+      offer,
+      parsedResponse: parseEditFirstChoiceDecision({
+        choiceType: params.choiceType,
+        output: input.response,
+        latestUserText: input.latestUserText,
+      }),
+    }
+  })
+}
 
 describe('project assistant chat route', () => {
   beforeEach(() => {
@@ -609,7 +661,7 @@ describe('project assistant chat route', () => {
             type: 'choice_response',
             runId: 'run-1',
             interruptionId: 'choice-already-consumed',
-            choiceType: 'style',
+            cardId: 'style-card-1',
             toolCallId: 'choice-tool-1',
             output: {
               ok: true,
@@ -631,7 +683,33 @@ describe('project assistant chat route', () => {
     }))
   })
 
+  it('POST /api/projects/[projectId]/assistant/runs/[runId]/choice -> requires persisted card identity', async () => {
+    const response = await choicePost(
+      buildMockRequest({
+        path: '/api/projects/project-1/assistant/runs/run-1/choice',
+        method: 'POST',
+        body: {
+          context: { episodeId: 'episode-1' },
+          assistantPermissionMode: 'ask',
+          interruptionId: 'choice-1',
+          toolCallId: 'tool-1',
+          output: { ok: true, decision: 'approve' },
+        },
+      }),
+      { params: Promise.resolve({ projectId: 'project-1', runId: 'run-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(interruptionMock.consumeProjectAgentChoiceInterruption).not.toHaveBeenCalled()
+  })
+
   it('POST /api/projects/[projectId]/assistant/chat -> resolves a choice response into an in-band choice result', async () => {
+    mockConsumedChoice({
+      choiceType: 'style',
+      interruptionId: 'choice-style-1',
+      cardId: 'style-card-1',
+      toolCallId: 'choice-tool-1',
+    })
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
@@ -644,9 +722,9 @@ describe('project assistant chat route', () => {
           control: {
             type: 'choice_response',
             runId: 'run-1',
-            interruptionId: null,
-            choiceType: 'style',
-            toolCallId: null,
+            interruptionId: 'choice-style-1',
+            cardId: 'style-card-1',
+            toolCallId: 'choice-tool-1',
             output: {
               ok: true,
               stylePreviewId: 'style-1',
@@ -661,7 +739,7 @@ describe('project assistant chat route', () => {
     expect(response.status).toBe(200)
     expect(persistenceMock.appendProjectAssistantThreadMessages).toHaveBeenCalledWith(expect.objectContaining({
       messages: [expect.objectContaining({
-        id: 'workspace-control-user:choice_response:run-1:style',
+        id: 'workspace-control-user:choice_response:run-1:choice-style-1',
         role: 'user',
         parts: [{ type: 'text', text: '民俗恐怖片' }],
       })],
@@ -677,7 +755,13 @@ describe('project assistant chat route', () => {
     }))
   })
 
-  it('POST /api/projects/[projectId]/assistant/chat -> approves assets before continuing an asset review choice', async () => {
+  it('POST /api/projects/[projectId]/assistant/chat -> records asset approval without writing asset state', async () => {
+    mockConsumedChoice({
+      choiceType: 'asset_review',
+      interruptionId: 'choice-asset-1',
+      cardId: 'asset-card-1',
+      toolCallId: 'tool-choice-asset',
+    })
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
@@ -690,8 +774,8 @@ describe('project assistant chat route', () => {
           control: {
             type: 'choice_response',
             runId: 'run-1',
-            interruptionId: null,
-            choiceType: 'asset_review',
+            interruptionId: 'choice-asset-1',
+            cardId: 'asset-card-1',
             toolCallId: 'tool-choice-asset',
             output: {
               ok: true,
@@ -704,11 +788,7 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(editScriptServiceMock.approveProjectEpisodeEditScriptAssets).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-    })
+    expect(editScriptServiceMock.approveProjectEpisodeEditScriptAssets).not.toHaveBeenCalled()
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       control: expect.objectContaining({
         kind: 'choice',
@@ -721,6 +801,12 @@ describe('project assistant chat route', () => {
   })
 
   it('POST /api/projects/[projectId]/assistant/chat -> keeps assets unapproved when asset review sends revision notes', async () => {
+    mockConsumedChoice({
+      choiceType: 'asset_review',
+      interruptionId: 'choice-asset-2',
+      cardId: 'asset-card-2',
+      toolCallId: 'tool-choice-asset',
+    })
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
@@ -733,8 +819,8 @@ describe('project assistant chat route', () => {
           control: {
             type: 'choice_response',
             runId: 'run-1',
-            interruptionId: null,
-            choiceType: 'asset_review',
+            interruptionId: 'choice-asset-2',
+            cardId: 'asset-card-2',
             toolCallId: 'tool-choice-asset',
             output: {
               ok: true,
@@ -771,30 +857,11 @@ describe('project assistant chat route', () => {
   })
 
   it('POST /api/projects/[projectId]/assistant/runs/[runId]/choice -> confirms only the production plan and aspect ratio', async () => {
-    interruptionMock.consumeProjectAgentChoiceInterruption.mockResolvedValueOnce({
-      id: 'choice-interruption-1',
-      runId: 'run-1',
-      type: 'choice',
-      status: 'consumed',
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+    mockConsumedChoice({
+      choiceType: 'bible_review',
+      interruptionId: 'choice-interruption-1',
+      cardId: 'edit-first-bible-review:plan-1',
       toolCallId: 'tool-choice-1',
-      payload: {
-        choiceType: 'bible_review',
-        card: {
-          cardId: 'edit-first-bible-review',
-          toolCallId: 'tool-choice-1',
-          choiceType: 'bible_review',
-          title: 'Confirm production plan',
-          groups: [{
-            key: 'aspectRatio',
-            label: 'Aspect Ratio',
-            required: true,
-            options: [],
-          }],
-          submitLabel: 'Confirm production plan',
-          submit: { kind: 'submit_tool_output' },
-        },
-      },
     })
 
     const response = await choicePost(
@@ -806,7 +873,7 @@ describe('project assistant chat route', () => {
           assistantPermissionMode: 'ask',
           visibleUserText: '鬼故事',
           interruptionId: 'choice-interruption-1',
-          choiceType: 'bible_review',
+          cardId: 'edit-first-bible-review:plan-1',
           toolCallId: 'tool-choice-1',
           output: {
             ok: true,
@@ -831,33 +898,10 @@ describe('project assistant chat route', () => {
         choiceType: 'bible_review',
       }),
     }))
-    expect(prismaMock.project.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'project-1',
-        userId: 'user-1',
-      },
-      data: {
-        videoRatio: '9:16',
-      },
-    })
+    expect(prismaMock.project.updateMany).not.toHaveBeenCalled()
   })
 
-  it('POST /api/projects/[projectId]/assistant/chat -> consumes a claimed wait follow-up exactly once', async () => {
-    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce({
-      runId: 'run-1',
-      waitId: 'wait-1',
-      followUpKey: 'project-agent-wait:wait-1:completed',
-      operationId: 'generate_edit_script',
-      taskIds: ['task-1'],
-      failedTaskIds: [],
-      failedTasks: [],
-      terminalStatus: 'completed',
-      total: 1,
-      successCount: 1,
-      failedCount: 0,
-      claimId: 'claim-1',
-    })
-
+  it('POST /api/projects/[projectId]/assistant/chat -> rejects the retired public task follow-up control protocol', async () => {
     const response = await chatPost(
       buildMockRequest({
         path: '/api/projects/project-1/assistant/chat',
@@ -877,45 +921,8 @@ describe('project assistant chat route', () => {
       { params: Promise.resolve({ projectId: 'project-1' }) },
     )
 
-    expect(response.status).toBe(200)
-    expect(waitMock.consumeProjectAgentWaitFollowUp).toHaveBeenCalledWith({
-      runId: 'run-1',
-      waitId: 'wait-1',
-      claimId: 'claim-1',
-      projectId: 'project-1',
-      userId: 'user-1',
-    })
-    expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
-      control: expect.objectContaining({
-        kind: 'task_follow_up',
-        followUp: expect.objectContaining({ waitId: 'wait-1' }),
-      }),
-    }))
-  })
-
-  it('POST /api/projects/[projectId]/assistant/chat -> rejects an unclaimed task follow-up with a conflict', async () => {
-    waitMock.consumeProjectAgentWaitFollowUp.mockResolvedValueOnce(null)
-
-    const response = await chatPost(
-      buildMockRequest({
-        path: '/api/projects/project-1/assistant/chat',
-        method: 'POST',
-        headers: { 'x-project-agent-run-control': '1' },
-        body: {
-          context: { episodeId: 'episode-1' },
-          assistantPermissionMode: 'ask',
-          control: {
-            type: 'task_follow_up',
-            runId: 'run-1',
-            waitId: 'wait-1',
-            claimId: 'claim-expired',
-          },
-        },
-      }),
-      { params: Promise.resolve({ projectId: 'project-1' }) },
-    )
-
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
+    expect(waitMock.consumeProjectAgentWaitFollowUp).not.toHaveBeenCalled()
     expect(projectAgentMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
   })
 

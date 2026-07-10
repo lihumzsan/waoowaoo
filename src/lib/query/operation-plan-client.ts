@@ -3,10 +3,7 @@ import {
   buildBillingActionQuotePreview,
   type BillingActionQuotePreview,
 } from '@/lib/billing/action-quote-preview'
-import type {
-  ConfirmedOperationPlanInput,
-  OperationPlanView,
-} from '@/lib/operations/planning'
+import type { OperationPlanView } from '@/lib/operations/planning'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -56,21 +53,30 @@ export async function fetchAssetOperationPlanView(params: {
   return await response.json() as OperationPlanView
 }
 
-export function readPlanConfirmedMaxCost(plan: OperationPlanView): number | null {
-  const value = plan.quote.totalMaxFrozenCost
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-/**
- * Converts the exact plan that the user chose to execute into the transitional
- * confirmation input accepted by operation commit. This is the only client
- * constructor for `confirmed: true`; callers must first obtain a server plan.
- */
-export function confirmOperationPlan(plan: OperationPlanView): ConfirmedOperationPlanInput {
-  const confirmedMaxCost = readPlanConfirmedMaxCost(plan)
-  return {
-    confirmed: true,
-    ...(confirmedMaxCost !== null ? { confirmedMaxCost } : {}),
+export async function issueOperationApprovalGrant(plan: OperationPlanView): Promise<{
+  approvalGrantId: string
+  operationRequestId: string
+}> {
+  if (!plan.planSnapshotId) throw new Error('OPERATION_PLAN_SNAPSHOT_ID_REQUIRED')
+  const operationRequestId = crypto.randomUUID()
+  const response = await apiFetch('/api/operation-approval-grants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      planSnapshotId: plan.planSnapshotId,
+      operationRequestId,
+    }),
+  })
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => ({}))
+    const message = isRecord(payload) && typeof payload.message === 'string'
+      ? payload.message
+      : 'OPERATION_APPROVAL_GRANT_FAILED'
+    throw new Error(message)
+  }
+  return await response.json() as {
+    approvalGrantId: string
+    operationRequestId: string
   }
 }
 

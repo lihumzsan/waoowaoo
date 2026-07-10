@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
 import {
   addChannelListenerMock,
   authState,
@@ -72,6 +73,16 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(async () => []),
     },
   },
+}))
+
+const issueApprovalGrantMock = vi.hoisted(() => vi.fn(async () => ({
+  approvalGrantId: 'grant-1',
+  operationRequestId: 'operation-request-1',
+})))
+
+vi.mock('@/lib/operations/planned-operation-invocation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/operations/planned-operation-invocation')>()),
+  issueApprovalGrant: issueApprovalGrantMock,
 }))
 
 describe('api contract - task run routes (behavior)', () => {
@@ -178,42 +189,102 @@ describe('api contract - task run routes (behavior)', () => {
     await reader!.cancel()
   })
 
-  it('GET /api/sse/replay: returns missed events as JSON for client-side recovery', async () => {
-    const { GET } = await import('@/app/api/sse/replay/route')
-
-    listEventsAfterMock.mockResolvedValueOnce([
-      {
-        id: '15',
-        type: 'task.lifecycle',
-        taskId: 'task-image-1',
-        projectId: 'project-1',
-        userId: 'user-1',
-        ts: new Date().toISOString(),
-        taskType: 'image_panel',
-        targetType: 'ProjectPanel',
-        targetId: 'panel-1',
-        episodeId: 'episode-1',
-        payload: { lifecycleType: 'task.completed' },
-      } satisfies ReplayEvent,
-    ])
+  it('GET /api/sse: subscribes before bootstrap and flushes buffered live facts after the snapshot', async () => {
+    const { GET } = await import('@/app/api/sse/route')
+    const bootstrapEvent: ReplayEvent = {
+      id: '20',
+      type: 'task.lifecycle',
+      taskId: 'task-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: new Date().toISOString(),
+      taskType: 'IMAGE_CHARACTER',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      episodeId: null,
+      payload: { lifecycleType: 'task.processing', progress: 20 },
+    }
+    let resolveBootstrap: (events: ReplayEvent[]) => void = () => {
+      throw new Error('SSE_BOOTSTRAP_RESOLVER_NOT_READY')
+    }
+    listEventsAfterMock.mockImplementationOnce(async () => await new Promise<ReplayEvent[]>((resolve) => {
+      resolveBootstrap = resolve
+    }))
 
     const req = buildMockRequest({
-      path: '/api/sse/replay',
+      path: '/api/sse',
       method: 'GET',
-      query: {
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        lastEventId: '14',
-      },
+      query: { projectId: 'project-1' },
+      headers: { 'last-event-id': '19' },
     })
     const res = await GET(req, emptyRouteContext)
+    await vi.waitFor(() => expect(subscriberState.listener).toBeTruthy())
+
+    subscriberState.listener!(JSON.stringify({
+      ...bootstrapEvent,
+      id: '21',
+      payload: { lifecycleType: 'task.processing', progress: 40 },
+    }))
+    resolveBootstrap([bootstrapEvent])
+
+    const reader = res.body?.getReader()
+    expect(reader).toBeTruthy()
+    const snapshotChunk = await reader!.read()
+    const bufferedChunk = await reader!.read()
+    const decoded = [snapshotChunk, bufferedChunk]
+      .map((chunk) => new TextDecoder().decode(chunk.value))
+      .join('')
+    expect(decoded.indexOf('"id":"20"')).toBeGreaterThanOrEqual(0)
+    expect(decoded.indexOf('"id":"21"')).toBeGreaterThan(decoded.indexOf('"id":"20"'))
+    await reader!.cancel()
+  })
+
+  it('GET /api/sse: abort during bootstrap releases the listener acquired before the query', async () => {
+    const { GET } = await import('@/app/api/sse/route')
+    let resolveBootstrap: (events: ReplayEvent[]) => void = () => {
+      throw new Error('SSE_BOOTSTRAP_RESOLVER_NOT_READY')
+    }
+    listEventsAfterMock.mockImplementationOnce(async () => await new Promise<ReplayEvent[]>((resolve) => {
+      resolveBootstrap = resolve
+    }))
+    const abortController = new AbortController()
+    const req = new NextRequest('http://localhost:3000/api/sse?projectId=project-1', {
+      method: 'GET',
+      headers: { 'last-event-id': '19' },
+      signal: abortController.signal,
+    })
+    const res = await GET(req, emptyRouteContext)
+    await vi.waitFor(() => expect(subscriberState.listener).toBeTruthy())
+
+    abortController.abort()
+    await vi.waitFor(() => expect(subscriberState.unsubscribe).toHaveBeenCalledTimes(1))
+    resolveBootstrap([])
+    await res.body?.cancel()
+  })
+
+  it('POST /api/operation-approval-grants: issues one grant for an authenticated immutable plan', async () => {
+    const { POST } = await import('@/app/api/operation-approval-grants/route')
+    const req = buildMockRequest({
+      path: '/api/operation-approval-grants',
+      method: 'POST',
+      body: {
+        planSnapshotId: 'snapshot-1',
+        operationRequestId: 'operation-request-1',
+      },
+    })
+
+    const res = await POST(req, emptyRouteContext)
 
     expect(res.status).toBe(200)
-    expect(listEventsAfterMock).toHaveBeenCalledWith('project-1', 14, 500)
-    const payload = await res.json() as { success: boolean; events: ReplayEvent[] }
-    expect(payload.success).toBe(true)
-    expect(payload.events).toHaveLength(1)
-    expect(payload.events[0]?.id).toBe('15')
+    expect(issueApprovalGrantMock).toHaveBeenCalledWith({
+      userId: 'user-1',
+      planSnapshotId: 'snapshot-1',
+      requestId: 'operation-request-1',
+    })
+    await expect(res.json()).resolves.toEqual({
+      approvalGrantId: 'grant-1',
+      operationRequestId: 'operation-request-1',
+    })
   })
 
   it('GET /api/sse: channel lifecycle stream includes terminal completed event', async () => {

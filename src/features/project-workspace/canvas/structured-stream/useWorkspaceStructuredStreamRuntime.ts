@@ -43,19 +43,21 @@ interface UseWorkspaceStructuredStreamRuntimeResult {
   readonly patches: readonly WorkspaceCanvasStreamPatch[]
 }
 
-interface StreamAccumulator {
+export interface StreamAccumulator {
   readonly taskId: string
   readonly taskType: string | null
   readonly targetType: string | null
   readonly targetId: string | null
   readonly episodeId: string | null
   readonly stepId: string | null
+  readonly stepAttempt: number
   readonly streamRunId: string
   readonly lane: string
   readonly adapter: StructuredStreamAdapter
   readonly parseState: StructuredStreamParseState
   readonly items: readonly StructuredStreamItem[]
   readonly errorMessage: string | null
+  readonly lastSeq: number
 }
 
 export interface StructuredStreamSnapshot {
@@ -78,9 +80,41 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function readPositiveInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
+}
+
+const MAX_STREAM_ACCUMULATORS = 128
+const MAX_TERMINAL_STREAM_RUNS = 512
+
+function trimOldestMapEntries<TKey, TValue>(map: Map<TKey, TValue>, limit: number): void {
+  while (map.size > limit) {
+    const oldest = map.keys().next().value as TKey | undefined
+    if (oldest === undefined) return
+    map.delete(oldest)
+  }
+}
+
+export function addBoundedIdentity(
+  current: ReadonlySet<string>,
+  identity: string,
+  limit = MAX_TERMINAL_STREAM_RUNS,
+): ReadonlySet<string> {
+  const next = new Set(current)
+  next.delete(identity)
+  next.add(identity)
+  while (next.size > limit) {
+    const oldest = next.values().next().value as string | undefined
+    if (!oldest) break
+    next.delete(oldest)
+  }
+  return next
+}
+
 function createAccumulatorKey(input: {
   readonly taskId: string
   readonly streamRunId: string
+  readonly stepAttempt: number
   readonly stepId: string | null
   readonly lane: string
   readonly adapterKey: StructuredStreamAdapterKey
@@ -88,6 +122,7 @@ function createAccumulatorKey(input: {
   return [
     input.taskId,
     input.streamRunId,
+    String(input.stepAttempt),
     input.stepId ?? '__step',
     input.lane,
     input.adapterKey,
@@ -126,7 +161,7 @@ function normalizeItems(
   return nextItems
 }
 
-function processStreamEvent(
+export function processStructuredStreamEvent(
   current: ReadonlyMap<string, StreamAccumulator>,
   event: SSEEvent,
 ): ReadonlyMap<string, StreamAccumulator> {
@@ -138,8 +173,11 @@ function processStreamEvent(
   if (!delta || kind !== 'text') return current
 
   const stepId = readString(payload.stepId)
-  const streamRunId = readString(payload.streamRunId) ?? `run:${event.taskId}`
+  const stepAttempt = readPositiveInteger(payload.stepAttempt)
+  const streamRunId = readString(payload.streamRunId)
   const lane = readString(stream.lane) ?? 'main'
+  const seq = readPositiveInteger(stream.seq)
+  if (!streamRunId || !stepAttempt || !seq) return current
   const adapters = findStructuredStreamAdapters({
     taskType: event.taskType ?? null,
     stepId,
@@ -151,12 +189,30 @@ function processStreamEvent(
     const key = createAccumulatorKey({
       taskId: event.taskId,
       streamRunId,
+      stepAttempt,
       stepId,
       lane,
       adapterKey: adapter.key,
     })
     const previous = next.get(key)
+    const logicalAccumulators = [...next.entries()].filter(([, accumulator]) => (
+      accumulator.taskId === event.taskId
+      && accumulator.stepId === stepId
+      && accumulator.lane === lane
+      && accumulator.adapter.key === adapter.key
+    ))
+    const highestAttempt = logicalAccumulators.reduce(
+      (highest, [, accumulator]) => Math.max(highest, accumulator.stepAttempt),
+      0,
+    )
+    if (stepAttempt < highestAttempt) return
+    if (stepAttempt > highestAttempt) {
+      logicalAccumulators.forEach(([accumulatorKey]) => next.delete(accumulatorKey))
+    }
     if (previous?.errorMessage) return
+    if (previous && seq <= previous.lastSeq) return
+    if (previous && seq !== previous.lastSeq + 1) return
+    if (!previous && seq !== 1) return
     const parseState = previous?.parseState ?? (
       adapter.mode === 'object'
         ? createStructuredStreamObjectParseState(adapter.path)
@@ -171,12 +227,14 @@ function processStreamEvent(
         targetId: event.targetId ?? null,
         episodeId: event.episodeId ?? null,
         stepId,
+        stepAttempt,
         streamRunId,
         lane,
         adapter,
         parseState: result.state,
         items: normalizeItems(adapter, previous?.items ?? [], result.items),
         errorMessage: null,
+        lastSeq: seq,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -187,20 +245,24 @@ function processStreamEvent(
         targetId: event.targetId ?? null,
         episodeId: event.episodeId ?? null,
         stepId,
+        stepAttempt,
         streamRunId,
         lane,
         adapter,
         parseState,
         items: previous?.items ?? [],
         errorMessage: message,
+        lastSeq: seq,
       })
     }
   })
 
+  trimOldestMapEntries(next, MAX_STREAM_ACCUMULATORS)
+
   return next
 }
 
-function snapshotsFromAccumulators(
+export function snapshotsFromAccumulators(
   accumulators: ReadonlyMap<string, StreamAccumulator>,
 ): readonly StructuredStreamSnapshot[] {
   return [...accumulators.values()]
@@ -233,6 +295,12 @@ export function shouldClearStreamAccumulatorsForLifecycle(
   payload: Record<string, unknown>,
 ): boolean {
   return lifecycleType === TASK_EVENT_TYPE.CREATED && readString(payload.reason) === 'watchdog_requeue'
+}
+
+export function isTerminalStructuredStreamLifecycle(lifecycleType: string | null): boolean {
+  return lifecycleType === TASK_EVENT_TYPE.COMPLETED
+    || lifecycleType === TASK_EVENT_TYPE.FAILED
+    || lifecycleType === TASK_EVENT_TYPE.CANCELED
 }
 
 function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCanvasStreamPresentation {
@@ -700,31 +768,42 @@ export function useWorkspaceStructuredStreamRuntime({
 }: UseWorkspaceStructuredStreamRuntimeInput): UseWorkspaceStructuredStreamRuntimeResult {
   const { subscribeTaskEvents } = useWorkspaceProvider()
   const [accumulators, setAccumulators] = useState<ReadonlyMap<string, StreamAccumulator>>(() => new Map())
-  const terminalTaskIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const terminalStreamRunIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const streamRunIdsByTaskRef = useRef<ReadonlyMap<string, readonly string[]>>(new Map())
 
   useEffect(() => {
     return subscribeTaskEvents((event) => {
       if ('episodeId' in event && event.episodeId && event.episodeId !== episodeId) return
       if (event.type === TASK_SSE_EVENT_TYPE.STREAM) {
-        if (terminalTaskIdsRef.current.has(event.taskId)) return
-        setAccumulators((current) => processStreamEvent(current, event))
+        const payload = readRecord(event.payload)
+        const streamRunId = readString(payload.streamRunId)
+        if (!streamRunId || terminalStreamRunIdsRef.current.has(streamRunId)) return
+        const runsByTask = new Map(streamRunIdsByTaskRef.current)
+        const taskRuns = [...(runsByTask.get(event.taskId) ?? [])].filter((value) => value !== streamRunId)
+        taskRuns.push(streamRunId)
+        runsByTask.set(event.taskId, taskRuns.slice(-8))
+        trimOldestMapEntries(runsByTask, 128)
+        streamRunIdsByTaskRef.current = runsByTask
+        setAccumulators((current) => processStructuredStreamEvent(current, event))
         return
       }
       if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return
       const payload = readRecord(event.payload)
       const lifecycleType = readString(payload.lifecycleType)
       if (shouldClearStreamAccumulatorsForLifecycle(lifecycleType, payload)) {
-        terminalTaskIdsRef.current = new Set(terminalTaskIdsRef.current).add(event.taskId)
         setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
         return
       }
-      if (
-        lifecycleType !== TASK_EVENT_TYPE.COMPLETED
-        && lifecycleType !== TASK_EVENT_TYPE.FAILED
-      ) {
-        return
+      if (!isTerminalStructuredStreamLifecycle(lifecycleType)) return
+      for (const streamRunId of streamRunIdsByTaskRef.current.get(event.taskId) ?? []) {
+        terminalStreamRunIdsRef.current = addBoundedIdentity(
+          terminalStreamRunIdsRef.current,
+          streamRunId,
+        )
       }
-      terminalTaskIdsRef.current = new Set(terminalTaskIdsRef.current).add(event.taskId)
+      const runsByTask = new Map(streamRunIdsByTaskRef.current)
+      runsByTask.delete(event.taskId)
+      streamRunIdsByTaskRef.current = runsByTask
       setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
     })
   }, [episodeId, subscribeTaskEvents])
