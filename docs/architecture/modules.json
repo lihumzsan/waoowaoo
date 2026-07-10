@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "id": "billing-approval",
+      "document": "docs/architecture/modules/billing-approval.md",
+      "title": "计费与审批",
+      "sourcePaths": [
+        "src/lib/billing",
+        "src/lib/soundscape",
+        "src/lib/operations/domains/music",
+        "src/app/api/projects/[projectId]/generate-soundscape",
+        "src/lib/billing/media-approval-policy.ts",
+        "src/lib/operations/planning.ts",
+        "src/lib/operations/confirmation.ts",
+        "src/lib/operations/submit-operation-task.ts",
+        "src/lib/task/submitter.ts"
+      ],
+      "testPaths": [
+        "tests/unit/billing/media-approval-policy.test.ts",
+        "tests/unit/operations/planning.test.ts",
+        "tests/unit/worker/soundscape-worker.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/no-hardcoded-operation-confirmed.mjs",
+        "scripts/guards/no-media-provider-bypass.mjs"
+      ]
+    },
+    {
+      "id": "canvas-node",
+      "document": "docs/architecture/modules/canvas-node.md",
+      "title": "Canvas 节点与流式状态",
+      "sourcePaths": [
+        "src/features/project-workspace/canvas",
+        "src/features/project-workspace/canvas/workspace-canvas-node-ids.ts",
+        "src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts",
+        "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts",
+        "src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts",
+        "src/features/project-workspace/canvas/node-presentation-profiles.ts"
+      ],
+      "testPaths": [
+        "tests/unit/project-workspace/structured-stream-adapters.test.ts",
+        "tests/unit/project-workspace/structured-stream-runtime.test.ts",
+        "tests/regression/project-canvas-task-backed-running.test.ts",
+        "tests/regression/project-canvas-long-form-node-identity.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/no-history-state-inference.mjs",
+        "scripts/guards/no-server-mirror-state.mjs"
+      ]
+    },
+    {
+      "id": "async-task-lifecycle",
+      "document": "docs/architecture/modules/async-task-lifecycle.md",
+      "title": "异步任务生命周期",
+      "sourcePaths": [
+        "src/lib/task",
+        "src/lib/workers",
+        "src/lib/task/types.ts",
+        "src/lib/task/submitter.ts",
+        "src/lib/task/service.ts",
+        "src/lib/operations/submit-operation-task.ts"
+      ],
+      "testPaths": [
+        "tests/integration/task/create-task-dedupe.integration.test.ts",
+        "tests/regression/task-dedupe-recovery.test.ts",
+        "tests/regression/task-enqueue-billing-rollback.test.ts",
+        "tests/unit/task/service-operation-metadata.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/task-submit-compensation-guard.mjs",
+        "scripts/guards/no-operation-direct-submit-task.mjs",
+        "scripts/guards/task-target-states-no-polling-guard.mjs"
+      ]
+    },
+    {
+      "id": "assistant-run-lifecycle",
+      "document": "docs/architecture/modules/assistant-run-lifecycle.md",
+      "title": "Assistant Run 生命周期",
+      "sourcePaths": [
+        "src/lib/project-agent",
+        "src/lib/operations",
+        "src/lib/operations/registry.ts",
+        "src/lib/operations/types.ts"
+      ],
+      "testPaths": [
+        "tests/unit/project-agent/runtime-routing.test.ts",
+        "tests/unit/project-agent/tool-adapter-gates.test.ts",
+        "tests/unit/operations/registry.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/no-client-agent-control.mjs",
+        "scripts/guards/no-assistant-fixed-workflow-surface.mjs",
+        "scripts/guards/no-history-state-inference.mjs"
+      ]
+    }
+  ]
+}

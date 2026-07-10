@@ -16,6 +16,7 @@ function fail(title, details = []) {
   for (const line of details) {
     console.error(`  - ${line}`)
   }
+  console.error('  - See docs/architecture/modules/billing-approval.md#权威入口.')
   process.exit(1)
 }
 

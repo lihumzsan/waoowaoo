@@ -91,6 +91,8 @@ AGENTS.md
 docs/**
 !docs/agent/
 !docs/agent/**
+!docs/architecture/
+!docs/architecture/**
 
 # generated artifacts (local only)
 docs/agent/artifacts/*.export.json

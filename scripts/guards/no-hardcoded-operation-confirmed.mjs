@@ -34,8 +34,9 @@ for (const filePath of await listSourceFiles(sourceRoot)) {
 
 if (violations.length > 0) {
   console.error([
-    'Hardcoded operationConfirmed: true bypasses approval provenance.',
-    'Propagate the confirmed state from the approved operation or parent task instead:',
+    'BA-03: hardcoded operationConfirmed: true bypasses approval provenance.',
+    'Propagate approval from the confirmed operation or approved plan; do not manufacture a boolean at the task boundary.',
+    'See docs/architecture/modules/billing-approval.md#不变量.',
     ...violations.map((violation) => `- ${violation}`),
   ].join('\n'))
   process.exit(1)
