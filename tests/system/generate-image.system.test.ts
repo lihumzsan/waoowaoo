@@ -7,6 +7,10 @@ import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import { seedMinimalDomainState } from './helpers/seed'
 import { expectLifecycleEvents, listTaskEventTypes, waitForTaskTerminalState } from './helpers/tasks'
 import { startSystemWorkers, stopSystemWorkers, type SystemWorkers } from './helpers/workers'
+import {
+  bindAssistantWaitToSystemTask,
+  expectTerminalFailureConsistency,
+} from './helpers/terminal-failure-consistency'
 
 const imageState = vi.hoisted(() => ({
   mode: 'success' as 'success' | 'fatal' | 'transient-once',
@@ -28,6 +32,10 @@ vi.mock('@/lib/task/retry-policy', async () => {
     TASK_RETRY_BACKOFF_BASE_MS: 25,
   }
 })
+
+vi.mock('@/lib/project-agent/server-follow-up', () => ({
+  scheduleResolvedProjectAgentWaitFollowUpsForTaskEvent: vi.fn(),
+}))
 
 vi.mock('@/lib/workers/handlers/image-task-handler-shared', async () => {
   const actual = await vi.importActual<typeof import('@/lib/workers/handlers/image-task-handler-shared')>(
@@ -159,12 +167,11 @@ describe('system - generate image', () => {
     expectLifecycleEvents(eventTypes, 'completed')
   })
 
-  it('[P0:SYS-PROVIDER-FAILURE-NO-FALLBACK] fatal provider path fails without changing existing output', async () => {
+  it('[P0:SYS-PROVIDER-FAILURE-NO-FALLBACK] [P0:SYS-TERMINAL-FAILURE-CONSISTENCY] fatal provider failure stays consistent across Task, Agent, Canvas, and billing', async () => {
     const seeded = await seedMinimalDomainState()
     mockAuthenticated(seeded.user.id)
     imageState.mode = 'fatal'
     imageState.errorMessage = 'IMAGE_GENERATION_FATAL'
-    workers = await startSystemWorkers(['image'])
 
     const originalAppearance = await prisma.characterAppearance.findUnique({
       where: { id: seeded.appearance.id },
@@ -189,9 +196,23 @@ describe('system - generate image', () => {
 
     expect(response.status).toBe(200)
     const json = await response.json() as { taskId: string }
+    await bindAssistantWaitToSystemTask({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      taskId: json.taskId,
+      targetType: 'CharacterAppearance',
+      targetId: seeded.appearance.id,
+    })
+    workers = await startSystemWorkers(['image'])
     const task = await waitForTaskTerminalState(json.taskId)
     expect(task.status).toBe('failed')
     expect(task.errorMessage).toContain('IMAGE_GENERATION_FATAL')
+    expect(task.billingInfo).toMatchObject({
+      billable: true,
+      modeSnapshot: 'OFF',
+      status: 'skipped',
+    })
 
     const appearance = await prisma.characterAppearance.findUnique({
       where: { id: seeded.appearance.id },
@@ -201,6 +222,15 @@ describe('system - generate image', () => {
 
     const eventTypes = await listTaskEventTypes(json.taskId)
     expectLifecycleEvents(eventTypes, 'failed')
+    await expectTerminalFailureConsistency({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      taskId: json.taskId,
+      targetType: 'CharacterAppearance',
+      targetId: seeded.appearance.id,
+      expectedError: imageState.errorMessage,
+    })
   })
 
   it('[P0:SYS-TASK-RETRY-SUCCESS] transient attempt failure retries without exposing a premature target failure', async () => {

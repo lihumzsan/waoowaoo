@@ -4,7 +4,7 @@
   { "id": "SYS-ASSISTANT-APPROVAL-TASK-CONTINUE", "status": "scenario-required" },
   { "id": "SYS-ASSISTANT-AWAITING-TASK-RELOAD", "status": "scenario-required" },
   { "id": "SYS-TASK-RETRY-SUCCESS", "status": "protected" },
-  { "id": "SYS-TERMINAL-FAILURE-CONSISTENCY", "status": "scenario-required" },
+  { "id": "SYS-TERMINAL-FAILURE-CONSISTENCY", "status": "protected" },
   { "id": "SYS-QUEUE-ENQUEUE-COMPENSATION", "status": "protected" },
   { "id": "SYS-SSE-DUPLICATE-LATE-REPLAY", "status": "scenario-required" },
   { "id": "SYS-PROVIDER-FAILURE-NO-FALLBACK", "status": "protected" },
