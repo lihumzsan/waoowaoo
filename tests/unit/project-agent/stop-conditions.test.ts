@@ -61,6 +61,7 @@ describe('project agent business stop signals', () => {
       operationIds: ['generate_edit_script'],
       taskIds: ['task-1'],
       phases: [],
+      taskWaits: [{ operationId: 'generate_edit_script', taskIds: ['task-1'], phases: [] }],
     })
   })
 
@@ -84,7 +85,29 @@ describe('project agent business stop signals', () => {
       operationIds: ['generate_episode_videos'],
       taskIds: ['task-video-1'],
       phases: [],
+      taskWaits: [{ operationId: 'generate_episode_videos', taskIds: ['task-video-1'], phases: [] }],
     })
+  })
+
+  it('preserves one operation-to-task mapping for each wait instead of joining operation ids', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([
+      {
+        toolName: 'generate_edit_script',
+        output: { ok: true, data: { async: true, taskId: 'task-script-1' } },
+      },
+      {
+        toolName: 'generate_episode_videos',
+        output: { ok: true, data: { async: true, taskIds: ['task-video-1', 'task-video-2'] } },
+      },
+    ])
+
+    expect(stopPart?.reason).toBe('awaiting_external_task')
+    if (!stopPart || stopPart.reason !== 'awaiting_external_task') return
+    expect(stopPart.taskWaits).toEqual([
+      { operationId: 'generate_edit_script', taskIds: ['task-script-1'], phases: [] },
+      { operationId: 'generate_episode_videos', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
+    ])
   })
 
   it('[task status active] -> remains an observation so the agent can answer without creating a wait', () => {

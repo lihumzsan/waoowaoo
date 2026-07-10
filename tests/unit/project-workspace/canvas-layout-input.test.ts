@@ -20,6 +20,7 @@ function canvasNode(input: {
     zIndex: input.zIndex,
     data: {
       kind,
+      mediaLoadingContext: null,
       layoutNodeType: kind,
       targetType: input.targetType ?? 'panel',
       targetId: input.targetId ?? input.id,

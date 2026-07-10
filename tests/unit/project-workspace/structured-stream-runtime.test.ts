@@ -25,6 +25,7 @@ function workspaceNode(input: {
     position: { x: 0, y: 0 },
     data: {
       kind: input.kind,
+      mediaLoadingContext: null,
       layoutNodeType: input.kind,
       targetType: input.targetType,
       targetId: input.targetId,

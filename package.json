@@ -164,7 +164,6 @@
     "file-saver": "^2.0.5",
     "geist": "^1.7.0",
     "ioredis": "^5.9.2",
-    "jsonrepair": "^3.13.2",
     "jszip": "^3.10.1",
     "lru-cache": "^11.2.6",
     "lucide-react": "^0.575.0",

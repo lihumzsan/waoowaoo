@@ -26,7 +26,7 @@ interface MediaGenerationLoadingProps {
   /** 进度来源(系统统一的运行时状态);为空则不渲染 */
   readonly taskState: EstimatedTaskProgressSource | null | undefined
   /** 用户选中的视觉风格图(storage key 或 URL);无则退回模糊磨砂底 */
-  readonly styleImageUrl?: string | null
+  readonly styleImageUrl: string | null
   /** 环直径(px),按容器大小传入 */
   readonly size?: number
   readonly className?: string
@@ -37,7 +37,7 @@ interface MediaGenerationLoadingViewProps {
   readonly mode: 'running' | 'failed'
   /** 0–100;null 表示拿不到进度(只转动效、不显示数字) */
   readonly percent: number | null
-  readonly styleImageUrl?: string | null
+  readonly styleImageUrl: string | null
   readonly size: number
   readonly className?: string
   readonly showBackground?: boolean

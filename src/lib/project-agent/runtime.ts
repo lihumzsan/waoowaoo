@@ -39,6 +39,7 @@ import {
 import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
+import { stableArgsHash } from './runtime-signal'
 import { compressMessages } from './message-compression'
 import {
   resolveProjectAgentAssistantModelKey,
@@ -574,21 +575,27 @@ async function maybeCreateProjectAgentWait(params: {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
   }
-  const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, params.stopPart.operationIds)
-  const waitId = await createProjectAgentWait({
-    runId: params.runId,
-    projectId: params.projectId,
-    userId: params.userId,
-    episodeId: params.episodeId,
-    assistantId: 'workspace-command',
-    operationId: params.stopPart.operationIds.join(','),
-    taskIds: params.stopPart.taskIds,
-    followUpMode,
-  })
-  if (!waitId) {
-    throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED runId=${params.runId}`)
+  const followUpModes: ProjectAgentWaitFollowUpMode[] = []
+  for (const taskWait of params.stopPart.taskWaits) {
+    const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, [taskWait.operationId])
+    const waitId = await createProjectAgentWait({
+      runId: params.runId,
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      assistantId: 'workspace-command',
+      operationId: taskWait.operationId,
+      taskIds: taskWait.taskIds,
+      followUpMode,
+    })
+    if (!waitId) {
+      throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED runId=${params.runId} operationId=${taskWait.operationId}`)
+    }
+    followUpModes.push(followUpMode)
   }
-  return followUpMode
+  if (followUpModes.every((mode) => mode === 'complete')) return 'complete'
+  if (followUpModes.every((mode) => mode === 'await_user_choice')) return 'await_user_choice'
+  return 'resume_agent'
 }
 
 interface ProjectAgentLiveWorkflowState {
@@ -1149,6 +1156,7 @@ export async function createProjectAgentChatResponse(input: {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
           const approvalToolCallId = readApprovalToolCallId(approvalItem)
+          const approvalInputHash = stableArgsHash(readApprovalInput(approvalItem))
           const operationPlan = await buildApprovalOperationPlanView({
             item: approvalItem,
             operation: operations[operationId],
@@ -1166,8 +1174,11 @@ export async function createProjectAgentChatResponse(input: {
             toolCallId: approvalToolCallId,
             runState: result.state.toString(),
             payload: {
+              operationId,
+              toolCallId: approvalToolCallId,
+              inputHash: approvalInputHash,
               ...(operationPlan ? { operationPlan } : {}),
-            } as Prisma.InputJsonValue,
+            } as unknown as Prisma.InputJsonValue,
             previousActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
           })
           chunks.push(createDataChunk('data-agent-interruption', {
@@ -1177,6 +1188,7 @@ export async function createProjectAgentChatResponse(input: {
             approvalId,
             operationId,
             toolCallId: approvalToolCallId,
+            inputHash: approvalInputHash,
             display: {
               title: localizeProjectAgentOperationTitle(operationId, normalizeProjectAgentLocale(locale)),
               description: toolDescriptions.get(operationId) ?? operationId,

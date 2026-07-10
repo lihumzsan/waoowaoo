@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import { recordTextUsage as recordBillingTextUsage } from '@/lib/billing/runtime-usage'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { createScopedLogger } from '@/lib/logging/core'
+import { getLogContext } from '@/lib/logging/context'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type { ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
 
@@ -120,9 +121,11 @@ export function logLlmRawOutput(params: {
   action?: string
   text: string
   reasoning: string
+  termination?: { readonly kind: string; readonly rawReason: string | null }
   usage?: LlmUsage | null
   providerResponse?: unknown
 }) {
+  const logContext = getLogContext()
   const isEmpty = !params.text
   const logPayload = {
     audit: true,
@@ -141,8 +144,12 @@ export function logLlmRawOutput(params: {
       output: {
         reasoning: params.reasoning,
         text: params.text,
+        textChars: params.text.length,
+        reasoningChars: params.reasoning.length,
         empty: isEmpty || undefined,
       },
+      taskAttempt: logContext.taskAttempt ?? null,
+      termination: params.termination ?? null,
       usage: params.usage || null,
       providerResponse: params.providerResponse ?? null,
     },

@@ -332,12 +332,6 @@ export function useAssetActions(input: AssetActionScopeInput) {
     }
     const confirmedMaxCost = await assetOperationBillingPlan(assetId, 'generate', requestBody)
     const overlayTarget = resolveGenerateOverlayTarget(input, payload)
-    if (overlayTarget) {
-      upsertTaskTargetOverlay(queryClient, {
-        ...overlayTarget,
-        intent: 'generate',
-      })
-    }
 
     try {
       const response = await apiFetch(`/api/assets/${assetId}/generate`, {
@@ -351,8 +345,21 @@ export function useAssetActions(input: AssetActionScopeInput) {
       if (!response.ok) {
         throw new Error('Failed to generate asset render')
       }
+      const result: unknown = await response.json()
+      const resultRecord = result && typeof result === 'object' && !Array.isArray(result)
+        ? result as Record<string, unknown>
+        : null
+      const taskId = typeof resultRecord?.taskId === 'string' ? resultRecord.taskId.trim() : ''
+      if (overlayTarget && taskId) {
+        upsertTaskTargetOverlay(queryClient, {
+          ...overlayTarget,
+          runningTaskId: taskId,
+          runningTaskType: typeof resultRecord?.taskType === 'string' ? resultRecord.taskType : null,
+          intent: 'generate',
+        })
+      }
       invalidateScopeQueries(queryClient, input)
-      return response.json()
+      return result
     } catch (error) {
       if (overlayTarget) {
         clearTaskTargetOverlay(queryClient, overlayTarget)

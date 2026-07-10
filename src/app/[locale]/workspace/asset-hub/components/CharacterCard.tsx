@@ -406,6 +406,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
                             targetId: character.id,
                             running: true,
                         })}
+                        styleImageUrl={null}
                         size={64}
                     />
                 )}

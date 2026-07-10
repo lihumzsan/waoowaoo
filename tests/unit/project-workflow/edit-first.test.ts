@@ -66,6 +66,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_ingest_script')
     expect(state.nextAction?.operationId).toBe('ingest_script')
+    expect(state.nextAction?.approvalKind).toBe('none')
     expect(state.nextAction?.requiresUserConfirmation).toBe(false)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['ingest_script'])
   })
@@ -363,6 +364,7 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_storyboard_images')
     expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_images')
+    expect(state.nextAction?.approvalKind).toBe('billable_media')
     expect(state.nextAction?.requiresUserConfirmation).toBe(true)
   })
 
@@ -538,7 +540,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_generate_audio_layers')
     expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
+    expect(state.nextAction?.approvalKind).toBe('billable_media')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual([
       'generate_episode_bgm_score',
       'generate_episode_soundscape',
@@ -625,7 +628,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('ready_to_render_final')
     expect(state.nextAction?.operationId).toBe('render_final_video')
-    expect(state.nextAction?.requiresUserConfirmation).toBe(true)
+    expect(state.nextAction?.approvalKind).toBe('none')
+    expect(state.nextAction?.requiresUserConfirmation).toBe(false)
     expect(resolveEditFirstWorkflowCapabilityOperationIds(state)).toEqual(['render_final_video'])
   })
 

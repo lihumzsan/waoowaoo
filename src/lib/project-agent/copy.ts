@@ -63,10 +63,6 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '把生成好的资产和空间档案展示给用户，让用户审核并确认是否继续。它只用于资产审核这一步，不要拿它当通用的执行许可，也不要向用户描述背后的卡片机制。',
     en: 'Show the generated assets and spatial profiles to the user for review and a go/no-go decision. Use it only for asset review — do not use it as a generic execution gate, and do not describe the underlying card mechanism to the user.',
   },
-  request_edit_budget_confirmation_choice: {
-    zh: '在即将启动一批会消耗额度或产生计费的生产任务前，向用户确认预算并确认继续。它只用于计费/批量执行前的确认，不能用来替代 Bible、资产或风格的内容审核。',
-    en: 'Before starting a batch of production tasks that will consume credits or incur billing, confirm the budget and the intent to continue with the user. Use it only as a pre-billing/pre-batch confirmation — it does not replace Bible, asset, or style content review.',
-  },
   request_script_intake_choice: {
     zh: '当用户的输入缺少剧本的基础结构信息（时代与背景、主角与人物动机、核心冲突、关键人物关系、类型基调、结局走向等标准剧本要素）时，用它发起扩写前创作问诊，让用户先把这些基本结构补齐，再进入扩写。在绝大部分情况下，除非用户直接给出了完整可拍剧本，否则都要先调用这个工具来问诊；只有用户已经贴出完整可拍剧本时才跳过它。',
     en: 'Use this for pre-expansion creative intake whenever the user\'s input lacks the basic structural information of a script (era and setting, protagonist and character motivation, core conflict, key relationships, genre and tone, ending direction — the standard script elements). Have the user fill in that basic structure before expansion. In the vast majority of cases you should run intake first; skip it only when the user has directly provided a complete, filmable script.',
@@ -153,10 +149,6 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   request_edit_asset_review_choice: {
     zh: '审核资产',
     en: 'Review assets',
-  },
-  request_edit_budget_confirmation_choice: {
-    zh: '确认预算',
-    en: 'Confirm budget',
   },
   request_script_intake_choice: {
     zh: '补充创作方向',

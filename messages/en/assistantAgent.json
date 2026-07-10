@@ -57,6 +57,8 @@
   "toolCall": {
     "title": "Tool Call",
     "success": "Success",
+    "submitted": "Submitted",
+    "taskCount": "{count} tasks",
     "failed": "Failed",
     "running": "Running",
     "needsAction": "Needs Action",

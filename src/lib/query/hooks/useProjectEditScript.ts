@@ -1,6 +1,6 @@
 'use client'
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
@@ -131,6 +131,17 @@ async function fetchProjectEditBibleResponse(projectId: string, episodeId: strin
   }
 }
 
+export function projectEditBibleQueryOptions(projectId: string, episodeId: string) {
+  return queryOptions({
+    queryKey: queryKeys.project.editBible(projectId, episodeId),
+    queryFn: async (): Promise<EditBibleResponse> => {
+      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
+      return await fetchProjectEditBibleResponse(projectId, episodeId)
+    },
+    staleTime: 5000,
+  })
+}
+
 export function useProjectEditScript(projectId: string | null, episodeId: string | null) {
   return useQuery({
     queryKey: queryKeys.project.editScript(projectId || '', episodeId || ''),
@@ -151,26 +162,16 @@ export function useProjectEditScript(projectId: string | null, episodeId: string
 
 export function useProjectEditBible(projectId: string | null, episodeId: string | null) {
   return useQuery({
-    queryKey: queryKeys.project.editBible(projectId || '', episodeId || ''),
-    queryFn: async () => {
-      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
-      return await fetchProjectEditBibleResponse(projectId, episodeId)
-    },
+    ...projectEditBibleQueryOptions(projectId || '', episodeId || ''),
     select: (data) => data.editBible,
     enabled: Boolean(projectId && episodeId),
-    staleTime: 5000,
   })
 }
 
 export function useProjectEditBibleResponse(projectId: string | null, episodeId: string | null) {
   return useQuery({
-    queryKey: queryKeys.project.editBible(projectId || '', episodeId || ''),
-    queryFn: async () => {
-      if (!projectId || !episodeId) throw new Error('Project ID and episode ID are required')
-      return await fetchProjectEditBibleResponse(projectId, episodeId)
-    },
+    ...projectEditBibleQueryOptions(projectId || '', episodeId || ''),
     enabled: Boolean(projectId && episodeId),
-    staleTime: 5000,
   })
 }
 

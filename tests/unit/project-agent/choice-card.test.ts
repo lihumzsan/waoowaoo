@@ -386,46 +386,4 @@ describe('edit-first assistant choice cards', () => {
     })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=ready_to_generate_shot_execution_plan')
   })
 
-  it('builds a budget confirmation card from the current workflow next action', async () => {
-    const card = await buildEditFirstAssistantChoiceCard({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      locale: 'zh',
-      workflow: workflow('ready_to_render_chapters', {
-        id: 'render_chapters',
-        operationId: 'render_chapters',
-        title: 'Render chapter videos',
-        requiresUserConfirmation: true,
-      }),
-      choiceType: 'budget_confirmation',
-      toolCallId: 'tool-call-budget',
-    })
-
-    expect(card).toMatchObject({
-      cardId: 'edit-first-budget:ready_to_render_chapters:render_chapters',
-      toolCallId: 'tool-call-budget',
-      choiceType: 'budget_confirmation',
-      variant: 'confirm',
-      title: '确认生产预算',
-      groups: [],
-      submitLabel: '确认并继续',
-      submit: {
-        kind: 'submit_tool_output',
-      },
-    })
-  })
-
-  it('rejects budget confirmation without a production next action', async () => {
-    await expect(buildEditFirstAssistantChoiceCard({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      locale: 'zh',
-      workflow: workflow('assets_ready_for_review'),
-      choiceType: 'budget_confirmation',
-      toolCallId: 'tool-call-budget',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=budget_confirmation:stage=assets_ready_for_review')
-  })
-
 })

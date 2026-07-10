@@ -36,14 +36,6 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed || null
 }
 
-function buildOptimisticTaskId(targetType: string, targetId: string, now: number): string {
-  return `optimistic:${targetType}:${targetId}:${now.toString(36)}`
-}
-
-function isOptimisticTaskId(taskId: string | null): boolean {
-  return typeof taskId === 'string' && taskId.startsWith('optimistic:')
-}
-
 function pruneExpiredOverlay(prev: TaskTargetOverlayMap | undefined, now: number) {
   const next: TaskTargetOverlayMap = { ...(prev || {}) }
   for (const [overlayKey, value] of Object.entries(next)) {
@@ -73,15 +65,15 @@ export function upsertTaskTargetOverlay(
   },
 ) {
   const now = Date.now()
+  const incomingTaskId = normalizeOptionalString(params.runningTaskId)
+  if (!incomingTaskId) return
   const key = toOverlayKey(params.targetType, params.targetId)
   queryClient.setQueryData<TaskTargetOverlayMap>(
     queryKeys.tasks.targetStateOverlay(params.projectId),
     (prev) => {
       const next = pruneExpiredOverlay(prev, now)
       const existing = next[key]
-      const runningTaskId = normalizeOptionalString(params.runningTaskId)
-        || normalizeOptionalString(existing?.runningTaskId)
-        || buildOptimisticTaskId(params.targetType, params.targetId, now)
+      const runningTaskId = incomingTaskId
       const runningTaskType = normalizeOptionalString(params.runningTaskType)
         || normalizeOptionalString(existing?.runningTaskType)
       const progressGroupId = normalizeOptionalString(params.progressGroupId)
@@ -201,9 +193,8 @@ export function applyTaskLifecycleToOverlay(
           const currentTaskId = normalizeOptionalString(current.runningTaskId)
           const isEventTarget = overlayKey === key
           const matchesTerminalTask = Boolean(incomingTaskId && currentTaskId === incomingTaskId)
-          const matchesOptimisticEventTarget = Boolean(isEventTarget && currentTaskId && isOptimisticTaskId(currentTaskId))
           const matchesEventTargetWithoutTask = isEventTarget && !incomingTaskId
-          if (!matchesTerminalTask && !matchesOptimisticEventTarget && !matchesEventTargetWithoutTask) continue
+          if (!matchesTerminalTask && !matchesEventTargetWithoutTask) continue
 
           delete next[overlayKey]
           changed = true

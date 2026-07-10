@@ -70,6 +70,7 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
                       targetId: `${props.characterId}:${originalIndex}`,
                       running: true,
                     })}
+                    styleImageUrl={null}
                     size={48}
                   />
                 )}
@@ -150,6 +151,7 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
             targetId: props.characterName,
             running: true,
           })}
+          styleImageUrl={null}
           size={64}
         />
       )}

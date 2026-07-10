@@ -46,7 +46,7 @@ function completion(model: string): OpenAI.Chat.Completions.ChatCompletion {
 async function* openRouterStreamChunks(): AsyncGenerator<unknown> {
   yield { choices: [{ delta: { content: 'ok' } }] }
   yield {
-    choices: [],
+    choices: [{ delta: {}, finish_reason: 'stop' }],
     usage: {
       prompt_tokens: 200,
       completion_tokens: 10,
@@ -214,6 +214,7 @@ describe('OpenRouter prompt cache provider contract', () => {
     })
 
     expect(result.text).toBe('ok')
+    expect(result.termination).toEqual({ kind: 'normal', rawReason: 'stop' })
     expect(result.usage).toEqual({
       promptTokens: 200,
       completionTokens: 10,
@@ -231,5 +232,79 @@ describe('OpenRouter prompt cache provider contract', () => {
       },
       provider_cost_credits: usdToCredits(0.0125),
     })
+  })
+
+  it('rejects reasoning-only streams even when the provider reports stop', async () => {
+    async function* reasoningOnly(): AsyncGenerator<unknown> {
+      yield { choices: [{ delta: { reasoning: 'thinking' } }] }
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }] }
+    }
+    completionCreateMock.mockResolvedValue(reasoningOnly())
+
+    await expect(runOpenRouterLlmStream({
+      userId: 'user-1',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'google/gemini-3.5-flash',
+        modelKey: 'openrouter::google/gemini-3.5-flash',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.example/v1',
+      },
+      messages: [{ role: 'user', content: 'return json' }],
+      options: { reasoning: true },
+    })).rejects.toMatchObject({ code: 'EMPTY_RESPONSE' })
+  })
+
+  it('rejects an abnormal EOF without a final finish reason', async () => {
+    async function* truncated(): AsyncGenerator<unknown> {
+      yield { choices: [{ delta: { content: '{"partial":' } }] }
+    }
+    completionCreateMock.mockResolvedValue(truncated())
+
+    await expect(runOpenRouterLlmStream({
+      userId: 'user-1',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'google/gemini-3.5-flash',
+        modelKey: 'openrouter::google/gemini-3.5-flash',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.example/v1',
+      },
+      messages: [{ role: 'user', content: 'return json' }],
+      options: { reasoning: true },
+    })).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' })
+  })
+
+  it('classifies an explicit token limit as non-retryable truncation', async () => {
+    async function* tokenLimited(): AsyncGenerator<unknown> {
+      yield { choices: [{ delta: { content: '{"partial":' } }] }
+      yield { choices: [{ delta: {}, finish_reason: 'length' }] }
+    }
+    completionCreateMock.mockResolvedValue(tokenLimited())
+
+    await expect(runOpenRouterLlmStream({
+      userId: 'user-1',
+      selection: {
+        provider: 'openrouter',
+        modelId: 'google/gemini-3.5-flash',
+        modelKey: 'openrouter::google/gemini-3.5-flash',
+      },
+      providerConfig: {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: 'sk-openrouter',
+        baseUrl: 'https://openrouter.example/v1',
+      },
+      messages: [{ role: 'user', content: 'return json' }],
+      options: { reasoning: true },
+    })).rejects.toMatchObject({ code: 'MODEL_OUTPUT_TRUNCATED', retryable: false })
   })
 })

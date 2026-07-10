@@ -1,5 +1,4 @@
 import type { ProjectAgentOperationDefinition } from '@/lib/operations/types'
-import { isEditFirstAutoApprovedOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
 import { EDIT_FIRST_CHOICE_OPERATION_IDS } from './edit-first-choice-tools'
 
 export type AssistantPermissionMode = 'ask' | 'auto'
@@ -33,7 +32,7 @@ export function shouldRequireAssistantToolApproval(params: {
   operation: ProjectAgentOperationDefinition
 }): boolean {
   if (isHumanInputOperation(params.operation.id)) return false
-  if (isEditFirstAutoApprovedOperationId(params.operation.id)) return false
+  if (params.operation.confirmation.kind === 'billable_media') return true
   if (params.mode === 'auto') return false
-  return params.operation.confirmation.required === true
+  return params.operation.confirmation.kind === 'destructive'
 }

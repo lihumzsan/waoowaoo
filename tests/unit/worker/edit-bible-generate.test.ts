@@ -138,7 +138,6 @@ const aiMock = vi.hoisted(() => ({
     reasoning: '',
     usage: null,
     completion: null,
-    repairRounds: 0,
   })),
 }))
 
@@ -259,7 +258,6 @@ describe('worker edit-bible-generate behavior', () => {
       reasoning: '',
       usage: null,
       completion: null,
-      repairRounds: 0,
     })
     editBibleMock.generateEditBibleArtifacts.mockResolvedValue({
       bible: {

@@ -31,6 +31,7 @@ function node(input: TestNodeInput): WorkspaceCanvasFlowNode {
     style: { width, height },
     data: {
       kind: 'shot',
+      mediaLoadingContext: { styleImageUrl: null },
       layoutNodeType: 'shot',
       targetType: 'panel',
       targetId: input.id,

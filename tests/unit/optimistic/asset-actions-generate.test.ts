@@ -39,7 +39,7 @@ function getOverlay(
 function createOkResponse() {
   return {
     ok: true,
-    json: async () => ({ success: true }),
+    json: async () => ({ success: true, taskId: 'task-prop-1', taskType: 'image_location' }),
   } as Response
 }
 
@@ -66,7 +66,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
     })
   })
 
-  it('keeps global prop in generating state immediately after submit', async () => {
+  it('marks a global prop queued only after the server returns a real taskId', async () => {
     const queryClient = new QueryClient()
     useQueryClientMock.mockReturnValue(queryClient)
 
@@ -100,7 +100,7 @@ describe('useAssetActions.generate optimistic overlay', () => {
     expect(overlay?.intent).toBe('generate')
   })
 
-  it('targets project prop generation overlay at the shared location-image task target', async () => {
+  it('targets the project prop overlay after receiving a real taskId', async () => {
     const queryClient = new QueryClient()
     useQueryClientMock.mockReturnValue(queryClient)
 

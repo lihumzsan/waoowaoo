@@ -42,6 +42,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将为角色生成形象图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -87,6 +88,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将为场景生成图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },

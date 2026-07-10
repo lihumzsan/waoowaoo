@@ -13,6 +13,7 @@ import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers/project-agent-operations'
+import { EDIT_FIRST_OPERATION_APPROVAL_KINDS } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const streamState = vi.hoisted(() => ({
   capturedToolNames: [] as string[],
@@ -435,6 +436,7 @@ function buildWorkflow(stage: EditFirstWorkflowState['stage'], operationIds: str
           id: operationId,
           operationId: operationId as EditFirstWorkflowOperationId,
           title: operationId,
+          approvalKind: 'billable_media',
           requiresUserConfirmation: true,
         }
       : null,
@@ -443,6 +445,8 @@ function buildWorkflow(stage: EditFirstWorkflowState['stage'], operationIds: str
 }
 
 function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
+  const editFirstApprovalKind = (EDIT_FIRST_OPERATION_APPROVAL_KINDS as Readonly<Record<string, 'none' | 'billable_media'>>)[id]
+  const approvalKind = editFirstApprovalKind ?? (intent === 'act' ? 'billable_media' : 'none')
   return makeTestOperation({
     id,
     summary: id,
@@ -450,7 +454,9 @@ function makeOperation(id: string, intent: 'query' | 'act' = 'query') {
     groupPath: id.startsWith('get_') || id.startsWith('list_') ? ['project', 'read'] : ['edit-script'],
     prerequisites: { episodeId: 'optional' },
     effects: intent === 'act' ? EFFECTS_BILLABLE : EFFECTS_NONE,
-    confirmation: intent === 'act' ? { required: true, summary: 'billable operation' } : { required: false },
+    confirmation: approvalKind === 'none'
+      ? { kind: 'none', required: false }
+      : { kind: approvalKind, required: true, summary: 'billable operation' },
     inputSchema: z.object({}),
     outputSchema: z.unknown(),
     execute: async () => ({}),

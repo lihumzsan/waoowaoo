@@ -20,7 +20,7 @@ function getOverlay(
 }
 
 describe('task-target-overlay', () => {
-  it('creates optimistic runningTaskId when onMutate omits it', () => {
+  it('does not create a running overlay when onMutate has no real taskId', () => {
     const queryClient = new QueryClient()
     const projectId = 'project-1'
     const key = 'ProjectPanel:panel-1'
@@ -34,7 +34,7 @@ describe('task-target-overlay', () => {
     })
 
     const overlay = getOverlay(queryClient, projectId, key)
-    expect(overlay?.runningTaskId).toMatch(/^optimistic:ProjectPanel:panel-1:/)
+    expect(overlay).toBeNull()
   })
 
   it('does not clear overlay on completed event from a different taskId', () => {
@@ -148,7 +148,7 @@ describe('task-target-overlay', () => {
     expect(getOverlay(queryClient, projectId, 'ProjectPanel:panel-5')?.runningTaskId).toBe('task-other')
   })
 
-  it('clears optimistic overlay when the real task completes', () => {
+  it('does not let a pre-submit overlay impersonate the later real task', () => {
     const queryClient = new QueryClient()
     const projectId = 'project-1'
     const key = 'ProjectEpisode:episode-1'
@@ -161,8 +161,7 @@ describe('task-target-overlay', () => {
       intent: 'generate',
     })
 
-    const optimisticOverlay = getOverlay(queryClient, projectId, key)
-    expect(optimisticOverlay?.runningTaskId).toMatch(/^optimistic:ProjectEpisode:episode-1:/)
+    expect(getOverlay(queryClient, projectId, key)).toBeNull()
 
     applyTaskLifecycleToOverlay(queryClient, {
       projectId,
@@ -179,7 +178,6 @@ describe('task-target-overlay', () => {
       eventTs: new Date().toISOString(),
     })
 
-    const overlay = getOverlay(queryClient, projectId, key)
-    expect(overlay).toBeNull()
+    expect(getOverlay(queryClient, projectId, key)).toBeNull()
   })
 })

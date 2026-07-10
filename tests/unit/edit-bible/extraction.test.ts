@@ -32,7 +32,6 @@ const structuredStepMock = vi.hoisted(() => {
           choices: [],
         },
         data,
-        repairRounds: 0,
       }
     }),
   }

@@ -67,6 +67,11 @@ export type ProjectAgentStopPartData =
     operationIds: string[]
     taskIds: string[]
     phases: string[]
+    taskWaits: Array<{
+      operationId: string
+      taskIds: string[]
+      phases: string[]
+    }>
   }
   | {
     reason: 'awaiting_user_confirmation'
@@ -87,6 +92,7 @@ export interface ProjectAgentInterruptionPartData {
   approvalId: string
   operationId: string
   toolCallId?: string | null
+  inputHash: string
   display: {
     title: string
     description: string

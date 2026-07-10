@@ -212,22 +212,6 @@ describe('buildEditFirstChoiceResult', () => {
     expect(parsed.nextOperationId).toBeUndefined()
   })
 
-  it('serializes budget confirmation without selecting the next operation', () => {
-    const choiceResult = buildEditFirstChoiceResult({
-      choiceType: 'budget_confirmation',
-      toolCallId: 'tool-call-budget',
-      latestUserText: '确认预算',
-      output: {
-        ok: true,
-        decision: 'approve',
-      },
-    })
-
-    const { parsed } = readSyntheticToolResult(choiceResult)
-    expect(parsed.decision).toBe('approve')
-    expect(parsed.nextOperationId).toBeUndefined()
-  })
-
   it('persists approved bible review as the user decision without a second confirmation operation', async () => {
     await applyEditFirstChoiceResultSideEffects({
       choiceType: 'bible_review',
@@ -320,18 +304,6 @@ describe('buildEditFirstChoiceResult', () => {
 
     expect(prismaMock.project.updateMany).not.toHaveBeenCalled()
     expect(confirmEpisodeEditBibleMock).not.toHaveBeenCalled()
-  })
-
-  it('rejects budget confirmation without approval', () => {
-    expect(buildEditFirstChoiceResult({
-      choiceType: 'budget_confirmation',
-      toolCallId: 'tool-call-budget',
-      latestUserText: '等等',
-      output: {
-        ok: true,
-        decision: 'revise',
-      },
-    })).toBeNull()
   })
 
   it('rejects a bible review without a decision', () => {

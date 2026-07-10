@@ -193,11 +193,17 @@ export type AiLlmUsage = {
   providerCostCredits?: number
 }
 
+export type AiLlmTermination = {
+  readonly kind: 'normal' | 'token_limit' | 'safety' | 'tool_call' | 'unknown'
+  readonly rawReason: string | null
+}
+
 export type AiLlmExecutionResult = {
   completion: OpenAI.Chat.Completions.ChatCompletion
   logProvider: string
   text: string
   reasoning: string
+  termination: AiLlmTermination
   usage?: AiLlmUsage | null
   successDetails?: AiUnknownObject
 }

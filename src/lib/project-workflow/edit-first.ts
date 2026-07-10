@@ -11,11 +11,12 @@ import {
   resolveStoryboardImageReadiness,
 } from './edit-first-readiness'
 import {
-  isEditFirstAutoApprovedOperationId,
+  getEditFirstOperationApprovalKind,
+  type EditFirstOperationApprovalKind,
   type EditFirstWorkflowOperationId,
 } from './edit-first-operation-policy'
 export {
-  EDIT_FIRST_AUTO_APPROVED_OPERATION_IDS,
+  EDIT_FIRST_OPERATION_APPROVAL_KINDS,
   EDIT_FIRST_WORKFLOW_OPERATION_IDS,
   type EditFirstWorkflowOperationId,
 } from './edit-first-operation-policy'
@@ -64,6 +65,7 @@ export interface EditFirstWorkflowAction {
   id: string
   operationId: EditFirstWorkflowOperationId
   title: string
+  approvalKind: EditFirstOperationApprovalKind
   requiresUserConfirmation: boolean
 }
 
@@ -145,11 +147,13 @@ function workflowAction(
   operationId: EditFirstWorkflowOperationId,
   title: string,
 ): EditFirstWorkflowAction {
+  const approvalKind = getEditFirstOperationApprovalKind(operationId)
   return {
     id: operationId,
     operationId,
     title,
-    requiresUserConfirmation: !isEditFirstAutoApprovedOperationId(operationId),
+    approvalKind,
+    requiresUserConfirmation: approvalKind !== 'none',
   }
 }
 

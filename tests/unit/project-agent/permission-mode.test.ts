@@ -12,7 +12,7 @@ function buildOperation(id: string) {
     id,
     intent: 'query',
     effects: EFFECTS_NONE,
-    confirmation: { required: false },
+    confirmation: { kind: 'none', required: false },
     inputSchema: z.object({}),
     outputSchema: z.object({ ok: z.boolean() }),
     execute: async () => ({ ok: true }),
@@ -41,7 +41,7 @@ describe('assistant permission mode', () => {
         id: 'generate_episode_videos',
         intent: 'act',
         effects: EFFECTS_BILLABLE,
-        confirmation: { required: true },
+        confirmation: { kind: 'billable_media', required: true },
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: async () => ({ ok: true }),
@@ -49,14 +49,14 @@ describe('assistant permission mode', () => {
     })).toBe(true)
   })
 
-  it('does not require generic execution approval for auto-approved edit-first main operations in ask mode', () => {
+  it('does not require approval for an edit-first text operation', () => {
     expect(shouldRequireAssistantToolApproval({
       mode: 'ask',
       operation: makeTestOperation({
         id: 'generate_edit_script',
         intent: 'act',
-        effects: EFFECTS_BILLABLE,
-        confirmation: { required: true },
+        effects: EFFECTS_NONE,
+        confirmation: { kind: 'none', required: false },
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: async () => ({ ok: true }),

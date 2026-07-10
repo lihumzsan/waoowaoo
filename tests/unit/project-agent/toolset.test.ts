@@ -42,6 +42,7 @@ function workflow(stage: EditFirstWorkflowState['stage'], operationIds: string[]
           id: operationId,
           operationId: operationId as EditFirstWorkflowOperationId,
           title: operationId,
+          approvalKind: 'billable_media',
           requiresUserConfirmation: true,
         }
       : null,
@@ -277,32 +278,6 @@ describe('project agent live operation enablement', () => {
       workflow: approved,
       operationId: 'generate_bible_from_script',
     })).toBe(true)
-  })
-
-  it('enables budget confirmation only for production stages with a next action', () => {
-    const toolset = resolveProjectAgentToolset({
-      registry: registry(),
-      context: { episodeId: 'episode-1' },
-    })
-    const production = workflow('ready_to_render_chapters', ['render_chapters'])
-    const review = workflow('assets_ready_for_review', ['revise_edit_script_assets'])
-    const missingAction = workflow('ready_to_render_chapters', [])
-
-    expect(isProjectAgentOperationEnabled({
-      toolset,
-      workflow: production,
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
-    })).toBe(true)
-    expect(isProjectAgentOperationEnabled({
-      toolset,
-      workflow: review,
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
-    })).toBe(false)
-    expect(isProjectAgentOperationEnabled({
-      toolset,
-      workflow: missingAction,
-      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation,
-    })).toBe(false)
   })
 
   it('keeps stage capability rules like bible revision during review', () => {

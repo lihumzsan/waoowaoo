@@ -130,55 +130,6 @@ function applyUnifiedCharacterSelection(
   })
 }
 
-function applyCharacterGenerationRunning(
-  characters: GlobalCharacter[] | undefined,
-  characterId: string,
-  appearanceIndex: number,
-): GlobalCharacter[] | undefined {
-  if (!characters) return characters
-  return characters.map((character) => {
-    if (character.id !== characterId) return character
-    return {
-      ...character,
-      appearances: (character.appearances || []).map((appearance) => {
-        if (appearance.appearanceIndex !== appearanceIndex) return appearance
-        return {
-          ...appearance,
-          imageTaskRunning: true,
-        }
-      }),
-    }
-  })
-}
-
-function applyUnifiedCharacterGenerationRunning(
-  assets: AssetSummary[] | undefined,
-  characterId: string,
-  appearanceIndex: number,
-): AssetSummary[] | undefined {
-  if (!assets) return assets
-  return assets.map((asset) => {
-    if (asset.id !== characterId || asset.kind !== 'character') return asset
-    return {
-      ...asset,
-      taskState: {
-        isRunning: true,
-        lastError: null,
-      },
-      variants: asset.variants.map((variant) => {
-        if (variant.index !== appearanceIndex) return variant
-        return {
-          ...variant,
-          taskState: {
-            isRunning: true,
-            lastError: null,
-          },
-        }
-      }),
-    }
-  })
-}
-
 function restoreCharacterQuerySnapshots(
   queryClient: ReturnType<typeof useQueryClient>,
   snapshots: Array<{ queryKey: readonly unknown[]; data: GlobalCharacter[] | undefined }>,
@@ -231,7 +182,7 @@ export function useGenerateCharacterImage() {
         }),
       }, 'Failed to generate image')
     },
-    onMutate: async ({ characterId, appearanceId, appearanceIndex }): Promise<GenerateCharacterImageContext> => {
+    onMutate: async ({ appearanceId }): Promise<GenerateCharacterImageContext> => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.globalAssets.characters(),
         exact: false,
@@ -250,30 +201,6 @@ export function useGenerateCharacterImage() {
         runningTaskType: 'asset_hub_image',
         intent: 'generate',
       })
-
-      queryClient.setQueriesData<GlobalCharacter[] | undefined>(
-        {
-          queryKey: queryKeys.globalAssets.characters(),
-          exact: false,
-        },
-        (previous) => applyCharacterGenerationRunning(
-          previous,
-          characterId,
-          appearanceIndex,
-        ),
-      )
-
-      queryClient.setQueriesData<AssetSummary[] | undefined>(
-        {
-          queryKey: queryKeys.assets.all('global'),
-          exact: false,
-        },
-        (previous) => applyUnifiedCharacterGenerationRunning(
-          previous,
-          characterId,
-          appearanceIndex,
-        ),
-      )
 
       return {
         previousQueries,

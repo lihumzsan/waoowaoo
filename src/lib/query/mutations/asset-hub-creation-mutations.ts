@@ -4,13 +4,11 @@ import { mapGlobalCharacterToAsset } from '@/lib/assets/mappers'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import type { GlobalCharacter } from '@/lib/query/hooks/useGlobalAssets'
 import { queryKeys } from '@/lib/query/keys'
-import { upsertTaskTargetOverlay } from '@/lib/query/task-target-overlay'
 import {
   requestJsonWithError,
   requestTaskResponseWithError,
 } from './mutation-shared'
 import {
-  GLOBAL_ASSET_PROJECT_ID,
   invalidateGlobalCharacters,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
@@ -177,19 +175,9 @@ export function useCreateAssetHubCharacter() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }, '创建角色失败'),
-    onSuccess: (data: CreateAssetHubCharacterResponse, variables: CreateAssetHubCharacterVariables) => {
+    onSuccess: (data: CreateAssetHubCharacterResponse) => {
       if (data.character) {
         upsertCreatedCharacterCaches(queryClient, data.character)
-        const primaryAppearanceId = data.character.appearances?.[0]?.id
-        if (variables.generateFromReference && primaryAppearanceId) {
-          upsertTaskTargetOverlay(queryClient, {
-            projectId: GLOBAL_ASSET_PROJECT_ID,
-            targetType: 'GlobalCharacterAppearance',
-            targetId: primaryAppearanceId,
-            runningTaskType: 'asset_hub_reference_to_character',
-            intent: 'generate',
-          })
-        }
       }
       invalidateCharacters()
     },

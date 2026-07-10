@@ -17,6 +17,7 @@ export const USER_ERROR_MESSAGES_ZH: Record<UnifiedErrorCode, string> = {
   EXTERNAL_ERROR: '外部服务暂时不可用，请稍后重试。',
   NETWORK_ERROR: '网络异常，请稍后重试。',
   EMPTY_RESPONSE: '模型返回空响应（无有效内容），请稍后重试。',
+  MODEL_OUTPUT_TRUNCATED: '模型输出因 token 上限被截断，请调整输出规模后重试。',
   PARSE_ERROR: '模型输出无法解析，请稍后重试。',
   MODEL_OUTPUT_SCHEMA_INVALID: '模型输出格式不符合要求，请稍后重试。',
   PLAN_VALIDATION_FAILED: '模型输出未通过制作规则校验，请修改后重试。',

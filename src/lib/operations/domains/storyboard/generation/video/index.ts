@@ -5,6 +5,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
+import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
   refineTaskSubmitOperationOutputSchema,
@@ -189,6 +190,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将为单个分镜格生成视频（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -227,6 +229,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: getEditFirstOperationApprovalKind('generate_episode_videos'),
         required: true,
         summary: '将按核心剪辑计划中的生成分段提交缺失的连续视频片段任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -267,6 +270,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将使用一组有序分镜参考图生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -306,6 +310,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将按核心剪辑表顺序批量生成连续视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -345,6 +350,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将按核心剪辑计划中的生成分段提交连续视频任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -384,6 +390,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将使用参考资产图和结构化生成分段事实直接生成一个视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -423,6 +430,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将使用参考资产图和结构化生成分段事实批量直接生成视频片段（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },

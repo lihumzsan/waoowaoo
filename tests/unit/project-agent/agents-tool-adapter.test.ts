@@ -77,6 +77,7 @@ function buildOperation(
     },
     effects: EFFECTS_BILLABLE,
     confirmation: {
+      kind: 'destructive',
       required: true,
       summary: 'Confirm billable generation',
     },
@@ -319,6 +320,7 @@ describe('createProjectAgentOperationTool', () => {
       ...buildOperation(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review, 'query'),
       effects: EFFECTS_NONE,
       confirmation: {
+        kind: 'none' as const,
         required: false,
       },
       agentFlow: {

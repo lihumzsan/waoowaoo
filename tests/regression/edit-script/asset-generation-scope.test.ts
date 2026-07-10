@@ -60,10 +60,16 @@ const submitAssetGenerateTaskMock = vi.hoisted(() => vi.fn(async (input: AssetGe
   runId: null,
   deduped: false,
 })))
+const readEpisodeEditBibleMock = vi.hoisted(() => vi.fn())
+const readEpisodeEditChaptersMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/assets/services/asset-actions', () => ({
   submitAssetGenerateTask: submitAssetGenerateTaskMock,
+}))
+vi.mock('@/lib/edit-bible/service', () => ({
+  readEpisodeEditBible: readEpisodeEditBibleMock,
+  readEpisodeEditChapters: readEpisodeEditChaptersMock,
 }))
 
 import {
@@ -180,6 +186,10 @@ describe('edit script asset generation scope regression', () => {
       sourceDocument: null,
     }))
     prismaMock.projectEditBible.findUnique.mockResolvedValue(null)
+    readEpisodeEditBibleMock.mockResolvedValue({
+      stylePreviews: [{ status: 'confirmed', imageUrl: 'https://cdn.example/style.png' }],
+    })
+    readEpisodeEditChaptersMock.mockResolvedValue([{ id: 'chapter-1' }])
     prismaMock.task.findFirst.mockResolvedValue(null)
     prismaMock.projectCharacter.findFirst.mockImplementation(async (input: CharacterFindFirstInput) => characterAssetRow({
       id: input.where.id,
@@ -204,6 +214,7 @@ describe('edit script asset generation scope regression', () => {
     const secondRequirement = requirement({ id: 'requirement-2', chapterId: 'chapter-2', name: 'Bob' })
     const firstScript = script({ id: 'script-1', chapterId: 'chapter-1', requirements: [firstRequirement] })
     const secondScript = script({ id: 'script-2', chapterId: 'chapter-2', requirements: [secondRequirement] })
+    readEpisodeEditChaptersMock.mockResolvedValue([{ id: 'chapter-1' }, { id: 'chapter-2' }])
 
     prismaMock.projectEditScript.findMany.mockResolvedValue([firstScript, secondScript])
     prismaMock.projectEditScript.findFirst.mockResolvedValue(script({
@@ -265,6 +276,7 @@ describe('edit script asset generation scope regression', () => {
     const secondRequirement = requirement({ id: 'requirement-2', chapterId: 'chapter-2', name: 'Alice' })
     const firstScript = script({ id: 'script-1', chapterId: 'chapter-1', requirements: [firstRequirement] })
     const secondScript = script({ id: 'script-2', chapterId: 'chapter-2', requirements: [secondRequirement] })
+    readEpisodeEditChaptersMock.mockResolvedValue([{ id: 'chapter-1' }, { id: 'chapter-2' }])
     const aliceAsset = characterAssetRow({
       id: 'character-alice',
       name: 'Alice',
@@ -342,6 +354,27 @@ describe('edit script asset generation scope regression', () => {
       locale: 'zh',
     })).rejects.toThrow('No edit script asset generation tasks were submitted while asset requirements remain unfinished.')
 
+    expect(submitAssetGenerateTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('does not mutate requirements or submit FAL tasks while any episode core edit table is not ready', async () => {
+    const firstScript = script({
+      id: 'script-1',
+      chapterId: 'chapter-1',
+      requirements: [requirement({ id: 'requirement-1', chapterId: 'chapter-1', name: 'Alice' })],
+    })
+    readEpisodeEditChaptersMock.mockResolvedValue([{ id: 'chapter-1' }, { id: 'chapter-2' }])
+    prismaMock.projectEditScript.findMany.mockResolvedValue([firstScript])
+
+    await expect(generateProjectEditScriptAssets({
+      request: request(),
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      userId: 'user-1',
+      locale: 'zh',
+    })).rejects.toThrow('EDIT_SCRIPT_ASSET_EPISODE_GATE_NOT_READY:chapter-2')
+
+    expect(prismaMock.projectEditAssetRequirement.update).not.toHaveBeenCalled()
     expect(submitAssetGenerateTaskMock).not.toHaveBeenCalled()
   })
 

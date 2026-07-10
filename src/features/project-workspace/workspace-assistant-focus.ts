@@ -1,6 +1,7 @@
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 
 export interface WorkspaceAssistantActiveTaskTarget extends TaskRuntimeTarget {
+  readonly taskId: string
   readonly operationId?: string | null
   readonly sourceKind?: string | null
 }

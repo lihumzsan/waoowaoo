@@ -22,6 +22,7 @@ import { ERROR_FAILURE_CLASS } from '@/lib/errors/codes'
 import { rollbackTaskBilling, settleTaskBilling } from '@/lib/billing'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
+import { withLogContext } from '@/lib/logging/context'
 
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -261,7 +262,12 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       },
     })
 
-    const { result, textUsage } = await withTextUsageCollection(async () => await handler(job))
+    const { result, textUsage } = await withLogContext({
+      taskId,
+      taskAttempt: job.attemptsMade + 1,
+      projectId: data.projectId,
+      userId: data.userId,
+    }, async () => await withTextUsageCollection(async () => await handler(job)))
     if (billingInfo?.billable) {
       billingInfo = (await settleTaskBilling({
         id: taskId,

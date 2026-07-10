@@ -151,6 +151,7 @@ describe('executeProjectAgentOperationFromApi', () => {
         intent: 'act',
         effects: EFFECTS_WRITE,
         confirmation: {
+          kind: 'destructive',
           required: true,
           summary: 'requires explicit confirmation',
         },

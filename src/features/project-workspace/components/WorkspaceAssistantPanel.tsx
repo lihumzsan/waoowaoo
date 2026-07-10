@@ -185,6 +185,7 @@ function isWorkspaceAssistantTaskRunningStatus(status: string | null | undefined
 }
 
 function buildWorkspaceAssistantActiveTaskTarget(input: {
+  readonly taskId: string | null | undefined
   readonly operationId: string | null
   readonly taskType: string | null | undefined
   readonly targetType: string | null | undefined
@@ -193,10 +194,12 @@ function buildWorkspaceAssistantActiveTaskTarget(input: {
 }): WorkspaceAssistantActiveTaskTarget | null {
   const targetType = input.targetType?.trim()
   const targetId = input.targetId?.trim()
-  if (!targetType || !targetId) return null
+  const taskId = input.taskId?.trim()
+  if (!taskId || !targetType || !targetId) return null
   const taskType = input.taskType?.trim()
   const operationId = input.operationId?.trim() || null
   return {
+    taskId,
     targetType,
     targetId,
     ...(taskType ? { types: [taskType] } : {}),
@@ -212,6 +215,7 @@ function dedupeWorkspaceAssistantActiveTaskTargets(
   targets.forEach((target) => {
     byKey.set([
       target.operationId ?? '',
+      target.taskId,
       target.targetType,
       target.targetId,
       (target.types ?? []).join(','),
@@ -672,6 +676,7 @@ export default function WorkspaceAssistantPanel({
       const taskOperationId = task.operationId ?? submission?.operationId ?? null
       if (operationId && taskOperationId !== operationId) return []
       const target = buildWorkspaceAssistantActiveTaskTarget({
+        taskId: task.taskId,
         operationId: taskOperationId,
         taskType: task.taskType,
         targetType: task.targetType,
@@ -686,6 +691,7 @@ export default function WorkspaceAssistantPanel({
           if (operationId && submission.operationId !== operationId) return []
           if (!isWorkspaceAssistantTaskRunningStatus(submission.data.status)) return []
           const target = buildWorkspaceAssistantActiveTaskTarget({
+            taskId: submission.data.taskId,
             operationId: submission.operationId,
             taskType: submission.data.taskType,
             targetType: submission.data.targetType,
@@ -866,7 +872,12 @@ export default function WorkspaceAssistantPanel({
                       <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />
                     ) : null}
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
-                      <WorkspaceAssistantActiveRunCard operationId={activeExternalTaskOperationId} />
+                      <WorkspaceAssistantActiveRunCard
+                        operationId={activeExternalTaskOperationId}
+                        tasks={(assistantRuntime.sessionState?.activeTasks ?? []).filter((task) => (
+                          task.operationId === activeExternalTaskOperationId
+                        ))}
+                      />
                     ) : null}
                     {serverPendingApproval ? (
                       <ConfirmationActionCard

@@ -58,6 +58,7 @@ describe('MediaGenerationLoadingView', () => {
       createElement(MediaGenerationLoadingView, {
         mode: 'failed',
         percent: null,
+        styleImageUrl: null,
         size: 72,
       }),
     )
@@ -71,6 +72,7 @@ describe('MediaGenerationLoadingView', () => {
       createElement(MediaGenerationLoadingView, {
         mode: 'running',
         percent: null,
+        styleImageUrl: null,
         size: 72,
       }),
     )

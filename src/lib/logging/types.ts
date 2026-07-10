@@ -11,6 +11,7 @@ export interface ErrorFields {
 export interface LogContext {
   requestId?: string
   taskId?: string
+  taskAttempt?: number
   projectId?: string
   userId?: string
   provider?: string

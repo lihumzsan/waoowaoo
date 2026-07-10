@@ -125,6 +125,7 @@ export default function LocationImageList(props: LocationImageListProps) {
                       targetId: img.id,
                       running: true,
                     })}
+                    styleImageUrl={null}
                     size={48}
                   />
                 )}
@@ -219,6 +220,7 @@ export default function LocationImageList(props: LocationImageListProps) {
             targetId: props.locationName,
             running: true,
           })}
+          styleImageUrl={null}
           size={64}
         />
       )}

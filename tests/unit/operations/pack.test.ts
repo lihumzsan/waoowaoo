@@ -28,7 +28,7 @@ function createNoopOperation(params: {
     intent: 'act',
     groupPath: params.groupPath,
     effects: NOOP_EFFECTS,
-    confirmation: { required: false },
+    confirmation: { kind: 'none', required: false },
     inputSchema: z.unknown(),
     outputSchema: z.unknown(),
     execute: async () => null,
@@ -46,7 +46,7 @@ describe('withOperationPack', () => {
       groupPath: ['asset', 'edit'],
       channels: { tool: true, api: false },
       prerequisites: { episodeId: 'optional' },
-      confirmation: { required: false },
+      confirmation: { kind: 'none', required: false },
     }
 
     expect(() => withOperationPack(draft, defaults)).toThrow(
@@ -63,7 +63,7 @@ describe('withOperationPack', () => {
       groupPath: ['project', 'read'],
       channels: { tool: true, api: false },
       prerequisites: { episodeId: 'optional' },
-      confirmation: { required: false },
+      confirmation: { kind: 'none', required: false },
     }
 
     const registry = withOperationPack(draft, defaults)
@@ -79,7 +79,7 @@ describe('withOperationPack', () => {
       groupPath: ['asset', 'edit'],
       channels: { tool: true, api: false },
       prerequisites: { episodeId: 'optional' },
-      confirmation: { required: false },
+      confirmation: { kind: 'none', required: false },
     }
 
     const registry = withOperationPack(draft, defaults)
@@ -95,7 +95,7 @@ describe('withOperationPack', () => {
       groupPath: ['asset-hub', 'character'],
       channels: { tool: true, api: false },
       prerequisites: { episodeId: 'optional' },
-      confirmation: { required: false },
+      confirmation: { kind: 'none', required: false },
     }
 
     expect(

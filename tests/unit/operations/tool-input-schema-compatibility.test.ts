@@ -218,7 +218,6 @@ describe('tool input schema compatibility', () => {
       'request_edit_bible_review_choice',
       'request_edit_style_choice',
       'request_edit_asset_review_choice',
-      'request_edit_budget_confirmation_choice',
       'generate_bible_from_script',
       'generate_edit_script_storyboard_images',
       'generate_episode_bgm_score',

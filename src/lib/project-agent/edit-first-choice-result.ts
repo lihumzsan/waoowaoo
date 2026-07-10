@@ -171,18 +171,6 @@ export function buildEditFirstChoiceResult(params: {
     }
   }
 
-  if (params.choiceType === 'budget_confirmation') {
-    const decision = readString(params.output.decision)
-    if (decision !== 'approve') return null
-    return {
-      inputItems: buildChoiceInputItems({
-        toolCallId: params.toolCallId,
-        choiceType: params.choiceType,
-        result: { decision: 'approve' },
-      }),
-    }
-  }
-
   const stylePreviewId = readString(params.output.stylePreviewId)
   const aspectRatio = readAspectRatio(params.output.aspectRatio)
   if (!stylePreviewId || !aspectRatio) return null

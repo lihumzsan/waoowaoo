@@ -242,7 +242,7 @@ describe('asset hub optimistic mutations', () => {
     expect(queryClient.getQueryData<AssetSummary[]>(locationsUnifiedAssetsKey)).toEqual([])
   })
 
-  it('adds reference-to-character task overlay when reference creation enqueues generation', () => {
+  it('does not fabricate a reference-to-character task overlay without a returned taskId', () => {
     const unifiedAssetsKey = queryKeys.assets.list({ scope: 'global' })
     queryClient.seedQuery(unifiedAssetsKey, [])
 
@@ -265,11 +265,10 @@ describe('asset hub optimistic mutations', () => {
       ? unified[0].variants[0]?.taskRefs[0]?.types
       : []
     expect(variantTaskTypes).toContain('asset_hub_reference_to_character')
-    expect(overlay?.['GlobalCharacterAppearance:appearance-1']?.phase).toBe('queued')
-    expect(overlay?.['GlobalCharacterAppearance:appearance-1']?.runningTaskType).toBe('asset_hub_reference_to_character')
+    expect(overlay?.['GlobalCharacterAppearance:appearance-1']).toBeUndefined()
   })
 
-  it('marks global character generation as running in legacy and unified caches', async () => {
+  it('waits for the real character image taskId before exposing running state', async () => {
     const allCharactersKey = queryKeys.globalAssets.characters()
     const unifiedAssetsKey = queryKeys.assets.list({ scope: 'global' })
     queryClient.seedQuery(allCharactersKey, [buildGlobalCharacter(null)])
@@ -287,10 +286,10 @@ describe('asset hub optimistic mutations', () => {
     const overlay = queryClient.getQueryData<Record<string, { phase: string }>>(
       queryKeys.tasks.targetStateOverlay('global-asset-hub'),
     )
-    expect(afterLegacy?.[0]?.appearances[0]?.imageTaskRunning).toBe(true)
-    expect(afterUnified?.[0]?.taskState.isRunning).toBe(true)
-    expect(afterUnified?.[0]?.kind === 'character' ? afterUnified[0].variants[0]?.taskState.isRunning : false).toBe(true)
-    expect(overlay?.['GlobalCharacterAppearance:appearance-1']?.phase).toBe('queued')
+    expect(afterLegacy?.[0]?.appearances[0]?.imageTaskRunning).toBe(false)
+    expect(afterUnified?.[0]?.taskState.isRunning).toBe(false)
+    expect(afterUnified?.[0]?.kind === 'character' ? afterUnified[0].variants[0]?.taskState.isRunning : true).toBe(false)
+    expect(overlay?.['GlobalCharacterAppearance:appearance-1']).toBeUndefined()
 
     mutation.onSuccess({ taskId: 'task-1' }, { appearanceId: 'appearance-1' })
 

@@ -219,6 +219,7 @@
         "aiEditing": "AI剪辑中",
         "generatingBgm": "配乐生成中",
         "processing": "处理中",
+        "inconsistent": "任务状态异常",
         "failed": "失败"
       },
       "statusBar": {

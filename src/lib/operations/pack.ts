@@ -1,4 +1,5 @@
 import type {
+  OperationApprovalKind,
   OperationChannels,
   OperationConfirmation,
   OperationGroupPath,
@@ -53,12 +54,26 @@ function mergePrerequisites(
 }
 
 function mergeConfirmation(
-  operation: { confirmation?: OperationConfirmation },
+  operation: {
+    confirmation?: Omit<OperationConfirmation, 'kind'> & { kind?: OperationApprovalKind }
+    effects: { billable: boolean; destructive: boolean; overwrite: boolean }
+  },
   defaults: OperationPackDefaults,
 ): OperationConfirmation {
   const base = operation.confirmation ?? defaults.confirmation
+  const required = base.required === true
+  const kind = base.kind ?? (
+    !required
+      ? 'none'
+      : operation.effects.destructive || operation.effects.overwrite
+        ? 'destructive'
+        : operation.effects.billable
+          ? 'billable_media'
+          : 'destructive'
+  )
   return {
-    required: base.required === true,
+    kind,
+    required,
     summary: base.summary ?? null,
     budget: base.budget ?? null,
   }

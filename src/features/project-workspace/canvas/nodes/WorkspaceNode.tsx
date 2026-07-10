@@ -500,9 +500,14 @@ function shotPreviewAspectRatio(data: WorkspaceCanvasFlowNode['data']): number {
   return 16 / 9
 }
 
+function mediaLoadingStyleImageUrl(data: WorkspaceCanvasFlowNode['data']): string | null {
+  return data.mediaLoadingContext?.styleImageUrl ?? null
+}
+
 function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
   const displayImageUrl = toDisplayImageUrl(data.previewImageUrl)
-  const displayStyleImageUrl = toDisplayImageUrl(data.loadingStyleImageUrl)
+  const styleImageUrl = mediaLoadingStyleImageUrl(data)
+  const displayStyleImageUrl = toDisplayImageUrl(styleImageUrl)
   const running = data.__running === true
   const frameStyle: React.CSSProperties = { aspectRatio: String(shotPreviewAspectRatio(data)) }
 
@@ -541,7 +546,7 @@ function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['da
           </div>
         </>
       )}
-      <MediaGenerationLoading taskState={data.taskProgress} styleImageUrl={data.loadingStyleImageUrl} size={72} showBackground={false} />
+      <MediaGenerationLoading taskState={data.taskProgress} styleImageUrl={styleImageUrl} size={72} showBackground={false} />
       {running && displayImageUrl ? <div className="pointer-events-none absolute inset-0 bg-white/10" /> : null}
     </div>
   )
@@ -688,7 +693,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
       <div className="relative" style={{ height: previewHeight }}>
         <MediaGenerationLoading
           taskState={data.taskProgress}
-          styleImageUrl={data.loadingStyleImageUrl}
+          styleImageUrl={mediaLoadingStyleImageUrl(data)}
           size={loadingRingSize}
         />
       </div>
@@ -707,7 +712,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
           />
           <MediaGenerationLoading
             taskState={data.taskProgress}
-            styleImageUrl={data.loadingStyleImageUrl}
+            styleImageUrl={mediaLoadingStyleImageUrl(data)}
             size={loadingRingSize}
           />
         </div>
@@ -806,7 +811,7 @@ function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data']
       )}
       <MediaGenerationLoading
         taskState={data.taskProgress}
-        styleImageUrl={data.loadingStyleImageUrl}
+        styleImageUrl={mediaLoadingStyleImageUrl(data)}
         size={loadingRingSize}
       />
     </div>
@@ -1554,7 +1559,7 @@ function EditAssetGroupHeroCard({
   asset,
   isOpen,
   labels,
-  loadingStyleImageUrl,
+  styleImageUrl,
   onPreviewImage,
   onRunAction,
   onSelect,
@@ -1562,7 +1567,7 @@ function EditAssetGroupHeroCard({
   readonly asset: WorkspaceCanvasEditAssetGroupItem
   readonly isOpen: boolean
   readonly labels: ReturnType<typeof useTranslations>
-  readonly loadingStyleImageUrl?: string | null
+  readonly styleImageUrl: string | null
   readonly onPreviewImage: ImagePreviewHandler | null
   readonly onRunAction: (action: WorkspaceCanvasNodeAction) => void
   readonly onSelect: () => void
@@ -1608,7 +1613,7 @@ function EditAssetGroupHeroCard({
             )}
             <MediaGenerationLoading
               taskState={asset.taskProgress}
-              styleImageUrl={loadingStyleImageUrl}
+              styleImageUrl={styleImageUrl}
               size={loadingSize}
             />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3/5 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
@@ -1720,7 +1725,7 @@ function EditAssetGroupContent({
                     asset={asset}
                     isOpen={on}
                     labels={labels}
-                    loadingStyleImageUrl={data.loadingStyleImageUrl}
+                    styleImageUrl={mediaLoadingStyleImageUrl(data)}
                     onPreviewImage={onPreviewImage}
                     onRunAction={(action) => data.onAction?.(action, data.nodeId)}
                     onSelect={selectAsset}
@@ -1759,7 +1764,7 @@ function StyleBiblePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['d
           />
           <MediaGenerationLoading
             taskState={data.taskProgress}
-            styleImageUrl={data.loadingStyleImageUrl}
+            styleImageUrl={mediaLoadingStyleImageUrl(data)}
             size={64}
           />
         </>

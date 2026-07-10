@@ -124,12 +124,12 @@ export async function chatCompletionStream(
   }
   const streamLlm = providerRuntime.streamLlm
 
-  let firstChunkEmitted = false
+  let mainTextChunkEmitted = false
   const wrappedCallbacks: ChatCompletionStreamCallbacks | undefined = callbacks
     ? {
       ...callbacks,
       onChunk: (chunk) => {
-        firstChunkEmitted = true
+        if (chunk.kind === 'text' && chunk.delta.trim().length > 0) mainTextChunkEmitted = true
         callbacks.onChunk?.(chunk)
       },
     }
@@ -140,7 +140,7 @@ export async function chatCompletionStream(
     const result = await withRetry({
       scope: `llm_stream:${selection.modelKey}`,
       policy: RETRY_POLICY.llmStream,
-      shouldRetry: () => !firstChunkEmitted,
+      shouldRetry: () => !mainTextChunkEmitted,
       run: async () => await streamLlm({
         userId,
         selection,
@@ -160,6 +160,7 @@ export async function chatCompletionStream(
       action: options.action,
       text: result.text,
       reasoning: result.reasoning,
+      termination: result.termination,
       usage: result.usage ?? undefined,
       providerResponse: result.successDetails?.openRouterResponse ?? null,
     })
@@ -278,6 +279,7 @@ export async function runChatCompletion(
         action: options.action,
         text: result.text,
         reasoning: result.reasoning,
+        termination: result.termination,
         usage: result.usage,
         providerResponse: result.successDetails?.openRouterResponse ?? null,
       })

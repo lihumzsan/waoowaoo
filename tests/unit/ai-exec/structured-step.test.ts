@@ -11,6 +11,7 @@ vi.mock('@/lib/ai-exec/engine', () => ({
 }))
 
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
+import { withLogContext } from '@/lib/logging/context'
 
 function completion(text: string) {
   return {
@@ -50,37 +51,27 @@ describe('executeAiStructuredTextStep', () => {
     vi.clearAllMocks()
   })
 
-  it('repairs invalid JSON by appending the previous output and validation error', async () => {
-    executeAiTextStepMock
-      .mockResolvedValueOnce(completion('not json'))
-      .mockResolvedValueOnce(completion('{"name":"fixed"}'))
+  it('retries invalid JSON with the original clean prompt at most three times', async () => {
+    executeAiTextStepMock.mockResolvedValue(completion('not json'))
 
-    const result = await executeAiStructuredTextStep({
+    await expect(executeAiStructuredTextStep({
       ...baseInput,
       parse: { kind: 'object' },
       schema: z.object({ name: z.string() }),
+    })).rejects.toMatchObject({
+      code: 'PARSE_ERROR',
+      retryable: true,
     })
-
-    expect(result.data).toEqual({ name: 'fixed' })
-    expect(result.repairRounds).toBe(1)
-    expect(executeAiTextStepMock).toHaveBeenCalledTimes(2)
-
-    const retryInput = executeAiTextStepMock.mock.calls[1]?.[0] as {
-      messages?: Array<{ role: string; content: unknown }>
-    } | undefined
-    expect(retryInput?.messages?.at(-2)).toEqual({
-      role: 'assistant',
-      content: 'not json',
-    })
-    expect(String(retryInput?.messages?.at(-1)?.content)).toContain('PARSE_ERROR')
+    expect(executeAiTextStepMock).toHaveBeenCalledTimes(3)
+    for (const [retryInput] of executeAiTextStepMock.mock.calls) {
+      expect(retryInput.messages).toEqual(baseInput.messages)
+    }
   })
 
-  it('repairs business validation failures in the same structured step boundary', async () => {
-    executeAiTextStepMock
-      .mockResolvedValueOnce(completion('{"segments":[{"duration":17}]}'))
-      .mockResolvedValueOnce(completion('{"segments":[{"duration":5}]}'))
+  it('rejects business validation failures without adding a repair message', async () => {
+    executeAiTextStepMock.mockResolvedValue(completion('{"segments":[{"duration":17}]}'))
 
-    const result = await executeAiStructuredTextStep({
+    await expect(executeAiStructuredTextStep({
       ...baseInput,
       parse: { kind: 'object' },
       schema: z.object({
@@ -96,31 +87,38 @@ describe('executeAiStructuredTextStep', () => {
         }
         return parsed
       },
-    })
-
-    expect(result.data).toEqual({ segments: [{ duration: 5 }] })
-    expect(result.repairRounds).toBe(1)
-    const retryInput = executeAiTextStepMock.mock.calls[1]?.[0] as {
-      messages?: Array<{ role: string; content: unknown }>
-    } | undefined
-    expect(String(retryInput?.messages?.at(-1)?.content)).toContain('generation segment duration exceeds provider limit: 17')
+    })).rejects.toMatchObject({ code: 'MODEL_OUTPUT_SCHEMA_INVALID', retryable: true })
+    expect(executeAiTextStepMock).toHaveBeenCalledTimes(3)
+    for (const [retryInput] of executeAiTextStepMock.mock.calls) {
+      expect(retryInput.messages).toEqual(baseInput.messages)
+    }
   })
 
-  it('throws non-retryable schema errors after repair rounds are exhausted', async () => {
-    executeAiTextStepMock
-      .mockResolvedValueOnce(completion('{"name":123}'))
-      .mockResolvedValueOnce(completion('{"name":456}'))
+  it('classifies an empty body before JSON parsing', async () => {
+    executeAiTextStepMock.mockResolvedValue(completion('   '))
 
     await expect(executeAiStructuredTextStep({
       ...baseInput,
       parse: { kind: 'object' },
       schema: z.object({ name: z.string() }),
-      maxRepairRounds: 1,
     })).rejects.toMatchObject({
-      code: 'MODEL_OUTPUT_SCHEMA_INVALID',
-      retryable: false,
+      code: 'EMPTY_RESPONSE',
+      retryable: true,
     })
+    expect(executeAiTextStepMock).toHaveBeenCalledTimes(3)
+  })
 
-    expect(executeAiTextStepMock).toHaveBeenCalledTimes(2)
+  it('uses one model request per async Task attempt so the queue owns retries', async () => {
+    executeAiTextStepMock.mockResolvedValue(completion('not json'))
+
+    await expect(withLogContext({ taskId: 'task-1', taskAttempt: 1 }, async () => (
+      await executeAiStructuredTextStep({
+        ...baseInput,
+        parse: { kind: 'object' },
+        schema: z.object({ name: z.string() }),
+      })
+    ))).rejects.toMatchObject({ code: 'PARSE_ERROR', retryable: true })
+
+    expect(executeAiTextStepMock).toHaveBeenCalledTimes(1)
   })
 })

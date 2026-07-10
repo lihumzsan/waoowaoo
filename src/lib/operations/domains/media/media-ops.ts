@@ -55,6 +55,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将批量重生成图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -171,6 +172,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将重生成单张图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },

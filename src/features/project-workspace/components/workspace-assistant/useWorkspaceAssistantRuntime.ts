@@ -39,7 +39,7 @@ import {
   WORKSPACE_ASSISTANT_THREAD_CATCH_UP_DELAYS_MS,
 } from './thread-sync'
 
-export type WorkspaceAssistantChoiceType = 'script_intake' | 'script_review' | 'bible_review' | 'style' | 'asset_review' | 'budget_confirmation'
+export type WorkspaceAssistantChoiceType = 'script_intake' | 'script_review' | 'bible_review' | 'style' | 'asset_review'
 export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice' | 'task-follow-up'
 type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
 

@@ -48,26 +48,8 @@ function readChoiceType(value: unknown): EditFirstChoiceType | null {
   return null
 }
 
-function isBudgetConfirmationWorkflowStage(value: string): value is EditFirstWorkflowStage {
-  return value === 'ready_to_generate_edit_script'
-    || value === 'ready_to_generate_assets'
-    || value === 'ready_to_generate_shot_execution_plan'
-    || value === 'ready_to_generate_storyboard'
-    || value === 'ready_to_generate_storyboard_images'
-    || value === 'ready_to_generate_videos'
-    || value === 'ready_to_render_chapters'
-    || value === 'ready_to_generate_bgm_score'
-    || value === 'ready_to_generate_audio_layers'
-    || value === 'ready_to_render_final'
-}
-
 function readChoiceWorkflowStage(choiceCard: ProjectAgentChoiceCardPartData): EditFirstWorkflowStage | null {
-  if (choiceCard.choiceType !== 'budget_confirmation') {
-    return FIXED_CHOICE_STAGE_BY_TYPE[choiceCard.choiceType] ?? null
-  }
-  const parts = choiceCard.cardId.split(':')
-  const stage = parts[1] ?? ''
-  return isBudgetConfirmationWorkflowStage(stage) ? stage : null
+  return FIXED_CHOICE_STAGE_BY_TYPE[choiceCard.choiceType] ?? null
 }
 
 function readChoiceCard(part: unknown): ProjectAgentChoiceCardPartData | null {
@@ -92,10 +74,11 @@ function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartDa
   const interruptionId = readString(data?.interruptionId)
   const approvalId = readString(data?.approvalId)
   const operationId = readString(data?.operationId)
+  const inputHash = readString(data?.inputHash)
   const display = isRecord(data?.display) ? data.display : null
   const title = readString(display?.title)
   const description = readString(display?.description)
-  if (!runId || !requestId || !interruptionId || !approvalId || !operationId || !title || !description) {
+  if (!runId || !requestId || !interruptionId || !approvalId || !operationId || !inputHash || !title || !description) {
     return null
   }
   return {
@@ -104,6 +87,7 @@ function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartDa
     interruptionId,
     approvalId,
     operationId,
+    inputHash,
     toolCallId: readString(data?.toolCallId),
     display: {
       title,

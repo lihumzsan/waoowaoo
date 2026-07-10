@@ -48,6 +48,8 @@ export function isTaskRuntimeStateRunning(
   state: TaskRuntimeStateLike | null | undefined,
 ): boolean {
   return isTaskRuntimeRunningPhase(state?.phase)
+    && typeof state?.runningTaskId === 'string'
+    && state.runningTaskId.trim().length > 0
 }
 
 export function taskRuntimeStateMapSignature(

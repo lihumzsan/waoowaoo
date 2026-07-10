@@ -53,6 +53,7 @@ import {
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
 import { compensateSubmittedTasks } from '@/lib/operations/planning'
+import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const editScriptVideoRatioSchema = z.enum(['9:16', '16:9', '21:9'])
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -378,7 +379,6 @@ const REQUEST_EDIT_CHOICE_SUMMARIES: Record<EditFirstChoiceType, string> = {
   bible_review: 'Request episode plan confirmation after the global planning baseline is ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   style: 'Request visual style selection after style previews are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
   asset_review: 'Request required asset review after assets and spatial profiles are ready. This tool has a fixed choice type; do not pass a choiceType argument.',
-  budget_confirmation: 'Request explicit user budget confirmation before the assistant starts the current billable or batch production stage. This tool has a fixed choice type; do not pass a choiceType argument.',
 }
 
 function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
@@ -534,7 +534,9 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        required: false,
+        kind: getEditFirstOperationApprovalKind('generate_edit_style_previews'),
+        required: true,
+        summary: '将生成视觉风格候选图片并产生媒体费用。批准后执行当前已确定的生成调用。',
       },
       agentFlow: {
         onTaskComplete: 'await_user_choice',
@@ -576,7 +578,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review]: buildRequestEditChoiceOperation('bible_review'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.style]: buildRequestEditChoiceOperation('style'),
     [EDIT_FIRST_CHOICE_TOOL_IDS.asset_review]: buildRequestEditChoiceOperation('asset_review'),
-    [EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation]: buildRequestEditChoiceOperation('budget_confirmation'),
     generate_edit_script: defineOperation({
       id: 'generate_edit_script',
       summary: 'Build the core edit plan for one chapter from the confirmed episode Bible, selected Style Bible, and chapter source slice.',
@@ -584,8 +585,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
-        required: true,
-        summary: '将基于已确认剧集规划、风格和当前章节源文本生成并覆盖本章核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('generate_edit_script'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptInputSchema,
@@ -629,8 +630,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
       confirmation: {
-        required: true,
-        summary: '将重新生成并覆盖指定章节的核心剪辑计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('replan_chapter'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA,
       inputSchema: replanChapterInputSchema,
@@ -687,8 +688,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        required: true,
-        summary: '将为本集所有选中章节批量提交核心剪辑计划任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('plan_chapters'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_PLAN_CHAPTERS_TOOL_INPUT_SCHEMA,
       inputSchema: planChaptersInputSchema,
@@ -775,6 +776,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
+        kind: getEditFirstOperationApprovalKind('generate_edit_script_assets'),
         required: true,
         summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交生成任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -823,6 +825,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
+        kind: getEditFirstOperationApprovalKind('revise_edit_script_assets'),
         required: true,
         summary: '将根据用户审核意见返工所需资产图片，并提交图片修改任务（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },
@@ -871,8 +874,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        required: true,
-        summary: '将基于核心剪辑计划、资产和空间档案生成并覆盖本集镜头执行计划（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('generate_edit_shot_execution_plan'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditShotExecutionPlanInputSchema,
@@ -947,8 +950,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
-        required: true,
-        summary: '将根据已完成的空间档案、核心剪辑计划、镜头执行计划和资产生成正式分镜面板提示词（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('generate_edit_script_storyboard'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptStoryboardInputSchema,

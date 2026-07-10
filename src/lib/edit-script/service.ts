@@ -33,6 +33,7 @@ import {
   type KnownPlanAsset,
 } from '@/lib/edit-chapter/asset-menu'
 import { EDIT_BIBLE_STATUS } from '@/lib/edit-bible/constraints'
+import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible/service'
 import { EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO } from '@/lib/edit-script/style-preview-image-constants'
 import type { Locale } from '@/i18n/routing'
 import {
@@ -460,7 +461,6 @@ async function runStructuredPromptStep<TData>(input: {
   readonly stepIndex: number
   readonly stepTotal: number
   readonly schema?: ZodType<unknown>
-  readonly maxRepairRounds?: number
   readonly validate: (raw: unknown) => TData
 }): Promise<TData> {
   const finalPromptContent = buildAiPromptContent({
@@ -489,7 +489,6 @@ async function runStructuredPromptStep<TData>(input: {
     },
     schema: input.schema ?? z.unknown(),
     parse: { kind: 'object' },
-    ...(input.maxRepairRounds !== undefined ? { maxRepairRounds: input.maxRepairRounds } : {}),
     validate: input.validate,
   })
 
@@ -1758,7 +1757,6 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       locale,
       promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
       schema: buildChapterPlanOutputSchema(scriptSource.assetMenu),
-      maxRepairRounds: 2,
       variables: {
         user_request: userPrompt,
         bible_text: scriptSource.sourceText,
@@ -2232,6 +2230,32 @@ async function submitRequirementImageTask(input: {
 }
 
 export async function generateProjectEditScriptAssets(input: GenerateEditScriptAssetsInput): Promise<EditScriptAssetGenerationPayload> {
+  const [episodeBible, episodeChapters, episodeScripts] = await Promise.all([
+    readEpisodeEditBible({ projectId: input.projectId, episodeId: input.episodeId }),
+    readEpisodeEditChapters({ projectId: input.projectId, episodeId: input.episodeId }),
+    prisma.projectEditScript.findMany({
+      where: { projectId: input.projectId, episodeId: input.episodeId },
+      select: { chapterId: true, status: true },
+    }),
+  ])
+  const confirmedStyleImageUrl = episodeBible?.stylePreviews.find((preview) => (
+    preview.status === 'confirmed'
+    && typeof preview.imageUrl === 'string'
+    && preview.imageUrl.trim().length > 0
+  ))?.imageUrl ?? null
+  if (!confirmedStyleImageUrl) {
+    throw new Error(`EDIT_FIRST_MEDIA_STYLE_CONTEXT_REQUIRED:${input.episodeId}`)
+  }
+  const readyChapterIds = new Set(episodeScripts
+    .filter((script) => script.status === 'ready' || script.status === 'completed')
+    .map((script) => script.chapterId))
+  const notReadyChapterIds = episodeChapters
+    .map((chapter) => chapter.id)
+    .filter((chapterId) => !readyChapterIds.has(chapterId))
+  if (episodeChapters.length === 0 || notReadyChapterIds.length > 0) {
+    throw new Error(`EDIT_SCRIPT_ASSET_EPISODE_GATE_NOT_READY:${notReadyChapterIds.join(',') || 'no-chapters'}`)
+  }
+
   const scripts = await getPersistedEditScriptsForAssetGeneration({
     projectId: input.projectId,
     episodeId: input.episodeId,

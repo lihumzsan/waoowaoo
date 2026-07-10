@@ -51,7 +51,7 @@ describe('storyboard panel image mutation task state', () => {
     vi.clearAllMocks()
   })
 
-  it('records image_panel task type in optimistic and submitted overlays', async () => {
+  it('records image_panel task state only after submission returns a real taskId', async () => {
     const { useRegenerateProjectPanelImage } = await import('@/lib/query/mutations/storyboard-panel-mutations')
     const queryClient = runtime.queryClient
     if (!queryClient) throw new Error('query client not initialized')
@@ -62,7 +62,7 @@ describe('storyboard panel image mutation task state', () => {
     mutation.onMutate({ panelId: 'panel-1', count: 1 })
 
     const optimisticOverlay = readOverlay(queryClient, 'project-1')
-    expect(optimisticOverlay['ProjectPanel:panel-1']?.runningTaskType).toBe('image_panel')
+    expect(optimisticOverlay['ProjectPanel:panel-1']).toBeUndefined()
 
     mutation.onSuccess({ taskId: 'task-panel-image-1' }, { panelId: 'panel-1', count: 1 })
 

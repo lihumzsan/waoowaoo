@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { EDIT_FIRST_CHOICE_OPERATION_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import { EDIT_FIRST_OPERATION_APPROVAL_KINDS } from '@/lib/project-workflow/edit-first-operation-policy'
 
 describe('project agent operation registry', () => {
   it('keeps operation ids aligned and core fields defined', () => {
@@ -92,14 +93,14 @@ describe('project agent operation registry', () => {
     expect(snapshotOperation.summary).toContain('Use detail=full only when panel fields, prompts, descriptions, or media URLs are explicitly needed')
   })
 
-  it('registers project music generation as a billable tool/api operation without pre-confirmation', () => {
+  it('registers project music generation as a billable media approval operation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.generate_project_music
 
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: true })
     expect(operation.groupPath).toEqual(['media', 'music'])
-    expect(operation.confirmation.required).toBe(false)
+    expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
     expect(operation.effects).toEqual({
       writes: true,
       billable: true,
@@ -111,7 +112,7 @@ describe('project agent operation registry', () => {
     })
   })
 
-  it('allows edit-first auto-approved operations to stay assistant-callable without confirmation', () => {
+  it('requires real media approval for edit-first style image generation', () => {
     const registry = createProjectAgentOperationRegistry()
     for (const operationId of [
       'generate_edit_style_previews',
@@ -120,7 +121,15 @@ describe('project agent operation registry', () => {
       expect(operation).toBeDefined()
       expect(operation.channels).toEqual({ tool: true, api: true })
       expect(operation.effects.bulk).toBe(true)
-      expect(operation.confirmation.required).toBe(false)
+      expect(operation.confirmation).toMatchObject({ kind: 'billable_media', required: true })
+    }
+  })
+
+  it('keeps every edit-first operation aligned with the canonical workflow approval policy', () => {
+    const registry = createProjectAgentOperationRegistry()
+    for (const [operationId, approvalKind] of Object.entries(EDIT_FIRST_OPERATION_APPROVAL_KINDS)) {
+      expect(registry[operationId]?.confirmation.kind, operationId).toBe(approvalKind)
+      expect(registry[operationId]?.confirmation.required, operationId).toBe(approvalKind !== 'none')
     }
   })
 
@@ -161,14 +170,14 @@ describe('project agent operation registry', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('registers final video render as a confirmed but non-billable assistant-callable operation', () => {
+  it('registers local final video render without media billing approval', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.render_final_video
 
     expect(operation).toBeDefined()
     expect(operation.channels).toEqual({ tool: true, api: true })
     expect(operation.groupPath).toEqual(['media', 'video'])
-    expect(operation.confirmation.required).toBe(true)
+    expect(operation.confirmation).toMatchObject({ kind: 'none', required: false })
     expect(operation.prerequisites.episodeId).toBe('required')
     expect(operation.effects).toEqual({
       writes: true,

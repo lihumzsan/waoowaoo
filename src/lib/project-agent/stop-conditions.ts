@@ -90,6 +90,11 @@ function mergeAwaitDescriptors(
       operationIds: Array.from(new Set(externalTaskDescriptors.map((descriptor) => descriptor.operationId))).sort(),
       taskIds: Array.from(new Set(externalTaskDescriptors.flatMap((descriptor) => descriptor.taskIds))).sort(),
       phases: Array.from(new Set(externalTaskDescriptors.flatMap((descriptor) => descriptor.phases))).sort(),
+      taskWaits: externalTaskDescriptors.map((descriptor) => ({
+        operationId: descriptor.operationId,
+        taskIds: Array.from(new Set(descriptor.taskIds)).sort(),
+        phases: Array.from(new Set(descriptor.phases)).sort(),
+      })),
     }
   }
 

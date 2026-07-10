@@ -178,20 +178,6 @@ function isEditFirstChoiceOperationEnabled(params: {
   if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.asset_review) {
     return params.workflow.stage === 'assets_ready_for_review'
   }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.budget_confirmation) {
-    return Boolean(params.workflow.nextAction) && (
-      params.workflow.stage === 'ready_to_generate_edit_script'
-      || params.workflow.stage === 'ready_to_generate_assets'
-      || params.workflow.stage === 'ready_to_generate_shot_execution_plan'
-      || params.workflow.stage === 'ready_to_generate_storyboard'
-      || params.workflow.stage === 'ready_to_generate_storyboard_images'
-      || params.workflow.stage === 'ready_to_generate_videos'
-      || params.workflow.stage === 'ready_to_render_chapters'
-      || params.workflow.stage === 'ready_to_generate_bgm_score'
-      || params.workflow.stage === 'ready_to_generate_audio_layers'
-      || params.workflow.stage === 'ready_to_render_final'
-    )
-  }
   return false
 }
 

@@ -3,7 +3,7 @@ import type {
   TaskRuntimeTarget,
 } from '@/lib/task/runtime-targets'
 import {
-  isTaskRuntimeRunningPhase,
+  isTaskRuntimeStateRunning,
   taskRuntimeTargetQueryKey,
 } from '@/lib/task/runtime-targets'
 import type {
@@ -16,6 +16,7 @@ import type {
 export interface WorkspaceNodeRuntimeLabels {
   readonly running: string
   readonly failed: string
+  readonly inconsistent: string
 }
 
 export function collectWorkspaceNodeRuntimeTargets(
@@ -43,7 +44,7 @@ function orderedRuntimeStates(
 }
 
 function firstRunningState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
-  return states.find((state) => isTaskRuntimeRunningPhase(state.phase)) ?? null
+  return states.find((state) => isTaskRuntimeStateRunning(state)) ?? null
 }
 
 function firstFailedState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
@@ -55,36 +56,6 @@ function readErrorMessage(state: TaskRuntimeStateLike | null): string | null {
   return typeof message === 'string' && message.trim() ? message.trim() : null
 }
 
-function optimisticTaskProgress(node: WorkspaceCanvasFlowNode): TaskRuntimeStateLike | null {
-  const target = node.data.runtimeTargets?.[0]
-  const taskType = target?.types?.[0]
-  if (!target || !taskType) return null
-  return {
-    targetType: target.targetType,
-    targetId: target.targetId,
-    phase: 'processing',
-    runningTaskId: `optimistic:${node.id}:${taskType}`,
-    runningTaskType: taskType,
-    updatedAt: null,
-    lastError: null,
-  }
-}
-
-function optimisticAssetTaskProgress(asset: WorkspaceCanvasEditAssetGroupItem): TaskRuntimeStateLike | null {
-  const target = asset.runtimeTarget
-  const taskType = target?.types?.[0]
-  if (!target || !taskType) return null
-  return {
-    targetType: target.targetType,
-    targetId: target.targetId,
-    phase: 'processing',
-    runningTaskId: `optimistic:${asset.requirementId}:${taskType}`,
-    runningTaskType: taskType,
-    updatedAt: null,
-    lastError: null,
-  }
-}
-
 function resolveEditAssetItemRuntimePatch(input: {
   readonly asset: WorkspaceCanvasEditAssetGroupItem
   readonly statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>
@@ -94,7 +65,7 @@ function resolveEditAssetItemRuntimePatch(input: {
     ? input.statesByQueryKey.get(taskRuntimeTargetQueryKey(input.asset.runtimeTarget)) ?? null
     : null
 
-  if (state && isTaskRuntimeRunningPhase(state.phase)) {
+  if (state && isTaskRuntimeStateRunning(state)) {
     return {
       ...input.asset,
       isRunning: true,
@@ -115,8 +86,9 @@ function resolveEditAssetItemRuntimePatch(input: {
   if (input.asset.isRunning) {
     return {
       ...input.asset,
-      statusLabel: input.labels.running,
-      taskProgress: input.asset.taskProgress ?? optimisticAssetTaskProgress(input.asset),
+      isRunning: false,
+      statusLabel: input.labels.inconsistent,
+      taskProgress: null,
     }
   }
 
@@ -199,7 +171,6 @@ function withRuntimeErrorMessage(
 export function resolveWorkspaceNodeRuntimePatch(input: {
   readonly node: WorkspaceCanvasFlowNode
   readonly statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>
-  readonly isOptimisticallyRunning: boolean
   readonly labels: WorkspaceNodeRuntimeLabels
 }): Partial<WorkspaceCanvasNodeData> {
   const states = orderedRuntimeStates(input.node, input.statesByQueryKey)
@@ -210,13 +181,13 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
     labels: input.labels,
   })
   const editAssetGroupPatch = editAssetGroupDetails ? { editAssetGroupDetails } : {}
-  if (runningState || input.isOptimisticallyRunning) {
+  if (runningState) {
     return {
       ...editAssetGroupPatch,
       artifactPhase: 'running',
       isRunning: true,
       statusLabel: input.labels.running,
-      taskProgress: runningState ?? optimisticTaskProgress(input.node),
+      taskProgress: runningState,
     }
   }
 
@@ -232,12 +203,13 @@ export function resolveWorkspaceNodeRuntimePatch(input: {
   }
 
   if (typeof input.node.data.isRunning === 'boolean') {
+    const inconsistent = input.node.data.isRunning === true
     return {
       ...editAssetGroupPatch,
-      artifactPhase: input.node.data.artifactPhase,
-      isRunning: input.node.data.isRunning,
-      statusLabel: input.node.data.statusLabel,
-      taskProgress: input.node.data.isRunning ? input.node.data.taskProgress ?? optimisticTaskProgress(input.node) : null,
+      artifactPhase: inconsistent ? 'failed' : input.node.data.artifactPhase,
+      isRunning: false,
+      statusLabel: inconsistent ? input.labels.inconsistent : input.node.data.statusLabel,
+      taskProgress: null,
     }
   }
   return {

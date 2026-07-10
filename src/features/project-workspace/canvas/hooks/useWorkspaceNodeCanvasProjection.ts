@@ -25,14 +25,39 @@ import type {
   WorkspaceCanvasFlowEdge,
   WorkspaceCanvasFlowNode,
   WorkspaceCanvasImageDetails,
+  MediaLoadingContext,
+  WorkspaceCanvasMediaNodeKind,
+  WorkspaceCanvasMediaNodeData,
   WorkspaceCanvasNodeActionHandler,
   WorkspaceCanvasNodeData,
+  WorkspaceCanvasNodeRecord,
   WorkspaceCanvasProjection,
   WorkspaceCanvasShotDetails,
   WorkspaceCanvasSoundscapeDetails,
   WorkspaceCanvasStyleBibleDetails,
   WorkspaceCanvasVideoPlanDetails,
 } from '../node-canvas-types'
+
+type WorkspaceCanvasNodeInputBase = Omit<
+  WorkspaceCanvasNodeData,
+  'nodeId' | 'width' | 'height' | 'kind' | 'mediaLoadingContext'
+>
+
+type WorkspaceCanvasNodeInputData = WorkspaceCanvasNodeInputBase & (
+  | {
+    readonly kind: WorkspaceCanvasMediaNodeKind
+    readonly mediaLoadingContext: MediaLoadingContext
+  }
+  | {
+    readonly kind: Exclude<WorkspaceCanvasNodeData['kind'], WorkspaceCanvasMediaNodeKind>
+    readonly mediaLoadingContext?: never
+  }
+)
+
+type WorkspaceCanvasMediaNodeInputData = Omit<
+  WorkspaceCanvasMediaNodeData,
+  'nodeId' | 'width' | 'height' | 'mediaLoadingContext'
+>
 import {
   WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE,
   WORKSPACE_CANVAS_DEFAULT_NODE_SIZE,
@@ -63,6 +88,7 @@ interface TranslateValues {
 type Translate = (key: string, values?: TranslateValues) => string
 
 interface WorkspaceCanvasActiveTaskTarget extends TaskRuntimeTarget {
+  readonly taskId: string
   readonly operationId?: string | null
   readonly sourceKind?: string | null
 }
@@ -488,20 +514,28 @@ function createEdge(id: string, source: string, target: string): WorkspaceCanvas
   }
 }
 
+function normalizeMediaLoadingContext(value: unknown): MediaLoadingContext | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const styleImageUrl = Reflect.get(value, 'styleImageUrl')
+  if (styleImageUrl !== null && typeof styleImageUrl !== 'string') return null
+  return { styleImageUrl }
+}
+
 function createNode(input: {
   readonly id: string
   readonly position: { readonly x: number; readonly y: number }
-  readonly data: Omit<WorkspaceCanvasNodeData, 'nodeId' | 'width' | 'height'>
+  readonly data: WorkspaceCanvasNodeInputData
   readonly width: number
   readonly height: number
 }): WorkspaceCanvasFlowNode {
-  const data = {
+  const data: WorkspaceCanvasNodeRecord = {
     ...input.data,
+    mediaLoadingContext: normalizeMediaLoadingContext(input.data.mediaLoadingContext),
     nodeId: input.id,
     width: input.width,
     height: input.height,
     layoutBasePosition: input.position,
-  } as WorkspaceCanvasNodeData
+  }
   return {
     id: input.id,
     type: 'workspaceNode',
@@ -509,6 +543,26 @@ function createNode(input: {
     style: styleForNode(input.width, input.height),
     data,
   }
+}
+
+function createMediaNode(input: {
+  readonly id: string
+  readonly position: { readonly x: number; readonly y: number }
+  readonly data: WorkspaceCanvasMediaNodeInputData
+  readonly loadingContext: { readonly styleImageUrl: string | null }
+  readonly width: number
+  readonly height: number
+}): WorkspaceCanvasFlowNode {
+  return createNode({
+    id: input.id,
+    position: input.position,
+    width: input.width,
+    height: input.height,
+    data: {
+      ...input.data,
+      mediaLoadingContext: input.loadingContext,
+    },
+  })
 }
 
 function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate): WorkspaceCanvasEditPipelineStepItem[] {
@@ -686,7 +740,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const sourceScriptRunning = !sourceScriptMaterialized && (
     Boolean(activeEditBibleTaskTarget?.sourceKind === 'prompt_generated_outline')
     || Boolean(editSourceScriptStreamTarget)
-    || editFirstWorkflow.stage === 'script_generating'
     || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
   )
   const sourceScriptFailed = Boolean(
@@ -700,7 +753,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     || Boolean(editSourceScriptStreamTarget)
   const bibleRunning = Boolean(activeEditBibleTaskTarget && activeEditBibleTaskTarget.sourceKind !== 'prompt_generated_outline')
     || Boolean(editBibleStreamTarget)
-    || editFirstWorkflow.stage === 'bible_generating'
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const hasProductionPlanningArtifact = Boolean(
     editBible
@@ -811,7 +863,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   let styleBibleNodeId: string | null = null
   if (styleBibleDetails && editBible) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
-    nodes.push(createNode({
+    nodes.push(createMediaNode({
       id: styleBibleNodeId,
       position: layoutPosition(savedLayouts, styleBibleNodeId, {
         x: STORY_COLUMN_X,
@@ -819,6 +871,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       }),
       width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
       data: {
         projectId,
         episodeName,
@@ -832,7 +885,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         meta: translate('status.succeeded'),
         ...workspaceCanvasSucceededPresentation(phaseLabels),
         previewImageUrl: stylePreviewImageUrl,
-        loadingStyleImageUrl: stylePreviewImageUrl,
         styleBibleDetails,
         onAction,
       },
@@ -1038,16 +1090,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const locationRequirements = countEditAssetRequirements(script.requirements, 'location')
     const assetsReady = script.requirements.length > 0
       && script.requirements.every((requirement) => requirement.status === 'completed')
-    const assetsRunning = script.requirements.some((requirement) => requirement.status === 'generating' || requirement.status === 'pending')
     const assetsFailed = script.requirements.some((requirement) => requirement.status === 'failed')
-    const assetGroupPresentation = assetsRunning
-      ? workspaceCanvasRunningPresentation(phaseLabels)
-      : assetsFailed
+    const assetsInconsistent = script.requirements.some((requirement) => requirement.status === 'generating')
+    const assetGroupPresentation = assetsFailed
         ? workspaceCanvasFailedPresentation(phaseLabels)
         : assetsReady
           ? workspaceCanvasSucceededPresentation(phaseLabels)
           : null
-    nodes.push(createNode({
+    nodes.push(createMediaNode({
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
         x: STORY_COLUMN_X + COLUMN_GAP_X,
@@ -1055,6 +1105,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       }),
       width: 720,
       height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
       data: {
         projectId,
         episodeName,
@@ -1069,7 +1120,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           characters: characterRequirements,
           locations: locationRequirements,
         }),
-        ...(assetGroupPresentation ?? { statusLabel: '', isRunning: false }),
+        ...(assetGroupPresentation ?? {
+          statusLabel: assetsInconsistent ? translate('status.inconsistent') : translate('status.pending'),
+          isRunning: false,
+        }),
         actionLabel: assetsReady ? undefined : translate('actions.generateEditAssets'),
         action: assetsReady ? undefined : { type: 'generate_edit_assets', editScriptId: script.id },
         editAssetGroupDetails: {
@@ -1084,8 +1138,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             shotNumbers: requirement.shotIds
               .map((shotId) => script.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
               .filter((value): value is number => typeof value === 'number'),
-            statusLabel: artifactPresentationFromTaskBackedStatus(requirement.status, phaseLabels)?.statusLabel ?? '',
-            isRunning: requirement.status === 'generating' || requirement.status === 'pending',
+            statusLabel: requirement.status === 'generating'
+              ? translate('status.inconsistent')
+              : artifactPresentationFromTaskBackedStatus(requirement.status, phaseLabels)?.statusLabel
+                ?? translate('status.pending'),
+            isRunning: false,
             previewImageUrl: assetPreviewUrl(requirement),
             runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(requirement.taskTargetType ?? null, requirement.taskTargetId ?? null),
             taskProgress: null,
@@ -1175,7 +1232,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         : shotFailed
           ? workspaceCanvasFailedPresentation(phaseLabels)
           : workspaceCanvasSucceededPresentation(phaseLabels)
-      nodes.push(createNode({
+      nodes.push(createMediaNode({
         id: nodeId,
         position: layoutPosition(savedLayouts, nodeId, gridPosition({
           index,
@@ -1188,6 +1245,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         })),
         width: WORKSPACE_CANVAS_SHOT_NODE_SIZE.width,
         height: WORKSPACE_CANVAS_SHOT_NODE_SIZE.height,
+        loadingContext: { styleImageUrl: stylePreviewImageUrl },
         data: {
           projectId,
           episodeName,
@@ -1204,7 +1262,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           ...shotPresentation,
           previewImageUrl,
           previewAspectRatio,
-          loadingStyleImageUrl: stylePreviewImageUrl,
           runtimeTargets: runtimeTargets(
             TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
             TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
@@ -1247,7 +1304,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ? artifactPresentationFromTaskBackedStatus(videoGroup.status, phaseLabels)
           ?? workspaceCanvasFailedPresentation(phaseLabels)
         : null
-      nodes.push(createNode({
+      nodes.push(createMediaNode({
         id: nodeId,
         position: layoutPosition(savedLayouts, nodeId, gridPosition({
           index,
@@ -1260,6 +1317,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         })),
         width: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
         height: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height,
+        loadingContext: { styleImageUrl: stylePreviewImageUrl },
         data: {
           projectId,
           episodeName,
@@ -1312,11 +1370,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       ? artifactPresentationFromTaskBackedStatus(bgmDetails.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
       : null
-    nodes.push(createNode({
+    nodes.push(createMediaNode({
       id: bgmNodeId,
       position: layoutPosition(savedLayouts, bgmNodeId, { x: SHOT_GRID_START_X, y: bgmScoreDefaultY }),
       width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
       data: {
         projectId,
         episodeName,
@@ -1345,7 +1404,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       ? artifactPresentationFromTaskBackedStatus(details.status, phaseLabels)
         ?? workspaceCanvasFailedPresentation(phaseLabels)
       : null
-    nodes.push(createNode({
+    nodes.push(createMediaNode({
       id: soundscapeNodeId,
       position: layoutPosition(savedLayouts, soundscapeNodeId, {
         x: SHOT_GRID_START_X + WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width + SHOT_GRID_GAP_X,
@@ -1353,6 +1412,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       }),
       width: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_BGM_SCORE_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
       data: {
         projectId,
         episodeName,
@@ -1389,11 +1449,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ? artifactPresentationFromTaskBackedStatus(finalVideo.renderStatus, phaseLabels)
           ?? workspaceCanvasFailedPresentation(phaseLabels)
         : null
-    nodes.push(createNode({
+    nodes.push(createMediaNode({
       id: finalNodeId,
       position: layoutPosition(savedLayouts, finalNodeId, { x: SHOT_GRID_START_X, y: bgmStageBottomY + FINAL_TIMELINE_GAP_Y }),
       width: WORKSPACE_CANVAS_FINAL_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_FINAL_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
       data: {
         projectId,
         episodeName,

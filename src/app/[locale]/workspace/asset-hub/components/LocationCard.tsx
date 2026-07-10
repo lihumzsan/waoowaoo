@@ -320,6 +320,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
                         targetId: img.id,
                         running: true,
                       })}
+                      styleImageUrl={null}
                       size={48}
                     />
                   )}
@@ -431,6 +432,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
               targetId: location.id,
               running: true,
             })}
+            styleImageUrl={null}
             size={64}
           />
         )}

@@ -58,7 +58,7 @@ export function makeTestOperation<Input, Output>(params: {
     channels: params.channels ?? { tool: true, api: true },
     prerequisites: params.prerequisites ?? { episodeId: 'optional' },
     effects: params.effects ?? EFFECTS_NONE,
-    confirmation: params.confirmation ?? { required: false },
+    confirmation: params.confirmation ?? { kind: 'none', required: false },
     ...(params.agentFlow ? { agentFlow: params.agentFlow } : {}),
     toolInputSchema: createProjectAgentToolInputSchema({
       operationId: params.id,

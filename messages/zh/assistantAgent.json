@@ -57,6 +57,8 @@
   "toolCall": {
     "title": "工具调用",
     "success": "成功",
+    "submitted": "已提交",
+    "taskCount": "{count} 个任务",
     "failed": "失败",
     "running": "进行中",
     "needsAction": "待处理",

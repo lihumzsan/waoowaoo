@@ -416,10 +416,10 @@ function ProjectWorkspaceCanvasContent({
       const runtimePatch = resolveWorkspaceNodeRuntimePatch({
         node: projectedNode,
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        isOptimisticallyRunning: false,
         labels: {
           running: nodeRunningStatusLabel(),
           failed: t('status.failed'),
+          inconsistent: t('status.inconsistent'),
         },
       })
       return {
@@ -576,14 +576,13 @@ function ProjectWorkspaceCanvasContent({
   }, [])
   const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => {
     return inputNodes.map((node) => {
-      const isOptimisticallyRunning = optimisticRunningNodeIdsRef.current.has(node.id)
       const runtimePatch = resolveWorkspaceNodeRuntimePatch({
         node,
         statesByQueryKey: workspaceTaskStateByQueryKeyRef.current,
-        isOptimisticallyRunning,
         labels: {
           running: nodeRunningStatusLabel(),
           failed: t('status.failed'),
+          inconsistent: t('status.inconsistent'),
         },
       })
       const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)

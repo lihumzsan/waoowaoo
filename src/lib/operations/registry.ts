@@ -1,6 +1,5 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
-import { isEditFirstAutoApprovedOperationId } from '@/lib/project-workflow/edit-first-operation-policy'
 export type {
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
@@ -12,33 +11,6 @@ function mustTrimmedString(value: unknown, label: string): string {
   const trimmed = value.trim()
   if (!trimmed) throw new Error(`PROJECT_AGENT_OPERATION_${label}_EMPTY`)
   return trimmed
-}
-
-function requiresConfirmationByEffects(effects: {
-  billable: boolean
-  destructive: boolean
-  overwrite: boolean
-  bulk: boolean
-  externalSideEffects: boolean
-  longRunning: boolean
-}): boolean {
-  return (
-    effects.billable
-    || effects.destructive
-    || effects.overwrite
-    || effects.bulk
-    || effects.externalSideEffects
-    || effects.longRunning
-  )
-}
-
-function isToolConfirmationExemptOperationId(operationId: string): boolean {
-  return (
-    isEditFirstAutoApprovedOperationId(operationId)
-    || operationId === 'generate_project_music'
-    || operationId === 'generate_episode_bgm_score'
-    || operationId === 'generate_episode_soundscape'
-  )
 }
 
 function validateOperationRegistry(registry: Record<string, unknown>) {
@@ -127,28 +99,18 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INTERRUPTS_FOR_INVALID:${operationId}`)
       }
     }
-    const confirmation = op.confirmation as { required?: unknown } | undefined
+    const confirmation = op.confirmation as { kind?: unknown; required?: unknown } | undefined
     if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_MISSING:${operationId}`)
     }
     if (confirmation.required !== true && confirmation.required !== false) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_INVALID:${operationId}`)
     }
-    const needsConfirm = requiresConfirmationByEffects(effects as {
-      billable: boolean
-      destructive: boolean
-      overwrite: boolean
-      bulk: boolean
-      externalSideEffects: boolean
-      longRunning: boolean
-    })
-    if (
-      needsConfirm
-      && channels.tool === true
-      && confirmation.required !== true
-      && !isToolConfirmationExemptOperationId(operationId)
-    ) {
-      throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_REQUIRED_MISMATCH:${operationId}`)
+    if (confirmation.kind !== 'none' && confirmation.kind !== 'billable_media' && confirmation.kind !== 'destructive') {
+      throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_INVALID:${operationId}`)
+    }
+    if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
+      throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
     }
     const toolInputSchema = op.toolInputSchema as { properties?: unknown; required?: unknown; additionalProperties?: unknown } | undefined
     if (channels.tool === true) {

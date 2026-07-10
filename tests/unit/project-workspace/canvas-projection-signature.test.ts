@@ -20,6 +20,7 @@ function createNode(input: {
     position: { x: input.x ?? 1, y: 2 },
     data: {
       kind: 'shot',
+      mediaLoadingContext: { styleImageUrl: null },
       layoutNodeType: 'shot',
       targetType: 'panel',
       targetId: 'panel-1',

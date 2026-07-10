@@ -13,6 +13,6 @@ export function createApiOnlyOperationRegistry(): ProjectAgentOperationRegistry 
     groupPath: ['api-only'],
     channels: { tool: false, api: true },
     prerequisites: { episodeId: 'optional' },
-    confirmation: { required: false, summary: null, budget: null },
+    confirmation: { kind: 'none', required: false, summary: null, budget: null },
   })
 }

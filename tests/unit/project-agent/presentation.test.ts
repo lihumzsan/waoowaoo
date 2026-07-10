@@ -45,6 +45,7 @@ describe('project agent presentation', () => {
         id: 'generate_edit_script_assets',
         operationId: 'generate_edit_script_assets' as const,
         title: 'Generate required assets',
+        approvalKind: 'billable_media' as const,
         requiresUserConfirmation: true,
       },
       allowedOperationIds: ['generate_edit_script_assets' as const],

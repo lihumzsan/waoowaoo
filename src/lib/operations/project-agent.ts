@@ -37,7 +37,7 @@ import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
 
 export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegistry {
-  const CONFIRM_NONE = { required: false, summary: null, budget: null } as const
+  const CONFIRM_NONE = { kind: 'none', required: false, summary: null, budget: null } as const
   const CHANNELS_TOOL_API = { tool: true, api: true } as const
   const CHANNELS_API_ONLY = { tool: false, api: true } as const
   const PREREQ_EPISODE_OPTIONAL = { episodeId: 'optional' } as const

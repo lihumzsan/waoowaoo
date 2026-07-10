@@ -24,6 +24,24 @@ export type WorkspaceCanvasNodeKind =
   | 'editRequiredAsset'
   | 'editAssetGroup'
 
+export type WorkspaceCanvasMediaNodeKind = Extract<WorkspaceCanvasNodeKind,
+  | 'shot'
+  | 'imageAsset'
+  | 'videoClip'
+  | 'finalTimeline'
+  | 'editStylePreview'
+  | 'editStyleBible'
+  | 'videoPlan'
+  | 'bgmScore'
+  | 'soundscape'
+  | 'editRequiredAsset'
+  | 'editAssetGroup'
+>
+
+export interface MediaLoadingContext {
+  readonly styleImageUrl: string | null
+}
+
 export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editSourceScript' | 'editBible' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
@@ -395,7 +413,7 @@ export interface WorkspaceCanvasNodeDisclosureState {
   readonly collapseWhenStreamCompletes: boolean
 }
 
-export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
+export interface WorkspaceCanvasNodeData {
   readonly nodeId?: string
   readonly projectId?: string
   readonly episodeName?: string
@@ -433,6 +451,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly tertiaryAction?: WorkspaceCanvasNodeAction
   readonly tertiaryActionBillingQuote?: BillingActionQuotePreview
   readonly actionDisabled?: boolean
+  readonly readOnly?: boolean
   readonly onAction?: WorkspaceCanvasNodeActionHandler
   readonly expanded?: boolean
   readonly expandedLayout?: 'stack' | 'wide'
@@ -443,8 +462,7 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly previewImageUrl?: string | null
   readonly previewAspectRatio?: number | null
   readonly previewDisplayHeight?: number | null
-  /** 待生成媒体的加载背景图(用户选中的视觉风格图);无则退回模糊磨砂底 */
-  readonly loadingStyleImageUrl?: string | null
+  readonly mediaLoadingContext: MediaLoadingContext | null
   readonly shotDetails?: WorkspaceCanvasShotDetails
   readonly imageDetails?: WorkspaceCanvasImageDetails
   readonly videoDetails?: WorkspaceCanvasVideoDetails
@@ -462,7 +480,20 @@ export interface WorkspaceCanvasNodeData extends Record<string, unknown> {
   readonly editAssetGroupDetails?: WorkspaceCanvasEditAssetGroupDetails
 }
 
-export type WorkspaceCanvasFlowNode = Node<WorkspaceCanvasNodeData, 'workspaceNode'>
+export type WorkspaceCanvasMediaNodeData = WorkspaceCanvasNodeData & {
+  readonly kind: WorkspaceCanvasMediaNodeKind
+  readonly mediaLoadingContext: MediaLoadingContext
+}
+
+export type WorkspaceCanvasNonMediaNodeData = WorkspaceCanvasNodeData & {
+  readonly kind: Exclude<WorkspaceCanvasNodeKind, WorkspaceCanvasMediaNodeKind>
+  readonly mediaLoadingContext: null
+}
+
+export type WorkspaceCanvasDiscriminatedNodeData = WorkspaceCanvasMediaNodeData | WorkspaceCanvasNonMediaNodeData
+
+export type WorkspaceCanvasNodeRecord = WorkspaceCanvasNodeData & Record<string, unknown>
+export type WorkspaceCanvasFlowNode = Node<WorkspaceCanvasNodeRecord, 'workspaceNode'>
 export type WorkspaceCanvasFlowEdge = Edge
 
 export interface WorkspaceCanvasProjection {

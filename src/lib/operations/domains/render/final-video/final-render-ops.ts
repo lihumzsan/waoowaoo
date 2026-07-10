@@ -14,6 +14,7 @@ import {
 } from '@/lib/operations/output-schemas'
 import { createTaskBatchKey } from '@/lib/task/batch'
 import { compensateSubmittedTasks } from '@/lib/operations/planning'
+import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const finalRenderInputSchema = z.object({
   confirmed: z.boolean().optional(),
@@ -107,8 +108,8 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         longRunning: true,
       },
       confirmation: {
-        required: true,
-        summary: '将为本集章节批量提交章节成片渲染任务。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('render_chapters'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: renderChaptersInputSchema,
@@ -194,8 +195,8 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         longRunning: true,
       },
       confirmation: {
-        required: true,
-        summary: '将使用已完成的 episode 配乐与环境音层导出最终成片。若音频层尚未完成，请先生成配乐与环境音。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('render_final_video'),
+        required: false,
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: finalRenderInputSchema,

@@ -16,6 +16,7 @@
     "INTERNAL_ERROR": "Server error. Please try again later",
     "NETWORK_ERROR": "Network error. Please check your connection",
     "EMPTY_RESPONSE": "Model returned an empty response (no meaningful content). Please retry",
+    "MODEL_OUTPUT_TRUNCATED": "Model output hit its token limit. Reduce the requested output size and retry",
     "PARSE_ERROR": "Model output could not be parsed. Please retry",
     "MODEL_OUTPUT_SCHEMA_INVALID": "Model output did not match the required schema. Please retry",
     "PLAN_VALIDATION_FAILED": "Generated plan did not pass validation. Please revise and retry",

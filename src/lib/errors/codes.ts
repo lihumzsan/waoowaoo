@@ -130,16 +130,23 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.EMPTY_RESPONSE',
     defaultMessage: 'Model returned empty response',
   },
-  PARSE_ERROR: {
+  MODEL_OUTPUT_TRUNCATED: {
     httpStatus: 502,
     retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.MODEL_OUTPUT_TRUNCATED',
+    defaultMessage: 'Model output was truncated by the token limit',
+  },
+  PARSE_ERROR: {
+    httpStatus: 502,
+    retryable: true,
     category: ERROR_CATEGORY.PROVIDER,
     userMessageKey: 'errors.PARSE_ERROR',
     defaultMessage: 'Model output could not be parsed',
   },
   MODEL_OUTPUT_SCHEMA_INVALID: {
     httpStatus: 502,
-    retryable: false,
+    retryable: true,
     category: ERROR_CATEGORY.PROVIDER,
     userMessageKey: 'errors.MODEL_OUTPUT_SCHEMA_INVALID',
     defaultMessage: 'Model output did not match the required schema',
@@ -254,7 +261,7 @@ export function getErrorSpec(code: UnifiedErrorCode) {
 }
 
 export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
-  if (code === 'MODEL_OUTPUT_SCHEMA_INVALID' || code === 'PLAN_VALIDATION_FAILED') {
+  if (code === 'PLAN_VALIDATION_FAILED') {
     return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
   }
   return ERROR_CATALOG[code].retryable

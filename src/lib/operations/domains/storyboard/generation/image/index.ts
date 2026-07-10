@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
+import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 import { assertOperationPlanConfirmedCost, resolveConfirmedMaxCostForExecution } from '@/lib/operations/planning'
 import { refineTaskSubmitOperationOutputSchema, refineTaskBatchSubmitOperationOutputSchema, taskBatchSubmitOperationOutputSchemaBase, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { commitGenerateEditScriptStoryboardImagesOperation, planGenerateEditScriptStoryboardImagesOperation } from './edit-script-storyboard-images'
@@ -38,6 +39,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         longRunning: true,
       },
       confirmation: {
+        kind: getEditFirstOperationApprovalKind('generate_edit_script_storyboard_images'),
         required: true,
         summary: '将为当前剪辑先行分镜中缺失图片的格子批量生成分镜图片，可能消耗额度或产生计费。',
       },
@@ -76,6 +78,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
         longRunning: true,
       },
       confirmation: {
+        kind: 'billable_media',
         required: true,
         summary: '将为分镜格子重新生成图片（可能消耗额度/产生计费）。确认继续后请重新调用并传入 confirmed=true。',
       },

@@ -65,7 +65,6 @@ export function workspaceCanvasArtifactPhaseFromTaskBackedStatus(
   if (terminalPhase) return terminalPhase
   if (
     status === 'generating'
-    || status === 'pending'
     || status === 'queued'
     || status === 'processing'
   ) return 'running'

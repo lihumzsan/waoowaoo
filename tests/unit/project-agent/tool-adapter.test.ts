@@ -93,6 +93,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         intent: 'act',
         effects: EFFECTS_WRITE,
         confirmation: {
+          kind: 'billable_media',
           required: true,
           summary: 'needs confirm',
           budget: {
@@ -138,6 +139,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         intent: 'act',
         effects: EFFECTS_WRITE,
         confirmation: {
+          kind: 'destructive',
           required: true,
           summary: 'needs confirm',
         },
@@ -215,7 +217,7 @@ describe('executeProjectAgentOperationFromTool', () => {
           externalSideEffects: true,
           longRunning: true,
         },
-        confirmation: { required: false },
+        confirmation: { kind: 'none', required: false },
         inputSchema: z.object({ prompt: z.string().min(1) }),
         outputSchema: z.object({ ok: z.boolean(), taskCount: z.number().int() }),
         plan: planMock,
@@ -344,7 +346,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         summary: 'choice',
         intent: 'query',
         effects: EFFECTS_NONE,
-        confirmation: { required: false },
+        confirmation: { kind: 'none', required: false },
         agentFlow: { interruptsFor: 'choice' },
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),

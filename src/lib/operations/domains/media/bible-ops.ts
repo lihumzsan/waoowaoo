@@ -30,6 +30,7 @@ import {
   EDIT_FIRST_INGEST_SCRIPT_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_REVISE_SCRIPT_TOOL_INPUT_SCHEMA,
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
+import { getEditFirstOperationApprovalKind } from '@/lib/project-workflow/edit-first-operation-policy'
 
 const optionalEpisodeIdField = {
   episodeId: z.string().trim().min(1).optional(),
@@ -517,8 +518,8 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_WRITE,
       confirmation: {
-        required: true,
-        summary: '将覆盖当前剧集规划基线（剧情节拍、事件台账、情绪曲线和章节切分）。若已有下游章节产物，操作会失败。确认继续后请重新调用并传入 confirmed=true。',
+        kind: getEditFirstOperationApprovalKind('revise_bible'),
+        required: false,
       },
       toolInputSchema: reviseBibleToolInputSchema,
       inputSchema: reviseBibleOperationInputSchema,

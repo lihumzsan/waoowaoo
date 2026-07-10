@@ -16,6 +16,7 @@
     "INTERNAL_ERROR": "服务器错误，请稍后重试",
     "NETWORK_ERROR": "网络错误，请检查连接",
     "EMPTY_RESPONSE": "模型返回空响应（无有效内容），请稍后重试",
+    "MODEL_OUTPUT_TRUNCATED": "模型输出达到 token 上限，请缩小输出规模后重试",
     "PARSE_ERROR": "模型输出无法解析，请稍后重试",
     "MODEL_OUTPUT_SCHEMA_INVALID": "模型输出格式不符合要求，请稍后重试",
     "PLAN_VALIDATION_FAILED": "生成的规划未通过校验，请修改后重试",

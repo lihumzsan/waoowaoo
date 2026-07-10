@@ -61,6 +61,12 @@ function collectLineViolations(fullPath) {
   const lines = content.split('\n')
   const violations = []
 
+  if (
+    /useQuery\s*\(\s*\{[\s\S]{0,500}?queryKey\s*:\s*queryKeys\.project\.editBible\s*\(/.test(content)
+  ) {
+    violations.push(`${relPath}: forbidden: edit Bible query must reuse projectEditBibleQueryOptions`)
+  }
+
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
     for (const rule of lineRules) {

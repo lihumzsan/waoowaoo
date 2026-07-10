@@ -56,7 +56,10 @@ export interface OperationEffects {
   longRunning: boolean
 }
 
+export type OperationApprovalKind = 'none' | 'billable_media' | 'destructive'
+
 export interface OperationConfirmation {
+  kind: OperationApprovalKind
   required: boolean
   summary?: string | null
   budget?: {
@@ -144,7 +147,7 @@ export interface ProjectAgentOperationDefinitionBase<Input = unknown, Output = u
   channels?: OperationChannels
   prerequisites?: Partial<OperationPrerequisites>
   effects: OperationEffects
-  confirmation?: OperationConfirmation
+  confirmation?: Omit<OperationConfirmation, 'kind'> & { kind?: OperationApprovalKind }
   agentFlow?: OperationAgentFlow
   /**
    * Model-facing OpenAI Agents SDK tool input schema.

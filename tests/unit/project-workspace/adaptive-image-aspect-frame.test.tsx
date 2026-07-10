@@ -123,6 +123,7 @@ describe('adaptive image aspect frame', () => {
       nodeId: 'edit-style-bible:bible-1',
       projectId: 'project-1',
       kind: 'editStyleBible',
+      mediaLoadingContext: { styleImageUrl: 'https://example.com/style.png' },
       layoutNodeType: 'editStyleBible',
       targetType: 'editStyleBible',
       targetId: 'bible-1',

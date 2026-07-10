@@ -31,7 +31,7 @@ export type GenerateResult = {
 
 export type AiProviderLlmResult = Pick<
   AiLlmExecutionResult,
-  'completion' | 'logProvider' | 'text' | 'reasoning' | 'usage' | 'successDetails'
+  'completion' | 'logProvider' | 'text' | 'reasoning' | 'termination' | 'usage' | 'successDetails'
 >
 
 export type AiProviderLlmStreamContext = {

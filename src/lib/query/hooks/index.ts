@@ -161,6 +161,7 @@ export {
 } from './useProjectContext'
 
 export {
+    projectEditBibleQueryOptions,
     useProjectEditBible,
     useProjectEditBibleResponse,
     useProjectEditScript,

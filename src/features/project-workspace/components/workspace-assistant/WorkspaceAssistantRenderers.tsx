@@ -34,7 +34,7 @@ import type {
   TaskSubmittedPartData,
 } from '@/lib/project-agent/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
-import { useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
+import { projectEditBibleQueryOptions, useConfirmProjectEditStylePreview } from '@/lib/query/hooks'
 import { MarkdownTextPart } from './MarkdownTextPart'
 import {
   buildChoiceCardCustomOptionValue,
@@ -47,14 +47,13 @@ import {
 } from './choice-card-actions'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
-import { apiFetch } from '@/lib/api-fetch'
-import type { ProjectEditBible, ProjectEditStylePreview } from '@/types/project'
-import { queryKeys } from '@/lib/query/keys'
+import type { ProjectEditStylePreview } from '@/types/project'
 import { WorkspaceAssistantThinkingIndicator } from './WorkspaceAssistantThinkingIndicator'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
+import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -324,6 +323,13 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
 
 export function WorkspaceAssistantActiveRunCard(props: {
   operationId: string | null
+  tasks: readonly {
+    taskId: string
+    taskType: string
+    targetType: string
+    targetId: string
+    status: string
+  }[]
 }) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -333,9 +339,18 @@ export function WorkspaceAssistantActiveRunCard(props: {
       <div className="flex items-center gap-2">
         <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
         <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
-          {t('toolCall.running')} · {operationTitle}
+          {t('toolCall.running')} · {operationTitle} · {t('toolCall.taskCount', { count: props.tasks.length })}
         </div>
       </div>
+      {props.tasks.length > 0 ? (
+        <div className="mt-2 space-y-1 pl-5 text-[11px] text-[var(--glass-text-tertiary)]">
+          {props.tasks.map((task) => (
+            <div key={task.taskId} className="truncate">
+              {task.taskType} · {task.targetType}/{task.targetId} · {task.status}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -898,15 +913,10 @@ export function EditStylePreviewGenerationDataCard(props: DataMessagePartProps<E
   // part 携带的 data.items 仅作首帧种子；Bible 一到就接管 —— 追加候选会自动出现，
   // 不再依赖快照清单或 taskId 是否回填。
   const editBibleQuery = useQuery({
-    queryKey: queryKeys.project.editBible(data.projectId, data.episodeId),
-    queryFn: async (): Promise<ProjectEditBible | null> => {
-      const response = await apiFetch(`/api/projects/${data.projectId}/bible?episodeId=${encodeURIComponent(data.episodeId)}`)
-      if (!response.ok) throw new Error('EDIT_STYLE_PREVIEW_BIBLE_FETCH_FAILED')
-      const payload = await response.json() as { editBible?: ProjectEditBible | null }
-      return payload.editBible ?? null
-    },
+    ...projectEditBibleQueryOptions(data.projectId, data.episodeId),
+    select: (response) => response.editBible,
     refetchInterval: (query) => {
-      const previews = query.state.data?.stylePreviews ?? []
+      const previews = query.state.data?.editBible?.stylePreviews ?? []
       if (previews.some((preview) => preview.status === 'confirmed')) return false
       if (previews.length === 0) return 2500
       const allTerminal = previews.every((preview) => isEditStylePreviewTerminal(preview))
@@ -1156,6 +1166,19 @@ function readToolResultFailureMessage(result: unknown): string | null {
   return code || null
 }
 
+function readOperationSubmissionState(result: unknown): OperationSubmissionState | null {
+  if (!isRecord(result) || result.ok !== true || !isRecord(result.data) || result.data.async !== true) return null
+  const taskIds = typeof result.data.taskId === 'string'
+    ? [result.data.taskId]
+    : Array.isArray(result.data.taskIds)
+      ? result.data.taskIds
+      : []
+  const taskRefs = taskIds.flatMap((taskId) => (
+    typeof taskId === 'string' && taskId.trim() ? [{ taskId: taskId.trim() }] : []
+  ))
+  return taskRefs.length > 0 ? { phase: 'submitted', taskRefs } : null
+}
+
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
@@ -1168,8 +1191,9 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
     setDetailsOpen(isWorkspaceAssistantToolDetailsOpen(props.toolCallId))
   }, [props.toolCallId])
   const failureMessage = readToolResultFailureMessage(props.result)
+  const submissionState = toolStatus === 'complete' ? readOperationSubmissionState(props.result) : null
   const summaryText = toolStatus === 'complete'
-    ? failureMessage ? t('toolCall.failed') : t('toolCall.success')
+    ? failureMessage ? t('toolCall.failed') : submissionState?.phase === 'submitted' ? t('toolCall.submitted') : t('toolCall.success')
     : toolStatus === 'requires-action'
       ? t('toolCall.needsAction')
       : t('toolCall.running')

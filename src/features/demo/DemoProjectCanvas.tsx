@@ -22,7 +22,7 @@ import {
 import { workspaceNodeTypes } from '@/features/project-workspace/canvas/nodes/workspaceNodeTypes'
 import type {
   WorkspaceCanvasFlowNode,
-  WorkspaceCanvasNodeData,
+  WorkspaceCanvasNodeRecord,
 } from '@/features/project-workspace/canvas/node-canvas-types'
 import {
   buildWorkspaceCanvasLegacyLayoutModel,
@@ -69,7 +69,7 @@ function toReadOnlyNode(input: {
         outputAspectRatio: DEMO_VIDEO_PLAN_ASPECT_RATIO,
       }
     : node.data.videoPlanDetails
-  const readOnlyData: WorkspaceCanvasNodeData = {
+  const readOnlyData: WorkspaceCanvasNodeRecord = {
     ...node.data,
     nodeId: node.data.nodeId ?? node.id,
     isRunning: false,

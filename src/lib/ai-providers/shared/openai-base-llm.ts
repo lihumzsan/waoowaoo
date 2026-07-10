@@ -28,6 +28,7 @@ import type {
   AiProviderLlmResult,
   AiProviderLlmStreamContext,
 } from '@/lib/ai-providers/runtime-types'
+import { AppError } from '@/lib/errors/app-error'
 
 type AISdkStreamChunk = {
   type?: string
@@ -79,6 +80,13 @@ function extractOpenRouterStreamUsage(part: unknown): OpenRouterStreamUsage | nu
   })
   if (!summary) return null
   return summary
+}
+
+function extractOpenRouterFinishReason(part: unknown): string | null {
+  if (!part || typeof part !== 'object') return null
+  const choices = (part as { choices?: Array<{ finish_reason?: unknown }> }).choices
+  const value = choices?.[0]?.finish_reason
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 export async function runOpenAIBaseUrlLlmCompletion(input: {
@@ -163,6 +171,19 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, buildOpenRouterRequestOptions(openRouterSessionId))
   const normalizedCompletion = completion as OpenAI.Chat.Completions.ChatCompletion
   const completionParts = getCompletionParts(normalizedCompletion)
+  const finishReason = normalizedCompletion.choices[0]?.finish_reason ?? null
+  if (finishReason === 'length') {
+    throw new AppError('MODEL_OUTPUT_TRUNCATED', 'OpenRouter output reached the token limit', {
+      details: { rawReason: finishReason, textChars: completionParts.text.length, reasoningChars: completionParts.reasoning.length },
+      provider: 'openrouter',
+    })
+  }
+  if (!completionParts.text.trim()) {
+    throw new AppError('EMPTY_RESPONSE', 'OpenRouter returned no response body', {
+      details: { rawReason: finishReason, textChars: 0, reasoningChars: completionParts.reasoning.length },
+      provider: 'openrouter',
+    })
+  }
   return buildAiProviderLlmResult({
     completion: normalizedCompletion,
     logProvider: input.providerName,
@@ -295,8 +316,10 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
   let seq = 1
   let finalCompletion: OpenAI.Chat.Completions.ChatCompletion | null = null
   let streamUsage: OpenRouterStreamUsage | null = null
+  let streamFinishReason: string | null = null
   for await (const part of withStreamChunkTimeout(stream as AsyncIterable<unknown>)) {
     streamUsage = extractOpenRouterStreamUsage(part) ?? streamUsage
+    streamFinishReason = extractOpenRouterFinishReason(part) ?? streamFinishReason
     const { textDelta, reasoningDelta } = extractStreamDeltaParts(part)
     if (reasoningDelta) {
       reasoning += reasoningDelta
@@ -326,9 +349,38 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
       const finalParts = getCompletionParts(finalCompletion)
       reasoning = finalParts.reasoning || reasoning
       text = finalParts.text || text
-    } catch {
-      finalCompletion = null
+    } catch (error: unknown) {
+      throw new AppError('EXTERNAL_ERROR', 'OpenRouter final completion could not be read', {
+        details: { failure: 'final_completion_read_failed' },
+        provider: 'openrouter',
+        cause: error,
+      })
     }
+  }
+  const rawFinishReason = finalCompletion?.choices[0]?.finish_reason ?? streamFinishReason
+  if (!rawFinishReason) {
+    throw new AppError('EXTERNAL_ERROR', 'OpenRouter stream ended without a final completion', {
+      details: { failure: 'abnormal_eof', textChars: text.length, reasoningChars: reasoning.length },
+      provider: 'openrouter',
+    })
+  }
+  if (rawFinishReason === 'length') {
+    throw new AppError('MODEL_OUTPUT_TRUNCATED', 'OpenRouter output reached the token limit', {
+      details: { rawReason: rawFinishReason, textChars: text.length, reasoningChars: reasoning.length },
+      provider: 'openrouter',
+    })
+  }
+  if (rawFinishReason === 'content_filter') {
+    throw new AppError('SENSITIVE_CONTENT', 'OpenRouter blocked the response for safety reasons', {
+      details: { rawReason: rawFinishReason },
+      provider: 'openrouter',
+    })
+  }
+  if (!text.trim()) {
+    throw new AppError('EMPTY_RESPONSE', 'OpenRouter returned reasoning without a response body', {
+      details: { rawReason: rawFinishReason, textChars: 0, reasoningChars: reasoning.length },
+      provider: 'openrouter',
+    })
   }
   const completion = finalCompletion ?? buildOpenAIChatCompletion(
     input.selection.modelId,
@@ -342,6 +394,10 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     logProvider: input.providerName,
     text,
     reasoning,
+    termination: {
+      kind: 'normal',
+      rawReason: rawFinishReason,
+    },
     usage: finalCompletion ? completionUsageSummary(finalCompletion) : streamUsage,
     successDetails: {
       engine: 'openai_sdk_stream',

@@ -18,6 +18,7 @@ function workspaceNode(
     position: { x: 0, y: 0 },
     data: {
       kind,
+      mediaLoadingContext: null,
       layoutNodeType: kind,
       targetType: 'panel',
       targetId: id,

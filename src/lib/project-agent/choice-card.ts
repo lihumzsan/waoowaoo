@@ -21,19 +21,6 @@ import type { EditFirstChoiceType } from './edit-first-choice-tools'
 
 const STYLE_PREVIEW_SIGNED_URL_SECONDS = 7 * 24 * 60 * 60
 const EDIT_FIRST_ASPECT_RATIOS: readonly EditScriptVideoRatio[] = EDIT_SCRIPT_VIDEO_RATIOS
-const BUDGET_CONFIRMATION_ALLOWED_STAGES = new Set<string>([
-  'ready_to_generate_edit_script',
-  'ready_to_generate_assets',
-  'ready_to_generate_shot_execution_plan',
-  'ready_to_generate_storyboard',
-  'ready_to_generate_storyboard_images',
-  'ready_to_generate_videos',
-  'ready_to_render_chapters',
-  'ready_to_generate_bgm_score',
-  'ready_to_generate_audio_layers',
-  'ready_to_render_final',
-])
-
 export function readEditFirstAspectRatio(text: string): EditScriptVideoRatio | null {
   const normalized = text.trim()
   const ratio = EDIT_FIRST_ASPECT_RATIOS.find((candidate) => normalized.includes(candidate))
@@ -369,33 +356,6 @@ async function buildAssetReviewChoiceCard(params: {
   }
 }
 
-function buildBudgetConfirmationChoiceCard(params: {
-  locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
-  toolCallId: string
-}): ProjectAgentChoiceCardPartData {
-  const nextAction = params.workflow.nextAction
-  if (!nextAction || !BUDGET_CONFIRMATION_ALLOWED_STAGES.has(params.workflow.stage)) {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=budget_confirmation:stage=${params.workflow.stage}`)
-  }
-  const isEnglish = params.locale === 'en'
-  return {
-    cardId: `edit-first-budget:${params.workflow.stage}:${nextAction.operationId}`,
-    toolCallId: params.toolCallId,
-    choiceType: 'budget_confirmation',
-    variant: 'confirm',
-    title: isEnglish ? 'Confirm Production Budget' : '确认生产预算',
-    description: isEnglish
-      ? `Confirm this stage before the assistant starts ${nextAction.title}. The exact billable task submission still uses the project operation rules.`
-      : `请确认这一阶段可以开始执行：${nextAction.title}。实际计费任务仍由项目 operation 规则提交和记录。`,
-    groups: [],
-    submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
-    submit: {
-      kind: 'submit_tool_output',
-    },
-  }
-}
-
 export async function buildEditFirstAssistantChoiceCard(params: {
   projectId: string
   userId: string
@@ -433,14 +393,6 @@ export async function buildEditFirstAssistantChoiceCard(params: {
       projectId: params.projectId,
       userId: params.userId,
       episodeId: params.episodeId,
-      locale: params.locale,
-      workflow: params.workflow,
-      toolCallId: params.toolCallId,
-    })
-  }
-
-  if (params.choiceType === 'budget_confirmation') {
-    return buildBudgetConfirmationChoiceCard({
       locale: params.locale,
       workflow: params.workflow,
       toolCallId: params.toolCallId,
