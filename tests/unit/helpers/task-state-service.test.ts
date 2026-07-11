@@ -170,6 +170,55 @@ describe('task state service helpers', () => {
     expect(state.batch?.total).toBe(3)
   })
 
+  it('uses only the newest task for each index when a terminal batch is retried', () => {
+    const state = resolveTargetState(
+      { targetType: 'LocationImage', targetId: 'location-1' },
+      [
+        {
+          id: 'retry-index-0',
+          type: 'image_location',
+          status: 'processing',
+          progress: 40,
+          payload: { batch: { id: 'batch-stable', index: 0, total: 2 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:03:00.000Z'),
+        },
+        {
+          id: 'retry-index-1',
+          type: 'image_location',
+          status: 'queued',
+          progress: 0,
+          payload: { batch: { id: 'batch-stable', index: 1, total: 2 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:02:00.000Z'),
+        },
+        {
+          id: 'old-failed-index-0',
+          type: 'image_location',
+          status: 'failed',
+          progress: 20,
+          payload: { batch: { id: 'batch-stable', index: 0, total: 2 } },
+          errorCode: 'GENERATION_TIMEOUT',
+          errorMessage: 'old failure',
+          updatedAt: new Date('2026-07-11T00:01:00.000Z'),
+        },
+      ],
+    )
+
+    expect(state.phase).toBe('processing')
+    expect(state.batch).toEqual({
+      id: 'batch-stable',
+      total: 2,
+      queued: 1,
+      processing: 1,
+      completed: 0,
+      failed: 0,
+      failedIndexes: [],
+    })
+  })
+
   it('resolves failed state and normalizes error', () => {
     const state = resolveTargetState(
       { targetType: 'GlobalCharacter', targetId: 'c1' },

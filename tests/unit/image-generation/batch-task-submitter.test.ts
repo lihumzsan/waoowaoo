@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const mocks = vi.hoisted(() => ({
-  findMany: vi.fn(async () => [] as Array<{ id: string }>),
+  findMany: vi.fn(async () => [] as Array<{ id: string; payload?: unknown }>),
   submitTask: vi.fn(),
   cancelTask: vi.fn<(taskId: string, reason?: string) => Promise<{ cancelled: boolean }>>(async () => ({ cancelled: true })),
   removeTaskJob: vi.fn<(taskId: string) => Promise<boolean>>(async () => true),
@@ -51,7 +51,7 @@ describe('submitImageBatchTasks', () => {
           imageIndex: index,
           batch: { id: batchId, index, total: 3 },
         }),
-        dedupeKey: `${TASK_TYPE.IMAGE_LOCATION}:location-1:single:${index}`,
+        dedupeKey: `${TASK_TYPE.IMAGE_LOCATION}:location-1:batch:${batchId}:single:${index}`,
       }))
     }
     expect(result).toEqual({
@@ -130,8 +130,31 @@ describe('submitImageBatchTasks', () => {
       'submit:1',
     ])
     expect(mocks.submitTask).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:appearance-1:single:0:regen:regen-1`,
+      dedupeKey: expect.stringMatching(
+        new RegExp(`^${TASK_TYPE.IMAGE_CHARACTER}:appearance-1:batch:.+:single:0:regen:regen-1$`),
+      ),
     }))
+  })
+
+  it('supersedes an active batch when the requested count changes', async () => {
+    mocks.findMany.mockResolvedValue([{
+      id: 'old-1',
+      payload: { batch: { id: 'old-batch', index: 0, total: 3 } },
+    }])
+
+    await submitImageBatchTasks({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_LOCATION,
+      targetType: 'LocationImage',
+      targetId: 'location-1',
+      payload: { count: 2 },
+      count: 2,
+    })
+
+    expect(mocks.cancelTask).toHaveBeenCalledWith('old-1', 'Superseded by a newer image batch')
+    expect(mocks.removeTaskJob).toHaveBeenCalledWith('old-1')
   })
 
   it('cancels children already submitted when a later child cannot be submitted', async () => {

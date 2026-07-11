@@ -150,10 +150,16 @@ function resolveBatchTargetState(
   }>,
   newestBatch: { id: string; index: number; total: number },
 ): TaskTargetState {
-  const batchTasks = tasks
+  const sortedBatchTasks = tasks
     .map((task) => ({ task, batch: readBatchMeta(task.payload) }))
     .filter((entry) => entry.batch?.id === newestBatch.id)
     .sort((left, right) => right.task.updatedAt.getTime() - left.task.updatedAt.getTime())
+  const latestByIndex = new Map<number, typeof sortedBatchTasks[number]>()
+  for (const entry of sortedBatchTasks) {
+    if (!entry.batch || latestByIndex.has(entry.batch.index)) continue
+    latestByIndex.set(entry.batch.index, entry)
+  }
+  const batchTasks = Array.from(latestByIndex.values())
 
   let queued = 0
   let processing = 0
@@ -181,10 +187,10 @@ function resolveBatchTargetState(
     ? 'processing'
     : queued > 0
       ? 'queued'
-      : failed > 0
-        ? 'failed'
-        : observed < newestBatch.total
-          ? 'queued'
+      : observed < newestBatch.total
+        ? 'queued'
+        : failed > 0
+          ? 'failed'
           : 'completed'
   const representative = phase === 'processing'
     ? batchTasks.find((entry) => entry.task.status === 'processing')?.task

@@ -12,6 +12,14 @@ export type ImageBatchMeta = {
   total: number
 }
 
+function readBatchTotal(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const batch = (payload as Record<string, unknown>).batch
+  if (!batch || typeof batch !== 'object' || Array.isArray(batch)) return null
+  const total = (batch as Record<string, unknown>).total
+  return typeof total === 'number' && Number.isInteger(total) && total > 0 ? total : null
+}
+
 type ImageBatchTaskType =
   | typeof TASK_TYPE.IMAGE_CHARACTER
   | typeof TASK_TYPE.IMAGE_LOCATION
@@ -55,19 +63,24 @@ export async function submitImageBatchTasks(input: {
   const count = Math.max(1, Math.floor(input.count))
   const batchId = createBatchId({ ...input, count })
 
-  if (input.regenerationToken) {
-    const activeTasks = await prisma.task.findMany({
-      where: {
-        userId: input.userId,
-        projectId: input.projectId,
-        type: input.type,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
-      },
-      select: { id: true },
+  const activeTasks = await prisma.task.findMany({
+    where: {
+      userId: input.userId,
+      projectId: input.projectId,
+      type: input.type,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      status: { in: [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] },
+    },
+    select: { id: true, payload: true },
+  })
+  const shouldSupersede = Boolean(input.regenerationToken)
+    || activeTasks.some((task) => {
+      const activeTotal = readBatchTotal(task.payload)
+      return activeTotal !== null && activeTotal !== count
     })
 
+  if (shouldSupersede) {
     for (const task of activeTasks) {
       await cancelTask(task.id, 'Superseded by a newer image batch')
       await removeTaskJob(task.id).catch(() => false)
@@ -95,7 +108,7 @@ export async function submitImageBatchTasks(input: {
           imageIndex: index,
           batch,
         },
-        dedupeKey: `${input.type}:${input.targetId}:single:${index}${regenerationSuffix}`,
+        dedupeKey: `${input.type}:${input.targetId}:batch:${batchId}:single:${index}${regenerationSuffix}`,
       }))
     }
   } catch (error) {
