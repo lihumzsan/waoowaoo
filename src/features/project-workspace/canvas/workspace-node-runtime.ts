@@ -58,17 +58,6 @@ function persistedPhase(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasPer
   return 'pending'
 }
 
-function completedWithoutMaterializedResource(
-  task: TaskRuntimeStateLike | null,
-  phase: WorkspaceCanvasPersistedPhase,
-): boolean {
-  return task?.phase === 'completed'
-    && (
-      phase === 'pending'
-      || task.lastError?.code?.startsWith('CANVAS_TERMINAL_RESOURCE_') === true
-    )
-}
-
 function streamFact(patch: WorkspaceCanvasStreamPatch | null) {
   return patch ? {
     taskId: patch.taskId,
@@ -88,12 +77,6 @@ function resolveItemLifecycle(input: {
     task: input.state,
     stream: null,
     submitting: false,
-    contractError: completedWithoutMaterializedResource(input.state, phase)
-      ? {
-          code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
-          message: 'Task completed before its materialized asset resource reached the canvas cache.',
-        }
-      : null,
   })
 }
 
@@ -135,12 +118,6 @@ export function resolveWorkspaceCanvasNodeData(input: {
     task,
     stream: streamFact(input.streamPatch),
     submitting: input.submitting,
-    contractError: completedWithoutMaterializedResource(task, basePhase)
-      ? {
-          code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
-          message: 'Task completed before its materialized resource reached the canvas cache.',
-        }
-      : null,
   })
   const acceptsStreamContent = lifecycle.phase === 'streaming'
     || (lifecycle.phase === 'failed' && input.streamPatch?.error !== null)

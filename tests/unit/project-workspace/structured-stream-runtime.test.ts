@@ -242,7 +242,7 @@ describe('workspace structured stream runtime', () => {
     expect(resolved.body).toBe('persisted source')
   })
 
-  it('surfaces completed-without-resource as an explicit contract failure', () => {
+  it('clears completed stream state while the formal resource Query refetches', () => {
     const terminal = {
       phase: 'completed',
       taskId: 'task-1',
@@ -258,8 +258,8 @@ describe('workspace structured stream runtime', () => {
     })
 
     expect(resolved.lifecycle).toMatchObject({
-      phase: 'failed',
-      error: { code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING' },
+      phase: 'pending',
+      error: null,
     })
   })
 })

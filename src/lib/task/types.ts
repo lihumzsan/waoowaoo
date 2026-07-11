@@ -1,10 +1,4 @@
 import type { Locale } from '@/i18n/routing'
-import type { WorkspaceMaterializedResourceEnvelope } from '@/lib/workspace-resource/materialized-resource-version'
-
-export type {
-  WorkspaceMaterializedResourceEnvelope,
-  WorkspaceMaterializedResourceVersion,
-} from '@/lib/workspace-resource/materialized-resource-version'
 
 export const TASK_STATUS = {
   QUEUED: 'queued',
@@ -178,7 +172,6 @@ export type TaskSSEEvent = {
     lifecycleType?: TaskLifecycleEventType
     coveredTargets?: readonly { readonly targetType: string; readonly targetId: string }[]
     affectedResources?: readonly WorkspaceResourceRef[]
-    materializedResources?: readonly WorkspaceMaterializedResourceEnvelope[]
   }) | null
 }
 

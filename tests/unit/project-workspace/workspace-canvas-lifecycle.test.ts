@@ -151,15 +151,12 @@ describe('workspace Canvas lifecycle resolver', () => {
     }))).toMatchObject({ error: { code: 'TASK_FAILED', message: 'Task failed' } })
   })
 
-  it('requires resource materialization before accepting completed task terminal state', () => {
+  it('keeps the persisted resource phase while a completed task notification refetches', () => {
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'completed', taskId: 'task-1', progress: 100 },
     }))).toEqual({
-      phase: 'failed', taskId: 'task-1', taskType: null, progress: 100, stream: null,
-      error: {
-        code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
-        message: 'Task completed without a materialized Canvas resource.',
-      },
+      phase: 'pending', taskId: 'task-1', taskType: null, progress: 100, stream: null,
+      error: null,
     })
     for (const persistedPhase of ['succeeded', 'failed', 'canceled'] as const) {
       expect(resolveWorkspaceCanvasLifecycle(facts({

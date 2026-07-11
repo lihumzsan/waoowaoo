@@ -22,8 +22,8 @@ function readTerminalProjectors(source) {
       && ts.isIdentifier(node.initializer.expression)
       && node.initializer.expression.text === 'definition'
     ) {
-      const failure = node.initializer.arguments[5]
-      const cancel = node.initializer.arguments[6]
+      const failure = node.initializer.arguments[4]
+      const cancel = node.initializer.arguments[5]
       if (failure && cancel && ts.isStringLiteral(failure) && ts.isStringLiteral(cancel)) {
         result.set(node.name.expression.name.text, { failure: failure.text, cancel: cancel.text })
       }

@@ -7,8 +7,8 @@ import { resolveProjectAgentWaitsForTaskTerminalInTransaction } from '@/lib/proj
 import { projectTaskTargetTerminalInTransaction } from '@/lib/task/target-failure-sync'
 import { parseTaskBillingInfo } from '@/lib/task/billing-info'
 import {
-  parseReadyTaskHandlerCheckpointOutput,
-  type ReadyTaskHandlerCheckpointOutput,
+  parseTaskHandlerCheckpointOutput,
+  type TaskHandlerCheckpointOutput,
 } from '@/lib/task/execution-checkpoint'
 import { buildTaskLifecycleEventPayload } from '@/lib/task/publisher'
 import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
@@ -142,7 +142,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       let nextBillingInfo = currentBillingInfo
       let errorCode: string | null = null
       let errorMessage: string | null = null
-      let completedOutput: ReadyTaskHandlerCheckpointOutput | null = null
+      let completedOutput: TaskHandlerCheckpointOutput | null = null
 
       if (intent.kind === 'completed') {
         const checkpoint = await tx.taskExecutionCheckpoint.findUnique({
@@ -156,10 +156,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
           checkpoint.state !== 'ready'
         )
           throw new Error(`TASK_TERMINAL_CHECKPOINT_INVALID:${task.id}`)
-        completedOutput = parseReadyTaskHandlerCheckpointOutput(checkpoint.output)
-        if (completedOutput.materializedResources.some((resource) => resource.taskId !== task.id)) {
-          throw new Error(`TASK_TERMINAL_CHECKPOINT_RESOURCE_TASK_MISMATCH:${task.id}`)
-        }
+        completedOutput = parseTaskHandlerCheckpointOutput(checkpoint.output)
         nextBillingInfo = (await settleTaskBillingInTransaction(
           tx,
           {
@@ -246,9 +243,6 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
         payload: {
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),
-          ...(completedOutput?.materializedResources.length
-            ? { materializedResources: completedOutput.materializedResources }
-            : {}),
           ...(errorCode ? { errorCode } : {}),
           ...(errorMessage ? { message: errorMessage } : {}),
           terminalSource: intent.kind === 'completed' ? 'worker' : intent.source,

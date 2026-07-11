@@ -18,11 +18,10 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
 - **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
-- **CN-08 — 原子终态资源交接。** Canvas Task 完成前必须从已持久化数据读取画布实际消费的 Query DTO，并随 completed SSE 发送 `materializedResources`。客户端必须先同步写 Query Cache，再写 Task 终态，最后清除 structured runtime；`affectedResources` 只负责后续一致性校验。必需信封缺失必须显式呈现 `CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING`，禁止 timer 或 refetch fallback。
-- **CN-08A — 资源版本单调。** `ProjectEpisode.resourceRevision` 是 `episodeData` 与 `editBible` 快照排序的唯一持久版本。Episode 自身更新以及正式 DTO 所含子表的 INSERT/UPDATE/DELETE 均由数据库 trigger 在原事务内原子递增；因此物理删除、并发写和同一时间精度内的多次写入仍形成严格全序。正式 Query DTO 读取采用 seqlock：先读 revision、完整读取聚合 DTO、再读 revision；只有前后相等才发布快照，连续三次变化则显式失败，禁止把某次局部读与另一时刻的版本拼接。构造入口以 `resource_revision` 内嵌在同一快照中。版本类型、DTO 内嵌版本提取与比较由 `materialized-resource-version.ts` 唯一声明；终态 envelope 的版本必须与 DTO 内版本相等。Query Cache 仅在 incoming 严格更新时替换；相同版本返回 `duplicate`，旧版本返回 `stale`，身份冲突、缺失、格式错误或不可比较版本原地失败。合法 duplicate/stale 终态是成功的幂等交接，不得因 `applied.length === 0` 伪造 handoff missing。taskId、事件到达顺序、内容 hash 和客户端时间均无权充当版本。
+- **CN-08 — 终态通知后读取正式资源。** Canvas Task 必须先持久化业务资源，再由 Terminal Service 提交 completed/failed/canceled Event。终态 Event 只通过显式 `affectedResources` 通知客户端；客户端不得从 Task payload 直接写业务 Query Cache，而应由 `resource-change-sync.ts` invalidate 并 refetch active Query。Query fetch 是 Canvas 内容的唯一 Cache writer；Task Event 只负责清除 Task/structured runtime。缺少 `affectedResources` 时不得按 TaskType 猜测资源。网络失败保持 Query stale/invalidated 并交给正常重试或刷新，不得伪造成 Task 失败。
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
-- **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；optimistic rollback 必须经过正式 resourceVersion comparator，不能覆盖较新的终态 DTO。
+- **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
 
 ## 权威入口
 
@@ -33,10 +32,8 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 流式事实收集：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`；该模块无权合并最终节点生命周期。
 - renderer 运行态只读取最终 `data.lifecycle`；禁止恢复 `__running`、operationId pending switch 或把 DB `generating` 本地改写为 `ready`。
 - DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
-- 原子终态接力：`src/lib/workspace-resource/materialized-resource.ts` 与 `src/lib/query/materialized-resource-cache.ts`。
-- 物化资源版本类型与比较器：`src/lib/workspace-resource/materialized-resource-version.ts`。
-- 正式 Query DTO 版本构造：`src/lib/workspace-resource/query-dto-version.ts`；Episode detail 与 Edit Bible GET 必须复用该入口。
-- 持久版本读取：`src/lib/workspace-resource/resource-revision.ts`；唯一写入者是 `20260711060000_add_episode_resource_revision` 中的数据库 trigger，应用代码无权自行计算或回写 revision。`src/lib/workspace-resource/episode-resource-revision-contract.ts` 声明 `episodeData`/`editBible` 聚合实际消费的 13 个子 relation；CI 必须对账它们各自的 INSERT/UPDATE/DELETE trigger（加 Episode 自身更新，共 40 个 trigger 实例），而不是把所有 Prisma relation 误当成聚合成员。由于仓库历史基线仍以 `prisma db push` 部署，`npm run db:prepare` 必须在 schema sync 后通过 `scripts/install-resource-revision-triggers.ts` 安装完整集合；全有时幂等通过、部分存在时原地失败，禁止静默补半套。
+- Task/Mutation 受影响资源契约：`src/lib/workspace-resource/resource-impact.ts`；禁止从 TaskType 或 target 文案猜测 Query。
+- 终态通知到正式 Query：`src/lib/query/workspace-sse-event-sync.ts` 与 `src/lib/query/resource-change-sync.ts`；SSE 不直接调用 `setQueryData` 写业务资源。
 - SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
@@ -51,22 +48,18 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
 - `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
-- `tests/unit/optimistic/sse-task-terminal.test.ts` 与 `sse-event-ordering.test.ts` 验证 Query Cache materialization 早于 runtime clear，并拒绝重复/乱序覆盖。
-- `tests/unit/query/materialized-resource-cache.test.ts` 验证连续、重复、旧版本、跨 Task、refetch/SSE 交错和刷新重建时的单调门禁。
-- `tests/unit/workspace-resource/resource-revision.test.ts` 验证 seqlock 只发布前后 revision 相同的完整快照，检测到并发写时重读整个聚合，持续变化则显式失败。
-- `tests/integration/task/workspace-resource-revision.integration.test.ts` 在真实 MySQL 上验证同一事务中的连续子表写入、物理删除以及 Panel 间接关系均严格推进 revision。
-- `tests/unit/task/resource-revision-trigger-installer.test.ts` 验证 aggregate relation registry 与 migration 中 40 个 trigger 实例身份完整；同一真实 MySQL integration 同时执行 `db push` 后安装入口、完整 migration SQL 与重复安装幂等检查。
+- `tests/unit/optimistic/sse-task-terminal.test.ts` 与 `tests/unit/query/workspace-sse-event-sync.test.ts` 验证终态先请求正式 Query refetch，再通知 runtime 清理；completed/failed/canceled 均不直接写业务 Cache。
 - `tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 验证重复、晚到与 replay 事件不能越过 Task 终态水位。
 - `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
-- 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写、无版本 rollback 和无界 stream/SSE identity 回流。
-- `scripts/guards/materialized-resource-version-guard.mjs` 阻止无条件 cache replace、字符串猜序和 taskId 版本 fallback 回流。
+- 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写和无界 stream/SSE identity 回流。
+- `scripts/guards/terminal-resource-refetch-guard.mjs` 阻止恢复 terminal payload 直接写 Cache、资源版本/trigger 协议或 materialization-only checkpoint 阶段。
 - `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。
 
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
-- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query refetch 空窗；`d31a5615b` 按 TL-06A 删除 timer 后空窗重新暴露。正确修复是 CN-08 的原子 Query DTO 交接，而不是恢复延迟清理。
+- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后暴露生命周期与内容读取竞争。本阶段选择明确的最终一致性语义：终态立即清 runtime，内容只从正式 Query 重新读取；不得恢复 timer 或 terminal payload Cache writer。
 
 ## 修改检查表
 

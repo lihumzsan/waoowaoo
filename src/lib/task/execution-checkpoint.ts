@@ -2,21 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { TextUsageEntry } from '@/lib/billing/runtime-usage'
-import type { WorkspaceMaterializedResourceEnvelope } from './types'
-import {
-  parseWorkspaceMaterializedResourceVersion,
-  readWorkspaceMaterializedResourceVersionFromData,
-} from '@/lib/workspace-resource/materialized-resource-version'
 
 export const TASK_HANDLER_RESULT_STEP_KEY = '__handler_result__'
 
 export type TaskHandlerCheckpointOutput = {
   result: Record<string, unknown> | null
   textUsage: TextUsageEntry[]
-}
-
-export type ReadyTaskHandlerCheckpointOutput = TaskHandlerCheckpointOutput & {
-  materializedResources: WorkspaceMaterializedResourceEnvelope[]
 }
 
 function canonicalize(value: unknown): unknown {
@@ -59,7 +50,7 @@ function parseTextUsage(value: unknown): TextUsageEntry[] {
   })
 }
 
-function parseExecutedOutput(value: unknown): TaskHandlerCheckpointOutput {
+export function parseTaskHandlerCheckpointOutput(value: unknown): TaskHandlerCheckpointOutput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('TASK_EXECUTION_CHECKPOINT_OUTPUT_INVALID')
   }
@@ -73,53 +64,25 @@ function parseExecutedOutput(value: unknown): TaskHandlerCheckpointOutput {
   }
 }
 
-export function parseReadyTaskHandlerCheckpointOutput(value: unknown): ReadyTaskHandlerCheckpointOutput {
-  const base = parseExecutedOutput(value)
-  const record = value as Record<string, unknown>
-  if (!Array.isArray(record.materializedResources)) {
-    throw new Error('TASK_EXECUTION_CHECKPOINT_MATERIALIZED_RESOURCES_INVALID')
-  }
-  const resources = record.materializedResources.map((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error('TASK_EXECUTION_CHECKPOINT_MATERIALIZED_RESOURCE_INVALID')
-    }
-    const resource = item as Record<string, unknown>
-    if (
-      (resource.kind !== 'editBible' && resource.kind !== 'episodeData')
-      || typeof resource.projectId !== 'string'
-      || typeof resource.episodeId !== 'string'
-      || typeof resource.resourceKey !== 'string'
-      || typeof resource.taskId !== 'string'
-    ) throw new Error('TASK_EXECUTION_CHECKPOINT_MATERIALIZED_RESOURCE_INVALID')
-    const version = parseWorkspaceMaterializedResourceVersion(resource.kind, resource.resourceVersion)
-    const dataVersion = readWorkspaceMaterializedResourceVersionFromData(resource.kind, resource.data)
-    if (!version || !dataVersion || canonicalJson(version) !== canonicalJson(dataVersion)) {
-      throw new Error('TASK_EXECUTION_CHECKPOINT_MATERIALIZED_RESOURCE_VERSION_INVALID')
-    }
-    return resource as unknown as WorkspaceMaterializedResourceEnvelope
-  })
-  return { ...base, materializedResources: resources }
-}
-
 export async function loadTaskHandlerCheckpoint(params: {
   taskId: string
   inputFingerprint: string
-}): Promise<{ id: string; state: 'executed' | 'ready'; output: TaskHandlerCheckpointOutput } | null> {
+}): Promise<{ id: string; state: 'ready'; output: TaskHandlerCheckpointOutput } | null> {
   const row = await prisma.taskExecutionCheckpoint.findUnique({
     where: { taskId_stepKey: { taskId: params.taskId, stepKey: TASK_HANDLER_RESULT_STEP_KEY } },
   })
   if (!row) return null
-  if ((row.state !== 'executed' && row.state !== 'ready') || row.inputFingerprint !== params.inputFingerprint) {
+  if (row.state !== 'ready' || row.inputFingerprint !== params.inputFingerprint) {
     throw new Error(`TASK_EXECUTION_CHECKPOINT_CONFLICT:${params.taskId}`)
   }
-  return { id: row.id, state: row.state, output: parseExecutedOutput(row.output) }
+  return { id: row.id, state: 'ready', output: parseTaskHandlerCheckpointOutput(row.output) }
 }
 
 export async function saveTaskHandlerCheckpoint(params: {
   taskId: string
   inputFingerprint: string
   output: TaskHandlerCheckpointOutput
-}): Promise<{ id: string; state: 'executed' | 'ready'; output: TaskHandlerCheckpointOutput }> {
+}): Promise<{ id: string; state: 'ready'; output: TaskHandlerCheckpointOutput }> {
   const serialized = JSON.parse(canonicalJson(params.output)) as Prisma.InputJsonValue
   try {
     const row = await prisma.taskExecutionCheckpoint.create({
@@ -128,12 +91,12 @@ export async function saveTaskHandlerCheckpoint(params: {
         taskId: params.taskId,
         stepKey: TASK_HANDLER_RESULT_STEP_KEY,
         inputFingerprint: params.inputFingerprint,
-        state: 'executed',
+        state: 'ready',
         output: serialized,
         completedAt: new Date(),
       },
     })
-    return { id: row.id, state: 'executed', output: parseExecutedOutput(row.output) }
+    return { id: row.id, state: 'ready', output: parseTaskHandlerCheckpointOutput(row.output) }
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
     const existing = await loadTaskHandlerCheckpoint(params)
@@ -142,38 +105,4 @@ export async function saveTaskHandlerCheckpoint(params: {
     }
     return existing
   }
-}
-
-export async function finalizeTaskHandlerCheckpoint(params: {
-  id: string
-  taskId: string
-  inputFingerprint: string
-  materializedResources: readonly WorkspaceMaterializedResourceEnvelope[]
-}): Promise<{ id: string; output: ReadyTaskHandlerCheckpointOutput }> {
-  return await prisma.$transaction(async (tx) => {
-    const row = await tx.taskExecutionCheckpoint.findUnique({ where: { id: params.id } })
-    if (!row || row.taskId !== params.taskId || row.inputFingerprint !== params.inputFingerprint) {
-      throw new Error(`TASK_EXECUTION_CHECKPOINT_CONFLICT:${params.taskId}`)
-    }
-    const output = {
-      ...parseExecutedOutput(row.output),
-      materializedResources: [...params.materializedResources],
-    }
-    if (row.state === 'ready') {
-      const ready = parseReadyTaskHandlerCheckpointOutput(row.output)
-      if (canonicalJson(ready) !== canonicalJson(output)) {
-        throw new Error(`TASK_EXECUTION_CHECKPOINT_READY_COLLISION:${params.taskId}`)
-      }
-      return { id: row.id, output: ready }
-    }
-    if (row.state !== 'executed') throw new Error(`TASK_EXECUTION_CHECKPOINT_STATE_INVALID:${row.state}`)
-    const updated = await tx.taskExecutionCheckpoint.update({
-      where: { id: row.id },
-      data: {
-        state: 'ready',
-        output: JSON.parse(canonicalJson(output)) as Prisma.InputJsonValue,
-      },
-    })
-    return { id: updated.id, output: parseReadyTaskHandlerCheckpointOutput(updated.output) }
-  })
 }

@@ -71,13 +71,6 @@ const editBibleMock = vi.hoisted(() => ({
   })),
 }))
 
-const resourceRevisionMock = vi.hoisted(() => ({
-  readConsistentWorkspaceResourceSnapshot: vi.fn(async (input: { read: () => Promise<unknown> }) => ({
-    data: await input.read(),
-    resourceRevision: 7,
-  })),
-}))
-
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/task/resolve-locale', () => ({
   resolveRequiredTaskLocale: vi.fn(() => 'zh'),
@@ -90,7 +83,6 @@ vi.mock('@/lib/edit-bible', async (importOriginal) => ({
   confirmEpisodeEditBible: editBibleMock.confirmEpisodeEditBible,
   reviseEpisodeEditBible: editBibleMock.reviseEpisodeEditBible,
 }))
-vi.mock('@/lib/workspace-resource/resource-revision', () => resourceRevisionMock)
 
 type ProjectRouteContext = {
   params: Promise<{ projectId: string }>
@@ -175,10 +167,13 @@ describe('api contract - project edit bible routes', () => {
       editBible: { id: 'bible-1' },
       chapters: [{ id: 'chapter-1' }],
     })
-    expect(resourceRevisionMock.readConsistentWorkspaceResourceSnapshot).toHaveBeenCalledWith({
+    expect(editBibleMock.readEpisodeEditBible).toHaveBeenCalledWith({
       projectId: 'project-1',
       episodeId: 'episode-1',
-      read: expect.any(Function),
+    })
+    expect(editBibleMock.readEpisodeEditChapters).toHaveBeenCalledWith({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
     })
   })
 

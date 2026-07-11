@@ -162,18 +162,6 @@ export function resolveWorkspaceCanvasLifecycle(
   }
 
   if (facts.task?.phase === 'completed') {
-    if (facts.persistedPhase === 'pending') {
-      return lifecycle({
-        phase: 'failed',
-        taskId,
-        taskType,
-        progress: readTaskProgress(facts.task),
-        error: {
-          code: 'CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING',
-          message: 'Task completed without a materialized Canvas resource.',
-        },
-      })
-    }
     return lifecycle({
       phase: facts.persistedPhase,
       taskId,

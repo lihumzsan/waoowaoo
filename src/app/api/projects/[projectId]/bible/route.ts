@@ -14,8 +14,6 @@ import {
   reviseEpisodeEditBible,
   submitProjectEditBibleGenerationTask,
 } from '@/lib/edit-bible'
-import { createEditBibleQueryDto } from '@/lib/workspace-resource/query-dto-version'
-import { readConsistentWorkspaceResourceSnapshot } from '@/lib/workspace-resource/resource-revision'
 
 const patchEditBibleRequestSchema = z.discriminatedUnion('action', [
   z.object({
@@ -42,28 +40,20 @@ export const GET = apiHandler(async (
   })
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const snapshot = await readConsistentWorkspaceResourceSnapshot({
-    projectId,
-    episodeId: parsed.data.episodeId,
-    read: async () => {
-      const [editBible, chapters] = await Promise.all([
-        readEpisodeEditBible({
-          projectId,
-          episodeId: parsed.data.episodeId,
-        }),
-        readEpisodeEditChapters({
-          projectId,
-          episodeId: parsed.data.episodeId,
-        }),
-      ])
-      return { editBible, chapters }
-    },
+  const [editBible, chapters] = await Promise.all([
+    readEpisodeEditBible({
+      projectId,
+      episodeId: parsed.data.episodeId,
+    }),
+    readEpisodeEditChapters({
+      projectId,
+      episodeId: parsed.data.episodeId,
+    }),
+  ])
+  return NextResponse.json({
+    editBible: editBible ? { ...editBible, chapters } : null,
+    chapters,
   })
-  return NextResponse.json(createEditBibleQueryDto(
-    snapshot.data.editBible,
-    snapshot.data.chapters,
-    snapshot.resourceRevision,
-  ))
 })
 
 export const POST = apiHandler(async (

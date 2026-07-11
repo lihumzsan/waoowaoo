@@ -119,11 +119,6 @@ if (
   violations.push('SSE client event identity dedupe must be bounded and overflow into snapshot resync')
 }
 
-const episodeMutations = read('src/lib/query/mutations/useEpisodeMutations.ts')
-if (!episodeMutations.includes('restoreWorkspaceMaterializedResourceSnapshot')) {
-  violations.push('episode optimistic rollback must pass through the materialized resource version gate')
-}
-
 for (const rendererPath of walk(path.join(canvasRoot, 'nodes'))) {
   const relativePath = path.relative(root, rendererPath)
   const content = fs.readFileSync(rendererPath, 'utf8')

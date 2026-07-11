@@ -142,7 +142,7 @@ services:
         condition: service_healthy
     command: >
       sh -c "
-        npm run db:prepare &&
+        npm run db:push &&
         (sleep 5 && echo '' &&
         echo '╔══════════════════════════════════════════════════╗' &&
         echo '║            waoowaoo is ready!                    ║' &&

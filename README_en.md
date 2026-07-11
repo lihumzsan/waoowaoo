@@ -83,8 +83,8 @@ npm install
 # Start infrastructure only
 docker compose up mysql redis minio -d
 
-# Prepare the schema and required database triggers
-npm run db:prepare
+# Push the Prisma schema
+npm run db:push
 
 # Start development server
 npm run dev
@@ -97,7 +97,7 @@ Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http:/
 > The database is initialized automatically on first launch — no extra configuration needed.
 
 > [!WARNING]
-> When running the app directly, do not skip `npm run db:prepare`. It synchronizes the Prisma schema and installs the complete Episode resource-revision trigger set with fail-closed validation. Bare `prisma db push` is not sufficient.
+> When running the app directly, do not skip `npm run db:push`. It synchronizes the Prisma schema before the application and workers start.
 >
 > Before applying async Task/Assistant lifecycle migrations, stop new submissions and workers, then run `npm run db:async-migration-preflight`. Proceed only when active Tasks, the retired parent Task type, pending Outbox commands, and non-terminal Runs/Waits are all zero. The check is read-only and never backfills legacy Tasks.
 

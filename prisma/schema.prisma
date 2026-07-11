@@ -129,7 +129,6 @@ model ProjectEpisode {
   audioMediaId            String?
   audioMedia              MediaObject?               @relation("ProjectEpisodeAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
   srtContent              String?                    @db.Text
-  resourceRevision        Int                        @default(0)
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)

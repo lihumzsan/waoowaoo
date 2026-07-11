@@ -5,6 +5,7 @@ import { applyWorkspaceSSEEvent } from '@/lib/query/workspace-sse-event-sync'
 import type { TaskTargetState } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { TASK_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
+import { readProjectEpisodeDetail } from '@/lib/projects/read-episode-detail'
 import { resolveWorkspaceCanvasLifecycle } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
 import { WorkspaceSSEEventSequence } from '@/lib/query/workspace-sse-event-sequence'
 
@@ -23,14 +24,14 @@ export async function expectCompletedCanvasHandoff(input: {
   ))
   expect(completedEvent).toBeTruthy()
   if (!completedEvent) throw new Error('SYSTEM_COMPLETED_LIFECYCLE_EVENT_MISSING')
-  expect(completedEvent.payload?.materializedResources).toEqual([
+  expect(completedEvent.payload?.affectedResources).toEqual(expect.arrayContaining([
     expect.objectContaining({
       kind: 'episodeData',
       projectId: input.projectId,
       episodeId: input.episodeId,
-      taskId: input.taskId,
     }),
-  ])
+  ]))
+  expect(completedEvent.payload).not.toHaveProperty('materializedResources')
 
   const queryClient = new QueryClient()
   const serializedTargets = JSON.stringify([{
@@ -81,10 +82,14 @@ export async function expectCompletedCanvasHandoff(input: {
   }, apply)).toBe('rejected_after_terminal')
   expect(acceptedEvents).toEqual([completedEvent.id])
 
-  const materializedEpisode = queryClient.getQueryData<unknown>(
+  expect(queryClient.getQueryData(
     queryKeys.episodeData(input.projectId, input.episodeId),
-  )
-  expect(JSON.stringify(materializedEpisode)).toContain(input.persistedOutput)
+  )).toBeUndefined()
+  const canonicalEpisode = await readProjectEpisodeDetail({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+  })
+  expect(JSON.stringify(canonicalEpisode)).toContain(input.persistedOutput)
   const states = queryClient.getQueryData<readonly TaskTargetState[]>(targetStateKey)
   expect(states).toEqual([
     expect.objectContaining({

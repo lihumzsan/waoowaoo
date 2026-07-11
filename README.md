@@ -93,14 +93,14 @@ mysql:13306  redis:16379  minio:19000
 docker compose up mysql redis minio -d
 
 # 初始化数据库表结构（首次必须执行，跳过会导致启动后报错）
-npm run db:prepare
+npm run db:push
 
 # 启动开发服务器
 npm run dev
 ```
 
 > [!WARNING]
-> 跳过 `npm run db:prepare` 会导致数据库表或资源版本 trigger 缺失。该命令先同步 Prisma schema，再以 fail-closed 方式安装 Episode 资源版本 trigger；请务必在启动应用与 worker 前运行。
+> 跳过 `npm run db:push` 会导致数据库表结构缺失；请务必在启动应用与 worker 前运行。
 >
 > 升级异步任务/Assistant lifecycle migration 前，先停止新提交与 worker，并运行 `npm run db:async-migration-preflight`。只有 active Task、旧父任务、待交付 Outbox、非终态 Run/Wait 全部为 0 才能继续；该命令只读且不会回填旧任务。
 

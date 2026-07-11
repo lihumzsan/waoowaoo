@@ -21,10 +21,8 @@ import { normalizeAnyError } from '@/lib/errors/normalize'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
 import { getLogContext, withLogContext } from '@/lib/logging/context'
-import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
 import { commitTaskTerminal } from '@/lib/task/terminal'
 import {
-  finalizeTaskHandlerCheckpoint,
   loadTaskExecutionFingerprint,
   loadTaskHandlerCheckpoint,
   saveTaskHandlerCheckpoint,
@@ -270,16 +268,8 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       })
     })
     const { result } = checkpoint.output
-    const materializedResources = await materializeWorkspaceResourcesForTask(data)
-    const readyCheckpoint = await finalizeTaskHandlerCheckpoint({
-      id: checkpoint.id,
-      taskId,
-      inputFingerprint,
-      materializedResources,
-    })
     const completedPayload = withFlowFields(data, {
       ...(result || {}),
-      materializedResources,
       displayMode: 'loading',
       trace: {
         requestId: data.trace?.requestId || null,
@@ -289,7 +279,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       kind: 'completed',
       taskId,
       fence: { kind: 'attempt', attempt: taskAttempt },
-      executionCheckpointId: readyCheckpoint.id,
+      executionCheckpointId: checkpoint.id,
       eventPayload: {
         ...completedPayload,
         message: buildTaskProgressMessage({

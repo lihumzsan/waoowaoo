@@ -105,9 +105,9 @@ function canvasScenario(
 const terminalExpected = { phase: 'succeeded', body: 'persisted source', errorCode: null }
 
 export const CANVAS_LIFECYCLE_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
-  canvasScenario('SCENARIO-CANVAS-MATERIALIZE-BEFORE-TERMINAL', [
+  canvasScenario('SCENARIO-CANVAS-TERMINAL-REFETCH-CANONICAL-RESOURCE', [
     { id: 'streaming', facts: { persisted: 'pending', task: 'processing', stream: true }, expected: { phase: 'streaming', body: 'streamed source', errorCode: null } },
-    { id: 'materialized-terminal', facts: { persisted: 'succeeded', task: 'completed', stream: true }, expected: terminalExpected },
+    { id: 'refetched-terminal', facts: { persisted: 'succeeded', task: 'completed', stream: true }, expected: terminalExpected },
   ], (facts) => facts.task === 'completed'
     ? { phase: 'pending', body: '', errorCode: null }
     : resolveCanvas(facts)),

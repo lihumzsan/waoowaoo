@@ -24,7 +24,6 @@ describe('TaskDefinition conformance', () => {
       expect(definition.workerHandler.length).toBeGreaterThan(0)
       expect(['none', 'text', 'image', 'video', 'music', 'sound_effect']).toContain(definition.billingPolicy)
       expect(isBillableTaskType(taskType)).toBe(definition.billingPolicy !== 'none')
-      expect(['edit_bible', 'episode_data']).toContain(definition.materializer)
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
       expect(['none', 'chapter_render', 'final_video_render']).toContain(definition.submissionTargetOwnership)
@@ -33,14 +32,13 @@ describe('TaskDefinition conformance', () => {
     }
   })
 
-  it('removes TaskType routing switches from workers, billing, and materialization', () => {
+  it('removes TaskType routing switches from workers and billing', () => {
     for (const file of [
       '../../src/lib/workers/image.worker.ts',
       '../../src/lib/workers/video.worker.ts',
       '../../src/lib/workers/music.worker.ts',
       '../../src/lib/workers/text.worker.ts',
       '../../src/lib/billing/task-policy.ts',
-      '../../src/lib/workspace-resource/materialized-resource.ts',
     ]) {
       const source = readFileSync(new URL(file, import.meta.url), 'utf8')
       expect(source).not.toMatch(/switch \(job\.data\.type\)/)
