@@ -18,6 +18,7 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(async () => ({})),
+    updateMany: vi.fn(async () => ({ count: 1 })),
   },
   novelPromotionCharacter: {
     findUnique: vi.fn(),
@@ -119,11 +120,55 @@ describe('worker character-image-task-handler behavior', () => {
       aspectRatio: '3:2',
     }))
 
-    expect(prismaMock.characterAppearance.update).toHaveBeenCalledWith({
-      where: { id: 'appearance-2' },
+    expect(prismaMock.characterAppearance.updateMany).toHaveBeenCalledWith({
+      where: { id: 'appearance-2', imageUrls: JSON.stringify([]) },
       data: {
         imageUrls: JSON.stringify(['cos/character-generated-0.png']),
         imageUrl: 'cos/character-generated-0.png',
+      },
+    })
+  })
+
+  it('retries a single-image merge when a parallel sibling updates imageUrls first', async () => {
+    prismaMock.characterAppearance.findUnique
+      .mockResolvedValueOnce({
+        id: 'appearance-2',
+        characterId: 'character-1',
+        appearanceIndex: 1,
+        descriptions: JSON.stringify(['A', 'B']),
+        description: 'A',
+        imageUrls: JSON.stringify([]),
+        selectedIndex: 0,
+        imageUrl: null,
+        changeReason: '初始形象',
+        character: { name: 'Hero' },
+      })
+      .mockResolvedValueOnce({
+        imageUrls: JSON.stringify([]),
+        selectedIndex: 0,
+        imageUrl: null,
+      })
+      .mockResolvedValueOnce({
+        imageUrls: JSON.stringify(['cos/index-0.png']),
+        selectedIndex: 0,
+        imageUrl: 'cos/index-0.png',
+      })
+    prismaMock.characterAppearance.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+    sharedMock.generateProjectLabeledImageToStorage.mockResolvedValueOnce('cos/index-1.png')
+
+    await handleCharacterImageTask(buildJob({ imageIndex: 1 }))
+
+    expect(prismaMock.characterAppearance.updateMany).toHaveBeenCalledTimes(2)
+    expect(prismaMock.characterAppearance.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        id: 'appearance-2',
+        imageUrls: JSON.stringify(['cos/index-0.png']),
+      },
+      data: {
+        imageUrls: JSON.stringify(['cos/index-0.png', 'cos/index-1.png']),
+        imageUrl: 'cos/index-0.png',
       },
     })
   })
