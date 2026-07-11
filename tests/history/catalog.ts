@@ -90,6 +90,24 @@ export const HISTORICAL_DEFECT_CATALOG = [
     replayMode: 'semantic-fault-injection',
     status: 'protected',
   },
+  {
+    id: 'BUG-PG-002',
+    commits: [
+      'a4aed5ba47af15788109094c74bac07a9b9cb516',
+    ],
+    symptom: 'A multi-candidate image Task can reuse the first candidate provider result for every candidate slot.',
+    rootCause: 'The durable provider fence was correct, but the fan-out caller assigned every independent candidate the same invocation identity.',
+    severity: 'P1',
+    module: 'provider-gateway',
+    invariantIds: ['PG-06', 'TL-13'],
+    affectedLayers: ['unit', 'integration-task', 'regression'],
+    escapedLayers: ['unit', 'integration-task'],
+    scenarioIds: [
+      'SCENARIO-PROVIDER-MULTI-CANDIDATE-IDENTITY',
+    ],
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
+  },
 ] as const satisfies readonly HistoricalDefect[]
 
 export function validateHistoricalDefectCatalog(

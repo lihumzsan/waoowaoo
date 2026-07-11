@@ -402,7 +402,7 @@ function parseStoredChatCompletion(value: unknown): OpenAI.Chat.Completions.Chat
   return value as OpenAI.Chat.Completions.ChatCompletion
 }
 
-function taskAiInvocationKey(input: {
+export function taskAiInvocationKey(input: {
   readonly modality: 'llm' | 'vision'
   readonly action?: string
   readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
@@ -412,8 +412,10 @@ function taskAiInvocationKey(input: {
   if (!action || !stepId || !input.meta) {
     throw new Error(`TASK_AI_INVOCATION_IDENTITY_REQUIRED:${input.modality}`)
   }
-  const stepAttempt = input.meta.stepAttempt ?? 1
-  return `ai:${input.modality}:${action}:${stepId}:${input.meta.stepIndex}:${stepAttempt}`
+  // `stepAttempt` is stream presentation metadata, not a provider invocation
+  // identity. Including it here would let a replay submit the same external
+  // request under a fresh durable fence.
+  return `ai:${input.modality}:${action}:${stepId}:${input.meta.stepIndex}`
 }
 
 async function executeTaskAwareLlmCompletion(input: {

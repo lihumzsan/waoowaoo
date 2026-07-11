@@ -14,9 +14,13 @@ const readFileMock = vi.hoisted(() => vi.fn())
 
 const prismaMock = vi.hoisted(() => ({
   projectEpisodeFinalOutput: {
-    findFirst: vi.fn(async (): Promise<unknown> => null),
+    findFirst: vi.fn(async (): Promise<unknown> => ({
+      renderStatus: 'processing',
+      renderTaskId: 'task-1',
+      outputMediaId: null,
+    })),
     findUnique: vi.fn(),
-    upsert: vi.fn(),
+    updateMany: vi.fn(async () => ({ count: 1 })),
   },
   projectEditMusicScore: {
     findUnique: vi.fn(),
@@ -89,6 +93,9 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: reportTaskProgressMock,
+}))
+vi.mock('@/lib/workers/utils', () => ({
+  assertTaskActive: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/ai-exec/engine', () => ({

@@ -178,11 +178,7 @@ describe('final video render worker', () => {
     }))).rejects.toThrow('EPISODE_CHAPTER_OUTPUT_REQUIRED:chapter-1')
 
     expect(generateMusicMock).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({ renderStatus: 'processing', renderTaskId: 'task-1' }),
-    }))
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
+    expect(prismaMock.projectEpisodeFinalOutput.updateMany).not.toHaveBeenCalled()
     expect(reportTaskProgressMock).toHaveBeenCalledWith(expect.anything(), 10, {
       stage: 'final_render_prepare',
     })
@@ -220,11 +216,14 @@ describe('final video render worker', () => {
     expect(mediaServiceMock.resolveStorageKeyFromMediaValue).toHaveBeenCalledWith(expect.objectContaining({
       storageKey: 'chapter-video/chapter-1.mp4',
     }))
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { episodeId: 'episode-1' },
-      update: expect.objectContaining({
-        renderStatus: 'completed',
+    expect(prismaMock.projectEpisodeFinalOutput.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        episodeId: 'episode-1',
+        renderStatus: 'processing',
         renderTaskId: 'task-1',
+      }),
+      data: expect.objectContaining({
+        renderStatus: 'completed',
         outputUrl: '/m/final-video',
         outputMediaId: 'media-final',
       }),
@@ -242,11 +241,15 @@ describe('final video render worker', () => {
     expect(generateMusicMock).not.toHaveBeenCalled()
     expect(storageMock.getObjectBuffer).not.toHaveBeenCalledWith('music/bgm-score.m4a')
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
+    expect(prismaMock.projectEpisodeFinalOutput.updateMany).not.toHaveBeenCalled()
   })
 
   it('replays a persisted final output without composing the video again', async () => {
-    prismaMock.projectEpisodeFinalOutput.findFirst.mockResolvedValueOnce({ outputMediaId: 'media-final' })
+    prismaMock.projectEpisodeFinalOutput.findFirst.mockResolvedValueOnce({
+      renderStatus: 'completed',
+      renderTaskId: 'task-1',
+      outputMediaId: 'media-final',
+    })
     mediaServiceMock.getMediaObjectById.mockResolvedValueOnce({
       id: 'media-final',
       url: '/m/final-video',
@@ -261,6 +264,6 @@ describe('final video render worker', () => {
 
     expect(result).toMatchObject({ videoMediaId: 'media-final', durationSeconds: 3 })
     expect(execFileMock).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).not.toHaveBeenCalled()
+    expect(prismaMock.projectEpisodeFinalOutput.updateMany).not.toHaveBeenCalled()
   })
 })

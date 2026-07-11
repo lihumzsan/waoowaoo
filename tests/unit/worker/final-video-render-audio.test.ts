@@ -201,13 +201,16 @@ describe('final video render worker', () => {
     expect(ffmpegCalls.some((args) => args.includes('sidechaincompress='))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes('amix=inputs=2'))).toBe(true)
     expect(ffmpegCalls.some((args) => args.includes(' -an '))).toBe(true)
-    const completedFinalOutputCall = prismaMock.projectEpisodeFinalOutput.upsert.mock.calls.find((call) => {
-      const arg = call[0] as { update?: { renderStatus?: string } }
-      return arg.update?.renderStatus === 'completed'
+    const updateCalls = prismaMock.projectEpisodeFinalOutput.updateMany.mock.calls as unknown as Array<[
+      { data?: { renderStatus?: string } },
+    ]>
+    const completedFinalOutputCall = updateCalls.find((call) => {
+      const arg = call[0] as { data?: { renderStatus?: string } }
+      return arg.data?.renderStatus === 'completed'
     })
     expect(completedFinalOutputCall).toBeTruthy()
     expect(completedFinalOutputCall?.[0]).toEqual(expect.objectContaining({
-      update: expect.objectContaining({
+      data: expect.objectContaining({
         renderStatus: 'completed',
         outputMediaId: 'media-final',
         outputUrl: '/m/final-video',

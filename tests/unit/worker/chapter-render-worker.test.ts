@@ -8,7 +8,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   projectEditChapter: {
     findFirst: vi.fn(),
-    update: vi.fn(),
+    updateMany: vi.fn(),
   },
   projectPanel: {
     findMany: vi.fn(),
@@ -61,6 +61,9 @@ vi.mock('@/lib/video-compose/final-render-audio', () => ({
 vi.mock('@/lib/workers/shared', () => ({
   reportTaskProgress: vi.fn(),
 }))
+vi.mock('@/lib/workers/utils', () => ({
+  assertTaskActive: vi.fn(async () => undefined),
+}))
 vi.mock('@/lib/workers/final-video-render', () => finalRenderMock)
 
 import { handleChapterRenderTask } from '@/lib/workers/chapter-render'
@@ -94,8 +97,13 @@ describe('handleChapterRenderTask', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     prismaMock.project.findUnique.mockResolvedValue({ videoRatio: '16:9' })
-    prismaMock.projectEditChapter.findFirst.mockResolvedValue({ id: 'chapter-1' })
-    prismaMock.projectEditChapter.update.mockResolvedValue({ id: 'chapter-1' })
+    prismaMock.projectEditChapter.findFirst.mockResolvedValue({
+      id: 'chapter-1',
+      renderStatus: 'processing',
+      renderTaskId: 'task-1',
+      outputMediaId: null,
+    })
+    prismaMock.projectEditChapter.updateMany.mockResolvedValue({ count: 1 })
     prismaMock.projectPanel.findMany.mockResolvedValue([])
     prismaMock.projectVideoGroup.findMany.mockResolvedValue([])
     finalRenderMock.buildEditScript.mockResolvedValue(null)
@@ -105,12 +113,12 @@ describe('handleChapterRenderTask', () => {
     await expect(handleChapterRenderTask(buildJob())).rejects.toThrow('CHAPTER_RENDER_CHAPTER_REQUIRED')
   })
 
-  it('checks chapter ownership before writing processing status', async () => {
+  it('checks chapter ownership before rendering', async () => {
     prismaMock.projectEditChapter.findFirst.mockResolvedValueOnce(null)
 
     await expect(handleChapterRenderTask(chapterJob())).rejects.toThrow('CHAPTER_RENDER_CHAPTER_NOT_FOUND')
 
-    expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditChapter.updateMany).not.toHaveBeenCalled()
   })
 
   it('leaves failed target projection to the unified Task terminal service', async () => {
@@ -118,8 +126,7 @@ describe('handleChapterRenderTask', () => {
 
     await expect(handleChapterRenderTask(chapterJob())).rejects.toThrow('original render failure')
 
-    expect(prismaMock.projectEditChapter.update).toHaveBeenCalledTimes(1)
-    expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(prismaMock.projectEditChapter.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ renderStatus: 'failed' }),
     }))
   })
@@ -143,7 +150,7 @@ describe('handleChapterRenderTask', () => {
     const result = await handleChapterRenderTask(chapterJob())
 
     expect(result).toMatchObject({ mediaId: 'media-chapter', durationSeconds: 3 })
-    expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditChapter.updateMany).not.toHaveBeenCalled()
     expect(finalRenderMock.concatClips).not.toHaveBeenCalled()
   })
 })

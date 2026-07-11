@@ -243,21 +243,6 @@ export async function submitPlannedOperationTask(params: {
   return result
 }
 
-export async function commitOperationPlan<Input, Output>(params: {
-  operation: ProjectAgentOperationDefinition<Input, Output>
-  ctx: ProjectAgentOperationContext
-  input: Input
-  plan: OperationPlan
-}): Promise<Output> {
-  if (!params.operation.commit) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_COMMIT_UNAVAILABLE',
-      message: `operation commit unavailable: ${params.operation.id}`,
-    })
-  }
-  return await params.operation.commit(params.ctx, params.input, params.plan)
-}
-
 export async function planOperation<Input>(params: {
   operation: ProjectAgentOperationDefinition<Input, unknown>
   ctx: ProjectAgentOperationContext

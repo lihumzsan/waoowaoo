@@ -36,7 +36,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 原子终态接力：`src/lib/workspace-resource/materialized-resource.ts` 与 `src/lib/query/materialized-resource-cache.ts`。
 - 物化资源版本类型与比较器：`src/lib/workspace-resource/materialized-resource-version.ts`。
 - 正式 Query DTO 版本构造：`src/lib/workspace-resource/query-dto-version.ts`；Episode detail 与 Edit Bible GET 必须复用该入口。
-- 持久版本读取：`src/lib/workspace-resource/resource-revision.ts`；唯一写入者是 `20260711060000_add_episode_resource_revision` 中的数据库 trigger，应用代码无权自行计算或回写 revision。由于仓库历史基线仍以 `prisma db push` 部署，`npm run db:prepare` 必须在 schema sync 后通过 `scripts/install-resource-revision-triggers.ts` 安装完整 40-trigger 集合；全有时幂等通过、部分存在时原地失败，禁止静默补半套。
+- 持久版本读取：`src/lib/workspace-resource/resource-revision.ts`；唯一写入者是 `20260711060000_add_episode_resource_revision` 中的数据库 trigger，应用代码无权自行计算或回写 revision。`src/lib/workspace-resource/episode-resource-revision-contract.ts` 声明 `episodeData`/`editBible` 聚合实际消费的 13 个子 relation；CI 必须对账它们各自的 INSERT/UPDATE/DELETE trigger（加 Episode 自身更新，共 40 个 trigger 实例），而不是把所有 Prisma relation 误当成聚合成员。由于仓库历史基线仍以 `prisma db push` 部署，`npm run db:prepare` 必须在 schema sync 后通过 `scripts/install-resource-revision-triggers.ts` 安装完整集合；全有时幂等通过、部分存在时原地失败，禁止静默补半套。
 - SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
@@ -55,7 +55,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/unit/query/materialized-resource-cache.test.ts` 验证连续、重复、旧版本、跨 Task、refetch/SSE 交错和刷新重建时的单调门禁。
 - `tests/unit/workspace-resource/resource-revision.test.ts` 验证 seqlock 只发布前后 revision 相同的完整快照，检测到并发写时重读整个聚合，持续变化则显式失败。
 - `tests/integration/task/workspace-resource-revision.integration.test.ts` 在真实 MySQL 上验证同一事务中的连续子表写入、物理删除以及 Panel 间接关系均严格推进 revision。
-- `tests/unit/task/resource-revision-trigger-installer.test.ts` 验证 migration 中 40 个 trigger 身份完整；同一真实 MySQL integration 同时执行 `db push` 后安装入口、完整 migration SQL 与重复安装幂等检查。
+- `tests/unit/task/resource-revision-trigger-installer.test.ts` 验证 aggregate relation registry 与 migration 中 40 个 trigger 实例身份完整；同一真实 MySQL integration 同时执行 `db push` 后安装入口、完整 migration SQL 与重复安装幂等检查。
 - `tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 验证重复、晚到与 replay 事件不能越过 Task 终态水位。
 - `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
 - 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写、无版本 rollback 和无界 stream/SSE identity 回流。

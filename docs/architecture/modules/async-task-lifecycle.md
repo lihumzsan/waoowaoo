@@ -24,8 +24,8 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-08 — 批准批次与业务投影一次提交、commit 后入队。** `billable_media` 的 operation-specific 业务写入、MutationBatch、Grant、OperationExecution、Task/freeze/Created event/`task.enqueue` Outbox responsibility 必须在唯一 MySQL 事务持久化，并复用普通 Task 相同的事务 primitive；enqueue command 无需未来时间暂存，因为事务 commit 前对 dispatcher 不可见。初次 Outbox 入队与 queued/absent reconciler 恢复必须复用同一 Execution completed 门禁。HTTP 响应、Redis 可用性、第二阶段 release 和逐 Task 补偿都不承担整批正确性。
 - **TL-09 — SSE 单握手与复合持久水位。** 服务端必须先订阅 Redis channel，再读取 bootstrap，并按 snapshot → buffered live 精确去重交接；server/client 都必须在有界窗口保存 `event identity → canonical fingerprint`，相同 identity 的不同事实必须 conflict/resync，禁止当成 duplicate 静默跳过。运输水位必须分别携带 TaskEvent 数字游标、MutationBatch `(createdAt,id)` 游标与 Assistant `ProjectAgentEvent.id` 游标；当客户端尚无 Mutation 或 Assistant 水位时，bootstrap 必须发送对应的 level-triggered recovery 事实，禁止只补一个事实域导致其他域永久脱漏。客户端刷新后从持久水位重连，持续 replay polling 不得承担正确性。
 - **TL-09A — Assistant continuation dead-letter 必须先完成业务结算。** `project_agent.continue_wait` 投递耗尽时，Outbox 不能先标 dead 再留下 `awaiting_task`。唯一顺序是：复用 Assistant continuation settlement 原子结算 checkpoint、Activity、Wait、Run、Thread message 与 Session Event，事务成功后再 dead-letter；结算失败保留 Outbox 可重试。未执行命令使用 `delivery_exhausted`，已有 running checkpoint 使用 `outcome_unknown`，不得重新调用模型。
-- **TL-10 — 业务目标写入必须携带 Task 所有权 fence。** 会进入 `generating` 的持久资源必须在 Task 创建事务或 worker 的明确开始边沿记录 `generationTaskId`（或同等 execution identity）；成功、失败与取消 projector 只能以 `(resourceId, generationTaskId, activeStatus)` CAS。成功后必须保留最后完成 Task 的 ownership watermark，并允许同一 Task 在“资源已提交、handler checkpoint 尚未提交”的崩溃窗中读取正式资源幂等返回；不得清空 owner 后把重放解释成 stale failure。若 failure/cancel 与同一 Task 的正式资源成功提交竞争，projector 必须返回 `success_materialized`，Terminal Service 不得回滚账务或写失败/取消；BullMQ 已终止时由唯一 reconciler 把同一 Task 重新入队完成 checkpoint 与成功终态。`ProjectEditBible`、`ProjectEditScript`、`ProjectEditShotExecutionPlan`、MusicScore、Soundscape、StylePreview、VideoGroup 与 render target 均受同一规则约束。旧 Task 晚到只能成为 no-op，未知 target/type 组合必须显式失败。
-- **TL-11 — Task 契约必须在一个 registry 穷尽。** 每个 TaskDefinition 必须声明 queue、worker handler、billing policy、正式资源 materializer、retry、success handoff、failure projector 与 cancel projector；不得用 helper 默认 `none` 掩盖缺失。四个 worker、Billing 与 materializer 只按 registry 的 capability key 分派，不得各自按 TaskType 维护 switch。Terminal Service 在同一事务内按 registry 调用 projector。取消只撤销当前 Task 的目标所有权并回到可重试的 pending，不得复用 failure projector 或写成 `failed`。
+- **TL-10 — 业务目标写入必须携带 Task 所有权 fence。** 会进入 `generating` 的持久资源必须在 Task 创建事务或 worker 的明确开始边沿记录 `generationTaskId`（或同等 execution identity）；Chapter/Final render 必须在 Task、billing、Created Event 与 Outbox 同一提交事务取得 `renderTaskId`，worker 只能以 `(target, renderTaskId, processing)` CAS 物化成功。成功、失败与取消 projector 只能以 `(resourceId, generationTaskId, activeStatus)`（或等价 render fence）CAS。成功后必须保留最后完成 Task 的 ownership watermark，并允许同一 Task 在“资源已提交、handler checkpoint 尚未提交”的崩溃窗中读取正式资源幂等返回；不得清空 owner 后把重放解释成 stale failure。若 failure/cancel 与同一 Task 的正式资源成功提交竞争，projector 必须返回 `success_materialized`，Terminal Service 不得回滚账务或写失败/取消；BullMQ 已终止时由唯一 reconciler 把同一 Task 重新入队完成 checkpoint 与成功终态。`ProjectEditBible`、`ProjectEditScript`、`ProjectEditShotExecutionPlan`、MusicScore、Soundscape、StylePreview、VideoGroup 与 render target 均受同一规则约束。旧 Task 晚到只能成为 no-op，未知 target/type 组合必须显式失败。
+- **TL-11 — Task 契约必须在一个 registry 穷尽。** 每个 TaskDefinition 必须声明 queue、worker handler、billing policy、正式资源 materializer、retry、success handoff、submission target ownership、failure projector 与 cancel projector；不得用 helper 默认 `none` 掩盖缺失。四个 worker、Billing、submission ownership、materializer 与 Terminal Service 只按 registry 的 capability key 分派，不得各自按 TaskType 维护 switch。Terminal Service 在同一事务内按 registry 调用 projector。取消只撤销当前 Task 的目标所有权并回到可重试的 pending，不得复用 failure projector 或写成 `failed`。
 - **TL-12 — EditBible 成功事务持锁。** `persistGeneratedEditBibleBundle` 必须从事务第一步 `FOR UPDATE` 锁定 Bible，并校验 id、episode、sourceDocument、generationTaskId 与 generating。source read、bundle validation、chapter/style/Bible 全部写入在同一持锁事务，最终以完整 owner fence CAS；旧 Task 成功、失败或取消不得覆盖新 owner。
 - **TL-13 — 外部执行至多一次。** Task 中每一个媒体、LLM 与 vision provider 调用必须在发出请求前以 `taskId + executionFingerprint + invocationKey + requestHash` 持久化 invocation fence。provider POST 内部不得自动重试。明确成功结果必须持久化并可重放；明确 HTTP/业务拒绝持久化为 rejected；断连、超时或 provider 成功后本地持久化失败一律进入 `outcome_unknown`，禁止再提交。Task 最终失败并由 Terminal Service 退回用户额度，平台承担外部可能已产生的成本。poll/download 可以重试，但不得重建 provider job。provider 结果之后的对象存储产物必须由 `taskId + artifact identity` 生成稳定 key，使 worker crash/retry 复用同一对象与 MediaObject，而不是制造随机孤儿。
 
@@ -44,6 +44,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 | 丢失 job 恢复、stale timeout 与终态对账           | `src/lib/task/reconcile.ts`                                                        | instrumentation 只启动唯一 reconciler                       |
 | SSE Task/Mutation/Assistant 重放水位              | `src/lib/sse/protocol.ts` 的 v2 复合 cursor；服务端握手 `src/app/api/sse/route.ts` | `useSSE` 只投影并持久化 transport cursor                    |
 | ProjectEditBible 当前生成所有权                   | `ProjectEditBible.generationTaskId` / Task 创建事务 hook                           | 持锁 success projector 与 terminal failure/cancel projector |
+| Chapter/Final render 当前所有权                   | `renderTaskId` / `target-ownership.ts` 的 Task 创建事务 claim                     | owner-fenced worker success 与 terminal failure/cancel projector |
 | Provider/LLM/Vision 提交资格与可重放结果          | `TaskExecutionCheckpoint` / `src/lib/task/provider-invocation.ts`                  | `ai-exec`、worker retry、Terminal Service                   |
 | Task 对象存储产物身份                             | `src/lib/task/artifact-storage.ts` 的 `taskId + artifact`                          | worker upload、MediaObject upsert                           |
 | Outbox 投递次数与 dead-letter                     | `OutboxCommand.deliveryCount` / Outbox worker                                      | dispatcher、告警与人工处理                                  |
@@ -58,10 +59,11 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - 提交、队列与计费边界：`src/lib/task/submitter.ts`。
 - Task attempt/progress 服务：`src/lib/task/service.ts`；唯一终态事务：`src/lib/task/terminal/service.ts`。
 - Task 创建原子提交：`src/lib/task/transactional-create.ts`；普通与批准 Task 均复用，Redis 只由 `task.enqueue` Outbox consumer 接触。
+- Task submission target ownership：`src/lib/task/target-ownership.ts`；render target 的 active owner 在 Task 创建事务中取得，worker 无权无条件改写。
 - Task → BullMQ 完整 envelope：`src/lib/task/job-envelope.ts`；Task type → queue 的穷尽映射：`src/lib/task/queues.ts`。
 - Queue 四态观察与唯一恢复 cycle：`src/lib/task/reconcile.ts`；`src/instrumentation.ts` 只负责启动，不写 Task。
 - Operation 到 Task 的提交适配：`src/lib/operations/submit-operation-task.ts`。
-- 批准计划到整批 Task 的唯一入口：`src/lib/task/approved-plan-submitter.ts`；初次入队：`src/lib/task/enqueue.ts`。
+- 批准计划到整批 Task 的唯一入口：`src/lib/task/approved-plan-submitter.ts`；初次 Outbox 投递与 queued/absent 恢复都复用 `src/lib/task/enqueue.ts` 的 execution-completed 门禁。
 - Canvas 终态物化：`src/lib/workspace-resource/materialized-resource.ts`；客户端接力：`src/lib/query/materialized-resource-cache.ts`。
 - 物化版本协议：`src/lib/workspace-resource/materialized-resource-version.ts`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
@@ -98,6 +100,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 在真实 MySQL+Redis 下验证 add-before-mark、固定 job identity、丢 job 重置、lease reclaim/stale owner 与 poison command 首次 dead-letter；`tests/unit/outbox/queue-observation.test.ts` 验证 Redis unavailable 不得解释为 absent。
 - `tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts` 与 `tests/unit/outbox/project-agent-continuation-dead-letter.test.ts` 验证 Assistant continuation 投递耗尽先结算、后 dead，且 settlement 失败不丢失重试责任。
 - `tests/integration/task/task-target-terminal-projectors.integration.test.ts` 验证 MusicScore、Soundscape、EditScript 与 ShotExecutionPlan 的 failure/cancel/late owner CAS；`tests/integration/task/task-target-terminal-ownership.integration.test.ts` 验证正式资源成功先提交时 cancel 不得覆盖成功，且已终态重放必须具有精确 terminal Event/broadcast bundle；`scripts/guards/task-target-ownership-guard.mjs` 与 `no-worker-attempt-target-terminal-write.mjs` 阻止 attempt 恢复第二终态写入者。
+- `tests/unit/task/target-ownership.test.ts` 验证 Chapter/Final render 在 Task 创建事务中取得目标 owner；worker success 必须带该 owner CAS，不能自行 claim 或覆盖后来的 target。
 - `tests/integration/task/edit-script-ownership-migration.integration.test.ts` 在隔离的真实 MySQL schema 中执行 `20260711070000`，验证两个 owner column 与 index 实际可安装。
 - `tests/unit/task/artifact-storage.test.ts` 与 `scripts/guards/task-artifact-idempotency-guard.mjs` 验证 Task 产物 key 稳定且所有 worker 上传都携带显式身份。
 - `tests/integration/task/async-migration-preflight.integration.test.ts` 验证维护窗口对 active Task、旧父任务、Outbox、Run 与 Wait 任一非零均 fail-closed。
@@ -110,8 +113,8 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 1. 暂停新 Task/Operation/Assistant Run 提交并停止 worker 消费；等待 BullMQ 与 DB 中所有 active Task 排空。
 2. 运行 `npm run db:async-migration-preflight`，用只读查询证明 active Task、`edit_style_previews_generate` 旧父任务、待交付 Outbox、非终态 Assistant Run/Wait 五类计数全部为 `0`。任一计数非零立即中止发布；禁止手工忽略结果。
-3. 不得从已被 progress 合并污染的 `Task.payload` 回填 `executionFingerprint`，也不得猜测 `ProjectEditBible.generationTaskId`。本批采用“排空后切换”，不是数据回填。
-4. 在应用 migration（或历史基线部署使用 `npm run db:prepare`）、部署新代码、启动 dispatcher/worker 后，必须确认 `information_schema.TRIGGERS` 中本模块声明的 40 个资源版本 trigger 全部存在，再验证 guards、schema 与只读健康检查，最后恢复提交流量。部分 trigger 集合必须原地失败，禁止继续启动。
+3. 不得从已被 progress 合并污染的 `Task.payload` 回填 `executionFingerprint`，也不得猜测 `ProjectEditBible.generationTaskId`。本批对这些不可靠身份采用“排空后切换”；早期 `20260711010000` 的确定性 `runVersion/eventSeq` 历史回填是单独、显式的 migration 步骤，不得被描述为不存在。
+4. 在应用 migration（或历史基线部署使用 `npm run db:prepare`）、部署新代码、启动 dispatcher/worker 后，必须确认 `information_schema.TRIGGERS` 中本模块声明的 40 个资源版本 **trigger 实例**（13 个 aggregate child relation 的 INSERT/UPDATE/DELETE 加 Episode 自身更新）全部存在，再验证 guards、schema 与只读健康检查，最后恢复提交流量。部分 trigger 集合必须原地失败，禁止继续启动。
 5. `20260711030000` 会删除 `operationConfirmed`；因此 migration 与新应用必须作为同一维护窗口切换，禁止旧应用实例继续写入。
 
 ## 历史回归

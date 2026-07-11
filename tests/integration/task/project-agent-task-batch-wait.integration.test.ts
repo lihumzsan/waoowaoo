@@ -24,6 +24,12 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
   it('commits every Task and one Run-level Wait under the same transaction', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
+    const episode = await prisma.projectEpisode.create({
+      data: { projectId: project.id, episodeNumber: 1, name: 'Assistant batch render episode' },
+    })
+    const chapters = await Promise.all([0, 1].map(async (chapterIndex) => await prisma.projectEditChapter.create({
+      data: { episodeId: episode.id, chapterIndex },
+    })))
     const { run } = await createProjectAgentUserTurnRun({
       runId: 'assistant-nonbillable-batch-run',
       requestId: 'assistant-nonbillable-batch-request',
@@ -81,17 +87,18 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
       runFence,
       signal: new AbortController().signal,
       taskBatchBinding: binding,
-    }, async () => await submitOperationTaskBatch(['chapter-1', 'chapter-2'].map((chapterId) => ({
+    }, async () => await submitOperationTaskBatch(chapters.map((chapter) => ({
       request,
       userId: user.id,
       projectId: project.id,
+      episodeId: episode.id,
       type: TASK_TYPE.CHAPTER_RENDER,
       targetType: 'ProjectEditChapter',
-      targetId: chapterId,
+      targetId: chapter.id,
       operationId: 'render_chapters',
       source: 'assistant-panel',
-      payload: { chapterId },
-      dedupeKey: `assistant-nonbillable-batch:${chapterId}`,
+      payload: { episodeId: episode.id, chapterId: chapter.id },
+      dedupeKey: `assistant-nonbillable-batch:${chapter.id}`,
       locale: 'en' as const,
       billingInfo: null,
     }))))

@@ -12,6 +12,7 @@ import { assertFinalRenderClipsHaveSources, normalizeFinalRenderErrorLocale } fr
 import { buildFinalRenderClips, resolveFinalRenderDimensions } from '@/lib/video-compose/final-render-plan'
 import { concatFinalRenderAudioClips, muxFinalRenderSourceAudio, renderFinalRenderClipAudio } from '@/lib/video-compose/final-render-audio'
 import { reportTaskProgress } from './shared'
+import { assertTaskActive } from './utils'
 import {
   buildEditScript,
   concatClips,
@@ -37,20 +38,27 @@ function resolveChapterIdFromJob(job: Job<TaskJobData>, payload: ChapterRenderPa
   throw new Error('CHAPTER_RENDER_CHAPTER_REQUIRED')
 }
 
-async function markChapterRenderStatus(input: {
+async function persistChapterRenderSuccess(input: {
   readonly chapterId: string
-  readonly renderStatus: string
+  readonly episodeId: string
   readonly taskId: string
-  readonly outputMediaId?: string | null
+  readonly outputMediaId: string
 }): Promise<void> {
-  await prisma.projectEditChapter.update({
-    where: { id: input.chapterId },
-    data: {
-      renderStatus: input.renderStatus,
+  const persisted = await prisma.projectEditChapter.updateMany({
+    where: {
+      id: input.chapterId,
+      episodeId: input.episodeId,
       renderTaskId: input.taskId,
-      ...(input.outputMediaId !== undefined ? { outputMediaId: input.outputMediaId } : {}),
+      renderStatus: 'processing',
+    },
+    data: {
+      renderStatus: 'completed',
+      outputMediaId: input.outputMediaId,
     },
   })
+  if (persisted.count !== 1) {
+    throw new Error(`CHAPTER_RENDER_SUCCESS_OWNERSHIP_STALE:${input.chapterId}:${input.taskId}`)
+  }
 }
 
 export async function handleChapterRenderTask(job: Job<TaskJobData>) {
@@ -101,12 +109,9 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
       height: media.height,
     }
   }
-
-  await markChapterRenderStatus({
-    chapterId,
-    renderStatus: 'processing',
-    taskId: job.data.taskId,
-  })
+  if (chapter.renderTaskId !== job.data.taskId || chapter.renderStatus !== 'processing') {
+    throw new Error(`CHAPTER_RENDER_TASK_OWNERSHIP_STALE:${chapterId}:${job.data.taskId}`)
+  }
 
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-chapter-render-${randomUUID()}-`))
   try {
@@ -209,9 +214,10 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
       height: dimensions.height,
       durationMs: Math.round(durationSeconds * 1000),
     })
-    await markChapterRenderStatus({
+    await assertTaskActive(job, 'persist_chapter_render')
+    await persistChapterRenderSuccess({
       chapterId,
-      renderStatus: 'completed',
+      episodeId,
       taskId: job.data.taskId,
       outputMediaId: media.id,
     })

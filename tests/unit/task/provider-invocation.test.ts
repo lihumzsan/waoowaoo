@@ -14,28 +14,37 @@ type CheckpointRow = {
 
 const checkpointState = vi.hoisted(() => ({
   row: null as CheckpointRow | null,
+  rows: new Map<string, CheckpointRow>(),
 }))
 
 const prismaMock = vi.hoisted(() => ({
   taskExecutionCheckpoint: {
-    findUnique: vi.fn(async () => checkpointState.row),
+    findUnique: vi.fn(async ({ where }: {
+      where: { taskId_stepKey: { taskId: string; stepKey: string } }
+    }) => checkpointState.rows.get(`${where.taskId_stepKey.taskId}:${where.taskId_stepKey.stepKey}`) ?? null),
     create: vi.fn(async ({ data }: { data: CheckpointRow }) => {
-      if (checkpointState.row) {
+      const identity = `${data.taskId}:${data.stepKey}`
+      if (checkpointState.rows.has(identity)) {
         throw new Prisma.PrismaClientKnownRequestError('unique conflict', {
           code: 'P2002',
           clientVersion: 'test',
         })
       }
-      checkpointState.row = { ...data, completedAt: null }
-      return checkpointState.row
+      const row = { ...data, completedAt: null }
+      checkpointState.rows.set(identity, row)
+      checkpointState.row = row
+      return row
     }),
     updateMany: vi.fn(async ({ where, data }: {
       where: { id: string; state: string }
       data: { state: string; output: unknown; completedAt: Date }
     }) => {
-      const row = checkpointState.row
-      if (!row || row.id !== where.id || row.state !== where.state) return { count: 0 }
-      checkpointState.row = { ...row, ...data }
+      const entry = [...checkpointState.rows.entries()].find(([, row]) => row.id === where.id)
+      const row = entry?.[1]
+      if (!entry || !row || row.state !== where.state) return { count: 0 }
+      const updated = { ...row, ...data }
+      checkpointState.rows.set(entry[0], updated)
+      checkpointState.row = updated
       return { count: 1 }
     }),
   },
@@ -66,6 +75,7 @@ function executeWith(execute: () => Promise<{ success: boolean; imageUrl?: strin
 describe('task provider invocation at-most-once fence', () => {
   beforeEach(() => {
     checkpointState.row = null
+    checkpointState.rows.clear()
     vi.clearAllMocks()
   })
 
@@ -83,6 +93,25 @@ describe('task provider invocation at-most-once fence', () => {
 
     expect(execute).toHaveBeenCalledTimes(1)
     expect(checkpointState.row?.state).toBe('submitted')
+  })
+
+  it('keeps distinct candidate identities independent while replaying each candidate once', async () => {
+    const execute = vi.fn(async () => ({ success: true, imageUrl: 'https://provider/result.png' }))
+    const invokeCandidate = async (key: string) => await executeTaskProviderInvocation({
+      taskId: 'task-1',
+      invocation: { key },
+      modality: 'image',
+      provider: 'fal',
+      modelKey: 'fal::image-model',
+      request: { prompt: 'same immutable request' },
+      execute,
+    })
+
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
+    await expect(invokeCandidate('media:image:candidate:1')).resolves.toMatchObject({ success: true })
+
+    expect(execute).toHaveBeenCalledTimes(2)
   })
 
   it('marks a lost provider response as outcome unknown and never resubmits it', async () => {

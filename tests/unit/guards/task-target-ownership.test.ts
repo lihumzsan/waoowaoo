@@ -10,7 +10,11 @@ const valid = {
     [TASK_TYPE.SOUNDSCAPE_GENERATE]: definition('music', 'soundscape_generate', 'sound_effect', 'episode_data', 3, 'soundscape', 'soundscape'),
     [TASK_TYPE.EDIT_SCRIPT_GENERATE]: definition('text', 'edit_script_generate', 'text', 'episode_data', 3, 'edit_script', 'edit_script'),
     [TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE]: definition('text', 'edit_shot_execution_plan_generate', 'text', 'episode_data', 3, 'edit_shot_execution_plan', 'edit_shot_execution_plan'),
+    [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 'episode_data', 1, 'chapter_render', 'chapter_render', 'chapter_render'),
+    [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 'episode_data', 1, 'final_video_render', 'final_video_render', 'final_video_render'),
+    submissionTargetOwnership: 'chapter_render' 'final_video_render',
   }`,
+  transactionalCreate: 'claimTaskTargetOwnershipInTransaction',
   projectors:
     "projectMusicScore projectSoundscape projectEditScript projectEditShotExecutionPlan generationTaskId: input.taskId 'success_materialized'",
   editScriptService:
@@ -18,8 +22,8 @@ const valid = {
   videoWorker: 'readCompletedVideoGroupForTask',
   stylePreviewWorker: "preview.status === 'completed'",
   editBibleWorker: 'alreadyPersisted',
-  chapterRender: "chapter.renderStatus === 'completed'",
-  finalRender: 'FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING',
+  chapterRender: "chapter.renderStatus === 'completed' projectEditChapter.updateMany renderStatus: 'processing' CHAPTER_RENDER_SUCCESS_OWNERSHIP_STALE",
+  finalRender: "FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING projectEpisodeFinalOutput.updateMany renderStatus: 'processing' FINAL_VIDEO_RENDER_SUCCESS_OWNERSHIP_STALE",
   bgmWorker: 'readCompletedMusicScoreMix',
   soundscapeWorker: 'readCompletedSoundscapeMix',
   terminalService: "reason: 'completion_pending' TASK_TERMINAL_BUNDLE_MISSING task-lifecycle-broadcast:${event.id}",

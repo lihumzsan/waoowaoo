@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { inspectProviderSubmissionSource } from '../../../scripts/guards/provider-submission-at-most-once-guard.mjs'
+import {
+  inspectProviderSubmissionSource,
+  inspectTaskLlmInvocationIdentity,
+} from '../../../scripts/guards/provider-submission-at-most-once-guard.mjs'
 
 describe('provider submission at-most-once guard', () => {
   it('accepts a provider POST and task media call with explicit at-most-once contracts', () => {
@@ -23,5 +26,21 @@ describe('provider submission at-most-once guard', () => {
       expect.stringContaining('provider POST must use RETRY_POLICY.providerSubmit'),
       expect.stringContaining('must declare a stable provider invocation key'),
     ]))
+  })
+
+  it('rejects an LLM provider identity that changes with stream presentation attempts', () => {
+    expect(inspectTaskLlmInvocationIdentity([
+      'function taskAiInvocationKey(input) {',
+      '  const stepAttempt = input.meta.stepAttempt ?? 1',
+      '  return `ai:${input.meta.stepIndex}:${stepAttempt}`',
+      '}',
+    ].join('\n'))).toEqual(expect.arrayContaining([
+      expect.stringContaining('must not include transient stepAttempt'),
+    ]))
+    expect(inspectTaskLlmInvocationIdentity([
+      'function taskAiInvocationKey(input) {',
+      '  return `ai:${input.meta.stepIndex}`',
+      '}',
+    ].join('\n'))).toEqual([])
   })
 })

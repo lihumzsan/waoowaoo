@@ -78,6 +78,20 @@ export function inspectProviderSubmissionSource(input) {
   return violations
 }
 
+export function inspectTaskLlmInvocationIdentity(content) {
+  const match = content.match(/function taskAiInvocationKey[\s\S]*?\n}\s*(?:\nasync|$)/)
+  if (!match) return ['src/lib/ai-exec/engine.ts is missing taskAiInvocationKey']
+  const keyFactory = match[0]
+  const violations = []
+  if (!keyFactory.includes('input.meta.stepIndex')) {
+    violations.push('task LLM invocation key must include the stable step index')
+  }
+  if (/\$\{stepAttempt\}|meta\.stepAttempt/.test(keyFactory)) {
+    violations.push('task LLM invocation key must not include transient stepAttempt metadata')
+  }
+  return violations
+}
+
 function walk(dir, output = []) {
   if (!fs.existsSync(dir)) return output
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -111,6 +125,11 @@ function runCli() {
     'TASK_PROVIDER_INVOCATION_KEY_REQUIRED',
   ]) {
     if (!engine.includes(required)) violations.push(`src/lib/ai-exec/engine.ts missing ${required}`)
+  }
+  violations.push(...inspectTaskLlmInvocationIdentity(engine))
+  const panelImageHandler = fs.readFileSync(path.join(root, 'src/lib/workers/handlers/panel-image-task-handler.ts'), 'utf8')
+  if (!panelImageHandler.includes('invocationKey: createImageCandidateInvocationKey(i)')) {
+    violations.push('src/lib/workers/handlers/panel-image-task-handler.ts must give every candidate a stable distinct provider invocation key')
   }
   for (const required of [
     'executeTaskDurableInvocation',

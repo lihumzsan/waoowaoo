@@ -58,6 +58,36 @@ export function inspectTaskTargetOwnershipContract(input) {
     }
   }
   for (const required of [
+    'submissionTargetOwnership',
+    "'chapter_render'",
+    "'final_video_render'",
+  ]) {
+    if (!input.definitions.includes(required)) {
+      violations.push(`TaskDefinition missing submission ownership contract: ${required}`)
+    }
+  }
+  if (!input.transactionalCreate.includes('claimTaskTargetOwnershipInTransaction')) {
+    violations.push('Task creation must claim target ownership before lifecycle Event and Outbox persistence')
+  }
+  for (const required of [
+    'projectEditChapter.updateMany',
+    "renderStatus: 'processing'",
+    'CHAPTER_RENDER_SUCCESS_OWNERSHIP_STALE',
+  ]) {
+    if (!input.chapterRender.includes(required)) {
+      violations.push(`ChapterRender success must use the submission owner CAS: ${required}`)
+    }
+  }
+  for (const required of [
+    'projectEpisodeFinalOutput.updateMany',
+    "renderStatus: 'processing'",
+    'FINAL_VIDEO_RENDER_SUCCESS_OWNERSHIP_STALE',
+  ]) {
+    if (!input.finalRender.includes(required)) {
+      violations.push(`FinalRender success must use the submission owner CAS: ${required}`)
+    }
+  }
+  for (const required of [
     'projectMusicScore',
     'projectSoundscape',
     'projectEditScript',
@@ -115,6 +145,7 @@ function runCli() {
   const violations = inspectTaskTargetOwnershipContract({
     schema: read('prisma/schema.prisma'),
     definitions: read('src/lib/task/definition.ts'),
+    transactionalCreate: read('src/lib/task/transactional-create.ts'),
     projectors: read('src/lib/task/target-failure-sync.ts'),
     editScriptService: read('src/lib/edit-script/service.ts'),
     videoWorker: read('src/lib/workers/video.worker.ts'),

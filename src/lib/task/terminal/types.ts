@@ -22,7 +22,7 @@ export type TaskTerminalCommitIntent =
   | (TaskTerminalBase & {
       kind: 'canceled'
       reason: string
-      source: 'user' | 'operation_compensation' | 'system'
+      source: 'user' | 'system'
     })
 
 export type TaskTerminalCommitResult =

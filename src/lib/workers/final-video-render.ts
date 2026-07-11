@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { Job } from 'bullmq'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
   readCompletedMusicScoreMix,
@@ -22,6 +21,7 @@ import { getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from './shared'
+import { assertTaskActive } from './utils'
 import {
   parseFinalRenderEditScriptCore,
   resolveFinalRenderDimensions,
@@ -309,30 +309,27 @@ export async function concatClips(input: {
   ])
 }
 
-async function upsertEpisodeFinalOutput(input: {
+async function persistEpisodeFinalOutputSuccess(input: {
   readonly episodeId: string
-  readonly renderStatus: string
   readonly taskId: string
-  readonly outputUrl?: string | null
-  readonly outputMediaId?: string | null
+  readonly outputUrl: string
+  readonly outputMediaId: string
 }): Promise<void> {
-  const updateData: Prisma.ProjectEpisodeFinalOutputUncheckedUpdateInput = {
-    renderStatus: input.renderStatus,
-    renderTaskId: input.taskId,
-    ...(input.outputUrl !== undefined ? { outputUrl: input.outputUrl } : {}),
-    ...(input.outputMediaId !== undefined ? { outputMediaId: input.outputMediaId } : {}),
-  }
-  await prisma.projectEpisodeFinalOutput.upsert({
-    where: { episodeId: input.episodeId },
-    update: updateData,
-    create: {
+  const persisted = await prisma.projectEpisodeFinalOutput.updateMany({
+    where: {
       episodeId: input.episodeId,
-      renderStatus: input.renderStatus,
       renderTaskId: input.taskId,
-      outputUrl: input.outputUrl ?? null,
-      outputMediaId: input.outputMediaId ?? null,
+      renderStatus: 'processing',
+    },
+    data: {
+      renderStatus: 'completed',
+      outputUrl: input.outputUrl,
+      outputMediaId: input.outputMediaId,
     },
   })
+  if (persisted.count !== 1) {
+    throw new Error(`FINAL_VIDEO_RENDER_SUCCESS_OWNERSHIP_STALE:${input.episodeId}:${input.taskId}`)
+  }
 }
 
 export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
@@ -340,17 +337,18 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   if (!episodeId) throw new Error('FINAL_VIDEO_RENDER_EPISODE_REQUIRED')
 
-  const completed = await prisma.projectEpisodeFinalOutput.findFirst({
+  const renderTarget = await prisma.projectEpisodeFinalOutput.findFirst({
     where: {
       episodeId,
-      renderStatus: 'completed',
-      renderTaskId: job.data.taskId,
-      outputMediaId: { not: null },
     },
-    select: { outputMediaId: true },
+    select: { renderStatus: true, renderTaskId: true, outputMediaId: true },
   })
-  if (completed?.outputMediaId) {
-    const media = await getMediaObjectById(completed.outputMediaId)
+  if (
+    renderTarget?.renderStatus === 'completed'
+    && renderTarget.renderTaskId === job.data.taskId
+    && renderTarget.outputMediaId
+  ) {
+    const media = await getMediaObjectById(renderTarget.outputMediaId)
     if (!media) throw new Error(`FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING:${episodeId}`)
     if (!media.durationMs || !media.width || !media.height) {
       throw new Error(`FINAL_VIDEO_RENDER_OUTPUT_METADATA_MISSING:${episodeId}`)
@@ -365,12 +363,13 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       height: media.height,
     }
   }
-
-  await upsertEpisodeFinalOutput({
-    episodeId,
-    renderStatus: 'processing',
-    taskId: job.data.taskId,
-  })
+  if (
+    !renderTarget
+    || renderTarget.renderTaskId !== job.data.taskId
+    || renderTarget.renderStatus !== 'processing'
+  ) {
+    throw new Error(`FINAL_VIDEO_RENDER_TASK_OWNERSHIP_STALE:${episodeId}:${job.data.taskId}`)
+  }
 
   const workspaceDir = await mkdtemp(path.join(tmpdir(), `waoowaoo-final-render-${randomUUID()}-`))
   try {
@@ -526,9 +525,9 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       durationMs: Math.round(stitchedDurationSeconds * 1000),
     })
 
-    await upsertEpisodeFinalOutput({
+    await assertTaskActive(job, 'persist_final_video_render')
+    await persistEpisodeFinalOutputSuccess({
       episodeId,
-      renderStatus: 'completed',
       taskId: job.data.taskId,
       outputUrl: media.url,
       outputMediaId: media.id,

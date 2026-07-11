@@ -4,12 +4,14 @@ import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import { buildTaskLifecycleEventPayload } from './publisher'
 import { createTaskExecutionFingerprint } from './execution-identity'
+import { claimTaskTargetOwnershipInTransaction } from './target-ownership'
 import {
   TASK_EVENT_TYPE,
   TASK_STATUS,
   type BillingMode,
   type CreateTaskInput,
   type TaskBillingInfo,
+  type TaskType,
 } from './types'
 
 function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNull {
@@ -73,6 +75,14 @@ export async function persistSubmittedTaskInTransaction(params: {
     data: { billingInfo: toJson(preparedBilling) },
   })
 
+  await claimTaskTargetOwnershipInTransaction(params.tx, {
+    id: stored.id,
+    projectId: stored.projectId,
+    episodeId: stored.episodeId,
+    type: stored.type as TaskType,
+    targetType: stored.targetType,
+    targetId: stored.targetId,
+  })
   await params.onTaskCreatedInTransaction?.(params.tx, stored)
 
   const event = await params.tx.taskEvent.create({

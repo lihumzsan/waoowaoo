@@ -53,6 +53,20 @@ export const TASK_LIFECYCLE_EVENT_TYPES = [
 
 export type TaskLifecycleEventType = (typeof TASK_LIFECYCLE_EVENT_TYPES)[number]
 
+export const TASK_TERMINAL_EVENT_TYPES = [
+  TASK_EVENT_TYPE.COMPLETED,
+  TASK_EVENT_TYPE.FAILED,
+  TASK_EVENT_TYPE.CANCELED,
+] as const
+
+export type TaskTerminalEventType = (typeof TASK_TERMINAL_EVENT_TYPES)[number]
+
+export function isTaskTerminalEventType(value: string | null | undefined): value is TaskTerminalEventType {
+  return value === TASK_EVENT_TYPE.COMPLETED
+    || value === TASK_EVENT_TYPE.FAILED
+    || value === TASK_EVENT_TYPE.CANCELED
+}
+
 export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',

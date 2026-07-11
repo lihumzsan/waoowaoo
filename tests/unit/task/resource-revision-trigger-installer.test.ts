@@ -1,5 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import {
+  EPISODE_RESOURCE_REVISION_CHILD_TABLES,
+  PROJECT_EPISODE_RESOURCE_REVISION_TRIGGER_COUNT,
+} from '@/lib/workspace-resource/episode-resource-revision-contract'
 import { parseResourceRevisionTriggerStatements } from '../../../scripts/install-resource-revision-triggers'
 
 describe('resource revision trigger installer', () => {
@@ -10,8 +14,9 @@ describe('resource revision trigger installer', () => {
     ), 'utf8')
     const triggers = parseResourceRevisionTriggerStatements(sql)
 
-    expect(triggers).toHaveLength(40)
-    expect(new Set(triggers.map((trigger) => trigger.name)).size).toBe(40)
+    expect(triggers).toHaveLength(PROJECT_EPISODE_RESOURCE_REVISION_TRIGGER_COUNT)
+    expect(new Set(triggers.map((trigger) => trigger.name)).size).toBe(PROJECT_EPISODE_RESOURCE_REVISION_TRIGGER_COUNT)
+    expect(EPISODE_RESOURCE_REVISION_CHILD_TABLES).toHaveLength(13)
     expect(triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'project_episode_resource_revision_update' }),
       expect.objectContaining({ name: 'panel_resource_revision_delete' }),

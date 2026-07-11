@@ -227,6 +227,6 @@ describe('final video render worker', () => {
     }))).rejects.toThrow('FINAL_VIDEO_RENDER_BGM_NOT_READY:generating')
 
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
-    expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
+    expect(prismaMock.projectEpisodeFinalOutput.updateMany).not.toHaveBeenCalled()
   })
 })

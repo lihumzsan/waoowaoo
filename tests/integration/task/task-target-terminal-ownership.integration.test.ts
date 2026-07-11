@@ -5,6 +5,7 @@ import { createFixtureEpisode, createFixtureProject, createFixtureUser } from '.
 import { prisma } from '../../helpers/prisma'
 import { projectTaskTargetTerminalInTransaction } from '@/lib/task/target-failure-sync'
 import { commitTaskTerminal } from '@/lib/task/terminal'
+import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('Task target terminal ownership', () => {
@@ -76,6 +77,55 @@ describe('Task target terminal ownership', () => {
       taskId: null,
       errorMessage: null,
     })
+  })
+
+  it('claims Chapter and Final render target ownership in the Task creation transaction', async () => {
+    const user = await createFixtureUser()
+    const project = await createFixtureProject(user.id)
+    const episode = await createFixtureEpisode(project.id)
+    const chapter = await prisma.projectEditChapter.create({
+      data: { episodeId: episode.id, chapterIndex: 1 },
+    })
+
+    const chapterTask = await submitTask({
+      userId: user.id,
+      locale: 'en',
+      projectId: project.id,
+      episodeId: episode.id,
+      type: TASK_TYPE.CHAPTER_RENDER,
+      targetType: 'ProjectEditChapter',
+      targetId: chapter.id,
+      payload: { episodeId: episode.id, chapterId: chapter.id },
+      dedupeKey: `chapter-render-owner:${chapter.id}`,
+    })
+    const finalTask = await submitTask({
+      userId: user.id,
+      locale: 'en',
+      projectId: project.id,
+      episodeId: episode.id,
+      type: TASK_TYPE.FINAL_VIDEO_RENDER,
+      targetType: 'ProjectEpisode',
+      targetId: episode.id,
+      payload: { episodeId: episode.id },
+      dedupeKey: `final-render-owner:${episode.id}`,
+    })
+
+    await expect(prisma.projectEditChapter.findUniqueOrThrow({ where: { id: chapter.id } })).resolves.toMatchObject({
+      renderTaskId: chapterTask.taskId,
+      renderStatus: 'processing',
+    })
+    await expect(prisma.projectEpisodeFinalOutput.findUniqueOrThrow({
+      where: { episodeId: episode.id },
+    })).resolves.toMatchObject({
+      renderTaskId: finalTask.taskId,
+      renderStatus: 'processing',
+    })
+    await expect(prisma.taskEvent.count({
+      where: { taskId: { in: [chapterTask.taskId, finalTask.taskId] } },
+    })).resolves.toBe(2)
+    await expect(prisma.outboxCommand.count({
+      where: { aggregateType: 'task', aggregateId: { in: [chapterTask.taskId, finalTask.taskId] } },
+    })).resolves.toBe(4)
   })
 
   it('ignores late failure and cancellation after a replacement Task owns the preview', async () => {

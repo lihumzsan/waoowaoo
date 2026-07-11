@@ -45,6 +45,7 @@ export type TaskBillingPolicy = 'none' | 'text' | 'image' | 'video' | 'music' | 
 export type TaskMaterializer = 'edit_bible' | 'episode_data'
 export type TaskExecutionProtocol = 'handler_result_checkpoint'
 export type TaskTerminalSuccessHandoff = 'handler_result_checkpoint'
+export type TaskSubmissionTargetOwnership = 'none' | 'chapter_render' | 'final_video_render'
 
 export type TaskDefinition<Q extends QueueType = QueueType> = {
   queue: Q
@@ -54,6 +55,7 @@ export type TaskDefinition<Q extends QueueType = QueueType> = {
   maxAttempts: number
   executionProtocol: TaskExecutionProtocol
   terminalSuccessHandoff: TaskTerminalSuccessHandoff
+  submissionTargetOwnership: TaskSubmissionTargetOwnership
   terminalFailureProjector: TaskTargetTerminalProjector
   terminalCancelProjector: TaskTargetTerminalProjector
 }
@@ -66,6 +68,7 @@ function definition<Q extends QueueType>(
   maxAttempts: number,
   terminalFailureProjector: TaskTargetTerminalProjector,
   terminalCancelProjector: TaskTargetTerminalProjector,
+  submissionTargetOwnership: TaskSubmissionTargetOwnership = 'none',
 ): TaskDefinition<Q> {
   return {
     queue,
@@ -75,6 +78,7 @@ function definition<Q extends QueueType>(
     maxAttempts,
     executionProtocol: 'handler_result_checkpoint',
     terminalSuccessHandoff: 'handler_result_checkpoint',
+    submissionTargetOwnership,
     terminalFailureProjector,
     terminalCancelProjector,
   }
@@ -90,8 +94,8 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.MUSIC_SCORE_PLAN]: definition('music', 'music_score', 'music', 'episode_data', 3, 'music_score', 'music_score'),
   [TASK_TYPE.SOUNDSCAPE_PLAN]: definition('music', 'soundscape_plan', 'text', 'episode_data', 3, 'soundscape', 'soundscape'),
   [TASK_TYPE.SOUNDSCAPE_GENERATE]: definition('music', 'soundscape_generate', 'sound_effect', 'episode_data', 3, 'soundscape', 'soundscape'),
-  [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 'episode_data', 1, 'final_video_render', 'final_video_render'),
-  [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 'episode_data', 1, 'chapter_render', 'chapter_render'),
+  [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 'episode_data', 1, 'final_video_render', 'final_video_render', 'final_video_render'),
+  [TASK_TYPE.CHAPTER_RENDER]: definition('video', 'chapter_render', 'none', 'episode_data', 1, 'chapter_render', 'chapter_render', 'chapter_render'),
   [TASK_TYPE.VIDEO_PANEL]: definition('video', 'video_panel', 'video', 'episode_data', 3, 'none', 'none'),
   [TASK_TYPE.VIDEO_GROUP]: definition('video', 'video_group', 'video', 'episode_data', 3, 'video_group', 'video_group'),
   [TASK_TYPE.MODIFY_ASSET_IMAGE]: definition('image', 'modify_asset_image', 'image', 'episode_data', 3, 'none', 'none'),

@@ -1,7 +1,7 @@
 import {
-  TASK_EVENT_TYPE,
   TASK_SSE_EVENT_TYPE,
   WORKSPACE_SSE_EVENT_TYPE,
+  isTaskTerminalEventType,
   type AssistantSessionChangedSSEEvent,
   type SSEEvent,
   type TaskSSEEvent,
@@ -38,9 +38,7 @@ function isTaskSSEEvent(event: SSEEvent): event is TaskSSEEvent {
 
 function isTerminalTaskEvent(event: TaskSSEEvent): boolean {
   if (event.type !== TASK_SSE_EVENT_TYPE.LIFECYCLE) return false
-  return event.payload?.lifecycleType === TASK_EVENT_TYPE.COMPLETED
-    || event.payload?.lifecycleType === TASK_EVENT_TYPE.FAILED
-    || event.payload?.lifecycleType === TASK_EVENT_TYPE.CANCELED
+  return isTaskTerminalEventType(event.payload?.lifecycleType)
 }
 
 function readNumericEventId(event: SSEEvent): number | null {

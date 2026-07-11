@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, isTaskTerminalEventType, type SSEEvent } from '@/lib/task/types'
 import { normalizeSourceScriptSegments } from '@/lib/edit-bible/source-script-segments'
 import type { EditSourceScriptStructure } from '@/lib/edit-bible/schemas'
 import {
@@ -298,9 +298,7 @@ export function shouldClearStreamAccumulatorsForLifecycle(
 }
 
 export function isTerminalStructuredStreamLifecycle(lifecycleType: string | null): boolean {
-  return lifecycleType === TASK_EVENT_TYPE.COMPLETED
-    || lifecycleType === TASK_EVENT_TYPE.FAILED
-    || lifecycleType === TASK_EVENT_TYPE.CANCELED
+  return isTaskTerminalEventType(lifecycleType)
 }
 
 function streamPresentation(items: readonly StructuredStreamItem[]): WorkspaceCanvasStreamPresentation {

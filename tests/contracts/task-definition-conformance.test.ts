@@ -27,6 +27,7 @@ describe('TaskDefinition conformance', () => {
       expect(['edit_bible', 'episode_data']).toContain(definition.materializer)
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
+      expect(['none', 'chapter_render', 'final_video_render']).toContain(definition.submissionTargetOwnership)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalFailureProjector)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalCancelProjector)
     }
@@ -58,6 +59,8 @@ describe('TaskDefinition conformance', () => {
     expect(TASK_DEFINITIONS.video_group.terminalCancelProjector).toBe('video_group')
     expect(TASK_DEFINITIONS.chapter_render.terminalCancelProjector).toBe('chapter_render')
     expect(TASK_DEFINITIONS.final_video_render.terminalCancelProjector).toBe('final_video_render')
+    expect(TASK_DEFINITIONS.chapter_render.submissionTargetOwnership).toBe('chapter_render')
+    expect(TASK_DEFINITIONS.final_video_render.submissionTargetOwnership).toBe('final_video_render')
     expect(TASK_DEFINITIONS.music_score_plan.terminalFailureProjector).toBe('music_score')
     expect(TASK_DEFINITIONS.music_score_plan.terminalCancelProjector).toBe('music_score')
     expect(TASK_DEFINITIONS.soundscape_plan.terminalFailureProjector).toBe('soundscape')

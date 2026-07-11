@@ -223,12 +223,22 @@ export async function resolveImageSourceFromGeneration(
       size?: string
       provider?: string
     }
+    /**
+     * A durable identity for this exact provider submission. A Task may make
+     * more than one independent image request, so callers that fan out must
+     * supply a stable per-request key rather than sharing the default.
+     */
+    invocationKey?: string
     allowTaskExternalIdResume?: boolean
     pollProgress?: { start?: number; end?: number }
   },
 ): Promise<string> {
   const logger = scopedWorkerUtilLogger(job, 'worker.image.generate_source')
   const startedAt = Date.now()
+  const invocationKey = params.invocationKey === undefined
+    ? 'media:image:primary'
+    : params.invocationKey.trim()
+  if (!invocationKey) throw new Error('IMAGE_PROVIDER_INVOCATION_KEY_REQUIRED')
   const allowTaskExternalIdResume = params.allowTaskExternalIdResume !== false
 
   // 服务重启续接：若 DB 中已有 externalId，直接恢复轮询，不重新提交外部 API
@@ -291,7 +301,7 @@ export async function resolveImageSourceFromGeneration(
     result = await withLogContext(
       { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
       () => generateImage(params.userId, params.modelId, params.prompt, finalOptions, {
-        key: 'media:image:primary',
+        key: invocationKey,
       }),
     )
   } catch (error) {

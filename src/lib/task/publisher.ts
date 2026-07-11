@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { redis } from '@/lib/redis'
 import {
   TASK_EVENT_TYPE,
+  TASK_TERMINAL_EVENT_TYPES,
   TASK_SSE_EVENT_TYPE,
+  isTaskTerminalEventType,
   type TaskEventType,
   type TaskLifecycleEventType,
   type TaskSSEEvent,
@@ -261,7 +263,7 @@ export async function listRecentTerminalLifecycleEvents(params: {
     where: {
       projectId: params.projectId,
       userId: params.userId,
-      eventType: { in: [TASK_EVENT_TYPE.COMPLETED, TASK_EVENT_TYPE.FAILED, TASK_EVENT_TYPE.CANCELED] },
+      eventType: { in: TASK_TERMINAL_EVENT_TYPES },
       ...(params.episodeId ? { task: { episodeId: params.episodeId } } : {}),
     },
     orderBy: { id: 'desc' },
@@ -298,10 +300,7 @@ export function buildTaskLifecycleEventPayload(params: {
     ),
     coveragePayload: params.coveragePayload ?? params.payload ?? null,
   })
-  const isTerminal = normalizedType === TASK_EVENT_TYPE.COMPLETED
-    || normalizedType === TASK_EVENT_TYPE.FAILED
-    || normalizedType === TASK_EVENT_TYPE.CANCELED
-  if (!isTerminal) return normalizedPayload
+  if (!isTaskTerminalEventType(normalizedType)) return normalizedPayload
   const affectedResources = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
     taskType: params.taskType,
     lifecycleType: normalizedType,
@@ -338,11 +337,7 @@ async function publishTaskLifecycleEvent(params: {
   payload?: Record<string, unknown> | null
   persist?: boolean
 }) {
-  if (
-    params.lifecycleType === TASK_EVENT_TYPE.COMPLETED
-    || params.lifecycleType === TASK_EVENT_TYPE.FAILED
-    || params.lifecycleType === TASK_EVENT_TYPE.CANCELED
-  ) {
+  if (isTaskTerminalEventType(params.lifecycleType)) {
     throw new Error(`TASK_TERMINAL_EVENT_REQUIRES_TERMINAL_SERVICE:${params.taskId}`)
   }
   const persist = params.persist !== false

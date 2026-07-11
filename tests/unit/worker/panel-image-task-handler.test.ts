@@ -155,6 +155,23 @@ describe('worker panel-image-task-handler behavior', () => {
     })
   })
 
+  it('assigns a distinct durable provider identity to every requested candidate', async () => {
+    await handlePanelImageTask(buildJob({ candidateCount: 3 }))
+
+    expect(utilsMock.resolveImageSourceFromGeneration).toHaveBeenCalledTimes(3)
+    const calls = utilsMock.resolveImageSourceFromGeneration.mock.calls as unknown as Array<[
+      unknown,
+      { invocationKey?: string },
+    ]>
+    expect(calls.map(([, input]) => (
+      input.invocationKey
+    ))).toEqual([
+      'media:image:candidate:0',
+      'media:image:candidate:1',
+      'media:image:candidate:2',
+    ])
+  })
+
   it('compare-only mode exposes selected render facts and does not mutate the panel', async () => {
     const result = await handlePanelImageTask(buildJob({
       compareOnly: true,

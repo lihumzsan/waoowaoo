@@ -1,5 +1,6 @@
 import { queryFalStatus } from '@/lib/ai-providers/fal/queue'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
+import { createImageCandidateInvocationKey } from '@/lib/task/provider-invocation-identity'
 import { startScenarioServer } from '../../helpers/fakes/scenario-server'
 import {
   assertHistoricalThrows,
@@ -128,9 +129,45 @@ const zeroFallback: HistoricalRegressionScenario = {
   },
 }
 
+const multiCandidateIdentity: HistoricalRegressionScenario = {
+  id: 'SCENARIO-PROVIDER-MULTI-CANDIDATE-IDENTITY',
+  identity: 'SCENARIO-PROVIDER-MULTI-CANDIDATE-IDENTITY',
+  defectId: 'BUG-PG-002',
+  severity: 'P1',
+  invariantIds: ['PG-06', 'TL-13'],
+  historicalDefectIds: ['BUG-PG-002'],
+  layers: ['regression'],
+  async execute(context) {
+    assertHistoricalValue([
+      createImageCandidateInvocationKey(0),
+      createImageCandidateInvocationKey(1),
+      createImageCandidateInvocationKey(2),
+    ], [
+      'media:image:candidate:0',
+      'media:image:candidate:1',
+      'media:image:candidate:2',
+    ], 'every candidate receives an independent durable provider identity')
+    context.recordExecution(this.id)
+  },
+  async verifyFailBefore() {
+    await proveSemanticFaultRejected(() => {
+      assertHistoricalValue([
+        'media:image:primary',
+        'media:image:primary',
+        'media:image:primary',
+      ], [
+        'media:image:candidate:0',
+        'media:image:candidate:1',
+        'media:image:candidate:2',
+      ], 'every candidate receives an independent durable provider identity')
+    })
+  },
+}
+
 export const PROVIDER_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   failed,
   unknownStatus,
   completedWithoutMedia,
   zeroFallback,
+  multiCandidateIdentity,
 ]

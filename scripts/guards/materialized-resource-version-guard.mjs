@@ -19,6 +19,7 @@ const queryDtoVersion = read('src/lib/workspace-resource/query-dto-version.ts')
 const episodeReader = read('src/lib/projects/read-episode-detail.ts')
 const editBibleRoute = read('src/app/api/projects/[projectId]/bible/route.ts')
 const resourceRevision = read('src/lib/workspace-resource/resource-revision.ts')
+const revisionAggregateContract = read('src/lib/workspace-resource/episode-resource-revision-contract.ts')
 const schema = read('prisma/schema.prisma')
 const migration = read('prisma/migrations/20260711060000_add_episode_resource_revision/migration.sql')
 const installer = read('scripts/install-resource-revision-triggers.ts')
@@ -99,21 +100,11 @@ if (!episodeReader.includes('readConsistentWorkspaceResourceSnapshot')) {
 if (!editBibleRoute.includes('readConsistentWorkspaceResourceSnapshot')) {
   violations.push('edit Bible GET must read its aggregate and resourceRevision through one seqlock boundary')
 }
-for (const table of [
-  'project_episode_source_documents',
-  'project_edit_chapters',
-  'project_edit_bibles',
-  'project_edit_style_previews',
-  'project_edit_scripts',
-  'project_edit_shot_execution_plans',
-  'project_edit_asset_requirements',
-  'project_episode_final_outputs',
-  'project_edit_music_scores',
-  'project_edit_soundscapes',
-  'project_video_groups',
-  'project_storyboards',
-  'project_panels',
-]) {
+const aggregateTables = [...revisionAggregateContract.matchAll(/table:\s*'([^']+)'/g)].map((match) => match[1])
+if (aggregateTables.length === 0 || new Set(aggregateTables).size !== aggregateTables.length) {
+  violations.push('episode resource revision aggregate contract must declare a non-empty unique table set')
+}
+for (const table of aggregateTables) {
   for (const edge of ['INSERT', 'UPDATE', 'DELETE']) {
     if (!migration.includes(`${edge} ON \`${table}\``)) {
       violations.push(`resource revision migration is missing ${table} ${edge} edge`)

@@ -57,6 +57,29 @@ describe('provider invocation at-most-once DB integration', () => {
     })).resolves.toEqual({ state: 'submitted' })
   })
 
+  it('keeps independently requested image candidates in one Task behind distinct durable fences', async () => {
+    await seedTask('provider-candidate-task')
+    const execute = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/candidate.mp3' }))
+    const invokeCandidate = async (key: string) => await executeTaskProviderInvocation({
+      taskId: 'provider-candidate-task',
+      invocation: { key },
+      modality: 'image',
+      provider: 'fal',
+      modelKey: 'fal::image-model',
+      request: { prompt: 'same candidate prompt' },
+      execute,
+    })
+
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
+    await expect(invokeCandidate('media:image:candidate:0')).resolves.toMatchObject({ success: true })
+    await expect(invokeCandidate('media:image:candidate:1')).resolves.toMatchObject({ success: true })
+
+    expect(execute).toHaveBeenCalledTimes(2)
+    await expect(prisma.taskExecutionCheckpoint.count({
+      where: { taskId: 'provider-candidate-task' },
+    })).resolves.toBe(2)
+  })
+
   it('serializes a concurrent first claim so only one caller can invoke the provider', async () => {
     await seedTask('provider-concurrent-task')
     let releaseProvider!: () => void
