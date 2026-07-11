@@ -141,6 +141,9 @@
 - `test:guards` 是架构 guard 唯一集合入口；`verify:push` 和 CI 不得复制 guard 清单。
 - 新 guard 必须有实现、自身测试、mandatory mount 证明和 architecture module 映射。
 - 需要完整验证时运行 `npm run verify:push`；开发服务可能运行时禁止 `npm run build`，必须使用 `npm run build:verify`。
+- **验证节奏。** 完整验证是最终收口门禁，不是每次编辑后的默认动作：同一未提交变更集最多在最终稳定 diff 上运行一次 `verify:push`。开发和修复过程中必须优先运行与改动直接对应的 unit / contract / integration / system / regression 测试，以及必要的 typecheck、lint 和 guard；补测试、文档、fixture 或 guard 后只重跑受影响层级，禁止自动重跑全套。
+- `verify:push` 因测试基础设施、网络或其他代码外状态失败时，必须先区分基础设施故障与产品断言失败；修复或重启基础设施后只重跑失败的 required suite 及其依赖检查。除非用户明确要求完整重跑或生产代码发生新的实质变更，不得把基础设施失败当作全套重跑理由。
+- 用户明确要求“只运行修改代码的测试”“不跑全量”或同义指令时，该范围优先；交付必须如实说明已运行层级与未运行盲区，不得用未执行的完整验证暗示通过。
 - 不运行 browser-use，也不打开浏览器尝试自动测试页面。
 
 ## 11. 完成定义与大型变更
