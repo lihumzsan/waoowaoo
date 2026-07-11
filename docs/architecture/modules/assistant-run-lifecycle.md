@@ -58,6 +58,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `tests/unit/project-agent/waits-follow-up.test.ts` 验证 Wait claim/start fence 的原子推进与同命令重放。
 - `tests/integration/task/project-agent-continuation-settlement.integration.test.ts` 在真实 MySQL 上验证并发 checkpoint、message/checkpoint 原子性、checkpoint 后崩溃重放与缺失 checkpoint 时终态事务整体回滚。
 - `tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts` 验证投递耗尽与已开始执行的未知结果都先完成 Assistant settlement，重复结算不新增 Event/message，废弃 Wait 不被重开。
+- `tests/unit/outbox/project-agent-continuation-dead-letter.test.ts` 验证 Outbox 只有在 Assistant settlement 成功后才能 dead-letter；settlement 异常必须保留命令重试资格。
 - `tests/integration/task/project-agent-session-broadcast.integration.test.ts` 在真实 MySQL 上验证每个已提交 ProjectAgentEvent 都有且只有一个同事务广播责任，reducer 失败时 Event 与 Outbox 一起回滚。
 - `tests/integration/task/project-agent-execution-segment.integration.test.ts` 验证同一 Run 的 initial user segment 与 Decision segment 使用不同水位；`project-agent-task-batch-wait.integration.test.ts` 与 approved batch integration 验证收费/非收费 Task batch 只产生一个同事务 Wait。
 - `tests/integration/task/project-agent-thread-clear-race.integration.test.ts` 验证 Thread DELETE 与新 Run/消息创建共享 project scope lock，任何竞态结果都不会删除新消息。
@@ -80,12 +81,13 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `tests/unit/operations/invocation.test.ts` 与 API/Tool adapter tests 验证双 channel 语义一致、channel 越权拒绝、prerequisite、Grant provenance 及输入/输出 schema 门禁。
 - `tests/unit/operations/invocation-execution-fence.test.ts` 用 execute-started barrier 验证失锁 signal 会使 transactional domain write 回滚，并验证旧 `runVersion/eventSeq` 在执行器前失败。
 - `tests/unit/operations/write-authority-registry.test.ts` 穷尽验证真实 Tool 写 Operation 只有一种 commit authority，并证明无法原子化的能力保持 API-only。
+- `tests/integration/api/specific/project-character-style-forwarding.test.ts` 验证旧的 create+reference 组合输入在写记录前显式失败；`tests/unit/guards/single-operation-invocation.test.ts` 阻止 Operation domain 恢复内部 HTTP 自调用。
 - `scripts/guards/no-client-agent-control.mjs` 阻止客户端成为 Agent 控制面。
 - `scripts/guards/no-assistant-fixed-workflow-surface.mjs` 阻止将固定流程伪装成 Agent 自主运行。
 - `scripts/guards/no-history-state-inference.mjs` 阻止从历史消息推断当前业务状态。
 - 同一 guard 扫描实际 Panel/runtime/helper，阻止退役的 async-task/style-preview history scanner、timer polling 和 client-run-over-server precedence 回流。
 - `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant 控制层直接提交 Task 并绕过 operation/Wait。
-- `scripts/guards/single-operation-invocation-guard.mjs` 阻止 API/Tool adapter 重新实现 schema、plan/Grant/execute 或输出分流。
+- `scripts/guards/single-operation-invocation-guard.mjs` 与真实 registry conformance 阻止 API/Tool adapter 重新实现 schema、plan/Grant/execute、输出分流、未分类 Tool 写入或 Operation 内部 HTTP 自调用。
 - 同一 guard 执行真实 Operation registry authority conformance，并禁止 Operation domain 通过 HTTP 自调用 route。
 - 同一 guard 强制 Tool adapter 传递 Run execution fence，强制普通 Task 与批准计划的最终提交入口保留统一 transaction barrier 与事务内 Wait 绑定，并禁止 runtime 恢复 Task commit 后补建 Wait。
 - `scripts/guards/single-project-agent-continuation.mjs` 阻止旧 Wait 扫描/claim helpers 与第二续跑调用者复活，并强制 Outbox-only、message checkpoint-before-finalize 的两阶段顺序。

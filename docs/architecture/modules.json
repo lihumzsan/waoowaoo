@@ -254,6 +254,7 @@
         "tests/integration/task/project-agent-session-broadcast.integration.test.ts",
         "tests/integration/task/project-agent-interruption-atomicity.integration.test.ts",
         "tests/unit/outbox/project-agent-session-broadcast.test.ts",
+        "tests/unit/outbox/project-agent-continuation-dead-letter.test.ts",
         "tests/unit/guards/single-project-agent-continuation.test.ts",
         "tests/unit/guards/single-operation-invocation.test.ts",
         "tests/unit/project-agent/run-state-machine.test.ts",
@@ -314,6 +315,7 @@
         "scripts/guards/assistant-choice-offer-authority-guard.mjs",
         "scripts/guards/project-agent-run-state-machine-guard.mjs",
         "scripts/guards/single-operation-invocation-guard.mjs",
+        "scripts/guards/operation-write-authority-registry.ts",
         "scripts/guards/sse-durable-watermark-guard.mjs"
       ]
     },

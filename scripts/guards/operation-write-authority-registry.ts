@@ -1,3 +1,5 @@
+// Architecture contract: docs/architecture/modules/assistant-run-lifecycle.md
+
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-authority'
 
