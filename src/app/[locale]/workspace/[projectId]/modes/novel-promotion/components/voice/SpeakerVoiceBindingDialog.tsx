@@ -42,10 +42,6 @@ export default function SpeakerVoiceBindingDialog({
         onClose()
     }, [onClose])
 
-    const confirmUploadVoice = useCallback(() => {
-        return window.confirm(t('uploadQwenHint'))
-    }, [t])
-
     // 从音色库选择后的回调
     const handleVoiceSelected = useCallback((voice: {
         id: string
@@ -66,11 +62,10 @@ export default function SpeakerVoiceBindingDialog({
                 voiceType: voice.voiceType,
                 audioUrl: voice.customVoiceUrl,
             })
-            alert(t('uploadQwenHint'))
         }
         setSubDialogOpen(false)
         onClose()
-    }, [speaker, onBound, onClose, t])
+    }, [speaker, onBound, onClose])
 
     // AI 设计音色或上传音频后的回调
     const handleCreationSuccess = useCallback(() => {
@@ -80,12 +75,9 @@ export default function SpeakerVoiceBindingDialog({
     }, [])
 
     const handleTabClick = useCallback((tab: BindingTab) => {
-        if (tab === 'upload' && !confirmUploadVoice()) {
-            return
-        }
         setActiveTab(tab)
         setSubDialogOpen(true)
-    }, [confirmUploadVoice])
+    }, [])
 
     if (!isOpen) return null
     if (typeof document === 'undefined') return null
@@ -175,10 +167,7 @@ export default function SpeakerVoiceBindingDialog({
                             {activeTab === 'design' && t('aiDesignDesc')}
                         </p>
                         <button
-                            onClick={() => {
-                                if (activeTab === 'upload' && !confirmUploadVoice()) return
-                                setSubDialogOpen(true)
-                            }}
+                            onClick={() => setSubDialogOpen(true)}
                             className="glass-btn-base glass-btn-primary px-8 py-2.5 rounded-lg text-sm font-medium"
                         >
                             {activeTab === 'select' && t('selectFromLibrary')}

@@ -286,7 +286,6 @@
         "noVoice": "No voice",
         "previewFailed": "Preview failed: {error}",
         "uploadFailed": "Upload audio failed: {error}",
-        "uploadQwenHint": "Uploaded voices can only be synthesized with IndexTTS, not QwenTTS. QwenTTS requires an AI-designed voice.",
         "uploading": "Uploading...",
         "uploaded": "Uploaded",
         "uploadAudio": "Upload Audio",
