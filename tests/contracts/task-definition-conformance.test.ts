@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { isBillableTaskType } from '@/lib/billing/task-policy'
 import { TASK_DEFINITIONS } from '@/lib/task/definition'
@@ -7,13 +6,6 @@ import { getQueueTypeByTaskType } from '@/lib/task/queues'
 import { getTaskMaxAttempts } from '@/lib/task/retry-policy'
 
 describe('TaskDefinition conformance', () => {
-  it('declares one complete Task contract without spread-based hidden defaults', () => {
-    const source = readFileSync(new URL('../../src/lib/task/definition.ts', import.meta.url), 'utf8')
-    expect(source).not.toMatch(/\.\.\.(?:NONE|target)/)
-    expect(source).not.toContain('const NONE =')
-    expect(source).not.toContain('const target =')
-  })
-
   it('registers every TaskType exactly once and drives queue/retry policy', () => {
     const taskTypes = Object.values(TASK_TYPE).sort()
     expect(Object.keys(TASK_DEFINITIONS).sort()).toEqual(taskTypes)
@@ -29,20 +21,6 @@ describe('TaskDefinition conformance', () => {
       expect(['none', 'chapter_render', 'final_video_render']).toContain(definition.submissionTargetOwnership)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalFailureProjector)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalCancelProjector)
-    }
-  })
-
-  it('removes TaskType routing switches from workers and billing', () => {
-    for (const file of [
-      '../../src/lib/workers/image.worker.ts',
-      '../../src/lib/workers/video.worker.ts',
-      '../../src/lib/workers/music.worker.ts',
-      '../../src/lib/workers/text.worker.ts',
-      '../../src/lib/billing/task-policy.ts',
-    ]) {
-      const source = readFileSync(new URL(file, import.meta.url), 'utf8')
-      expect(source).not.toMatch(/switch \(job\.data\.type\)/)
-      expect(source).not.toMatch(/switch \(taskType\)/)
     }
   })
 

@@ -36,6 +36,7 @@ describe('project agent business stop signals', () => {
     const controller = createProjectAgentStopController()
     const stopPart = controller.evaluateStep([{
       toolName: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+      suspendsFor: 'choice',
       output: {
         ok: true,
         data: {

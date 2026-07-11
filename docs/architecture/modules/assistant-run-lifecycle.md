@@ -56,55 +56,12 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 验证
 
-- `tests/unit/project-agent/runtime-routing-*.test.ts` 按 bootstrap、choice、workflow、approval 与 settlement 验证运行时路由。
-- `tests/unit/project-agent/server-follow-up.test.ts` 验证稳定 command identity、checkpoint-before-finalize 与 checkpoint replay 不重跑模型。
-- `tests/unit/project-agent/waits-follow-up.test.ts` 验证 Wait claim/start fence 的原子推进与同命令重放。
-- `tests/integration/task/project-agent-continuation-settlement.integration.test.ts` 在真实 MySQL 上验证并发 checkpoint、message/checkpoint 原子性、checkpoint 后崩溃重放与缺失 checkpoint 时终态事务整体回滚。
-- `tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts` 验证投递耗尽与已开始执行的未知结果都先完成 Assistant settlement，重复结算不新增 Event/message，废弃 Wait 不被重开。
-- `tests/unit/outbox/project-agent-continuation-dead-letter.test.ts` 验证 Outbox 只有在 Assistant settlement 成功后才能 dead-letter；settlement 异常必须保留命令重试资格。
-- `tests/integration/task/project-agent-session-broadcast.integration.test.ts` 在真实 MySQL 上验证每个已提交 ProjectAgentEvent 都有且只有一个同事务广播责任，reducer 失败时 Event 与 Outbox 一起回滚。
-- `tests/integration/task/project-agent-execution-segment.integration.test.ts` 验证同一 Run 的 initial user segment 与 Decision segment 使用不同水位；`project-agent-task-batch-wait.integration.test.ts` 与 approved batch integration 验证收费/非收费 Task batch 只产生一个同事务 Wait。
-- `tests/integration/task/project-agent-thread-clear-race.integration.test.ts` 验证 Thread DELETE 与新 Run/消息创建共享 project scope lock，任何竞态结果都不会删除新消息。
-- `tests/unit/components/workspace-assistant-session-watermark.test.ts` 与 Thread clear route/DB tests 验证持久 `thread.cleared`、旧 GET 拒绝和权威空快照 replace。
-- `tests/system/assistant-reload.system.test.ts` 由 P0 journey registry 强制收集，验证 `awaiting_task` 与 `awaiting_choice` 刷新后仍从持久 Run/Activity/Wait/Interruption/Thread 恢复，并在真实 MySQL 中验证双 active Run 与跨 Run open Activity 都显式失败，而不是依赖当前标签页内存或单元 mock。
-- `tests/unit/project-agent/run-state-machine.test.ts` 验证七状态转换、终态单调和 expected-status 门禁。
-- `tests/unit/project-agent/run-heartbeat.test.ts` 验证 DB/Redis 续租失败和异常都会触发 ownership loss。
-- `tests/integration/task/project-agent-choice-execution-fence.integration.test.ts` 用真实 MySQL 验证 Choice 的精确 durable Interaction、Run fence 与 `awaiting_choice` 是一次成功结果；`tests/unit/operations/invocation-execution-fence.test.ts` 证明合法 awaiting status 不会被误判失去执行权，且缺失/错协议 receipt 不能被接受。
-- `tests/unit/operations/invocation.test.ts` 用未注册的未来 Choice identity 证明 invocation 只根据 `agentFlow.suspendsFor: choice` 核验通用 receipt；`assistant-choice-offer-authority` guard 禁止 invocation 恢复 operation-id 分支、旧 postcondition 或 Choice 专属 fence。新增第六种 Choice 只能扩展其 registry 声明与业务内容，不得修改 invocation、fence 或 stop controller。
-- `tests/unit/project-agent/interruption-consume.test.ts` 验证重复/并发消费由 pending 状态 CAS 拒绝，基础设施故障不会伪装成重复提交。
-- 同一测试同时验证 Approval 的 supersede + raise 只调用一个带 Run 锁的事务入口，投影故障不会落入第二写入路径；`tests/unit/project-agent/event-reducer.test.ts` 验证 Activity create-only、终态 identity 冲突以及三种零行终态 CAS 都显式失败。
-- `tests/unit/project-agent/interruption-consume.test.ts` 验证 consumed Approval/Choice 只能重读完全相同的持久决定；`tests/unit/project-agent/runs.test.ts` 验证 bootstrap 失败可创建独立 retry Run，而 execution-started 后必须 outcome unknown；route contract 验证 retry 不复活旧 Run。
-- `tests/contracts/assistant-choice-offer-conformance.test.ts` 穷尽验证每一种 Choice 都绑定一个显式受审资源种类，且卡片必须有完整持久身份。
-- 同一 conformance test 逐项验证 registry 覆盖全部 Choice，并同时声明唯一 tool identity、Offer builder 模式、Decision parser、tool availability、Workflow policy 与当前资源 resolver；`assistant-choice-offer-authority-guard` 阻止卡片、Offer、结果、toolset 与 Workflow 恢复各自的 Choice type 分派器。
-- `tests/unit/project-agent/session-state-*.test.ts` 验证刷新只投影 interruption 中的持久 Offer、不调用卡片 builder，并验证多 active Run、跨 Run Interruption/Wait/Activity 与不稳定事件水位都显式失败。
-- `tests/unit/components/workspace-assistant-runtime-persistence.test.ts` 验证 control optimistic 与服务端持久消息共用 canonical ID，Thread 刷新只保留一份；`workspace-assistant-approval-dismissal.test.ts` 验证请求失败恢复卡片、成功后旧 Session 不重开卡片且 refresh 失败不会留下本地 pending。
-- `tests/unit/components/workspace-assistant-renderers.test.ts` 验证 Choice renderer 只消费持久 `replyMode`、`submit.decision`、`group.presentation`；历史 style-generation part 保持隐藏且无轮询/Task target 私有生命周期。
-- `tests/unit/project-agent/interruption-consume.test.ts` 与 `tests/unit/project-agent/runs.test.ts` 验证决定保持 consumed、相同决定只可建立新的 pre-execution Run attempt，且 execution-started 后必须拒绝重放。
-- `tests/unit/project-workflow/edit-first-*.test.ts` 按剧本、规划、分镜视频与渲染音频验证失败状态不会开放错误操作。
-- `tests/unit/project-agent/tool-adapter-gates.test.ts` 验证工具确认与执行门禁。
-- `tests/unit/operations/registry.test.ts` 验证 operation metadata、confirmation 和 agentFlow。
-- `tests/unit/operations/invocation.test.ts` 与 API/Tool adapter tests 验证双 channel 语义一致、channel 越权拒绝、prerequisite、Grant provenance 及输入/输出 schema 门禁。
-- `tests/unit/operations/invocation-execution-fence.test.ts` 用 execute-started barrier 验证失锁 signal 会使 transactional domain write 回滚，并验证旧 `runVersion/eventSeq` 在执行器前失败。
-- `tests/unit/operations/write-authority-registry.test.ts` 穷尽验证真实 Tool 写 Operation 只有一种 commit authority，并证明无法原子化的能力保持 API-only。
-- `tests/integration/api/specific/project-character-style-forwarding.test.ts` 验证旧的 create+reference 组合输入在写记录前显式失败；`tests/unit/guards/single-operation-invocation.test.ts` 阻止 Operation domain 恢复内部 HTTP 自调用。
-- `scripts/guards/no-client-agent-control.mjs` 阻止客户端成为 Agent 控制面。
-- `scripts/guards/no-assistant-fixed-workflow-surface.mjs` 阻止将固定流程伪装成 Agent 自主运行。
-- `scripts/guards/no-history-state-inference.mjs` 阻止从历史消息推断当前业务状态。
-- 同一 guard 扫描实际 Panel/runtime/helper，阻止退役的 async-task/style-preview history scanner、timer polling 和 client-run-over-server precedence 回流。
-- `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant 控制层直接提交 Task 并绕过 operation/Wait。
-- `scripts/guards/single-operation-invocation-guard.mjs` 与真实 registry conformance 阻止 API/Tool adapter 重新实现 schema、plan/Grant/execute、输出分流、未分类 Tool 写入或 Operation 内部 HTTP 自调用。
-- 同一 guard 执行真实 Operation registry authority conformance，并禁止 Operation domain 通过 HTTP 自调用 route。
-- 同一 guard 强制 Tool adapter 传递 Run execution fence，强制普通 Task 与批准计划的最终提交入口保留统一 transaction barrier 与事务内 Wait 绑定，并禁止 runtime 恢复 Task commit 后补建 Wait。
-- `scripts/guards/single-project-agent-continuation.mjs` 阻止旧 Wait 扫描/claim helpers 与第二续跑调用者复活，并强制 Outbox-only、message checkpoint-before-finalize 的两阶段顺序。
-- `scripts/guards/no-plan-run-runtime.mjs` 同时扫描 runtime/API/Operation 与 Prisma schema；`PlanRun/PlanStepRun/PlanRunEvent/PlanArtifact` 模型及表已由 `20260711173000_remove_plan_run_persistence` 退役，禁止恢复可写 delegate 或第二套 Assistant 状态机。
-- `tests/integration/api/specific/workflow-lab-service.integration.test.ts` 与 `workflow-lab-style-choice.integration.test.ts` 验证 Lab Choice 也经同一事件 reducer 投影并共用目标 runtime identity，Approval checkpoint 不伪造不可消费的运行态。
-- `scripts/guards/project-agent-run-state-machine-guard.mjs` 扫描全 `src` 的 Run、Activity、Interruption 生命周期写入，阻止 reducer 外重新出现第二写入者，并阻止 session-state GET 恢复 stale cancellation 副作用。仅允许 `heartbeatAt` 与已消费 interruption `runState` 清理两个明确的非生命周期维护写入。
-- 同一 guard 禁止恢复 `interruption.reopened`，强制 `run.execution_started` 先于模型调用，并要求 consumed-control retry authority 锁定 interruption、检查 execution Event 后创建新 Run。
-- `scripts/guards/assistant-choice-offer-authority-guard.mjs` 阻止 chat route 恢复无 interruption 的 Activity fallback、阻止客户端重新提供 `choiceType`、阻止 Session refresh 重建卡片，并强制 Choice 在同一事务内验证 Offer/fingerprint 后只持久化规范化 Decision。
-- 同一 Choice guard 通过 TypeScript AST 追踪 `choiceType` 的直接访问、变量别名与解构别名，禁止 renderer 以 `if/switch/条件表达式` 恢复私有控制语义；它还按 registry 的 choice key 与 workflow stage 检测任意命名的私有 stage map。`assistant-architecture-guards.test.ts` 使用可绕过旧字符串匹配的恶意 fixture 反证。
-- `tests/unit/sse/server-session.test.ts`、`tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 与 `sse-task-terminal.test.ts` 验证 bootstrap/live 相同事实精确去重、同 identity 不同 fingerprint 显式 conflict、窗口溢出与客户端 snapshot resync。
-- `scripts/guards/sse-durable-watermark-guard.mjs` 强制 Task/Mutation/Assistant 三域复合水位、subscribe-before-bootstrap、ProjectAgentEvent 同事务 Outbox、Outbox-only publisher、server/client 有界 identity→fingerprint 和客户端旧 Session 响应拒绝。
-
+- `tests/golden-journey/**` 是 Assistant 跨浏览器、UI、Agent SDK、Operation、MySQL、Redis、worker、Outbox、SSE 与刷新恢复的最高组合证据；主线、阶段探针、断流、重复提交、provider failure 和 worker retry 使用同一生产链。
+- `tests/integration/task/project-agent-*.integration.test.ts` 中保留的场景使用真实 MySQL/Redis 验证 continuation settlement、dead delivery、execution segment、Interruption 原子性、Task batch Wait、并发 terminal、Thread clear race 与 session broadcast。
+- `tests/integration/api/specific/workflow-lab-*.integration.test.ts` 验证 Golden checkpoint 的 Choice/Approval 事实通过生产 reducer 投影并获得目标 runtime identity。
+- `tests/unit/project-agent/{run-state-machine,event-reducer,event-reducer-transitions,execution-segment,suspension,waits,session-state-*}.test.ts` 只验证纯状态机、reducer、identity 和投影输入输出。
+- `tests/contracts/assistant-choice-offer-conformance.test.ts` 从生产 Choice registry 穷尽验证 identity、resource fingerprint、Decision parser 与 suspension capability。
+- `scripts/guards/{single-project-agent-continuation,no-plan-run-runtime,assistant-choice-offer-authority-guard,project-agent-run-state-machine-guard,single-operation-invocation-guard,sse-durable-watermark-guard}.mjs` 只提供结构旁路检查，不替代真实用户旅程。
 ## Session 通知状态所有权
 
 | 事实 | 唯一所有者 / 写入者 | 消费者 |

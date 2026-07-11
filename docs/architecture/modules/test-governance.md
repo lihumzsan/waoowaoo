@@ -4,67 +4,88 @@
 
 ## 设计理念
 
-测试数量、测试文件存在和代码覆盖率都不是行为正确性的权威证据。测试治理必须把产品与架构不变量、历史缺陷、可执行场景和 CI 实际运行结果连接成一条可验证链路；任何必跑测试未收集、被跳过或因基础设施不可用而未执行，都必须原地失败。
+测试不是代码变更的附件，也不以数量、覆盖率、目录层级或 mutation 分数衡量。唯一目标是用独立 oracle 反证会伤害用户结果或架构不变量的错误实现。
+
+产品行为的最高证据是经过真实浏览器、生产 UI/API/service、MySQL、Redis、队列、worker、Outbox、SSE 和刷新恢复的 Golden Journey。浏览器难以经济、确定性注入的并发、崩溃、事务、重试和外部协议故障，才由关键基础设施测试补充。纯逻辑测试只保护有实际边界空间的 parser、resolver、reducer、policy、状态机、算法和 canonical identity。
 
 ## 不变量
 
-- **TG-01 — CI fail-closed。** MySQL、Redis、队列或测试服务不可用时，完整验证必须失败；禁止跳过 integration、system 或 regression 后继续成功。
-- **TG-02 — 历史缺陷单一目录。** 自动 Git 扫描只生成候选报告，人工确认的根因、架构不变量与场景映射只写入 `HistoricalDefectCatalog`。
-- **TG-03 — 行为覆盖必须可执行。** route、task type 与需求只能映射到实际执行的 scenario id；测试文件存在或字符串声明不能充当行为覆盖证据。
-- **TG-04 — 影响范围显式。** CI 必须使用明确 base/head Git range；缺失 range 必须失败。非 CI 环境只允许明确文件列表、range 或本地 staged diff。
-- **TG-05 — 必跑测试零跳过。** required-suite verifier 必须比较发现文件与 Vitest JSON 实际结果，并拒绝缺失文件、重复文件、跨 suite 文件及 skipped/todo case。
-- **TG-06 — 测试能力可反证。** P0/P1 历史缺陷必须有错误实现失败、修复实现通过的证据；关键纯逻辑使用增量 mutation testing 检查测试是否能识别小错误。
-- **TG-07 — 测试代码保持单一职责。** 新测试文件不得超过仓库约定的职责和规模边界；删除旧测试必须先提供替代 scenario id 与 CI 收集证据。
-- **TG-08 — Guard 必须可反证。** 架构 guard 的关键 inspector 必须可由测试直接调用，并用会绕过旧实现的最小恶意 fixture 证明失败；仅在当前仓库输出 OK、仅检查固定文件或精确字符串不构成 guard 自身测试。
+- **TG-01 — 独立 oracle。** 期望结果必须来自用户目标、模块不变量、生产 registry 契约或已确认历史事实，不得从当前实现、mock 返回值、源码字符串或调用次数反推。
+- **TG-02 — 测试准入。** 修改文件、增加 route、修复 bug 或新增实例都不自动要求新测试。新测试必须符合下方准入契约；优先扩展既有场景或穷尽 registry。
+- **TG-03 — 真实主链。** 产品旅程不得 mock 被测系统自己的 UI、route、service、状态机、数据库、队列、worker、SSE 或 projector。只有付费/不可控外部系统和明确故障边界可以用协议兼容替身。
+- **TG-04 — 可反证。** 纠正性测试必须证明同一断言在 pre-fix 代码或受控语义故障下失败；把错误值直接传给断言不构成历史路径反证。
+- **TG-05 — 权威事实断言。** 行为测试断言用户可见结果和/或只读持久事实。DOM 文案、日志、测试 ledger、文件存在和 scenario 名称不能单独证明业务正确。
+- **TG-06 — 真实基础设施。** 关键 integration 使用真实 MySQL/Redis/queue/worker 或真实协议服务器，且动作必须经过生产 owner；setup 可创建隔离前置数据，但不能代替被测动作。
+- **TG-07 — 纯逻辑边界。** logic 测试不得 mock 相邻内部层来伪装集成，只允许显式输入到显式输出；getter、透传、call-count、当前映射快照和组件内部实现不准入。
+- **TG-08 — 穷尽 conformance。** registry conformance 必须枚举生产 registry，并验证 capability/policy/identity 等真实契约。动态调用后只检查“返回 Response”不构成 conformance。
+- **TG-09 — Harness fail-closed。** Golden 场景未挂载、required case 被跳过、依赖不可用、浏览器异常、外部付费调用或只读 oracle 写入都必须显式失败。
+- **TG-10 — 执行时机独立。** 本模块定义测试证据和命令，不定义 commit、push、PR、nightly 或 release 的运行时机。Git hooks 保持由独立策略决定。
+
+## 准入类别
+
+一个新测试至少属于且只声明一个主类别：
+
+1. **Golden Journey**：P0/P1 用户旅程、稳定交互边界、刷新恢复或真实组合故障。
+2. **Critical Infrastructure**：浏览器无法经济且确定性构造的事务、幂等、并发、晚到、重复、崩溃、重试、补偿或外部协议故障。
+3. **Logic Specification**：有非平凡边界或组合空间的纯函数、parser、resolver、reducer、policy、状态机、算法或 canonical identity。
+4. **Registry Conformance**：同类实例必须穷尽的生产 registry identity/capability/policy 合同。
+5. **Harness Self-test**：证明 Golden provider、network policy、read-only oracle、场景挂载和报告器 fail closed。
+
+准入说明必须写明权威来源、会被拒绝的错误实现、生产入口、最终 oracle 和可执行命令。实现与测试可以在同一变更中提交，但纠正性变更必须保留 red/green 证据。
 
 ## 权威入口
 
-- 历史缺陷：`tests/history/catalog.ts`。
-- 实施中发现但不得在测试阶段修生产代码的缺口：`tests/history/discovered-gaps.ts`。
-- 可执行场景与实际执行证据：`tests/harness/behavior-scenario.ts`。
-- 生命周期事实序列：`tests/harness/lifecycle-sequence.ts`。
-- 历史错误反证：`tests/harness/historical-regression.ts` 与 `tests/history/scenarios/**`。
-- Task type 行为契约：`tests/contracts/tasktype-scenario-registry.ts`。
-- Route identity 与访问边界：`tests/contracts/route-catalog.ts`；可执行契约：`tests/contracts/route-scenario-registry.ts`。
-- Git 候选报告：`scripts/test-history/candidate-report.mjs`。
-- 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
-- 必跑 suite 执行器：`scripts/test-verification/run-required-suite.mjs`，统一生成 Vitest JSON 并立即核对发现文件、实际文件、case 与 skip 数。
-- P0 System Journey：`tests/system/p0-journeys.json` 是至少十条旅程的 identity/status Registry；新增 P0 必须扩展该穷尽 registry，不能被固定数量上限拒绝；`verify-system-journeys.mjs` 只接受 Vitest JSON 中实际通过的 `[P0:<id>]` 作为执行证据。
-- Assistant Golden Journey：`tests/golden-journey/**` 是浏览器贯穿、稳定检查点矩阵和零费用协议 provider 的唯一目录；`contracts/scenarios.ts` 声明场景 identity，`runtime/verify-mounts.ts` 必须用 Playwright discovery 证明每个 identity 实际挂载。冻结红色基线保存在 `docs/architecture/incidents/assistant-golden-journey/**`；在架构修复将矩阵翻绿之前，它是诊断门禁而非可跳过后仍宣称成功的完整验证。
-- Mutation：`stryker.incremental.config.mjs`、`vitest.mutation.config.ts` 与 `scripts/mutation/verify-baseline.mjs`。
-- 统一完整验证：`scripts/verify-push.sh`。
+- 浏览器完整旅程、场景 identity、故障变体、只读 oracle 与 harness：`tests/golden-journey/**`。
+- Golden 架构与历史矩阵：`docs/architecture/incidents/assistant-golden-journey/**`。
+- 本次测试体系收敛证据：`docs/architecture/incidents/test-system-reset/**`。
+- 关键 Task/Assistant/Outbox 并发与事务：`tests/integration/task/**`。
+- 外部 provider 协议：`tests/integration/provider/**`。
+- 计费事务与并发：`tests/integration/billing/**`、`tests/concurrency/billing/**`。
+- Workflow Lab checkpoint 真实性：`tests/integration/api/specific/workflow-lab-*.integration.test.ts`。
+- 纯逻辑规格：经本模块准入后保留在 `tests/unit/**`；目录名是现有物理位置，不代表恢复“每层都要 Unit”的旧制度。
+- 穷尽 registry conformance：`tests/contracts/**`。
+- Required Vitest suite 的发现/执行/skip 核对：`scripts/test-verification/run-required-suite.mjs` 与 `verify-vitest-report.mjs`。
+- 架构结构检查集合：`npm run check:architecture`。
+- 测试命令：`test:logic`、`test:conformance`、`test:critical:*`、`test:golden:*`。这些命令不隐含运行时机。
 
-## 验证
+## 明确删除的旧证据
 
-- `tests/unit/test-history/catalog.test.ts` 验证缺陷目录唯一性与完整字段。
-- `tests/unit/test-history/candidate-report.test.ts` 验证 Git 候选、测试层和热点统计。
-- `tests/unit/test-harness/behavior-scenario.test.ts` 与 `lifecycle-sequence.test.ts` 验证执行证据和显式事实序列。
-- `tests/unit/test-verification/verify-vitest-report.test.ts` 验证未收集与 skipped case 原地失败。
-- `tests/unit/guards/verify-push-fail-closed.test.ts` 验证测试服务不可用不会跳过高价值 suite。
-- `tests/unit/guards/changed-file-test-impact-guard.test.ts` 验证 CI base/head range 与测试影响规则。
-- `tests/unit/guards/assistant-architecture-guards.test.ts` 反证历史消息推断、可绕过旧精确字符串的 Choice 私有 stage map/别名 type switch、computed Prisma delegate 与 raw SQL 生命周期写入；`no-plan-run-runtime.test.ts` 反证 runtime marker 与 Prisma model 恢复。
-- `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
-- `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
-- `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
-- `scripts/guards/test-size-guard.mjs` 穷尽扫描全仓测试，任何超过 350 行或 10 个 case 的测试文件都会失败；历史超限豁免已删除。
-- `npm run test:golden:self` 验证本地模型/媒体协议、浏览器网络封锁、阶段穷尽契约和场景挂载；`npm run test:golden:matrix` 使用真实 Chromium、MySQL、Redis、worker、Agent SDK 和 Workflow Lab 分叉产出结构化红/绿/blocked 矩阵。
+以下内容不再是架构防线：
 
-仍以生产源码字符串为断言对象的组件测试只能算结构 guard，不能作为渲染、交互或跨进程恢复的行为证明；高风险 Assistant UI 生命周期必须由 render/interaction、integration 或 system 测试另行覆盖。现有 `workspace-assistant-{approval-dismissal,panel-approval,panel-style-runtime,renderers}` 源码断言是明确的 P3 测试治理债务，不得据此宣称对应用户路径已被完整验证。
+- mocked route、component、service、worker 与“mock X 后断言 X”测试；
+- route 文件 catalog、behavior ledger、requirements matrix 与测试文件覆盖率；
+- synthetic history registry 和手工错误返回值式 fail-before；
+- 全仓 mutation baseline、coverage baseline 和相关分数；
+- test-size、changed-file-test-impact、route-test-count、behavior-quality guard；
+- `unit / integration / system / regression / contracts` 每层都要覆盖的目录制度；
+- `test:all`、`test:regression` 等以跑遍旧目录定义完整性的聚合命令；
+- API-only long-form runner 作为第二条 Golden Journey。
+
+历史根因和症状写入 `docs/architecture/incidents/**`。需要 executable protection 时，链接到真实 Golden 或 Critical scenario；文档记录本身不伪装成测试。
+
+## 验证与失败语义
+
+Golden Journey 从浏览器启动，setup 后只走生产写入路径，以浏览器观察和只读 durable oracle 共同收口。固定 sleep 不能证明成功；timeout 只负责界定失败。失败、取消、拒绝、重试、重复、晚到、断线、刷新与并发场景必须声明预期 terminal 和禁止的部分副作用。
+
+Critical Infrastructure 测试只开放一个受控故障 seam，并验证真实生产 owner 的事务、idempotency、terminal、compensation 和 recovery。Logic Specification 直接输入事实并断言完整结果。Registry Conformance 从生产 registry 枚举，不维护第二份实例文件清单。
+
+测试基础设施不可用时只能报告未验证，不得宣称对应证据通过。是否以及何时运行这些命令由后续执行策略决定，本阶段不修改 commit/push hooks。
 
 ## 历史回归
 
-- 90 天 Git 候选报告显示纠正性提交绝大多数同时修改测试，但主要集中在 unit 层；测试与实现同步变化不能证明历史问题已被独立保护。
-- 旧 `verify:push` 在测试服务准备失败时跳过 integration、system 和 regression，仍可能成功结束。
-- 旧 changed-file guard 在 CI checkout 没有 staged diff 时输出 `SKIP no changed files detected`，没有检查真实 PR 影响范围。
-- 旧 route/task behavior matrix 主要验证测试文件存在，不能证明每个 route 或 task scenario 实际执行。
-- Task type 的旧文件名 catalog、behavior matrix 与文本 guard 已由穷尽型可执行 Registry 一次性替换。
-- Route 的旧文件名 behavior matrix 与文本 guard 已删除；源文件发现 guard、唯一 identity catalog 和执行账本共同保证新增 Route 必须实际运行。
-- `BUG-AR-003` 表明围栏、状态机与 Choice Offer 即使各有单测，也会在真实 `Operation → Interaction → Run` 组合中产生互相矛盾的结论；凡是 Operation 自己可推进持久生命周期的路径，必须有真实 invocation integration 与刷新 system scenario，不能只 mock fence 或手工 seed 终态。
+- 旧体系累计数百个 Unit、mocked Integration、System、Regression 和元测试文件，却未能发现真实 Assistant 组合链缺陷；详见 `docs/architecture/incidents/test-system-reset/history-matrix.md`。
+- Route catalog 在 mock 鉴权和内部依赖后把“返回一个拒绝 Response”当成场景执行，不能证明 route 业务语义。
+- Synthetic history registry 把手工错误常量传给同一断言充当 fail-before，没有执行历史生产路径。
+- 全仓 mutation、coverage、test-size、requirements matrix 与 changed-file guard 提高了维护成本，但没有提高真实组合错误的发现率。
+- Golden Journey 首次通过真实 Chromium、MySQL、Redis、worker、Outbox、SSE 和刷新组合独立复现了此前绿色测试遗漏的问题，因此成为浏览器完整产品证据的唯一 owner。
 
 ## 修改检查表
 
-1. 该测试保护哪个需求、架构不变量或历史缺陷？
-2. 错误实现下是否能证明失败，而不是只在当前实现上通过？
-3. CI 是否实际收集并执行该场景，且 skipped 数为零？
-4. 是否新增了文件名映射、字符串 guard 或 mock 自证作为第二套覆盖解释？
-5. 删除旧测试或 guard 时，替代 scenario id 和必跑命令是什么？
+1. 已有 Golden、Critical、Logic 或 Conformance 是否已经保护本次事实？
+2. 若要新增测试，它属于哪个唯一准入类别？
+3. oracle 来自哪里，哪一种具体错误实现会失败？
+4. 是否 mock 了错误可能存在的内部层？
+5. 纠正性变更是否有 pre-fix 或真实受控故障 red 证据？
+6. 断言是否收口到用户结果或权威持久事实？
+7. 场景是否被一个明确命令实际发现，且无 skip/todo？
+8. 删除旧测试时，它是无效证据，还是需要先由真实场景接管？

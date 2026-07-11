@@ -98,6 +98,10 @@ function runCli() {
       return fs.readFileSync(file, 'utf8').includes('runProjectAgentWaitContinuationCommand(')
     })
     .map((file) => path.relative(cwd, file).split(path.sep).join('/'))
+  const externalExecutors = walk(path.join(cwd, 'scripts'))
+    .filter((file) => !path.relative(cwd, file).split(path.sep).join('/').startsWith('scripts/guards/'))
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n')
   const violations = inspectProjectAgentContinuationContract({
     productionSources,
     continuationCallers,
@@ -105,7 +109,7 @@ function runCli() {
     serverFollowUp: read('src/lib/project-agent/server-follow-up.ts'),
     executionHandoff: read('src/lib/project-agent/execution-handoff.ts'),
     publicControl: read('src/lib/project-agent/control.ts'),
-    externalExecutors: read('scripts/e2e-long-form/api-client.ts') + read('scripts/e2e-long-form/runner.ts'),
+    externalExecutors,
   })
   if (violations.length > 0) {
     console.error('[single-project-agent-continuation] violations detected')

@@ -43,22 +43,11 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 ## 验证
 
-- `tests/unit/project-workspace/structured-stream-adapters.test.ts` 验证 stream adapter 契约。
-- `tests/unit/project-workspace/structured-stream-runtime.test.ts` 验证 runtime 合并与重放语义。
-- `tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts` 穷尽验证唯一 resolver 的身份、进度、stream、终态交接、取消和派生投影。
-- `tests/regression/project-canvas-task-backed-running.test.ts` 验证运行态来自任务权威状态。
-- `tests/regression/project-canvas-long-form-node-identity.test.ts` 验证节点身份稳定。
-- `tests/contracts/canvas-node-conformance.test.ts` 对所有 definition 自动执行生命周期与能力声明契约。
-- `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量。
-- `tests/unit/optimistic/sse-task-terminal.test.ts` 与 `tests/unit/query/workspace-sse-event-sync.test.ts` 验证终态先请求正式 Query refetch，再通知 runtime 清理；completed/failed/canceled 均不直接写业务 Cache。
-- `tests/unit/optimistic/workspace-sse-event-sequence.test.ts` 验证重复、晚到与 replay 事件不能越过 Task 终态水位。
-- `scripts/guards/canvas-node-lifecycle-contract-guard.mjs` 阻止旧字段、第二生命周期构造边界和 registry 缺项重新出现。
-- 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写和无界 stream/SSE identity 回流。
-- `scripts/guards/terminal-resource-refetch-guard.mjs` 阻止恢复 terminal payload 直接写 Cache、资源版本/trigger 协议或 materialization-only checkpoint 阶段。
-- `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。
-- `scripts/guards/canvas-motion-presence-contract-guard.mjs` 阻止将 React children 恢复成 Presence state，且要求复用共享 transition authority。
-- `tests/unit/project-workspace/workspace-canvas-motion-presence.test.ts` 穷尽验证稳定可见、重开、立即隐藏与退出动画的 Presence action；`BUG-CN-002` history scenario 反证旧的 children-state 自循环。
-
+- `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口或 reload divergence 都是场景失败。
+- `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
+- `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
+- `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
+- Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。

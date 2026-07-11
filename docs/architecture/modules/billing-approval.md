@@ -42,23 +42,10 @@
 
 ## 验证
 
-- `tests/unit/billing/media-approval-policy.test.ts` 覆盖统一媒体分类。
-- `tests/unit/operations/planning.test.ts` 覆盖计划报价与确认额度边界。
-- `tests/unit/operations/planning.test.ts` 也反证 tool-only Operation 不能通过 API plan endpoint 暴露计划或开始业务处理。
-- `tests/unit/operations/reference-character-{authority,planning}.test.ts` 验证参考图文本提取与图片生成拥有不同 Task billing policy，图片计划绑定目标所有权并生成 image quote，未获 Grant 的 API 调用显式失败。
-- `tests/integration/task/approved-operation-plan-batch.integration.test.ts` 用真实 MySQL 验证 Grant/Execution/业务写入/全 Task/freeze/outbox 全有或全无、余额不足回滚、Task batch 后故障回滚与并发重复调用串行化。
-- `tests/integration/task/approval-grant-expiry-replay.integration.test.ts` 用真实 MySQL 证明未消费 Grant 过期后零执行副作用，已消费 Grant 超 TTL 只返回同一持久 output 且不再次 commit。
-- `tests/unit/worker/soundscape-plan-worker.test.ts` 与 `soundscape-generate-worker.test.ts` 覆盖 Soundscape 任务链路。
-- `tests/unit/billing/task-runtime-billing.test.ts` 验证 Task runtime 不读取同步 Billing mode、不创建第二计费生命周期，并把 usage 保留给 Terminal Service。
-- `scripts/guards/single-task-billing-owner-guard.mjs` 强制 Task billing 只保留 transaction API，并禁止重新导出 Terminal Service 之外的 Task settle/rollback 写入口。
-- `scripts/guards/no-hardcoded-operation-confirmed.mjs` 阻止在生产源码中写死批准状态。
-- `scripts/guards/no-media-provider-bypass.mjs` 阻止绕过统一媒体供应商入口。
-- `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant choice/runtime 绕过 operation registry 直接提交任务。
-- `scripts/guards/approval-plan-batch-authority-guard.mjs` 强制不可变 Grant provenance、单事务 authority，并禁止 lease/`submitted`/9999 暂存协议回归。
-- `scripts/guards/single-operation-invocation-guard.mjs` 强制 API/Tool adapter 只能调用统一 invocation authority。
-
-`tests/unit/operations/planning.test.ts` 穷尽要求所有 `billable_media` operation 同时提供 plan/commit；任何计划外 Task 都在最终提交边界失败。收费文本 LLM operation 属于 `confirmation:none`，不得因为 `effects.billable` 被误归类为媒体审批。
-
+- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-grant-expiry-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、并发重复、过期和持久重放。
+- `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
+- `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
+- `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
 ## 状态所有权
 
 | 事实                                                           | 唯一所有者 / 写入者                                                                | 消费者                                        |

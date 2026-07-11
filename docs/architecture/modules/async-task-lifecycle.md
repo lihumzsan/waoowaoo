@@ -73,40 +73,13 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 ## 验证
 
-- `tests/integration/task/create-task-dedupe.integration.test.ts` 验证去重与重复提交。
-- `tests/integration/task/create-task-dedupe.integration.test.ts`、`tests/regression/task-submission-durable-outbox.test.ts` 与 `tests/system/task-submission-durable-outbox.system.test.ts` 验证 batch 严格复用/冲突/整体回滚，以及 Redis 不可用时 Task/freeze/event/enqueue responsibility 仍原子提交且 submitter 零直写队列。
-- `tests/unit/task/service-operation-metadata.test.ts` 验证 operation metadata 语义。
-- `tests/unit/task/job-envelope.test.ts` 验证恢复入队不会丢失 billing、operation、scope、priority 与 trace。
-- `tests/unit/task/execution-checkpoint.test.ts` 验证 handler result 直接进入 terminal-ready checkpoint，旧 materialization-only `executed` 状态原地失败。
-- `tests/unit/task/reconcile-target-sync.test.ts` 与 `reconcile-queue-lifecycle.test.ts` 验证 queue unavailable 零写入、批准 Task 恢复仍经过 Execution completed 门禁，以及最终失败投影。
-- `tests/integration/task/task-reconcile-queue.integration.test.ts` 验证真实 DB + Redis 下 queued/absent 的完整恢复时序。
-- `tests/integration/task/approved-operation-plan-batch.integration.test.ts` 验证真实 DB 下批准批次的 Task/freeze/outbox 原子性。
-- `tests/contracts/task-definition-conformance.test.ts` 验证每个 TaskType 的 queue/handler/billing/retry/execution/success/failure/cancel 声明被必跑 guard suite 收集，并阻止 worker、Billing 恢复 TaskType 私有 switch。
-- `tests/unit/sse/server-session.test.ts`、`tests/unit/operations/sse-ops.test.ts` 与 `tests/integration/api/contract/task-run-routes.test.ts` 验证 subscribe-before-bootstrap、复合游标、缺失 Mutation 水位的 recovery checkpoint、buffer 去重和 abort cleanup。
-- `tests/unit/query/workspace-sse-event-sync.test.ts` 验证 completed/failed/canceled 只按显式 `affectedResources` 请求正式 Query refetch，且不直接写业务 Cache。
-- `scripts/guards/task-submit-compensation-guard.mjs` 检查 route 的 create + submit 补偿标记。
-- `scripts/guards/no-operation-direct-submit-task.mjs` 阻止 operation 绕过统一提交边界。
-- `scripts/guards/no-project-agent-direct-task-submit.mjs` 阻止 Assistant choice/runtime 绕过 operation registry 直接提交 Task。
-- `scripts/guards/task-target-states-no-polling-guard.mjs` 阻止以 polling 伪造目标状态。
-- `scripts/guards/single-task-reconciler-guard.mjs` 阻止第二 watchdog、instrumentation 直接写 Task，以及四态观察/完整 envelope 被绕过。
-- `scripts/guards/no-worker-attempt-target-terminal-write.mjs` 阻止单次 worker attempt 提前写业务目标终态。
-- `scripts/guards/terminal-resource-refetch-guard.mjs` 阻止 terminal payload 直接写 Cache、资源版本/trigger 协议和 materialization-only checkpoint 阶段回流。
-- `scripts/guards/sse-durable-watermark-guard.mjs` 阻止恢复 5 秒 replay polling、丢失复合水位或颠倒 subscribe/bootstrap 顺序。
-- `scripts/guards/edit-bible-task-ownership-guard.mjs` 阻止 ProjectEditBible 回退为无 Task fence 的成功/失败写入。
-- `tests/unit/task/provider-invocation.test.ts` 验证 submitted 结果重放、结果未知零重提和明确拒绝；`scripts/guards/provider-submission-at-most-once-guard.mjs` 阻止 provider POST 恢复自动重试或 Task 媒体调用缺失 invocation key。
-- `tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 在真实 MySQL 上验证 invocation 首次 claim 的并发互斥、成功重放和 `outcome_unknown` 永不重提；`tests/integration/billing/worker-lifecycle.integration.test.ts` 验证未知提交结果即使 BullMQ 配置了剩余 attempts 也会立即失败、回滚冻结额度且保持用户余额不扣减。
-- `tests/integration/task/task-attempt-claim.integration.test.ts` 在真实 MySQL 上以并发 claim 验证每个精确 attempt 只有一个 owner；`scripts/guards/single-task-attempt-owner-guard.mjs` 阻止 `processing → processing` 旧入口、无 attempt retry 或 terminal fence 回流。
-- `tests/unit/worker/runtime-config.test.ts` 与 `tests/unit/helpers/redis-config.test.ts` 验证缺省值与非法显式配置的 fail-closed 行为；`scripts/guards/worker-runtime-config-guard.mjs` 阻止 worker 或 Redis client 恢复分散 parse/fallback。
-- `tests/integration/task/outbox-delivery-lifecycle.integration.test.ts` 在真实 MySQL+Redis 下验证 add-before-mark、固定 job identity、丢 job 重置、lease reclaim/stale owner 与 poison command 首次 dead-letter；`tests/unit/outbox/queue-observation.test.ts` 验证 Redis unavailable 不得解释为 absent。
-- `tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts` 与 `tests/unit/outbox/project-agent-continuation-dead-letter.test.ts` 验证 Assistant continuation 投递耗尽先结算、后 dead，且 settlement 失败不丢失重试责任。
-- `tests/integration/task/task-target-terminal-projectors.integration.test.ts` 验证 MusicScore、Soundscape、EditScript 与 ShotExecutionPlan 的 failure/cancel/late owner CAS；`tests/integration/task/task-target-terminal-ownership.integration.test.ts` 验证正式资源成功先提交时 cancel 不得覆盖成功，且已终态重放必须具有精确 terminal Event/broadcast bundle；`scripts/guards/task-target-ownership-guard.mjs` 与 `no-worker-attempt-target-terminal-write.mjs` 阻止 attempt 恢复第二终态写入者。
-- `tests/unit/task/target-ownership.test.ts` 验证 Chapter/Final render 在 Task 创建事务中取得目标 owner；worker success 必须带该 owner CAS，不能自行 claim 或覆盖后来的 target。
-- `tests/integration/task/edit-script-ownership-migration.integration.test.ts` 在隔离的真实 MySQL schema 中执行 `20260711070000`，验证两个 owner column 与 index 实际可安装。
-- `tests/unit/task/artifact-storage.test.ts` 与 `scripts/guards/task-artifact-idempotency-guard.mjs` 验证 Task 产物 key 稳定且所有 worker 上传都携带显式身份。
-- `tests/integration/task/async-migration-preflight.integration.test.ts` 验证维护窗口对 active Task、旧父任务、Outbox、Run 与 Wait 任一非零均 fail-closed。
-- `scripts/guards/single-task-billing-owner-guard.mjs` 禁止恢复非事务 `prepare/settle/rollbackTaskBilling`，并强制 Terminal Service 使用 transaction API。
-- `scripts/guards/task-submission-atomicity-guard.mjs` 禁止 generic submitter 恢复 Task 创建后的直接 billing/event/BullMQ 副作用，并强制普通与批准 Task 复用同一事务 primitive 和 Outbox consumer。
-
+- `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts` 和 `outbox-delivery-lifecycle.integration.test.ts` 使用真实 MySQL/Redis 验证 Task/freeze/event/outbox 的原子创建、去重、回滚和恢复。
+- `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`task-target-terminal-{ownership,projectors}.integration.test.ts` 验证并发 attempt owner、queue unavailable、late terminal 和唯一业务 projector。
+- `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证并发终态通过锁定 Wait aggregate 收敛且 continuation command 唯一。
+- `tests/integration/task/{provider-invocation-at-most-once,async-migration-preflight,edit-script-ownership-migration}.integration.test.ts` 验证 provider POST fence、维护窗口 fail-closed 和真实 schema 安装。
+- `tests/unit/task/{job-envelope,retry-policy,target-ownership,normalize-error,operation-result-normalizer}.test.ts` 与 `tests/unit/sse/{protocol,server-session}.test.ts` 只验证纯协议和 resolver 边界。
+- `tests/contracts/task-definition-conformance.test.ts` 从生产 Task registry 穷尽验证 queue、handler、billing、retry、execution 和 terminal projector 声明。
+- Task 相关静态 guards 只阻止已知第二 writer/入口重新出现，不作为 route → worker → DB 行为证明。
 ## 本批 migration 发布门禁（必须人工执行，当前未应用）
 
 `20260711020000` 至 `20260711070000` 只能在维护窗口整体切换，禁止旧/新协议双轨运行：

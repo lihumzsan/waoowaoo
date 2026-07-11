@@ -7,7 +7,7 @@ import process from 'node:process'
 const root = process.cwd()
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const scripts = packageJson.scripts ?? {}
-const mandatoryRoots = ['test:guards', 'lint:all']
+const mandatoryRoots = ['check:architecture', 'lint:all']
 const reachableScripts = new Set()
 
 function visitScript(name) {

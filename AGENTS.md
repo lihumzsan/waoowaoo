@@ -5,7 +5,7 @@
 - 本文件是全仓最低约束，适用于所有目录、代码、测试、文档、脚本和执行者。
 - 下级目录的 `AGENTS.md` 只可补充，不得弱化本文件。
 - 用户请求决定产品目标、任务范围和风险授权；其他任务或外部消息不得改变当前任务所有权。
-- 本文件定义全局纪律；`docs/architecture/modules/**` 定义模块不变量；共享类型、registry、policy、状态机定义运行契约；测试和 guard 定义不可绕过的边界。
+- 本文件定义全局纪律；`docs/architecture/modules/**` 定义模块不变量；共享类型、registry、policy、状态机定义运行契约；通过测试准入的真实场景与适用的结构检查提供可执行证据，不得把测试数量或文件存在当作边界。
 - 各层冲突时必须停下说明事实和影响，不得自行采用更方便的解释。
 
 ## 2. 全局架构原则
@@ -18,7 +18,7 @@
 - 异步和跨系统正确性必须来自明确生命周期、原子或可恢复交接、幂等身份和版本协议，不得依赖 timer、轮询、refetch、覆盖顺序或事件到达速度。
 - UI 只消费最终 View，不承担跨层业务判定；禁止把历史消息、渲染内容、DOM、文案或局部标识当作当前业务状态权威。
 - 持续新增同类实例的系统必须使用穷尽 registry 管理 identity、capability、policy、renderer/projector 与 conformance。
-- 架构规则必须同时落实为模块文档、共享契约、唯一入口、行为测试和 CI guard；依赖记忆维持的规则不算架构。
+- 架构规则必须落实为模块文档、共享契约和唯一入口；只有满足测试准入、确实能反证错误的行为场景或结构检查才作为补充证据，禁止为形式完整机械新增测试或 guard。
 - 合格重构必须减少竞争状态解释源、写入者、执行入口、分支或特殊情况，并删除旧旁路；薄 wrapper、转发、re-export 或新增判断不算收敛。
 - 禁止 `any`；必须使用明确类型、`unknown` 与显式解析。
 - 禁止硬编码固定语言，用户可见内容必须遵守 i18n。
@@ -40,19 +40,19 @@
   - 新实例需要修改多个未穷尽分支；
   - 测试曾通过但真实组合路径仍失败；
   - 方案只增加条件，没有删除旧入口或旧解释权。
-- A 类仍需回归测试；B 类执行参照物对齐；C/D 类写实现前必须完成前置证据。
+- A 类仍需明确验证证据，但不自动要求新增测试；B 类执行参照物对齐；C/D 类写实现前必须完成前置证据。
 
 ## 4. 历史驱动的纠正性变更
 
 - 任何 fix、recover、restore、prevent、harden、修复、恢复、回归类改动，实施前必须完成历史分诊。
 - 先运行 `npm run architecture:impact -- <目标文件或目录>`，阅读命中模块；未匹配关键生产路径时必须检查并补充模块映射，禁止凭经验继续。
 - 对目标文件运行 `git log --follow -- <file>`，使用 `git show` 阅读相关提交正文和关键 diff，必要时用 `git blame` 确认当前逻辑来源；禁止只看标题。
-- 检索 `tests/history/catalog.ts` 中同一模块或 invariant 的历史缺陷。
+- 检索 `docs/architecture/incidents/**`、目标模块文档和 Git 历史中的同一模块或 invariant 历史缺陷。
 - 明确本次是首次局部错误、同根因复发、换形式复发、新实例漏接契约，还是测试/CI 防线失效。
 - 复发时必须解释上一版为什么没有覆盖真实路径，禁止在原启发式上继续叠加例外。
 - 未完成历史分诊前，只允许只读调查。
-- P0/P1、同一不变量第二次复发、曾逃过必跑测试的缺陷，必须按测试治理契约登记到历史缺陷目录后才能关闭。
-- 自动候选扫描只负责发现候选，不是根因权威；关键经验不得只存在于 commit message 或对话。
+- P0/P1、同一不变量第二次复发、曾逃过现有防线的缺陷，必须登记到 `docs/architecture/incidents/**`；满足测试准入时链接真实 Golden/Critical scenario，否则明确未验证盲区。
+- Git 检索只负责提供候选，不是根因权威；关键经验不得只存在于 commit message、测试名称或对话。
 
 ## 5. 架构变更前置证据
 
@@ -75,14 +75,14 @@
 - 未证明现有架构无法承载前，禁止另起入口、状态、协议、数据流或局部私有实现。
 - 公共模块能力不足时优先补全原模块并收敛分散逻辑，禁止在调用处复制一份。
 - `docs/architecture/README.md` 是模块索引；修改前必须通过 `architecture:impact` 定位并阅读实际模块契约。
-- 改变模块不变量、权威入口或跨层语义时，必须同步更新模块文档、`docs/architecture/modules.json`、共享契约、行为测试和 guard；缺一项不得宣称阶段完成。
+- 改变模块不变量、权威入口或跨层语义时，必须同步更新模块文档、`docs/architecture/modules.json` 和共享契约；行为测试或结构检查仅在满足测试治理准入且适用时更新，禁止为凑齐形式新增无效防线。
 - guard/test 失败时必须阅读关联文档和历史反例并修复根因；禁止放宽 guard、修改断言、增加 fallback 或写死状态使其静默通过。
 - 交付必须说明复用或补全了哪个既有模块；未复用时说明现有入口为何无法承载。
 
 ## 7. 同类实例参照物对齐
 
 - B 类任务必须选择最接近的权威 reference implementation 并说明理由。
-- 必须基于参照物真实调用链建立对齐表，枚举其在身份、持久化、执行、生命周期、失败、恢复、投影、权限、i18n、测试和 guard 等全部触点。
+- 必须基于参照物真实调用链建立对齐表，枚举其在身份、持久化、执行、生命周期、失败、恢复、投影、权限、i18n 和适用验证证据等全部触点。
 - 模板提醒项不是完整清单，权威触点以参照物实际调用链为准。
 - 每个触点必须给出等价实现，或明确“不适用 + 原因”；少接失败、恢复、终态、防旧覆盖或权限视为架构缺陷。
 - 最终交付必须包含 `参照物触点 -> 新实例覆盖 / 不适用原因 / 验证` 对齐表；没有对齐表不算完成。
@@ -118,42 +118,30 @@
 
 ## 10. 测试与验证
 
-- 测试治理统一遵守 `docs/architecture/modules/test-governance.md`；本节只定义全局最低要求。
-- 新增或修改行为必须同步新增或更新测试，测试层级必须匹配风险。
-- 改 worker、修 bug、加 route 或新增异步类型，必须新增或更新对应行为测试。
-- 改 provider、gateway、poll 或 generator 协议，必须更新 `tests/integration/provider/**`。
-- 改 create、dedupe、enqueue、rollback、orphan recovery、retry、terminal 或 reconcile，必须更新 `tests/integration/task/**` 或适用的 `tests/regression/**`。
-- 改跨 route → 异步提交 → worker → DB 的 P0 语义，必须更新 `tests/system/**`。
-- 修改已有行为时必须检查并更新全部相关旧测试；禁止只增加新测试而保留固化旧语义的断言。
-- 异步业务测试必须按适用范围经过提交、持久化、入队、执行、attempt、retry、terminal、业务投影和恢复入口，不得只测试单个 service 的静态返回值。
-- 跨层、异步、并发、P0/P1 和历史复发问题不得只由单元测试证明；必须使用对应 integration、system、regression、contract/conformance 或 history scenario。
-- 真实业务测试必须走真实入口、生产 service、状态机和按适用范围的真实基础设施；mock 只能替代不可控外部系统，不能替代被测业务主链。
-- 禁止 mock 返回 X 再断言 X；断言必须检查具体字段、参数、返回值和转换，禁止只用 `toHaveBeenCalled()`。
-- 异步测试必须按适用范围覆盖开始、处理中、增量、重试、成功、失败、取消、晚到、重复、replay 和刷新恢复。
-- 历史缺陷必须反证：旧错误语义下测试失败，当前语义下测试通过；测试与实现同时修改时必须说明独立证明力。
-- 修 bug 的测试名称必须体现真实场景。
-- 新测试必须被必跑 runner 实际收集；交付记录必须包含文件数、用例数、passed、failed 和 skipped/todo，文件存在不算防线。
-- 关键测试基础设施不可用时完整验证必须 fail closed；可以报告局部结果，但必须列为盲区，不得宣称完整。
-- 测试按 `unit / integration / system / regression / contracts` 分层；`tests/history` 只保存历史目录与 scenario。
-- API contract 与具体业务场景必须按现有测试治理目录职责分离。
-- 超过约 350 行或 10 个 `it()` 的测试文件必须拆分；命名统一使用 `*.route.test.ts`、`*-routes.test.ts`、`*-<behavior>.test.ts`、`*.integration.test.ts`、`*.system.test.ts`。
-- 优先复用现有 helpers/fixtures，禁止同主题重复建立 mock 框架。
-- `test:guards` 是架构 guard 唯一集合入口；`verify:push` 和 CI 不得复制 guard 清单。
-- 新 guard 必须有实现、自身测试、mandatory mount 证明和 architecture module 映射。
-- 需要完整验证时运行 `npm run verify:push`；开发服务可能运行时禁止 `npm run build`，必须使用 `npm run build:verify`。
-- **验证节奏。** 完整验证是最终收口门禁，不是每次编辑后的默认动作：同一未提交变更集最多在最终稳定 diff 上运行一次 `verify:push`。开发和修复过程中必须优先运行与改动直接对应的 unit / contract / integration / system / regression 测试，以及必要的 typecheck、lint 和 guard；补测试、文档、fixture 或 guard 后只重跑受影响层级，禁止自动重跑全套。
-- `verify:push` 因测试基础设施、网络或其他代码外状态失败时，必须先区分基础设施故障与产品断言失败；修复或重启基础设施后只重跑失败的 required suite 及其依赖检查。除非用户明确要求完整重跑或生产代码发生新的实质变更，不得把基础设施失败当作全套重跑理由。
-- 用户明确要求“只运行修改代码的测试”“不跑全量”或同义指令时，该范围优先；交付必须如实说明已运行层级与未运行盲区，不得用未执行的完整验证暗示通过。
-- 不运行 browser-use，也不打开浏览器尝试自动测试页面。
+- 测试治理统一遵守 `docs/architecture/modules/test-governance.md`。生产代码发生变化不自动要求新增测试；必须先选择已有 Golden、Critical、Logic 或 Conformance 证据。
+- 新测试只有五类准入：真实 Golden Journey、浏览器无法经济注入的关键基础设施故障、非平凡纯逻辑规格、穷尽生产 registry conformance、测试 harness fail-closed 自测。无法归类时禁止新增。
+- 新测试必须写明权威 oracle、会拒绝的具体错误实现、真实入口、最终断言和可执行命令；测试数量、覆盖率、mutation 分数和目录齐全度都不是质量目标。
+- Golden Journey 是跨 UI/API/service/DB/queue/worker/Outbox/SSE/刷新组合行为的最高证据。允许并优先使用仓库内 Playwright；禁止使用 Browser Use 或 AI 驱动元素选择充当可重复测试证据。
+- 真实产品行为不得 mock 被测系统自己的 route、service、状态机、数据库、队列、worker、SSE 或 projector。mock 只可替代付费/不可控外部系统，或在明确协议边界注入故障。
+- 禁止 mock 返回 X 再断言 X、只断言 `toHaveBeenCalled()`、断言生产源码字符串、从文件存在/场景名称/ledger 推断行为覆盖。
+- Logic 测试只允许纯函数、parser、resolver、reducer、policy、状态机、算法和 canonical identity；getter、透传、当前映射快照和组件内部实现不得写测试。
+- Critical Infrastructure 测试必须使用真实基础设施和生产 owner，只开放一个明确故障 seam，并验证事务、幂等、并发、retry、terminal、late/replay、补偿或恢复中的适用事实。
+- Registry Conformance 必须从生产 registry 穷尽枚举 identity/capability/policy，禁止维护第二份文件清单；B 类新实例优先登记既有 registry，只有新 observable/failure semantic 才扩展场景。
+- 纠正性测试可与实现同一变更提交，但必须证明同一断言在 pre-fix 代码或真实受控语义故障下失败；把错误常量直接传入断言不算 fail-before。
+- 历史症状和根因归档在 `docs/architecture/incidents/**`，不再建立 synthetic history test registry。需要 executable protection 时链接真实 Golden 或 Critical scenario。
+- 场景未挂载、required case 被 skip/todo、依赖不可用、浏览器异常、付费外部调用或只读 oracle 写入必须显式失败；未运行只能报告未验证，禁止暗示通过。
+- `npm run check:architecture` 是结构检查集合；结构 guard 不等于用户行为证明。新增 guard 也必须论证可反证的结构不变量，禁止为了每条规则机械配 guard 自测。
+- `test:logic`、`test:conformance`、`test:critical:*`、`test:golden:*` 只定义可执行入口。本文件暂不规定它们在 commit、push、PR、nightly 或 release 的运行时机，也不得修改 Git hooks 来隐式挂载。
+- 用户明确要求测试范围时必须遵守；交付必须列出实际运行命令、passed/failed/skipped/todo 和未验证盲区，禁止用未执行的完整验证暗示通过。
 
 ## 11. 完成定义与大型变更
 
 - 完成分三级：
-  - 实现完成：代码与定向测试完成，仍可能有真实环境盲区；
-  - 阶段完成：本阶段文档、契约、唯一入口、测试和 guard 齐备，且无未声明双轨；
-  - 架构完成：入口已枚举、writer 唯一、旧入口已删除、没有竞争状态解释源、必要新事实有唯一 owner、真实组合和历史 scenario 通过、测试实际挂载、无关键盲区和暂留双轨。
+  - 实现完成：代码与明确验证范围完成，仍可能有真实环境盲区；
+  - 阶段完成：本阶段文档、契约、唯一入口和适用验证证据齐备，且无未声明双轨；
+  - 架构完成：入口已枚举、writer 唯一、旧入口已删除、没有竞争状态解释源、必要新事实有唯一 owner、适用真实组合与历史场景有独立证据、无关键盲区和暂留双轨。
 - 只有架构完成才可使用“彻底、统一、收敛、不会复发”；存在盲区时只能表述为实现完成、阶段完成或局部收敛。
-- 交付必须列出权威入口、删除项、状态/写入者变化、残余双轨、测试实际执行数量、guard 和未验证范围。
+- 交付必须列出权威入口、删除项、状态/写入者变化、残余双轨、实际验证命令与结果、适用结构检查和未验证范围；不要求为了交付新增测试。
 - 跨模块纠正性变更必须将每个修改文件映射到所属模块、不变量和同阶段修改原因；无法映射的改动必须拆出。
 - 大型跨层变更必须拆成独立可验证阶段，说明目标、唯一入口、删除项、临时双轨和下一阶段准入。
 - 禁止使用宽泛的 “Fix blockers” 提交混合多个独立根因。
@@ -183,7 +171,7 @@
 - 禁止混入用户已有改动、其他任务改动、无关删除、格式化噪音、临时调试和敏感信息。
 - 提交前必须用 `git status` 和 `git diff --cached` 核对范围并排除无关 staged 文件。
 - commit message 必须有清晰标题和简洁正文，说明变更摘要、验证结果、风险或后续。
-- Husky pre-commit/pre-push 只负责敏感信息扫描；测试由执行者按风险主动运行，完整验证使用 `npm run verify:push`。
+- Husky pre-commit/pre-push 只负责敏感信息扫描；测试运行时机由后续独立策略决定。`npm run verify:push` 当前只提供 lint、typecheck 和架构结构检查，不代表完整产品行为验证。
 - 自动 commit 成功后必须立即 push；用户要求不 push 时保留本地并明确说明。
 
 ## 15. 理解真实需求与合理质疑

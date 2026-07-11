@@ -27,14 +27,11 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 
 ## 验证
 
-- `tests/integration/provider/fal-provider.contract.test.ts`、`fal-queue-result-errors.contract.test.ts`、`fal-video-*.contract.test.ts` 和 `elevenlabs-sound-effect-provider.contract.test.ts` 验证真实 provider 协议；FAL queue 的 malformed、FAILED、422、500 与 unknown 状态必须显式分类，不得进入 fallback。
-- `tests/unit/task/async-poll-external-id.test.ts` 验证异步 external id 与轮询语义。
-- `tests/unit/guards/no-provider-model-fallback.test.ts` 与 `no-cross-provider-model-data.test.ts` 验证零降级和物理隔离。
-- `scripts/guards/no-provider-model-fallback.mjs`、`no-cross-provider-switch.mjs`、`no-cross-provider-model-data.mjs`、`no-provider-guessing.mjs` 和 `no-legacy-ai-entry-imports.mjs` 阻止散落的 provider 语义。
-- `scripts/guards/no-api-direct-llm-call.mjs` 与 `no-media-provider-bypass.mjs` 阻止 API/媒体调用绕过网关。
-- `tests/unit/task/provider-invocation.test.ts` 验证媒体与 LLM 结果、拒绝和未知状态的持久重放；`scripts/guards/provider-submission-at-most-once-guard.mjs` 强制 POST 使用单次提交策略并要求每个 Task 外部调用具有稳定 invocation key。
-- `tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 在真实 MySQL 上验证并发首次提交只能有一个执行者，以及断连后的持久 `outcome_unknown` 不会在 worker 重启或 Task retry 时重新发送 POST。
-
+- `tests/integration/provider/fal-*.contract.test.ts` 使用本地协议服务器验证真实 FAL adapter 的提交、轮询、FAILED/unknown/malformed/无媒体结果、422/500 和零隐式 retry。
+- `tests/integration/provider/provider-gateway-{capabilities,connections}.contract.test.ts` 与 `message-content.contract.test.ts` 验证生产 registry capability、connection 和消息协议。
+- `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level streaming 协议；`tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 使用真实 MySQL 验证并发首次提交唯一与 `outcome_unknown` 零重提。
+- `tests/unit/task/async-poll-external-id.test.ts` 只验证纯 external identity 解析。
+- provider guards 只阻止 API/媒体绕过、跨 provider 猜测和 fallback 等结构旁路，不替代协议或用户旅程证据。
 ## 历史回归
 
 - `ccdd10be6` 修复 FAL 异步失败未被 surface 的问题：provider 的失败终态必须进入统一任务失败边界，不能留在 polling 中静默消失。
