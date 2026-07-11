@@ -1,157 +1,226 @@
-# Two-Machine Development Runtime Design
+# waoowaoo 双机开发运行架构
 
-## Goal
+## 1. 文档状态
 
-Keep `192.168.0.116` useful as the high-frequency development workstation while using the stronger, always-on `192.168.0.112` machine for persistent infrastructure and GPU generation.
+- 状态：已部署并通过实际运行验证
+- 生效日期：2026-07-11
+- 开发机：`192.168.0.116`
+- 基础设施与 GPU 计算机：`192.168.0.112`
 
-The design must preserve fast frontend and backend edit cycles, avoid two copies of the source tree, reduce memory pressure on the 16 GB workstation, and make the first trial reversible.
+本架构的目标是在保留本机高频代码修改体验的同时，把长期运行、占用内存和依赖 GPU 的服务集中到 `192.168.0.112`。项目只保留一个日常开发工作区，不维护两份可写源码。
 
-## Confirmed Environment
+## 2. 架构总览
 
-### Development workstation: `192.168.0.116`
+```mermaid
+flowchart LR
+    U["开发者"] --> C["192.168.0.116<br/>Git / Codex / VS Code"]
+    C --> N["Next.js 开发服务器"]
+    C --> W["Workers / Watchdog / Bull Board"]
+    B["Chrome"] -->|"localhost:3000"| N
+    N -->|"LAN"| DB["192.168.0.112<br/>MySQL :13306"]
+    N -->|"LAN"| R["Redis :16379"]
+    N -->|"LAN"| M["MinIO :19000 / :19001"]
+    W -->|"任务队列"| R
+    W -->|"生成请求"| G["ComfyUI :8878<br/>RTX 5070 Ti"]
+    W -->|"媒体读写"| M
+```
 
-- Intel Core i7-8750H, 6 cores / 12 threads.
-- 16 GB RAM.
-- NVIDIA GTX 1050 Ti plus Intel integrated graphics.
-- Holds the active Git checkout, Codex, VS Code, Chrome, Node.js development processes, and the current Docker-backed MySQL, Redis, and MinIO services.
-- A live measurement showed roughly 3 GB Chrome working set, 2.2 GB Node working set, and 3.5 GB private memory committed by WSL.
+核心边界如下：
 
-### Infrastructure and compute machine: `192.168.0.112`
+- `192.168.0.116` 负责代码、开发进程和浏览器交互。
+- `192.168.0.112` 负责持久化数据、任务队列、对象存储和 GPU 生成。
+- 浏览器始终访问本机 Next.js，不直接访问 112 上的应用服务。
+- 112 是 MySQL、Redis、MinIO 和 ComfyUI 的唯一正常运行端。
 
-- Intel Core i5-13600KF, 14 cores / 20 threads.
-- 64 GB RAM.
-- NVIDIA RTX 5070 Ti.
-- Can remain powered on and is dedicated to ComfyUI and project background infrastructure.
-- ComfyUI is reachable at `192.168.0.112:8878`.
-- Docker already contains the project's MySQL, Redis, MinIO, and persisted data. The trial will reuse these services instead of performing a default bulk migration.
-- At design time, RDP and ComfyUI were reachable from `192.168.0.116`; the historical MySQL, Redis, and MinIO ports were not reachable and therefore require a listening and firewall check before the trial.
+## 3. 机器职责
 
-## Selected Architecture
+### 3.1 `192.168.0.116`：开发与应用执行端
 
-### `192.168.0.116`: development workstation
+硬件概况：16 GB 内存，Intel Core i7-8750H，NVIDIA GTX 1050 Ti。
 
-The workstation remains the only source-code workspace and runs all processes that need immediate feedback from code edits:
+负责运行：
 
-- Git checkout and working tree.
-- Codex and VS Code.
-- Chrome.
-- Next.js development server.
-- Image, video, voice, and text BullMQ workers.
-- Watchdog.
-- Bull Board.
-- Local Codex CLI provider execution.
-
-This keeps frontend, API, and worker changes in one checkout. No source synchronization, remote deployment, or duplicate `node_modules` tree is needed for normal development.
-
-### `192.168.0.112`: persistent infrastructure and GPU compute
-
-The server runs the stateful and long-lived services:
-
-- ComfyUI on port `8878`.
-- MySQL, expected on port `13306` unless the live Docker configuration proves otherwise.
-- Redis, expected on port `16379` unless the live Docker configuration proves otherwise.
-- MinIO API and console, expected on ports `19000` and `19001` unless the live Docker configuration proves otherwise.
-- Docker volumes, backups, generated media storage, models, and ComfyUI custom nodes.
-
-It does not run Next.js, application workers, Codex, or a second application checkout during the normal development workflow.
-
-## Data and Request Flow
-
-1. The user edits code on `192.168.0.116`.
-2. Next.js and `tsx watch` observe the same local working tree.
-3. Next.js and workers connect over the LAN to MySQL, Redis, and MinIO on `192.168.0.112`.
-4. ComfyUI jobs are submitted to `192.168.0.112:8878`.
-5. Generated media is persisted through the MinIO service on `192.168.0.112`.
-6. Chrome continues to open the application from the local Next.js server so Fast Refresh and error overlays remain immediate.
-
-The project must use a browser-reachable MinIO public endpoint when it produces signed or direct media URLs. Internal service endpoints and public media endpoints must not be assumed to be interchangeable.
-
-## Code Reload and Restart Rules
-
-| Change | Expected behavior |
+| 组件 | 用途 |
 | --- | --- |
-| React components, CSS, client code | Next.js Fast Refresh; no manual restart |
-| API routes and ordinary Next.js server TypeScript | Automatic recompilation; no routine restart |
-| Worker handler code | `tsx watch` restarts the worker process |
-| Watchdog or Bull Board code | Their `tsx watch` process restarts automatically |
-| `.env`, startup arguments, or process topology | Restart the local development process tree |
-| `package.json` or dependencies | Install dependencies, then restart affected local processes |
-| Prisma schema | Apply the approved schema operation, regenerate Prisma Client, then restart affected local processes |
-| MySQL, Redis, MinIO, or ComfyUI configuration | Restart only the corresponding service on `192.168.0.112` |
+| Git 工作区 | 项目唯一日常可写源码 |
+| Codex、VS Code | 编码、检查和调试 |
+| Chrome | 访问 `http://localhost:3000`，验证页面和操作项目 |
+| Next.js 开发服务器 | 前端页面、API 路由和 Fast Refresh |
+| BullMQ Workers | image、video、voice、text 四类任务执行 |
+| Watchdog | 任务状态恢复与异常检测 |
+| Bull Board | 本地查看 112 上 Redis 队列状态 |
+| Codex CLI provider | 从本机源码环境调用 Codex 能力 |
 
-## Existing Docker Data Policy
+本机不再正常运行 MySQL、Redis、MinIO 容器，Docker Desktop也不需要随 Windows 自动启动。本机 Docker 数据不能作为运行时数据源。
 
-The first trial will directly use the existing Docker services and volumes on `192.168.0.112`. It will not overwrite them and will not copy the local Docker volumes by default.
+### 3.2 `192.168.0.112`：基础设施、数据与 GPU 端
 
-Before changing the local `.env`, the trial must verify:
+硬件概况：64 GB 内存，Intel Core i5-13600KF，NVIDIA RTX 5070 Ti，可长期运行。
 
-- Docker container names, image versions, health, restart policy, volume mounts, and bound ports.
-- The expected application database exists and accepts an authenticated connection.
-- Key table counts and the newest relevant timestamps are compatible with the user's claim that the data is complete.
-- The MinIO bucket exists, representative image/video/audio objects can be read, and object counts are plausible.
-- Redis responds and its keyspace does not contain stale active BullMQ jobs that would be incorrectly resumed.
-- ComfyUI `/system_stats` and `/queue` are reachable.
+负责运行：
 
-If the remote database or object storage is demonstrably behind the current local state, the trial stops before switching. It must not merge or overwrite data automatically.
+| 服务 | 地址 | 数据职责 |
+| --- | --- | --- |
+| MySQL | `192.168.0.112:13306` | 用户、项目、剧集、角色、分镜、任务等结构化数据 |
+| Redis | `192.168.0.112:16379` | BullMQ 队列、任务状态和应用实时状态 |
+| MinIO API | `http://192.168.0.112:19000` | 图片、视频、音频等媒体对象 |
+| MinIO Console | `http://192.168.0.112:19001` | 对象存储管理界面 |
+| ComfyUI | `http://192.168.0.112:8878` | 使用 RTX 5070 Ti 执行图片、视频和音频工作流 |
+| Docker Desktop | 112 本机 | 承载 MySQL、Redis、MinIO 及其正式数据卷 |
 
-Redis queue state is disposable for the trial. Stale queued or processing jobs must not be resumed merely because an old Redis volume exists.
+112 不负责：
 
-## Network and Security
+- 日常 Git 工作区或第二份可写源码。
+- Next.js 开发服务器。
+- waoowaoo 应用 Workers、Watchdog 或 Bull Board。
+- Codex、VS Code、Chrome 等交互式开发工具。
 
-- Give `192.168.0.112` a stable DHCP reservation or static address.
-- Bind MySQL, Redis, MinIO, and ComfyUI to an address reachable from the LAN only as required.
-- Windows Firewall on `192.168.0.112` should allow required ports only from `192.168.0.116`.
-- MySQL, Redis, and MinIO must retain authentication; credentials remain only in `.env` or the service secret store and never enter Git or terminal logs.
-- RDP remains available for administration.
-- Public internet exposure, router port forwarding, and unauthenticated LAN-wide Redis access are out of scope and prohibited by this design.
+## 4. 数据归属
 
-## Trial Procedure
+112 上的数据是当前运行架构的正式数据源：
 
-The trial is a controlled connection switch, not a destructive migration:
+- MySQL Docker volume 是结构化数据唯一写入端。
+- MinIO Docker volume 是项目媒体唯一持久化端。
+- Redis 是当前任务队列运行端；队列状态不应在两台机器之间合并。
+- ComfyUI 的模型、custom nodes、workflows、input 和 output 由 112 管理。
 
-1. Record the current local service endpoints and a baseline of application behavior and memory usage.
-2. Inspect and validate the existing Docker services and data on `192.168.0.112` through RDP.
-3. Open only the required server ports to `192.168.0.116` and confirm connectivity.
-4. Stop the local application process tree so it cannot write while connection settings change.
-5. Save a secure backup of the local `.env` outside Git.
-6. Change only the database, Redis, MinIO, and related public endpoint values to point to `192.168.0.112`; keep ComfyUI at `192.168.0.112:8878`.
-7. Start the local Next.js, workers, watchdog, and Bull Board processes.
-8. Run the acceptance checks below.
-9. If all checks pass, stop local Docker infrastructure and disable its automatic startup while retaining it temporarily for rollback.
+禁止同时启用两套基础设施并让不同应用进程分别写入。尤其不能在 `.env` 指向 112 时误启动本机队列，再让另一个应用实例连接本机 Redis，否则会形成任务分叉。
 
-## Acceptance Checks
+本架构不创建自动备份文件，也不把备份目录作为运行流程的一部分。
 
-- Existing user login succeeds.
-- Expected projects, episodes, characters, locations, storyboards, and provider configuration are visible.
-- Representative existing image, video, and audio assets open successfully.
-- A small text task completes through Redis and the local worker.
-- A small ComfyUI task completes through `192.168.0.112:8878` and its result is readable from MinIO.
-- A Codex CLI provider smoke test succeeds from `192.168.0.116`.
-- Bull Board shows the expected queue state without resurrecting stale work.
-- Editing one frontend file triggers Fast Refresh.
-- Editing one worker file triggers a watcher restart and the worker reconnects to remote Redis.
-- Chrome and total workstation memory are remeasured after local Docker infrastructure is stopped.
+## 5. 配置边界
 
-## Failure Handling and Rollback
+本机项目 `.env` 中以下连接必须指向 112：
 
-If any acceptance check fails:
+| 配置 | 当前目标 |
+| --- | --- |
+| `DATABASE_URL` 主机 | `192.168.0.112:13306` |
+| `REDIS_HOST` | `192.168.0.112` |
+| `REDIS_PORT` | `16379` |
+| `MINIO_ENDPOINT` | `http://192.168.0.112:19000` |
+| ComfyUI endpoint | `http://192.168.0.112:8878` |
 
-1. Stop the local application process tree.
-2. Restore the saved local `.env`.
-3. Start the retained local Docker services.
-4. Restart the local application process tree.
-5. Confirm the original local path is healthy before investigating the remote service.
+用户名、密码、Token 和密钥只保存在 `.env` 或服务自身的安全配置中，不进入 Git、架构文档或命令输出。
 
-The trial must not delete local Docker volumes, remove remote volumes, or modify remote data destructively. Local infrastructure remains available until at least one complete generation chain and one normal development edit cycle have succeeded against the remote services.
+## 6. 请求和任务流
 
-## Separate Browser Optimization
+### 普通页面请求
 
-Infrastructure placement does not eliminate the confirmed GPU cost of the workspace's animated background. A separate, low-risk frontend change should reduce or disable the 200% blurred animated background and full-screen backdrop blur. This is independent of the service trial and should be measured separately so its benefit is not confused with moving Docker infrastructure.
+1. Chrome 访问 116 的 `localhost:3000`。
+2. Next.js 在 116 上执行页面和 API 代码。
+3. API 通过局域网读取 112 的 MySQL、Redis 和 MinIO。
+4. 页面继续由 116 返回，因此保留 Fast Refresh 与本地错误提示。
 
-## Non-Goals
+### 异步生成任务
 
-- Moving Codex, VS Code, Chrome, Next.js, or application workers to `192.168.0.112`.
-- Maintaining two writable application source trees.
-- Automatically merging divergent MySQL or MinIO data.
-- Exposing infrastructure services to the public internet.
-- Deleting either machine's existing Docker volumes during the trial.
+1. Next.js 把任务写入 112 的 Redis。
+2. 116 上对应 Worker 从 Redis 获取任务。
+3. Worker 调用模型服务；ComfyUI 类型任务发送到 112 的 `8878`。
+4. 生成结果写入 112 的 MinIO。
+5. Worker 更新 112 的 MySQL 与 Redis 状态。
+6. Chrome 通过 SSE 或状态查询看到结果。
+
+## 7. 代码更新与重启规则
+
+| 修改内容 | 是否需要手动重启 |
+| --- | --- |
+| React 组件、CSS、客户端代码 | 不需要，Next.js Fast Refresh |
+| 普通 API Route、服务端 TypeScript | 通常不需要，Next.js 自动编译 |
+| Worker handler | 不需要，`tsx watch` 自动重启 Worker |
+| Watchdog、Bull Board 代码 | 不需要，各自的 `tsx watch` 自动重启 |
+| `.env` | 需要重启整个本地开发进程树 |
+| `package.json`、lockfile、依赖 | 安装依赖后重启受影响进程 |
+| Prisma schema | 执行确认过的 schema 操作、生成 Prisma Client，再重启受影响进程 |
+| Next.js 启动参数或进程编排 | 需要重启整个本地开发进程树 |
+| 112 上 MySQL、Redis、MinIO 配置 | 只重启对应 Docker 服务 |
+| ComfyUI 模型、节点或启动参数 | 按 ComfyUI 要求重启 112 上的 ComfyUI |
+
+因此，高频前端和后端业务代码修改仍在 116 上完成，绝大部分修改不需要人工重启，也不需要同步代码到 112。
+
+## 8. 启动顺序
+
+### 112
+
+1. 启动 Windows 和 Docker Desktop。
+2. 确认 MySQL、Redis、MinIO 容器运行。
+3. 启动 ComfyUI。
+4. 确认端口 `13306`、`16379`、`19000`、`19001`、`8878` 可访问。
+
+### 116
+
+1. 确认能够访问 112 的五个端口。
+2. 在项目目录执行 `npm run dev`。
+3. 启动过程先验证 MinIO bucket，再启动 Next.js、Workers、Watchdog 和 Bull Board。
+4. 浏览器访问 `http://localhost:3000/zh`。
+
+如果 112 尚未就绪，不应先启动 116 的 Workers，以免持续重连或产生误导性任务错误。
+
+## 9. 停机顺序
+
+短时间停止 116 不会影响 112 上的数据。推荐顺序：
+
+1. 停止 116 的 `npm run dev` 进程树。
+2. 保持 112 的 MySQL、Redis、MinIO 和 ComfyUI 运行，供下次开发直接使用。
+3. 只有进行 112 维护或关机时，才依次停止 ComfyUI 和 Docker 服务。
+
+112 停机前应避免仍有 active 或 waiting 任务。
+
+## 10. 故障判断
+
+| 现象 | 优先检查 |
+| --- | --- |
+| 页面打不开 | 116 的 Next.js 是否监听 `3000` |
+| 页面能开但项目数据加载失败 | 112 的 MySQL `13306` 和本机 `DATABASE_URL` |
+| 任务一直排队 | 112 的 Redis `16379`、116 的 Worker 进程 |
+| 媒体打不开或上传失败 | 112 的 MinIO `19000`、bucket 和 endpoint 配置 |
+| ComfyUI 任务失败 | 112 的 `8878`、GPU 显存、模型和 custom nodes |
+| SSE 断开 | 116 的 Next.js、浏览器网络和 Redis 连接 |
+| 修改代码没有生效 | 对照第 7 节判断 watcher 是否覆盖该类型修改 |
+
+恢复时应修复当前配置或服务本身，不自动创建、恢复或合并备份文件。
+
+## 11. 网络与安全规则
+
+- 112 应使用固定 IP 或 DHCP 地址保留，保持 `192.168.0.112` 稳定。
+- MySQL、Redis、MinIO、ComfyUI 只对可信局域网开放必要端口。
+- Windows Firewall 应尽量只允许 116 访问这些端口。
+- 不配置公网端口转发，不把 Redis 或 MinIO 暴露到互联网。
+- MySQL、Redis 和 MinIO 保持身份验证。
+- RDP 仅用于 112 的管理和故障处理。
+
+## 12. 资源分配结论
+
+该分工符合两台机器的硬件特点：
+
+- 116 的 16 GB 内存主要留给 Chrome、Next.js、Worker、Codex 和编辑器。
+- 112 的 64 GB 内存承担 Docker 基础设施、模型、媒体数据和长期后台服务。
+- RTX 5070 Ti 专用于 ComfyUI，避免 116 的 GTX 1050 Ti 承担生成负载。
+- 实际切换后，116 的可用内存从约 2.1 GB 增加到约 3.3 GB；Chrome 仍是主要内存使用者之一，浏览器优化属于独立问题。
+
+## 13. 日常检查清单
+
+开始开发前：
+
+- 112 在线。
+- Docker 中 MySQL、Redis、MinIO 为 running/healthy。
+- ComfyUI `8878` 可访问。
+- 116 的 `.env` 指向 112。
+- 本机没有启动另一套 MySQL、Redis、MinIO。
+
+启动项目后：
+
+- `/zh` 返回 HTTP 200。
+- Prisma 能连接到 112 的数据库。
+- Redis 返回 `PONG`。
+- MinIO bucket 验证通过。
+- BullMQ 没有意外恢复的旧 active/waiting 任务。
+- 工作区能加载已有项目、剧集和媒体。
+
+## 14. 明确不采用的方案
+
+- 不把全部应用进程都放到 112；否则 116 会退化成纯终端，且本地代码修改反馈变慢。
+- 不维护两份可写源码；避免同步冲突、依赖不一致和忘记部署。
+- 不在 112 上运行第二套 Next.js 或 Worker。
+- 不让 116 与 112 的 MySQL、Redis、MinIO 同时作为正式数据源。
+- 不把任何基础设施端口暴露到公网。
+- 不在运行流程中创建自动备份文件。
