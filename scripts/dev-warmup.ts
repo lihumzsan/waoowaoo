@@ -5,6 +5,7 @@ const DEFAULT_BASE_URL = 'http://127.0.0.1:3000'
 const DEFAULT_STARTUP_TIMEOUT_MS = 120_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
 const STARTUP_RETRY_DELAY_MS = 500
+const DEFAULT_PROJECT_NAME = '蛊真人后传'
 
 export type WarmupResult = {
   path: string
@@ -16,6 +17,7 @@ export type WarmupOptions = {
   baseUrl: string
   username: string
   password: string
+  projectName?: string
   nodeEnv?: string
   fetchImpl?: typeof fetch
   sleep?: (ms: number) => Promise<void>
@@ -27,6 +29,18 @@ export type WarmupOptions = {
 type RequestOutcome = {
   result: WarmupResult
   response: Response | null
+}
+
+type ProjectListPayload = {
+  projects?: Array<{ id?: unknown; name?: unknown }>
+}
+
+type ProjectDataPayload = {
+  project?: {
+    novelPromotionData?: {
+      episodes?: Array<{ id?: unknown }>
+    }
+  }
 }
 
 export function assertWarmupEnvironment(baseUrl: string, nodeEnv: string | undefined): void {
@@ -113,6 +127,7 @@ export async function runDevWarmup(options: WarmupOptions): Promise<WarmupResult
     baseUrl,
     username,
     password,
+    projectName = DEFAULT_PROJECT_NAME,
     nodeEnv,
     fetchImpl = fetch,
     sleep = async (ms) => await new Promise((resolve) => setTimeout(resolve, ms)),
@@ -191,10 +206,84 @@ export async function runDevWarmup(options: WarmupOptions): Promise<WarmupResult
   cookies = mergeResponseCookies(cookies, login.response)
 
   const cookieHeader = toCookieHeader(cookies)
-  for (const pathName of [
-    '/api/auth/session',
-    '/zh/home',
+  for (const pathName of ['/api/auth/session', '/zh/home']) {
+    const outcome = await requestOnce(baseUrl, pathName, fetchImpl, requestTimeoutMs, {
+      headers: { cookie: cookieHeader },
+    })
+    results.push(outcome.result)
+    logResult(outcome.result, log)
+  }
+
+  const projects = await requestOnce(
+    baseUrl,
     '/api/projects?page=1&pageSize=5',
+    fetchImpl,
+    requestTimeoutMs,
+    { headers: { cookie: cookieHeader } },
+  )
+  results.push(projects.result)
+  logResult(projects.result, log)
+  if (!projects.response?.ok) return results
+
+  let projectId: string | undefined
+  try {
+    const payload = await projects.response.json() as ProjectListPayload
+    const project = payload.projects?.find((candidate) => candidate.name === projectName)
+    projectId = typeof project?.id === 'string' ? project.id : undefined
+  } catch {
+    projectId = undefined
+  }
+  if (!projectId) {
+    log(`[dev:warmup] project=${projectName} skipped=not-found`)
+    return results
+  }
+
+  const workspacePath = `/zh/workspace/${projectId}`
+  const workspace = await requestOnce(baseUrl, workspacePath, fetchImpl, requestTimeoutMs, {
+    headers: { cookie: cookieHeader },
+  })
+  results.push(workspace.result)
+  logResult(workspace.result, log)
+
+  const projectDataPath = `/api/projects/${projectId}/data`
+  const projectData = await requestOnce(baseUrl, projectDataPath, fetchImpl, requestTimeoutMs, {
+    headers: { cookie: cookieHeader },
+  })
+  results.push(projectData.result)
+  logResult(projectData.result, log)
+  if (!projectData.response?.ok) return results
+
+  let episodeId: string | undefined
+  try {
+    const payload = await projectData.response.json() as ProjectDataPayload
+    const episode = payload.project?.novelPromotionData?.episodes
+      ?.find((candidate) => typeof candidate.id === 'string')
+    episodeId = typeof episode?.id === 'string' ? episode.id : undefined
+  } catch {
+    episodeId = undefined
+  }
+  if (!episodeId) {
+    log(`[dev:warmup] project=${projectName} skipped=no-episode`)
+    return results
+  }
+
+  const runSearch = new URLSearchParams({
+    projectId,
+    workflowType: 'story_to_script_run',
+    targetType: 'NovelPromotionEpisode',
+    targetId: episodeId,
+    episodeId,
+    limit: '20',
+  })
+  runSearch.append('status', 'queued')
+  runSearch.append('status', 'running')
+  runSearch.append('status', 'canceling')
+  runSearch.set('_v', '2')
+
+  for (const pathName of [
+    `${workspacePath}?episode=${encodeURIComponent(episodeId)}`,
+    `/api/novel-promotion/${projectId}/episodes/${episodeId}?profile=config`,
+    `/api/runs?${runSearch.toString()}`,
   ]) {
     const outcome = await requestOnce(baseUrl, pathName, fetchImpl, requestTimeoutMs, {
       headers: { cookie: cookieHeader },

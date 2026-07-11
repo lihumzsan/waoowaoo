@@ -85,6 +85,34 @@ describe('runDevWarmup', () => {
         })
       }
 
+      if (url.pathname === '/api/projects') {
+        return new Response(JSON.stringify({
+          projects: [
+            { id: 'project-other', name: 'mountain' },
+            { id: 'project-gu', name: '蛊真人后传' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      if (url.pathname === '/api/projects/project-gu/data') {
+        return new Response(JSON.stringify({
+          project: {
+            novelPromotionData: {
+              episodes: [
+                { id: 'episode-1', name: '第1集' },
+                { id: 'episode-2', name: '第2集' },
+              ],
+            },
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -111,11 +139,18 @@ describe('runDevWarmup', () => {
       '/api/auth/session',
       '/zh/home',
       '/api/projects?page=1&pageSize=5',
+      '/zh/workspace/project-gu',
+      '/api/projects/project-gu/data',
+      '/zh/workspace/project-gu?episode=episode-1',
+      '/api/novel-promotion/project-gu/episodes/episode-1?profile=config',
+      '/api/runs?projectId=project-gu&workflowType=story_to_script_run&targetType=NovelPromotionEpisode&targetId=episode-1&episodeId=episode-1&limit=20&status=queued&status=running&status=canceling&_v=2',
     ])
     for (const call of calls.slice(4)) {
       expect(call.cookie).toContain('next-auth.session-token=session-secret')
     }
-    expect(results.map((result) => result.status)).toEqual([200, 200, 200, 200])
+    expect(results.map((result) => result.status)).toEqual([
+      200, 200, 200, 200, 200, 200, 200, 200, 200,
+    ])
     expect(logs.join('\n')).not.toContain('123456')
     expect(logs.join('\n')).not.toContain('csrf-secret')
     expect(logs.join('\n')).not.toContain('session-secret')
