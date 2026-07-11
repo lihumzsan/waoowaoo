@@ -384,6 +384,8 @@
         "tests/harness",
         "tests/mutation",
         "tests/system",
+        "tests/golden-journey",
+        "docs/architecture/incidents/assistant-golden-journey",
         "tests/contracts/requirements-matrix.ts",
         "tests/contracts/route-catalog.ts",
         "tests/contracts/route-scenario-registry.ts",
