@@ -1,12 +1,24 @@
 import mysql, { type RowDataPacket } from 'mysql2/promise'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { GoldenWorkspaceScope } from '../browser/pages/home'
 import type {
   GoldenOracleIdentitySummary,
   GoldenOracleSnapshot,
 } from './types'
 
-const ORACLE_DATABASE_URL = process.env.GOLDEN_ORACLE_DATABASE_URL
-  ?? 'mysql://golden_oracle:golden_oracle_password@127.0.0.1:3307/waoowaoo_test'
+async function resolveOracleDatabaseUrl(): Promise<string> {
+  const explicit = process.env.GOLDEN_ORACLE_DATABASE_URL?.trim()
+  if (explicit) return explicit
+  const descriptor = JSON.parse(await readFile(
+    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
+    'utf8',
+  )) as { readonly oracleDatabaseUrl?: unknown }
+  if (typeof descriptor.oracleDatabaseUrl !== 'string' || !descriptor.oracleDatabaseUrl.trim()) {
+    throw new Error('GOLDEN_ORACLE_DATABASE_URL_MISSING')
+  }
+  return descriptor.oracleDatabaseUrl
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -77,7 +89,7 @@ async function queryRows(
 }
 
 export async function assertGoldenOracleIsReadOnly(): Promise<void> {
-  const connection = await mysql.createConnection(ORACLE_DATABASE_URL)
+  const connection = await mysql.createConnection(await resolveOracleDatabaseUrl())
   try {
     await connection.query('CREATE TABLE golden_oracle_write_probe (id INT)')
   } catch (error) {
@@ -93,7 +105,7 @@ export async function assertGoldenOracleIsReadOnly(): Promise<void> {
 }
 
 export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Promise<GoldenOracleSnapshot> {
-  const connection = await mysql.createConnection({ uri: ORACLE_DATABASE_URL, supportBigNumbers: true })
+  const connection = await mysql.createConnection({ uri: await resolveOracleDatabaseUrl(), supportBigNumbers: true })
   try {
     const projectScope = [scope.projectId]
     const episodeScope = [scope.episodeId, scope.projectId]

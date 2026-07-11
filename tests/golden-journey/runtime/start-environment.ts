@@ -3,6 +3,7 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import mysql from 'mysql2/promise'
 import { prepareFreshTestServices } from '../../setup/test-services'
@@ -13,7 +14,7 @@ import { startGoldenModelServer, type GoldenModelServer } from '../providers/mod
 const APP_PORT = 3100
 const COORDINATOR_PORT = 3199
 const ARTIFACT_ROOT = path.resolve(process.cwd(), 'artifacts/golden-journey')
-const ORACLE_DATABASE_URL = 'mysql://golden_oracle:golden_oracle_password@127.0.0.1:3307/waoowaoo_test'
+const ORACLE_DATABASE_USER = 'golden_oracle'
 
 interface GoldenEnvironmentState {
   readonly model: GoldenModelServer
@@ -39,7 +40,7 @@ function baseEnvironment(gatewayBaseUrl: string): NodeJS.ProcessEnv {
     BILLING_MODE: 'OFF',
     DEPLOYMENT_EDITION: 'self-hosted',
     PROVIDER_CREDENTIAL_MODE: 'platform-key',
-    DATABASE_URL: 'mysql://root:root@127.0.0.1:3307/waoowaoo_test',
+    DATABASE_URL: requireEnvironmentValue('DATABASE_URL'),
     REDIS_HOST: '127.0.0.1',
     REDIS_PORT: '6380',
     STORAGE_TYPE: 'local',
@@ -69,6 +70,12 @@ function baseEnvironment(gatewayBaseUrl: string): NodeJS.ProcessEnv {
   }
 }
 
+function requireEnvironmentValue(name: string): string {
+  const value = process.env[name]?.trim()
+  if (!value) throw new Error(`GOLDEN_ENVIRONMENT_VALUE_REQUIRED:${name}`)
+  return value
+}
+
 function runSetup(command: string, args: readonly string[], env: NodeJS.ProcessEnv): void {
   const result = spawnSync(command, [...args], {
     cwd: process.cwd(),
@@ -80,14 +87,24 @@ function runSetup(command: string, args: readonly string[], env: NodeJS.ProcessE
   }
 }
 
-async function createReadOnlyOracleUser(): Promise<void> {
-  const connection = await mysql.createConnection('mysql://root:root@127.0.0.1:3307/waoowaoo_test')
+function buildOracleDatabaseUrl(databaseUrl: string, password: string): string {
+  const url = new URL(databaseUrl)
+  url.username = ORACLE_DATABASE_USER
+  url.password = password
+  return url.toString()
+}
+
+async function createReadOnlyOracleUser(databaseUrl: string, password: string): Promise<string> {
+  const connection = await mysql.createConnection(databaseUrl)
   try {
-    await connection.query("CREATE USER IF NOT EXISTS 'golden_oracle'@'%' IDENTIFIED BY 'golden_oracle_password'")
+    await connection.query(
+      `CREATE USER IF NOT EXISTS '${ORACLE_DATABASE_USER}'@'%' IDENTIFIED BY ${connection.escape(password)}`,
+    )
     await connection.query("GRANT SELECT ON `waoowaoo_test`.* TO 'golden_oracle'@'%'")
   } finally {
     await connection.end()
   }
+  return buildOracleDatabaseUrl(databaseUrl, password)
 }
 
 function spawnLogged(input: {
@@ -153,7 +170,10 @@ async function startEnvironment(): Promise<GoldenEnvironmentState> {
   })
   const env = baseEnvironment(gateway.baseUrl)
   runSetup(executable('tsx'), ['src/lib/storage/init.ts'], env)
-  await createReadOnlyOracleUser()
+  const oracleDatabaseUrl = await createReadOnlyOracleUser(
+    requireEnvironmentValue('DATABASE_URL'),
+    randomUUID(),
+  )
   const children = [
     spawnLogged({
       name: 'next',
@@ -174,7 +194,7 @@ async function startEnvironment(): Promise<GoldenEnvironmentState> {
     appBaseUrl: `http://127.0.0.1:${APP_PORT}`,
     providerBaseUrl: gateway.baseUrl,
     databaseUrl: env.DATABASE_URL,
-    oracleDatabaseUrl: ORACLE_DATABASE_URL,
+    oracleDatabaseUrl,
     redisHost: env.REDIS_HOST,
     redisPort: env.REDIS_PORT,
     gitCommit: process.env.GOLDEN_GIT_COMMIT ?? 'fb7d2fa42121409a469c3adaaaefa0f64b2c1ba6',
