@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { Locale } from '@/i18n/routing'
 import { prisma } from '@/lib/prisma'
 import { removeTaskJob } from '@/lib/task/queues'
@@ -16,6 +16,30 @@ type ImageBatchTaskType =
   | typeof TASK_TYPE.IMAGE_CHARACTER
   | typeof TASK_TYPE.IMAGE_LOCATION
 
+function createBatchId(input: {
+  userId: string
+  projectId: string
+  type: ImageBatchTaskType
+  targetType: string
+  targetId: string
+  count: number
+  regenerationToken?: string | null
+}) {
+  if (input.regenerationToken) return randomUUID()
+  const digest = createHash('sha256')
+    .update([
+      input.userId,
+      input.projectId,
+      input.type,
+      input.targetType,
+      input.targetId,
+      String(input.count),
+    ].join(':'))
+    .digest('hex')
+    .slice(0, 32)
+  return `batch-${digest}`
+}
+
 export async function submitImageBatchTasks(input: {
   userId: string
   locale: Locale
@@ -29,7 +53,7 @@ export async function submitImageBatchTasks(input: {
   regenerationToken?: string | null
 }) {
   const count = Math.max(1, Math.floor(input.count))
-  const batchId = randomUUID()
+  const batchId = createBatchId({ ...input, count })
 
   if (input.regenerationToken) {
     const activeTasks = await prisma.task.findMany({
@@ -75,10 +99,14 @@ export async function submitImageBatchTasks(input: {
       }))
     }
   } catch (error) {
-    for (const result of results) {
-      await cancelTask(result.taskId, 'Image batch submission failed before every child was queued')
-      await removeTaskJob(result.taskId).catch(() => false)
-    }
+    await Promise.allSettled(
+      results
+        .filter((result) => !result.deduped)
+        .map(async (result) => {
+          await cancelTask(result.taskId, 'Image batch submission failed before every child was queued')
+          await removeTaskJob(result.taskId).catch(() => false)
+        }),
+    )
     throw error
   }
 

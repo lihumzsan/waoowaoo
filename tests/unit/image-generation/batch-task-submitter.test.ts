@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   removeTaskJob: vi.fn<(taskId: string) => Promise<boolean>>(async () => true),
 }))
 
-vi.mock('node:crypto', () => ({ randomUUID: () => 'batch-1' }))
 vi.mock('@/lib/prisma', () => ({ prisma: { task: { findMany: mocks.findMany } } }))
 vi.mock('@/lib/task/submitter', () => ({ submitTask: mocks.submitTask }))
 vi.mock('@/lib/task/service', () => ({ cancelTask: mocks.cancelTask }))
@@ -43,13 +42,14 @@ describe('submitImageBatchTasks', () => {
     })
 
     expect(mocks.submitTask).toHaveBeenCalledTimes(3)
+    const batchId = result.batchId
     for (let index = 0; index < 3; index += 1) {
       expect(mocks.submitTask).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
         targetId: 'location-1',
         payload: expect.objectContaining({
           count: 1,
           imageIndex: index,
-          batch: { id: 'batch-1', index, total: 3 },
+          batch: { id: batchId, index, total: 3 },
         }),
         dedupeKey: `${TASK_TYPE.IMAGE_LOCATION}:location-1:single:${index}`,
       }))
@@ -59,9 +59,32 @@ describe('submitImageBatchTasks', () => {
       async: true,
       taskId: 'task-0',
       taskIds: ['task-0', 'task-1', 'task-2'],
-      batchId: 'batch-1',
+      batchId,
       status: 'queued',
     })
+  })
+
+  it('uses the same batch identity for duplicate initial submissions', async () => {
+    const input = {
+      userId: 'user-1',
+      locale: 'zh' as const,
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_LOCATION,
+      targetType: 'LocationImage',
+      targetId: 'location-1',
+      payload: { count: 2 },
+      count: 2,
+    }
+
+    const first = await submitImageBatchTasks(input)
+    const second = await submitImageBatchTasks(input)
+
+    expect(second.batchId).toBe(first.batchId)
+    const batchIds = mocks.submitTask.mock.calls.map((call) => {
+      const batch = call[0].payload?.batch as { id?: string } | undefined
+      return batch?.id
+    })
+    expect(new Set(batchIds)).toEqual(new Set([first.batchId]))
   })
 
   it('cancels older active children before submitting a regeneration batch', async () => {
@@ -138,5 +161,32 @@ describe('submitImageBatchTasks', () => {
       'Image batch submission failed before every child was queued',
     )
     expect(mocks.removeTaskJob).toHaveBeenCalledWith('task-0')
+  })
+
+  it('does not cancel deduped children or mask the original submission error', async () => {
+    mocks.submitTask
+      .mockResolvedValueOnce({
+        success: true,
+        async: true,
+        taskId: 'existing-task-0',
+        status: 'processing',
+        deduped: true,
+      })
+      .mockRejectedValueOnce(new Error('enqueue failed'))
+    mocks.cancelTask.mockRejectedValueOnce(new Error('cleanup failed'))
+
+    await expect(submitImageBatchTasks({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_LOCATION,
+      targetType: 'LocationImage',
+      targetId: 'location-1',
+      payload: { count: 2 },
+      count: 2,
+    })).rejects.toThrow('enqueue failed')
+
+    expect(mocks.cancelTask).not.toHaveBeenCalled()
+    expect(mocks.removeTaskJob).not.toHaveBeenCalled()
   })
 })

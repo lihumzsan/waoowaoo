@@ -176,13 +176,16 @@ function resolveBatchTargetState(
       : (toProgress(entry.task.progress) || 0)
   }
 
+  const observed = queued + processing + completed + failed
   const phase: TaskTargetPhase = processing > 0
     ? 'processing'
     : queued > 0
       ? 'queued'
       : failed > 0
         ? 'failed'
-        : 'completed'
+        : observed < newestBatch.total
+          ? 'queued'
+          : 'completed'
   const representative = phase === 'processing'
     ? batchTasks.find((entry) => entry.task.status === 'processing')?.task
     : phase === 'queued'

@@ -149,6 +149,27 @@ describe('task state service helpers', () => {
     })
   })
 
+  it('keeps an incompletely submitted batch queued instead of reporting completion', () => {
+    const state = resolveTargetState(
+      { targetType: 'LocationImage', targetId: 'location-1' },
+      [{
+        id: 'task-completed',
+        type: 'image_location',
+        status: 'completed',
+        progress: 100,
+        payload: { batch: { id: 'batch-3', index: 0, total: 3 } },
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date('2026-07-11T00:01:00.000Z'),
+      }],
+    )
+
+    expect(state.phase).toBe('queued')
+    expect(state.progress).toBe(33)
+    expect(state.batch?.completed).toBe(1)
+    expect(state.batch?.total).toBe(3)
+  })
+
   it('resolves failed state and normalizes error', () => {
     const state = resolveTargetState(
       { targetType: 'GlobalCharacter', targetId: 'c1' },
