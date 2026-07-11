@@ -9,6 +9,40 @@ export type DiscoveredTestGap = {
 
 export const DISCOVERED_TEST_GAPS: readonly DiscoveredTestGap[] = [
   {
+    id: 'GJ-AR-001',
+    symptom: 'A real browser consumes a valid script-review Choice after a legal Run advance and receives PROJECT_AGENT_RUN_EVENT_STALE with creation watermarks one behind the current Run.',
+    evidence: [
+      'tests/golden-journey/journeys/mainline-complete.spec.ts',
+      'tests/golden-journey/journeys/mainline-intake.spec.ts',
+      'docs/architecture/incidents/assistant-golden-journey/baseline-scan.md',
+    ],
+    owner: 'assistant-run-lifecycle',
+    rationale: 'The existing protected Choice fence scenario did not execute the browser response after a legal intervening event. The production consume path reuses the Offer creation watermark as a current eligibility precondition.',
+    status: 'production-fix-required',
+  },
+  {
+    id: 'GJ-AR-002',
+    symptom: 'When the streamed model stops after a successful tool result, the real product reaches assistant_failure instead of deterministically consuming the workflow nextAction.',
+    evidence: [
+      'tests/golden-journey/journeys/model-variants.spec.ts',
+      'docs/architecture/incidents/assistant-golden-journey/baseline-scan.md',
+    ],
+    owner: 'assistant-run-lifecycle',
+    rationale: 'Routing fixtures that synthesize a second model turn conceal that continuation ownership is still probabilistic in the real Agent SDK loop.',
+    status: 'production-fix-required',
+  },
+  {
+    id: 'GJ-CN-001',
+    symptom: 'The real streaming workspace still reaches Maximum update depth exceeded at the ReactFlow store updater without any user selection.',
+    evidence: [
+      'tests/golden-journey/journeys/mainline-complete.spec.ts',
+      'docs/architecture/incidents/assistant-golden-journey/baseline-scan.md',
+    ],
+    owner: 'canvas-node',
+    rationale: 'BUG-CN-002 is marked protected, but its existing renderer-level defense does not cover the controlled ReactFlow prop/store feedback loop exercised by the full workspace.',
+    status: 'production-fix-required',
+  },
+  {
     id: 'MUT-TL-001',
     symptom: 'The first mutation baseline exposes surviving and uncovered mutations in the Task target terminal projector.',
     evidence: [

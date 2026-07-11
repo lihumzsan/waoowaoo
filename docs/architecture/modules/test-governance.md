@@ -30,6 +30,7 @@
 - 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
 - 必跑 suite 执行器：`scripts/test-verification/run-required-suite.mjs`，统一生成 Vitest JSON 并立即核对发现文件、实际文件、case 与 skip 数。
 - P0 System Journey：`tests/system/p0-journeys.json` 是至少十条旅程的 identity/status Registry；新增 P0 必须扩展该穷尽 registry，不能被固定数量上限拒绝；`verify-system-journeys.mjs` 只接受 Vitest JSON 中实际通过的 `[P0:<id>]` 作为执行证据。
+- Assistant Golden Journey：`tests/golden-journey/**` 是浏览器贯穿、稳定检查点矩阵和零费用协议 provider 的唯一目录；`contracts/scenarios.ts` 声明场景 identity，`runtime/verify-mounts.ts` 必须用 Playwright discovery 证明每个 identity 实际挂载。冻结红色基线保存在 `docs/architecture/incidents/assistant-golden-journey/**`；在架构修复将矩阵翻绿之前，它是诊断门禁而非可跳过后仍宣称成功的完整验证。
 - Mutation：`stryker.incremental.config.mjs`、`vitest.mutation.config.ts` 与 `scripts/mutation/verify-baseline.mjs`。
 - 统一完整验证：`scripts/verify-push.sh`。
 
@@ -46,6 +47,7 @@
 - `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
 - `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
 - `scripts/guards/test-size-guard.mjs` 穷尽扫描全仓测试，任何超过 350 行或 10 个 case 的测试文件都会失败；历史超限豁免已删除。
+- `npm run test:golden:self` 验证本地模型/媒体协议、浏览器网络封锁、阶段穷尽契约和场景挂载；`npm run test:golden:matrix` 使用真实 Chromium、MySQL、Redis、worker、Agent SDK 和 Workflow Lab 分叉产出结构化红/绿/blocked 矩阵。
 
 仍以生产源码字符串为断言对象的组件测试只能算结构 guard，不能作为渲染、交互或跨进程恢复的行为证明；高风险 Assistant UI 生命周期必须由 render/interaction、integration 或 system 测试另行覆盖。现有 `workspace-assistant-{approval-dismissal,panel-approval,panel-style-runtime,renderers}` 源码断言是明确的 P3 测试治理债务，不得据此宣称对应用户路径已被完整验证。
 
