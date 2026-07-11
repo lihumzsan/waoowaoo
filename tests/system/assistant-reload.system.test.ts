@@ -3,9 +3,11 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
 import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
-import { settleProjectAgentInterruptionSuspension } from '@/lib/project-agent/interruptions'
+import {
+  prepareProjectAgentChoiceExecutionHandoff,
+  settleProjectAgentPreparedChoiceHandoff,
+} from '@/lib/project-agent/execution-handoff'
 import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
-import { appendProjectAssistantThreadMessages } from '@/lib/project-agent/persistence'
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
@@ -112,18 +114,17 @@ describe('system - Assistant awaiting-task reload', () => {
       requestId: `system-choice-reload:${seeded.project.id}`,
       controlKind: 'user_turn',
     })
-    const suspension = await settleProjectAgentInterruptionSuspension({
-      kind: 'choice',
-      executionFence: {
-        runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
-        signal: new AbortController().signal,
-      },
+    const executionFence = {
+      runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
+      signal: new AbortController().signal,
+    }
+    const prepared = await prepareProjectAgentChoiceExecutionHandoff({
+      executionFence,
+      executionSegmentId: `user-turn:${run.id}`,
       projectId: seeded.project.id,
       userId: seeded.user.id,
       episodeId: seeded.episode.id,
       assistantId: 'workspace-command',
-      runId: run.id,
-      runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
       operationId: 'request_script_intake_choice',
       toolCallId: `system-choice-tool:${run.id}`,
       card: {
@@ -146,20 +147,18 @@ describe('system - Assistant awaiting-task reload', () => {
         },
       }),
     })
-    if (suspension.kind !== 'choice') throw new Error('SYSTEM_ASSISTANT_CHOICE_SUSPENSION_INVALID')
-    await appendProjectAssistantThreadMessages({
+    const suspension = await settleProjectAgentPreparedChoiceHandoff({
+      executionFence,
+      handoff: prepared,
       projectId: seeded.project.id,
       userId: seeded.user.id,
       episodeId: seeded.episode.id,
       assistantId: 'workspace-command',
-      messages: [{
+      message: {
         id: `system-choice-message:${run.id}`,
         role: 'assistant',
-        parts: [
-          { type: 'text', text: '请先补充几个创作方向。' },
-          { type: 'data-assistant-choice-card', data: suspension.card },
-        ],
-      }],
+        parts: [{ type: 'text', text: '请先补充几个创作方向。' }],
+      },
     })
 
     const first = await getProjectAgentSessionState({
@@ -201,9 +200,6 @@ describe('system - Assistant awaiting-task reload', () => {
       id: `system-choice-message:${run.id}`,
       parts: expect.arrayContaining([
         expect.objectContaining({ type: 'text', text: '请先补充几个创作方向。' }),
-        expect.objectContaining({ type: 'data-assistant-choice-card', data: expect.objectContaining({
-          interruptionId: suspension.card.interruptionId,
-        }) }),
       ]),
     })])
   })

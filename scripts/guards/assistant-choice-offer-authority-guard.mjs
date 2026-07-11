@@ -166,13 +166,14 @@ export function inspectChoiceSuspensionReceiptAuthority(input) {
   const violations = []
   for (const marker of [
     'operation.agentFlow?.suspendsFor',
-    'requireProjectAgentSuspensionReceipt({',
+    'requireProjectAgentChoiceHandoffReceipt({',
   ]) {
     if (!input.operationInvocation.includes(marker)) {
       violations.push(`Operation invocation is missing declared Choice suspension authority ${JSON.stringify(marker)}`)
     }
   }
   for (const forbidden of [
+    'requireProjectAgentSuspensionReceipt({',
     'resolveProjectAgentOperationPostInvocationStatus',
     'assertProjectAgentChoiceExecutionFenceAfterInvocation',
     'assertProjectAgentOperationExecutionFenceAfterInvocation',

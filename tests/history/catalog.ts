@@ -146,6 +146,25 @@ export const HISTORICAL_DEFECT_CATALOG = [
     status: 'protected',
   },
   {
+    id: 'BUG-AR-004',
+    commits: [
+      '55ef9f8184b1f791c0fc3eb2b19469cc762e72a9',
+      '864438fc614169828327a504bb80e605cf6a2565',
+    ],
+    symptom: 'A task continuation can close its Activity more than once, reject a legitimate Choice or Approval handoff, and leave a failed tool message or incomplete reload view.',
+    rootCause: 'The continuation Activity, checkpoint, message, Wait, Run, and Interaction were settled by separate adapter, interruption, and finalizer paths; the system used a Run fence as a late compensating check instead of one execution-segment handoff transaction.',
+    severity: 'P0',
+    module: 'assistant-run-lifecycle',
+    invariantIds: ['AR-03B', 'AR-03E', 'AR-05A', 'AR-05B'],
+    affectedLayers: ['unit', 'integration-task', 'system', 'regression', 'guard'],
+    escapedLayers: ['unit', 'integration-task', 'system'],
+    scenarioIds: [
+      'SCENARIO-ASSISTANT-EXECUTION-HANDOFF-SINGLE-WRITER',
+    ],
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
+  },
+  {
     id: 'BUG-CN-002',
     commits: [
       '340c33f6035cb8a00a7403bc815447b4c4ec169e',

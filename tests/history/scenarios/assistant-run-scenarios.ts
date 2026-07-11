@@ -13,6 +13,7 @@ import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-author
 import { applyProjectAgentWaitTerminalEvent } from '@/lib/project-agent/waits'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import { requireProjectAgentSuspensionReceipt } from '@/lib/project-agent/operation-execution-fence'
+import { inspectExecutionHandoffConvergence } from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
 
 type TransitionFacts = {
   readonly from: ProjectAgentRunStatus
@@ -261,6 +262,33 @@ const choiceSuspensionReceipt: HistoricalRegressionScenario = {
   },
 }
 
+const executionHandoffSingleWriter: HistoricalRegressionScenario = {
+  id: 'SCENARIO-ASSISTANT-EXECUTION-HANDOFF-SINGLE-WRITER',
+  identity: 'SCENARIO-ASSISTANT-EXECUTION-HANDOFF-SINGLE-WRITER',
+  defectId: 'BUG-AR-004',
+  severity: 'P0',
+  invariantIds: ['AR-03B', 'AR-03E', 'AR-05A', 'AR-05B'],
+  historicalDefectIds: ['BUG-AR-004'],
+  layers: ['regression', 'guard'],
+  async execute(context) {
+    const violations = inspectExecutionHandoffConvergence({
+      'agents-tool-adapter.ts': 'const sourceOperationActivityId = operationActivityId',
+      'execution-handoff.ts': 'export async function settleProjectAgentPreparedChoiceHandoff() {}',
+    })
+    assertHistoricalValue(violations, [], 'current handoff path has no retired continuation writer')
+    context.recordExecution(this.id)
+  },
+  async verifyFailBefore() {
+    await proveSemanticFaultRejected(() => {
+      const violations = inspectExecutionHandoffConvergence({
+        'agents-tool-adapter.ts': 'const currentActivityId = context.activityId',
+        'interruptions.ts': 'settleProjectAgentInterruptionSuspension({})',
+      })
+      assertHistoricalValue(violations, [], 'retired continuation writers must be rejected')
+    })
+  },
+}
+
 export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   settlementDisconnect,
   staleHeartbeatWriter,
@@ -268,4 +296,5 @@ export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionSc
   operationWriteAfterLockLoss,
   concurrentTaskTerminalWait,
   choiceSuspensionReceipt,
+  executionHandoffSingleWriter,
 ]

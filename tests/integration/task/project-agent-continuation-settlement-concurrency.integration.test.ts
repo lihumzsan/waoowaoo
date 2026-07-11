@@ -4,12 +4,7 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import {
-  beginProjectAgentWaitContinuationExecution,
-  checkpointProjectAgentWaitFollowUp,
   claimProjectAgentWaitContinuation,
-  finalizeProjectAgentWaitFollowUp,
-  loadProjectAgentWaitContinuationCheckpoint,
-  releaseProjectAgentWaitContinuationClaim,
 } from '@/lib/project-agent/waits'
 import {
   appendProjectAssistantThreadMessages,

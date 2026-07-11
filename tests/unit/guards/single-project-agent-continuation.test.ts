@@ -6,26 +6,29 @@ const validContract = {
   continuationCallers: ['src/lib/workers/outbox.worker.ts'],
   outboxWorker: 'await runProjectAgentWaitContinuationCommand(payload, outboxId)',
   serverFollowUp: [
-    'loadProjectAgentWaitContinuationCheckpoint',
+    'loadProjectAgentContinuationCheckpoint',
     "'x-request-id': params.commandId",
     'await beginProjectAgentWaitContinuationExecution({',
     'await createProjectAgentChatResponse({',
-    'await checkpointProjectAgentWaitFollowUp({',
-    'await finalizeProjectAgentWaitFollowUp({',
+    'await settleProjectAgentContinuationTerminalHandoff({',
+    'await finalizeProjectAgentContinuationHandoff({',
   ].join('\n'),
-  waits: [
+  executionHandoff: [
     'projectAgentContinuationCheckpoint.findUnique',
+    'projectAgentContinuationCheckpoint.updateMany',
     'appendProjectAssistantThreadMessagesInTransaction',
+    'appendProjectAgentEventsInTransaction',
     'PROJECT_AGENT_CONTINUATION_CHECKPOINT_MISSING',
     "status: 'running'",
     "status: 'settled'",
+    'prisma.$transaction',
   ].join('\n'),
   publicControl: '',
   externalExecutors: '',
 }
 
 describe('single Project Agent continuation guard', () => {
-  it('accepts the outbox-only checkpoint-before-settlement path', () => {
+  it('accepts the outbox-only atomic execution-handoff path', () => {
     expect(inspectProjectAgentContinuationContract(validContract)).toEqual([])
   })
 
@@ -43,30 +46,29 @@ describe('single Project Agent continuation guard', () => {
     ])
   })
 
-  it('rejects settlement before the durable message checkpoint', () => {
+  it('rejects the retired split checkpoint settlement path', () => {
     expect(inspectProjectAgentContinuationContract({
       ...validContract,
       serverFollowUp: [
-        'loadProjectAgentWaitContinuationCheckpoint',
+        'loadProjectAgentContinuationCheckpoint',
         "'x-request-id': params.commandId",
         'await beginProjectAgentWaitContinuationExecution({',
         'await createProjectAgentChatResponse({',
-        'await finalizeProjectAgentWaitFollowUp({',
         'await checkpointProjectAgentWaitFollowUp({',
       ].join('\n'),
-    })).toContain('server continuation must checkpoint the assistant message before final settlement')
+    })).toContain('server continuation must not restore split checkpoint settlement: checkpointProjectAgentWaitFollowUp')
   })
 
   it('rejects model execution before the durable at-most-once fence', () => {
     expect(inspectProjectAgentContinuationContract({
       ...validContract,
       serverFollowUp: [
-        'loadProjectAgentWaitContinuationCheckpoint',
+        'loadProjectAgentContinuationCheckpoint',
         "'x-request-id': params.commandId",
         'await createProjectAgentChatResponse({',
         'await beginProjectAgentWaitContinuationExecution({',
-        'await checkpointProjectAgentWaitFollowUp({',
-        'await finalizeProjectAgentWaitFollowUp({',
+        'await settleProjectAgentContinuationTerminalHandoff({',
+        'await finalizeProjectAgentContinuationHandoff({',
       ].join('\n'),
     })).toContain('server continuation must persist its at-most-once execution fence before invoking the model')
   })

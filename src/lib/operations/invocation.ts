@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma'
 import {
   assertProjectAgentOperationExecutionFenceCurrent,
   assertProjectAgentOperationExecutionFenceInTransaction,
-  requireProjectAgentSuspensionReceipt,
+  requireProjectAgentChoiceHandoffReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
 import type { ProjectAgentSuspensionReceipt } from '@/lib/project-agent/suspension'
+import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
 import {
@@ -33,6 +34,7 @@ export type ProjectAgentOperationInvocationResult =
       data: unknown
       operation: ProjectAgentOperationDefinition
       suspension: ProjectAgentSuspensionReceipt | null
+      choiceHandoff: ProjectAgentChoiceHandoffReceipt | null
     }
   | {
       kind: 'approval_required'
@@ -245,13 +247,13 @@ export async function invokeProjectAgentOperation(params: {
       issues: parsedOutput.error.issues,
     })
   }
-  const suspension = executionFence && operation.agentFlow?.suspendsFor
-    ? requireProjectAgentSuspensionReceipt({
+  const choiceHandoff = executionFence && operation.agentFlow?.suspendsFor === 'choice'
+    ? requireProjectAgentChoiceHandoffReceipt({
         fence: executionFence,
-        kind: operation.agentFlow.suspendsFor,
         operationId: operation.id,
       })
     : null
+  const suspension: ProjectAgentSuspensionReceipt | null = null
   await publishWorkspaceResourceChangedEventsFromWriteResult({
     result: parsedOutput.data,
     fallbackProjectId: params.context.projectId,
@@ -263,6 +265,7 @@ export async function invokeProjectAgentOperation(params: {
     data: parsedOutput.data,
     operation,
     suspension,
+    choiceHandoff,
   }
   }
 

@@ -25,10 +25,9 @@ import { buildEditFirstAssistantChoiceOfferCandidate } from '@/lib/project-agent
 import { buildScriptIntakeChoiceOfferCandidate, planScriptIntakeQuestions } from '@/lib/project-agent/script-intake'
 import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 import { EDIT_FIRST_CHOICE_TYPES, EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-import { settleProjectAgentInterruptionSuspension } from '@/lib/project-agent/interruptions'
+import { prepareProjectAgentChoiceExecutionHandoff } from '@/lib/project-agent/execution-handoff'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
-import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import {
   EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
   EDIT_FIRST_CONFIRM_STYLE_PREVIEW_TOOL_INPUT_SCHEMA,
@@ -579,6 +578,13 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
       if (!runId) {
         throw new Error('REQUEST_EDIT_CHOICE_RUN_ID_REQUIRED')
       }
+      const executionSegmentId = ctx.context.executionSegmentId?.trim()
+      if (!executionSegmentId) {
+        throw new Error('REQUEST_EDIT_CHOICE_EXECUTION_SEGMENT_REQUIRED')
+      }
+      if (ctx.executionFence && ctx.executionFence.runFence.runId !== runId) {
+        throw new Error(`REQUEST_EDIT_CHOICE_RUN_FENCE_MISMATCH:${runId}`)
+      }
       const candidate = isScriptIntake
         ? buildScriptIntakeChoiceOfferCandidate({
             locale,
@@ -601,35 +607,26 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
             choiceType,
             toolCallId,
           })
-      const suspension = await settleProjectAgentInterruptionSuspension({
-        kind: 'choice',
+      const handoff = await prepareProjectAgentChoiceExecutionHandoff({
         executionFence: (() => {
           if (!ctx.executionFence) throw new Error('PROJECT_AGENT_CHOICE_EXECUTION_FENCE_REQUIRED')
           return ctx.executionFence
         })(),
-        runFence: (() => {
-          if (!ctx.context.runFence) throw new Error('PROJECT_AGENT_RUN_FENCE_REQUIRED')
-          return ctx.context.runFence
-        })(),
-        runId,
+        executionSegmentId,
         projectId: ctx.projectId,
         userId: ctx.userId,
         episodeId,
+        locale: ctx.context.locale ?? null,
         assistantId: 'workspace-command',
         operationId,
         toolCallId,
-        previousActivityId: ctx.context.currentActivityId ?? null,
         card: candidate.card,
         reviewedResource: candidate.reviewedResource,
       })
-      if (suspension.kind !== 'choice') {
-        throw new Error(`PROJECT_AGENT_CHOICE_SUSPENSION_KIND_INVALID:${suspension.kind}`)
-      }
-      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', suspension.card)
       return requestEditFirstChoiceOutputSchema.parse({
         emitted: true,
         choiceType,
-        cardId: suspension.cardId,
+        cardId: handoff.card.cardId,
         workflowStage: workflow.stage,
       })
     },

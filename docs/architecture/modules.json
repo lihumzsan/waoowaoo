@@ -241,7 +241,8 @@
         "src/app/api/sse/route.ts",
         "src/lib/query/hooks/useSSE.ts",
         "src/lib/query/workspace-sse-event-sequence.ts",
-        "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql"
+        "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql",
+        "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql"
       ],
       "testPaths": [
         "tests/integration/api/contract/project-assistant-chat-text.route.test.ts",
@@ -261,7 +262,7 @@
         "tests/unit/project-agent/run-state-machine.test.ts",
         "tests/unit/project-agent/run-heartbeat.test.ts",
         "tests/unit/project-agent/interruption-consume.test.ts",
-        "tests/unit/project-agent/interruption-creation.test.ts",
+        "tests/unit/project-agent/execution-handoff.test.ts",
         "tests/unit/project-agent/suspension.test.ts",
         "tests/unit/project-agent/event-reducer.test.ts",
         "tests/unit/project-agent/event-reducer-transitions.test.ts",

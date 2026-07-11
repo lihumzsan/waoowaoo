@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { isDeepStrictEqual } from 'node:util'
 import { Prisma } from '@prisma/client'
 import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
@@ -21,6 +20,7 @@ import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
+import { prepareProjectAgentTaskExecutionHandoffInTransaction } from './execution-handoff'
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
@@ -32,14 +32,6 @@ export type ProjectAgentTaskFollowUpSettlementOutcome =
   | 'awaiting_task'
   | 'awaiting_choice'
   | 'awaiting_approval'
-
-export interface ProjectAgentContinuationCheckpoint {
-  commandId: string
-  waitId: string
-  runId: string
-  outcome: ProjectAgentTaskFollowUpSettlementOutcome
-  messageId: string
-}
 
 export type ProjectAgentContinuationExecutionStart = 'started' | 'already_started' | 'settled'
 
@@ -61,10 +53,18 @@ interface ProjectAgentWaitScopeInput {
 export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput {
   runFence: ProjectAgentRunFence
   runId: string
+  executionSegmentId?: string | null
+  /** Locale recorded with the durable handoff for recovery copy. */
+  locale?: string | null
   operationId: string
   taskIds: string[]
   followUpMode: ProjectAgentWaitFollowUpMode
-  previousActivityId?: string | null
+  /**
+   * The short-lived Activity created for this same Operation invocation.
+   * Task binding owns its terminal transition; it is never an execution
+   * segment or continuation Activity.
+   */
+  sourceOperationActivityId?: string | null
 }
 
 interface ProjectAgentWaitRow {
@@ -353,14 +353,14 @@ export async function bindProjectAgentWaitToTasksInTransaction(
       scopeRef,
     },
     events: [
-      ...(input.previousActivityId
+      ...(input.sourceOperationActivityId
         ? [{
             runFence: input.runFence,
-            idempotencyKey: `activity-completed:${input.previousActivityId}:before:${activityId}`,
+            idempotencyKey: `activity-completed:${input.sourceOperationActivityId}:before:${activityId}`,
             event: {
               kind: 'activity.completed' as const,
               runId: input.runId,
-              activityId: input.previousActivityId,
+              activityId: input.sourceOperationActivityId,
             },
           }]
         : []),
@@ -411,6 +411,22 @@ export async function bindProjectAgentWaitToTasksInTransaction(
       projectId: input.projectId,
       userId: input.userId,
       lifecycleType: terminalType,
+    })
+  }
+  const executionSegmentId = input.executionSegmentId?.trim() ?? ''
+  if (executionSegmentId) {
+    await prepareProjectAgentTaskExecutionHandoffInTransaction(tx, {
+      executionSegmentId,
+      runId: input.runId,
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      locale: input.locale ?? null,
+      assistantId,
+      operationId: input.operationId,
+      waitId,
+      taskIds,
+      followUpMode: input.followUpMode,
     })
   }
   return {
@@ -1053,55 +1069,6 @@ export async function startProjectAgentWaitFollowUp(input: {
   })
 }
 
-function normalizeProjectAgentTaskFollowUpSettlementOutcome(
-  value: string,
-): ProjectAgentTaskFollowUpSettlementOutcome {
-  switch (value) {
-    case 'completed':
-    case 'failed':
-    case 'outcome_unknown':
-    case 'delivery_exhausted':
-    case 'awaiting_task':
-    case 'awaiting_choice':
-    case 'awaiting_approval':
-      return value
-    default:
-      throw new Error(`PROJECT_AGENT_CONTINUATION_OUTCOME_INVALID:${value}`)
-  }
-}
-
-function serializeContinuationMessage(message: UIMessage): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(message)) as Prisma.InputJsonValue
-}
-
-export async function loadProjectAgentWaitContinuationCheckpoint(input: {
-  waitId: string
-  runId: string
-  commandId: string
-}): Promise<ProjectAgentContinuationCheckpoint | null> {
-  const checkpoint = await prisma.projectAgentContinuationCheckpoint.findUnique({
-    where: { commandId: input.commandId },
-  })
-  if (!checkpoint) return null
-  if (checkpoint.waitId !== input.waitId || checkpoint.runId !== input.runId) {
-    throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_IDENTITY_MISMATCH:${input.commandId}`)
-  }
-  if (checkpoint.status === 'running') return null
-  if (
-    checkpoint.status !== 'settled'
-    || checkpoint.outcome === null
-    || checkpoint.messageId === null
-    || checkpoint.messageJson === null
-  ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STATE_INVALID:${input.commandId}`)
-  return {
-    commandId: checkpoint.commandId,
-    waitId: checkpoint.waitId,
-    runId: checkpoint.runId,
-    outcome: normalizeProjectAgentTaskFollowUpSettlementOutcome(checkpoint.outcome),
-    messageId: checkpoint.messageId,
-  }
-}
-
 export async function beginProjectAgentWaitContinuationExecution(input: {
   runId: string
   waitId: string
@@ -1160,249 +1127,6 @@ export async function beginProjectAgentWaitContinuationExecution(input: {
       },
     })
     return 'started'
-  })
-}
-
-export async function checkpointProjectAgentWaitFollowUp(input: {
-  runId: string
-  waitId: string
-  commandId: string
-  claimOwner: string
-  projectId: string
-  userId: string
-  outcome: ProjectAgentTaskFollowUpSettlementOutcome
-  message: UIMessage
-}): Promise<ProjectAgentContinuationCheckpoint> {
-  if (!input.message.id.trim()) throw new Error('PROJECT_AGENT_CONTINUATION_MESSAGE_ID_REQUIRED')
-  const messageJson = serializeContinuationMessage(input.message)
-  return await prisma.$transaction(async (tx) => {
-    const lockedWait = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id
-      FROM project_agent_waits
-      WHERE id = ${input.waitId}
-      FOR UPDATE
-    `)
-    if (lockedWait.length !== 1) {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STALE:${input.waitId}`)
-    }
-    const wait = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
-    if (
-      !wait
-      || wait.runId !== input.runId
-      || wait.projectId !== input.projectId
-      || wait.userId !== input.userId
-      || wait.status !== 'claimed'
-      || wait.followUpCommandId !== input.commandId
-      || wait.claimId !== input.claimOwner
-      || !wait.claimExpiresAt
-      || wait.claimExpiresAt.getTime() <= Date.now()
-      || wait.followedAt !== null
-    ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STALE:${input.waitId}`)
-
-    const existing = await tx.projectAgentContinuationCheckpoint.findUnique({
-      where: { commandId: input.commandId },
-    })
-    if (!existing) {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_EXECUTION_NOT_STARTED:${input.commandId}`)
-    }
-    if (existing.waitId !== input.waitId || existing.runId !== input.runId) {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_IDENTITY_MISMATCH:${input.commandId}`)
-    }
-    if (existing.status === 'settled') {
-      if (
-        existing.outcome !== input.outcome
-        || existing.messageId !== input.message.id
-        || !isDeepStrictEqual(existing.messageJson, messageJson)
-      ) throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_CONFLICT:${input.commandId}`)
-      return {
-        commandId: existing.commandId,
-        waitId: existing.waitId,
-        runId: existing.runId,
-        outcome: normalizeProjectAgentTaskFollowUpSettlementOutcome(existing.outcome),
-        messageId: existing.messageId,
-      }
-    }
-    if (existing.status !== 'running') {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_STATE_INVALID:${input.commandId}`)
-    }
-
-    await appendProjectAssistantThreadMessagesInTransaction(tx, {
-      projectId: wait.projectId,
-      userId: wait.userId,
-      episodeId: wait.episodeId,
-      assistantId: wait.assistantId as ProjectAssistantId,
-      messages: [input.message],
-    })
-    const updated = await tx.projectAgentContinuationCheckpoint.updateMany({
-      where: {
-        commandId: input.commandId,
-        waitId: input.waitId,
-        runId: input.runId,
-        status: 'running',
-      },
-      data: {
-        status: 'settled',
-        outcome: input.outcome,
-        messageId: input.message.id,
-        messageJson,
-        completedAt: new Date(),
-      },
-    })
-    if (updated.count !== 1) {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_CAS_FAILED:${input.commandId}`)
-    }
-    return {
-      commandId: input.commandId,
-      waitId: input.waitId,
-      runId: input.runId,
-      outcome: input.outcome,
-      messageId: input.message.id,
-    }
-  })
-}
-
-export async function finalizeProjectAgentWaitFollowUp(input: {
-  runId: string
-  waitId: string
-  commandId: string
-  claimOwner: string
-  projectId: string
-  userId: string
-}): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const wait = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
-    if (
-      !wait
-      || wait.runId !== input.runId
-      || wait.projectId !== input.projectId
-      || wait.userId !== input.userId
-      || wait.status !== 'claimed'
-      || wait.followUpCommandId !== input.commandId
-      || wait.claimId !== input.claimOwner
-      || !wait.claimExpiresAt
-      || wait.claimExpiresAt.getTime() <= Date.now()
-    ) throw new Error(`PROJECT_AGENT_CONTINUATION_FINALIZE_STALE:${input.waitId}`)
-    const checkpoint = await tx.projectAgentContinuationCheckpoint.findUnique({
-      where: { commandId: input.commandId },
-    })
-    if (
-      !checkpoint
-      || checkpoint.waitId !== wait.id
-      || checkpoint.runId !== input.runId
-      || checkpoint.status !== 'settled'
-      || checkpoint.outcome === null
-      || checkpoint.messageId === null
-      || checkpoint.messageJson === null
-    ) {
-      throw new Error(`PROJECT_AGENT_CONTINUATION_CHECKPOINT_MISSING:${input.commandId}`)
-    }
-    const outcome = normalizeProjectAgentTaskFollowUpSettlementOutcome(checkpoint.outcome)
-    const run = await tx.projectAgentRun.findUnique({
-      where: { id: input.runId },
-      select: { id: true, runVersion: true, eventSeq: true },
-    })
-    if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
-    const runFence = createProjectAgentRunFence(run)
-    const activityEvent = outcome === 'failed'
-      || outcome === 'outcome_unknown'
-      || outcome === 'delivery_exhausted'
-      ? {
-          runFence,
-          idempotencyKey: `activity-failed:${input.commandId}:continuation`,
-          event: {
-            kind: 'activity.failed' as const,
-            runId: input.runId,
-            activityId: input.commandId,
-            errorCode: outcome === 'outcome_unknown'
-              ? 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN'
-              : outcome === 'delivery_exhausted'
-                ? 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED'
-                : 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
-            errorMessage: outcome === 'outcome_unknown'
-              ? 'Project agent continuation outcome is unknown and must not be replayed automatically'
-              : outcome === 'delivery_exhausted'
-                ? 'Project agent continuation delivery exhausted before execution could complete'
-                : 'Project agent continuation reached a tool error',
-          },
-        }
-      : {
-          runFence,
-          idempotencyKey: `activity-completed:${input.commandId}:continuation`,
-          event: {
-            kind: 'activity.completed' as const,
-            runId: input.runId,
-            activityId: input.commandId,
-          },
-        }
-    const terminalRunEvent = outcome === 'completed'
-      ? {
-          runFence,
-          idempotencyKey: `run-completed:${input.runId}:continuation:${input.commandId}`,
-          event: {
-            kind: 'run.completed' as const,
-            runId: input.runId,
-            stopReason: 'completed',
-          },
-        }
-      : outcome === 'failed'
-        ? {
-            runFence,
-            idempotencyKey: `run-failed:${input.runId}:continuation:${input.commandId}`,
-            event: {
-              kind: 'run.failed' as const,
-              runId: input.runId,
-              stopReason: 'tool_error',
-              errorCode: 'PROJECT_AGENT_TOOL_ERROR',
-              errorMessage: 'Project agent continuation reached a tool error',
-            },
-          }
-        : outcome === 'outcome_unknown'
-          ? {
-              runFence,
-              idempotencyKey: `run-failed:${input.runId}:continuation-outcome-unknown:${input.commandId}`,
-              event: {
-                kind: 'run.failed' as const,
-                runId: input.runId,
-                stopReason: 'continuation_outcome_unknown',
-                errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
-                errorMessage: 'Project agent continuation outcome is unknown and must not be replayed automatically',
-              },
-            }
-          : outcome === 'delivery_exhausted'
-            ? {
-                runFence,
-                idempotencyKey: `run-failed:${input.runId}:continuation-delivery-exhausted:${input.commandId}`,
-                event: {
-                  kind: 'run.failed' as const,
-                  runId: input.runId,
-                  stopReason: 'continuation_delivery_exhausted',
-                  errorCode: 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED',
-                  errorMessage: 'Project agent continuation delivery exhausted before execution could complete',
-                },
-              }
-          : null
-    await appendProjectAgentEventsInTransaction(tx, {
-      scope: {
-        projectId: wait.projectId,
-        userId: wait.userId,
-        episodeId: wait.episodeId,
-        assistantId: wait.assistantId as ProjectAssistantId,
-        scopeRef: wait.scopeRef,
-      },
-      events: [activityEvent, {
-        runFence,
-        idempotencyKey: `wait-followed:${wait.id}:${input.commandId}`,
-        event: {
-          kind: 'wait.followed' as const,
-          runId: input.runId,
-          activityId: input.commandId,
-          waitId: wait.id,
-          claimId: input.claimOwner,
-          commandId: input.commandId,
-          sourceOperationId: wait.operationId,
-        },
-      }, ...(terminalRunEvent ? [terminalRunEvent] : [])],
-    })
   })
 }
 

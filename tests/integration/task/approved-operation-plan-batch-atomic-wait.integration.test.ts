@@ -297,7 +297,7 @@ describe('approved operation plan Task batch integration', () => {
           operationId: batch.operationId,
           taskIds: [...batch.taskIds],
           followUpMode: 'resume_agent',
-          previousActivityId: operationActivityId,
+          sourceOperationActivityId: operationActivityId,
         })
         if (!suspension) throw new Error('EXPECTED_ASSISTANT_WAIT')
         bound = true

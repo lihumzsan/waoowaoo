@@ -71,7 +71,7 @@ describe('Project Agent Task terminal Wait concurrency', () => {
       operationId: 'concurrent_terminal_test',
       taskIds,
       followUpMode: 'resume_agent',
-      previousActivityId: activityId,
+      sourceOperationActivityId: activityId,
     }))
     if (!suspension) throw new Error('EXPECTED_WAIT')
     const waitId = suspension.waitId

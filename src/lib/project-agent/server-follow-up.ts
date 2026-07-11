@@ -6,10 +6,7 @@ import { createProjectAgentChatResponse } from './runtime'
 import {
   claimProjectAgentWaitContinuation,
   beginProjectAgentWaitContinuationExecution,
-  checkpointProjectAgentWaitFollowUp,
-  finalizeProjectAgentWaitFollowUp,
   extendProjectAgentWaitContinuationClaim,
-  loadProjectAgentWaitContinuationCheckpoint,
   releaseProjectAgentWaitContinuationClaim,
   startProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUp,
@@ -20,6 +17,13 @@ import {
   getProjectAgentRun,
   type ProjectAgentRunRecord,
 } from './runs'
+import { createProjectAgentRunFence } from './run-fence'
+import {
+  finalizeProjectAgentContinuationHandoff,
+  loadProjectAgentContinuationCheckpoint,
+  recoverProjectAgentPreparedExecutionHandoff,
+  settleProjectAgentContinuationTerminalHandoff,
+} from './execution-handoff'
 import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
@@ -168,6 +172,27 @@ async function runClaimedFollowUp(params: {
 
   let lock: ProjectAgentRunLock | null = runLock
   try {
+    let resolveSettlement: (() => void) | null = null
+    let rejectSettlement: ((error: unknown) => void) | null = null
+    const settlementCompletion = new Promise<void>((resolve, reject) => {
+      resolveSettlement = resolve
+      rejectSettlement = reject
+    })
+    // The stream may report settlement failure before its body drain returns.
+    // Mark that rejection as observed now; the awaited promise below still
+    // propagates the same failure to the Outbox worker.
+    void settlementCompletion.catch(() => undefined)
+    let settlementCompleted = false
+    const settleCompletion = (): void => {
+      if (settlementCompleted) return
+      settlementCompleted = true
+      resolveSettlement?.()
+    }
+    const failCompletion = (error: unknown): void => {
+      if (settlementCompleted) return
+      settlementCompleted = true
+      rejectSettlement?.(error)
+    }
     const consumed = await startProjectAgentWaitFollowUp({
       runId: run.id,
       waitId: params.followUp.waitId,
@@ -186,7 +211,7 @@ async function runClaimedFollowUp(params: {
       userId: params.userId,
     })
     if (executionStart === 'settled') {
-      await finalizeProjectAgentWaitFollowUp({
+      await finalizeProjectAgentContinuationHandoff({
         runId: run.id,
         waitId: params.followUp.waitId,
         commandId: params.commandId,
@@ -197,7 +222,37 @@ async function runClaimedFollowUp(params: {
       return true
     }
     if (executionStart === 'already_started') {
-      await checkpointProjectAgentWaitFollowUp({
+      const recoveredRun = await getProjectAgentRun({
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+        runId: run.id,
+      })
+      if (!recoveredRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
+      const recovered = await recoverProjectAgentPreparedExecutionHandoff({
+        executionFence: {
+          runFence: createProjectAgentRunFence(recoveredRun),
+          signal: params.claimSignal,
+          continuationClaim: {
+            waitId: params.followUp.waitId,
+            commandId: params.commandId,
+            claimOwner: params.claimOwner,
+          },
+        },
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+        assistantId: 'workspace-command',
+        executionSegmentId: `wait-continuation:${params.commandId}`,
+        continuation: {
+          waitId: params.followUp.waitId,
+          commandId: params.commandId,
+          claimOwner: params.claimOwner,
+          executionActivityId: consumed.followUpActivityId ?? params.commandId,
+        },
+      })
+      if (recovered) return true
+      await settleProjectAgentContinuationTerminalHandoff({
         runId: run.id,
         waitId: params.followUp.waitId,
         commandId: params.commandId,
@@ -209,14 +264,6 @@ async function runClaimedFollowUp(params: {
           runId: run.id,
           commandId: params.commandId,
         }),
-      })
-      await finalizeProjectAgentWaitFollowUp({
-        runId: run.id,
-        waitId: params.followUp.waitId,
-        commandId: params.commandId,
-        claimOwner: params.claimOwner,
-        projectId: params.projectId,
-        userId: params.userId,
       })
       return true
     }
@@ -268,28 +315,31 @@ async function runClaimedFollowUp(params: {
         claimOwner: params.claimOwner,
       },
       settleTaskFollowUp: async (settlement) => {
-        await checkpointProjectAgentWaitFollowUp({
-          runId: continuationRunId,
-          waitId: params.followUp.waitId,
-          commandId: params.commandId,
-          claimOwner: params.claimOwner,
-          projectId: params.projectId,
-          userId: params.userId,
-          outcome: settlement.outcome,
-          message: settlement.message,
-        })
-        await finalizeProjectAgentWaitFollowUp({
-          runId: continuationRunId,
-          waitId: params.followUp.waitId,
-          commandId: params.commandId,
-          claimOwner: params.claimOwner,
-          projectId: params.projectId,
-          userId: params.userId,
-        })
+        try {
+          await settleProjectAgentContinuationTerminalHandoff({
+            runId: continuationRunId,
+            waitId: params.followUp.waitId,
+            commandId: params.commandId,
+            claimOwner: params.claimOwner,
+            projectId: params.projectId,
+            userId: params.userId,
+            outcome: settlement.outcome,
+            message: settlement.message,
+          })
+          settleCompletion()
+        } catch (error) {
+          failCompletion(error)
+          throw error
+        }
       },
+      confirmTaskFollowUpSettlement: async () => {
+        settleCompletion()
+      },
+      onTaskFollowUpSettlementFailure: failCompletion,
     })
     lock = null
     await drainResponseBody(response)
+    await settlementCompletion
     return true
   } catch (error) {
     logger.error({
@@ -330,13 +380,13 @@ export async function runProjectAgentWaitContinuationCommand(
       `PROJECT_AGENT_CONTINUATION_STALE:${command.waitId}:${command.runId}:${String(command.expectedRunVersion)}:${command.expectedEventSeq}`,
     )
   }
-  const checkpoint = await loadProjectAgentWaitContinuationCheckpoint({
+  const checkpoint = await loadProjectAgentContinuationCheckpoint({
     waitId: command.waitId,
     runId: command.runId,
     commandId: outboxId,
   })
   if (checkpoint) {
-    await finalizeProjectAgentWaitFollowUp({
+    await finalizeProjectAgentContinuationHandoff({
       runId: command.runId,
       waitId: command.waitId,
       commandId: outboxId,
@@ -441,7 +491,7 @@ export async function settleProjectAgentWaitContinuationDeliveryExhausted(
     const outcome = executionStart === 'already_started'
       ? 'outcome_unknown' as const
       : 'delivery_exhausted' as const
-    await checkpointProjectAgentWaitFollowUp({
+    await settleProjectAgentContinuationTerminalHandoff({
       runId: command.runId,
       waitId: command.waitId,
       commandId: outboxId,
@@ -454,13 +504,15 @@ export async function settleProjectAgentWaitContinuationDeliveryExhausted(
         : buildContinuationDeliveryExhaustedMessage({ runId: command.runId, commandId: outboxId }),
     })
   }
-  await finalizeProjectAgentWaitFollowUp({
-    runId: command.runId,
-    waitId: command.waitId,
-    commandId: outboxId,
-    claimOwner,
-    projectId: claim.projectId,
-    userId: claim.userId,
-  })
+  if (executionStart === 'settled') {
+    await finalizeProjectAgentContinuationHandoff({
+      runId: command.runId,
+      waitId: command.waitId,
+      commandId: outboxId,
+      claimOwner,
+      projectId: claim.projectId,
+      userId: claim.userId,
+    })
+  }
   return 'settled'
 }

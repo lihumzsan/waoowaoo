@@ -34,10 +34,8 @@ import {
   recordProjectAgentSuspensionReceipt,
   type ProjectAgentOperationExecutionFence,
 } from './operation-execution-fence'
-import type {
-  ProjectAgentSuspensionReceipt,
-  ProjectAgentTaskSuspensionReceipt,
-} from './suspension'
+import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
+import type { ProjectAgentChoiceHandoffReceipt } from './execution-handoff'
 import { bindProjectAgentWaitToTasksInTransaction } from './waits'
 
 type UnknownObject = { [key: string]: unknown }
@@ -135,7 +133,10 @@ export interface CreateProjectAgentOperationToolParams {
    */
   isEnabled?: () => Promise<boolean>
   /** Called exactly once after an execution attempt with its real outcome. */
-  onExecutionSettled?: (outcome: { ok: boolean; suspension: ProjectAgentSuspensionReceipt | null }) => void
+  onExecutionSettled?: (outcome: {
+    ok: boolean
+    choiceHandoff: ProjectAgentChoiceHandoffReceipt | null
+  }) => void
   onTaskBatchBound?: (batch: {
     operationId: string
     taskIds: readonly string[]
@@ -178,11 +179,11 @@ export function createProjectAgentOperationTool(
       let executionSettlementReported = false
       const reportExecutionSettled = (
         ok: boolean,
-        suspension: ProjectAgentSuspensionReceipt | null = null,
+        choiceHandoff: ProjectAgentChoiceHandoffReceipt | null = null,
       ): void => {
         if (executionSettlementReported) return
         executionSettlementReported = true
-        params.onExecutionSettled?.({ ok, suspension })
+        params.onExecutionSettled?.({ ok, choiceHandoff })
       }
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
@@ -216,7 +217,7 @@ export function createProjectAgentOperationTool(
           return budgetFailure
         }
       }
-      const createTaskBatchBinding = (previousActivityId: string | null): ProjectAgentOperationTaskBatchBinding => {
+      const createTaskBatchBinding = (sourceOperationActivityId: string | null): ProjectAgentOperationTaskBatchBinding => {
         let bound = false
         let committed = false
         let boundBatch: {
@@ -235,14 +236,16 @@ export function createProjectAgentOperationTool(
             const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, {
               runFence: params.runFence,
               runId,
+              executionSegmentId: params.context.executionSegmentId ?? null,
               projectId: params.projectId,
               userId: params.userId,
               episodeId: params.context.episodeId ?? null,
+              locale: params.context.locale ?? null,
               assistantId: 'workspace-command',
               operationId: params.operation.id,
               taskIds,
               followUpMode: params.operation.agentFlow?.onTaskComplete === 'complete' ? 'complete' : 'resume_agent',
-              previousActivityId,
+              sourceOperationActivityId,
             })
             if (!suspension) throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED:${params.operation.id}`)
             bound = true
@@ -287,7 +290,7 @@ export function createProjectAgentOperationTool(
             taskBatchBinding,
           })
           const enforcedResult = enforceLongRunningTaskSignal(params.operation, result)
-          reportExecutionSettled(enforcedResult.ok, executionFence.suspensionReceipt ?? null)
+          reportExecutionSettled(enforcedResult.ok, executionFence.choiceHandoffReceipt ?? null)
           return enforcedResult
         } catch (error) {
           reportExecutionSettled(false)
@@ -310,17 +313,6 @@ export function createProjectAgentOperationTool(
           assistantId: 'workspace-command',
         },
         events: [
-          ...(params.context.currentActivityId
-              ? [{
-                runFence: params.runFence,
-                idempotencyKey: `activity-completed:${params.context.currentActivityId}:before:${operationActivityId}`,
-                event: {
-                  kind: 'activity.completed' as const,
-                  runId,
-                  activityId: params.context.currentActivityId,
-                },
-              }]
-            : []),
           {
             runFence: params.runFence,
             idempotencyKey: `activity-started:${operationActivityId}`,
@@ -388,7 +380,7 @@ export function createProjectAgentOperationTool(
           }],
         })
         if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
-        reportExecutionSettled(result.ok, executionFence.suspensionReceipt ?? null)
+        reportExecutionSettled(result.ok)
         return result
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)

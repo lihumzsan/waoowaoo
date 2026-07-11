@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { UIMessage } from 'ai'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
@@ -9,8 +10,11 @@ import {
 } from '@/lib/project-agent/runs'
 import {
   consumeProjectAgentApprovalInterruption,
-  settleProjectAgentInterruptionSuspension,
 } from '@/lib/project-agent/interruptions'
+import {
+  prepareProjectAgentApprovalExecutionHandoff,
+  settleProjectAgentPreparedApprovalHandoff,
+} from '@/lib/project-agent/execution-handoff'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
   createProjectAgentExecutionSegment,
@@ -18,6 +22,27 @@ import {
 } from '@/lib/project-agent/execution-segment'
 
 const PREFIX = 'execution-segment-integration:'
+
+async function settleApprovalHandoff(
+  input: Omit<Parameters<typeof prepareProjectAgentApprovalExecutionHandoff>[0], 'executionSegmentId'> & {
+    message: UIMessage
+  },
+) {
+  const { message, ...prepareInput } = input
+  const handoff = await prepareProjectAgentApprovalExecutionHandoff({
+    ...prepareInput,
+    executionSegmentId: `test-approval:${input.approvalId}`,
+  })
+  return await settleProjectAgentPreparedApprovalHandoff({
+    executionFence: input.executionFence,
+    handoff,
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId: input.assistantId,
+    message,
+  })
+}
 
 describe('Project Agent execution segment DB integration', () => {
   beforeEach(async () => {
@@ -65,17 +90,23 @@ describe('Project Agent execution segment DB integration', () => {
       runId,
     })
     if (!afterUserExecution) throw new Error('EXPECTED_RUN')
-    const suspension = await settleProjectAgentInterruptionSuspension({
-      kind: 'approval',
+    const suspension = await settleApprovalHandoff({
+      executionFence: {
+        runFence: createProjectAgentRunFence(afterUserExecution),
+        signal: new AbortController().signal,
+      },
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
-      runId,
-      runFence: createProjectAgentRunFence(afterUserExecution),
       operationId: 'generate_edit_style_previews',
       approvalId: `${PREFIX}approval`,
       toolCallId: `${PREFIX}tool`,
       runState: '{"checkpoint":"approval"}',
+      message: {
+        id: `${PREFIX}approval-message`,
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'approval required' }],
+      },
     })
     if (suspension.kind !== 'approval') throw new Error('EXPECTED_APPROVAL_SUSPENSION')
     const interruptionId = suspension.interruptionId
@@ -144,10 +175,11 @@ describe('Project Agent execution segment DB integration', () => {
         },
       },
     })
-    expect(thread.messagesJson).toEqual([
+    expect(thread.messagesJson).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: `${PREFIX}message` }),
+      expect.objectContaining({ id: `${PREFIX}approval-message` }),
       expect.objectContaining({ id: `${PREFIX}approval-visible-message` }),
-    ])
+    ]))
   })
 
   it('rejects a durable replay of the same execution segment before model or tool execution can run twice', async () => {

@@ -29,6 +29,7 @@ import {
   createProjectAgentExecutionSegment,
   projectAgentExecutionStartedIdempotencyKey,
 } from './execution-segment'
+import { recoverProjectAgentPreparedExecutionHandoff } from './execution-handoff'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -812,14 +813,25 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
     },
     select: { id: true, runVersion: true, eventSeq: true },
   })
-  const runIds = staleRuns.map((run) => run.id)
-  await Promise.all(staleRuns.map(async (run) => {
-    await updateProjectAgentRunStatus({
-      runFence: createProjectAgentRunFence(run),
-      status: 'cancelled',
-      expectedStatuses: ['running'],
-      stopReason: 'stale_running_run',
+  const settled = await Promise.all(staleRuns.map(async (run) => {
+    const recovered = await recoverProjectAgentPreparedExecutionHandoff({
+      executionFence: {
+        runFence: createProjectAgentRunFence(run),
+        signal: new AbortController().signal,
+      },
+      projectId: scope.projectId,
+      userId: scope.userId,
+      episodeId: scope.episodeId ?? null,
+      assistantId,
     })
+    if (!recovered) {
+      await updateProjectAgentRunStatus({
+        runFence: createProjectAgentRunFence(run),
+        status: 'cancelled',
+        expectedStatuses: ['running'],
+        stopReason: 'stale_running_run',
+      })
+    }
     await releaseProjectAgentRunLockForRun({
       ...scope,
       runId: run.id,
@@ -833,8 +845,9 @@ export async function cancelStaleRunningProjectAgentRunsForScope(
         },
       })
     })
+    return recovered ? null : run.id
   }))
-  return runIds
+  return settled.filter((runId): runId is string => runId !== null)
 }
 
 export async function ensureProjectAgentRunSlotAvailable(scope: ProjectAgentRunScope): Promise<void> {

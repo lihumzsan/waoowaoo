@@ -33,6 +33,14 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
+  requireProjectAgentChoiceHandoffReceipt: vi.fn(() => ({
+    kind: 'choice',
+    handoffId: 'handoff-choice',
+    executionSegmentId: 'user-turn:run-test',
+    runId: 'run-test',
+    operationId: 'choice_op',
+    toolCallId: 'tool-choice',
+  })),
   requireProjectAgentSuspensionReceipt: vi.fn(() => ({
     kind: 'choice',
     runId: 'run-test',

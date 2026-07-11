@@ -113,10 +113,6 @@ vi.mock('@/lib/project-agent/choice-card', () => ({
   buildEditFirstAssistantChoiceCard: vi.fn(),
 }))
 
-vi.mock('@/lib/project-agent/interruptions', () => ({
-  settleProjectAgentInterruptionSuspension: vi.fn(),
-}))
-
 vi.mock('@/lib/project-workflow/edit-first', () => ({
   resolveEditFirstWorkflowState: vi.fn(),
 }))

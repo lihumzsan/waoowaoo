@@ -1,39 +1,24 @@
-import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { Prisma } from '@prisma/client'
 import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
-import { createScopedLogger } from '@/lib/logging/core'
 import type { ProjectAssistantId } from './types'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
 } from './persistence'
 import { appendProjectAgentEventsInTransaction } from './event'
-import type { ProjectAgentChoiceCardDefinition } from './types'
 import {
   assertProjectAgentChoiceOfferCurrent,
-  buildProjectAgentChoiceOffer,
   parseProjectAgentChoiceDecision,
   parseProjectAgentChoiceOffer,
   type ProjectAgentChoiceOffer,
-  type ProjectAgentChoiceReviewedResource,
 } from './choice-offer'
 import type { EditFirstChoiceDecision } from './edit-first-choice-result'
 import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
-import {
-  assertProjectAgentOperationExecutionFenceInTransaction,
-  assertProjectAgentOperationExecutionFenceSignal,
-  recordProjectAgentSuspensionReceipt,
-  type ProjectAgentOperationExecutionFence,
-} from './operation-execution-fence'
-import type {
-  ProjectAgentApprovalSuspensionReceipt,
-  ProjectAgentChoiceSuspensionReceipt,
-} from './suspension'
 import type { ProjectAgentEventInput, ProjectAgentEventScopeRef } from './event/types'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
@@ -88,10 +73,6 @@ function isInterruptionConsumeRace(error: unknown): boolean {
     && error.message.startsWith('PROJECT_AGENT_INTERRUPTION_TRANSITION_RACED')
 }
 
-const projectAgentInterruptionLogger = createScopedLogger({
-  module: 'project-agent.interruptions',
-})
-
 function buildScope(scope: ProjectAgentInterruptionScope): {
   assistantId: ProjectAssistantId
   scopeRef: string
@@ -114,13 +95,12 @@ interface PendingProjectAgentInterruptionForReplacement {
   eventSeq: bigint
 }
 
-async function appendProjectAgentInterruptionReplacementInTransaction(
+export async function appendProjectAgentInterruptionReplacementInTransaction(
   tx: Prisma.TransactionClient,
   params: {
     scope: ProjectAgentEventScopeRef
     runId: string
     runFence: ProjectAgentRunFence
-    previousActivityId?: string | null
     nextActivityId: string
     raisedEvent: ProjectAgentEventInput
     beforeAppend?: () => Promise<void>
@@ -184,17 +164,6 @@ async function appendProjectAgentInterruptionReplacementInTransaction(
           outcome: 'superseded' as const,
         },
       })),
-      ...(params.previousActivityId
-        ? [{
-            runFence: params.runFence,
-            idempotencyKey: `activity-completed:${params.previousActivityId}:before:${params.nextActivityId}`,
-            event: {
-              kind: 'activity.completed' as const,
-              runId: params.runId,
-              activityId: params.previousActivityId,
-            },
-          }]
-        : []),
       params.raisedEvent,
     ],
   })
@@ -233,170 +202,6 @@ function toInterruptionSnapshot(record: {
     toolCallId: record.toolCallId,
     payload: record.payload,
   }
-}
-
-export type ProjectAgentInterruptionSuspensionInput =
-  | (ProjectAgentInterruptionScope & {
-      kind: 'approval'
-      runFence: ProjectAgentRunFence
-      runId: string
-      operationId: string
-      approvalId: string
-      toolCallId: string | null
-      runState: string
-      payload?: Prisma.InputJsonValue
-      previousActivityId?: string | null
-      executionFence?: ProjectAgentOperationExecutionFence | null
-    })
-  | (ProjectAgentInterruptionScope & {
-      kind: 'choice'
-      runFence: ProjectAgentRunFence
-      runId: string
-      operationId: string
-      toolCallId: string
-      card: ProjectAgentChoiceCardDefinition
-      reviewedResource: ProjectAgentChoiceReviewedResource
-      previousActivityId?: string | null
-      executionFence: ProjectAgentOperationExecutionFence
-    })
-
-function assertSuspensionExecutionFenceMatches(
-  params: ProjectAgentInterruptionSuspensionInput,
-): void {
-  const executionFence = params.executionFence
-  if (!executionFence) return
-  const fence = executionFence.runFence
-  if (
-    fence.runId !== params.runId
-    || fence.runId !== params.runFence.runId
-    || fence.runVersion !== params.runFence.runVersion
-    || fence.eventSeq !== params.runFence.eventSeq
-  ) {
-    throw new Error(`PROJECT_AGENT_SUSPENSION_EXECUTION_FENCE_MISMATCH:${params.runId}`)
-  }
-}
-
-/**
- * The sole settlement authority for Interaction-backed suspension protocols.
- * It locks the Run and atomically supersedes any older pending Interaction,
- * raises the new Interaction, projects its waiting Activity/Run state through
- * the event reducer, and emits the session outbox. The returned receipt is
- * recorded only after that transaction commits.
- */
-export async function settleProjectAgentInterruptionSuspension(
-  params: ProjectAgentInterruptionSuspensionInput,
-): Promise<ProjectAgentApprovalSuspensionReceipt | ProjectAgentChoiceSuspensionReceipt> {
-  assertSuspensionExecutionFenceMatches(params)
-  const activityId = randomUUID()
-  const interruptionId = randomUUID()
-  const { assistantId, scopeRef } = buildScope(params)
-  const scope: ProjectAgentEventScopeRef = {
-    projectId: params.projectId,
-    userId: params.userId,
-    episodeId: params.episodeId ?? null,
-    assistantId,
-    scopeRef,
-  }
-  const offer = params.kind === 'choice'
-    ? buildProjectAgentChoiceOffer({
-        runId: params.runId,
-        interruptionId,
-        card: params.card,
-        reviewedResource: params.reviewedResource,
-      })
-    : null
-  const raisedEvent: ProjectAgentEventInput = params.kind === 'approval'
-    ? {
-        runFence: params.runFence,
-        idempotencyKey: `interruption-raised:${interruptionId}`,
-        event: {
-          kind: 'interruption.raised',
-          runId: params.runId,
-          activityId,
-          interruptionId,
-          interruptionKind: 'approval',
-          operationId: params.operationId,
-          approvalId: params.approvalId,
-          toolCallId: params.toolCallId,
-          payload: params.payload ?? {},
-          runState: params.runState,
-        },
-      }
-    : {
-        runFence: params.runFence,
-        idempotencyKey: `interruption-raised:${interruptionId}`,
-        event: {
-          kind: 'interruption.raised',
-          runId: params.runId,
-          activityId,
-          interruptionId,
-          interruptionKind: 'choice',
-          operationId: params.operationId,
-          approvalId: `choice:${randomUUID()}`,
-          toolCallId: params.toolCallId,
-          choiceType: offer!.card.choiceType,
-          payload: offer! as unknown as Prisma.InputJsonValue,
-          runState: null,
-        },
-      }
-  let supersededIds: string[] = []
-  await prisma.$transaction(async (tx) => {
-    if (params.executionFence) {
-      await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.executionFence)
-    }
-    supersededIds = await appendProjectAgentInterruptionReplacementInTransaction(tx, {
-      scope,
-      runId: params.runId,
-      runFence: params.runFence,
-      previousActivityId: params.previousActivityId,
-      nextActivityId: activityId,
-      beforeAppend: offer
-        ? async () => await assertProjectAgentChoiceOfferCurrent({
-            tx,
-            projectId: params.projectId,
-            userId: params.userId,
-            episodeId: params.episodeId,
-            offer,
-          })
-        : undefined,
-      raisedEvent,
-    })
-    if (params.executionFence) {
-      assertProjectAgentOperationExecutionFenceSignal(params.executionFence)
-    }
-  })
-  if (supersededIds.length > 0) {
-    projectAgentInterruptionLogger.warn({
-      action: 'assistant.interruption.superseded-by-new',
-      message: 'Pending project agent interruptions superseded by a new suspension',
-      projectId: params.projectId,
-      userId: params.userId,
-      details: { supersededIds },
-    })
-  }
-  const receipt: ProjectAgentApprovalSuspensionReceipt | ProjectAgentChoiceSuspensionReceipt = params.kind === 'approval'
-    ? {
-        kind: 'approval',
-        runId: params.runId,
-        operationId: params.operationId,
-        activityId,
-        interruptionId,
-        approvalId: params.approvalId,
-        toolCallId: params.toolCallId,
-      }
-    : {
-        kind: 'choice',
-        runId: params.runId,
-        operationId: params.operationId,
-        activityId,
-        interruptionId,
-        cardId: offer!.card.cardId,
-        toolCallId: offer!.card.toolCallId,
-        choiceType: offer!.card.choiceType,
-        card: offer!.card,
-      }
-  recordProjectAgentSuspensionReceipt(receipt)
-  return receipt
 }
 
 /**

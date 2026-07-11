@@ -11,8 +11,11 @@ import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operation
 import { createProjectAgentRun, getProjectAgentRun } from '@/lib/project-agent/runs'
 import {
   consumeProjectAgentApprovalInterruption,
-  settleProjectAgentInterruptionSuspension,
 } from '@/lib/project-agent/interruptions'
+import {
+  prepareProjectAgentApprovalExecutionHandoff,
+  settleProjectAgentPreparedApprovalHandoff,
+} from '@/lib/project-agent/execution-handoff'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
   claimProjectAgentWaitContinuation,
@@ -91,18 +94,34 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
     requestId: `system-assistant-approval:${scope.projectId}`,
     controlKind: 'user_turn',
   })
-  const suspension = await settleProjectAgentInterruptionSuspension({
-    kind: 'approval',
+  const executionFence = {
+    runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
+    signal: new AbortController().signal,
+  }
+  const handoff = await prepareProjectAgentApprovalExecutionHandoff({
+    executionFence,
+    executionSegmentId: `user-turn:${run.id}`,
     projectId: scope.projectId,
     userId: scope.userId,
     episodeId: scope.episodeId,
-    runId: run.id,
-    runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
+    locale: 'zh',
     operationId: 'generate_character_image',
     approvalId: `system-approval:${run.id}`,
     toolCallId: operationContext.toolCallId,
     runState: '{"kind":"system-approval-checkpoint"}',
     payload: { operationPlan: planView as unknown as Prisma.InputJsonValue },
+  })
+  const suspension = await settleProjectAgentPreparedApprovalHandoff({
+    executionFence,
+    handoff,
+    projectId: scope.projectId,
+    userId: scope.userId,
+    episodeId: scope.episodeId,
+    message: {
+      id: `system-assistant-approval-message:${run.id}`,
+      role: 'assistant',
+      parts: [{ type: 'text', text: '请确认生成角色图像。' }],
+    },
   })
   if (suspension.kind !== 'approval') throw new Error('SYSTEM_ASSISTANT_APPROVAL_SUSPENSION_INVALID')
   const interruptionId = suspension.interruptionId

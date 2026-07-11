@@ -10,12 +10,14 @@ const sourceRoot = path.join(root, 'src')
 const reducerPath = path.join(root, 'src/lib/project-agent/event/reducer.ts')
 const runMaintenancePath = path.join(root, 'src/lib/project-agent/runs.ts')
 const interruptionMaintenancePath = path.join(root, 'src/lib/project-agent/interruptions.ts')
+const executionHandoffPath = path.join(root, 'src/lib/project-agent/execution-handoff.ts')
 const projectionModels = new Set([
   'projectAgentRun',
   'projectAgentActivity',
   'projectAgentInterruption',
   'projectAgentWait',
   'projectAgentContinuationCheckpoint',
+  'projectAgentExecutionHandoff',
   'projectAssistantThread',
 ])
 const secondaryProjectionOwners = new Map([
@@ -23,8 +25,8 @@ const secondaryProjectionOwners = new Map([
     path.join(root, 'src/lib/project-agent/event/reducer.ts'),
     path.join(root, 'src/lib/project-agent/waits.ts'),
   ])],
-  ['projectAgentContinuationCheckpoint', new Set([
-    path.join(root, 'src/lib/project-agent/waits.ts'),
+  ['projectAgentExecutionHandoff', new Set([
+    path.join(root, 'src/lib/project-agent/execution-handoff.ts'),
   ])],
   ['projectAssistantThread', new Set([
     path.join(root, 'src/lib/project-agent/persistence.ts'),
@@ -85,6 +87,27 @@ export function inspectProjectAgentProjectionWrites(filePath, sourceText) {
   return found
 }
 
+/**
+ * AR-03E rejects the retired Activity hand-off aliases and the legacy
+ * post-hoc interruption settlement entrypoint. A new waiting interaction
+ * must flow through the typed execution-segment handoff authority instead.
+ */
+export function inspectExecutionHandoffConvergence(files) {
+  const violations = []
+  for (const [filePath, sourceText] of Object.entries(files)) {
+    for (const retired of [
+      'currentActivityId',
+      'previousActivityId',
+      'settleProjectAgentInterruptionSuspension',
+    ]) {
+      if (sourceText.includes(retired)) {
+        violations.push(`${filePath}: retired execution handoff authority ${retired} is forbidden`)
+      }
+    }
+  }
+  return violations
+}
+
 function mutationDataKeys(node) {
   const argument = node.arguments[0]
   if (!argument || !ts.isObjectLiteralExpression(argument)) return null
@@ -94,6 +117,16 @@ function mutationDataKeys(node) {
 }
 
 function isDeclaredMaintenanceMutation(filePath, node, mutation) {
+  // Wait authority may create the at-most-once running fence. Every outcome
+  // transition and all message/Activity/Wait/Run settlement belongs to the
+  // execution-handoff authority; no other writer may mutate this projection.
+  if (mutation.model === 'projectAgentContinuationCheckpoint') {
+    return filePath === executionHandoffPath
+      || (
+        filePath === path.join(root, 'src/lib/project-agent/waits.ts')
+        && mutation.method === 'create'
+      )
+  }
   const secondaryOwners = secondaryProjectionOwners.get(mutation.model)
   if (secondaryOwners) return secondaryOwners.has(filePath)
   if (mutation.method !== 'updateMany') return false
@@ -193,6 +226,20 @@ for (const required of [
     violations.push(`src/lib/project-agent/runtime.ts: execution segment authority missing ${required}`)
   }
 }
+for (const required of [
+  'settleProjectAgentPreparedChoiceHandoff',
+  'prepareProjectAgentApprovalExecutionHandoff',
+  'settleProjectAgentPreparedApprovalHandoff',
+  'settleProjectAgentPreparedTaskHandoff',
+]) {
+  if (!runtimeSource.includes(required)) {
+    violations.push(`src/lib/project-agent/runtime.ts: execution-segment settlement authority missing ${required}`)
+  }
+}
+const adapterSource = fs.readFileSync(path.join(root, 'src/lib/project-agent/agents-tool-adapter.ts'), 'utf8')
+if (adapterSource.includes('currentActivityId')) {
+  violations.push('src/lib/project-agent/agents-tool-adapter.ts: generic adapter must not close a continuation Activity')
+}
 const chatRouteSource = fs.readFileSync(
   path.join(root, 'src/app/api/projects/[projectId]/assistant/chat/route.ts'),
   'utf8',
@@ -270,17 +317,59 @@ for (const requiredFragment of ['$queryRaw', 'projectAgentInterruption.findMany'
     violations.push(`src/lib/project-agent/interruptions.ts: atomic interruption replacement must retain ${requiredFragment}`)
   }
 }
-const suspensionSettlementBody = functionBody(
-  interruptionSource,
-  'settleProjectAgentInterruptionSuspension',
+const executionHandoffSourceText = fs.readFileSync(executionHandoffPath, 'utf8')
+const executionHandoffSource = ts.createSourceFile(
+  executionHandoffPath,
+  executionHandoffSourceText,
+  ts.ScriptTarget.Latest,
+  true,
 )
-if (
-  !suspensionSettlementBody.includes('prisma.$transaction')
-  || !suspensionSettlementBody.includes('appendProjectAgentInterruptionReplacementInTransaction')
-  || !suspensionSettlementBody.includes('recordProjectAgentSuspensionReceipt')
-) {
-  violations.push('src/lib/project-agent/interruptions.ts: settleProjectAgentInterruptionSuspension must atomically replace, raise, and record its receipt')
+for (const [functionName, requiredFragments] of [
+  ['prepareProjectAgentChoiceExecutionHandoff', [
+    'prisma.$transaction',
+    'assertProjectAgentOperationExecutionFenceInTransaction',
+    'projectAgentExecutionHandoff.create',
+  ]],
+  ['settleProjectAgentPreparedChoiceHandoff', [
+    'prisma.$transaction',
+    'appendProjectAgentInterruptionReplacementInTransaction',
+    'appendProjectAgentExecutionSegmentMessageHandoffInTransaction',
+    "status: 'settled'",
+  ]],
+  ['prepareProjectAgentApprovalExecutionHandoff', [
+    'prisma.$transaction',
+    'projectAgentExecutionHandoff.create',
+    "kind: 'approval'",
+  ]],
+  ['settleProjectAgentPreparedApprovalHandoff', [
+    'prisma.$transaction',
+    'appendProjectAgentInterruptionReplacementInTransaction',
+    'appendProjectAgentExecutionSegmentMessageHandoffInTransaction',
+    "status: 'settled'",
+  ]],
+  ['settleProjectAgentPreparedTaskHandoff', [
+    'prisma.$transaction',
+    'appendProjectAgentExecutionSegmentMessageHandoffInTransaction',
+    "outcome: 'awaiting_task'",
+  ]],
+  ['recoverProjectAgentPreparedExecutionHandoff', [
+    'settleProjectAgentPreparedChoiceHandoff',
+    'settleProjectAgentPreparedTaskHandoff',
+  ]],
+]) {
+  const body = functionBody(executionHandoffSource, functionName)
+  for (const requiredFragment of requiredFragments) {
+    if (!body.includes(requiredFragment)) {
+      violations.push(`src/lib/project-agent/execution-handoff.ts: ${functionName} must retain ${requiredFragment}`)
+    }
+  }
 }
+
+const sourceFiles = Object.fromEntries(collectTypeScriptFiles(sourceRoot).map((filePath) => [
+  path.relative(root, filePath),
+  fs.readFileSync(filePath, 'utf8'),
+]))
+violations.push(...inspectExecutionHandoffConvergence(sourceFiles))
 
 const runSourceText = fs.readFileSync(runMaintenancePath, 'utf8')
 const runSource = ts.createSourceFile(runMaintenancePath, runSourceText, ts.ScriptTarget.Latest, true)

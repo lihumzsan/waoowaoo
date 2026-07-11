@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
+import type { ProjectAgentChoiceHandoffReceipt } from './execution-handoff'
 import {
   assertProjectAgentSuspensionReceipt,
   isSameProjectAgentSuspensionReceipt,
@@ -19,6 +20,12 @@ export interface ProjectAgentOperationExecutionFence {
     claimOwner: string
   } | null
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
+  /**
+   * The durable, non-visible Choice intent prepared by this invocation. It is
+   * distinct from a SuspensionReceipt: the final Interaction is committed by
+   * execution-segment settlement together with the assistant message.
+   */
+  choiceHandoffReceipt?: ProjectAgentChoiceHandoffReceipt | null
   /**
    * In-memory committed receipt for this one invocation. It is never a
    * substitute for persisted Interaction/Wait facts; it merely prevents an
@@ -121,6 +128,47 @@ export function recordProjectAgentSuspensionReceipt(
     return
   }
   fence.suspensionReceipt = receipt
+}
+
+export function recordProjectAgentChoiceHandoffReceipt(
+  receipt: ProjectAgentChoiceHandoffReceipt,
+): void {
+  const fence = getProjectAgentOperationExecutionFence()
+  if (!fence) return
+  if (receipt.runId !== fence.runFence.runId) {
+    throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_RUN_MISMATCH:${receipt.runId}:${fence.runFence.runId}`)
+  }
+  const current = fence.choiceHandoffReceipt
+  if (current) {
+    if (
+      current.handoffId !== receipt.handoffId
+      || current.executionSegmentId !== receipt.executionSegmentId
+      || current.operationId !== receipt.operationId
+      || current.toolCallId !== receipt.toolCallId
+    ) {
+      throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_CONFLICT:${fence.runFence.runId}`)
+    }
+    return
+  }
+  fence.choiceHandoffReceipt = receipt
+}
+
+export function requireProjectAgentChoiceHandoffReceipt(params: {
+  fence: ProjectAgentOperationExecutionFence
+  operationId: string
+}): ProjectAgentChoiceHandoffReceipt {
+  const receipt = params.fence.choiceHandoffReceipt
+  if (!receipt) {
+    throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_MISSING:${params.operationId}`)
+  }
+  if (
+    receipt.kind !== 'choice'
+    || receipt.runId !== params.fence.runFence.runId
+    || receipt.operationId !== params.operationId
+  ) {
+    throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_MISMATCH:${params.operationId}`)
+  }
+  return receipt
 }
 
 /**

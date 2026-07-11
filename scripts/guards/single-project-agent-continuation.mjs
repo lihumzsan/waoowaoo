@@ -34,20 +34,24 @@ export function inspectProjectAgentContinuationContract(input) {
     violations.push(`ProjectAgentWait continuation must have exactly one caller: ${input.continuationCallers.join(', ') || '(none)'}`)
   }
   for (const required of [
-    'loadProjectAgentWaitContinuationCheckpoint',
+    'loadProjectAgentContinuationCheckpoint',
     'beginProjectAgentWaitContinuationExecution',
-    'checkpointProjectAgentWaitFollowUp',
-    'finalizeProjectAgentWaitFollowUp',
+    'settleProjectAgentContinuationTerminalHandoff',
+    'finalizeProjectAgentContinuationHandoff',
     "'x-request-id': params.commandId",
   ]) {
     if (!input.serverFollowUp.includes(required)) {
       violations.push(`server continuation is missing required durable step: ${required}`)
     }
   }
-  const checkpointIndex = input.serverFollowUp.indexOf('await checkpointProjectAgentWaitFollowUp({')
-  const finalizeIndex = input.serverFollowUp.indexOf('await finalizeProjectAgentWaitFollowUp({', checkpointIndex)
-  if (checkpointIndex < 0 || finalizeIndex < 0 || checkpointIndex >= finalizeIndex) {
-    violations.push('server continuation must checkpoint the assistant message before final settlement')
+  for (const retired of [
+    'checkpointProjectAgentWaitFollowUp',
+    'finalizeProjectAgentWaitFollowUp',
+    'loadProjectAgentWaitContinuationCheckpoint',
+  ]) {
+    if (input.serverFollowUp.includes(retired)) {
+      violations.push(`server continuation must not restore split checkpoint settlement: ${retired}`)
+    }
   }
   const beginIndex = input.serverFollowUp.indexOf('await beginProjectAgentWaitContinuationExecution({')
   const modelIndex = input.serverFollowUp.indexOf('await createProjectAgentChatResponse({')
@@ -56,13 +60,16 @@ export function inspectProjectAgentContinuationContract(input) {
   }
   for (const required of [
     'projectAgentContinuationCheckpoint.findUnique',
+    'projectAgentContinuationCheckpoint.updateMany',
     'appendProjectAssistantThreadMessagesInTransaction',
+    'appendProjectAgentEventsInTransaction',
     'PROJECT_AGENT_CONTINUATION_CHECKPOINT_MISSING',
     "status: 'running'",
     "status: 'settled'",
+    'prisma.$transaction',
   ]) {
-    if (!input.waits.includes(required)) {
-      violations.push(`Wait authority is missing continuation checkpoint enforcement: ${required}`)
+    if (!input.executionHandoff.includes(required)) {
+      violations.push(`Execution handoff authority is missing atomic continuation settlement: ${required}`)
     }
   }
   return violations
@@ -96,7 +103,7 @@ function runCli() {
     continuationCallers,
     outboxWorker: read('src/lib/workers/outbox.worker.ts'),
     serverFollowUp: read('src/lib/project-agent/server-follow-up.ts'),
-    waits: read('src/lib/project-agent/waits.ts'),
+    executionHandoff: read('src/lib/project-agent/execution-handoff.ts'),
     publicControl: read('src/lib/project-agent/control.ts'),
     externalExecutors: read('scripts/e2e-long-form/api-client.ts') + read('scripts/e2e-long-form/runner.ts'),
   })

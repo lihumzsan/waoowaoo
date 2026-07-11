@@ -71,7 +71,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
           operationId: batch.operationId,
           taskIds: [...batch.taskIds],
           followUpMode: 'resume_agent',
-          previousActivityId: activityId,
+          sourceOperationActivityId: activityId,
         })
         if (!suspension) throw new Error('EXPECTED_WAIT')
         bound = true

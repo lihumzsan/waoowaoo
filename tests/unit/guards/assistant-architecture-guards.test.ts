@@ -4,7 +4,10 @@ import {
   inspectChoiceSuspensionReceiptAuthority,
   inspectChoiceRegistryAuthority,
 } from '../../../scripts/guards/assistant-choice-offer-authority-guard.mjs'
-import { inspectProjectAgentProjectionWrites } from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
+import {
+  inspectExecutionHandoffConvergence,
+  inspectProjectAgentProjectionWrites,
+} from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
 
 describe('Assistant architecture guards', () => {
   it('rejects message-history continuation inference', () => {
@@ -34,7 +37,7 @@ describe('Assistant architecture guards', () => {
     const violations = inspectChoiceSuspensionReceiptAuthority({
       operationInvocation: `
         operation.agentFlow?.suspendsFor
-        requireProjectAgentSuspensionReceipt({})
+        requireProjectAgentChoiceHandoffReceipt({})
         if (operationId === 'request_future_editorial_choice') {}
       `,
     })
@@ -50,5 +53,17 @@ describe('Assistant architecture guards', () => {
       'fixture.ts',
       "await tx.$executeRawUnsafe('UPDATE project_agent_runs SET status = ?', 'failed')",
     )).toContain('fixture.ts: raw SQL mutates an Assistant lifecycle projection table')
+  })
+
+  it('rejects the retired post-hoc suspension settlement and continuation Activity aliases', () => {
+    expect(inspectExecutionHandoffConvergence({
+      'fixture.ts': [
+        'const currentActivityId = context.activityId',
+        'await settleProjectAgentInterruptionSuspension({})',
+      ].join('\n'),
+    })).toEqual([
+      'fixture.ts: retired execution handoff authority currentActivityId is forbidden',
+      'fixture.ts: retired execution handoff authority settleProjectAgentInterruptionSuspension is forbidden',
+    ])
   })
 })

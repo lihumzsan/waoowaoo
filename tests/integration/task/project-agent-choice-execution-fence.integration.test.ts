@@ -45,7 +45,7 @@ describe('Project Agent Choice execution fence DB integration', () => {
     await resetBillingState()
   })
 
-  it('commits a Choice receipt and awaiting_choice without a post-invocation running check', async () => {
+  it('prepares a durable Choice handoff without treating awaiting_choice as an operation fence outcome', async () => {
     const user = await createFixtureUser()
     const project = await createFixtureProject(user.id)
     const episode = await createFixtureEpisode(project.id)
@@ -78,6 +78,7 @@ describe('Project Agent Choice execution fence DB integration', () => {
         context: {
           runId: run.id,
           runFence: executionFence.runFence,
+          executionSegmentId: `user-turn:${run.id}`,
           episodeId: episode.id,
           locale: 'zh',
         },
@@ -90,7 +91,7 @@ describe('Project Agent Choice execution fence DB integration', () => {
     })).resolves.toMatchObject({
       kind: 'executed',
       data: { emitted: true, choiceType: 'script_intake' },
-      suspension: {
+      choiceHandoff: {
         kind: 'choice',
         runId: run.id,
         operationId: 'request_script_intake_choice',
@@ -98,7 +99,7 @@ describe('Project Agent Choice execution fence DB integration', () => {
       },
     })
 
-    const [persistedRun, interruptions, activities] = await Promise.all([
+    const [persistedRun, interruptions, activities, handoffs] = await Promise.all([
       prisma.projectAgentRun.findUniqueOrThrow({
         where: { id: run.id },
         select: { status: true, runVersion: true, eventSeq: true },
@@ -111,22 +112,23 @@ describe('Project Agent Choice execution fence DB integration', () => {
         where: { runId: run.id },
         select: { status: true, type: true, operationId: true, toolCallId: true },
       }),
+      prisma.projectAgentExecutionHandoff.findMany({
+        where: { runId: run.id },
+        select: { status: true, kind: true, operationId: true, executionSegmentId: true },
+      }),
     ])
     expect(persistedRun).toMatchObject({
-      status: 'awaiting_choice',
+      status: 'running',
       runVersion: executionFence.runFence.runVersion,
       eventSeq: BigInt(executionFence.runFence.eventSeq),
     })
-    expect(interruptions).toEqual([{
-      status: 'pending',
+    expect(interruptions).toEqual([])
+    expect(activities).toEqual([])
+    expect(handoffs).toEqual([{
+      status: 'prepared',
+      kind: 'choice',
       operationId: 'request_script_intake_choice',
-      toolCallId: 'tool-choice-1',
-    }])
-    expect(activities).toEqual([{
-      status: 'waiting',
-      type: 'awaiting_choice',
-      operationId: 'request_script_intake_choice',
-      toolCallId: 'tool-choice-1',
+      executionSegmentId: `user-turn:${run.id}`,
     }])
   })
 })

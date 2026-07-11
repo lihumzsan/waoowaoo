@@ -31,7 +31,8 @@ export interface ProjectAgentContext {
   episodeId?: string | null
   runId?: string | null
   runFence?: ProjectAgentRunFence | null
-  currentActivityId?: string | null
+  /** Immutable identity of the current model/tool execution segment. */
+  executionSegmentId?: string | null
   choiceDecision?: EditFirstChoiceDecision | null
   selectedScopeRef?: string | null
   selectedPanelId?: string | null

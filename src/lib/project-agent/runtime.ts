@@ -47,7 +47,6 @@ import {
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
-  type ProjectAgentTaskFollowUpSettlementOutcome,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
@@ -62,10 +61,17 @@ import {
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
-  settleProjectAgentInterruptionSuspension,
   type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
+import {
+  type ProjectAgentContinuationTerminalOutcome,
+  prepareProjectAgentApprovalExecutionHandoff,
+  settleProjectAgentPreparedApprovalHandoff,
+  settleProjectAgentPreparedChoiceHandoff,
+  settleProjectAgentPreparedTaskHandoff,
+  type ProjectAgentChoiceHandoffReceipt,
+} from './execution-handoff'
 import {
   settleProjectAgentRunFailureWithMessage,
   settleProjectAgentRunWithMessage,
@@ -185,7 +191,7 @@ export type ProjectAgentResolvedControl =
   }
 
 export interface ProjectAgentTaskFollowUpSettlement {
-  outcome: ProjectAgentTaskFollowUpSettlementOutcome
+  outcome: ProjectAgentContinuationTerminalOutcome
   message: UIMessage
 }
 
@@ -636,18 +642,19 @@ async function createProjectAgentWaitBindings(params: {
 
 function requireProjectAgentChoiceSuspensionReceipt(params: {
   stopPart: ProjectAgentStopPartData | null
-  committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
-}): void {
-  if (!params.stopPart || params.stopPart.reason !== 'awaiting_user_confirmation') return
+  preparedChoiceHandoffs: ReadonlyMap<string, ProjectAgentChoiceHandoffReceipt>
+}): ProjectAgentChoiceHandoffReceipt | null {
+  if (!params.stopPart || params.stopPart.reason !== 'awaiting_user_confirmation') return null
   if (params.stopPart.operationIds.length !== 1) {
     throw new Error(`PROJECT_AGENT_MULTIPLE_CHOICE_SUSPENSIONS_UNSUPPORTED:${params.stopPart.operationIds.join(',')}`)
   }
   const operationId = params.stopPart.operationIds[0]
   if (!operationId) throw new Error('PROJECT_AGENT_CHOICE_SUSPENSION_OPERATION_MISSING')
-  const suspension = params.committedSuspensions.get(operationId)
-  if (!suspension || suspension.kind !== 'choice' || suspension.operationId !== operationId) {
-    throw new Error(`PROJECT_AGENT_CHOICE_SUSPENSION_RECEIPT_MISSING:${operationId}`)
+  const handoff = params.preparedChoiceHandoffs.get(operationId)
+  if (!handoff || handoff.kind !== 'choice' || handoff.operationId !== operationId) {
+    throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_MISSING:${operationId}`)
   }
+  return handoff
 }
 
 interface ProjectAgentLiveWorkflowState {
@@ -724,6 +731,8 @@ export async function createProjectAgentChatResponse(input: {
   ownershipSignal?: AbortSignal | null
   continuationClaim?: ProjectAgentOperationExecutionFence['continuationClaim']
   settleTaskFollowUp?: (outcome: ProjectAgentTaskFollowUpSettlement) => Promise<void>
+  confirmTaskFollowUpSettlement?: () => Promise<void>
+  onTaskFollowUpSettlementFailure?: (error: unknown) => void
 }): Promise<Response> {
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
   const runFence = createProjectAgentRunFence(input.run)
@@ -771,7 +780,7 @@ export async function createProjectAgentChatResponse(input: {
     ...contextBase,
     runId: input.run.id,
     runFence,
-    currentActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
+    executionSegmentId: executionSegment.id,
     choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
     ...(approvedInvocation && control.kind === 'approval'
       ? {
@@ -819,6 +828,12 @@ export async function createProjectAgentChatResponse(input: {
     await safelyReleaseProjectAgentRunLock(input.runLock)
   }
   let heartbeatStopped = false
+  let taskFollowUpSettlementFailureReported = false
+  const reportTaskFollowUpSettlementFailure = (error: unknown): void => {
+    if (taskFollowUpSettlementFailureReported) return
+    taskFollowUpSettlementFailureReported = true
+    input.onTaskFollowUpSettlementFailure?.(error)
+  }
   const runAbortController = new AbortController()
   const abortFromOwnershipSignal = (): void => {
     if (!runAbortController.signal.aborted) {
@@ -1058,6 +1073,7 @@ export async function createProjectAgentChatResponse(input: {
   let latestStopPart: ProjectAgentStopPartData | null = null
   const transactionallyBoundTaskBatches = new Map<string, readonly string[]>()
   const committedSuspensions = new Map<string, ProjectAgentSuspensionReceipt>()
+  const preparedChoiceHandoffs = new Map<string, ProjectAgentChoiceHandoffReceipt>()
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -1089,13 +1105,19 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: ({ suspension }) => {
-        if (suspension) {
-          const existing = committedSuspensions.get(suspension.operationId)
-          if (existing && !isSameProjectAgentSuspensionReceipt(existing, suspension)) {
-            throw new Error(`PROJECT_AGENT_SUSPENSION_RECEIPT_DUPLICATE:${suspension.operationId}`)
+      onExecutionSettled: ({ choiceHandoff }) => {
+        if (choiceHandoff) {
+          const existing = preparedChoiceHandoffs.get(choiceHandoff.operationId)
+          if (
+            existing
+            && (
+              existing.handoffId !== choiceHandoff.handoffId
+              || existing.executionSegmentId !== choiceHandoff.executionSegmentId
+            )
+          ) {
+            throw new Error(`PROJECT_AGENT_CHOICE_HANDOFF_DUPLICATE:${choiceHandoff.operationId}`)
           }
-          committedSuspensions.set(suspension.operationId, suspension)
+          preparedChoiceHandoffs.set(choiceHandoff.operationId, choiceHandoff)
         }
         liveWorkflow.invalidate()
       },
@@ -1180,7 +1202,8 @@ export async function createProjectAgentChatResponse(input: {
       signal: runAbortController.signal,
     })
     let runStatusFinalized = false
-    let taskFollowUpSettlement: ProjectAgentTaskFollowUpSettlementOutcome | null = null
+    let taskFollowUpSettlement: ProjectAgentContinuationTerminalOutcome | null = null
+    let taskFollowUpSettlementCommittedInline = false
     let pendingRunSettlement: {
       status: ProjectAgentRunStatus
       stopReason: string
@@ -1297,7 +1320,8 @@ export async function createProjectAgentChatResponse(input: {
 
         const approvalItem = result.interruptions[0] ?? result.state.getInterruptions()[0] ?? null
         const shouldPersistApprovalInterruption = !!approvalItem && latestStopPart?.reason !== 'awaiting_external_task'
-        if (approvalItem && shouldPersistApprovalInterruption) {
+        const pendingApprovalHandoff = approvalItem && shouldPersistApprovalInterruption
+          ? await (async () => {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
           const approvalToolCallId = readApprovalToolCallId(approvalItem)
@@ -1308,52 +1332,16 @@ export async function createProjectAgentChatResponse(input: {
             toolCallId: approvalToolCallId,
             approvalPreflightStore,
           })
-          const suspension = await settleProjectAgentInterruptionSuspension({
-            kind: 'approval',
-            executionFence: {
-              runFence,
-              signal: runAbortController.signal,
-              continuationClaim: input.continuationClaim ?? null,
-            },
-            runFence,
-            runId: input.run.id,
-            projectId: input.projectId,
-            userId: input.userId,
-            episodeId: context.episodeId || null,
-            assistantId: 'workspace-command',
-            operationId,
-            approvalId,
-            toolCallId: approvalToolCallId,
-            runState: result.state.toString(),
-            payload: {
+            return {
+              approvalId,
               operationId,
               toolCallId: approvalToolCallId,
               inputHash: approvalInputHash,
-              ...(operationPlan ? { operationPlan } : {}),
-            } as unknown as Prisma.InputJsonValue,
-            previousActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
-          })
-          if (suspension.kind !== 'approval') {
-            throw new Error(`PROJECT_AGENT_APPROVAL_SUSPENSION_KIND_INVALID:${suspension.kind}`)
-          }
-          chunks.push(createDataChunk('data-agent-interruption', {
-            runId: input.run.id,
-            requestId,
-            interruptionId: suspension.interruptionId,
-            approvalId,
-            operationId,
-            toolCallId: approvalToolCallId,
-            inputHash: approvalInputHash,
-            display: {
-              title: localizeProjectAgentOperationTitle(operationId, normalizeProjectAgentLocale(locale)),
-              description: toolDescriptions.get(operationId) ?? operationId,
-            },
-            operationPlan,
-          } satisfies ProjectAgentInterruptionPartData))
-          chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
-          if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_approval'
-          runStatusFinalized = true
-        }
+              operationPlan,
+              runState: result.state.toString(),
+            }
+          })()
+          : null
 
         let waitFollowUpMode: ProjectAgentWaitFollowUpMode | null = null
         try {
@@ -1376,11 +1364,11 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
           return chunks
         }
+        const preparedChoiceHandoff = requireProjectAgentChoiceSuspensionReceipt({
+          stopPart: latestStopPart,
+          preparedChoiceHandoffs,
+        })
         if (latestStopPart) {
-          requireProjectAgentChoiceSuspensionReceipt({
-            stopPart: latestStopPart,
-            committedSuspensions,
-          })
           chunks.push(createDataChunk('data-agent-stop', latestStopPart))
         }
 
@@ -1411,14 +1399,160 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
           return chunks
         }
-        if (!shouldPersistApprovalInterruption) {
+        if (pendingApprovalHandoff) {
+          chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
+          const preparedApprovalHandoff = await prepareProjectAgentApprovalExecutionHandoff({
+            executionFence: {
+              runFence,
+              signal: runAbortController.signal,
+              continuationClaim: input.continuationClaim ?? null,
+            },
+            executionSegmentId: executionSegment.id,
+            projectId: input.projectId,
+            userId: input.userId,
+            episodeId: context.episodeId || null,
+            locale,
+            assistantId: 'workspace-command',
+            operationId: pendingApprovalHandoff.operationId,
+            approvalId: pendingApprovalHandoff.approvalId,
+            toolCallId: pendingApprovalHandoff.toolCallId,
+            runState: pendingApprovalHandoff.runState,
+            payload: {
+              operationId: pendingApprovalHandoff.operationId,
+              toolCallId: pendingApprovalHandoff.toolCallId,
+              inputHash: pendingApprovalHandoff.inputHash,
+              ...(pendingApprovalHandoff.operationPlan
+                ? { operationPlan: pendingApprovalHandoff.operationPlan }
+                : {}),
+            } as unknown as Prisma.InputJsonValue,
+          })
+          const approvalSuspension = await settleProjectAgentPreparedApprovalHandoff({
+            executionFence: {
+              runFence,
+              signal: runAbortController.signal,
+              continuationClaim: input.continuationClaim ?? null,
+            },
+            handoff: preparedApprovalHandoff,
+            projectId: input.projectId,
+            userId: input.userId,
+            episodeId: context.episodeId || null,
+            assistantId: 'workspace-command',
+            message: await buildAssistantMessageOnce(),
+            continuation: control.kind === 'task_follow_up'
+              ? (() => {
+                  const claimOwner = input.continuationClaim?.claimOwner
+                  const executionActivityId = control.followUp.followUpActivityId
+                  if (!claimOwner || !executionActivityId) {
+                    throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
+                  }
+                  return {
+                    waitId: control.followUp.waitId,
+                    commandId: control.followUp.commandId,
+                    claimOwner,
+                    executionActivityId,
+                  }
+                })()
+              : null,
+          })
+          assistantMessagePersisted = true
+          chunks.push(createDataChunk('data-agent-interruption', {
+            runId: input.run.id,
+            requestId,
+            interruptionId: approvalSuspension.interruptionId,
+            approvalId: pendingApprovalHandoff.approvalId,
+            operationId: pendingApprovalHandoff.operationId,
+            toolCallId: pendingApprovalHandoff.toolCallId,
+            inputHash: pendingApprovalHandoff.inputHash,
+            display: {
+              title: localizeProjectAgentOperationTitle(
+                pendingApprovalHandoff.operationId,
+                normalizeProjectAgentLocale(locale),
+              ),
+              description: toolDescriptions.get(pendingApprovalHandoff.operationId)
+                ?? pendingApprovalHandoff.operationId,
+            },
+            operationPlan: pendingApprovalHandoff.operationPlan,
+          } satisfies ProjectAgentInterruptionPartData))
+          if (control.kind === 'task_follow_up') taskFollowUpSettlementCommittedInline = true
+          runStatusFinalized = true
+        } else if (!shouldPersistApprovalInterruption) {
           if (latestStopPart?.reason === 'awaiting_external_task') {
             chunks.push(createRuntimeStatusChunk('awaiting_task', 'awaiting_task'))
-            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_task'
+            if (latestStopPart.taskWaits.length !== 1 || !latestStopPart.taskWaits[0]) {
+              throw new Error('PROJECT_AGENT_TASK_HANDOFF_WAIT_DESCRIPTOR_MISSING')
+            }
+            const taskWait = latestStopPart.taskWaits[0]
+            await settleProjectAgentPreparedTaskHandoff({
+              executionFence: {
+                runFence,
+                signal: runAbortController.signal,
+                continuationClaim: input.continuationClaim ?? null,
+              },
+              executionSegmentId: executionSegment.id,
+              projectId: input.projectId,
+              userId: input.userId,
+              episodeId: context.episodeId || null,
+              assistantId: 'workspace-command',
+              operationId: taskWait.operationId,
+              taskIds: taskWait.taskIds,
+              message: await buildAssistantMessageOnce(),
+              continuation: control.kind === 'task_follow_up'
+                ? (() => {
+                    const claimOwner = input.continuationClaim?.claimOwner
+                    const executionActivityId = control.followUp.followUpActivityId
+                    if (!claimOwner || !executionActivityId) {
+                      throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
+                    }
+                    return {
+                      waitId: control.followUp.waitId,
+                      commandId: control.followUp.commandId,
+                      claimOwner,
+                      executionActivityId,
+                    }
+                  })()
+                : null,
+            })
+            if (control.kind === 'task_follow_up') taskFollowUpSettlementCommittedInline = true
+            assistantMessagePersisted = true
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
             chunks.push(createRuntimeStatusChunk('awaiting_choice', 'awaiting_user_choice'))
-            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_choice'
+            if (!preparedChoiceHandoff) {
+              throw new Error('PROJECT_AGENT_CHOICE_HANDOFF_REQUIRED_FOR_CHOICE_STOP')
+            }
+            const choiceSuspension = await settleProjectAgentPreparedChoiceHandoff({
+              executionFence: {
+                runFence,
+                signal: runAbortController.signal,
+                continuationClaim: input.continuationClaim ?? null,
+              },
+              handoff: preparedChoiceHandoff,
+              projectId: input.projectId,
+              userId: input.userId,
+              episodeId: context.episodeId || null,
+              assistantId: 'workspace-command',
+              message: await buildAssistantMessageOnce(),
+              continuation: control.kind === 'task_follow_up'
+                ? (() => {
+                    const claimOwner = input.continuationClaim?.claimOwner
+                    const executionActivityId = control.followUp.followUpActivityId
+                    if (!claimOwner || !executionActivityId) {
+                      throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
+                    }
+                    return {
+                      waitId: control.followUp.waitId,
+                      commandId: control.followUp.commandId,
+                      claimOwner,
+                      executionActivityId,
+                    }
+                  })()
+                : null,
+            })
+            if (control.kind === 'task_follow_up') {
+              taskFollowUpSettlementCommittedInline = true
+            }
+            assistantMessagePersisted = true
+            chunks.push(createDataChunk('data-assistant-choice-card', choiceSuspension.card))
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'tool_error') {
             if (input.settleTaskFollowUp) taskFollowUpSettlement = 'failed'
@@ -1467,6 +1601,7 @@ export async function createProjectAgentChatResponse(input: {
           return
         }
         if (input.settleTaskFollowUp) {
+          reportTaskFollowUpSettlementFailure(effectiveError)
           return
         }
         const failureTerminal = resolveProjectAgentRunFailureTerminal({
@@ -1498,15 +1633,23 @@ export async function createProjectAgentChatResponse(input: {
       onSettled: async () => {
         try {
           if (input.settleTaskFollowUp) {
-            if (!taskFollowUpSettlement) throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_SETTLEMENT_MISSING')
-            await input.settleTaskFollowUp({
-              outcome: taskFollowUpSettlement,
-              message: await buildAssistantMessageOnce(),
-            })
+            if (taskFollowUpSettlementCommittedInline) {
+              if (!input.confirmTaskFollowUpSettlement) {
+                throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_INLINE_CONFIRMATION_MISSING')
+              }
+              await input.confirmTaskFollowUpSettlement()
+            } else {
+              if (!taskFollowUpSettlement) throw new Error('PROJECT_AGENT_TASK_FOLLOW_UP_SETTLEMENT_MISSING')
+              await input.settleTaskFollowUp({
+                outcome: taskFollowUpSettlement,
+                message: await buildAssistantMessageOnce(),
+              })
+            }
           } else {
             await persistAssistantMessageOrSettleRun()
           }
         } catch (error) {
+          if (input.settleTaskFollowUp) reportTaskFollowUpSettlementFailure(error)
           projectAgentLogger.error({
             action: 'assistant.agents.settlement.failed',
             message: 'Project agent message and run settlement failed',

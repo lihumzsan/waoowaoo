@@ -5,16 +5,21 @@ import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import {
   beginProjectAgentWaitContinuationExecution,
-  checkpointProjectAgentWaitFollowUp,
-  claimProjectAgentWaitContinuation,
-  finalizeProjectAgentWaitFollowUp,
-  loadProjectAgentWaitContinuationCheckpoint,
-  releaseProjectAgentWaitContinuationClaim,
 } from '@/lib/project-agent/waits'
 import {
   appendProjectAssistantThreadMessages,
   loadProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
+import { appendProjectAgentEvents } from '@/lib/project-agent/event'
+import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
+import {
+  finalizeProjectAgentContinuationHandoff,
+  loadProjectAgentContinuationCheckpoint,
+  prepareProjectAgentChoiceExecutionHandoff,
+  settleProjectAgentContinuationTerminalHandoff,
+  settleProjectAgentPreparedChoiceHandoff,
+} from '@/lib/project-agent/execution-handoff'
+import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
 const RUN_ID = 'continuation-run-1'
 const WAIT_ID = 'continuation-wait-1'
 const COMMAND_ID = 'continuation-command-1'
@@ -92,7 +97,7 @@ describe('Project Agent continuation settlement DB integration', () => {
     await resetBillingState()
   })
 
-  it('replays a crash after checkpoint without duplicating the message or final settlement', async () => {
+  it('atomically commits the terminal continuation message, checkpoint, Activity, Wait, and Run', async () => {
     const { user, project } = await seedClaimedContinuation()
     const message = buildAssistantMessage()
 
@@ -105,58 +110,21 @@ describe('Project Agent continuation settlement DB integration', () => {
       userId: user.id,
     })).resolves.toBe('started')
 
-    const [first, duplicate] = await Promise.all([
-      checkpointProjectAgentWaitFollowUp({
-        runId: RUN_ID,
-        waitId: WAIT_ID,
-        commandId: COMMAND_ID,
-        claimOwner: FIRST_CLAIM,
-        projectId: project.id,
-        userId: user.id,
-        outcome: 'completed',
-        message,
-      }),
-      checkpointProjectAgentWaitFollowUp({
-        runId: RUN_ID,
-        waitId: WAIT_ID,
-        commandId: COMMAND_ID,
-        claimOwner: FIRST_CLAIM,
-        projectId: project.id,
-        userId: user.id,
-        outcome: 'completed',
-        message,
-      }),
-    ])
-    expect(duplicate).toEqual(first)
-
-    expect(await releaseProjectAgentWaitContinuationClaim({
-      waitId: WAIT_ID,
-      commandId: COMMAND_ID,
-      claimOwner: FIRST_CLAIM,
-    })).toBe(true)
-    const replayClaim = await claimProjectAgentWaitContinuation({
-      waitId: WAIT_ID,
-      runId: RUN_ID,
-      expectedRunVersion: 1,
-      expectedEventSeq: '0',
-      commandId: COMMAND_ID,
-      claimOwner: 'continuation-claim-2',
-    })
-    expect(replayClaim.status).toBe('claimed')
-    expect(await loadProjectAgentWaitContinuationCheckpoint({
+    const settled = await settleProjectAgentContinuationTerminalHandoff({
       waitId: WAIT_ID,
       runId: RUN_ID,
       commandId: COMMAND_ID,
-    })).toEqual(first)
-
-    await finalizeProjectAgentWaitFollowUp({
-      runId: RUN_ID,
-      waitId: WAIT_ID,
-      commandId: COMMAND_ID,
-      claimOwner: 'continuation-claim-2',
       projectId: project.id,
       userId: user.id,
+      claimOwner: FIRST_CLAIM,
+      outcome: 'completed',
+      message,
     })
+    expect(await loadProjectAgentContinuationCheckpoint({
+      waitId: WAIT_ID,
+      runId: RUN_ID,
+      commandId: COMMAND_ID,
+    })).toEqual(settled)
 
     const thread = await loadProjectAssistantThread({
       projectId: project.id,
@@ -176,7 +144,7 @@ describe('Project Agent continuation settlement DB integration', () => {
     ])
     expect(thread?.messages).toEqual([message])
     expect(checkpointCount).toBe(1)
-    expect(wait).toMatchObject({ status: 'followed', claimId: 'continuation-claim-2' })
+    expect(wait).toMatchObject({ status: 'followed', claimId: FIRST_CLAIM })
     expect(activity?.status).toBe('completed')
     expect(run).toMatchObject({ status: 'completed', stopReason: 'completed' })
     expect(events.map((event) => event.kind)).toEqual([
@@ -189,7 +157,7 @@ describe('Project Agent continuation settlement DB integration', () => {
   it('rolls back the whole terminal handoff when no checkpoint exists', async () => {
     const { user, project } = await seedClaimedContinuation()
 
-    await expect(finalizeProjectAgentWaitFollowUp({
+    await expect(finalizeProjectAgentContinuationHandoff({
       runId: RUN_ID,
       waitId: WAIT_ID,
       commandId: COMMAND_ID,
@@ -235,7 +203,7 @@ describe('Project Agent continuation settlement DB integration', () => {
       projectId: project.id,
       userId: user.id,
     })).resolves.toBe('started')
-    await checkpointProjectAgentWaitFollowUp({
+    await settleProjectAgentContinuationTerminalHandoff({
       runId: RUN_ID,
       waitId: WAIT_ID,
       commandId: COMMAND_ID,
@@ -244,14 +212,6 @@ describe('Project Agent continuation settlement DB integration', () => {
       userId: user.id,
       outcome: 'outcome_unknown',
       message,
-    })
-    await finalizeProjectAgentWaitFollowUp({
-      runId: RUN_ID,
-      waitId: WAIT_ID,
-      commandId: COMMAND_ID,
-      claimOwner: FIRST_CLAIM,
-      projectId: project.id,
-      userId: user.id,
     })
 
     const [wait, activity, run, thread] = await Promise.all([
@@ -275,6 +235,133 @@ describe('Project Agent continuation settlement DB integration', () => {
       errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
     })
     expect(thread?.messages).toEqual([message])
+  })
+
+  it('keeps the task follow-up Activity open through a normal tool, then settles it exactly once when Choice takes over', async () => {
+    const { user, project } = await seedClaimedContinuation()
+    await expect(beginProjectAgentWaitContinuationExecution({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+    })).resolves.toBe('started')
+
+    const beforeOperation = await prisma.projectAgentRun.findUniqueOrThrow({
+      where: { id: RUN_ID },
+      select: { id: true, runVersion: true, eventSeq: true },
+    })
+    const operationFence = createProjectAgentRunFence(beforeOperation)
+    const ordinaryActivityId = `${COMMAND_ID}:read-overview`
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: project.id,
+        userId: user.id,
+        assistantId: 'workspace-command',
+      },
+      events: [{
+        runFence: operationFence,
+        idempotencyKey: `activity-started:${ordinaryActivityId}`,
+        event: {
+          kind: 'activity.started',
+          runId: RUN_ID,
+          activityId: ordinaryActivityId,
+          type: 'operation',
+          operationId: 'get_episode_overview',
+        },
+      }, {
+        runFence: operationFence,
+        idempotencyKey: `activity-completed:${ordinaryActivityId}`,
+        event: {
+          kind: 'activity.completed',
+          runId: RUN_ID,
+          activityId: ordinaryActivityId,
+        },
+      }],
+    })
+
+    expect(await prisma.projectAgentActivity.findUniqueOrThrow({
+      where: { id: COMMAND_ID },
+      select: { status: true },
+    })).toEqual({ status: 'running' })
+
+    const toolCallId = `${COMMAND_ID}:script-review`
+    const executionFence = {
+      runFence: operationFence,
+      signal: new AbortController().signal,
+      continuationClaim: {
+        waitId: WAIT_ID,
+        commandId: COMMAND_ID,
+        claimOwner: FIRST_CLAIM,
+      },
+    }
+    const prepared = await prepareProjectAgentChoiceExecutionHandoff({
+      executionFence,
+      executionSegmentId: `wait-continuation:${COMMAND_ID}`,
+      projectId: project.id,
+      userId: user.id,
+      assistantId: 'workspace-command',
+      operationId: 'request_script_intake_choice',
+      toolCallId,
+      card: {
+        cardId: `${COMMAND_ID}:script-review-card`,
+        toolCallId,
+        choiceType: 'script_intake',
+        replyMode: 'per_group',
+        title: '补充创作方向',
+        description: '请选择创作方向。',
+        groups: [],
+        submitLabel: '继续',
+        submit: { kind: 'submit_tool_output', decision: 'approve' },
+      },
+      reviewedResource: fingerprintProjectAgentChoiceResource({
+        kind: 'script_intake_prompt',
+        snapshot: {
+          cardId: `${COMMAND_ID}:script-review-card`,
+          choiceType: 'script_intake',
+          groups: [],
+        },
+      }),
+    })
+    const suspension = await settleProjectAgentPreparedChoiceHandoff({
+      executionFence,
+      handoff: prepared,
+      projectId: project.id,
+      userId: user.id,
+      assistantId: 'workspace-command',
+      message: {
+        id: `workspace-assistant-task-follow-up:${WAIT_ID}:${COMMAND_ID}:choice`,
+        role: 'assistant',
+        parts: [{ type: 'text', text: '请确认剧本。' }],
+      },
+      continuation: {
+        waitId: WAIT_ID,
+        commandId: COMMAND_ID,
+        claimOwner: FIRST_CLAIM,
+        executionActivityId: COMMAND_ID,
+      },
+    })
+
+    const [followUpActivity, ordinaryActivity, wait, run, interruptions] = await Promise.all([
+      prisma.projectAgentActivity.findUnique({ where: { id: COMMAND_ID }, select: { status: true } }),
+      prisma.projectAgentActivity.findUnique({ where: { id: ordinaryActivityId }, select: { status: true } }),
+      prisma.projectAgentWait.findUnique({ where: { id: WAIT_ID }, select: { status: true, followedAt: true } }),
+      prisma.projectAgentRun.findUnique({ where: { id: RUN_ID }, select: { status: true, errorCode: true } }),
+      prisma.projectAgentInterruption.findMany({
+        where: { runId: RUN_ID },
+        select: { id: true, status: true, operationId: true },
+      }),
+    ])
+    expect(followUpActivity).toEqual({ status: 'completed' })
+    expect(ordinaryActivity).toEqual({ status: 'completed' })
+    expect(wait).toMatchObject({ status: 'followed', followedAt: expect.any(Date) })
+    expect(run).toEqual({ status: 'awaiting_choice', errorCode: null })
+    expect(interruptions).toEqual([{
+      id: suspension.interruptionId,
+      status: 'pending',
+      operationId: 'request_script_intake_choice',
+    }])
   })
 
   it('serializes concurrent thread appends without dropping either message', async () => {

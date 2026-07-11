@@ -23,16 +23,13 @@ vi.mock('@/lib/workspace-resource/resource-change-events', () => ({
 
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
-  requireProjectAgentSuspensionReceipt: vi.fn(() => ({
+  requireProjectAgentChoiceHandoffReceipt: vi.fn(() => ({
     kind: 'choice',
+    handoffId: 'handoff-choice',
+    executionSegmentId: 'user-turn:run-test',
     runId: 'run-test',
     operationId: 'request_future_editorial_choice',
-    activityId: 'activity-choice',
-    interruptionId: 'interruption-choice',
-    cardId: 'card-choice',
     toolCallId: 'tool-choice',
-    choiceType: 'script_intake',
-    card: {},
   })),
   assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
   runWithProjectAgentOperationExecutionFence: vi.fn(async (
@@ -104,7 +101,7 @@ describe('invokeProjectAgentOperation', () => {
     expect(execute).toHaveBeenNthCalledWith(2, expect.any(Object), { title: 'same' })
   })
 
-  it('requires the declared Choice protocol receipt for a future Choice identity without an invocation branch', async () => {
+  it('requires the declared prepared Choice handoff for a future Choice identity without an invocation branch', async () => {
     const execute = vi.fn(async () => ({
       emitted: true,
       choiceType: 'script_intake',
@@ -135,9 +132,8 @@ describe('invokeProjectAgentOperation', () => {
     })).resolves.toMatchObject({ kind: 'executed' })
 
     const fence = await import('@/lib/project-agent/operation-execution-fence')
-    expect(fence.requireProjectAgentSuspensionReceipt).toHaveBeenCalledWith(expect.objectContaining({
+    expect(fence.requireProjectAgentChoiceHandoffReceipt).toHaveBeenCalledWith(expect.objectContaining({
       operationId: 'request_future_editorial_choice',
-      kind: 'choice',
     }))
   })
 

@@ -415,8 +415,17 @@ vi.mock('@/lib/api-errors', () => ({
   getRequestId: vi.fn(() => 'req-1'),
 }))
 
-vi.mock('@/lib/project-agent/interruptions', () => ({
-  settleProjectAgentInterruptionSuspension: vi.fn(async () => ({
+vi.mock('@/lib/project-agent/execution-handoff', () => ({
+  prepareProjectAgentApprovalExecutionHandoff: vi.fn(async () => ({
+    kind: 'approval',
+    handoffId: 'handoff-approval-1',
+    executionSegmentId: 'user-turn:run-1',
+    runId: 'run-1',
+    operationId: 'generate_edit_style_previews',
+    approvalId: 'approval-row-1',
+    toolCallId: 'tool-approval-1',
+  })),
+  settleProjectAgentPreparedApprovalHandoff: vi.fn(async () => ({
     kind: 'approval',
     runId: 'run-1',
     operationId: 'generate_edit_style_previews',
@@ -424,6 +433,27 @@ vi.mock('@/lib/project-agent/interruptions', () => ({
     interruptionId: 'interruption-row-1',
     approvalId: 'approval-row-1',
     toolCallId: 'tool-approval-1',
+  })),
+  settleProjectAgentPreparedChoiceHandoff: vi.fn(async () => ({
+    kind: 'choice',
+    runId: 'run-1',
+    operationId: 'request_script_intake_choice',
+    activityId: 'activity-choice-1',
+    interruptionId: 'interruption-choice-1',
+    cardId: 'card-choice-1',
+    toolCallId: 'tool-choice-1',
+    choiceType: 'script_intake',
+    card: {},
+  })),
+  settleProjectAgentPreparedTaskHandoff: vi.fn(async () => ({
+    kind: 'task',
+    handoffId: 'handoff-task-1',
+    executionSegmentId: 'user-turn:run-1',
+    runId: 'run-1',
+    operationId: 'generate_edit_style_previews',
+    waitId: 'wait-task-1',
+    taskIds: ['task-generated-1'],
+    followUpMode: 'resume_agent',
   })),
 }))
 

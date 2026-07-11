@@ -23,9 +23,14 @@ const runLockMock = vi.hoisted(() => ({
   releaseProjectAgentRunLockForRun: vi.fn(async () => false),
 }))
 
+const executionHandoffMock = vi.hoisted(() => ({
+  recoverProjectAgentPreparedExecutionHandoff: vi.fn(async (): Promise<'choice' | 'task' | null> => null),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/project-agent/run-lock', () => runLockMock)
 vi.mock('@/lib/project-agent/event', () => eventMock)
+vi.mock('@/lib/project-agent/execution-handoff', () => executionHandoffMock)
 
 import {
   cancelRunningProjectAgentRun,
@@ -133,6 +138,31 @@ describe('project agent runs', () => {
         }),
       })],
     }))
+    expect(runLockMock.releaseProjectAgentRunLockForRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-1',
+    }))
+  })
+
+  it('recovers a prepared interaction handoff before considering a stale run cancelled', async () => {
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([
+      { id: 'run-1', runVersion: 1, eventSeq: BigInt(1) },
+    ])
+    executionHandoffMock.recoverProjectAgentPreparedExecutionHandoff.mockResolvedValueOnce('choice')
+
+    const cancelledIds = await cancelStaleRunningProjectAgentRunsForScope({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+    })
+
+    expect(cancelledIds).toEqual([])
+    expect(executionHandoffMock.recoverProjectAgentPreparedExecutionHandoff).toHaveBeenCalledWith(expect.objectContaining({
+      executionFence: expect.objectContaining({
+        runFence: { runId: 'run-1', runVersion: 1, eventSeq: '1' },
+      }),
+    }))
+    expect(eventMock.appendProjectAgentEvents).not.toHaveBeenCalled()
     expect(runLockMock.releaseProjectAgentRunLockForRun).toHaveBeenCalledWith(expect.objectContaining({
       runId: 'run-1',
     }))
