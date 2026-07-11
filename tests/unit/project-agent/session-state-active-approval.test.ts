@@ -27,7 +27,6 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
@@ -93,6 +92,16 @@ describe('project agent session-state', () => {
   })
 
   it('keeps the approved operation visible while the approval response run is active', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { kind: 'ACTIVITY', id: 'activity-active-1', runId: 'run-active-1' },
+    ])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{
+      id: 'run-active-1',
+      status: 'running',
+      controlKind: 'user_turn',
+      errorCode: null,
+      errorMessage: null,
+    }])
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
       {
         id: 'run-active-1',

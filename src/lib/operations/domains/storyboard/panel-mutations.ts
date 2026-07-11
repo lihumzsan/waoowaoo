@@ -1,6 +1,7 @@
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { createMutationBatch } from '@/lib/mutation-batch/service'
+import { createMutationBatch, createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import { serializeStructuredJsonField } from '@/lib/project-workflow/panel-ai-data-sync'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { getSignedUrl, generateUniqueKey, downloadAndUploadImage, toFetchableUrl } from '@/lib/storage'
@@ -26,7 +27,6 @@ const storyboardMutationActionSchema = z.enum([
 ])
 
 const storyboardMutationInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   action: storyboardMutationActionSchema,
   storyboardId: z.string().min(1).optional(),
   panelId: z.string().min(1).optional(),
@@ -38,7 +38,6 @@ const storyboardMutationInputSchema = z.object({
 }).passthrough()
 
 export const updateStoryboardPanelPromptInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   storyboardId: z.string().min(1).optional(),
   panelId: z.string().min(1).optional(),
   panelIndex: z.number().int().min(0).max(2000).optional(),
@@ -58,13 +57,11 @@ export const updateStoryboardPanelPromptInputSchema = z.object({
 })
 
 export const selectStoryboardPanelCandidateInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   panelId: z.string().min(1),
   selectedImageUrl: z.string().min(1),
 })
 
 export const cancelStoryboardPanelCandidatesInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   panelId: z.string().min(1),
 })
 
@@ -80,10 +77,14 @@ function parseUnknownArray(jsonValue: string | null): unknown[] {
   }
 }
 
-async function resolveStoryboardContext(ctx: ProjectAgentOperationContext, input: StoryboardMutationInput) {
+async function resolveStoryboardContext(
+  ctx: ProjectAgentOperationContext,
+  input: StoryboardMutationInput,
+  client: Prisma.TransactionClient | typeof prisma,
+) {
   const panelId = normalizeString(input.panelId)
   if (panelId) {
-    const panel = await prisma.projectPanel.findFirst({
+    const panel = await client.projectPanel.findFirst({
       where: {
         id: panelId,
         storyboard: {
@@ -111,7 +112,7 @@ async function resolveStoryboardContext(ctx: ProjectAgentOperationContext, input
     throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
   }
 
-  const panel = await prisma.projectPanel.findFirst({
+  const panel = await client.projectPanel.findFirst({
     where: {
       storyboardId,
       panelIndex: input.panelIndex,
@@ -139,11 +140,13 @@ async function executeCandidateMutation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
+  transaction?: Prisma.TransactionClient,
 ) {
+  const client = transaction ?? prisma
   const panelId = normalizeString(input.panelId)
   if (!panelId) throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
 
-  const panel = await prisma.projectPanel.findFirst({
+  const panel = await client.projectPanel.findFirst({
     where: {
       id: panelId,
       storyboard: {
@@ -163,12 +166,12 @@ async function executeCandidateMutation(
 
   if (input.action === 'cancel_panel_candidates') {
     const previousCandidateImages = panel.candidateImages
-    await prisma.projectPanel.update({
+    await client.projectPanel.update({
       where: { id: panelId },
       data: { candidateImages: null },
     })
 
-    const mutationBatch = await createMutationBatch({
+    const mutationBatchInput = {
       projectId: ctx.projectId,
       userId: ctx.userId,
       source: ctx.source,
@@ -183,7 +186,10 @@ async function executeCandidateMutation(
           payload: { previousCandidateImages },
         },
       ],
-    })
+    }
+    const mutationBatch = transaction
+      ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
+      : await createMutationBatch(mutationBatchInput)
 
     return { success: true, panelId, mutationBatchId: mutationBatch.id }
   }
@@ -215,7 +221,7 @@ async function executeCandidateMutation(
   const previousCandidateImages = panel.candidateImages
   const previousImageUrl = panel.imageUrl
 
-  await prisma.projectPanel.update({
+  await client.projectPanel.update({
     where: { id: panelId },
     data: {
       imageUrl: finalImageKey,
@@ -223,7 +229,7 @@ async function executeCandidateMutation(
     },
   })
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatchInput = {
     projectId: ctx.projectId,
     userId: ctx.userId,
     source: ctx.source,
@@ -241,7 +247,10 @@ async function executeCandidateMutation(
         },
       },
     ],
-  })
+  }
+  const mutationBatch = transaction
+    ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
+    : await createMutationBatch(mutationBatchInput)
 
   return {
     success: true,
@@ -256,8 +265,10 @@ async function executePromptMutation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
+  transaction?: Prisma.TransactionClient,
 ) {
-  const { panelId, episodeId } = await resolveStoryboardContext(ctx, input)
+  const client = transaction ?? prisma
+  const { panelId, episodeId } = await resolveStoryboardContext(ctx, input, client)
 
   const updateData: Record<string, unknown> = {}
   if (Object.prototype.hasOwnProperty.call(input, 'videoPrompt')) updateData.videoPrompt = input.videoPrompt
@@ -269,7 +280,7 @@ async function executePromptMutation(
     return { success: true, panelId, noop: true }
   }
 
-  const before = await prisma.projectPanel.findFirst({
+  const before = await client.projectPanel.findFirst({
     where: { id: panelId },
     select: {
       id: true,
@@ -280,12 +291,12 @@ async function executePromptMutation(
   })
   if (!before) throw new Error('PROJECT_AGENT_PANEL_NOT_FOUND')
 
-  await prisma.projectPanel.update({
+  await client.projectPanel.update({
     where: { id: panelId },
     data: updateData,
   })
 
-  const mutationBatch = await createMutationBatch({
+  const mutationBatchInput = {
     projectId: ctx.projectId,
     userId: ctx.userId,
     source: ctx.source,
@@ -304,7 +315,10 @@ async function executePromptMutation(
         },
       },
     ],
-  })
+  }
+  const mutationBatch = transaction
+    ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
+    : await createMutationBatch(mutationBatchInput)
 
   return { success: true, panelId, mutationBatchId: mutationBatch.id }
 }
@@ -313,10 +327,11 @@ export async function executeStoryboardMutationOperation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
+  transaction?: Prisma.TransactionClient,
 ) {
   if (input.action === 'select_panel_candidate' || input.action === 'cancel_panel_candidates') {
-    return await executeCandidateMutation(ctx, input, operationId)
+    return await executeCandidateMutation(ctx, input, operationId, transaction)
   }
 
-  return await executePromptMutation(ctx, input, operationId)
+  return await executePromptMutation(ctx, input, operationId, transaction)
 }

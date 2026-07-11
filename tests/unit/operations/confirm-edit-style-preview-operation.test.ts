@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditStylePreviewPayload } from '@/lib/edit-script/types'
+import type { Prisma } from '@prisma/client'
 
 const mocks = vi.hoisted(() => ({
   projectFindFirst: vi.fn(),
@@ -42,6 +43,10 @@ function confirmedPreview(): EditStylePreviewPayload {
 }
 
 describe('confirm_edit_style_preview operation', () => {
+  const transaction = {
+    project: { findFirst: mocks.projectFindFirst },
+  } as unknown as Prisma.TransactionClient
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.projectFindFirst.mockResolvedValue({ videoRatio: '16:9' })
@@ -52,7 +57,7 @@ describe('confirm_edit_style_preview operation', () => {
     const operation = createEditScriptOperations().confirm_edit_style_preview
 
     expect(mocks.confirmProjectEditStylePreview).not.toHaveBeenCalled()
-    const result = await operation.execute!(
+    const result = await operation.executeInTransaction!(
       {
         request: new NextRequest('http://localhost/api/test'),
         userId: 'user-1',
@@ -64,6 +69,7 @@ describe('confirm_edit_style_preview operation', () => {
         source: 'assistant-panel',
       },
       {},
+      transaction,
     )
 
     expect(mocks.confirmProjectEditStylePreview).toHaveBeenCalledTimes(1)
@@ -73,6 +79,7 @@ describe('confirm_edit_style_preview operation', () => {
       episodeId: 'episode-1',
       stylePreviewId: 'style-2',
       aspectRatio: '16:9',
+      client: transaction,
     })
     expect(result).toMatchObject({
       id: 'style-2',
@@ -86,7 +93,7 @@ describe('confirm_edit_style_preview operation', () => {
     const operation = createEditScriptOperations().confirm_edit_style_preview
 
     await expect(
-      operation.execute!(
+      operation.executeInTransaction!(
         {
           request: new NextRequest('http://localhost/api/test'),
           userId: 'user-1',
@@ -98,6 +105,7 @@ describe('confirm_edit_style_preview operation', () => {
           source: 'assistant-panel',
         },
         {},
+        transaction,
       ),
     ).rejects.toThrow('EDIT_STYLE_PREVIEW_PROJECT_VIDEO_RATIO_REQUIRED')
     expect(mocks.confirmProjectEditStylePreview).not.toHaveBeenCalled()

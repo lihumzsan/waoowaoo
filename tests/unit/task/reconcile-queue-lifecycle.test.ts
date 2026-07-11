@@ -30,11 +30,8 @@ const publisherMock = vi.hoisted(() => ({
   publishTaskEvent: vi.fn(),
 }))
 
-const targetFailureMock = vi.hoisted(() => ({
-  syncTaskTargetFailure: vi.fn(),
-}))
 const terminalMock = vi.hoisted(() => ({
-  commitTaskTerminal: vi.fn(async () => ({
+  commitTaskTerminal: vi.fn(async (): Promise<Record<string, unknown>> => ({
     applied: true as const,
     status: 'failed' as const,
     terminalEventId: 1,
@@ -42,7 +39,7 @@ const terminalMock = vi.hoisted(() => ({
   })),
 }))
 const approvedEnqueueMock = vi.hoisted(() => ({
-  enqueuePersistedApprovedTask: vi.fn(async () => undefined),
+  enqueuePersistedTask: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -52,19 +49,20 @@ vi.mock('@/lib/task/queues', () => ({
 }))
 vi.mock('@/lib/task/service', () => serviceMock)
 vi.mock('@/lib/task/publisher', () => publisherMock)
-vi.mock('@/lib/task/target-failure-sync', () => targetFailureMock)
 vi.mock('@/lib/task/terminal', () => terminalMock)
 vi.mock('@/lib/task/enqueue', () => approvedEnqueueMock)
 
 import { reconcileActiveTasks, runTaskReconciliationCycle } from '@/lib/task/reconcile'
 
-function buildQueuedTask(payload: unknown = {
-  groupId: 'group-1',
-  meta: {
-    locale: 'zh',
-    trace: { requestId: 'request-1' },
+function buildQueuedTask(
+  payload: unknown = {
+    groupId: 'group-1',
+    meta: {
+      locale: 'zh',
+      trace: { requestId: 'request-1' },
+    },
   },
-}) {
+) {
   return {
     id: 'task-1',
     parentTaskId: 'parent-task-1',
@@ -107,48 +105,53 @@ describe('task reconcile queue lifecycle', () => {
       recoveredTaskIds: ['task-1'],
       unavailableTaskIds: [],
     })
-    expect(queuesMock.addTaskJob).toHaveBeenCalledWith({
-      taskId: 'task-1',
-      parentTaskId: 'parent-task-1',
-      type: TASK_TYPE.VIDEO_GROUP,
-      locale: 'zh',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      targetType: 'ProjectVideoGroup',
-      targetId: 'group-1',
-      payload: {
-        groupId: 'group-1',
-        meta: {
-          locale: 'zh',
-          trace: { requestId: 'request-1' },
+    expect(queuesMock.addTaskJob).toHaveBeenCalledWith(
+      {
+        taskId: 'task-1',
+        parentTaskId: 'parent-task-1',
+        type: TASK_TYPE.VIDEO_GROUP,
+        locale: 'zh',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        targetType: 'ProjectVideoGroup',
+        targetId: 'group-1',
+        payload: {
+          groupId: 'group-1',
+          meta: {
+            locale: 'zh',
+            trace: { requestId: 'request-1' },
+          },
         },
+        batchKey: 'batch-1',
+        billingInfo: null,
+        userId: 'user-1',
+        operationId: 'generate_video_group',
+        operationSource: 'assistant',
+        approvalGrantId: null,
+        operationExecutionId: null,
+        operationPlanTaskId: null,
+        operationRequestId: 'operation-request-1',
+        trace: { requestId: 'request-1' },
       },
-      batchKey: 'batch-1',
-      billingInfo: null,
-      userId: 'user-1',
-      operationId: 'generate_video_group',
-      operationSource: 'assistant',
-      approvalGrantId: null,
-      operationExecutionId: null,
-      operationPlanTaskId: null,
-      operationRequestId: 'operation-request-1',
-      trace: { requestId: 'request-1' },
-    }, { priority: 7 })
+      { priority: 7 },
+    )
     expect(serviceMock.markTaskEnqueued).toHaveBeenCalledWith('task-1')
   })
 
   it('recovers an approved queued task only through the completed execution gate', async () => {
-    prismaMock.task.findMany.mockResolvedValue([{
-      ...buildQueuedTask(),
-      approvalGrantId: 'grant-1',
-      operationExecutionId: 'execution-1',
-      operationPlanTaskId: 'plan-task-1',
-    }])
+    prismaMock.task.findMany.mockResolvedValue([
+      {
+        ...buildQueuedTask(),
+        approvalGrantId: 'grant-1',
+        operationExecutionId: 'execution-1',
+        operationPlanTaskId: 'plan-task-1',
+      },
+    ])
 
     const result = await reconcileActiveTasks()
 
     expect(result.recoveredTaskIds).toEqual(['task-1'])
-    expect(approvedEnqueueMock.enqueuePersistedApprovedTask).toHaveBeenCalledWith({
+    expect(approvedEnqueueMock.enqueuePersistedTask).toHaveBeenCalledWith({
       taskId: 'task-1',
       operationExecutionId: 'execution-1',
     })
@@ -165,14 +168,60 @@ describe('task reconcile queue lifecycle', () => {
     const result = await reconcileActiveTasks()
 
     expect(result.failedTaskIds).toEqual(['task-1'])
-    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'failed',
-      taskId: 'task-1',
-      fence: { kind: 'snapshot', updatedAt: new Date('2026-01-01T00:00:00.000Z') },
-      source: 'reconciler',
-      errorCode: 'RECONCILE_ORPHAN',
-      errorMessage: 'Queue job failed before Task terminal update: provider request exhausted',
-    }))
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'failed',
+        taskId: 'task-1',
+        fence: {
+          kind: 'snapshot',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        source: 'reconciler',
+        errorCode: 'RECONCILE_ORPHAN',
+        errorMessage: 'Queue job failed before Task terminal update: provider request exhausted',
+      }),
+    )
+  })
+
+  it('requeues the same Task when formal resource success won the terminal race', async () => {
+    prismaMock.task.findMany.mockResolvedValue([
+      {
+        ...buildQueuedTask(),
+        status: TASK_STATUS.PROCESSING,
+      },
+    ])
+    queueMock.getJob.mockResolvedValue({
+      getState: vi.fn(async () => 'failed'),
+      failedReason: 'worker stopped after persisting the resource',
+    })
+    terminalMock.commitTaskTerminal.mockResolvedValueOnce({
+      applied: false,
+      reason: 'completion_pending',
+      existingStatus: TASK_STATUS.PROCESSING,
+      terminalEventId: null,
+      outboxCommandIds: [],
+    })
+
+    const result = await reconcileActiveTasks()
+
+    expect(result).toEqual({
+      failedTaskIds: [],
+      recoveredTaskIds: ['task-1'],
+      unavailableTaskIds: [],
+    })
+    expect(prismaMock.task.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'task-1',
+        status: TASK_STATUS.PROCESSING,
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      data: {
+        status: TASK_STATUS.QUEUED,
+        startedAt: null,
+        heartbeatAt: null,
+      },
+    })
+    expect(queuesMock.addTaskJob).toHaveBeenCalledTimes(1)
   })
 
   it('reports an invalid recovery envelope as failed rather than recovered', async () => {
@@ -186,21 +235,26 @@ describe('task reconcile queue lifecycle', () => {
       unavailableTaskIds: [],
     })
     expect(queuesMock.addTaskJob).not.toHaveBeenCalled()
-    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'failed',
-      taskId: 'task-1',
-      source: 'reconciler',
-      errorMessage: 'Queued task recovery contract invalid: task locale is missing',
-    }))
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'failed',
+        taskId: 'task-1',
+        source: 'reconciler',
+        errorMessage: 'Queued task recovery contract invalid: task locale is missing',
+      }),
+    )
   })
 
   it('coalesces overlapping reconciliation ticks into one cycle', async () => {
     let releaseSweep: () => void = () => {
       throw new Error('sweep release was not initialized')
     }
-    serviceMock.sweepStaleTasks.mockImplementationOnce(async () => await new Promise<[]>(resolve => {
-      releaseSweep = () => resolve([])
-    }))
+    serviceMock.sweepStaleTasks.mockImplementationOnce(
+      async () =>
+        await new Promise<[]>((resolve) => {
+          releaseSweep = () => resolve([])
+        }),
+    )
 
     const first = runTaskReconciliationCycle()
     const second = runTaskReconciliationCycle()

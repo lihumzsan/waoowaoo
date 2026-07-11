@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
-import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import { generateUniqueKey, uploadObject } from '@/lib/storage'
+import { ensureMediaObjectFromStorageKey, getMediaObjectById } from '@/lib/media/service'
+import { uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { assertFinalRenderClipsHaveSources, normalizeFinalRenderErrorLocale } from '@/lib/video-compose/final-render-errors'
 import { buildFinalRenderClips, resolveFinalRenderDimensions } from '@/lib/video-compose/final-render-plan'
@@ -69,11 +70,37 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
         episodeId,
         episode: { projectId: job.data.projectId },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        renderStatus: true,
+        renderTaskId: true,
+        outputMediaId: true,
+      },
     }),
   ])
   if (!project) throw new Error('CHAPTER_RENDER_PROJECT_NOT_FOUND')
   if (!chapter) throw new Error('CHAPTER_RENDER_CHAPTER_NOT_FOUND')
+  if (
+    chapter.renderStatus === 'completed'
+    && chapter.renderTaskId === job.data.taskId
+    && chapter.outputMediaId
+  ) {
+    const media = await getMediaObjectById(chapter.outputMediaId)
+    if (!media) throw new Error(`CHAPTER_RENDER_OUTPUT_MEDIA_MISSING:${chapter.id}`)
+    if (!media.durationMs || !media.width || !media.height) {
+      throw new Error(`CHAPTER_RENDER_OUTPUT_METADATA_MISSING:${chapter.id}`)
+    }
+    return {
+      episodeId,
+      chapterId,
+      mediaId: media.id,
+      outputUrl: media.url,
+      storageKey: media.storageKey,
+      durationSeconds: media.durationMs / 1000,
+      width: media.width,
+      height: media.height,
+    }
+  }
 
   await markChapterRenderStatus({
     chapterId,
@@ -167,7 +194,11 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
     const outputBuffer = await readFile(outputPath)
     const storageKey = await uploadObject(
       outputBuffer,
-      generateUniqueKey('chapter-video', 'mp4'),
+      buildTaskArtifactStorageKey({
+        taskId: job.data.taskId,
+        artifact: `chapter-video:${chapterId}`,
+        extension: 'mp4',
+      }),
       1,
       'video/mp4',
     )

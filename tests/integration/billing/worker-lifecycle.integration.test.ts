@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Job } from 'bullmq'
 import { UnrecoverableError } from 'bullmq'
-import { prepareTaskBilling } from '@/lib/billing/service'
+import { prepareTaskBillingInTransaction } from '@/lib/billing/service'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
+import { AppError } from '@/lib/errors/app-error'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { cancelTask } from '@/lib/task/service'
 import { withTaskLifecycle } from '@/lib/workers/shared'
@@ -32,12 +33,12 @@ async function createPreparedMusicTask() {
   if (!raw || !raw.billable) {
     throw new Error('failed to build billing info fixture')
   }
-  const prepared = await prepareTaskBilling({
+  const prepared = await prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
     id: taskId,
     userId: user.id,
     projectId: project.id,
     billingInfo: raw,
-  })
+  }, 'ENFORCE'))
 
   const billingInfo = prepared as TaskBillingInfo
   await createQueuedTask({
@@ -106,6 +107,10 @@ describe('billing/worker lifecycle integration', () => {
 
   it('marks task failed immediately for retryable errors when task attempts are exhausted', async () => {
     const fixture = await createPreparedMusicTask()
+    await prisma.task.update({
+      where: { id: fixture.taskId },
+      data: { attempt: 2 },
+    })
 
     await expect(
       withTaskLifecycle(fixture.job, async () => {
@@ -140,6 +145,31 @@ describe('billing/worker lifecycle integration', () => {
     expect(task?.errorMessage).toBeNull()
     const billing = task?.billingInfo as TaskBillingInfo
     expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('frozen')
+  })
+
+  it('refunds immediately and never retries when provider submission outcome is unknown', async () => {
+    const fixture = await createPreparedMusicTask()
+    const retryJob = {
+      ...fixture.job,
+      opts: { attempts: 3 },
+      attemptsMade: 0,
+    } as unknown as Job<TaskJobData>
+
+    await expect(
+      withTaskLifecycle(retryJob, async () => {
+        throw new AppError('PROVIDER_SUBMISSION_OUTCOME_UNKNOWN')
+      }),
+    ).rejects.toBeInstanceOf(UnrecoverableError)
+
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: fixture.taskId } })
+    expect(task.status).toBe('failed')
+    expect(task.errorCode).toBe('PROVIDER_SUBMISSION_OUTCOME_UNKNOWN')
+    const billing = task.billingInfo as TaskBillingInfo
+    expect((billing as Extract<TaskBillingInfo, { billable: true }>).status).toBe('rolled_back')
+
+    const balance = await prisma.userBalance.findUniqueOrThrow({ where: { userId: fixture.user.id } })
+    expect(balance.frozenAmount).toBeCloseTo(0, 8)
+    expect(balance.balance).toBeCloseTo(10, 8)
   })
 
   it('rolls back billing on cancellation path', async () => {

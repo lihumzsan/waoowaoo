@@ -29,6 +29,7 @@ function buildMessages(): UIMessage[] {
             interruptionId: 'choice-interruption-source',
             toolCallId: 'tool-1',
             choiceType: 'style',
+            replyMode: 'whole_card',
             title: 'Choose style',
             description: 'Pick one.',
             groups: [
@@ -36,6 +37,7 @@ function buildMessages(): UIMessage[] {
                 key: 'stylePreviewId',
                 label: 'Style',
                 required: true,
+                presentation: 'image',
                 options: [
                   {
                     value: 'preview-source',
@@ -45,7 +47,7 @@ function buildMessages(): UIMessage[] {
               },
             ],
             submitLabel: 'Confirm',
-            submit: { kind: 'submit_tool_output' },
+            submit: { kind: 'submit_tool_output', decision: 'select' },
           },
         },
       ],

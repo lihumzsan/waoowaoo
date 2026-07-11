@@ -14,6 +14,21 @@ const projectionModels = new Set([
   'projectAgentRun',
   'projectAgentActivity',
   'projectAgentInterruption',
+  'projectAgentWait',
+  'projectAgentContinuationCheckpoint',
+  'projectAssistantThread',
+])
+const secondaryProjectionOwners = new Map([
+  ['projectAgentWait', new Set([
+    path.join(root, 'src/lib/project-agent/event/reducer.ts'),
+    path.join(root, 'src/lib/project-agent/waits.ts'),
+  ])],
+  ['projectAgentContinuationCheckpoint', new Set([
+    path.join(root, 'src/lib/project-agent/waits.ts'),
+  ])],
+  ['projectAssistantThread', new Set([
+    path.join(root, 'src/lib/project-agent/persistence.ts'),
+  ])],
 ])
 
 function collectTypeScriptFiles(directory) {
@@ -56,6 +71,8 @@ function mutationDataKeys(node) {
 }
 
 function isDeclaredMaintenanceMutation(filePath, node, mutation) {
+  const secondaryOwners = secondaryProjectionOwners.get(mutation.model)
+  if (secondaryOwners) return secondaryOwners.has(filePath)
   if (mutation.method !== 'updateMany') return false
   const keys = mutationDataKeys(node)
   if (!keys || keys.length !== 1) return false
@@ -63,10 +80,6 @@ function isDeclaredMaintenanceMutation(filePath, node, mutation) {
     filePath === runMaintenancePath
     && mutation.model === 'projectAgentRun'
     && keys[0] === 'heartbeatAt'
-  ) || (
-    filePath === interruptionMaintenancePath
-    && mutation.model === 'projectAgentInterruption'
-    && keys[0] === 'runState'
   )
 }
 
@@ -93,6 +106,177 @@ const sessionStatePath = path.join(root, 'src/lib/project-agent/session-state.ts
 const sessionStateSource = fs.readFileSync(sessionStatePath, 'utf8')
 if (sessionStateSource.includes('cancelStaleRunningProjectAgentRunsForScope')) {
   violations.push('src/lib/project-agent/session-state.ts: GET projection must remain read-only')
+}
+if (
+  sessionStateSource.includes('activeStylePreviewGeneration')
+  || sessionStateSource.includes('generate_edit_style_previews')
+) {
+  violations.push('src/lib/project-agent/session-state.ts: Session projection must not contain operation-specific private lifecycle state')
+}
+for (const required of [
+  'projectAgentRun.findMany',
+  'PROJECT_AGENT_SESSION_ACTIVE_RUN_CONFLICT',
+  'PROJECT_AGENT_SESSION_INTERRUPTION_RUN_MISMATCH',
+  'PROJECT_AGENT_SESSION_WAIT_RUN_MISMATCH',
+  'PROJECT_AGENT_SESSION_ACTIVITY_RUN_MISMATCH',
+]) {
+  if (!sessionStateSource.includes(required)) {
+    violations.push(`src/lib/project-agent/session-state.ts: Session same-Run projection contract missing ${required}`)
+  }
+}
+
+const assistantPanelPath = path.join(root, 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx')
+const assistantPanelSource = fs.readFileSync(assistantPanelPath, 'utf8')
+if (
+  assistantPanelSource.includes('activeStylePreviewGeneration')
+  || assistantPanelSource.includes('shouldDockWorkspaceStylePreviewGenerationCard')
+  || assistantPanelSource.includes('shouldSuppressWorkspaceAssistantOperationRunCard')
+) {
+  violations.push('src/features/project-workspace/components/WorkspaceAssistantPanel.tsx: UI must project generic Run/Wait/Choice state without an operation-specific lifecycle')
+}
+
+const runtimeSource = fs.readFileSync(path.join(root, 'src/lib/project-agent/runtime.ts'), 'utf8')
+if (
+  runtimeSource.includes('updateProjectAgentRunStatus(')
+  || runtimeSource.includes('reopenProjectAgentInterruption(')
+  || !runtimeSource.includes('settleProjectAgentRunFailureWithMessage(')
+) {
+  violations.push('src/lib/project-agent/runtime.ts: user-visible failure must atomically settle message + Run and must not reopen a consumed decision')
+}
+const executionFenceIndex = runtimeSource.indexOf("kind: 'run.execution_started'")
+const compressionModelIndex = runtimeSource.indexOf('await compressMessages')
+const modelRunIndex = runtimeSource.indexOf('await run(agent, runInput')
+if (
+  executionFenceIndex < 0
+  || compressionModelIndex < 0
+  || modelRunIndex < 0
+  || executionFenceIndex > compressionModelIndex
+  || executionFenceIndex > modelRunIndex
+) {
+  violations.push('src/lib/project-agent/runtime.ts: execution-segment fence must precede compression and primary model execution')
+}
+for (const required of [
+  'createProjectAgentExecutionSegment',
+  'projectAgentExecutionStartedIdempotencyKey(executionSegment.id)',
+  'executionSegmentId: executionSegment.id',
+]) {
+  if (!runtimeSource.includes(required)) {
+    violations.push(`src/lib/project-agent/runtime.ts: execution segment authority missing ${required}`)
+  }
+}
+const chatRouteSource = fs.readFileSync(
+  path.join(root, 'src/app/api/projects/[projectId]/assistant/chat/route.ts'),
+  'utf8',
+)
+if (
+  chatRouteSource.includes('safelyUpdateProjectAgentRunStatus(')
+  || !chatRouteSource.includes('settleProjectAgentRunFailureWithMessage(')
+) {
+  violations.push('Assistant chat route must use atomic message + Run failure settlement')
+}
+if (
+  !chatRouteSource.includes('readRetryableConsumedProjectAgentApprovalInterruption')
+  || !chatRouteSource.includes('readRetryableConsumedProjectAgentChoiceInterruption')
+  || !chatRouteSource.includes('createProjectAgentConsumedControlRetryRun')
+) {
+  violations.push('Assistant chat route must preserve consumed decisions and create a distinct guarded retry Run')
+}
+
+function functionBody(source, functionName) {
+  let body = null
+  const visit = (node) => {
+    if (
+      ts.isFunctionDeclaration(node)
+      && node.name?.text === functionName
+      && node.body
+    ) {
+      body = node.body.getText(source)
+      return
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  if (!body) {
+    violations.push(`${path.relative(root, source.fileName)}: required authority ${functionName} is missing`)
+    return ''
+  }
+  return body
+}
+
+const reducerSourceText = fs.readFileSync(reducerPath, 'utf8')
+const reducerSource = ts.createSourceFile(reducerPath, reducerSourceText, ts.ScriptTarget.Latest, true)
+if (reducerSourceText.includes('projectAgentActivity.upsert')) {
+  violations.push('src/lib/project-agent/event/reducer.ts: activity.started must remain create-only')
+}
+for (const functionName of ['completeActivity', 'failActivity', 'cancelActivity']) {
+  const body = functionBody(reducerSource, functionName)
+  if (!body.includes('transitionProjectAgentActivity')) {
+    violations.push(`src/lib/project-agent/event/reducer.ts: ${functionName} must use the checked Activity transition authority`)
+  }
+}
+const transitionBody = functionBody(reducerSource, 'transitionProjectAgentActivity')
+if (!transitionBody.includes('transitioned.count !== 1')) {
+  violations.push('src/lib/project-agent/event/reducer.ts: Activity terminal transitions must reject zero-row and raced writes')
+}
+
+const interruptionSourceText = fs.readFileSync(interruptionMaintenancePath, 'utf8')
+if (
+  interruptionSourceText.includes('reopenProjectAgentInterruption')
+  || reducerSourceText.includes('interruption.reopened')
+) {
+  violations.push('Consumed Assistant decisions are immutable and must never be reopened')
+}
+const interruptionSource = ts.createSourceFile(
+  interruptionMaintenancePath,
+  interruptionSourceText,
+  ts.ScriptTarget.Latest,
+  true,
+)
+const replacementBody = functionBody(
+  interruptionSource,
+  'appendProjectAgentInterruptionReplacementInTransaction',
+)
+for (const requiredFragment of ['$queryRaw', 'projectAgentInterruption.findMany', 'appendProjectAgentEventsInTransaction']) {
+  if (!replacementBody.includes(requiredFragment)) {
+    violations.push(`src/lib/project-agent/interruptions.ts: atomic interruption replacement must retain ${requiredFragment}`)
+  }
+}
+for (const functionName of [
+  'createProjectAgentApprovalInterruption',
+  'createProjectAgentChoiceInterruption',
+]) {
+  const body = functionBody(interruptionSource, functionName)
+  if (
+    !body.includes('prisma.$transaction')
+    || !body.includes('appendProjectAgentInterruptionReplacementInTransaction')
+  ) {
+    violations.push(`src/lib/project-agent/interruptions.ts: ${functionName} must replace and raise under one transaction authority`)
+  }
+}
+
+const runSourceText = fs.readFileSync(runMaintenancePath, 'utf8')
+const runSource = ts.createSourceFile(runMaintenancePath, runSourceText, ts.ScriptTarget.Latest, true)
+const retryRunBody = functionBody(runSource, 'createProjectAgentConsumedControlRetryRun')
+for (const requiredFragment of [
+  'FOR UPDATE',
+  'projectAgentExecutionStartedIdempotencyKey(decisionSegment.id)',
+  'projectAgentEvent.findUnique',
+  'PROJECT_AGENT_CONTROL_EXECUTION_OUTCOME_UNKNOWN',
+  'PROJECT_AGENT_CONTROL_FAILED',
+  'appendProjectAgentEventsInTransaction',
+]) {
+  if (!retryRunBody.includes(requiredFragment)) {
+    violations.push(`src/lib/project-agent/runs.ts: consumed-control retry authority must retain ${requiredFragment}`)
+  }
+}
+for (const required of [
+  'readProjectAgentDecisionInterruptionId(event.executionSegmentId)',
+  'PROJECT_AGENT_APPROVAL_RUN_STATE_CLEAR_RACED',
+  'data: { runState: null }',
+]) {
+  if (!reducerSourceText.includes(required)) {
+    violations.push(`src/lib/project-agent/event/reducer.ts: execution-started approval cleanup missing ${required}`)
+  }
 }
 
 if (violations.length > 0) {

@@ -36,7 +36,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
     const { submitGeminiBatch } = await import('@/lib/ai-providers/google/llm')
     const result = await withRetry({
       scope: `google:image:batch:${modelId}`,
-      policy: RETRY_POLICY.mediaFetch,
+      policy: RETRY_POLICY.providerSubmit,
       run: async () => await submitGeminiBatch(apiKey, input.prompt, {
         referenceImages,
         ...(options.aspectRatio ? { aspectRatio: options.aspectRatio } : {}),
@@ -59,7 +59,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
   if (modelId.startsWith('imagen-')) {
     const response = await withRetry({
       scope: `google:image:imagen:${modelId}`,
-      policy: RETRY_POLICY.mediaFetch,
+      policy: RETRY_POLICY.providerSubmit,
       run: async () => await withProviderProxyDispatcher(
         GOOGLE_PROVIDER_PROXY_TARGET,
         async () => await ai.models.generateImages({
@@ -102,7 +102,7 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
 
   const response = await withRetry({
     scope: `google:image:gemini:${modelId}`,
-    policy: RETRY_POLICY.mediaFetch,
+    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({

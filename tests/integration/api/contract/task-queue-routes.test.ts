@@ -11,7 +11,6 @@ import {
   publishTaskEventMock,
   queryTaskTargetStatesMock,
   queryTasksMock,
-  removeTaskJobMock,
   resetTaskInfraMocks,
   type RouteContext,
   type TaskRecord,
@@ -46,9 +45,6 @@ vi.mock('@/lib/task/service', () => ({
   cancelTask: cancelTaskMock,
 }))
 
-vi.mock('@/lib/task/queues', () => ({
-  removeTaskJob: removeTaskJobMock,
-}))
 
 vi.mock('@/lib/task/publisher', () => ({
   publishTaskEvent: publishTaskEventMock,
@@ -70,6 +66,8 @@ vi.mock('@/lib/sse/shared-subscriber', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: vi.fn(async (work: (transaction: Record<string, never>) => Promise<unknown>) =>
+      await work({})),
     task: {
       findMany: vi.fn(async () => []),
     },
@@ -134,7 +132,11 @@ describe('api contract - task queue routes (behavior)', () => {
     const payload = await res.json() as { success: boolean; dismissed: number }
     expect(payload.success).toBe(true)
     expect(payload.dismissed).toBe(1)
-    expect(dismissFailedTasksMock).toHaveBeenCalledWith(['task-1', 'task-2'], 'user-1')
+    expect(dismissFailedTasksMock).toHaveBeenCalledWith(
+      ['task-1', 'task-2'],
+      'user-1',
+      expect.any(Object),
+    )
   })
 
   it('POST /api/task-target-states: validates payload and returns queried states', async () => {
@@ -210,7 +212,6 @@ describe('api contract - task queue routes (behavior)', () => {
     expect(res.status).toBe(200)
     const payload = await res.json() as { task: TaskRecord; cancelled: boolean }
 
-    expect(removeTaskJobMock).toHaveBeenCalledWith('task-1')
     expect(cancelTaskMock).toHaveBeenCalledWith('task-1')
     expect(payload.cancelled).toBe(true)
     expect(payload.task.status).toBe(TASK_STATUS.CANCELED)

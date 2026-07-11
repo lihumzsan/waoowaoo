@@ -4,22 +4,22 @@ import { inspectApprovalPlanBatchAuthority } from '../../../scripts/guards/appro
 const valid = {
   productionSources: '',
   batchSubmitter: [
-    'approvalGrant.updateMany',
-    'tx.task.create',
-    'prepareTaskBillingInTransaction',
-    'OUTBOX_COMMAND_KIND.TASK_ENQUEUE',
+    'persistSubmittedTaskBatchInTransaction',
     'transaction: Prisma.TransactionClient',
   ].join('\n'),
   planning: 'submitApprovedOperationPlanTasks()',
   outboxTypes: "TASK_ENQUEUE: 'task.enqueue'",
-  outboxWorker: 'await enqueuePersistedApprovedTask(payload)',
+  outboxWorker: 'await enqueuePersistedTask(payload)',
   execution: [
     'FOR UPDATE',
     "status: 'committing'",
     "status: 'completed'",
     'transaction: tx',
     'OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE',
+    'approvalGrant.updateMany',
   ].join('\n'),
+  genericSubmitter: 'BILLABLE_MEDIA_APPROVED_PLAN_SUBMITTER_REQUIRED',
+  legacyAuthorizationExists: false,
 }
 
 describe('approval plan batch authority guard', () => {
@@ -51,5 +51,29 @@ describe('approval plan batch authority guard', () => {
       "two-phase OperationExecution residue must be deleted: status: 'submitted'",
       'two-phase OperationExecution residue must be deleted: 9999',
     ])
+  })
+
+  it('rejects a second Grant consume writer and generic billable authorization inputs', () => {
+    expect(
+      inspectApprovalPlanBatchAuthority({
+        ...valid,
+        batchSubmitter: `${valid.batchSubmitter}\napprovalGrant.updateMany`,
+        genericSubmitter: 'assertTaskApprovalAuthorization\napprovalGrantId?: string',
+        legacyAuthorizationExists: true,
+      }),
+    ).toEqual([
+      'approved plan batch submitter must not consume ApprovalGrant',
+      'generic Task submitter restores billable authorization input: assertTaskApprovalAuthorization',
+      'generic Task submitter restores billable authorization input: approvalGrantId?:',
+      'generic Task submitter must fail closed for billable media',
+      'legacy generic Task approval authorization module must remain deleted',
+    ])
+  })
+
+  it('rejects an early Task-model replay path that bypasses durable bundle validation', () => {
+    expect(inspectApprovalPlanBatchAuthority({
+      ...valid,
+      batchSubmitter: `${valid.batchSubmitter}\nconst existing = await tx.task.findMany({})`,
+    })).toContain('approved plan batch submitter must not bypass the transactional Task bundle primitive')
   })
 })

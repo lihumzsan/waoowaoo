@@ -6,9 +6,10 @@ import {
   resetOutboxCommandEnqueue,
 } from './repository'
 import { prisma } from '@/lib/prisma'
+import { getOutboxRuntimeConfig } from '@/lib/workers/runtime-config'
 
 const logger = createScopedLogger({ module: 'outbox.dispatcher' })
-const STALE_ENQUEUED_MS = 90_000
+const outboxConfig = getOutboxRuntimeConfig()
 
 export async function dispatchPendingOutboxCommands(limit = 100): Promise<number> {
   const commands = await listOutboxCommandsAwaitingEnqueue(limit)
@@ -22,7 +23,7 @@ export async function dispatchPendingOutboxCommands(limit = 100): Promise<number
 }
 
 export async function reconcileStaleEnqueuedOutboxCommands(limit = 100): Promise<number> {
-  const staleBefore = new Date(Date.now() - STALE_ENQUEUED_MS)
+  const staleBefore = new Date(Date.now() - outboxConfig.staleEnqueuedMs)
   const commands = await prisma.outboxCommand.findMany({
     where: {
       acceptedAt: null,
@@ -59,7 +60,7 @@ const globalForOutboxDispatcher = globalThis as typeof globalThis & {
   __waoowaooOutboxDispatchCycle?: Promise<void>
 }
 
-export function startOutboxDispatcher(intervalMs = 5_000): void {
+export function startOutboxDispatcher(): void {
   if (globalForOutboxDispatcher.__waoowaooOutboxDispatcherTimer) return
   const execute = (): void => {
     if (globalForOutboxDispatcher.__waoowaooOutboxDispatchCycle) return
@@ -87,5 +88,8 @@ export function startOutboxDispatcher(intervalMs = 5_000): void {
       })
   }
   execute()
-  globalForOutboxDispatcher.__waoowaooOutboxDispatcherTimer = setInterval(execute, Math.max(1_000, intervalMs))
+  globalForOutboxDispatcher.__waoowaooOutboxDispatcherTimer = setInterval(
+    execute,
+    outboxConfig.dispatchIntervalMs,
+  )
 }

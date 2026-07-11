@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveWorkspaceAssistantActiveFocusRequest,
-} from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
+} from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
 function activity(input: {

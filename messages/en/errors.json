@@ -23,6 +23,8 @@
     "EDIT_SCRIPT_ASSET_MENU_EMPTY": "No confirmed scene or character assets are available for chapter planning",
     "PROVIDER_POLL_FAILED": "Provider polling failed. Please retry later",
     "PROVIDER_SUBMIT_FAILED": "Provider submission failed. Please retry later",
+    "PROVIDER_SUBMISSION_REJECTED": "The provider rejected this generation request",
+    "PROVIDER_SUBMISSION_OUTCOME_UNKNOWN": "The provider response was lost. Your credits were refunded and this request was not submitted again",
     "EXTERNAL_ERROR": "External service temporarily unavailable. Please retry later",
     "TASK_NOT_READY": "Task is still processing",
     "NO_RESULT": "Task has no result",

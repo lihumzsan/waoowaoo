@@ -120,4 +120,17 @@ describe('soundscape worker', () => {
       planJson: soundscapePlan,
     })
   })
+
+  it('replays a persisted plan without invoking the analysis model again', async () => {
+    prismaMock.projectEditSoundscape.findFirst.mockResolvedValueOnce({ planJson: soundscapePlan })
+    const { handleSoundscapePlanTask } = await import('@/lib/soundscape/generate')
+
+    const result = await handleSoundscapePlanTask(buildJob(TASK_TYPE.SOUNDSCAPE_PLAN, {
+      episodeId: 'episode-1',
+      soundEffectModel: 'elevenlabs::eleven_text_to_sound_v2',
+    }))
+
+    expect(result).toMatchObject({ decision: 'soundscape', sourceCount: 1, sectionCount: 1 })
+    expect(executeAiStructuredTextStepMock).not.toHaveBeenCalled()
+  })
 })

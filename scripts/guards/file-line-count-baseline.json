@@ -7,9 +7,9 @@
   "src/components/ui/model-dropdown-innovative.tsx": 588,
   "src/components/ui/model-dropdown-variants.tsx": 543,
   "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts": 825,
-  "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx": 683,
-  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 1210,
-  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 806,
+  "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx": 616,
+  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 853,
+  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 604,
   "src/lib/query/hooks/useAssets.ts": 456,
   "src/lib/query/hooks/useProjectEditScript.ts": 464,
   "src/lib/query/hooks/useStoryboards.ts": 496,
@@ -20,5 +20,5 @@
   "src/lib/query/mutations/location-image-mutations.ts": 355,
   "src/lib/query/mutations/location-management-mutations.ts": 352,
   "src/lib/workers/handlers/asset-hub-image-task-handler.ts": 312,
-  "src/lib/workers/handlers/image-task-handler-shared.ts": 527
+  "src/lib/workers/handlers/image-task-handler-shared.ts": 526
 }

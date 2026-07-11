@@ -23,6 +23,8 @@ export function inspectSseDurableWatermarkContract(input) {
     'taskEventId',
     'mutationEventAtMs',
     'mutationBatchId',
+    'agentEventId',
+    'v2;',
     'advanceWorkspaceSseCursor',
   ]) {
     if (!input.protocol.includes(required)) violations.push(`SSE composite cursor contract missing: ${required}`)
@@ -35,16 +37,75 @@ export function inspectSseDurableWatermarkContract(input) {
   if (!input.route.includes("request.nextUrl.searchParams.get('cursor')")) {
     violations.push('SSE route must accept the durable initial cursor')
   }
+  if (input.eventAppend && !input.eventAppend.includes('createSessionBroadcastOutbox(tx, createdEvent.id)')) {
+    violations.push('ProjectAgentEvent append must create the Assistant broadcast Outbox in the same transaction')
+  }
+  if (input.outboxWorker && !input.outboxWorker.includes('publishPersistedProjectAgentSessionChangedById')) {
+    violations.push('Outbox worker must remain the sole Assistant Session publisher')
+  }
+  if (input.assistantRuntime && !input.assistantRuntime.includes('PROJECT_AGENT_SESSION_STATE_STALE')) {
+    violations.push('Assistant runtime must reject Session responses older than the Assistant event watermark')
+  }
+  for (const required of [
+    'getWorkspaceSseEventIdentity',
+    'processedEventFingerprints',
+    'event_identity_conflict',
+    'event_identity_window_overflow',
+  ]) {
+    if (!input.clientSequence?.includes(required)) {
+      violations.push(`SSE client identity/fingerprint contract missing: ${required}`)
+    }
+  }
+  for (const required of [
+    'getWorkspaceSseEventIdentity',
+    'emittedIdentities',
+    'SseEventIdentityConflictError',
+    'SseEventIdentityWindowOverflowError',
+  ]) {
+    if (!input.serverSession?.includes(required)) {
+      violations.push(`SSE server live identity/fingerprint contract missing: ${required}`)
+    }
+  }
+  if (!input.client.includes('requestSnapshotResync()')) {
+    violations.push('SSE client identity conflict must request a snapshot resync')
+  }
+  if (input.publisherCallerFiles) {
+    const unexpected = input.publisherCallerFiles.filter((file) => file !== 'src/lib/workers/outbox.worker.ts')
+    if (unexpected.length > 0 || !input.publisherCallerFiles.includes('src/lib/workers/outbox.worker.ts')) {
+      violations.push(`Assistant Session publisher callers must be Outbox-only: ${input.publisherCallerFiles.join(', ')}`)
+    }
+  }
   return violations
+}
+
+function listFilesRecursively(root) {
+  const files = []
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolute = path.join(root, entry.name)
+    if (entry.isDirectory()) files.push(...listFilesRecursively(absolute))
+    else if (entry.isFile() && /\.[cm]?[jt]sx?$/.test(entry.name)) files.push(absolute)
+  }
+  return files
 }
 
 function runCli() {
   const cwd = process.cwd()
   const read = (file) => fs.readFileSync(path.join(cwd, file), 'utf8')
+  const publisherName = 'publishPersistedProjectAgentSessionChangedById'
+  const publisherDefinition = path.join(cwd, 'src/lib/project-agent/session-event.ts')
+  const publisherCallerFiles = listFilesRecursively(path.join(cwd, 'src'))
+    .filter((file) => file !== publisherDefinition && fs.readFileSync(file, 'utf8').includes(publisherName))
+    .map((file) => path.relative(cwd, file))
   const violations = inspectSseDurableWatermarkContract({
     client: read('src/lib/query/hooks/useSSE.ts'),
     protocol: read('src/lib/sse/protocol.ts'),
     route: read('src/app/api/sse/route.ts'),
+    eventAppend: read('src/lib/project-agent/event/append.ts'),
+    outboxWorker: read('src/lib/workers/outbox.worker.ts'),
+    assistantRuntime: read('src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantSessionSync.ts'),
+    clientSequence: read('src/lib/query/workspace-sse-event-sequence.ts'),
+    serverSession: read('src/lib/sse/server-session.ts'),
+    publisherCallerFiles,
     legacyReplayRouteExists: fs.existsSync(path.join(cwd, 'src/app/api/sse/replay/route.ts')),
   })
   if (violations.length > 0) {
@@ -52,7 +113,7 @@ function runCli() {
     for (const violation of violations) console.error(`- ${violation}`)
     process.exit(1)
   }
-  console.log('[sse-durable-watermark] OK composite durable cursor + subscribe-before-bootstrap')
+  console.log('[sse-durable-watermark] OK Task/Mutation/Assistant durable cursor + subscribe-before-bootstrap')
 }
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null

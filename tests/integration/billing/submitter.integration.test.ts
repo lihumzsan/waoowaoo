@@ -7,37 +7,10 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 
-const queueState = vi.hoisted(() => ({
-  mode: 'success' as 'success' | 'fail',
-  errorMessage: 'queue add failed',
-}))
-const addTaskJobMock = vi.hoisted(() => vi.fn(async () => ({ id: 'mock-job' })))
-const publishTaskEventMock = vi.hoisted(() => vi.fn(async () => ({})))
-
-vi.mock('@/lib/task/queues', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/task/queues')>()),
-  addTaskJob: addTaskJobMock,
-}))
-
-vi.mock('@/lib/task/publisher', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/task/publisher')>()),
-  publishTaskEvent: publishTaskEventMock,
-  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
-}))
-
-addTaskJobMock.mockImplementation(async () => {
-    if (queueState.mode === 'fail') {
-      throw new Error(queueState.errorMessage)
-    }
-    return { id: 'mock-job' }
-})
-
 describe('billing/submitter integration', () => {
   beforeEach(async () => {
     await resetBillingState()
     process.env.BILLING_MODE = 'ENFORCE'
-    queueState.mode = 'success'
-    queueState.errorMessage = 'queue add failed'
     vi.clearAllMocks()
   })
 
@@ -61,6 +34,10 @@ describe('billing/submitter integration', () => {
     const billing = task?.billingInfo as { billable?: boolean; source?: string } | null
     expect(billing?.billable).toBe(true)
     expect(billing?.source).toBe('task')
+    await expect(prisma.taskEvent.count({ where: { taskId: result.taskId } })).resolves.toBe(1)
+    await expect(prisma.outboxCommand.count({
+      where: { aggregateType: 'task', aggregateId: result.taskId },
+    })).resolves.toBe(2)
   })
 
   it('marks task as failed when balance is insufficient', async () => {
@@ -94,9 +71,8 @@ describe('billing/submitter integration', () => {
       orderBy: { createdAt: 'desc' },
     })
 
-    expect(task).toBeTruthy()
-    expect(task?.status).toBe('failed')
-    expect(task?.errorCode).toBe('INSUFFICIENT_BALANCE')
+    expect(task).toBeNull()
+    await expect(prisma.balanceFreeze.count()).resolves.toBe(0)
   })
 
   it('allows billable task submission without computed billingInfo in OFF mode (regression)', async () => {
@@ -145,17 +121,14 @@ describe('billing/submitter integration', () => {
       orderBy: { createdAt: 'desc' },
     })
 
-    expect(task).toBeTruthy()
-    expect(task?.status).toBe('failed')
-    expect(task?.errorCode).toBe('INVALID_PARAMS')
-    expect(task?.errorMessage).toContain('missing server-generated billingInfo')
+    expect(task).toBeNull()
   })
 
-  it('rolls back billing freeze and marks task failed when queue enqueue fails', async () => {
+  it('rolls back Task, billing freeze, event, and Outbox when the submission transaction fails', async () => {
     const user = await createTestUser()
     await seedBalance(user.id, 10)
-    queueState.mode = 'fail'
-    queueState.errorMessage = 'queue unavailable'
+    const eventCountBefore = await prisma.taskEvent.count()
+    const outboxCountBefore = await prisma.outboxCommand.count()
 
     await expect(
       submitTask({
@@ -166,8 +139,11 @@ describe('billing/submitter integration', () => {
         targetType: 'ProjectEditChapter',
         targetId: 'project-e',
         payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-e' },
+        onTaskCreatedInTransaction: async () => {
+          throw new Error('target ownership failed')
+        },
       }),
-    ).rejects.toMatchObject({ code: 'EXTERNAL_ERROR' } satisfies Pick<ApiError, 'code'>)
+    ).rejects.toThrow('target ownership failed')
 
     const task = await prisma.task.findFirst({
       where: {
@@ -178,19 +154,12 @@ describe('billing/submitter integration', () => {
     })
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })
 
-    expect(task).toBeTruthy()
-    expect(task?.status).toBe('failed')
-    expect(task?.errorCode).toBe('ENQUEUE_FAILED')
-    expect(task?.errorMessage).toContain('queue unavailable')
-    expect(task?.billingInfo).toMatchObject({
-      billable: true,
-      status: 'rolled_back',
-    })
+    expect(task).toBeNull()
     expect(balance?.balance).toBeCloseTo(10, 8)
     expect(balance?.frozenAmount).toBeCloseTo(0, 8)
-    expect(await prisma.balanceFreeze.count()).toBe(1)
-    const freeze = await prisma.balanceFreeze.findFirst({ orderBy: { createdAt: 'desc' } })
-    expect(freeze?.status).toBe('rolled_back')
+    expect(await prisma.balanceFreeze.count()).toBe(0)
+    expect(await prisma.taskEvent.count()).toBe(eventCountBefore)
+    expect(await prisma.outboxCommand.count()).toBe(outboxCountBefore)
   })
 
 })

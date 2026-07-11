@@ -1,10 +1,12 @@
 import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { QUEUE_NAME } from '@/lib/task/queues'
-import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { getTaskDefinitionForQueue, type ImageTaskHandlerKey } from '@/lib/task/definition'
+import type { TaskJobData } from '@/lib/task/types'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { withUserConcurrencyGate } from './user-concurrency-gate'
+import { getWorkerConcurrency } from './runtime-config'
 import {
   handleAssetHubImageTask,
   handleAssetHubModifyTask,
@@ -16,35 +18,31 @@ import {
 } from './handlers/image-task-handlers'
 
 type AnyObj = Record<string, unknown>
+type ImageTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
+
+async function handleRegenerateGroupTask(job: Job<TaskJobData>) {
+  const payload = (job.data.payload || {}) as AnyObj
+  return payload.type === 'character'
+    ? await handleCharacterImageTask(job)
+    : await handleLocationImageTask(job)
+}
+
+const IMAGE_TASK_HANDLERS = {
+  image_character: handleCharacterImageTask,
+  edit_style_preview: handleEditStylePreviewImageTask,
+  image_location: handleLocationImageTask,
+  regenerate_group: handleRegenerateGroupTask,
+  modify_asset_image: handleModifyAssetImageTask,
+  asset_hub_image: handleAssetHubImageTask,
+  asset_hub_modify: handleAssetHubModifyTask,
+  image_panel: handlePanelImageTask,
+} satisfies Record<ImageTaskHandlerKey, ImageTaskHandler>
 
 async function processImageTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
 
-  switch (job.data.type) {
-    case TASK_TYPE.IMAGE_CHARACTER:
-      return await handleCharacterImageTask(job)
-    case TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE:
-      return await handleEditStylePreviewImageTask(job)
-    case TASK_TYPE.IMAGE_LOCATION:
-      return await handleLocationImageTask(job)
-    case TASK_TYPE.REGENERATE_GROUP: {
-      const payload = (job.data.payload || {}) as AnyObj
-      if (payload.type === 'character') {
-        return await handleCharacterImageTask(job)
-      }
-      return await handleLocationImageTask(job)
-    }
-    case TASK_TYPE.MODIFY_ASSET_IMAGE:
-      return await handleModifyAssetImageTask(job)
-    case TASK_TYPE.ASSET_HUB_IMAGE:
-      return await handleAssetHubImageTask(job)
-    case TASK_TYPE.ASSET_HUB_MODIFY:
-      return await handleAssetHubModifyTask(job)
-    case TASK_TYPE.IMAGE_PANEL:
-      return await handlePanelImageTask(job)
-    default:
-      throw new Error(`Unsupported image task type: ${job.data.type}`)
-  }
+  const definition = getTaskDefinitionForQueue(job.data.type, 'image')
+  return await IMAGE_TASK_HANDLERS[definition.workerHandler](job)
 }
 
 export function createImageWorker() {
@@ -61,7 +59,7 @@ export function createImageWorker() {
     }),
     {
       connection: queueRedis,
-      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_IMAGE || '20', 10) || 20,
+      concurrency: getWorkerConcurrency('image'),
     },
   )
 }

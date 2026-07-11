@@ -44,6 +44,7 @@ export function createWorkerLLMStreamCallbacks(
   const activeProbeIntervalMs = 600
   let publishQueue: Promise<void> = Promise.resolve()
   let terminatedError: TaskTerminatedError | null = null
+  let publishError: unknown = null
   let checkingActive = false
   let lastActiveProbeAt = 0
 
@@ -58,6 +59,7 @@ export function createWorkerLLMStreamCallbacks(
   const ensureActiveOrThrow = (stage: string) => {
     void stage
     if (terminatedError) throw terminatedError
+    if (publishError) throw publishError
   }
 
   const assertActive = async (stage: string) => {
@@ -96,7 +98,6 @@ export function createWorkerLLMStreamCallbacks(
     ensureActiveOrThrow(stage)
     scheduleActiveProbe()
     publishQueue = publishQueue
-      .catch(() => undefined)
       .then(async () => {
         ensureActiveOrThrow(stage)
         await assertActive(stage)
@@ -107,7 +108,7 @@ export function createWorkerLLMStreamCallbacks(
           markTerminated(stage)
           return
         }
-        throw error
+        publishError = error
       })
   }
 
@@ -265,10 +266,11 @@ export function createWorkerLLMStreamCallbacks(
       })
     },
     async flush() {
-      await publishQueue.catch(() => undefined)
+      await publishQueue
       if (terminatedError) {
         throw terminatedError
       }
+      if (publishError) throw publishError
     },
   }
 }

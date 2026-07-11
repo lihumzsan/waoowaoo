@@ -11,6 +11,7 @@ import {
   prismaState,
   vi,
   type NextRequest,
+  type ProjectAgentOperationDefinition,
 } from './agents-tool-adapter.fixture'
 
 describe('createProjectAgentOperationTool', () => {
@@ -93,12 +94,20 @@ describe('createProjectAgentOperationTool', () => {
       merge: vi.fn(),
       onError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
     }
+    const baseOperation = buildOperation()
     const operation = {
-      ...buildOperation(),
+      ...baseOperation,
+      confirmation: {
+        kind: 'billable_media' as const,
+        required: true as const,
+        summary: 'Confirm billable generation',
+      },
       plan: vi.fn(async () => {
         throw new Error('CAPABILITY_VALUE_NOT_ALLOWED: duration value 3 is not allowed')
       }),
-    }
+      commit: vi.fn(async () => ({ success: true })),
+      execute: undefined,
+    } as unknown as ProjectAgentOperationDefinition
     const tool = createProjectAgentOperationTool({
       request: new Request('http://localhost') as unknown as NextRequest,
       operation,

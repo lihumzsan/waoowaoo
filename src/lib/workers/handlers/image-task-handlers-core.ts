@@ -102,7 +102,12 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
       }),
     })
 
-    const cosKey = await uploadImageSourceToCos(source, 'character-modify', appearance.id)
+    const cosKey = await uploadImageSourceToCos(
+      source,
+      'character-modify',
+      appearance.id,
+      { taskId: job.data.taskId, artifact: `character-modify:${appearance.id}:${imageIndex}` },
+    )
 
     while (imageUrls.length <= imageIndex) imageUrls.push('')
     imageUrls[imageIndex] = cosKey
@@ -210,7 +215,12 @@ export async function handleModifyAssetImageTask(job: Job<TaskJobData>) {
       }),
     })
 
-    const cosKey = await uploadImageSourceToCos(source, isProp ? 'prop-modify' : 'location-modify', locationImage.id)
+    const cosKey = await uploadImageSourceToCos(
+      source,
+      isProp ? 'prop-modify' : 'location-modify',
+      locationImage.id,
+      { taskId: job.data.taskId, artifact: `${isProp ? 'prop' : 'location'}-modify:${locationImage.id}` },
+    )
 
     let extractedDescription: {
       prompt: string

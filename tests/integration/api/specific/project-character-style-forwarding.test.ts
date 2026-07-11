@@ -11,6 +11,7 @@ const authMock = vi.hoisted(() => ({
 }))
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   projectCharacter: {
     findFirst: vi.fn(async () => null),
     create: vi.fn(async () => ({ id: 'character-1' })),
@@ -21,20 +22,15 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-const envMock = vi.hoisted(() => ({
-  getBaseUrl: vi.fn(() => 'http://localhost:3000'),
-}))
-
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
-vi.mock('@/lib/env', () => envMock)
-vi.mock('@/lib/task/resolve-locale', () => ({
-  resolveTaskLocale: vi.fn(() => 'zh'),
-}))
 
 describe('api specific - novel promotion character style forwarding', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.$transaction.mockImplementation(async (callback: (transaction: typeof prismaMock) => unknown) =>
+      await callback(prismaMock),
+    )
   })
 
   it('does not auto-generate images when creating by text prompt', async () => {
@@ -53,7 +49,6 @@ describe('api specific - novel promotion character style forwarding', () => {
       body: {
         name: 'Hero',
         description: '主角设定',
-        count: 4,
       },
     })
 
@@ -62,7 +57,7 @@ describe('api specific - novel promotion character style forwarding', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('does not inject default artStyle when creating from reference without override', async () => {
+  it('rejects legacy combined reference generation before creating records', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     )
@@ -85,9 +80,14 @@ describe('api specific - novel promotion character style forwarding', () => {
     })
 
     const res = await mod.POST(req, { params: Promise.resolve({ projectId: 'project-1' }) })
-    expect(res.status).toBe(200)
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body || '{}')) as Record<string, unknown>
-    expect(body).not.toHaveProperty('artStyle')
+    const body = await res.json()
+    expect(res.status).toBe(400)
+    expect(body.error.details).toMatchObject({
+      code: 'PROJECT_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
+      field: 'referenceImageUrl',
+    })
+    expect(prismaMock.projectCharacter.create).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('rejects explicit artStyle override when creating from reference', async () => {

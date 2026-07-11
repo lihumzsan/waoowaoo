@@ -8,6 +8,7 @@ import {
   useAiDesignCharacter,
   useCreateAssetHubCharacter,
   useCreateProjectCharacter,
+  useGenerateProjectCharacterFromReference,
   useGenerateCharacterImage,
   useGenerateProjectCharacterImage,
   useCreateProjectCharacterAppearance,
@@ -19,6 +20,16 @@ import {
 import { useImageGenerationCount } from '@/lib/image-generation/use-image-generation-count'
 
 type Mode = 'asset-hub' | 'project'
+
+type CreatedCharacterResponse = {
+  character?: {
+    id: string
+    appearances?: Array<{
+      id: string
+      appearanceIndex: number
+    }>
+  }
+}
 
 interface UseCharacterCreationSubmitParams {
   mode: Mode
@@ -73,6 +84,7 @@ export function useCharacterCreationSubmit({
   const extractProjectDescription = useExtractProjectReferenceCharacterDescription(projectId ?? '')
   const createAssetHubCharacter = useCreateAssetHubCharacter()
   const createProjectCharacter = useCreateProjectCharacter(projectId ?? '')
+  const generateProjectCharacterFromReference = useGenerateProjectCharacterFromReference(projectId ?? '')
   const generateAssetHubCharacterImage = useGenerateCharacterImage()
   const generateProjectCharacterImage = useGenerateProjectCharacterImage(projectId ?? '')
   const createProjectAppearance = useCreateProjectCharacterAppearance(projectId ?? '')
@@ -84,16 +96,6 @@ export function useCharacterCreationSubmit({
     count: referenceCharacterGenerationCount,
     setCount: setReferenceCharacterGenerationCount,
   } = useImageGenerationCount('reference-to-character')
-
-  type CreatedCharacterResponse = {
-    character?: {
-      id: string
-      appearances?: Array<{
-        id: string
-        appearanceIndex: number
-      }>
-    }
-  }
 
   const uploadReferenceImages = useCallback(async () => {
     const uploadMutation = mode === 'asset-hub' ? uploadAssetHubTemp : uploadProjectTemp
@@ -161,11 +163,20 @@ export function useCharacterCreationSubmit({
           count: referenceCharacterGenerationCount,
         })
       } else {
-        await createProjectCharacter.mutateAsync({
+        const created = await createProjectCharacter.mutateAsync({
           name: name.trim(),
           description: finalDescription || t('character.defaultDescription', { name: name.trim() }),
-          generateFromReference: true,
+        })
+        const character = created.character
+        const appearance = character?.appearances?.find((item) => item.appearanceIndex === 0)
+        if (!character?.id || !appearance?.id) {
+          throw new Error('PROJECT_CHARACTER_PRIMARY_APPEARANCE_MISSING')
+        }
+        await generateProjectCharacterFromReference.mutateAsync({
           referenceImageUrls,
+          characterName: name.trim(),
+          characterId: character.id,
+          appearanceId: appearance.id,
           customDescription: referenceSubMode === 'extract' ? finalDescription : undefined,
           count: referenceCharacterGenerationCount,
         })
@@ -187,6 +198,7 @@ export function useCharacterCreationSubmit({
     extractAssetHubDescription,
     extractProjectDescription,
     folderId,
+    generateProjectCharacterFromReference,
     mode,
     name,
     onClose,

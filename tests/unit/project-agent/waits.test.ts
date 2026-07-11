@@ -85,16 +85,16 @@ describe('project agent waits', () => {
     })
   })
 
-  it('[await_user_choice completed] -> closes the wait without waking the agent', () => {
+  it('[complete completed] -> closes the wait without waking the agent', () => {
     expect(resolveWaitTerminalNextStatus({
-      followUpMode: 'await_user_choice',
+      followUpMode: 'complete',
       terminalStatus: 'completed',
     })).toBe('followed')
   })
 
-  it('[await_user_choice failed] -> still resumes the agent so it can report the failure', () => {
+  it('[complete failed] -> still resumes the agent so it can report the failure', () => {
     expect(resolveWaitTerminalNextStatus({
-      followUpMode: 'await_user_choice',
+      followUpMode: 'complete',
       terminalStatus: 'failed',
     })).toBe('resolved')
   })

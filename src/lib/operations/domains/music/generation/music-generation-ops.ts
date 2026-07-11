@@ -691,6 +691,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
         externalSideEffects: true,
         longRunning: true,
       },
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,

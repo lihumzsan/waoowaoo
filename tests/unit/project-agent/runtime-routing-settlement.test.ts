@@ -4,6 +4,7 @@ import {
   createRegistry,
   describe,
   drainCapturedResponseStream,
+  eventState,
   expect,
   expectLastPersistedRunStatus,
   it,
@@ -40,6 +41,7 @@ describe('project agent runtime deterministic tool injection', () => {
     loggerState.info.mockReset()
     loggerState.error.mockReset()
     runState.safelyUpdateProjectAgentRunStatus.mockClear()
+    runState.settleProjectAgentRunFailureWithMessage.mockClear()
     runState.cancelRunningProjectAgentRun.mockClear()
     runHeartbeatState.stop.mockClear()
     runHeartbeatState.ownershipLossOnStart = null
@@ -52,7 +54,7 @@ describe('project agent runtime deterministic tool injection', () => {
     workflowRefreshState.resolveEditFirstWorkflowState.mockImplementation(async () => phaseState.editFirstWorkflow)
   })
 
-  it('logs assistant message persistence failures during stream settlement', async () => {
+  it('fails terminal settlement without marking the Run completed when message persistence fails', async () => {
     persistenceState.appendProjectAssistantThreadMessages.mockRejectedValueOnce(new Error('DB_DOWN'))
 
     const response = await runAssistant({ text: '生成剧本' })
@@ -72,7 +74,20 @@ describe('project agent runtime deterministic tool injection', () => {
         }),
       }))
     })
+    expect(runState.safelyUpdateProjectAgentRunStatus).not.toHaveBeenCalledWith(expect.objectContaining({
+      status: 'completed',
+    }))
     expect(runHeartbeatState.stop).toHaveBeenCalled()
+    expect(eventState.appendProjectAgentEvents).toHaveBeenCalledWith(expect.objectContaining({
+      events: [expect.objectContaining({
+        event: expect.objectContaining({
+          kind: 'run.execution_started',
+          runId: 'run-user_turn',
+          executionSegmentId: 'user-turn:run-user_turn',
+          controlKind: 'user_turn',
+        }),
+      })],
+    }))
   })
 
   it('persists cancellation and stops heartbeat when the response reader disconnects', async () => {
@@ -108,7 +123,7 @@ describe('project agent runtime deterministic tool injection', () => {
 
     expect(streamState.executedToolNames).toEqual(['plan_chapters'])
     expect(streamState.capturedEnabledToolNamesAfterExecution).toEqual([])
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith(expect.objectContaining({
+    expect(runState.settleProjectAgentRunFailureWithMessage).toHaveBeenCalledWith(expect.objectContaining({
       runFence: expect.objectContaining({ runId: 'run-user_turn' }),
       status: 'failed',
       stopReason: 'run_failed',
@@ -132,10 +147,11 @@ describe('project agent runtime deterministic tool injection', () => {
       /PROJECT_AGENT_RUN_FAILED requestId=req-1: DB_WORKFLOW_REFRESH_FAILED/,
     )
 
-    expect(runState.safelyUpdateProjectAgentRunStatus).toHaveBeenCalledWith({
+    expect(runState.settleProjectAgentRunFailureWithMessage).toHaveBeenCalledWith({
       runFence: expect.objectContaining({ runId: 'run-user_turn' }),
+      controlKind: 'user_turn',
+      requestId: 'req-1',
       status: 'cancelled',
-      expectedStatuses: ['running'],
       stopReason: 'run_lock_lost',
     })
   })

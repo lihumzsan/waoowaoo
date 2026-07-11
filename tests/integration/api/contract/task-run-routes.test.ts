@@ -64,6 +64,9 @@ vi.mock('@/lib/prisma', () => ({
     task: {
       findMany: vi.fn(async () => []),
     },
+    projectAgentEvent: {
+      findFirst: vi.fn(async () => null),
+    },
   },
 }))
 const issueApprovalGrantMock = vi.hoisted(() => vi.fn(async () => ({

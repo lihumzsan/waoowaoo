@@ -7,19 +7,18 @@ import {
 } from '@/lib/query/materialized-resource-cache'
 import type { WorkspaceMaterializedResourceEnvelope } from '@/lib/task/types'
 
-function editBibleData(version: number, title: string, updatedAt = `2026-07-11T00:0${String(version)}:00.000Z`) {
+function editBibleData(version: number, title: string) {
   return {
     editBible: {
       id: 'bible-1',
       version,
       title,
       chapters: [],
-      updatedAt,
     },
     chapters: [],
     resourceVersion: {
-      scheme: 'revision_updated_at' as const,
-      value: { revision: version, updatedAt },
+      scheme: 'resource_revision' as const,
+      value: version,
     },
   }
 }
@@ -40,18 +39,17 @@ function editBibleEnvelope(params: {
   }
 }
 
-function episodeData(updatedAt: string, name: string) {
+function episodeData(resourceRevision: number, name: string) {
   return {
     id: 'episode-1',
-    updatedAt,
     name,
-    resourceVersion: { scheme: 'aggregate_updated_at' as const, value: updatedAt },
+    resourceVersion: { scheme: 'resource_revision' as const, value: resourceRevision },
   }
 }
 
 function episodeEnvelope(params: {
   taskId: string
-  updatedAt: string
+  resourceRevision: number
   name: string
 }): WorkspaceMaterializedResourceEnvelope {
   return {
@@ -59,9 +57,9 @@ function episodeEnvelope(params: {
     projectId: 'project-1',
     episodeId: 'episode-1',
     resourceKey: 'episodeData:project-1:episode-1',
-    resourceVersion: { scheme: 'aggregate_updated_at', value: params.updatedAt },
+    resourceVersion: { scheme: 'resource_revision', value: params.resourceRevision },
     taskId: params.taskId,
-    data: episodeData(params.updatedAt, params.name),
+    data: episodeData(params.resourceRevision, params.name),
   }
 }
 
@@ -78,8 +76,8 @@ describe('materialized resource cache version gate', () => {
   it('does not let an optimistic rollback overwrite a newer formal resource snapshot', () => {
     const queryClient = new QueryClient()
     const queryKey = queryKeys.episodeData('project-1', 'episode-1')
-    const previous = episodeData('2026-07-11T00:01:00.000Z', 'optimistic baseline')
-    const terminal = episodeData('2026-07-11T00:02:00.000Z', 'new terminal snapshot')
+    const previous = episodeData(1, 'optimistic baseline')
+    const terminal = episodeData(2, 'new terminal snapshot')
     queryClient.setQueryData(queryKey, terminal)
 
     expect(restoreWorkspaceMaterializedResourceSnapshot({
@@ -98,8 +96,8 @@ describe('materialized resource cache version gate', () => {
       editBible: null,
       chapters: [],
       resourceVersion: {
-        scheme: 'revision_updated_at',
-        value: { revision: 0, updatedAt: '1970-01-01T00:00:00.000Z' },
+        scheme: 'resource_revision',
+        value: 0,
       },
     })
 
@@ -143,47 +141,47 @@ describe('materialized resource cache version gate', () => {
     expect(queryClient.getQueryData(queryKey)).toEqual(editBibleData(2, 'revision 2'))
   })
 
-  it('orders episodeData timestamps across refetch, SSE, and a cache rebuilt after refresh', () => {
+  it('orders episodeData revisions across refetch, SSE, and a cache rebuilt after refresh', () => {
     const queryClient = new QueryClient()
     const queryKey = queryKeys.episodeData('project-1', 'episode-1')
     queryClient.setQueryData(
       queryKey,
-      episodeData('2026-07-11T00:02:00.000Z', 'newer refetch'),
+      episodeData(2, 'newer refetch'),
     )
 
     const staleSse = apply(queryClient, episodeEnvelope({
       taskId: 'task-old-sse',
-      updatedAt: '2026-07-11T00:01:00.000Z',
+      resourceRevision: 1,
       name: 'older SSE',
     }))
     expect(staleSse.ignored).toEqual([expect.objectContaining({ reason: 'stale' })])
     expect(queryClient.getQueryData(queryKey)).toEqual(
-      episodeData('2026-07-11T00:02:00.000Z', 'newer refetch'),
+      episodeData(2, 'newer refetch'),
     )
 
     const newerSse = apply(queryClient, episodeEnvelope({
       taskId: 'task-new-sse',
-      updatedAt: '2026-07-11T00:03:00.000Z',
+      resourceRevision: 3,
       name: 'newer SSE',
     }))
     expect(newerSse.applied).toEqual([expect.objectContaining({ taskId: 'task-new-sse' })])
     expect(queryClient.getQueryData(queryKey)).toEqual(
-      episodeData('2026-07-11T00:03:00.000Z', 'newer SSE'),
+      episodeData(3, 'newer SSE'),
     )
 
     const refreshedClient = new QueryClient()
     refreshedClient.setQueryData(
       queryKey,
-      episodeData('2026-07-11T00:04:00.000Z', 'refresh snapshot'),
+      episodeData(4, 'refresh snapshot'),
     )
     const replayedTerminal = apply(refreshedClient, episodeEnvelope({
       taskId: 'task-replayed',
-      updatedAt: '2026-07-11T00:03:00.000Z',
+      resourceRevision: 3,
       name: 'replayed terminal',
     }))
     expect(replayedTerminal.ignored).toEqual([expect.objectContaining({ reason: 'stale' })])
     expect(refreshedClient.getQueryData(queryKey)).toEqual(
-      episodeData('2026-07-11T00:04:00.000Z', 'refresh snapshot'),
+      episodeData(4, 'refresh snapshot'),
     )
   })
 
@@ -192,7 +190,7 @@ describe('materialized resource cache version gate', () => {
     const queryKey = queryKeys.episodeData('project-1', 'episode-1')
     queryClient.setQueryData(
       queryKey,
-      episodeData('2026-07-11T00:01:00.000Z', 'initial snapshot'),
+      episodeData(1, 'initial snapshot'),
     )
     let resolveRefetch!: (value: ReturnType<typeof episodeData>) => void
     const refetchResult = new Promise<ReturnType<typeof episodeData>>((resolve) => {
@@ -208,15 +206,15 @@ describe('materialized resource cache version gate', () => {
 
     const terminal = apply(queryClient, episodeEnvelope({
       taskId: 'task-terminal',
-      updatedAt: '2026-07-11T00:03:00.000Z',
+      resourceRevision: 3,
       name: 'terminal snapshot',
     }))
     expect(terminal.applied).toEqual([expect.objectContaining({ taskId: 'task-terminal' })])
-    resolveRefetch(episodeData('2026-07-11T00:02:00.000Z', 'late refetch'))
+    resolveRefetch(episodeData(2, 'late refetch'))
     await refetch
 
     expect(queryClient.getQueryData(queryKey)).toEqual(
-      episodeData('2026-07-11T00:03:00.000Z', 'terminal snapshot'),
+      episodeData(3, 'terminal snapshot'),
     )
   })
 
@@ -225,7 +223,7 @@ describe('materialized resource cache version gate', () => {
     const invalidWireVersion = {
       ...episodeEnvelope({
         taskId: 'task-invalid-wire',
-        updatedAt: '2026-07-11T00:01:00.000Z',
+        resourceRevision: 1,
         name: 'invalid wire',
       }),
       resourceVersion: '2026-07-11T00:01:00.000Z',
@@ -252,8 +250,8 @@ describe('materialized resource cache version gate', () => {
       value: [{
         ...mismatched,
         resourceVersion: {
-          scheme: 'revision_updated_at',
-          value: { revision: 4, updatedAt: '2026-07-11T00:04:00.000Z' },
+          scheme: 'resource_revision',
+          value: 4,
         },
       }],
     })

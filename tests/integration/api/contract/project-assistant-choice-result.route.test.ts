@@ -7,8 +7,8 @@ import {
   describe,
   expect,
   it,
+  interruptionMock,
   mockConsumedChoice,
-  persistenceMock,
   projectAgentMock,
   vi,
 } from './project-assistant-routes.fixture'
@@ -54,8 +54,8 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(persistenceMock.appendProjectAssistantThreadMessages).toHaveBeenCalledWith(expect.objectContaining({
-      messages: [expect.objectContaining({
+    expect(interruptionMock.consumeProjectAgentChoiceInterruption).toHaveBeenCalledWith(expect.objectContaining({
+      visibleMessages: [expect.objectContaining({
         id: 'workspace-control-user:choice_response:run-1:choice-style-1',
         role: 'user',
         parts: [{ type: 'text', text: '民俗恐怖片' }],

@@ -22,6 +22,12 @@ import {
 } from '@/lib/ai-exec/llm/vision-runner'
 import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
 import { toAppError } from '@/lib/errors/app-error'
+import { getLogContext } from '@/lib/logging/context'
+import {
+  executeTaskDurableInvocation,
+  executeTaskProviderInvocation,
+  type TaskProviderInvocation,
+} from '@/lib/task/provider-invocation'
 
 export type AiMediaExecutionModality = Extract<AiModality, 'image' | 'video' | 'music' | 'soundEffect'>
 
@@ -122,11 +128,15 @@ export type AiMediaExecutionInput =
     options?: AiSoundEffectExecutionOptions
   }
 
-export async function executeMediaGeneration(input: AiMediaExecutionInput): Promise<GenerateResult> {
+export async function executeMediaGeneration(
+  input: AiMediaExecutionInput,
+  invocation?: TaskProviderInvocation,
+): Promise<GenerateResult> {
   const selection = await resolveModelSelection(input.userId, input.modelKey, input.modality)
   _ulogInfo(`[ai-exec:${input.modality}] resolved model selection: ${selection.modelKey}`)
   const adapter = resolveAiProviderAdapter(selection.provider)
-  switch (input.modality) {
+  const execute = async (): Promise<GenerateResult> => {
+    switch (input.modality) {
     case 'image': {
       const modalityAdapter = adapter[input.modality]
       if (!modalityAdapter) {
@@ -199,7 +209,20 @@ export async function executeMediaGeneration(input: AiMediaExecutionInput): Prom
         options: input.options,
       })
     }
+    }
   }
+  const taskId = getLogContext().taskId
+  if (!taskId) return await execute()
+  if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
+  return await executeTaskProviderInvocation({
+    taskId,
+    invocation,
+    modality: input.modality,
+    provider: selection.provider,
+    modelKey: selection.modelKey,
+    request: input,
+    execute,
+  })
 }
 
 export async function executeLlmCompletion(input: AiLlmExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -276,6 +299,7 @@ export async function generateImage(
   modelKey: string,
   prompt: string,
   options?: AiImageExecutionOptions,
+  invocation?: TaskProviderInvocation,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'image',
@@ -283,7 +307,7 @@ export async function generateImage(
     modelKey,
     prompt,
     options,
-  })
+  }, invocation)
 }
 
 export async function generateVideo(
@@ -291,6 +315,7 @@ export async function generateVideo(
   modelKey: string,
   imageUrl: string,
   options?: AiVideoExecutionOptions,
+  invocation?: TaskProviderInvocation,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'video',
@@ -298,7 +323,7 @@ export async function generateVideo(
     modelKey,
     imageUrl,
     options,
-  })
+  }, invocation)
 }
 
 export async function generateMusic(
@@ -306,6 +331,7 @@ export async function generateMusic(
   modelKey: string,
   prompt: string,
   options?: AiMusicExecutionOptions,
+  invocation?: TaskProviderInvocation,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'music',
@@ -313,7 +339,7 @@ export async function generateMusic(
     modelKey,
     prompt,
     options,
-  })
+  }, invocation)
 }
 
 export async function generateSoundEffect(
@@ -321,6 +347,7 @@ export async function generateSoundEffect(
   modelKey: string,
   prompt: string,
   options?: AiSoundEffectExecutionOptions,
+  invocation?: TaskProviderInvocation,
 ): Promise<GenerateResult> {
   return await executeMediaGeneration({
     modality: 'soundEffect',
@@ -328,7 +355,7 @@ export async function generateSoundEffect(
     modelKey,
     prompt,
     options,
-  })
+  }, invocation)
 }
 
 function toInt(value: unknown): number {
@@ -364,9 +391,60 @@ function extractTextAndReasoning(completion: OpenAI.Chat.Completions.ChatComplet
   }
 }
 
+function parseStoredChatCompletion(value: unknown): OpenAI.Chat.Completions.ChatCompletion {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('TASK_LLM_INVOCATION_RESULT_INVALID')
+  }
+  const record = value as Record<string, unknown>
+  if (typeof record.id !== 'string' || !Array.isArray(record.choices)) {
+    throw new Error('TASK_LLM_INVOCATION_RESULT_INVALID')
+  }
+  return value as OpenAI.Chat.Completions.ChatCompletion
+}
+
+function taskAiInvocationKey(input: {
+  readonly modality: 'llm' | 'vision'
+  readonly action?: string
+  readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
+}): string {
+  const action = input.action?.trim() || ''
+  const stepId = input.meta?.stepId.trim() || ''
+  if (!action || !stepId || !input.meta) {
+    throw new Error(`TASK_AI_INVOCATION_IDENTITY_REQUIRED:${input.modality}`)
+  }
+  const stepAttempt = input.meta.stepAttempt ?? 1
+  return `ai:${input.modality}:${action}:${stepId}:${input.meta.stepIndex}:${stepAttempt}`
+}
+
+async function executeTaskAwareLlmCompletion(input: {
+  readonly modality: 'llm' | 'vision'
+  readonly userId: string
+  readonly model: string
+  readonly action?: string
+  readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
+  readonly request: unknown
+  readonly execute: () => Promise<OpenAI.Chat.Completions.ChatCompletion>
+}): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const taskId = getLogContext().taskId
+  if (!taskId) return await input.execute()
+  return await executeTaskDurableInvocation({
+    taskId,
+    invocation: { key: taskAiInvocationKey(input) },
+    modality: input.modality,
+    provider: 'llm-runtime',
+    modelKey: input.model,
+    request: input.request,
+    execute: input.execute,
+    resultPolicy: {
+      parse: parseStoredChatCompletion,
+      isKnownRejectionError: (error) => !toAppError(error, { context: 'worker' }).retryable,
+    },
+  })
+}
+
 export async function executeAiTextStep(input: AiStepExecutionInput): Promise<AiStepExecutionResult> {
   try {
-    const completion = await chatCompletion(input.userId, input.model, input.messages, {
+    const options = {
       temperature: input.temperature,
       reasoning: input.reasoning,
       reasoningEffort: input.reasoningEffort,
@@ -377,6 +455,15 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
       streamStepTitle: input.meta.stepTitle,
       streamStepIndex: input.meta.stepIndex,
       streamStepTotal: input.meta.stepTotal,
+    }
+    const completion = await executeTaskAwareLlmCompletion({
+      modality: 'llm',
+      userId: input.userId,
+      model: input.model,
+      action: input.action,
+      meta: input.meta,
+      request: { messages: input.messages, options },
+      execute: async () => await chatCompletion(input.userId, input.model, input.messages, options),
     })
 
     const parts = extractTextAndReasoning(completion)
@@ -393,7 +480,7 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
 
 export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Promise<AiVisionStepExecutionResult> {
   try {
-    const completion = await chatCompletionWithVision(input.userId, input.model, input.prompt, input.imageUrls, {
+    const options = {
       temperature: input.temperature,
       reasoning: input.reasoning,
       reasoningEffort: input.reasoningEffort,
@@ -404,6 +491,21 @@ export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Pr
       streamStepTitle: input.meta?.stepTitle,
       streamStepIndex: input.meta?.stepIndex,
       streamStepTotal: input.meta?.stepTotal,
+    }
+    const completion = await executeTaskAwareLlmCompletion({
+      modality: 'vision',
+      userId: input.userId,
+      model: input.model,
+      action: input.action,
+      meta: input.meta,
+      request: { prompt: input.prompt, imageUrls: input.imageUrls, options },
+      execute: async () => await chatCompletionWithVision(
+        input.userId,
+        input.model,
+        input.prompt,
+        input.imageUrls,
+        options,
+      ),
     })
 
     const parts = extractTextAndReasoning(completion)

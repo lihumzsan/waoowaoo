@@ -51,6 +51,14 @@ export function applyWorkspaceSSEEvent(params: {
 }) {
   const { event, queryClient, projectId, episodeId, isGlobalAssetProject } = params
 
+  if (event.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.project.assistantThread(projectId, event.episodeId ?? ''),
+      exact: true,
+    })
+    return
+  }
+
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH) {
     const batchEpisodeId = typeof event.episodeId === 'string' ? event.episodeId : null
     const resolvedEpisodeId = batchEpisodeId || episodeId || null

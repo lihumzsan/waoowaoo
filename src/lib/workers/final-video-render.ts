@@ -17,8 +17,9 @@ import {
   readSoundscapeTimelineSignature,
 } from '@/lib/soundscape/project-data'
 import { parseNullableEditScriptStyleBible } from '@/lib/edit-script/style-bible-prompt'
-import { ensureMediaObjectFromStorageKey, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
-import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { ensureMediaObjectFromStorageKey, getMediaObjectById, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from './shared'
 import {
@@ -339,6 +340,32 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   if (!episodeId) throw new Error('FINAL_VIDEO_RENDER_EPISODE_REQUIRED')
 
+  const completed = await prisma.projectEpisodeFinalOutput.findFirst({
+    where: {
+      episodeId,
+      renderStatus: 'completed',
+      renderTaskId: job.data.taskId,
+      outputMediaId: { not: null },
+    },
+    select: { outputMediaId: true },
+  })
+  if (completed?.outputMediaId) {
+    const media = await getMediaObjectById(completed.outputMediaId)
+    if (!media) throw new Error(`FINAL_VIDEO_RENDER_OUTPUT_MEDIA_MISSING:${episodeId}`)
+    if (!media.durationMs || !media.width || !media.height) {
+      throw new Error(`FINAL_VIDEO_RENDER_OUTPUT_METADATA_MISSING:${episodeId}`)
+    }
+    return {
+      videoMediaId: media.id,
+      outputUrl: media.url,
+      storageKey: media.storageKey,
+      episodeId,
+      durationSeconds: media.durationMs / 1000,
+      width: media.width,
+      height: media.height,
+    }
+  }
+
   await upsertEpisodeFinalOutput({
     episodeId,
     renderStatus: 'processing',
@@ -483,7 +510,11 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
     await reportTaskProgress(job, 92, { stage: 'final_render_persist' })
     const storageKey = await uploadObject(
       outputBuffer,
-      generateUniqueKey('final-video', 'mp4'),
+      buildTaskArtifactStorageKey({
+        taskId: job.data.taskId,
+        artifact: `final-video:${episodeId}`,
+        extension: 'mp4',
+      }),
       1,
       'video/mp4',
     )

@@ -92,7 +92,7 @@ export async function executeElevenLabsSoundEffectGeneration(
     body: JSON.stringify(buildRequestBody(prompt, modelId, options)),
     cache: 'no-store',
     timeoutMs: 120_000,
-    policy: RETRY_POLICY.mediaFetch,
+    policy: RETRY_POLICY.providerSubmit,
     scope: `elevenlabs:sound-effect:${modelId}`,
     fetchFn: fetchWithProviderProxy,
   })

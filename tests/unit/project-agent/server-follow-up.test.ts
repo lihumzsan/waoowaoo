@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+type ClaimMockResult = Awaited<ReturnType<
+  (typeof import('@/lib/project-agent/waits'))['claimProjectAgentWaitContinuation']
+>>
+
 const waitMock = vi.hoisted(() => ({
-  claimProjectAgentWaitContinuation: vi.fn(async () => ({
+  claimProjectAgentWaitContinuation: vi.fn(async (): Promise<ClaimMockResult> => ({
     status: 'claimed' as const,
     projectId: 'project-1',
     userId: 'user-1',
@@ -31,7 +35,7 @@ const waitMock = vi.hoisted(() => ({
   } | null> => null),
   checkpointProjectAgentWaitFollowUp: vi.fn(async (input: {
     commandId: string
-    outcome: 'completed'
+    outcome: 'completed' | 'outcome_unknown' | 'delivery_exhausted'
     message: { id: string }
   }) => ({
     commandId: input.commandId,
@@ -57,6 +61,12 @@ const runMock = vi.hoisted(() => ({
 const runtimeMock = vi.hoisted(() => ({
   createProjectAgentChatResponse: vi.fn(async (input: {
     request: Request
+    ownershipSignal?: AbortSignal | null
+    continuationClaim?: {
+      waitId: string
+      commandId: string
+      claimOwner: string
+    } | null
     settleTaskFollowUp?: (settlement: {
       outcome: 'completed'
       message: { id: string; role: 'assistant'; parts: Array<{ type: 'text'; text: string }> }
@@ -86,7 +96,10 @@ vi.mock('@/lib/project-agent/persistence', () => ({
 vi.mock('@/lib/project-agent/runtime', () => runtimeMock)
 vi.mock('@/lib/logging/core', () => ({ createScopedLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })) }))
 
-import { runProjectAgentWaitContinuationCommand } from '@/lib/project-agent/server-follow-up'
+import {
+  runProjectAgentWaitContinuationCommand,
+  settleProjectAgentWaitContinuationDeliveryExhausted,
+} from '@/lib/project-agent/server-follow-up'
 
 describe('project agent durable server follow-up', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -102,6 +115,12 @@ describe('project agent durable server follow-up', () => {
         headers: expect.objectContaining({}),
       }),
       control: expect.objectContaining({ kind: 'task_follow_up' }),
+      ownershipSignal: expect.any(AbortSignal),
+      continuationClaim: {
+        waitId: 'wait-1',
+        commandId: 'outbox-1',
+        claimOwner: expect.any(String),
+      },
       settleTaskFollowUp: expect.any(Function),
     }))
     const runtimeInput = runtimeMock.createProjectAgentChatResponse.mock.calls[0]?.[0]
@@ -148,11 +167,87 @@ describe('project agent durable server follow-up', () => {
 
     expect(runtimeMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
     expect(waitMock.checkpointProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
-      waitId: 'wait-1', commandId: 'outbox-1', outcome: 'failed',
+      waitId: 'wait-1', commandId: 'outbox-1', outcome: 'outcome_unknown',
       message: expect.objectContaining({
         id: 'workspace-continuation-outcome-unknown:outbox-1',
       }),
     }))
     expect(waitMock.finalizeProjectAgentWaitFollowUp).toHaveBeenCalledTimes(1)
+  })
+
+  it('settles an exhausted delivery through the same checkpoint and finalize authority without invoking the model', async () => {
+    await expect(settleProjectAgentWaitContinuationDeliveryExhausted({
+      kind: 'project_agent.continue_wait', version: 1, waitId: 'wait-1', runId: 'run-1',
+      expectedRunVersion: 1, expectedEventSeq: '1',
+    }, 'outbox-1')).resolves.toBe('settled')
+
+    expect(runtimeMock.createProjectAgentChatResponse).not.toHaveBeenCalled()
+    expect(waitMock.startProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
+      waitId: 'wait-1', commandId: 'outbox-1',
+    }))
+    expect(waitMock.checkpointProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
+      waitId: 'wait-1',
+      commandId: 'outbox-1',
+      outcome: 'delivery_exhausted',
+      message: expect.objectContaining({
+        id: 'workspace-continuation-delivery-exhausted:outbox-1',
+      }),
+    }))
+    expect(waitMock.finalizeProjectAgentWaitFollowUp).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves outcome_unknown when delivery exhausts after continuation execution already started', async () => {
+    waitMock.beginProjectAgentWaitContinuationExecution.mockResolvedValueOnce('already_started')
+
+    await expect(settleProjectAgentWaitContinuationDeliveryExhausted({
+      kind: 'project_agent.continue_wait', version: 1, waitId: 'wait-1', runId: 'run-1',
+      expectedRunVersion: 1, expectedEventSeq: '1',
+    }, 'outbox-1')).resolves.toBe('settled')
+
+    expect(waitMock.checkpointProjectAgentWaitFollowUp).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'outcome_unknown',
+      message: expect.objectContaining({ id: 'workspace-continuation-outcome-unknown:outbox-1' }),
+    }))
+  })
+
+  it('finalizes an existing settled checkpoint without replacing its outcome', async () => {
+    waitMock.beginProjectAgentWaitContinuationExecution.mockResolvedValueOnce('settled')
+
+    await expect(settleProjectAgentWaitContinuationDeliveryExhausted({
+      kind: 'project_agent.continue_wait', version: 1, waitId: 'wait-1', runId: 'run-1',
+      expectedRunVersion: 1, expectedEventSeq: '1',
+    }, 'outbox-1')).resolves.toBe('settled')
+
+    expect(waitMock.checkpointProjectAgentWaitFollowUp).not.toHaveBeenCalled()
+    expect(waitMock.finalizeProjectAgentWaitFollowUp).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['already_followed', 'already_settled'],
+    ['abandoned', 'not_applicable'],
+    ['stale_or_not_claimable', 'not_applicable'],
+  ] as const)('does not alter a %s continuation while settling exhausted delivery', async (status, result) => {
+    waitMock.claimProjectAgentWaitContinuation.mockResolvedValueOnce({ status })
+
+    await expect(settleProjectAgentWaitContinuationDeliveryExhausted({
+      kind: 'project_agent.continue_wait', version: 1, waitId: 'wait-1', runId: 'run-1',
+      expectedRunVersion: 1, expectedEventSeq: '1',
+    }, 'outbox-1')).resolves.toBe(result)
+
+    expect(waitMock.startProjectAgentWaitFollowUp).not.toHaveBeenCalled()
+    expect(waitMock.checkpointProjectAgentWaitFollowUp).not.toHaveBeenCalled()
+    expect(waitMock.finalizeProjectAgentWaitFollowUp).not.toHaveBeenCalled()
+  })
+
+  it('rejects dead-letter settlement while another continuation claim is still active', async () => {
+    waitMock.claimProjectAgentWaitContinuation.mockResolvedValueOnce({ status: 'busy' })
+
+    await expect(settleProjectAgentWaitContinuationDeliveryExhausted({
+      kind: 'project_agent.continue_wait', version: 1, waitId: 'wait-1', runId: 'run-1',
+      expectedRunVersion: 1, expectedEventSeq: '1',
+    }, 'outbox-1')).rejects.toThrow('PROJECT_AGENT_CONTINUATION_DELIVERY_SETTLEMENT_BUSY:wait-1')
+
+    expect(waitMock.checkpointProjectAgentWaitFollowUp).not.toHaveBeenCalled()
+    expect(waitMock.finalizeProjectAgentWaitFollowUp).not.toHaveBeenCalled()
   })
 })

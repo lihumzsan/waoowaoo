@@ -85,6 +85,7 @@ describe('soundscape worker', () => {
         promptInfluence: 0.55,
         outputFormat: 'mp3_44100_128',
       },
+      { key: 'media:sound-effect:source:city_wind' },
     )
     expect(ensureMediaObjectFromStorageKeyMock).toHaveBeenNthCalledWith(1, 'soundscape/source/asset.mp3', {
       mimeType: 'audio/mpeg',

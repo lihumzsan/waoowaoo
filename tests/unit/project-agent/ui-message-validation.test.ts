@@ -44,7 +44,7 @@ describe('isPersistableUIMessages', () => {
 })
 
 describe('ensureUniqueUIMessages', () => {
-  it('rewrites later duplicate message ids while preserving message content', () => {
+  it('rejects duplicate message ids instead of synthesizing history', () => {
     const messages: UIMessage[] = [
       {
         id: 'assistant-1',
@@ -68,27 +68,8 @@ describe('ensureUniqueUIMessages', () => {
       },
     ]
 
-    expect(ensureUniqueUIMessages(messages)).toEqual([
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'first' }],
-      },
-      {
-        id: 'assistant-1--dedup-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'second' }],
-      },
-      {
-        id: 'assistant-1--dedup-1--dedup-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'existing suffix' }],
-      },
-      {
-        id: 'assistant-1--dedup-2',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'third' }],
-      },
-    ])
+    expect(() => ensureUniqueUIMessages(messages)).toThrow(
+      'PROJECT_ASSISTANT_DUPLICATE_MESSAGE_ID:assistant-1',
+    )
   })
 })

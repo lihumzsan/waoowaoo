@@ -50,6 +50,7 @@ const configServiceMock = vi.hoisted(() => ({
 }))
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => await run(prismaMock)),
   globalCharacter: {
     findUnique: vi.fn(async () => ({
       id: 'global-character-1',
@@ -137,17 +138,20 @@ vi.mock('@/lib/llm-observe/route-task', () => ({
 }))
 
 vi.mock('@/lib/task/submitter', () => ({
-  submitTask: vi.fn(async (params) => {
-    // to appease the contract test that checks maybeSubmitLLMTaskMock
+  prepareTaskSubmissionInput: vi.fn(async (params) => {
     maybeSubmitLLMTaskMock(params)
-    return {
-      success: true,
-      async: true,
-      taskId: 'task-1',
-      runId: null,
-      status: 'queued',
+    return { input: params, billingMode: 'OFF' }
+  }),
+}))
+
+vi.mock('@/lib/task/transactional-create', () => ({
+  persistSubmittedTaskBatchInTransaction: vi.fn(async (params) => {
+    const tasks = params.inputs.map((input: Record<string, unknown>) => ({
+      task: { ...input, id: 'task-1', status: 'queued', billingInfo: null },
       deduped: false,
-    }
+    }))
+    await params.onBatchCreatedInTransaction?.(params.tx, tasks)
+    return tasks
   }),
 }))
 

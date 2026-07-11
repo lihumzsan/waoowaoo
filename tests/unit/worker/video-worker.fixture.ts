@@ -92,6 +92,7 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(async () => undefined),
   },
   projectVideoGroup: {
+    findFirst: vi.fn(async (): Promise<unknown> => null),
     findUnique: vi.fn(),
     updateMany: vi.fn(async () => ({ count: 1 })),
     update: vi.fn(async () => undefined),

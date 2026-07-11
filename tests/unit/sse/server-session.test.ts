@@ -1,34 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { SSEEvent } from '@/lib/task/types'
 import {
-  advanceWorkspaceSseCursor,
-  EMPTY_WORKSPACE_SSE_CURSOR,
-  isWorkspaceSseEvent,
-  parseWorkspaceSseCursor,
-  parseWorkspaceSseBootstrap,
-  parseWorkspaceSseEventMessage,
-  serializeWorkspaceSseCursor,
-} from '@/lib/sse/protocol'
-import {
   SseBootstrapBufferOverflowError,
   SseEventIdentityConflictError,
+  SseEventIdentityWindowOverflowError,
   WorkspaceSseServerSession,
 } from '@/lib/sse/server-session'
-
-function lifecycleEvent(id: string, progress: number): SSEEvent {
-  return {
-    id,
-    type: 'task.lifecycle',
-    taskId: 'task-1',
-    projectId: 'project-1',
-    userId: 'user-1',
-    ts: '2026-07-11T00:00:00.000Z',
-    payload: {
-      lifecycleType: 'task.progress',
-      progress,
-    },
-  }
-}
+import { lifecycleEvent } from './sse-test-fixtures'
 
 describe('workspace SSE server session', () => {
   it('emits bootstrap before buffered live events and then switches to live mode', () => {
@@ -72,46 +50,36 @@ describe('workspace SSE server session', () => {
     expect(() => session.receiveLiveEvent(lifecycleEvent('11', 20)))
       .toThrow(SseBootstrapBufferOverflowError)
   })
-})
 
-describe('workspace SSE protocol parsing', () => {
-  it('round-trips and advances independent Task and mutation watermarks', () => {
-    const taskCursor = advanceWorkspaceSseCursor(EMPTY_WORKSPACE_SSE_CURSOR, lifecycleEvent('12', 10))
-    const mutationCursor = advanceWorkspaceSseCursor(taskCursor, {
-      id: 'mb:1777046400000:batch-2',
-      type: 'mutation.batch',
-      mutationBatchId: 'batch-2',
-      projectId: 'project-1',
-      userId: 'user-1',
-      ts: '2026-04-24T00:00:00.000Z',
-      operationId: null,
-      episodeId: 'episode-1',
-      targets: [],
-    })
-    const serialized = serializeWorkspaceSseCursor(mutationCursor)
+  it('deduplicates an identical identity during live delivery', () => {
+    const emitted: SSEEvent[] = []
+    const session = new WorkspaceSseServerSession((event) => emitted.push(event))
+    const event = lifecycleEvent('10', 10)
 
-    expect(serialized).toBe('v1;t=12;m=1777046400000:batch-2')
-    expect(parseWorkspaceSseCursor(serialized)).toEqual(mutationCursor)
-    expect(advanceWorkspaceSseCursor(mutationCursor, lifecycleEvent('11', 20))).toEqual(mutationCursor)
+    session.completeBootstrap([])
+    session.receiveLiveEvent(event)
+    session.receiveLiveEvent({ ...event })
+
+    expect(emitted).toEqual([event])
   })
 
-  it('rejects malformed composite cursors instead of silently resetting replay', () => {
-    expect(() => parseWorkspaceSseCursor('v1;t=12;m=broken'))
-      .toThrow('SSE_CURSOR_INVALID')
+  it('fails explicitly when a live identity changes fingerprint', () => {
+    const session = new WorkspaceSseServerSession(() => undefined)
+
+    session.completeBootstrap([])
+    session.receiveLiveEvent(lifecycleEvent('10', 10))
+
+    expect(() => session.receiveLiveEvent(lifecycleEvent('10', 20)))
+      .toThrow(SseEventIdentityConflictError)
   })
 
-  it('rejects unknown event types and malformed bootstrap events', () => {
-    const unknown = {
-      ...lifecycleEvent('10', 10),
-      type: 'task.unknown',
-    }
-    expect(isWorkspaceSseEvent(unknown)).toBe(false)
-    expect(() => parseWorkspaceSseEventMessage(JSON.stringify(unknown)))
-      .toThrow('SSE_MESSAGE_PAYLOAD_INVALID')
-    expect(() => parseWorkspaceSseBootstrap({
-      channel: 'project:project-1',
-      mode: 'recoverable_snapshot',
-      events: [unknown],
-    })).toThrow('SSE_BOOTSTRAP_EVENTS_INVALID')
+  it('requires a new snapshot instead of evicting live identity fingerprints', () => {
+    const session = new WorkspaceSseServerSession(() => undefined, 10, 1)
+
+    session.completeBootstrap([])
+    session.receiveLiveEvent(lifecycleEvent('10', 10))
+
+    expect(() => session.receiveLiveEvent(lifecycleEvent('11', 20)))
+      .toThrow(SseEventIdentityWindowOverflowError)
   })
 })

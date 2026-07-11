@@ -180,6 +180,36 @@ describe('worker video processor behavior', () => {
     }))
   })
 
+  it('VIDEO_GROUP: replays a persisted success without invoking the provider again', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+    prismaMock.projectVideoGroup.findFirst.mockResolvedValueOnce({
+      id: 'group-1',
+      videoUrl: '/m/video-public-1',
+      videoMediaId: 'video-media-1',
+      referenceImageUrl: null,
+      durationSec: 14,
+      shotIds: ['shot-1', 'shot-2'],
+      shotNumbers: [1, 2],
+    })
+
+    const result = await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_GROUP,
+      targetType: 'ProjectVideoGroup',
+      targetId: 'group-1',
+      payload: {
+        videoModel: 'google::veo',
+        gridMode: '2x2',
+        chapterId: 'chapter-1',
+        shotIds: ['shot-1', 'shot-2'],
+      },
+    }))
+
+    expect(result).toMatchObject({ groupId: 'group-1', videoMediaId: 'video-media-1' })
+    expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
+    expect(prismaMock.projectVideoGroup.updateMany).not.toHaveBeenCalled()
+  })
+
   it('未知任务类型: 显式报错', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
@@ -188,6 +218,6 @@ describe('worker video processor behavior', () => {
       type: TASK_TYPE.AI_CREATE_CHARACTER,
     })
 
-    await expect(processor!(unsupportedJob)).rejects.toThrow('Unsupported video task type')
+    await expect(processor!(unsupportedJob)).rejects.toThrow('TASK_QUEUE_MISMATCH:ai_create_character:text:video')
   })
 })

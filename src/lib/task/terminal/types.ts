@@ -1,7 +1,5 @@
 export type TaskTerminalFence =
-  | { kind: 'attempt'; attempt: number }
-  | { kind: 'snapshot'; updatedAt: Date }
-  | { kind: 'active' }
+  { kind: 'attempt'; attempt: number } | { kind: 'snapshot'; updatedAt: Date } | { kind: 'active' }
 
 type TaskTerminalBase = {
   taskId: string
@@ -44,6 +42,13 @@ export type TaskTerminalCommitResult =
   | {
       applied: false
       reason: 'stale_fence'
+      existingStatus: string
+      terminalEventId: null
+      outboxCommandIds: readonly []
+    }
+  | {
+      applied: false
+      reason: 'completion_pending'
       existingStatus: string
       terminalEventId: null
       outboxCommandIds: readonly []

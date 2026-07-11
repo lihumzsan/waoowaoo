@@ -1,15 +1,8 @@
 import { createScopedLogger } from '@/lib/logging/core'
-import { addTaskJob } from './queues'
-import { publishTaskEvent } from './publisher'
-import {
-  createTask,
-  markTaskEnqueueFailed,
-  markTaskEnqueued,
-} from './service'
-import { TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from './types'
+import { prisma } from '@/lib/prisma'
+import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
-  authorizeTaskBilling,
   getBillingMode,
   InsufficientBalanceError,
   isBillableTaskType,
@@ -20,10 +13,7 @@ import type { Locale } from '@/i18n/routing'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { buildBillingReceiptView, type BillingReceiptView } from '@/lib/billing/task-billing-view'
 import { requiresBillableMediaApproval } from '@/lib/billing/media-approval-policy'
-import { buildTaskJobEnvelope } from './job-envelope'
-import { commitTaskTerminal } from './terminal'
-import { observeTaskJob } from './reconcile'
-import { assertTaskApprovalAuthorization } from './approval-authorization'
+import { persistSubmittedTaskBatchInTransaction } from './transactional-create'
 import type { Prisma } from '@prisma/client'
 
 export function toObject(value: unknown): Record<string, unknown> {
@@ -101,7 +91,7 @@ export function normalizeTaskPayload(type: TaskType, payload?: Record<string, un
   }
 }
 
-export async function submitTask(params: {
+export type SubmitTaskParams = {
   userId: string
   locale: Locale
   projectId: string
@@ -119,15 +109,17 @@ export async function submitTask(params: {
   requestId?: string | null
   operationId?: string | null
   operationSource?: string | null
-  approvalGrantId?: string | null
-  operationExecutionId?: string | null
-  operationPlanTaskId?: string | null
   operationRequestId?: string | null
   onTaskCreatedInTransaction?: (
     tx: Prisma.TransactionClient,
     task: { id: string },
   ) => Promise<void>
-}): Promise<SubmitTaskResult> {
+}
+
+export async function prepareTaskSubmissionInput(params: SubmitTaskParams): Promise<{
+  readonly input: CreateTaskInput
+  readonly billingMode: Awaited<ReturnType<typeof getBillingMode>>
+}> {
   const logger = createScopedLogger({
     module: 'task.submitter',
     action: 'task.submit',
@@ -164,26 +156,30 @@ export async function submitTask(params: {
     : computedBillingInfo || params.billingInfo || null
 
   if (requiresBillableMediaApproval(resolvedBillingInfo)) {
-    await assertTaskApprovalAuthorization({
-      approvalGrantId: params.approvalGrantId,
-      operationExecutionId: params.operationExecutionId,
-      operationPlanTaskId: params.operationPlanTaskId,
-      userId: params.userId,
-      projectId: params.projectId,
-      episodeId: params.episodeId ?? null,
-      operationId: params.operationId ?? null,
-      type: params.type,
-      targetType: params.targetType,
-      targetId: params.targetId,
-      payload: params.payload ?? null,
-      dedupeKey: params.dedupeKey ?? null,
-      priority: params.priority ?? 0,
-      locale: params.locale,
-      billingInfo: resolvedBillingInfo,
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'BILLABLE_MEDIA_APPROVED_PLAN_SUBMITTER_REQUIRED',
+      message: `billable media Task must be created by the approved operation plan authority: ${params.type}`,
     })
   }
 
-  const { task, deduped } = await createTask({
+  const billingMode = await getBillingMode()
+  if (isBillableTaskType(params.type) && resolvedBillingInfo?.billable !== true) {
+    if (billingMode === 'ENFORCE') {
+      throw new ApiError('INVALID_PARAMS', {
+        message: `missing server-generated billingInfo for billable task type: ${params.type}`,
+      })
+    }
+    logger.warn({
+      action: 'task.submit.billing_info_missing_non_enforce',
+      message: `missing billingInfo ignored in ${billingMode} mode`,
+      details: {
+        type: params.type,
+        billingMode,
+      },
+    })
+  }
+
+  const taskInput = {
     userId: params.userId,
     projectId: params.projectId,
     parentTaskId: params.parentTaskId || null,
@@ -198,99 +194,54 @@ export async function submitTask(params: {
     billingInfo: resolvedBillingInfo || null,
     operationId: params.operationId || null,
     operationSource: params.operationSource || null,
-    approvalGrantId: params.approvalGrantId ?? null,
-    operationExecutionId: params.operationExecutionId ?? null,
-    operationPlanTaskId: params.operationPlanTaskId ?? null,
+    approvalGrantId: null,
+    operationExecutionId: null,
+    operationPlanTaskId: null,
     operationRequestId,
-  }, params.onTaskCreatedInTransaction
-    ? { onTaskCreatedInTransaction: params.onTaskCreatedInTransaction }
-    : undefined)
-  const runId: string | null = null
+  } satisfies CreateTaskInput
+  return { input: taskInput, billingMode }
+}
 
-  let preparedBillingInfo = (task.billingInfo || resolvedBillingInfo || null) as TaskBillingInfo | null
-  if (!deduped && isBillableTaskType(params.type) && preparedBillingInfo?.billable !== true) {
-    const billingMode = await getBillingMode()
-    if (billingMode === 'ENFORCE') {
-      await commitTaskTerminal({
-        kind: 'failed',
-        taskId: task.id,
-        fence: { kind: 'active' },
-        source: 'validation',
-        errorCode: 'INVALID_PARAMS',
-        errorMessage: `missing server-generated billingInfo for billable task type: ${params.type}`,
-        eventPayload: { stage: 'billing_validation_failed' },
-      })
-      throw new ApiError('INVALID_PARAMS', {
-        message: `missing server-generated billingInfo for billable task type: ${params.type}`,
+export async function submitTask(params: SubmitTaskParams): Promise<SubmitTaskResult> {
+  const logger = createScopedLogger({
+    module: 'task.submitter',
+    action: 'task.submit',
+    requestId: params.requestId || undefined,
+    projectId: params.projectId,
+    userId: params.userId,
+  })
+  const prepared = await prepareTaskSubmissionInput(params)
+  let created: Awaited<ReturnType<typeof persistSubmittedTaskBatchInTransaction>>
+  try {
+    created = await prisma.$transaction(async (tx) => await persistSubmittedTaskBatchInTransaction({
+        tx,
+        inputs: [prepared.input],
+        billingMode: prepared.billingMode,
+        onBatchCreatedInTransaction: params.onTaskCreatedInTransaction
+          ? async (transaction, tasks) => {
+              const first = tasks[0]
+              if (!first || tasks.length !== 1) throw new Error('TASK_SINGLE_BATCH_RESULT_INVALID')
+              await params.onTaskCreatedInTransaction!(transaction, first.task)
+            }
+          : undefined,
+      }))
+  } catch (error) {
+    if (error instanceof InsufficientBalanceError) {
+      throw new ApiError('INSUFFICIENT_BALANCE', {
+        message: error.message,
+        required: error.required,
+        available: error.available,
       })
     }
-    logger.warn({
-      action: 'task.submit.billing_info_missing_non_enforce',
-      message: `missing billingInfo ignored in ${billingMode} mode`,
-      taskId: task.id,
-      details: {
-        type: params.type,
-        billingMode,
-      },
-    })
+    throw error
   }
-
-  if (!deduped && preparedBillingInfo) {
-    try {
-      preparedBillingInfo = await authorizeTaskBilling(task.id)
-    } catch (error) {
-      if (error instanceof InsufficientBalanceError) {
-        await commitTaskTerminal({
-          kind: 'failed',
-          taskId: task.id,
-          fence: { kind: 'active' },
-          source: 'validation',
-          errorCode: 'INSUFFICIENT_BALANCE',
-          errorMessage: error.message,
-          eventPayload: { stage: 'billing_prepare_failed' },
-        })
-        throw new ApiError('INSUFFICIENT_BALANCE', {
-          message: error.message,
-          required: error.required,
-          available: error.available,
-        })
-      }
-      await commitTaskTerminal({
-        kind: 'failed',
-        taskId: task.id,
-        fence: { kind: 'active' },
-        source: 'validation',
-        errorCode: 'INTERNAL_ERROR',
-        errorMessage: error instanceof Error ? error.message : String(error),
-        eventPayload: { stage: 'billing_prepare_failed' },
-      })
-      throw error
-    }
-  }
-
-  if (!deduped) {
-    await publishTaskEvent({
-      taskId: task.id,
-      projectId: params.projectId,
-      userId: params.userId,
-      type: TASK_EVENT_TYPE.CREATED,
-      taskType: params.type,
-      targetType: params.targetType,
-      targetId: params.targetId,
-      episodeId: params.episodeId || null,
-      payload: {
-        ...normalizedPayload,
-        parentTaskId: params.parentTaskId || null,
-        billing: preparedBillingInfo || null,
-        trace: {
-          requestId: params.requestId || null,
-        },
-      },
-    })
-  }
+  const first = created[0]
+  if (!first || created.length !== 1) throw new Error('TASK_SINGLE_BATCH_RESULT_INVALID')
+  const { task, deduped } = first
+  const preparedBillingInfo = (task.billingInfo || null) as TaskBillingInfo | null
   logger.info({
-    action: 'task.submit.created',
-    message: 'task created',
+    action: deduped ? 'task.submit.deduped' : 'task.submit.persisted',
+    message: deduped ? 'existing Task reused' : 'Task and enqueue Outbox persisted',
     taskId: task.id,
     details: {
       type: params.type,
@@ -299,108 +250,11 @@ export async function submitTask(params: {
     },
   })
 
-  if (!deduped) {
-    try {
-      const envelope = buildTaskJobEnvelope({
-        id: task.id,
-        parentTaskId: params.parentTaskId || null,
-        type: params.type,
-        projectId: params.projectId,
-        episodeId: params.episodeId || null,
-        targetType: params.targetType,
-        targetId: params.targetId,
-        payload: normalizedPayload,
-        batchKey: params.batchKey || null,
-        billingInfo: preparedBillingInfo || null,
-        userId: params.userId,
-        operationId: params.operationId || null,
-        operationSource: params.operationSource || null,
-        approvalGrantId: params.approvalGrantId ?? null,
-        operationExecutionId: params.operationExecutionId ?? null,
-        operationPlanTaskId: params.operationPlanTaskId ?? null,
-        operationRequestId,
-        priority: task.priority,
-      })
-      await addTaskJob(envelope.data, {
-        priority: envelope.priority,
-      })
-      await markTaskEnqueued(task.id)
-      logger.info({
-        action: 'task.submit.enqueued',
-        message: 'task enqueued',
-        taskId: task.id,
-      })
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      const failedMessage = message || 'queue add failed'
-      const observation = await observeTaskJob(task.id)
-      if (observation === 'alive' || typeof observation === 'object') {
-        await markTaskEnqueued(task.id)
-        logger.warn({
-          action: 'task.submit.enqueue_response_lost',
-          message: 'queue add threw after BullMQ accepted the deterministic task job',
-          taskId: task.id,
-          details: { observation },
-        })
-      } else if (observation === 'unavailable') {
-        await markTaskEnqueueFailed(task.id, failedMessage)
-        logger.error({
-          action: 'task.submit.enqueue_unavailable',
-          message: failedMessage,
-          taskId: task.id,
-          errorCode: 'EXTERNAL_ERROR',
-          retryable: true,
-        })
-        throw new ApiError('EXTERNAL_ERROR', {
-          message: failedMessage,
-          taskId: task.id,
-        })
-      } else {
-        await markTaskEnqueueFailed(task.id, failedMessage)
-      await commitTaskTerminal({
-        kind: 'failed',
-        taskId: task.id,
-        fence: { kind: 'active' },
-        source: 'enqueue',
-        errorCode: 'ENQUEUE_FAILED',
-        errorMessage: failedMessage,
-        eventPayload: {
-          stage: 'enqueue_failed',
-          stageLabel: 'progress.stage.enqueueFailed',
-          message: failedMessage,
-          errorCode: 'ENQUEUE_FAILED',
-        },
-      })
-      logger.error({
-        action: 'task.submit.enqueue_failed',
-        message: failedMessage,
-        taskId: task.id,
-        errorCode: 'EXTERNAL_ERROR',
-        retryable: false,
-        error:
-          error instanceof Error
-            ? {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-              }
-              : {
-                message: String(error),
-              },
-      })
-      throw new ApiError('EXTERNAL_ERROR', {
-        message: failedMessage,
-        taskId: task.id,
-      })
-      }
-    }
-  }
-
   return {
     success: true,
     async: true,
     taskId: task.id,
-    runId,
+    runId: null,
     status: task.status,
     deduped,
     billingReceiptView: await buildBillingReceiptView(preparedBillingInfo),

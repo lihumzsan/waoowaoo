@@ -42,7 +42,7 @@ const terminalMock = vi.hoisted(() => ({
   })),
 }))
 const approvedEnqueueMock = vi.hoisted(() => ({
-  enqueuePersistedApprovedTask: vi.fn(async () => undefined),
+  enqueuePersistedTask: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -92,7 +92,9 @@ describe('task reconcile target sync', () => {
     ])
     prismaMock.task.updateMany.mockResolvedValue({ count: 1 })
     prismaMock.projectVideoGroup.updateMany.mockResolvedValue({ count: 1 })
-    prismaMock.projectEditStylePreview.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.projectEditStylePreview.updateMany.mockResolvedValue({
+      count: 1,
+    })
     queueMock.getJob.mockResolvedValue({
       getState: async () => 'failed',
     })
@@ -109,7 +111,10 @@ describe('task reconcile target sync', () => {
     expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith({
       kind: 'failed',
       taskId: 'task-1',
-      fence: { kind: 'snapshot', updatedAt: new Date('2026-05-20T10:00:00.000Z') },
+      fence: {
+        kind: 'snapshot',
+        updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+      },
       source: 'reconciler',
       errorCode: 'RECONCILE_ORPHAN',
       errorMessage: 'Queue job already terminated but DB was not updated',
@@ -143,13 +148,18 @@ describe('task reconcile target sync', () => {
       recoveredTaskIds: [],
       unavailableTaskIds: [],
     })
-    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'failed',
-      taskId: 'task-style-1',
-      fence: { kind: 'snapshot', updatedAt: new Date('2026-05-20T10:00:00.000Z') },
-      source: 'reconciler',
-      errorCode: 'RECONCILE_ORPHAN',
-    }))
+    expect(terminalMock.commitTaskTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'failed',
+        taskId: 'task-style-1',
+        fence: {
+          kind: 'snapshot',
+          updatedAt: new Date('2026-05-20T10:00:00.000Z'),
+        },
+        source: 'reconciler',
+        errorCode: 'RECONCILE_ORPHAN',
+      }),
+    )
   })
 
   it('does not mutate task, billing, dedupe, or target state when queue observation is unavailable', async () => {
@@ -178,33 +188,36 @@ describe('task reconcile target sync', () => {
       recoveredTaskIds: ['task-1'],
       unavailableTaskIds: [],
     })
-    expect(queueMock.addTaskJob).toHaveBeenCalledWith({
-      taskId: 'task-1',
-      parentTaskId: 'parent-1',
-      type: TASK_TYPE.VIDEO_GROUP,
-      locale: 'zh',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      targetType: 'ProjectVideoGroup',
-      targetId: 'group-1',
-      payload: {
-        groupId: 'group-1',
-        meta: {
-          locale: 'zh',
-          trace: { requestId: 'request-1' },
+    expect(queueMock.addTaskJob).toHaveBeenCalledWith(
+      {
+        taskId: 'task-1',
+        parentTaskId: 'parent-1',
+        type: TASK_TYPE.VIDEO_GROUP,
+        locale: 'zh',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        targetType: 'ProjectVideoGroup',
+        targetId: 'group-1',
+        payload: {
+          groupId: 'group-1',
+          meta: {
+            locale: 'zh',
+            trace: { requestId: 'request-1' },
+          },
         },
+        batchKey: 'batch-1',
+        billingInfo: null,
+        userId: 'user-1',
+        operationId: 'generate_video_group',
+        operationSource: 'assistant',
+        approvalGrantId: null,
+        operationExecutionId: null,
+        operationPlanTaskId: null,
+        operationRequestId: 'operation-request-1',
+        trace: { requestId: 'request-1' },
       },
-      batchKey: 'batch-1',
-      billingInfo: null,
-      userId: 'user-1',
-      operationId: 'generate_video_group',
-      operationSource: 'assistant',
-      approvalGrantId: null,
-      operationExecutionId: null,
-      operationPlanTaskId: null,
-      operationRequestId: 'operation-request-1',
-      trace: { requestId: 'request-1' },
-    }, { priority: 6 })
+      { priority: 6 },
+    )
     expect(billingMock.markTaskEnqueued).toHaveBeenCalledWith('task-1')
     expect(prismaMock.task.updateMany).not.toHaveBeenCalled()
   })

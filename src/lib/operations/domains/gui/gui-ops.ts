@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { logError } from '@/lib/logging/core'
-import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { createDefaultEditChapter } from '@/lib/edit-chapter'
@@ -46,11 +45,6 @@ const EFFECTS_WRITE_DESTRUCTIVE = {
   destructive: true,
 } as const
 
-function toObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, unknown>
-}
-
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -61,6 +55,27 @@ function assertNoLegacyArtStyle(input: Record<string, unknown>) {
     code: 'LEGACY_ART_STYLE_REMOVED',
     field: 'artStyle',
     message: 'artStyle is no longer supported; use the AI-generated Style Bible workflow.',
+  })
+}
+
+const CREATE_CHARACTER_GENERATION_FIELDS = [
+  'referenceImageUrl',
+  'referenceImageUrls',
+  'generateFromReference',
+  'customDescription',
+  'count',
+  'meta',
+] as const
+
+function assertCreateCharacterRecordOnlyInput(input: Record<string, unknown>): void {
+  const unsupportedField = CREATE_CHARACTER_GENERATION_FIELDS.find((field) =>
+    Object.prototype.hasOwnProperty.call(input, field),
+  )
+  if (!unsupportedField) return
+  throw new ApiError('INVALID_PARAMS', {
+    code: 'PROJECT_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
+    field: unsupportedField,
+    message: 'create_character only creates the records; submit reference_to_character explicitly after creation.',
   })
 }
 
@@ -81,8 +96,10 @@ function duplicateAssetError(assetType: 'character' | 'location', name: string):
 async function assertProjectCharacterNameAvailable(input: {
   readonly projectId: string
   readonly name: string
+  readonly client?: Pick<Prisma.TransactionClient, 'projectCharacter'>
 }): Promise<void> {
-  const existing = await prisma.projectCharacter.findFirst({
+  const client = input.client ?? prisma
+  const existing = await client.projectCharacter.findFirst({
     where: {
       projectId: input.projectId,
       name: input.name,
@@ -112,42 +129,20 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
   return {
     create_character: defineOperation({
       id: 'create_character',
-      summary: 'Create a project character and its primary appearance; optionally trigger reference-to-character background generation.',
+      summary: 'Create a project character and its primary appearance.',
       intent: 'act',
-      effects: {
-        ...EFFECTS_WRITE,
-        externalSideEffects: true,
-        longRunning: true,
-      },
+      effects: EFFECTS_WRITE,
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional(),
-        referenceImageUrl: z.string().optional(),
-        referenceImageUrls: z.array(z.string()).optional(),
-        generateFromReference: z.boolean().optional(),
-        customDescription: z.string().optional(),
-        count: z.number().int().positive().max(6).optional(),
-        meta: z.record(z.string(), z.unknown()).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
-        const taskLocale = resolveTaskLocale(ctx.request, body)
-        const bodyMeta = toObject(body.meta)
-        const acceptLanguage = ctx.request.headers.get('accept-language') || ''
+        assertCreateCharacterRecordOnlyInput(body)
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
-        const referenceImageUrl = normalizeString(input.referenceImageUrl)
-        const generateFromReference = input.generateFromReference === true
-        const customDescription = normalizeString(input.customDescription)
-        const count = generateFromReference
-          ? normalizeImageGenerationCount('reference-to-character', input.count)
-          : normalizeImageGenerationCount('character', input.count)
-
-        const referenceImageUrls = Array.isArray(input.referenceImageUrls)
-          ? input.referenceImageUrls.map((item: unknown) => normalizeString(item)).filter(Boolean)
-          : []
 
         if (!name) {
           throw new ApiError('INVALID_PARAMS')
@@ -155,16 +150,10 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         await assertProjectCharacterNameAvailable({
           projectId: ctx.projectId,
           name,
+          client: transaction,
         })
 
-        let allReferenceImages: string[] = []
-        if (referenceImageUrls.length > 0) {
-          allReferenceImages = referenceImageUrls.slice(0, 5)
-        } else if (referenceImageUrl) {
-          allReferenceImages = [referenceImageUrl]
-        }
-
-        const character = await prisma.projectCharacter.create({
+        const character = await transaction.projectCharacter.create({
           data: {
             projectId: ctx.projectId,
             name,
@@ -176,7 +165,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         })
 
         const descText = description || `${name} 的角色设定`
-        const appearance = await prisma.characterAppearance.create({
+        await transaction.characterAppearance.create({
           data: {
             characterId: character.id,
             appearanceIndex: PRIMARY_APPEARANCE_INDEX,
@@ -188,50 +177,23 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           },
         })
 
-        if (generateFromReference && allReferenceImages.length > 0) {
-          const { getBaseUrl } = await import('@/lib/env')
-          const baseUrl = getBaseUrl()
-          fetch(`${baseUrl}/api/projects/${ctx.projectId}/reference-to-character`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Cookie: ctx.request.headers.get('cookie') || '',
-              ...(acceptLanguage ? { 'Accept-Language': acceptLanguage } : {}),
-            },
-            body: JSON.stringify({
-              referenceImageUrls: allReferenceImages,
-              characterName: name,
-              characterId: character.id,
-              appearanceId: appearance.id,
-              count,
-              isBackgroundJob: true,
-              customDescription: customDescription || undefined,
-              locale: taskLocale || undefined,
-              meta: {
-                ...bodyMeta,
-                locale: taskLocale || bodyMeta.locale || undefined,
-              },
-	            }),
-	          }).catch(() => undefined)
-	        }
-
-        const characterWithAppearances = await prisma.projectCharacter.findUnique({
+        const characterWithAppearances = await transaction.projectCharacter.findUnique({
           where: { id: character.id },
           include: { appearances: true },
         })
 
-	        return { success: true, character: characterWithAppearances }
-	      },
-	    }),
-	    update_character: defineOperation({
-	      id: 'update_character',
-	      summary: 'Update a character name/introduction.',
-	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
-	      inputSchema: z.object({
-	        characterId: z.string().min(1),
-	        name: z.string().optional(),
-	        introduction: z.string().optional().nullable(),
+        return { success: true, character: characterWithAppearances }
+      },
+    }),
+    update_character: defineOperation({
+      id: 'update_character',
+      summary: 'Update a character name/introduction.',
+      intent: 'act',
+      effects: EFFECTS_WRITE_OVERWRITE,
+      inputSchema: z.object({
+        characterId: z.string().min(1),
+        name: z.string().optional(),
+        introduction: z.string().optional().nullable(),
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
@@ -265,7 +227,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        summary: '将删除角色及其形象数据。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
-	        confirmed: z.boolean().optional(),
 	        characterId: z.string().min(1),
 	      }),
       outputSchema: z.object({ success: z.boolean() }),
@@ -388,7 +349,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        summary: '将删除该角色形象及其图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 			      inputSchema: z.object({
-			        confirmed: z.boolean().optional(),
 			        characterId: z.string().min(1),
 			        appearanceId: z.string().min(1),
 		      }),
@@ -467,7 +427,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        summary: '将确认角色形象选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
-		        confirmed: z.boolean().optional(),
 		        characterId: z.string().min(1),
 		        appearanceId: z.string().min(1),
 		        selectedIndex: z.number().int().min(0).optional(),
@@ -650,7 +609,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        summary: '将删除场景及其图片记录。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 			      inputSchema: z.object({
-			        confirmed: z.boolean().optional(),
 			        locationId: z.string().min(1),
 		      }),
       outputSchema: z.object({ success: z.boolean() }),
@@ -681,7 +639,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        summary: '将确认场景选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
-		        confirmed: z.boolean().optional(),
 		        locationId: z.string().min(1),
 		        selectedIndex: z.number().int().min(0).optional(),
 	      }),
@@ -803,7 +760,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         summary: '将撤回一次资产渲染选择/变更。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         type: z.enum(['character', 'location']),
         id: z.string().min(1),
       }).passthrough(),
@@ -958,7 +914,6 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         summary: '将删除剧集及其关联数据。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         episodeId: z.string().min(1),
       }),
       outputSchema: z.object({ success: z.boolean() }),

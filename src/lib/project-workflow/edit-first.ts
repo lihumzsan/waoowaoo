@@ -6,6 +6,7 @@ import {
 } from '@/lib/soundscape/project-data'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
+import { getEditFirstChoiceDefinition } from '@/lib/project-agent/edit-first-choice-tools'
 import {
   resolveLocationSpatialProfileReadiness,
   resolveStoryboardImageReadiness,
@@ -185,30 +186,8 @@ export function resolveEditFirstWorkflowChoice(
   workflow: EditFirstWorkflowState,
   choice: EditFirstWorkflowChoiceDecision,
 ): EditFirstWorkflowState {
-  const transition = (() => {
-    if (choice.choiceType === 'script_intake' && workflow.stage === 'ready_to_ingest_script') {
-      return workflowAction('ingest_script', 'Generate source script')
-    }
-    if (choice.choiceType === 'script_review' && workflow.stage === 'script_ready_for_review') {
-      return choice.decision === 'approve'
-        ? workflowAction('approve_script', 'Approve generated script')
-        : workflowAction('revise_script', 'Revise generated script')
-    }
-    if (choice.choiceType === 'bible_review' && workflow.stage === 'bible_ready_for_review') {
-      return choice.decision === 'approve'
-        ? workflowAction('confirm_bible', 'Confirm episode plan')
-        : workflowAction('revise_bible', 'Revise episode plan')
-    }
-    if (choice.choiceType === 'asset_review' && workflow.stage === 'assets_ready_for_review') {
-      return choice.decision === 'approve'
-        ? workflowAction('approve_edit_script_assets', 'Approve required assets')
-        : workflowAction('revise_edit_script_assets', 'Revise required assets')
-    }
-    if (choice.choiceType === 'style' && workflow.stage === 'needs_style_choice') {
-      return workflowAction('confirm_edit_style_preview', 'Confirm selected visual style')
-    }
-    return null
-  })()
+  const definition = getEditFirstChoiceDefinition(choice.choiceType)
+  const transition = definition.resolveWorkflowAction(workflow, choice)
   if (!transition) {
     throw new Error(`EDIT_FIRST_REVIEW_CHOICE_STAGE_MISMATCH:${choice.choiceType}:${workflow.stage}`)
   }

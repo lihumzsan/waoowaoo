@@ -36,6 +36,7 @@ export const TASK_SSE_EVENT_TYPE = {
 export const WORKSPACE_SSE_EVENT_TYPE = {
   MUTATION_BATCH: 'mutation.batch',
   RESOURCE_CHANGED: 'resource.changed',
+  ASSISTANT_SESSION_CHANGED: 'assistant.session.changed',
 } as const
 
 export type TaskSSEEventType = (typeof TASK_SSE_EVENT_TYPE)[keyof typeof TASK_SSE_EVENT_TYPE]
@@ -206,7 +207,23 @@ export type ResourceChangedSSEEvent = {
   affectedResources: WorkspaceResourceRef[]
 }
 
-export type SSEEvent = TaskSSEEvent | MutationBatchSSEEvent | ResourceChangedSSEEvent
+export type AssistantSessionChangedSSEEvent = {
+  id: string
+  type: typeof WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED
+  projectId: string
+  userId: string
+  ts: string
+  episodeId: string | null
+  assistantId: string
+  scopeRef: string
+  agentEventId: string
+}
+
+export type SSEEvent =
+  | TaskSSEEvent
+  | MutationBatchSSEEvent
+  | ResourceChangedSSEEvent
+  | AssistantSessionChangedSSEEvent
 
 export type CreateTaskInput = {
   userId: string

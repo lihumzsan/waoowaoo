@@ -6,23 +6,26 @@ import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { createProjectAgentChatResponse } from '@/lib/project-agent'
 import type { ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 import {
-  appendProjectAssistantThreadMessages,
-  clearProjectAssistantThread,
   loadProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
+import { clearProjectAssistantThread } from '@/lib/project-agent/thread-clear'
+import { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
 import {
+  createProjectAgentControlVisibleUserMessageId,
   parseProjectAgentControlAction,
   type ProjectAgentControlAction,
 } from '@/lib/project-agent/control'
 import {
   consumeProjectAgentApprovalInterruption,
   consumeProjectAgentChoiceInterruption,
-  declinePendingProjectAgentInterruptionsForUserTurn,
+  readRetryableConsumedProjectAgentApprovalInterruption,
+  readRetryableConsumedProjectAgentChoiceInterruption,
+  type DeclinedProjectAgentInterruption,
 } from '@/lib/project-agent/interruptions'
 import {
   buildEditFirstChoiceResultFromDecision,
@@ -30,12 +33,11 @@ import {
 import { parseAssistantPermissionMode } from '@/lib/project-agent/permission-mode'
 import { readProjectAssistantTextAttachmentsFromMessage } from '@/lib/project-agent/text-attachments'
 import {
-  createProjectAgentRun,
+  createProjectAgentUserTurnRun,
+  createProjectAgentConsumedControlRetryRun,
   ensureProjectAgentRunSlotAvailable,
   getProjectAgentRun,
-  listBlockingProjectAgentRunsForThreadClear,
-  safelyUpdateProjectAgentRunStatus,
-  supersedePendingRunsInScope,
+  settleProjectAgentRunFailureWithMessage,
   type ProjectAgentRunRecord,
 } from '@/lib/project-agent/runs'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
@@ -101,6 +103,22 @@ function mapProjectAgentError(error: unknown): ApiError {
       return new ApiError('CONFLICT', {
         code: error.message,
         message: 'another assistant run is already active for this thread',
+      })
+    }
+    if (error.message.startsWith('PROJECT_AGENT_THREAD_ACTIVE:')) {
+      return new ApiError('CONFLICT', {
+        code: 'PROJECT_AGENT_THREAD_ACTIVE',
+        message: 'assistant thread cannot be cleared while an assistant run is active or waiting',
+      })
+    }
+    if (
+      error.message.startsWith('PROJECT_AGENT_CONTROL_EXECUTION_OUTCOME_UNKNOWN:')
+      || error.message.startsWith('PROJECT_AGENT_CONTROL_RETRY_NOT_ALLOWED:')
+      || error.message.startsWith('PROJECT_AGENT_CONSUMED_CONTROL_RETRY_INVALID:')
+    ) {
+      return new ApiError('CONFLICT', {
+        code: error.message.split(':', 1)[0] ?? 'PROJECT_AGENT_CONTROL_RETRY_REJECTED',
+        message: error.message,
       })
     }
   }
@@ -192,7 +210,7 @@ function buildControlVisibleUserMessage(params: {
   text: string
 }): UIMessage {
   return {
-    id: `workspace-control-user:${params.controlAction.type}:${params.controlAction.runId}:${params.controlAction.interruptionId}`,
+    id: createProjectAgentControlVisibleUserMessageId(params.controlAction),
     role: 'user',
     parts: [{
       type: 'text',
@@ -235,6 +253,11 @@ interface ProjectAgentControlScope {
   assistantId: 'workspace-command'
 }
 
+interface ResolvedProjectAgentControlCommand {
+  control: ProjectAgentResolvedControl
+  retryInterruptionId: string | null
+}
+
 /**
  * Resolves the structured control action against the database. Control state
  * lives in interruption/wait rows with one-time consumption semantics — a
@@ -246,27 +269,39 @@ async function resolveProjectAgentControl(params: {
   scope: ProjectAgentControlScope
   messages: UIMessage[]
   run: ProjectAgentRunRecord
-}): Promise<ProjectAgentResolvedControl> {
+  declinedInterruptions: readonly DeclinedProjectAgentInterruption[]
+  visibleUserMessages: UIMessage[]
+}): Promise<ResolvedProjectAgentControlCommand> {
   const { controlAction, scope } = params
 
   if (!controlAction) {
-    await supersedePendingRunsInScope(scope)
-    const declinedInterruptions = await declinePendingProjectAgentInterruptionsForUserTurn(scope)
     return {
-      kind: 'user_turn',
-      declinedInterruptions,
+      control: {
+        kind: 'user_turn',
+        declinedInterruptions: [...params.declinedInterruptions],
+      },
+      retryInterruptionId: null,
     }
   }
 
   if (controlAction.type === 'approval_response') {
-    const interruption = await consumeProjectAgentApprovalInterruption({
+    const response = {
+      approved: controlAction.approved,
+      reason: controlAction.reason,
+    } satisfies Prisma.InputJsonObject
+    const consumed = await consumeProjectAgentApprovalInterruption({
       ...scope,
       runId: controlAction.runId,
       interruptionId: controlAction.interruptionId,
-      response: {
-        approved: controlAction.approved,
-        reason: controlAction.reason,
-      },
+      response,
+      visibleMessages: params.visibleUserMessages,
+    })
+    const interruption = consumed ?? await readRetryableConsumedProjectAgentApprovalInterruption({
+      ...scope,
+      runId: controlAction.runId,
+      interruptionId: controlAction.interruptionId,
+      response,
+      visibleMessages: params.visibleUserMessages,
     })
     if (!interruption) {
       throw new ApiError('CONFLICT', {
@@ -275,16 +310,19 @@ async function resolveProjectAgentControl(params: {
       })
     }
     return {
-      kind: 'approval',
-      interruption,
-      approved: controlAction.approved,
-      reason: controlAction.reason,
+      control: {
+        kind: 'approval',
+        interruption,
+        approved: controlAction.approved,
+        reason: controlAction.reason,
+      },
+      retryInterruptionId: consumed ? null : interruption.id,
     }
   }
 
   if (controlAction.type === 'choice_response') {
     const latestUserText = readLatestVisibleUserText(params.messages)
-    const consumedChoice = await consumeProjectAgentChoiceInterruption({
+    const choiceParams = {
       ...scope,
       runId: controlAction.runId,
       interruptionId: controlAction.interruptionId,
@@ -292,7 +330,10 @@ async function resolveProjectAgentControl(params: {
       toolCallId: controlAction.toolCallId,
       response: controlAction.output as Prisma.InputJsonObject,
       latestUserText,
-    })
+      visibleMessages: params.visibleUserMessages,
+    }
+    const consumed = await consumeProjectAgentChoiceInterruption(choiceParams)
+    const consumedChoice = consumed ?? await readRetryableConsumedProjectAgentChoiceInterruption(choiceParams)
     if (!consumedChoice) {
       throw new ApiError('CONFLICT', {
         code: 'PROJECT_AGENT_CHOICE_INTERRUPTION_NOT_PENDING',
@@ -300,15 +341,18 @@ async function resolveProjectAgentControl(params: {
       })
     }
     return {
-      kind: 'choice',
-      interruptionId: consumedChoice.id,
-      choiceType: consumedChoice.offer.card.choiceType,
-      toolCallId: consumedChoice.offer.card.toolCallId,
-      cardId: consumedChoice.offer.card.cardId,
-      choiceResult: buildEditFirstChoiceResultFromDecision({
-        decision: consumedChoice.parsedResponse,
+      control: {
+        kind: 'choice',
+        interruptionId: consumedChoice.id,
+        choiceType: consumedChoice.offer.card.choiceType,
         toolCallId: consumedChoice.offer.card.toolCallId,
-      }),
+        cardId: consumedChoice.offer.card.cardId,
+        choiceResult: buildEditFirstChoiceResultFromDecision({
+          decision: consumedChoice.parsedResponse,
+          toolCallId: consumedChoice.offer.card.toolCallId,
+        }),
+      },
+      retryInterruptionId: consumed ? null : consumedChoice.id,
     }
   }
 
@@ -327,13 +371,13 @@ export const GET = apiHandler(async (
   if (isErrorResponse(authResult)) return authResult
 
   try {
-    const thread = await loadProjectAssistantThread({
+    const snapshot = await getProjectAssistantThreadWatermarkedSnapshot({
       projectId,
       userId: authResult.session.user.id,
       episodeId: readEpisodeIdFromQuery(request),
       assistantId: 'workspace-command',
     })
-    return NextResponse.json({ thread })
+    return NextResponse.json(snapshot)
   } catch (error) {
     throw mapProjectAgentError(error)
   }
@@ -371,17 +415,10 @@ export const DELETE = apiHandler(async (
       episodeId: readEpisodeIdFromQuery(request),
       assistantId: 'workspace-command' as const,
     }
-    const blockingRuns = await listBlockingProjectAgentRunsForThreadClear(scope)
-    if (blockingRuns.length > 0) {
-      throw new ApiError('CONFLICT', {
-        code: 'PROJECT_AGENT_THREAD_ACTIVE',
-        message: 'assistant thread cannot be cleared while an assistant run is active or waiting',
-      })
-    }
-    await clearProjectAssistantThread({
+    const result = await clearProjectAssistantThread({
       ...scope,
     })
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, eventWatermark: result.eventWatermark })
   } catch (error) {
     throw mapProjectAgentError(error)
   }
@@ -423,7 +460,13 @@ export const POST = apiHandler(async (
       assistantId: 'workspace-command' as const,
     }
     await assertProjectAgentRunSlotAvailable(scope)
-    const runId = controlAction?.runId ?? crypto.randomUUID()
+    const existingControlRun = controlAction
+      ? await resolveProjectAgentRunForRequest({ controlAction, scope })
+      : null
+    const runId = existingControlRun
+      && (existingControlRun.status === 'failed' || existingControlRun.status === 'cancelled')
+      ? crypto.randomUUID()
+      : controlAction?.runId ?? crypto.randomUUID()
     const runLock = await acquireProjectAgentRunLock({
       ...scope,
       runId,
@@ -435,6 +478,7 @@ export const POST = apiHandler(async (
       })
     }
     let run: ProjectAgentRunRecord | null = null
+    let declinedInterruptions: DeclinedProjectAgentInterruption[] = []
     let controlTransitioned = false
     try {
       const existingMessages = await loadAuthoritativeThreadMessages(scope)
@@ -445,36 +489,42 @@ export const POST = apiHandler(async (
       const newMessages = userMessage ? [userMessage] : visibleUserMessages
       const messages = appendUniqueMessages(existingMessages, newMessages)
       if (controlAction) {
-        run = await resolveProjectAgentRunForRequest({
-          controlAction,
-          scope,
-        })
+        run = existingControlRun
+        if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${controlAction.runId}`)
       } else {
         if (!userMessage) throw new Error('PROJECT_AGENT_INVALID_MESSAGES')
-        run = await createProjectAgentRun({
+        const created = await createProjectAgentUserTurnRun({
           ...scope,
           runId,
           requestId: getRequestId(request) ?? crypto.randomUUID(),
-          controlKind: 'user_turn',
-          appendMessages: [userMessage],
+          message: userMessage,
         })
+        run = created.run
+        declinedInterruptions = created.declinedInterruptions
       }
-      if (visibleUserMessages.length > 0) {
-        await appendProjectAssistantThreadMessages({
-          ...scope,
-          messages: visibleUserMessages,
-        })
-      }
-      const control = await resolveProjectAgentControl({
+      const resolvedControl = await resolveProjectAgentControl({
         controlAction,
         scope,
         messages,
         run,
+        declinedInterruptions,
+        visibleUserMessages,
       })
+      const control = resolvedControl.control
       if (controlAction) {
-        const refreshedRun = await getProjectAgentRun({ ...scope, runId: run.id })
-        if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
-        run = refreshedRun
+        if (resolvedControl.retryInterruptionId) {
+          run = await createProjectAgentConsumedControlRetryRun({
+            ...scope,
+            interruptionId: resolvedControl.retryInterruptionId,
+            requestId: getRequestId(request) ?? crypto.randomUUID(),
+            controlKind: controlAction.type,
+            runId: runLock.runId === controlAction.runId ? crypto.randomUUID() : runLock.runId,
+          })
+        } else {
+          const refreshedRun = await getProjectAgentRun({ ...scope, runId: run.id })
+          if (!refreshedRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${run.id}`)
+          run = refreshedRun
+        }
       }
       controlTransitioned = true
       return await createProjectAgentChatResponse({
@@ -490,14 +540,18 @@ export const POST = apiHandler(async (
       })
     } catch (error) {
       if (run && controlTransitioned) {
-        await safelyUpdateProjectAgentRunStatus({
-          runFence: createProjectAgentRunFence(run),
-          status: 'failed',
-          expectedStatuses: ['running'],
-          stopReason: 'control_resolution_failed',
-          errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
-          errorMessage: error instanceof Error ? error.message : String(error),
-        })
+        const currentRun = await getProjectAgentRun({ ...scope, runId: run.id })
+        if (currentRun?.status === 'running') {
+          await settleProjectAgentRunFailureWithMessage({
+            runFence: createProjectAgentRunFence(currentRun),
+            controlKind: controlAction?.type ?? currentRun.controlKind,
+            requestId: getRequestId(request) ?? currentRun.requestId,
+            status: 'failed',
+            stopReason: 'control_resolution_failed',
+            errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
+            errorMessage: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
       await safelyReleaseProjectAgentRunLock(runLock)
       throw error

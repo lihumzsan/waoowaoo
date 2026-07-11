@@ -17,6 +17,7 @@ import {
   vi,
   writeFileSync,
 } from './bgm-score-worker.fixture'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 
 describe('bgm score worker', () => {
   beforeEach(() => {
@@ -39,8 +40,8 @@ describe('bgm score worker', () => {
     })
     storageMock.uploadObject.mockImplementation(async (_buffer: Buffer, key: string) => key)
     mediaServiceMock.ensureMediaObjectFromStorageKey.mockImplementation(async (storageKey: string) => ({
-      id: storageKey.includes('music/bgm-score') ? 'media-mix' : `media-${storageKey}`,
-      url: storageKey.includes('music/bgm-score') ? '/m/bgm-mix' : `/m/${storageKey}`,
+      id: `media-${storageKey}`,
+      url: `/m/${storageKey}`,
     }))
   })
 
@@ -60,10 +61,15 @@ describe('bgm score worker', () => {
       musicModel: 'google::lyria-3-pro-preview',
     }))
 
+    const storageKey = buildTaskArtifactStorageKey({
+      taskId: 'task-bgm-1',
+      artifact: 'bgm-score:mix',
+      extension: 'm4a',
+    })
     expect(result).toMatchObject({
       episodeId: 'episode-1',
-      mediaId: 'media-mix',
-      audioUrl: '/m/bgm-mix',
+      mediaId: `media-${storageKey}`,
+      audioUrl: `/m/${storageKey}`,
       designSectionCount: 2,
       promptSectionCount: 1,
       virtualLayerCount: 2,
@@ -86,7 +92,7 @@ describe('bgm score worker', () => {
       }
       return arg.update?.status === 'completed'
         && arg.update.cuesJson?.schemaVersion === 2
-        && arg.update.mixJson?.url === '/m/bgm-mix'
+        && arg.update.mixJson?.url === `/m/${storageKey}`
         && arg.update.mixJson.durationMs === 3500
         && arg.update.cuesJson.plan?.virtualLayers?.length === 2
         && arg.update.cuesJson.plan?.promptSections?.length === 1

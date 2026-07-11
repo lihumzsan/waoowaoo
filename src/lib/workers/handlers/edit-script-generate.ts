@@ -60,6 +60,7 @@ export async function handleEditScriptGenerateTask(job: Job<TaskJobData>) {
         episodeId,
         chapterId,
         locale: job.data.locale,
+        taskId: job.data.taskId,
         ...(videoRatio ? { videoRatio } : {}),
         onGenerationStepPersisted: async (step) => {
           await reportTaskProgress(job, step.progress, {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { submitTask } from '@/lib/task/submitter'
-import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
+import { TASK_TYPE } from '@/lib/task/types'
 
 const loggerMock = vi.hoisted(() => ({
   info: vi.fn(),
@@ -12,37 +12,27 @@ vi.mock('@/lib/logging/core', () => ({
   createScopedLogger: vi.fn(() => loggerMock),
 }))
 
-const queueMock = vi.hoisted(() => ({
-  addTaskJob: vi.fn(async () => undefined),
+const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(async (run: (tx: object) => Promise<unknown>) => await run({})),
 }))
 
-vi.mock('@/lib/task/queues', () => queueMock)
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-const publisherMock = vi.hoisted(() => ({
-  publishTaskEvent: vi.fn(async () => undefined),
-  listRecentTerminalLifecycleEvents: vi.fn(async () => []),
-}))
-
-vi.mock('@/lib/task/publisher', () => publisherMock)
-
-const serviceMock = vi.hoisted(() => ({
-  createTask: vi.fn(async (input: { priority?: number | null; payload: Record<string, unknown> }) => ({
+const transactionCreateMock = vi.hoisted(() => ({
+  persistSubmittedTaskBatchInTransaction: vi.fn(async (params: {
+    inputs: Array<{ priority?: number | null }>
+  }) => [{
     task: {
       id: 'task-1',
       status: 'queued',
-      priority: input.priority ?? 0,
+      priority: params.inputs[0]?.priority ?? 0,
       billingInfo: null,
     },
     deduped: false,
-  })),
-  markTaskEnqueueFailed: vi.fn(async () => undefined),
-  markTaskEnqueued: vi.fn(async () => undefined),
-  markTaskFailed: vi.fn(async () => undefined),
-  rollbackTaskBillingForTask: vi.fn(async () => ({ attempted: false, rolledBack: false })),
-  updateTaskBillingInfo: vi.fn(async () => undefined),
+  }]),
 }))
 
-vi.mock('@/lib/task/service', () => serviceMock)
+vi.mock('@/lib/task/transactional-create', () => transactionCreateMock)
 
 const billingMock = vi.hoisted(() => ({
   buildDefaultTaskBillingInfo: vi.fn(() => null as import('@/lib/task/types').TaskBillingInfo | null),
@@ -52,7 +42,6 @@ const billingMock = vi.hoisted(() => ({
     readonly available = 0
   },
   isBillableTaskType: vi.fn(() => false),
-  prepareTaskBilling: vi.fn(async () => null),
 }))
 
 vi.mock('@/lib/billing', () => billingMock)
@@ -64,7 +53,7 @@ describe('submitTask progress group', () => {
     billingMock.isBillableTaskType.mockReturnValue(false)
   })
 
-  it('adds one operation progress group to persisted task, created event, and queued job payloads', async () => {
+  it('adds one operation progress group to the atomic Task submission input', async () => {
     await submitTask({
       userId: 'user-1',
       locale: 'zh',
@@ -87,42 +76,19 @@ describe('submitTask progress group', () => {
 
     const expectedProgressGroupId = 'operation:generate_edit_script_storyboard_images:request-1'
 
-    expect(serviceMock.createTask).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script_storyboard_images',
-      operationRequestId: 'request-1',
-      payload: expect.objectContaining({
-        ui: {
-          intent: 'generate',
-          hasOutputAtStart: false,
-          progressGroupId: expectedProgressGroupId,
-        },
-      }),
-    }), undefined)
-    expect(publisherMock.publishTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
-      type: TASK_EVENT_TYPE.CREATED,
-      payload: expect.objectContaining({
-        ui: {
-          intent: 'generate',
-          hasOutputAtStart: false,
-          progressGroupId: expectedProgressGroupId,
-        },
-      }),
+    expect(transactionCreateMock.persistSubmittedTaskBatchInTransaction).toHaveBeenCalledWith(expect.objectContaining({
+      inputs: [expect.objectContaining({
+        operationId: 'generate_edit_script_storyboard_images',
+        operationRequestId: 'request-1',
+        payload: expect.objectContaining({
+          ui: {
+            intent: 'generate',
+            hasOutputAtStart: false,
+            progressGroupId: expectedProgressGroupId,
+          },
+        }),
+      })],
     }))
-    expect(queueMock.addTaskJob).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: 'generate_edit_script_storyboard_images',
-      operationSource: 'project-ui',
-      approvalGrantId: null,
-      operationExecutionId: null,
-      operationPlanTaskId: null,
-      operationRequestId: 'request-1',
-      payload: expect.objectContaining({
-        ui: {
-          intent: 'generate',
-          hasOutputAtStart: false,
-          progressGroupId: expectedProgressGroupId,
-        },
-      }),
-    }), { priority: 0 })
   })
 
   it('rejects an unapproved sound_effect task before creating a task record or queue job', async () => {
@@ -157,10 +123,9 @@ describe('submitTask progress group', () => {
       operationId: 'generate_episode_soundscape',
       operationSource: 'worker',
     })).rejects.toMatchObject({
-      message: expect.stringContaining('must reference its approved plan'),
+      message: expect.stringContaining('must be created by the approved operation plan authority'),
     })
 
-    expect(serviceMock.createTask).not.toHaveBeenCalled()
-    expect(queueMock.addTaskJob).not.toHaveBeenCalled()
+    expect(transactionCreateMock.persistSubmittedTaskBatchInTransaction).not.toHaveBeenCalled()
   })
 })

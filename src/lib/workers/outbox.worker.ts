@@ -15,23 +15,29 @@ import {
   parseOutboxCommandPayload,
 } from '@/lib/outbox/types'
 import { publishPersistedTaskEventById } from '@/lib/task/publisher'
-import { enqueuePersistedApprovedTask } from '@/lib/task/enqueue'
-import { runProjectAgentWaitContinuationCommand } from '@/lib/project-agent/server-follow-up'
+import { enqueuePersistedTask } from '@/lib/task/enqueue'
+import {
+  runProjectAgentWaitContinuationCommand,
+  settleProjectAgentWaitContinuationDeliveryExhausted,
+} from '@/lib/project-agent/server-follow-up'
+import { publishPersistedProjectAgentSessionChangedById } from '@/lib/project-agent/session-event'
+import { getOutboxRuntimeConfig, getWorkerConcurrency } from './runtime-config'
 
 const logger = createScopedLogger({ module: 'worker.outbox' })
-const OUTBOX_LEASE_MS = 15 * 60 * 1000
+const outboxConfig = getOutboxRuntimeConfig()
 
 async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
   const outboxId = job.data.outboxId
   if (!outboxId || outboxId !== job.id) {
     throw new UnrecoverableError(`OUTBOX_JOB_ID_MISMATCH:${String(job.id)}:${outboxId}`)
   }
-  const leaseOwner = `bullmq:${outboxId}:${String(job.attemptsMade)}:${randomUUID()}`
-  const row = await claimOutboxCommand({ id: outboxId, leaseOwner, leaseMs: OUTBOX_LEASE_MS })
+  const leaseOwner = `bullmq:${outboxId}:${randomUUID()}`
+  const row = await claimOutboxCommand({ id: outboxId, leaseOwner, leaseMs: outboxConfig.leaseMs })
   if (!row) return
+  let payload: ReturnType<typeof parseOutboxCommandPayload> | null = null
   let leaseLost = false
   const leaseHeartbeat = setInterval(() => {
-    void extendOutboxCommandLease({ id: outboxId, leaseOwner, leaseMs: OUTBOX_LEASE_MS })
+    void extendOutboxCommandLease({ id: outboxId, leaseOwner, leaseMs: outboxConfig.leaseMs })
       .then((extended) => {
         if (!extended) leaseLost = true
       })
@@ -46,16 +52,22 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
             : { message: String(error) },
         })
       })
-  }, 60_000)
+  }, Math.max(1_000, Math.floor(outboxConfig.leaseMs / 3)))
 
   try {
-    const payload = parseOutboxCommandPayload(row.payload)
+    try {
+      payload = parseOutboxCommandPayload(row.payload)
+    } catch (error) {
+      throw new OutboxPermanentError(
+        error instanceof Error ? error.message : `OUTBOX_COMMAND_PAYLOAD_INVALID:${String(error)}`,
+      )
+    }
     if (row.kind !== payload.kind || row.version !== payload.version) {
       throw new OutboxPermanentError(`OUTBOX_ROW_CONTRACT_MISMATCH:${outboxId}`)
     }
     switch (payload.kind) {
       case OUTBOX_COMMAND_KIND.TASK_ENQUEUE:
-        await enqueuePersistedApprovedTask(payload)
+        await enqueuePersistedTask(payload)
         break
       case OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST:
         await publishPersistedTaskEventById(payload.eventId, payload.taskId)
@@ -63,21 +75,49 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
       case OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT:
         await runProjectAgentWaitContinuationCommand(payload, outboxId)
         break
+      case OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST:
+        await publishPersistedProjectAgentSessionChangedById(payload.projectAgentEventId)
+        break
     }
     if (leaseLost) throw new Error(`OUTBOX_LEASE_LOST:${outboxId}`)
     const accepted = await acceptOutboxCommand({ id: outboxId, leaseOwner })
     if (!accepted) throw new Error(`OUTBOX_ACCEPT_CAS_FAILED:${outboxId}`)
   } catch (error) {
-    const attempts = typeof job.opts.attempts === 'number' ? Math.max(1, job.opts.attempts) : 1
-    const currentAttempt = job.attemptsMade + 1
+    const currentAttempt = row.deliveryCount
+    const attempts = outboxConfig.maxDeliveryAttempts
     const permanent = error instanceof OutboxPermanentError
     const dead = permanent || currentAttempt >= attempts
     const message = error instanceof Error ? error.message : String(error)
+    if (dead && payload?.kind === OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT) {
+      try {
+        await settleProjectAgentWaitContinuationDeliveryExhausted(payload, outboxId)
+      } catch (settlementError) {
+        const settlementMessage = settlementError instanceof Error
+          ? settlementError.message
+          : String(settlementError)
+        await releaseOutboxCommand({
+          id: outboxId,
+          leaseOwner,
+          error: settlementMessage,
+          retryAt: new Date(Date.now() + Math.min(60_000, 1_000 * 2 ** Math.max(0, currentAttempt - 1))),
+          dead: false,
+        })
+        logger.error({
+          action: 'outbox.delivery.assistant_settlement_retry',
+          message: settlementMessage,
+          details: { outboxId, kind: row.kind, currentAttempt, attempts },
+          error: settlementError instanceof Error
+            ? { name: settlementError.name, message: settlementError.message, stack: settlementError.stack }
+            : { message: settlementMessage },
+        })
+        throw settlementError
+      }
+    }
     await releaseOutboxCommand({
       id: outboxId,
       leaseOwner,
       error: message,
-      retryAt: new Date(Date.now() + Math.min(60_000, 1_000 * 2 ** Math.max(0, job.attemptsMade))),
+      retryAt: new Date(Date.now() + Math.min(60_000, 1_000 * 2 ** Math.max(0, currentAttempt - 1))),
       dead,
     })
     logger.error({
@@ -101,7 +141,7 @@ export function createOutboxWorker(): Worker<OutboxJobData> {
     deliverOutboxCommand,
     {
       connection: queueRedis,
-      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_OUTBOX || '10', 10) || 10,
+      concurrency: getWorkerConcurrency('outbox'),
     },
   )
 }

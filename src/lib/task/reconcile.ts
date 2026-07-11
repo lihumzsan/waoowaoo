@@ -3,37 +3,25 @@ import { prisma } from '@/lib/prisma'
 import type { Queue } from 'bullmq'
 import { buildTaskJobEnvelope, type TaskJobEnvelopeSource } from './job-envelope'
 import { addTaskJob, getAllQueues } from './queues'
-import {
-  markTaskEnqueueFailed,
-  markTaskEnqueued,
-  sweepStaleTasks,
-} from './service'
-import {
-  TASK_EVENT_TYPE,
-  TASK_STATUS,
-  type TaskJobEnvelope,
-  type TaskJobData,
-  type TaskStatus,
-} from './types'
-import { commitTaskTerminal } from './terminal'
-import { enqueuePersistedApprovedTask } from './enqueue'
+import { markTaskEnqueueFailed, markTaskEnqueued, sweepStaleTasks } from './service'
+import { TASK_EVENT_TYPE, TASK_STATUS, type TaskJobEnvelope, type TaskJobData, type TaskStatus } from './types'
+import { commitTaskTerminal, type TaskTerminalCommitResult } from './terminal'
+import { enqueuePersistedTask } from './enqueue'
+import { getTaskReconcilerRuntimeConfig } from '@/lib/workers/runtime-config'
 
 const ACTIVE_STATUSES: TaskStatus[] = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING]
-const RECONCILE_INTERVAL_MS = 60_000
-const PROCESSING_TIMEOUT_MS = 5 * 60_000
+const reconcilerConfig = getTaskReconcilerRuntimeConfig()
 const RECONCILE_BATCH_SIZE = 200
-const TERMINAL_RECONCILE_GRACE_MS = 90_000
-const MISSING_RECONCILE_GRACE_MS = 30_000
 
 export type TaskJobObservation =
   | 'alive'
   | 'absent'
   | 'unavailable'
   | {
-    state: 'terminal'
-    jobState: 'completed' | 'failed'
-    failedReason: string | null
-  }
+      state: 'terminal'
+      jobState: 'completed' | 'failed'
+      failedReason: string | null
+    }
 
 export type TaskReconciliationResult = {
   failedTaskIds: string[]
@@ -71,9 +59,10 @@ export async function observeTaskJobAcrossQueues(
         action: 'task.job.observe_failed',
         message: 'BullMQ job observation failed',
         taskId,
-        error: error instanceof Error
-          ? { name: error.name, message: error.message, stack: error.stack }
-          : { message: String(error) },
+        error:
+          error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { message: String(error) },
       })
     }
   }
@@ -89,8 +78,8 @@ type ReconcileTask = TaskJobEnvelopeSource & {
   updatedAt: Date
 }
 
-async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<boolean> {
-  const terminal = await commitTaskTerminal({
+async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<TaskTerminalCommitResult> {
+  return await commitTaskTerminal({
     kind: 'failed',
     taskId: task.id,
     fence: { kind: 'snapshot', updatedAt: task.updatedAt },
@@ -103,7 +92,6 @@ async function failOrphanedTask(task: ReconcileTask, reason: string): Promise<bo
       message: reason,
     },
   })
-  return terminal.applied
 }
 
 type QueuedTaskRecovery = 'recovered' | 'failed' | 'retry_later'
@@ -114,14 +102,13 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
     envelope = buildTaskJobEnvelope(task)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    return await failOrphanedTask(task, `Queued task recovery contract invalid: ${message}`)
-      ? 'failed'
-      : 'retry_later'
+    const terminal = await failOrphanedTask(task, `Queued task recovery contract invalid: ${message}`)
+    return terminal.applied ? 'failed' : 'retry_later'
   }
 
   try {
     if (task.operationExecutionId) {
-      await enqueuePersistedApprovedTask({
+      await enqueuePersistedTask({
         taskId: task.id,
         operationExecutionId: task.operationExecutionId,
       })
@@ -144,6 +131,23 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
     })
     return 'retry_later'
   }
+}
+
+async function recoverMaterializedCompletion(task: ReconcileTask): Promise<QueuedTaskRecovery> {
+  const reset = await prisma.task.updateMany({
+    where: {
+      id: task.id,
+      status: task.status,
+      updatedAt: task.updatedAt,
+    },
+    data: {
+      status: TASK_STATUS.QUEUED,
+      startedAt: null,
+      heartbeatAt: null,
+    },
+  })
+  if (reset.count !== 1) return 'retry_later'
+  return await recoverQueuedTask({ ...task, status: TASK_STATUS.QUEUED })
 }
 
 export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> {
@@ -189,16 +193,10 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
       result.unavailableTaskIds.push(task.id)
       continue
     }
-    if (
-      typeof observation === 'object'
-      && now - task.updatedAt.getTime() < TERMINAL_RECONCILE_GRACE_MS
-    ) {
+    if (typeof observation === 'object' && now - task.updatedAt.getTime() < reconcilerConfig.terminalGraceMs) {
       continue
     }
-    if (
-      observation === 'absent'
-      && now - task.updatedAt.getTime() < MISSING_RECONCILE_GRACE_MS
-    ) {
+    if (observation === 'absent' && now - task.updatedAt.getTime() < reconcilerConfig.missingGraceMs) {
       continue
     }
 
@@ -209,13 +207,21 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
       continue
     }
 
-    const reason = typeof observation === 'object' && observation.failedReason
-      ? `Queue job ${observation.jobState} before Task terminal update: ${observation.failedReason}`
-      : typeof observation === 'object'
-        ? 'Queue job already terminated but DB was not updated'
-        : 'Queue job absent after reconciliation grace period'
-    if (await failOrphanedTask(task, reason)) {
+    const reason =
+      typeof observation === 'object' && observation.failedReason
+        ? `Queue job ${observation.jobState} before Task terminal update: ${observation.failedReason}`
+        : typeof observation === 'object'
+          ? 'Queue job already terminated but DB was not updated'
+          : 'Queue job absent after reconciliation grace period'
+    const terminal = await failOrphanedTask(task, reason)
+    if (terminal.applied) {
       result.failedTaskIds.push(task.id)
+      continue
+    }
+    if (terminal.reason === 'completion_pending') {
+      const recovery = await recoverMaterializedCompletion(task)
+      if (recovery === 'recovered') result.recoveredTaskIds.push(task.id)
+      if (recovery === 'failed') result.failedTaskIds.push(task.id)
     }
   }
 
@@ -224,13 +230,11 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
 
 async function executeTaskReconciliationCycle(): Promise<void> {
   const sweptProcessing = await sweepStaleTasks({
-    processingThresholdMs: PROCESSING_TIMEOUT_MS,
+    processingThresholdMs: reconcilerConfig.processingTimeoutMs,
   })
 
   const reconciled = await reconcileActiveTasks()
-  const changed = sweptProcessing.length
-    + reconciled.failedTaskIds.length
-    + reconciled.recoveredTaskIds.length
+  const changed = sweptProcessing.length + reconciled.failedTaskIds.length + reconciled.recoveredTaskIds.length
   if (changed > 0 || reconciled.unavailableTaskIds.length > 0) {
     logger.info({
       action: 'task.reconcile.cycle',
@@ -271,7 +275,7 @@ export function startTaskReconciler(): void {
   logger.info({
     action: 'task.reconcile.start',
     message: 'Task reconciler started',
-    details: { intervalMs: RECONCILE_INTERVAL_MS },
+    details: { intervalMs: reconcilerConfig.intervalMs },
   })
 
   const execute = async () => {
@@ -281,9 +285,10 @@ export function startTaskReconciler(): void {
       logger.error({
         action: 'task.reconcile.error',
         message: 'Task reconciliation cycle failed',
-        error: error instanceof Error
-          ? { name: error.name, message: error.message, stack: error.stack }
-          : { message: String(error) },
+        error:
+          error instanceof Error
+            ? { name: error.name, message: error.message, stack: error.stack }
+            : { message: String(error) },
       })
     }
   }
@@ -291,5 +296,5 @@ export function startTaskReconciler(): void {
   void execute()
   globalForTaskReconciler.__waoowaooTaskReconcilerTimer = setInterval(() => {
     void execute()
-  }, RECONCILE_INTERVAL_MS)
+  }, reconcilerConfig.intervalMs)
 }

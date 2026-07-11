@@ -7,7 +7,7 @@ import {
   buildRun,
   buildWorkflow,
   createProjectAgentChatResponse,
-  createProjectAgentWait,
+  bindProjectAgentWaitToTasksInTransaction,
   createRegistry,
   describe,
   drainCapturedResponseStream,
@@ -190,11 +190,10 @@ describe('project agent runtime deterministic tool injection', () => {
     await drainCapturedResponseStream()
 
     expect(response.status).toBe(200)
-    expect(createProjectAgentWait).toHaveBeenCalledWith(expect.objectContaining({
+    expect(bindProjectAgentWaitToTasksInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
       runId: 'run-approval_response',
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
       operationId: 'generate_edit_style_previews',
       taskIds: ['task-generated-1'],
     }))

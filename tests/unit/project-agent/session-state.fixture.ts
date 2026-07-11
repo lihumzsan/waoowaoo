@@ -41,6 +41,17 @@ type MockRun = {
 }
 
 const prismaMock = vi.hoisted(() => ({
+  $queryRaw: vi.fn(async () => [
+    { kind: 'WAIT', id: 'wait-1', runId: 'run-1' },
+    { kind: 'INTERRUPTION', id: 'interruption-1', runId: 'run-1' },
+    { kind: 'ACTIVITY', id: 'activity-wait-1', runId: 'run-1' },
+  ]),
+  projectAgentEvent: {
+    findFirst: vi.fn(async () => ({ id: BigInt(42) })),
+  },
+  projectAssistantThread: {
+    findUnique: vi.fn(async (): Promise<unknown> => null),
+  },
   task: {
     findMany: vi.fn(async () => [
       {
@@ -53,8 +64,14 @@ const prismaMock = vi.hoisted(() => ({
       },
     ]),
   },
-  projectEditBible: {
-    findFirst: vi.fn(async (): Promise<unknown | null> => null),
+  projectAgentRun: {
+    findMany: vi.fn(async () => [{
+      id: 'run-1',
+      status: 'awaiting_task',
+      controlKind: 'approval_response',
+      errorCode: null,
+      errorMessage: null,
+    }]),
   },
 }))
 
@@ -142,10 +159,11 @@ const choiceCardMock = vi.hoisted(() => ({
     interruptionId: null,
     toolCallId: 'tool-choice-1',
     choiceType: 'bible_review',
+    replyMode: 'whole_card',
     title: '确认制作规划',
     groups: [],
     submitLabel: '确认',
-    submit: { kind: 'submit_tool_output' },
+    submit: { kind: 'submit_tool_output', decision: 'approve' },
   })),
 }))
 
@@ -169,10 +187,13 @@ vi.mock('@/lib/project-agent/choice-card', async (importOriginal) => {
 
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
-import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import { getProjectAgentSessionSnapshot, getProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
 
 export { beforeEach, describe, expect, it, vi } from 'vitest'
 export { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 export { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
+export { getProjectAgentSessionSnapshot } from '@/lib/project-agent/session-state'
+export { getProjectAssistantThreadWatermarkedSnapshot } from '@/lib/project-agent/thread-snapshot'
 export { choiceCardMock, eventMock, interruptionsMock, prismaMock, runsMock, waitsMock, workflow, workflowMock }
 export type { MockInterruption, MockRun }

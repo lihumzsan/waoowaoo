@@ -19,8 +19,9 @@ const authMock = vi.hoisted(() => ({
   isErrorResponse: vi.fn((value: unknown) => value instanceof Response),
 }))
 
-const prismaMock = vi.hoisted(() => ({
-  project: {
+const prismaMock = vi.hoisted(() => {
+  const transaction = {
+    project: {
     findUnique: vi.fn(async () => ({
       id: 'project-1',
       analysisModel: 'llm::analysis',
@@ -35,14 +36,20 @@ const prismaMock = vi.hoisted(() => ({
       id: 'project-1',
       artStyle: 'realistic',
     })),
-  },
-  userPreference: {
-    upsert: vi.fn(async () => ({ userId: 'user-1', artStyle: 'realistic' })),
-  },
-  userStylePreset: {
-    findFirst: vi.fn(async (): Promise<MockUserStylePreset | null> => null),
-  },
-}))
+    },
+    userPreference: {
+      upsert: vi.fn(async () => ({ userId: 'user-1', artStyle: 'realistic' })),
+    },
+    userStylePreset: {
+      findFirst: vi.fn(async (): Promise<MockUserStylePreset | null> => null),
+    },
+  }
+  return {
+    ...transaction,
+    $transaction: vi.fn(async (work: (tx: typeof transaction) => Promise<unknown>) =>
+      await work(transaction)),
+  }
+})
 
 const mediaAttachMock = vi.hoisted(() => ({
   attachMediaFieldsToProject: vi.fn(async (value: unknown) => value),

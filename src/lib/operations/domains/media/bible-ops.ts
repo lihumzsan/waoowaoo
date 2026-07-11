@@ -41,19 +41,12 @@ const chapterDetailOperationInputSchema = z.object({
   chapterId: z.string().trim().min(1),
 }).passthrough()
 const ingestScriptOperationInputSchema = ingestEditBibleScriptInputSchema.extend(optionalEpisodeIdField)
-const reviseBibleOperationInputSchema = reviseEditBibleInputSchema.extend({
-  ...optionalEpisodeIdField,
-  confirmed: z.boolean().optional(),
-})
+const reviseBibleOperationInputSchema = reviseEditBibleInputSchema.extend(optionalEpisodeIdField)
 const reviseScriptOperationInputSchema = z.object({
   ...optionalEpisodeIdField,
   revisionNotes: z.string().trim().min(1).max(4000),
-  confirmed: z.boolean().optional(),
 }).passthrough()
-const generateBibleFromScriptOperationInputSchema = z.object({
-  ...optionalEpisodeIdField,
-  confirmed: z.boolean().optional(),
-}).passthrough()
+const generateBibleFromScriptOperationInputSchema = z.object(optionalEpisodeIdField).passthrough()
 const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
   operationId: 'revise_bible',
   inputSchema: reviseBibleOperationInputSchema,
@@ -61,7 +54,6 @@ const reviseBibleToolInputSchema = createProjectAgentToolInputSchema({
 const confirmBibleOperationInputSchema = confirmEditBibleInputSchema.extend({
   ...optionalEpisodeIdField,
   aspectRatio: z.enum(['9:16', '16:9', '21:9']),
-  confirmed: z.boolean().optional(),
 })
 
 const confirmBibleToolInputSchema: ProjectAgentToolInputSchema = {
@@ -344,6 +336,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         required: false,
       },
@@ -361,7 +354,6 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           text: input.text,
           ...(input.rawFileMediaId ? { rawFileMediaId: input.rawFileMediaId } : {}),
           source: ctx.source,
-          confirmed: true,
           locale: resolveLocale(ctx.context.locale),
         })
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -386,6 +378,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         required: false,
       },
@@ -401,7 +394,6 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           episodeId,
           revisionNotes: input.revisionNotes,
           source: ctx.source,
-          confirmed: true,
           locale: resolveLocale(ctx.context.locale),
         })
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -433,12 +425,13 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: generateBibleFromScriptOperationInputSchema,
       outputSchema: approveScriptOutputSchema,
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         await approveEpisodePromptGeneratedScript({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
+          client: transaction,
         })
         return { approved: true as const }
       },
@@ -449,6 +442,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BIBLE_GENERATE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         required: false,
       },
@@ -463,7 +457,6 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
           userId: ctx.userId,
           episodeId,
           source: ctx.source,
-          confirmed: true,
           locale: resolveLocale(ctx.context.locale),
         })
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
@@ -580,7 +573,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       toolInputSchema: reviseBibleToolInputSchema,
       inputSchema: reviseBibleOperationInputSchema,
       outputSchema: editBibleMutationOutputSchema,
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const result = await reviseEpisodeEditBible({
           projectId: ctx.projectId,
@@ -592,6 +585,7 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
             ...(input.ledger ? { ledger: input.ledger } : {}),
             ...(input.emotionalCurve ? { emotionalCurve: input.emotionalCurve } : {}),
           },
+          client: transaction,
         })
         return editBibleMutationOutputSchema.parse(result)
       },
@@ -609,13 +603,14 @@ export function createBibleOperations(): ProjectAgentOperationRegistryDraft {
       toolInputSchema: confirmBibleToolInputSchema,
       inputSchema: confirmBibleOperationInputSchema,
       outputSchema: editBibleMutationOutputSchema,
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const editBible = await confirmEpisodeEditBible({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId,
           videoRatio: input.aspectRatio,
+          client: transaction,
         })
         return editBibleMutationOutputSchema.parse({ editBible })
       },

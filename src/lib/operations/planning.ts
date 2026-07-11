@@ -8,8 +8,6 @@ import {
   requiresBillableMediaApproval,
   type BillableMediaApiType,
 } from '@/lib/billing/media-approval-policy'
-import { cancelTask } from '@/lib/task/service'
-import { removeTaskJob } from '@/lib/task/queues'
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
@@ -189,21 +187,6 @@ export function requirePlannedTaskBillingInfo(params: {
     throw new Error(`PROJECT_AGENT_PLANNED_TASK_BILLING_API_TYPE_INVALID:${params.taskType}:${billingInfo.apiType}`)
   }
   return billingInfo
-}
-
-export async function compensateSubmittedTasks(taskIds: readonly string[], reason = 'Operation batch submit failed before completion'): Promise<void> {
-  const failed: string[] = []
-  for (const taskId of taskIds) {
-    try {
-      await cancelTask(taskId, reason)
-      await removeTaskJob(taskId).catch(() => false)
-    } catch {
-      failed.push(taskId)
-    }
-  }
-  if (failed.length > 0) {
-    throw new Error(`PROJECT_AGENT_BATCH_TASK_COMPENSATION_FAILED:${failed.join(',')}`)
-  }
 }
 
 export async function toOperationPlanView(plan: OperationPlan): Promise<OperationPlanView> {

@@ -1,4 +1,5 @@
 import { Prisma, type ProjectAssistantThread } from '@prisma/client'
+import { isDeepStrictEqual } from 'node:util'
 import { safeValidateUIMessages, type UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { ensureUniqueUIMessages } from './ui-message-validation'
@@ -9,7 +10,7 @@ interface ProjectAssistantThreadScopeInput {
   episodeId?: string | null
 }
 
-interface ProjectAssistantThreadIdentity extends ProjectAssistantThreadScopeInput {
+export interface ProjectAssistantThreadIdentity extends ProjectAssistantThreadScopeInput {
   userId: string
   assistantId: ProjectAssistantId
 }
@@ -50,11 +51,17 @@ function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[])
 }
 
 function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMessage[] {
-  const seenIds = new Set(existing.map((message) => message.id))
+  const existingById = new Map(existing.map((message) => [message.id, message] as const))
   const nextMessages = [...existing]
   for (const message of appended) {
-    if (seenIds.has(message.id)) continue
-    seenIds.add(message.id)
+    const persisted = existingById.get(message.id)
+    if (persisted) {
+      if (!isDeepStrictEqual(persisted, message)) {
+        throw new Error(`PROJECT_ASSISTANT_MESSAGE_ID_CONFLICT:${message.id}`)
+      }
+      continue
+    }
+    existingById.set(message.id, message)
     nextMessages.push(message)
   }
   return ensureUniqueUIMessages(nextMessages)
@@ -169,13 +176,37 @@ export async function appendProjectAssistantThreadMessagesInTransaction(
   return toThreadSnapshot(record, nextMessages)
 }
 
-export async function clearProjectAssistantThread(input: ProjectAssistantThreadIdentity): Promise<void> {
-  await prisma.projectAssistantThread.deleteMany({
+export async function clearProjectAssistantThreadInTransaction(
+  tx: ProjectAssistantThreadTransactionClient,
+  input: ProjectAssistantThreadIdentity,
+): Promise<void> {
+  const scopeRef = buildProjectAssistantScopeRef(input)
+  const lockedProjects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM projects
+    WHERE id = ${input.projectId}
+    FOR UPDATE
+  `)
+  if (lockedProjects.length !== 1) {
+    throw new Error(`PROJECT_ASSISTANT_PROJECT_LOCK_FAILED:${input.projectId}`)
+  }
+  const blockingRun = await tx.projectAgentRun.findFirst({
     where: {
       projectId: input.projectId,
       userId: input.userId,
       assistantId: input.assistantId,
-      scopeRef: buildProjectAssistantScopeRef(input),
+      scopeRef,
+      status: { in: ['running', 'awaiting_approval', 'awaiting_choice', 'awaiting_task'] },
+    },
+    select: { id: true },
+  })
+  if (blockingRun) throw new Error(`PROJECT_AGENT_THREAD_ACTIVE:${blockingRun.id}`)
+  await tx.projectAssistantThread.deleteMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      assistantId: input.assistantId,
+      scopeRef,
     },
   })
 }

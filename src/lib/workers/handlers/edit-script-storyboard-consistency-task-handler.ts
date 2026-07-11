@@ -53,37 +53,22 @@ function parsePayload(job: Job<TaskJobData>): ParsedPayload {
 export async function handleEditScriptStoryboardCameraPlanTask(job: Job<TaskJobData>) {
   const parsed = parsePayload(job)
   await reportTaskProgress(job, 20, { stage: 'edit_script_storyboard_build_facts' })
-  let storyboardId: string | null = null
-  try {
-    const storyboard = await upsertEditScriptStoryboard({
-      snapshot: parsed.sourceSnapshot,
-    })
-    storyboardId = storyboard.id
-    const generatedPanels = generateStoryboardPanelPrompts({
-      snapshot: parsed.sourceSnapshot,
-    })
-    const panels = await upsertStoryboardPanelsFromPrompts({
-      storyboardId: storyboard.id,
-      snapshot: parsed.sourceSnapshot,
-      generatedPanels,
-    })
-    await prisma.projectStoryboard.update({
-      where: { id: storyboard.id },
-      data: {
-        lastError: null,
-      },
-    })
-    return { storyboardId: storyboard.id, panelCount: panels.length }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (storyboardId) {
-      await prisma.projectStoryboard.update({
-        where: { id: storyboardId },
-        data: {
-          lastError: message,
-        },
-      }).catch(() => undefined)
-    }
-    throw error
-  }
+  const storyboard = await upsertEditScriptStoryboard({
+    snapshot: parsed.sourceSnapshot,
+  })
+  const generatedPanels = generateStoryboardPanelPrompts({
+    snapshot: parsed.sourceSnapshot,
+  })
+  const panels = await upsertStoryboardPanelsFromPrompts({
+    storyboardId: storyboard.id,
+    snapshot: parsed.sourceSnapshot,
+    generatedPanels,
+  })
+  await prisma.projectStoryboard.update({
+    where: { id: storyboard.id },
+    data: {
+      lastError: null,
+    },
+  })
+  return { storyboardId: storyboard.id, panelCount: panels.length }
 }

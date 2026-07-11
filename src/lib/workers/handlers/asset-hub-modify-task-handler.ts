@@ -137,7 +137,12 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
       }),
     })
 
-    const imageKey = await uploadImageSourceToCos(source, 'global-character-modify', appearance.id)
+    const imageKey = await uploadImageSourceToCos(
+      source,
+      'global-character-modify',
+      appearance.id,
+      { taskId: job.data.taskId, artifact: `global-character-modify:${appearance.id}:${targetImageIndex}` },
+    )
 
     while (imageUrls.length <= targetImageIndex) imageUrls.push('')
     imageUrls[targetImageIndex] = imageKey
@@ -229,7 +234,12 @@ export async function handleAssetHubModifyTask(job: Job<TaskJobData>) {
       }),
     })
 
-    const imageKey = await uploadImageSourceToCos(source, isProp ? 'global-prop-modify' : 'global-location-modify', locationImage.id)
+    const imageKey = await uploadImageSourceToCos(
+      source,
+      isProp ? 'global-prop-modify' : 'global-location-modify',
+      locationImage.id,
+      { taskId: job.data.taskId, artifact: `${isProp ? 'global-prop' : 'global-location'}-modify:${locationImage.id}` },
+    )
 
     let extractedDescription: {
       prompt: string

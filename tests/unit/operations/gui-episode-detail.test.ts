@@ -148,6 +148,7 @@ describe('gui get_episode_detail operation', () => {
     prismaMock.projectEpisode.findFirst.mockResolvedValue({
       id: 'episode-1',
       projectId: 'project-1',
+      resourceRevision: 7,
       name: 'Episode 1',
       createdAt: new Date('2026-07-11T00:00:00.000Z'),
       updatedAt: new Date('2026-07-11T00:00:00.000Z'),

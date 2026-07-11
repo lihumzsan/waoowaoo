@@ -61,9 +61,9 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx) => {
+      executeInTransaction: async (ctx, _input, transaction) => {
         const deployment = getDeploymentConfig()
-        const preference = await prisma.userPreference.upsert({
+        const preference = await transaction.userPreference.upsert({
           where: { userId: ctx.userId },
           update: {},
           create: { userId: ctx.userId },
@@ -107,7 +107,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         const body = isRecord(input) ? input : {}
         if (isPlatformProviderCredentialMode(deployment)) {
@@ -133,7 +133,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const preference = await prisma.userPreference.upsert({
+        const preference = await transaction.userPreference.upsert({
           where: { userId: ctx.userId },
           update: updateData,
           create: { userId: ctx.userId, ...updateData },

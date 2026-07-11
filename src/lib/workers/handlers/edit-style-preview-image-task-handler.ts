@@ -31,13 +31,28 @@ export async function handleEditStylePreviewImageTask(job: Job<TaskJobData>) {
       projectId: job.data.projectId,
       episodeId: job.data.episodeId ?? undefined,
       taskId: job.data.taskId,
-      status: { in: ['pending', 'generating'] },
     },
     select: {
       id: true,
+      status: true,
+      imageKey: true,
     },
   })
   if (!preview) throw new Error(`EDIT_STYLE_PREVIEW_NOT_FOUND:${stylePreviewId}`)
+  if (preview.status === 'completed') {
+    if (!preview.imageKey) throw new Error(`EDIT_STYLE_PREVIEW_COMPLETED_IMAGE_MISSING:${preview.id}`)
+    return {
+      stylePreviewId: preview.id,
+      imageKey: preview.imageKey,
+      imageUrl: getSignedUrl(preview.imageKey, 7 * 24 * 3600),
+      prompt,
+      aspectRatio: imageRuntimeOptions.aspectRatio,
+      targetResolution: EDIT_STYLE_PREVIEW_GRID_TARGET_RESOLUTION,
+    }
+  }
+  if (preview.status !== 'pending' && preview.status !== 'generating') {
+    throw new Error(`EDIT_STYLE_PREVIEW_TASK_OWNERSHIP_STALE:${preview.id}:${job.data.taskId}`)
+  }
 
   await reportTaskProgress(job, 20, {
     stage: 'edit_style_preview_image_prepare',

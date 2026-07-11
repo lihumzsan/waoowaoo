@@ -15,11 +15,13 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - **PG-03 — Provider 隔离。** provider 专属模型常量、option 和条件分支只能留在自身 `ai-providers/<provider>/` 实现内；跨 provider 分支属于 registry/engine 的职责。
 - **PG-04 — 异步协议完整。** external id、轮询状态、成功结果、失败原因和可重试性必须被明确归一化；未知或失败状态不得被映射为完成。
 - **PG-05 — 零隐式降级。** 不支持的模型、能力、输出或 provider 故障必须显式失败。任何 fallback、默认模型或跨 provider 替换都必须被拒绝，而非悄悄继续。
+- **PG-06 — 提交与查询重试分离。** 由 provider 生成 external id 且不接受幂等键的媒体、LLM 与 vision POST 只能发送一次。Task 调用必须先经过 durable provider invocation fence；断连或超时导致结果未知时不得自动重提，必须显式失败并退回用户额度。获得 external id 后的 poll、结果下载和存储读取可以使用明确重试策略，但无权重建外部 job。Task 产物上传使用稳定 artifact key，重放不得制造随机对象。
 
 ## 权威入口
 
 - Provider adapter、媒体/LLM 实现与异步注册：`src/lib/ai-providers/`。
 - 执行引擎、结果归一化与异步轮询：`src/lib/ai-exec/engine.ts`、`src/lib/ai-exec/async-poll.ts`。
+- Task 媒体/LLM/vision 提交围栏与结果重放：`src/lib/task/provider-invocation.ts`；稳定产物身份：`src/lib/task/artifact-storage.ts`。
 - 模型目录、价格、能力和运行时选择：`src/lib/ai-registry/`。
 - 用户 provider 配置的严格解析：`src/lib/user-api/runtime-config.ts`。
 
@@ -30,6 +32,8 @@ Provider 差异只能停留在 `ai-providers` 的 provider 实现、`ai-exec` �
 - `tests/unit/guards/no-provider-model-fallback.test.ts` 与 `no-cross-provider-model-data.test.ts` 验证零降级和物理隔离。
 - `scripts/guards/no-provider-model-fallback.mjs`、`no-cross-provider-switch.mjs`、`no-cross-provider-model-data.mjs`、`no-provider-guessing.mjs` 和 `no-legacy-ai-entry-imports.mjs` 阻止散落的 provider 语义。
 - `scripts/guards/no-api-direct-llm-call.mjs` 与 `no-media-provider-bypass.mjs` 阻止 API/媒体调用绕过网关。
+- `tests/unit/task/provider-invocation.test.ts` 验证媒体与 LLM 结果、拒绝和未知状态的持久重放；`scripts/guards/provider-submission-at-most-once-guard.mjs` 强制 POST 使用单次提交策略并要求每个 Task 外部调用具有稳定 invocation key。
+- `tests/integration/task/provider-invocation-at-most-once.integration.test.ts` 在真实 MySQL 上验证并发首次提交只能有一个执行者，以及断连后的持久 `outcome_unknown` 不会在 worker 重启或 Task retry 时重新发送 POST。
 
 ## 历史回归
 

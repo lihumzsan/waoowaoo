@@ -129,6 +129,7 @@ model ProjectEpisode {
   audioMediaId            String?
   audioMedia              MediaObject?               @relation("ProjectEpisodeAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
   srtContent              String?                    @db.Text
+  resourceRevision        Int                        @default(0)
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @default(now()) @updatedAt
   project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -275,6 +276,7 @@ model ProjectEditScript {
   shotCount      Int
   status         String                         @default("ready")
   assetReviewStatus String                      @default("pending")
+  generationTaskId  String?
   createdAt      DateTime                       @default(now())
   updatedAt      DateTime                       @default(now()) @updatedAt
   project        Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -287,6 +289,7 @@ model ProjectEditScript {
   @@index([projectId])
   @@index([episodeId])
   @@index([chapterId])
+  @@index([generationTaskId])
   @@map("project_edit_scripts")
 }
 
@@ -298,6 +301,7 @@ model ProjectEditShotExecutionPlan {
   editScriptId  String            @unique
   executionPlanJson Json
   status        String            @default("ready")
+  generationTaskId String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @default(now()) @updatedAt
   project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -309,6 +313,7 @@ model ProjectEditShotExecutionPlan {
   @@index([episodeId])
   @@index([chapterId])
   @@index([editScriptId])
+  @@index([generationTaskId])
   @@map("project_edit_shot_execution_plans")
 }
 

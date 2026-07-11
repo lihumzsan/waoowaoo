@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   resolveWorkspaceAssistantDisplayedPendingInteraction,
-} from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
+} from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state'
 import type { ProjectAgentSessionPendingInteraction } from '@/lib/project-agent/session-state'
 
 function buildPendingApproval(
@@ -65,7 +65,7 @@ describe('workspace assistant approval card dismissal', () => {
     })).toBeNull()
   })
 
-  it('marks the response before dispatch and unmarks on failure or after the post-run refresh', () => {
+  it('marks before dispatch, restores only on request failure, and clears local pending before refresh', () => {
     const runtimeSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts'),
       'utf8',
@@ -74,16 +74,23 @@ describe('workspace assistant approval card dismissal', () => {
     const markIndex = runtimeSource.indexOf('if (respondedInterruptionId) markInterruptionResponded(respondedInterruptionId)')
     const fetchIndex = runtimeSource.indexOf('const response = await fetch(')
     const catchUnmarkIndex = runtimeSource.indexOf('if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)')
-    const refreshIndex = runtimeSource.indexOf('await refreshSessionState().catch(() => undefined)')
-    const settledUnmarkIndex = runtimeSource.lastIndexOf('if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)')
+    const localPendingClearIndex = runtimeSource.lastIndexOf('setActiveControlRun((current) => current?.runId === params.runId ? null : current)')
+    const refreshIndex = runtimeSource.indexOf(
+      'await refreshSessionState().catch(() => undefined)',
+      localPendingClearIndex,
+    )
 
     // The card must be suppressed in the same render as the click, before the
-    // network round trip; the mark is withdrawn on failure (card bounces back)
-    // and after the post-run session refresh (reopened interruptions render).
+    // network round trip. Only a failed request withdraws it; after success the
+    // mark survives a stale/failed refresh so an already-consumed card cannot
+    // reopen. Local request state is cleared before refresh, so a failed or
+    // hanging synchronization request cannot leave the UI permanently busy.
     expect(markIndex).toBeGreaterThan(-1)
     expect(fetchIndex).toBeGreaterThan(markIndex)
     expect(catchUnmarkIndex).toBeGreaterThan(fetchIndex)
-    expect(settledUnmarkIndex).toBeGreaterThan(refreshIndex)
+    expect(runtimeSource.lastIndexOf('if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)')).toBe(catchUnmarkIndex)
+    expect(localPendingClearIndex).toBeGreaterThan(catchUnmarkIndex)
+    expect(refreshIndex).toBeGreaterThan(localPendingClearIndex)
 
     // Displayed pending interaction is derived through the single resolver.
     expect(runtimeSource).toContain('resolveWorkspaceAssistantDisplayedPendingInteraction({')

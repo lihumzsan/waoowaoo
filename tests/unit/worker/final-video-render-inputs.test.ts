@@ -244,4 +244,23 @@ describe('final video render worker', () => {
     expect(storageMock.uploadObject).not.toHaveBeenCalled()
     expect(prismaMock.projectEpisodeFinalOutput.upsert).toHaveBeenCalledTimes(1)
   })
+
+  it('replays a persisted final output without composing the video again', async () => {
+    prismaMock.projectEpisodeFinalOutput.findFirst.mockResolvedValueOnce({ outputMediaId: 'media-final' })
+    mediaServiceMock.getMediaObjectById.mockResolvedValueOnce({
+      id: 'media-final',
+      url: '/m/final-video',
+      storageKey: 'video/final.mp4',
+      durationMs: 3000,
+      width: 1920,
+      height: 1080,
+    })
+    const { handleFinalVideoRenderTask } = await import('@/lib/workers/final-video-render')
+
+    const result = await handleFinalVideoRenderTask(buildJob({ episodeId: 'episode-1' }))
+
+    expect(result).toMatchObject({ videoMediaId: 'media-final', durationSeconds: 3 })
+    expect(execFileMock).not.toHaveBeenCalled()
+    expect(prismaMock.projectEpisodeFinalOutput.upsert).not.toHaveBeenCalled()
+  })
 })

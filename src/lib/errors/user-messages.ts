@@ -24,6 +24,8 @@ export const USER_ERROR_MESSAGES_ZH: Record<UnifiedErrorCode, string> = {
   EDIT_SCRIPT_ASSET_MENU_EMPTY: '缺少已确认的角色或场景资产，请先确认资产后再生成核心剪辑表。',
   PROVIDER_POLL_FAILED: '外部任务查询失败，请稍后重试。',
   PROVIDER_SUBMIT_FAILED: '外部任务提交失败，请稍后重试。',
+  PROVIDER_SUBMISSION_REJECTED: '外部服务拒绝了本次生成请求。',
+  PROVIDER_SUBMISSION_OUTCOME_UNKNOWN: '外部服务回执丢失，本次额度已退回且不会自动重复提交。',
   INSUFFICIENT_BALANCE: '余额不足，请充值后重试。',
   SENSITIVE_CONTENT: '内容可能涉及敏感信息，请修改后重试。',
   GENERATION_TIMEOUT: '生成超时，请重试。',

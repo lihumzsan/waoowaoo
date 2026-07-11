@@ -3,7 +3,7 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first'
 import {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
-  EDIT_FIRST_CHOICE_TOOL_IDS,
+  isEditFirstChoiceToolEnabled,
   isEditFirstChoiceToolId,
 } from './edit-first-choice-tools'
 import type { ProjectAgentContext } from './types'
@@ -156,28 +156,6 @@ export function isProjectAgentOperationAlwaysEnabled(
     || operationId === toolset.resumeOperationId
 }
 
-function isEditFirstChoiceOperationEnabled(params: {
-  workflow: EditFirstWorkflowState
-  operationId: string
-}): boolean {
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.script_intake) {
-    return params.workflow.stage === 'ready_to_ingest_script'
-  }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.script_review) {
-    return params.workflow.stage === 'script_ready_for_review'
-  }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.bible_review) {
-    return params.workflow.stage === 'bible_ready_for_review'
-  }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.style) {
-    return params.workflow.stage === 'needs_style_choice'
-  }
-  if (params.operationId === EDIT_FIRST_CHOICE_TOOL_IDS.asset_review) {
-    return params.workflow.stage === 'assets_ready_for_review'
-  }
-  return false
-}
-
 /**
  * Live availability of one registered operation against the current workflow
  * state. Evaluated once per model turn (via each tool's isEnabled), so the
@@ -192,7 +170,7 @@ export function isProjectAgentOperationEnabled(params: {
   if (params.toolset.disabledOperationIds.includes(params.operationId)) return false
   if (isProjectAgentOperationAlwaysEnabled(params.toolset, params.operationId)) return true
   if (isEditFirstChoiceToolId(params.operationId)) {
-    return isEditFirstChoiceOperationEnabled({
+    return isEditFirstChoiceToolEnabled({
       workflow: params.workflow,
       operationId: params.operationId,
     })

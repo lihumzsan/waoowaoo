@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { apiHandler } from '@/lib/api-errors'
 import { isErrorResponse, requireProjectAuth } from '@/lib/api-auth'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
-import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import { getProjectAgentSessionSnapshot } from '@/lib/project-agent/session-state'
 
 export const runtime = 'nodejs'
 
@@ -16,7 +16,7 @@ export const GET = apiHandler(async (
 
   const episodeId = request.nextUrl.searchParams.get('episodeId')?.trim() || null
   const locale = normalizeProjectAgentLocale(request.nextUrl.searchParams.get('locale'))
-  const sessionState = await getProjectAgentSessionState({
+  const snapshot = await getProjectAgentSessionSnapshot({
     projectId,
     userId: authResult.session.user.id,
     episodeId,
@@ -26,6 +26,7 @@ export const GET = apiHandler(async (
 
   return NextResponse.json({
     success: true,
-    sessionState,
+    sessionState: snapshot.sessionState,
+    eventWatermark: snapshot.eventWatermark,
   })
 })

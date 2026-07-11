@@ -94,6 +94,7 @@ export {
     useUploadProjectTempMedia,
     useExtractProjectReferenceCharacterDescription,
     useCreateProjectCharacter,
+    useGenerateProjectCharacterFromReference,
     useCreateProjectCharacterAppearance,
     useCopyProjectAssetFromGlobal,
     useUpdateProjectConfig,

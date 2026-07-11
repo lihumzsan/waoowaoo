@@ -48,6 +48,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit AI create character design task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -92,6 +93,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit AI create location design task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -136,6 +138,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit AI modify location task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -171,6 +174,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit reference-to-character task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,

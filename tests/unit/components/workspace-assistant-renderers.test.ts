@@ -8,6 +8,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import type { AbstractIntlMessages } from 'next-intl'
 import {
   AssistantChoiceCardView,
+  buildWorkspaceAssistantChoiceSelectionOutput,
   ConfirmationActionCard,
   WorkspaceAssistantActiveRunCard,
 } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
@@ -177,6 +178,7 @@ describe('workspace assistant renderers', () => {
         interruptionId: 'interruption-1',
         toolCallId: 'tool-call-1',
         choiceType: 'bible_review',
+        replyMode: 'whole_card',
         variant: 'confirm_or_reply',
         title: '确认制作规划',
         description: '选择比例后确认',
@@ -184,6 +186,7 @@ describe('workspace assistant renderers', () => {
           key: 'aspectRatio',
           label: '画面比例',
           required: true,
+          presentation: 'aspect_ratio',
           options: [
             { value: '9:16', label: '9:16' },
             { value: '16:9', label: '16:9' },
@@ -191,7 +194,7 @@ describe('workspace assistant renderers', () => {
           ],
         }],
         submitLabel: '确认制作规划',
-        submit: { kind: 'submit_tool_output' },
+        submit: { kind: 'submit_tool_output', decision: 'approve' },
         replyLabel: '需要修改',
         replyPlaceholder: '输入修改意见',
         replySubmitLabel: '提交修改意见',
@@ -219,6 +222,7 @@ describe('workspace assistant renderers', () => {
         interruptionId: 'interruption-2',
         toolCallId: 'tool-call-1',
         choiceType: 'script_intake',
+        replyMode: 'per_group',
         variant: 'confirm_or_reply',
         autoSubmitOnReady: true,
         title: '补充创作方向',
@@ -227,13 +231,14 @@ describe('workspace assistant renderers', () => {
           key: 'tone',
           label: '故事整体呈现怎样的视觉与情感基调？',
           required: true,
+          presentation: 'options',
           options: [
             { value: 'panic', label: '惊悚恐慌', description: '节奏极快。' },
             { value: 'solemn', label: '哲学敬畏', description: '画面宏大而静谧。' },
           ],
         }],
         submitLabel: '使用这些选择',
-        submit: { kind: 'submit_tool_output' },
+        submit: { kind: 'submit_tool_output', decision: 'approve' },
         replyLabel: '或直接补充你的想法',
         replyPlaceholder: '补充故事设定、氛围、人物、地点，或选项没有覆盖的内容...',
         replySubmitLabel: '使用这段补充',
@@ -245,5 +250,39 @@ describe('workspace assistant renderers', () => {
     expect(html).toContain('故事整体呈现怎样的视觉与情感基调？')
     expect(html).toContain('text-sm font-semibold leading-6 text-[var(--glass-text-primary)]')
     expect(html).toContain('placeholder="其他故事整体呈现怎样的视觉与情感基调？"')
+  })
+
+  it('uses persisted Choice UI policy instead of deriving behavior from choiceType or group keys', () => {
+    const rendererSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
+      'utf8',
+    )
+    const output = buildWorkspaceAssistantChoiceSelectionOutput({
+      card: {
+        cardId: 'policy-card',
+        choiceType: 'style',
+        submit: { kind: 'submit_tool_output', decision: 'approve' },
+      },
+      groups: [{
+        key: 'aspectRatio',
+        label: 'Rendered as ordinary options',
+        required: true,
+        presentation: 'options',
+        options: [{ value: '16:9', label: '16:9' }],
+      }],
+      selections: { aspectRatio: '16:9' },
+    })
+
+    expect(output).toMatchObject({
+      choiceType: 'style',
+      decision: 'approve',
+      selections: { aspectRatio: '16:9' },
+    })
+    expect(rendererSource).toContain("card.replyMode === 'per_group'")
+    expect(rendererSource).toContain("activeGroup?.presentation === 'aspect_ratio'")
+    expect(rendererSource).toContain("activeGroup?.presentation === 'image'")
+    expect(rendererSource).not.toContain('card.choiceType ===')
+    expect(rendererSource).not.toContain("activeGroup?.key === 'aspectRatio'")
+    expect(rendererSource).not.toContain("activeGroup?.key === 'stylePreviewId'")
   })
 })

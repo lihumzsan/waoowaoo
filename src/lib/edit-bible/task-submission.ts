@@ -64,7 +64,6 @@ async function submitPreparedEditBibleGenerationTask(input: {
   readonly sourceKind: EditSourceDocumentKind
   readonly estimatedInputTokens: number
   readonly source: string
-  readonly confirmed: boolean
   readonly locale: Locale
   readonly operationId: string
   readonly previousSourceDocumentId?: string | null
@@ -141,7 +140,6 @@ export async function submitProjectEditBibleGenerationTask(input: {
   readonly text: string
   readonly rawFileMediaId?: string
   readonly source: string
-  readonly confirmed: boolean
   readonly locale: Locale
 }): Promise<EditBibleGenerationTaskSubmitResult> {
   await assertEpisodeSourceWritable({
@@ -179,7 +177,6 @@ export async function submitProjectEditBibleGenerationTask(input: {
       sourceKind: input.sourceKind,
       estimatedInputTokens: sourceDocument.estimatedInputTokens,
       source: input.source,
-      confirmed: input.confirmed,
       locale: input.locale,
       operationId: 'ingest_script',
     })
@@ -196,7 +193,6 @@ export async function submitApprovedScriptEditBibleGenerationTask(input: {
   readonly userId: string
   readonly episodeId: string
   readonly source: string
-  readonly confirmed: boolean
   readonly locale: Locale
 }): Promise<EditBibleGenerationTaskSubmitResult> {
   const bible = await prisma.projectEditBible.findFirst({
@@ -258,7 +254,6 @@ export async function submitApprovedScriptEditBibleGenerationTask(input: {
       sourceKind: sourceDocument.sourceKind,
       estimatedInputTokens: estimateEditSourceDocumentInputTokens(sourceDocument.normalizedText),
       source: input.source,
-      confirmed: input.confirmed,
       locale: input.locale,
       operationId: 'generate_bible_from_script',
     })
@@ -275,7 +270,6 @@ export async function submitProjectEditScriptRevisionTask(input: {
   readonly episodeId: string
   readonly revisionNotes: string
   readonly source: string
-  readonly confirmed: boolean
   readonly locale: Locale
 }): Promise<EditBibleGenerationTaskSubmitResult> {
   const existing = await prisma.projectEditBible.findFirst({
@@ -337,7 +331,6 @@ export async function submitProjectEditScriptRevisionTask(input: {
       sourceKind: sourceDocument.sourceKind,
       estimatedInputTokens: sourceDocument.estimatedInputTokens,
       source: input.source,
-      confirmed: input.confirmed,
       locale: input.locale,
       operationId: 'revise_script',
       previousSourceDocumentId: existing.sourceDocumentId,

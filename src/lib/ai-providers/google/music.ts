@@ -104,7 +104,7 @@ export async function executeGoogleMusicGeneration(input: AiProviderMusicExecuti
 
   const response = await withRetry({
     scope: `google:music:generate:${modelId}`,
-    policy: RETRY_POLICY.mediaFetch,
+    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateContent({

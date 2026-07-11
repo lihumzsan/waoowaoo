@@ -60,25 +60,43 @@ const waitMock = vi.hoisted(() => ({
 const interruptionMock = vi.hoisted(() => ({
   consumeProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
   consumeProjectAgentChoiceInterruption: vi.fn(async (_input: unknown): Promise<unknown> => null),
+  readRetryableConsumedProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
+  readRetryableConsumedProjectAgentChoiceInterruption: vi.fn(async (): Promise<unknown> => null),
   getPendingProjectAgentApprovalInterruption: vi.fn(async (): Promise<unknown> => null),
-  declinePendingProjectAgentInterruptionsForUserTurn: vi.fn(async (): Promise<unknown[]> => []),
-  reopenProjectAgentInterruption: vi.fn(async (): Promise<void> => undefined),
 }))
 
 const runMock = vi.hoisted(() => ({
-  createProjectAgentRun: vi.fn(async (): Promise<unknown> => ({
-    id: 'run-1',
+  createProjectAgentUserTurnRun: vi.fn(async (): Promise<unknown> => ({
+    run: {
+      id: 'run-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-1',
+      status: 'running',
+      runVersion: 1,
+      eventSeq: '1',
+      terminalEventSeq: null,
+      controlKind: 'user_turn',
+      heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
+    },
+    declinedInterruptions: [],
+  })),
+  createProjectAgentConsumedControlRetryRun: vi.fn(async (): Promise<unknown> => ({
+    id: 'run-retry-1',
     projectId: 'project-1',
     userId: 'user-1',
     assistantId: 'workspace-command',
     scopeRef: 'episode:episode-1',
     episodeId: 'episode-1',
-    requestId: 'request-1',
+    requestId: 'project-agent-control-retry:interruption-1:1:request-2',
     status: 'running',
     runVersion: 1,
     eventSeq: '1',
     terminalEventSeq: null,
-    controlKind: 'user_turn',
+    controlKind: 'approval_response',
     heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
   getProjectAgentRun: vi.fn(async (): Promise<unknown> => ({
@@ -97,10 +115,9 @@ const runMock = vi.hoisted(() => ({
     heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
   })),
   ensureProjectAgentRunSlotAvailable: vi.fn(async (): Promise<void> => undefined),
-  listBlockingProjectAgentRunsForThreadClear: vi.fn(async (): Promise<unknown[]> => []),
+  settleProjectAgentRunFailureWithMessage: vi.fn(async (): Promise<void> => undefined),
   safelyUpdateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
   updateProjectAgentRunStatus: vi.fn(async (): Promise<void> => undefined),
-  supersedePendingRunsInScope: vi.fn(async (): Promise<string[]> => []),
 }))
 
 const runLockMock = vi.hoisted(() => ({
@@ -135,7 +152,20 @@ const persistenceMock = vi.hoisted(() => ({
     createdAt: '2026-04-13T00:00:00.000Z',
     updatedAt: '2026-04-13T00:00:00.000Z',
   })),
-  clearProjectAssistantThread: vi.fn(async (): Promise<void> => undefined),
+}))
+
+const threadClearMock = vi.hoisted(() => ({
+  clearProjectAssistantThread: vi.fn(async () => ({ eventWatermark: '42' })),
+}))
+
+const threadSnapshotMock = vi.hoisted(() => ({
+  getProjectAssistantThreadWatermarkedSnapshot: vi.fn(async (): Promise<{
+    thread: unknown
+    eventWatermark: string
+  }> => ({
+    thread: null,
+    eventWatermark: '0',
+  })),
 }))
 
 const threadLogMock = vi.hoisted(() => ({
@@ -225,6 +255,8 @@ vi.mock('@/lib/edit-bible', async () => {
 })
 
 vi.mock('@/lib/project-agent/persistence', () => persistenceMock)
+vi.mock('@/lib/project-agent/thread-clear', () => threadClearMock)
+vi.mock('@/lib/project-agent/thread-snapshot', () => threadSnapshotMock)
 
 vi.mock('@/lib/project-agent/waits', () => waitMock)
 
@@ -269,10 +301,14 @@ function mockConsumedChoice(params: {
         interruptionId: params.interruptionId,
         toolCallId: params.toolCallId,
         choiceType: params.choiceType,
+        replyMode: params.choiceType === 'script_intake' ? 'per_group' as const : 'whole_card' as const,
         title: 'Choice',
         groups: [],
         submitLabel: 'Continue',
-        submit: { kind: 'submit_tool_output' as const },
+        submit: {
+          kind: 'submit_tool_output' as const,
+          decision: params.choiceType === 'style' ? 'select' as const : 'approve' as const,
+        },
       },
       reviewedResource: {
         kind: 'script_intake_prompt' as const,
@@ -322,4 +358,4 @@ export { GET as chatLogGet } from '@/app/api/projects/[projectId]/assistant/chat
 export { POST as approvalPost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/approval/route'
 export { POST as choicePost } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/choice/route'
 export { GET as runGet } from '@/app/api/projects/[projectId]/assistant/runs/[runId]/route'
-export { apiAdapterMock, authState, buildTextAttachment, compressionState, editBibleMock, editScriptServiceMock, eventMock, interruptionMock, messageCompressionMock, mockConsumedChoice, modelConfigMock, modelResolverMock, persistenceMock, prismaMock, projectAgentMock, runLockMock, runMock, threadLogMock, waitMock }
+export { apiAdapterMock, authState, buildTextAttachment, compressionState, editBibleMock, editScriptServiceMock, eventMock, interruptionMock, messageCompressionMock, mockConsumedChoice, modelConfigMock, modelResolverMock, persistenceMock, prismaMock, projectAgentMock, runLockMock, runMock, threadClearMock, threadLogMock, threadSnapshotMock, waitMock }

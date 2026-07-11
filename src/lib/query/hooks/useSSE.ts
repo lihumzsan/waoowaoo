@@ -1,7 +1,7 @@
 'use client'
 import { logError as _ulogError, logWarn as _ulogWarn } from '@/lib/logging/core'
 
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import {
@@ -51,21 +51,26 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   const targetStatesInvalidateTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
   const isGlobalAssetProject = projectId === 'global-asset-hub'
-  const eventSequence = useMemo(
-    () => new WorkspaceSSEEventSequence(),
-    [episodeId, projectId],
-  )
+  const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
 
   const connection = useMemo(() => {
     if (!projectId) return null
     const cursor = readStoredCursor(projectId, episodeId)
     const params = new URLSearchParams({ projectId })
     if (episodeId) params.set('episodeId', episodeId)
-    if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0) {
+    if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0 || cursor.agentEventId !== '0') {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
     }
-    return { url: `/api/sse?${params}`, cursor }
-  }, [projectId, episodeId])
+    return { url: `/api/sse?${params}`, cursor, generation: snapshotResyncGeneration }
+  }, [projectId, episodeId, snapshotResyncGeneration])
+  const eventSequence = useMemo(
+    () => new WorkspaceSSEEventSequence(
+      connection?.cursor.taskEventId ?? 0,
+      {},
+      connection?.cursor.agentEventId ?? '0',
+    ),
+    [connection],
+  )
 
   const scheduleTargetStatesInvalidation = useCallback(() => {
     if (!projectId || targetStatesInvalidateTimerRef.current !== null) return
@@ -89,7 +94,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
   }, [episodeId, isGlobalAssetProject, onEvent, projectId, queryClient, scheduleTargetStatesInvalidation])
 
   const handleParsedEvent = useCallback((payload: unknown, transportCursor?: string) => {
-    if (!isWorkspaceSSEEvent(payload)) return
+    if (!isWorkspaceSSEEvent(payload)) throw new Error('WORKSPACE_SSE_EVENT_INVALID')
     const decision = eventSequence.process(payload, applyEvent)
     if (decision === 'duplicate' || decision === 'invalid') return
     const nextCursor = transportCursor
@@ -100,6 +105,15 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       persistCursor(projectId, episodeId, nextCursor)
     }
   }, [applyEvent, episodeId, eventSequence, projectId])
+
+  const requestSnapshotResync = useCallback(() => {
+    if (!projectId) return
+    window.sessionStorage?.removeItem(cursorStorageKey(projectId, episodeId))
+    cursorRef.current = { ...EMPTY_WORKSPACE_SSE_CURSOR }
+    sourceRef.current?.close()
+    sourceRef.current = null
+    setSnapshotResyncGeneration((current) => current + 1)
+  }, [episodeId, projectId])
 
   useEffect(() => {
     if (!enabled || !connection || !projectId) return
@@ -113,6 +127,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
         handleParsedEvent(JSON.parse(event.data || '{}'), event.lastEventId || undefined)
       } catch (error) {
         _ulogError('[useSSE] failed to parse event', error)
+        requestSnapshotResync()
       }
     }
 
@@ -122,6 +137,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       TASK_SSE_EVENT_TYPE.STREAM,
       WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH,
       WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
+      WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED,
     ] as const
     const listeners: Array<{ type: string; handler: EventListener }> = []
     for (const type of namedEvents) {
@@ -145,7 +161,7 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
       source.close()
       sourceRef.current = null
     }
-  }, [connection, enabled, projectId, episodeId, handleParsedEvent])
+  }, [connection, enabled, projectId, episodeId, handleParsedEvent, requestSnapshotResync])
 
   return {
     connected: !!sourceRef.current && sourceRef.current.readyState === EventSource.OPEN,

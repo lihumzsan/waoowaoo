@@ -12,6 +12,7 @@ export function computeRetryDelayMs(policy: RetryPolicy, attempt: number): numbe
 export const RETRY_POLICY = {
   llm: { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
   llmStream: { maxAttempts: 1, baseDelayMs: 1000, maxDelayMs: 5000 },
+  providerSubmit: { maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0 },
   mediaFetch: { maxAttempts: 3, baseDelayMs: 2000, maxDelayMs: 8000 },
   mediaPoll: { maxAttempts: 5, baseDelayMs: 1000, maxDelayMs: 5000 },
   storage: { maxAttempts: 3, baseDelayMs: 500, maxDelayMs: 2000 },

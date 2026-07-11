@@ -175,9 +175,11 @@ export interface AgentRuntimeContextPartData {
 
 export interface ProjectAgentChoiceCardSubmit {
   kind: 'submit_tool_output'
+  decision: 'approve' | 'select'
 }
 
 export type ProjectAgentChoiceCardVariant = 'choice' | 'confirm' | 'confirm_or_reply'
+export type ProjectAgentChoiceCardReplyMode = 'whole_card' | 'per_group'
 
 export interface ProjectAgentChoiceCardOption {
   value: string
@@ -191,6 +193,7 @@ export interface ProjectAgentChoiceCardGroup {
   key: string
   label: string
   required: boolean
+  presentation: 'options' | 'aspect_ratio' | 'image'
   options: ProjectAgentChoiceCardOption[]
 }
 
@@ -201,6 +204,7 @@ export interface ProjectAgentChoiceCardPartData {
   toolCallId: string
   choiceType: EditFirstChoiceType
   variant?: ProjectAgentChoiceCardVariant
+  replyMode: ProjectAgentChoiceCardReplyMode
   autoSubmitOnReady?: boolean
   title: string
   description?: string | null

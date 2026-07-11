@@ -1,10 +1,10 @@
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { logProjectAction } from '@/lib/logging/semantic'
-import { logError } from '@/lib/logging/core'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
   formatProjectValidationIssue,
@@ -26,8 +26,11 @@ function readProjectDraftBody(body: unknown): ProjectDraftInput {
   }
 }
 
-async function requireOwnedProject(params: { projectId: string; userId: string }) {
-  const project = await prisma.project.findUnique({
+async function requireOwnedProject(
+  params: { projectId: string; userId: string },
+  client: Pick<Prisma.TransactionClient, 'project'> = prisma,
+) {
+  const project = await client.project.findUnique({
     where: { id: params.projectId },
     include: { user: true },
   })
@@ -115,10 +118,10 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
   return {
     get_project_basic: {
       id: 'get_project_basic',
-      summary: 'Load base project info and update lastAccessedAt.',
+      summary: 'Load base project info.',
       intent: 'query',
       effects: {
-        writes: true,
+        writes: false,
         billable: false,
         destructive: false,
         overwrite: false,
@@ -130,12 +133,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: z.unknown(),
       execute: async (ctx) => {
         const project = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
-
-        prisma.project.update({
-          where: { id: ctx.projectId },
-          data: { lastAccessedAt: new Date() },
-        }).catch((error: unknown) => logError('update lastAccessedAt failed', error))
-
         return { project: addSignedUrlsToProject(project) }
       },
     },
@@ -158,7 +155,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
         description: z.string().optional().nullable(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const draft = readProjectDraftBody(input)
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
@@ -171,10 +168,13 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           })
         }
 
-        const existing = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
+        const existing = await requireOwnedProject(
+          { projectId: ctx.projectId, userId: ctx.userId },
+          transaction,
+        )
         const normalized = normalizeProjectDraft(draft)
 
-        const updatedProject = await prisma.project.update({
+        const updatedProject = await transaction.project.update({
           where: { id: ctx.projectId },
           data: {
             name: normalized.name.trim(),
@@ -199,6 +199,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       id: 'delete_project',
       summary: 'Delete the project and cleanup storage objects (destructive).',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         writes: true,
         billable: false,
@@ -213,7 +214,6 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
         summary: '将删除整个项目及其关联数据（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx) => {

@@ -69,15 +69,17 @@ describe('workflow lab style-choice restoration', () => {
       interruptionId: 'source-interruption',
       toolCallId: 'source-tool-call',
       choiceType: 'style',
+      replyMode: 'whole_card',
       title: 'Choose a style',
       groups: [{
         key: 'stylePreviewId',
         label: 'Style',
         required: true,
+        presentation: 'image',
         options: [{ value: preview.id, label: preview.title }],
       }],
       submitLabel: 'Confirm',
-      submit: { kind: 'submit_tool_output' },
+      submit: { kind: 'submit_tool_output', decision: 'select' },
     }
     const messages: UIMessage[] = [{
       id: 'user-message',
@@ -154,7 +156,8 @@ describe('workflow lab style-choice restoration', () => {
       runId: run.id,
       interruptionId: interruption.id,
       toolCallId: activity.toolCallId,
-      submit: { kind: 'submit_tool_output' },
+      replyMode: 'whole_card',
+      submit: { kind: 'submit_tool_output', decision: 'select' },
     })
     expect(persistedCard.groups[0]?.options[0]?.value).toBe(targetPreview.id)
 
@@ -170,8 +173,11 @@ describe('workflow lab style-choice restoration', () => {
       interruptionId: interruption.id,
       operationId: 'request_edit_style_choice',
       choiceType: 'style',
-      choiceCard: { submit: { kind: 'submit_tool_output' } },
+      choiceCard: {
+        replyMode: 'whole_card',
+        submit: { kind: 'submit_tool_output', decision: 'select' },
+      },
     })
-    expect(session.activeStylePreviewGeneration).toBeNull()
+    expect(session).not.toHaveProperty('activeStylePreviewGeneration')
   })
 })

@@ -41,7 +41,8 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => await putUserApiConfig(ctx.userId, input),
+      executeInTransaction: async (ctx, input, transaction) =>
+        await putUserApiConfig(ctx.userId, input, transaction),
     }),
   }
 }

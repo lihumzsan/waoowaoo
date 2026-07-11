@@ -2,11 +2,13 @@ import { Worker, type Job } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { queueRedis } from '@/lib/redis'
+import { getTaskDefinitionForQueue, type VideoTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { getUserWorkflowConcurrencyConfig } from '@/lib/config-service'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
 import { withUserConcurrencyGate } from './user-concurrency-gate'
+import { getWorkerConcurrency } from './runtime-config'
 import {
   assertTaskActive,
   getProjectModels,
@@ -163,7 +165,13 @@ async function generateVideoForPanel(
     }
   }
 
-  const cosKey = await uploadVideoSourceToCos(videoSource, 'panel-video', panel.id, downloadHeaders)
+  const cosKey = await uploadVideoSourceToCos(
+    videoSource,
+    'panel-video',
+    panel.id,
+    downloadHeaders,
+    { taskId: job.data.taskId, artifact: `panel-video:${panel.id}` },
+  )
   return {
     cosKey,
     ...(typeof generatedVideo.actualVideoTokens === 'number'
@@ -315,6 +323,38 @@ function supportsAssetReferenceMultiReference(modelId: string): boolean {
   return supportsAssetReferenceMultiReferenceVideoModel(modelId)
 }
 
+async function readCompletedVideoGroupForTask(params: {
+  readonly groupId: string
+  readonly taskId: string
+  readonly episodeId: string
+  readonly sourceMode: 'asset_reference' | 'panel_grid'
+}) {
+  const group = await prisma.projectVideoGroup.findFirst({
+    where: { id: params.groupId, taskId: params.taskId, status: 'completed' },
+  })
+  if (!group || !group.videoUrl || !group.videoMediaId) return null
+  if (!Array.isArray(group.shotIds) || !group.shotIds.every((value) => typeof value === 'string' && Boolean(value.trim()))) {
+    throw new Error(`VIDEO_GROUP_COMPLETED_SHOT_IDS_INVALID:${group.id}`)
+  }
+  if (!Array.isArray(group.shotNumbers) || !group.shotNumbers.every((value) => typeof value === 'number' && Number.isFinite(value))) {
+    throw new Error(`VIDEO_GROUP_COMPLETED_SHOT_NUMBERS_INVALID:${group.id}`)
+  }
+  if (typeof group.durationSec !== 'number' || !Number.isFinite(group.durationSec) || group.durationSec <= 0) {
+    throw new Error(`VIDEO_GROUP_COMPLETED_DURATION_INVALID:${group.id}`)
+  }
+  return {
+    episodeId: params.episodeId,
+    groupId: group.id,
+    videoUrl: group.videoUrl,
+    videoMediaId: group.videoMediaId,
+    referenceImageUrl: group.referenceImageUrl,
+    durationSec: group.durationSec,
+    shotIds: group.shotIds as string[],
+    shotNumbers: group.shotNumbers as number[],
+    sourceMode: params.sourceMode,
+  }
+}
+
 async function handleAssetReferenceVideoGroupTask(params: {
   readonly job: Job<TaskJobData>
   readonly payload: AnyObj
@@ -327,6 +367,13 @@ async function handleAssetReferenceVideoGroupTask(params: {
   const chapterId = normalizeString(payload.chapterId)
   if (!episodeId) throw new Error('ASSET_REFERENCE_VIDEO_EPISODE_REQUIRED')
   if (!chapterId) throw new Error('ASSET_REFERENCE_VIDEO_CHAPTER_REQUIRED')
+  const replayedCompletion = await readCompletedVideoGroupForTask({
+    groupId,
+    taskId: job.data.taskId,
+    episodeId,
+    sourceMode: 'asset_reference',
+  })
+  if (replayedCompletion) return replayedCompletion
   const shotIds = validateAssetReferenceShotIds(payload.shotIds)
   const referenceImageUrls = parseReferenceImageUrls(payload.referenceImageUrls)
   if (referenceImageUrls.length > 1 && !supportsAssetReferenceMultiReference(modelId)) {
@@ -430,7 +477,13 @@ async function handleAssetReferenceVideoGroupTask(params: {
   }
 
   await reportTaskProgress(job, 92, { stage: 'asset_reference_video_persist', groupId })
-  const cosKey = await uploadVideoSourceToCos(videoSource, 'asset-reference-video', groupId, downloadHeaders)
+  const cosKey = await uploadVideoSourceToCos(
+    videoSource,
+    'asset-reference-video',
+    groupId,
+    downloadHeaders,
+    { taskId: job.data.taskId, artifact: `asset-reference-video:${groupId}` },
+  )
   const videoMedia = await ensureMediaObjectFromStorageKey(cosKey, {
     mimeType: 'video/mp4',
     durationMs: durationSec * 1000,
@@ -440,7 +493,6 @@ async function handleAssetReferenceVideoGroupTask(params: {
     where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       status: 'completed',
-      taskId: null,
       videoUrl: videoMedia.url,
       videoMediaId: videoMedia.id,
       errorCode: null,
@@ -485,6 +537,13 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   const chapterId = normalizeString(payload.chapterId)
   if (!episodeId) throw new Error('VIDEO_GROUP_EPISODE_REQUIRED')
   if (!chapterId) throw new Error('VIDEO_GROUP_CHAPTER_REQUIRED')
+  const replayedCompletion = await readCompletedVideoGroupForTask({
+    groupId,
+    taskId: job.data.taskId,
+    episodeId,
+    sourceMode: 'panel_grid',
+  })
+  if (replayedCompletion) return replayedCompletion
   const shotIds = parseShotIds(payload.shotIds)
 
   const started = await prisma.projectVideoGroup.updateMany({
@@ -603,7 +662,13 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   }
 
   await reportTaskProgress(job, 92, { stage: 'video_group_persist', groupId })
-  const cosKey = await uploadVideoSourceToCos(videoSource, 'group-video', groupId, downloadHeaders)
+  const cosKey = await uploadVideoSourceToCos(
+    videoSource,
+    'group-video',
+    groupId,
+    downloadHeaders,
+    { taskId: job.data.taskId, artifact: `group-video:${groupId}` },
+  )
   const videoMedia = await ensureMediaObjectFromStorageKey(cosKey, {
     mimeType: 'video/mp4',
     durationMs: totalVideoGroupDuration(shots) * 1000,
@@ -613,7 +678,6 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
     where: { id: groupId, taskId: job.data.taskId, status: 'processing' },
     data: {
       status: 'completed',
-      taskId: null,
       videoUrl: videoMedia.url,
       videoMediaId: videoMedia.id,
       errorCode: null,
@@ -635,21 +699,19 @@ async function handleVideoGroupTask(job: Job<TaskJobData>) {
   }
 }
 
+type VideoTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
+
+const VIDEO_TASK_HANDLERS = {
+  video_panel: handleVideoPanelTask,
+  video_group: handleVideoGroupTask,
+  final_video_render: handleFinalVideoRenderTask,
+  chapter_render: handleChapterRenderTask,
+} satisfies Record<VideoTaskHandlerKey, VideoTaskHandler>
+
 async function processVideoTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
-
-  switch (job.data.type) {
-    case TASK_TYPE.VIDEO_PANEL:
-      return await handleVideoPanelTask(job)
-    case TASK_TYPE.VIDEO_GROUP:
-      return await handleVideoGroupTask(job)
-    case TASK_TYPE.FINAL_VIDEO_RENDER:
-      return await handleFinalVideoRenderTask(job)
-    case TASK_TYPE.CHAPTER_RENDER:
-      return await handleChapterRenderTask(job)
-    default:
-      throw new Error(`Unsupported video task type: ${job.data.type}`)
-  }
+  const definition = getTaskDefinitionForQueue(job.data.type, 'video')
+  return await VIDEO_TASK_HANDLERS[definition.workerHandler](job)
 }
 
 export function createVideoWorker() {
@@ -666,7 +728,7 @@ export function createVideoWorker() {
     }),
     {
       connection: queueRedis,
-      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_VIDEO || '4', 10) || 4,
+      concurrency: getWorkerConcurrency('video'),
     },
   )
 }

@@ -85,7 +85,7 @@ describe('regression - production plan to visual-style lifecycle', () => {
       required: true,
     }))
     expect(operation?.agentFlow).toEqual(expect.objectContaining({
-      onTaskComplete: 'await_user_choice',
+      onTaskComplete: 'resume_agent',
     }))
   })
 

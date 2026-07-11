@@ -47,9 +47,12 @@ export type OutboxJobObservation =
   | 'unavailable'
   | { state: 'terminal'; jobState: 'completed' | 'failed'; failedReason: string | null }
 
-export async function observeOutboxJob(outboxId: string): Promise<OutboxJobObservation> {
+export async function observeOutboxJobWithQueue(
+  outboxId: string,
+  queue: Pick<Queue<OutboxJobData>, 'getJob'>,
+): Promise<OutboxJobObservation> {
   try {
-    const job = await getOutboxQueue().getJob(outboxId)
+    const job = await queue.getJob(outboxId)
     if (!job) return 'absent'
     const state = await job.getState()
     if (state === 'completed' || state === 'failed') {
@@ -67,4 +70,8 @@ export async function observeOutboxJob(outboxId: string): Promise<OutboxJobObser
     })
     return 'unavailable'
   }
+}
+
+export async function observeOutboxJob(outboxId: string): Promise<OutboxJobObservation> {
+  return await observeOutboxJobWithQueue(outboxId, getOutboxQueue())
 }

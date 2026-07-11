@@ -1,4 +1,5 @@
 import { downloadAndUploadImage, downloadAndUploadVideo, generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 
 export interface ProcessMediaOptions {
   source: string | Buffer
@@ -6,6 +7,7 @@ export interface ProcessMediaOptions {
   keyPrefix: string
   targetId: string
   downloadHeaders?: Record<string, string>
+  taskArtifact?: { taskId: string; artifact: string }
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -32,7 +34,9 @@ function resolveContentType(ext: string): string {
 export async function processMediaResult(options: ProcessMediaOptions): Promise<string> {
   const { source, type, keyPrefix, targetId, downloadHeaders } = options
   const ext = type === 'video' ? 'mp4' : type === 'audio' ? 'mp3' : 'jpg'
-  const key = generateUniqueKey(`${keyPrefix}-${targetId}`, ext)
+  const key = options.taskArtifact
+    ? buildTaskArtifactStorageKey({ ...options.taskArtifact, extension: ext })
+    : generateUniqueKey(`${keyPrefix}-${targetId}`, ext)
   const contentType = resolveContentType(ext)
 
   if (typeof source === 'string') {

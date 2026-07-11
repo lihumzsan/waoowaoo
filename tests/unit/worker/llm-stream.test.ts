@@ -167,4 +167,21 @@ describe('createWorkerLLMStreamCallbacks', () => {
       }),
     )
   })
+
+  it('surfaces a queued stream persistence failure instead of silently dropping it', async () => {
+    reportTaskProgressMock.mockRejectedValueOnce(new Error('STREAM_PROGRESS_DB_DOWN'))
+    const job = buildJob()
+    const callbacks = createWorkerLLMStreamCallbacks(
+      job,
+      createWorkerLLMStreamContext(job, 'failure-regression'),
+    )
+
+    callbacks.onStage?.({
+      stage: 'streaming',
+      provider: 'ark',
+      step: { id: 'step-1', attempt: 1, title: 'Step', index: 1, total: 1 },
+    })
+
+    await expect(callbacks.flush()).rejects.toThrow('STREAM_PROGRESS_DB_DOWN')
+  })
 })

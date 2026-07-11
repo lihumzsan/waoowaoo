@@ -6,6 +6,7 @@ import { config } from 'dotenv'
 config()
 
 import { prisma } from '../src/lib/prisma'
+import { resolveRedisRuntimeConfig } from '../src/lib/redis-config'
 
 async function diagnoseProject(projectId: string) {
   console.log(`🔍 诊断项目: ${projectId}\n`)
@@ -114,9 +115,9 @@ async function diagnoseProject(projectId: string) {
   // 尝试连接 Redis
   try {
     const { Redis } = await import('ioredis')
+    const redisConfig = resolveRedisRuntimeConfig()
     const redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      ...redisConfig,
       maxRetriesPerRequest: 3,
       connectTimeout: 5000
     })

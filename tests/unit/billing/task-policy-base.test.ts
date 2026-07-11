@@ -74,9 +74,14 @@ describe('billing/task-policy', () => {
   })
 
   it('returns null for a non-billable task type', () => {
+    expect(isBillableTaskType(TASK_TYPE.FINAL_VIDEO_RENDER)).toBe(false)
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.FINAL_VIDEO_RENDER, {})).toBeNull()
+    expect(isBillableTaskType(TASK_TYPE.CHAPTER_RENDER)).toBe(false)
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.CHAPTER_RENDER, {})).toBeNull()
+
     const fake = 'not_billable' as unknown as (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
-    expect(isBillableTaskType(fake)).toBe(false)
-    expect(buildDefaultTaskBillingInfo(fake, {})).toBeNull()
+    expect(() => isBillableTaskType(fake)).toThrow('TASK_DEFINITION_MISSING:not_billable')
+    expect(() => buildDefaultTaskBillingInfo(fake, {})).toThrow('TASK_DEFINITION_MISSING:not_billable')
   })
 
   it('builds text billing info from explicit model payload', () => {

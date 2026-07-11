@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { callRoute } from '../../integration/api/helpers/call-route'
 import { prisma } from '../../helpers/prisma'
-import { enqueuePersistedApprovedTask } from '@/lib/task/enqueue'
+import { enqueuePersistedTask } from '@/lib/task/enqueue'
 
 export async function approveSystemOperation(input: {
   readonly projectId: string
@@ -54,7 +54,7 @@ export async function enqueueApprovedSystemTask(taskId: string): Promise<void> {
     where: { kind: 'task.enqueue', aggregateType: 'task', aggregateId: taskId },
   })
   if (!enqueueCommand) throw new Error(`SYSTEM_TASK_ENQUEUE_COMMAND_MISSING:${taskId}`)
-  await enqueuePersistedApprovedTask({
+  await enqueuePersistedTask({
     taskId,
     operationExecutionId: task.operationExecutionId,
   })

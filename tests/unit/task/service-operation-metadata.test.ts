@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const taskModelMock = vi.hoisted(() => ({
   findFirst: vi.fn(),
-  create: vi.fn(),
   update: vi.fn(),
   updateMany: vi.fn(),
   findUnique: vi.fn(),
@@ -11,56 +10,17 @@ const taskModelMock = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     task: taskModelMock,
+    $transaction: vi.fn(async (run: (tx: { task: typeof taskModelMock }) => Promise<unknown>) =>
+      await run({ task: taskModelMock })),
   },
 }))
 
-vi.mock('@/lib/billing', () => ({
-  rollbackTaskBilling: vi.fn(),
-}))
-
-import { createTask, tryMarkTaskProcessing, tryUpdateTaskProgress } from '@/lib/task/service'
-import { TASK_TYPE } from '@/lib/task/types'
+import { tryClaimTaskAttempt, tryUpdateTaskProgress } from '@/lib/task/service'
 
 describe('task service operation metadata', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     taskModelMock.findFirst.mockResolvedValue(null)
-    taskModelMock.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
-      id: 'task-1',
-      ...data,
-      createdAt: new Date('2026-05-02T00:00:00.000Z'),
-      updatedAt: new Date('2026-05-02T00:00:00.000Z'),
-    }))
-  })
-
-  it('writes operation metadata as first-class task fields', async () => {
-    const result = await createTask({
-      userId: 'user-1',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      type: TASK_TYPE.MUSIC_GENERATE,
-      targetType: 'Project',
-      targetId: 'project-1',
-      payload: { prompt: 'theme' },
-      operationId: 'generate_project_music',
-      operationSource: 'assistant-confirmation',
-      approvalGrantId: 'grant-1',
-      operationExecutionId: 'execution-1',
-      operationPlanTaskId: 'plan-task-1',
-      operationRequestId: 'req-1',
-    })
-
-    expect(result.deduped).toBe(false)
-    expect(taskModelMock.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        operationId: 'generate_project_music',
-        operationSource: 'assistant-confirmation',
-        approvalGrantId: 'grant-1',
-        operationExecutionId: 'execution-1',
-        operationPlanTaskId: 'plan-task-1',
-        operationRequestId: 'req-1',
-      }),
-    })
   })
 
   it('merges progress payload without dropping panel image task input', async () => {
@@ -81,7 +41,7 @@ describe('task service operation metadata', () => {
     })
     taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
 
-    const updated = await tryUpdateTaskProgress('task-1', 18, {
+    const updated = await tryUpdateTaskProgress('task-1', 2, 18, {
       stage: 'generate_panel_image',
       meta: {
         locale: 'zh',
@@ -92,7 +52,8 @@ describe('task service operation metadata', () => {
     expect(taskModelMock.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'task-1',
-        status: { in: ['queued', 'processing'] },
+        status: 'processing',
+        attempt: 2,
       },
       data: {
         progress: 18,
@@ -114,19 +75,20 @@ describe('task service operation metadata', () => {
     })
   })
 
-  it('does not clear externalId when marking a retried task processing without a new external id', async () => {
+  it('claims exactly one queued attempt without clearing its externalId', async () => {
     taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
+    taskModelMock.findUnique.mockResolvedValueOnce({ status: 'processing', attempt: 2 })
 
-    const marked = await tryMarkTaskProcessing('task-1')
+    const marked = await tryClaimTaskAttempt({ taskId: 'task-1' })
 
-    expect(marked).toBe(true)
+    expect(marked).toBe(2)
     const call = taskModelMock.updateMany.mock.calls[0]?.[0] as {
       data?: Record<string, unknown>
       where?: Record<string, unknown>
     } | undefined
     expect(call?.where).toEqual({
       id: 'task-1',
-      status: { in: ['queued', 'processing'] },
+      status: 'queued',
     })
     expect(call?.data).toEqual(expect.objectContaining({
       status: 'processing',
@@ -137,10 +99,14 @@ describe('task service operation metadata', () => {
 
   it('updates externalId only when a new external id is explicitly provided', async () => {
     taskModelMock.updateMany.mockResolvedValueOnce({ count: 1 })
+    taskModelMock.findUnique.mockResolvedValueOnce({ status: 'processing', attempt: 1 })
 
-    const marked = await tryMarkTaskProcessing('task-1', 'FAL:VIDEO:endpoint:req-1')
+    const marked = await tryClaimTaskAttempt({
+      taskId: 'task-1',
+      externalId: 'FAL:VIDEO:endpoint:req-1',
+    })
 
-    expect(marked).toBe(true)
+    expect(marked).toBe(1)
     const call = taskModelMock.updateMany.mock.calls[0]?.[0] as {
       data?: Record<string, unknown>
     } | undefined

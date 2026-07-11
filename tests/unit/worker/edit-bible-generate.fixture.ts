@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const editBibleMock = vi.hoisted(() => ({
+  EDIT_BIBLE_STATUS: {
+    SCRIPT_READY_FOR_REVIEW: 'script_ready_for_review',
+    READY_FOR_REVIEW: 'ready_for_review',
+  },
   generateEditBibleArtifacts: vi.fn(async () => ({
     bible: {
       synopsis: '故事梗概',
@@ -173,11 +177,17 @@ const workerMock = vi.hoisted(() => ({
   assertTaskActive: vi.fn(async () => undefined),
 }))
 
+const prismaMock = vi.hoisted(() => ({
+  projectEditBible: { findFirst: vi.fn(async (): Promise<unknown> => null) },
+  projectEditChapter: { count: vi.fn(async () => 0) },
+}))
+
 const streamMock = vi.hoisted(() => ({
   flush: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/edit-bible', () => editBibleMock)
+vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 vi.mock('@/lib/edit-source-document', async () => {
   const { z } = await import('zod')
@@ -250,4 +260,4 @@ export { beforeEach, describe, expect, it, vi } from 'vitest'
 export { TASK_TYPE } from '@/lib/task/types'
 export type { TaskJobData } from '@/lib/task/types'
 export { handleEditBibleGenerateTask } from '@/lib/workers/handlers/edit-bible-generate'
-export { aiMock, billingMock, buildJob, editBibleMock, promptMock, sourceDocumentMock, streamMock, workerMock }
+export { aiMock, billingMock, buildJob, editBibleMock, prismaMock, promptMock, sourceDocumentMock, streamMock, workerMock }

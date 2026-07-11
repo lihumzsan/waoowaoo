@@ -1,6 +1,6 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { AiProviderVideoExecutionContext } from '@/lib/ai-providers/runtime-types'
-import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
@@ -291,6 +291,7 @@ export async function arkCreateVideoTask(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(request),
+    policy: RETRY_POLICY.providerSubmit,
     timeoutMs,
     scope: 'ark:video:create',
     fetchFn: fetchWithProviderProxy,

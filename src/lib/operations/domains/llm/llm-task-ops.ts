@@ -23,6 +23,7 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit AI modify appearance task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -53,6 +54,7 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
       summary: 'Submit AI modify prop task.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,

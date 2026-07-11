@@ -756,8 +756,10 @@ export async function approveEpisodePromptGeneratedScript(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly client?: Prisma.TransactionClient
 }) {
-  const result = await prisma.projectEditBible.updateMany({
+  const client = input.client ?? prisma
+  const result = await client.projectEditBible.updateMany({
     where: {
       episodeId: input.episodeId,
       status: EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW,
@@ -864,8 +866,9 @@ export async function confirmEpisodeEditBible(input: {
   readonly userId: string
   readonly episodeId: string
   readonly videoRatio?: EditScriptVideoRatio
+  readonly client?: Prisma.TransactionClient
 }): Promise<PersistedEditBibleBundle> {
-  return await prisma.$transaction(async (tx) => {
+  const confirm = async (tx: Prisma.TransactionClient): Promise<PersistedEditBibleBundle> => {
     await assertEpisodeAccess({ ...input, client: tx })
     const bible = await tx.projectEditBible.findUnique({
       where: { episodeId: input.episodeId },
@@ -909,7 +912,8 @@ export async function confirmEpisodeEditBible(input: {
       select: persistedBibleSelect,
     })
     return mapPersistedBible(updated, input.projectId)
-  })
+  }
+  return input.client ? await confirm(input.client) : await prisma.$transaction(confirm)
 }
 
 export async function reviseEpisodeEditBible(input: {
@@ -922,6 +926,7 @@ export async function reviseEpisodeEditBible(input: {
     readonly ledger?: Ledger
     readonly emotionalCurve?: EditBibleEmotionalCurve
   }
+  readonly client?: Prisma.TransactionClient
 }): Promise<{
   readonly editBible: PersistedEditBibleBundle
   readonly chapters: readonly PersistedEditChapterPlan[]
@@ -953,7 +958,7 @@ export async function reviseEpisodeEditBible(input: {
     sourceText: sourceDocument.normalizedText,
   })
 
-  return await prisma.$transaction(async (tx) => {
+  const revise = async (tx: Prisma.TransactionClient) => {
     await assertEpisodeAccess({ ...input, client: tx })
     await assertNoDownstreamChapterArtifacts({
       episodeId: input.episodeId,
@@ -1002,5 +1007,6 @@ export async function reviseEpisodeEditBible(input: {
       editBible: mapPersistedBible(updated, input.projectId),
       chapters,
     }
-  })
+  }
+  return input.client ? await revise(input.client) : await prisma.$transaction(revise)
 }

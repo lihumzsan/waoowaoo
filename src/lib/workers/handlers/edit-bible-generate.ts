@@ -1,4 +1,5 @@
 import type { Job } from 'bullmq'
+import { prisma } from '@/lib/prisma'
 import type { Locale } from '@/i18n/routing'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
 import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
@@ -6,6 +7,7 @@ import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { withTextBilling } from '@/lib/billing'
 import {
   generateEditBibleArtifacts,
+  EDIT_BIBLE_STATUS,
   markEditBibleScriptReadyForReview,
   normalizeExpandedSourceScriptOutput,
   persistGeneratedEditBibleBundle,
@@ -109,6 +111,33 @@ export async function handleEditBibleGenerateTask(job: Job<TaskJobData>) {
   if (!sourceDocumentId) throw new Error('sourceDocumentId is required')
   if (!editBibleId) throw new Error('editBibleId is required')
   const generatesSourceScript = job.data.type === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
+
+  const alreadyPersisted = await prisma.projectEditBible.findFirst({
+    where: {
+      id: editBibleId,
+      episodeId,
+      generationTaskId: job.data.taskId,
+      status: {
+        in: [EDIT_BIBLE_STATUS.SCRIPT_READY_FOR_REVIEW, EDIT_BIBLE_STATUS.READY_FOR_REVIEW],
+      },
+    },
+    select: { status: true, sourceDocumentId: true, version: true },
+  })
+  if (alreadyPersisted) {
+    const chapterCount = alreadyPersisted.status === EDIT_BIBLE_STATUS.READY_FOR_REVIEW
+      ? await prisma.projectEditChapter.count({ where: { episodeId } })
+      : 0
+    return {
+      editBibleId,
+      episodeId,
+      sourceDocumentId: alreadyPersisted.sourceDocumentId,
+      status: alreadyPersisted.status,
+      chapterCount,
+      version: alreadyPersisted.status === EDIT_BIBLE_STATUS.READY_FOR_REVIEW
+        ? alreadyPersisted.version
+        : null,
+    }
+  }
 
   await reportTaskProgress(job, 12, {
     stage: generatesSourceScript ? 'edit_source_script_prepare' : 'edit_bible_prepare',

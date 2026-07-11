@@ -85,6 +85,10 @@ describe('worker video processor behavior', () => {
       {
         Authorization: 'Bearer oa-key',
       },
+      {
+        taskId: job.data.taskId,
+        artifact: 'panel-video:panel-1',
+      },
     )
   })
 

@@ -11,7 +11,8 @@ import { getProjectModelConfig } from '@/lib/config-service'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import { prisma } from '@/lib/prisma'
-import { generateUniqueKey, getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { getObjectBuffer, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import {
   buildFfmpegExecFileOptions,
@@ -29,6 +30,7 @@ import {
 } from './plan-contract'
 import { buildSoundscapePlanPrompt } from './prompt'
 import {
+  readCompletedSoundscapeMix,
   readSoundscapeSourcesStrict,
   writeSoundscapeProjectData,
 } from './project-data'
@@ -189,13 +191,18 @@ async function uploadGeneratedSoundscapeSource(input: {
   readonly audio: GeneratedAudioBuffer
   readonly source: SoundscapePlanSource
   readonly soundEffectModel: string
+  readonly taskId: string
 }): Promise<SoundscapeSourceAsset> {
   const measuredDurationSeconds = await probeAudioDurationSeconds(input.audio)
   if (measuredDurationSeconds <= 0) throw new Error('SOUNDSCAPE_SOURCE_AUDIO_DURATION_INVALID')
   const measuredDurationMs = Math.round(measuredDurationSeconds * 1000)
   const storageKey = await uploadObject(
     input.audio.buffer,
-    generateUniqueKey('soundscape/source', extensionFromMimeType(input.audio.mimeType)),
+    buildTaskArtifactStorageKey({
+      taskId: input.taskId,
+      artifact: `soundscape:source:${input.source.sourceId}`,
+      extension: extensionFromMimeType(input.audio.mimeType),
+    }),
     1,
     input.audio.mimeType,
   )
@@ -223,13 +230,14 @@ async function generateSoundscapeSource(input: {
   readonly userId: string
   readonly soundEffectModel: string
   readonly source: SoundscapePlanSource
+  readonly taskId: string
 }): Promise<SoundscapeSourceAsset> {
   const generated = await generateSoundEffect(input.userId, input.soundEffectModel, input.source.prompt, {
     durationSeconds: input.source.loopDurationSeconds,
     loop: true,
     promptInfluence: input.source.promptInfluence,
     outputFormat: SOUNDSCAPE_OUTPUT_FORMAT,
-  })
+  }, { key: `media:sound-effect:source:${input.source.sourceId}` })
   if (!generated.success) {
     throw new Error(generated.error || `SOUNDSCAPE_PROVIDER_FAILED:${input.source.sourceId}`)
   }
@@ -242,12 +250,14 @@ async function generateSoundscapeSource(input: {
     audio,
     source: input.source,
     soundEffectModel: input.soundEffectModel,
+    taskId: input.taskId,
   })
 }
 
 async function uploadGeneratedSoundscapeMix(input: {
   readonly audio: GeneratedAudioBuffer
   readonly durationSeconds: number
+  readonly taskId: string
 }): Promise<SoundscapeMix> {
   const measuredDurationSeconds = await probeAudioDurationSeconds(input.audio)
   if (measuredDurationSeconds + SOUNDSCAPE_DURATION_TOLERANCE_SECONDS < input.durationSeconds) {
@@ -256,7 +266,11 @@ async function uploadGeneratedSoundscapeMix(input: {
   const measuredDurationMs = Math.round(measuredDurationSeconds * 1000)
   const storageKey = await uploadObject(
     input.audio.buffer,
-    generateUniqueKey('soundscape/mix', extensionFromMimeType(input.audio.mimeType)),
+    buildTaskArtifactStorageKey({
+      taskId: input.taskId,
+      artifact: 'soundscape:mix',
+      extension: extensionFromMimeType(input.audio.mimeType),
+    }),
     1,
     input.audio.mimeType,
   )
@@ -280,6 +294,25 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
   const soundEffectModel = readString(payload.soundEffectModel)
   if (!episodeId) throw new Error('SOUNDSCAPE_EPISODE_REQUIRED')
   if (!soundEffectModel) throw new Error('SOUNDSCAPE_SOUND_EFFECT_MODEL_REQUIRED')
+
+  const persistedPlan = await prisma.projectEditSoundscape.findFirst({
+    where: {
+      episodeId,
+      taskId: job.data.taskId,
+      status: { in: [SOUNDSCAPE_STATUS.PLANNED, SOUNDSCAPE_STATUS.COMPLETED] },
+    },
+    select: { planJson: true },
+  })
+  if (persistedPlan?.planJson) {
+    const plan = parseSoundscapePlanStrict(persistedPlan.planJson)
+    return {
+      episodeId,
+      soundEffectModel,
+      decision: plan.decision,
+      sourceCount: plan.sources.length,
+      sectionCount: plan.sections.length,
+    }
+  }
 
   let signature = ''
   let durationSeconds = 0
@@ -417,22 +450,6 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
       sectionCount: plan.sections.length,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (signature && durationSeconds > 0) {
-      await writeSoundscapeProjectData({
-        episodeId,
-        soundscape: {
-          schemaVersion: 1,
-          status: SOUNDSCAPE_STATUS.FAILED,
-          taskId: job.data.taskId,
-          timelineSignature: signature,
-          durationSeconds,
-          soundEffectModel,
-          sources: existingSources,
-          errorMessage: message,
-        },
-      })
-    }
     throw error
   }
 }
@@ -465,6 +482,24 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
   })
   if (computedApprovedPlanHash !== approvedPlanHash) {
     throw new Error(`SOUNDSCAPE_APPROVED_PLAN_HASH_INVALID:${approvedPlanHash}:${computedApprovedPlanHash}`)
+  }
+
+  const completed = await prisma.projectEditSoundscape.findFirst({
+    where: { episodeId, taskId: job.data.taskId, status: SOUNDSCAPE_STATUS.COMPLETED },
+    select: { status: true, mixJson: true },
+  })
+  const completedMix = readCompletedSoundscapeMix(completed)
+  if (completedMix) {
+    return {
+      episodeId,
+      mediaId: completedMix.mediaId,
+      audioUrl: completedMix.url,
+      storageKey: completedMix.storageKey,
+      soundEffectModel,
+      sourceCount: approvedPlan.sources.length,
+      sectionCount: approvedPlan.sections.length,
+      durationMs: completedMix.durationMs,
+    }
   }
 
   let signature = ''
@@ -529,6 +564,7 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
         userId: job.data.userId,
         soundEffectModel,
         source,
+        taskId: job.data.taskId,
       })
       generatedSources.push(resolvedSource)
       await reportTaskProgress(job, 20 + Math.round((index + 1) / plan.sources.length * 40), {
@@ -579,6 +615,7 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
           mimeType: 'audio/mp4',
         },
         durationSeconds,
+        taskId: job.data.taskId,
       })
 
       await reportTaskProgress(job, 90, { stage: 'soundscape_persist' })
@@ -609,23 +646,6 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
       await rm(workspaceDir, { recursive: true, force: true })
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (signature && durationSeconds > 0) {
-      await writeSoundscapeProjectData({
-        episodeId,
-        soundscape: {
-          schemaVersion: 1,
-          status: SOUNDSCAPE_STATUS.FAILED,
-          taskId: job.data.taskId,
-          timelineSignature: signature,
-          durationSeconds,
-          soundEffectModel,
-          ...(plan ? { plan } : {}),
-          sources,
-          errorMessage: message,
-        },
-      })
-    }
     throw error
   }
 }

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import type { ProjectAgentOperationContext, ProjectAgentOperationDefinition } from './types'
 import { loadOperationPlanSnapshot } from './operation-plan-snapshot'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
+import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
 
 const EXECUTION_CONTRACT_VERSION = 1
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
@@ -250,6 +251,9 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
   } as OperationWriter
   const output = await prisma.$transaction(
     async (tx) => {
+      if (params.ctx.executionFence) {
+        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+      }
       await lockApprovalGrant(tx, params.invocation.approvalGrantId)
       const grant = await tx.approvalGrant.findUnique({
         where: { id: params.invocation.approvalGrantId },
@@ -282,6 +286,9 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         if (existing.status !== 'completed' || existing.output === null) {
           throw new Error(`OPERATION_EXECUTION_DURABLE_INTERMEDIATE_STATE:${existing.id}:${existing.status}`)
         }
+        if (params.ctx.executionFence) {
+          await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+        }
         return existing.output as Output
       }
       if (grant.consumedAt || grant.consumedExecutionId) {
@@ -304,25 +311,23 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           status: 'committing',
         },
       })
-      if (snapshot.plan.tasks.length === 0) {
-        const consumed = await tx.approvalGrant.updateMany({
-          where: {
-            id: grant.id,
-            version: 0,
-            consumedAt: null,
-            consumedExecutionId: null,
-            revokedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-          data: {
-            consumedAt: new Date(),
-            consumedExecutionId: execution.id,
-            version: { increment: 1 },
-          },
-        })
-        if (consumed.count !== 1) {
-          throw new Error(`APPROVAL_GRANT_CONSUME_RACED:${grant.id}`)
-        }
+      const consumed = await tx.approvalGrant.updateMany({
+        where: {
+          id: grant.id,
+          version: 0,
+          consumedAt: null,
+          consumedExecutionId: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          consumedAt: new Date(),
+          consumedExecutionId: execution.id,
+          version: { increment: 1 },
+        },
+      })
+      if (consumed.count !== 1) {
+        throw new Error(`APPROVAL_GRANT_CONSUME_RACED:${grant.id}`)
       }
       const committedOutput = await commit(
         {
@@ -369,6 +374,13 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       ) {
         throw new Error(`OPERATION_PLAN_ATOMIC_COMMIT_INCOMPLETE:${execution.id}`)
       }
+      if (params.ctx.executionFence) {
+        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+      }
+      await params.ctx.taskBatchBinding?.bindInTransaction(tx, {
+        operationId: params.operation.id,
+        taskIds: tasks.map((task) => task.id),
+      })
       await tx.operationExecution.update({
         where: { id: execution.id },
         data: {
@@ -377,6 +389,9 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           completedAt: new Date(),
         },
       })
+      if (params.ctx.executionFence && !params.ctx.taskBatchBinding?.isBound()) {
+        await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
+      }
       return output
     },
     {
@@ -384,6 +399,7 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       timeout: APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS,
     },
   )
+  params.ctx.taskBatchBinding?.markCommitted()
   for (const part of bufferedParts) {
     params.ctx.writer?.write(part)
   }

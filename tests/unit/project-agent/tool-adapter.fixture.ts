@@ -24,7 +24,40 @@ vi.mock('@/lib/operations/registry', () => ({
   createProjectAgentOperationRegistry: () => registryState.registry,
 }))
 
-import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    $transaction: vi.fn(async (work: (transaction: Record<string, never>) => Promise<unknown>) =>
+      await work({})),
+  },
+}))
+
+vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
+  assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
+  assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
+  runWithProjectAgentOperationExecutionFence: vi.fn(async (
+    _fence: unknown,
+    work: () => Promise<unknown>,
+  ) => await work()),
+}))
+
+import {
+  executeProjectAgentOperationFromTool as executeProjectAgentOperationFromToolAuthority,
+} from '@/lib/adapters/tools/execute-project-agent-operation'
+
+type ToolInvocation = Parameters<typeof executeProjectAgentOperationFromToolAuthority>[0]
+
+async function executeProjectAgentOperationFromTool(
+  params: Omit<ToolInvocation, 'executionFence'>,
+) {
+  return await executeProjectAgentOperationFromToolAuthority({
+    ...params,
+    executionFence: {
+      runFence: { runId: 'run-test', runVersion: 1, eventSeq: '1' },
+      signal: new AbortController().signal,
+    },
+  })
+}
 
 const originalDeploymentEdition = process.env.DEPLOYMENT_EDITION
 
@@ -51,5 +84,4 @@ export type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 export { makeTestOperation, EFFECTS_NONE, EFFECTS_WRITE } from '../../helpers/project-agent-operations'
 export { TASK_TYPE } from '@/lib/task/types'
 export type { OperationPlan } from '@/lib/operations/planning'
-export { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
-export { buildRequest, buildWriter, originalBillingMode, originalDeploymentEdition, registryState }
+export { buildRequest, buildWriter, executeProjectAgentOperationFromTool, originalBillingMode, originalDeploymentEdition, registryState }

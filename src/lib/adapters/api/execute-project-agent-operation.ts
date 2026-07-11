@@ -1,9 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
-import { commitOperationPlan, planOperation } from '@/lib/operations/planning'
-import { invokeApprovedOperationPlan, splitPlannedOperationInvocation } from '@/lib/operations/planned-operation-invocation'
-import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
+import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import {
   extractPrismaMissingColumn,
   inferApiErrorCodeFromMessage,
@@ -26,22 +24,6 @@ export async function executeProjectAgentOperationFromApi(params: {
   source?: string
 }) {
   const registry = createProjectAgentOperationRegistryForApi()
-  const operation = registry[params.operationId]
-  if (!operation) {
-    throw new ApiError('NOT_FOUND', {
-      message: `operation not found: ${params.operationId}`,
-    })
-  }
-
-  const splitInput = splitPlannedOperationInvocation(params.input)
-  const parsed = operation.inputSchema.safeParse(splitInput.businessInput)
-  if (!parsed.success) {
-    throw new ApiError('INVALID_PARAMS', {
-      message: 'INVALID_PARAMS',
-      issues: parsed.error.issues,
-    })
-  }
-
   const operationContext = {
     request: params.request,
     userId: params.userId,
@@ -59,56 +41,17 @@ export async function executeProjectAgentOperationFromApi(params: {
   }
 
   try {
-    const result =
-      operation.confirmation.kind === 'billable_media'
-        ? await (async () => {
-            if (!splitInput.invocation) {
-              throw new ApiError('INVALID_PARAMS', {
-                code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
-                message: 'approve the immutable operation plan before execution',
-              })
-            }
-            return await invokeApprovedOperationPlan({
-              operation,
-              ctx: operationContext,
-              normalizedInput: parsed.data,
-              invocation: splitInput.invocation,
-            })
-          })()
-        : operation.plan && operation.commit
-          ? await (async () => {
-              const plan = await planOperation({
-                operation,
-                ctx: operationContext,
-                input: parsed.data,
-              })
-              return await commitOperationPlan({
-                operation,
-                ctx: operationContext,
-                input: parsed.data,
-                plan,
-              })
-            })()
-          : operation.execute
-            ? await operation.execute(operationContext, parsed.data)
-            : (() => {
-                throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
-              })()
-    const outputParsed = operation.outputSchema.safeParse(result)
-    if (!outputParsed.success) {
-      throw new ApiError('EXTERNAL_ERROR', {
-        code: 'OPERATION_OUTPUT_INVALID',
-        message: `operation output schema mismatch: ${params.operationId}`,
-        issues: outputParsed.error.issues,
-      })
-    }
-    await publishWorkspaceResourceChangedEventsFromWriteResult({
-      result: outputParsed.data,
-      fallbackProjectId: params.projectId,
-      userId: params.userId,
-      fallbackEpisodeId: params.context?.episodeId ?? null,
+    const result = await invokeProjectAgentOperation({
+      registry,
+      channel: 'api',
+      operationId: params.operationId,
+      context: operationContext,
+      input: params.input,
     })
-    return outputParsed.data
+    if (result.kind !== 'executed') {
+      throw new Error(`API_OPERATION_APPROVAL_RESULT_INVALID:${params.operationId}`)
+    }
+    return result.data
   } catch (error) {
     if (error instanceof ApiError) throw error
     const missingColumn = extractPrismaMissingColumn(error)

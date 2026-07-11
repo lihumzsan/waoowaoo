@@ -2,7 +2,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import type { AiProviderVideoExecutionContext, GenerateResult } from '@/lib/ai-providers/runtime-types'
 import { buildFalQueueUrl } from '@/lib/ai-providers/fal/base-url'
-import { fetchWithRetry } from '@/lib/retry'
+import { fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { requireSelectedModelId } from '@/lib/ai-providers/shared/model-selection'
 import {
@@ -501,6 +501,7 @@ export async function executeFalVideoGeneration(input: AiProviderVideoExecutionC
       Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify(payload),
+    policy: RETRY_POLICY.providerSubmit,
     cache: 'no-store',
     scope: `fal:video:submit:${endpoint}`,
     fetchFn: fetchWithProviderProxy,

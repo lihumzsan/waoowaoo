@@ -2,6 +2,8 @@ import { ApiError } from '@/lib/api-errors'
 import type { Locale } from '@/i18n/routing'
 import { TASK_TYPE } from '@/lib/task/types'
 import { submitTask } from '@/lib/task/submitter'
+import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { buildStoryboardConsistencySource } from './source-snapshot'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
@@ -14,6 +16,8 @@ interface SubmitEditScriptStoryboardInput {
   readonly userId: string
   readonly locale: Locale
   readonly requestId?: string | null
+  readonly request?: NextRequest
+  readonly source?: string
 }
 
 async function resolveEditScriptId(input: Pick<SubmitEditScriptStoryboardInput, 'projectId' | 'episodeId' | 'chapterId' | 'editScriptId'>): Promise<string> {
@@ -51,7 +55,7 @@ export async function submitEditScriptStoryboardPanels(input: SubmitEditScriptSt
     editScriptId,
     userId: input.userId,
   })
-  const submitted = await submitTask({
+  const taskInput = {
     userId: input.userId,
     locale: input.locale,
     projectId: input.projectId,
@@ -73,7 +77,14 @@ export async function submitEditScriptStoryboardPanels(input: SubmitEditScriptSt
       },
     }),
     dedupeKey: `edit_script_storyboard:${input.projectId}:${input.episodeId}:${editScriptId}`,
-  })
+  }
+  const submitted = input.request && input.source
+    ? await submitOperationTask({
+        ...taskInput,
+        request: input.request,
+        source: input.source,
+      })
+    : await submitTask(taskInput)
   return {
     ...submitted,
     editScriptId,

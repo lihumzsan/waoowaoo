@@ -20,6 +20,10 @@ const runtime = vi.hoisted(() => ({
   effectCleanup: null as EffectCleanup,
   scheduledTimers: [] as Array<() => void>,
   scheduledIntervals: [] as Array<() => void>,
+  setState: vi.fn(),
+  getStoredCursor: vi.fn(() => null),
+  setStoredCursor: vi.fn(),
+  removeStoredCursor: vi.fn(),
 }))
 
 const overlayMock = vi.hoisted(() => ({
@@ -59,7 +63,7 @@ class FakeEventSource {
 
   emit(type: string, payload: unknown) {
     const event = { data: JSON.stringify(payload) } as MessageEvent
-    if (this.onmessage) this.onmessage(event)
+    if (type === 'message' && this.onmessage) this.onmessage(event)
     const set = this.listeners.get(type)
     if (!set) return
     for (const handler of set) {
@@ -79,6 +83,7 @@ vi.mock('react', async () => {
     useCallback: <T,>(callback: T) => callback,
     useMemo: <T,>(factory: () => T) => factory(),
     useRef: <T,>(value: T) => ({ current: value }),
+    useState: <T,>(value: T) => [value, runtime.setState] as const,
     useEffect: (effect: () => EffectCleanup) => {
       runtime.effectCleanup = effect()
     },

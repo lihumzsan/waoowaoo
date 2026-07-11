@@ -1,21 +1,13 @@
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { readProjectEpisodeDetail } from '@/lib/projects/read-episode-detail'
-import {
-  TASK_TYPE,
-  type TaskJobData,
-  type WorkspaceMaterializedResourceEnvelope,
-} from '@/lib/task/types'
+import { getTaskDefinition } from '@/lib/task/definition'
+import type { TaskJobData, WorkspaceMaterializedResourceEnvelope } from '@/lib/task/types'
 import {
   parseWorkspaceMaterializedResourceVersion,
   workspaceMaterializedResourceKey,
 } from './materialized-resource-version'
 import { createEditBibleQueryDto } from './query-dto-version'
-
-function isEditBibleQueryTask(taskType: string): boolean {
-  return taskType === TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE
-    || taskType === TASK_TYPE.EDIT_BIBLE_GENERATE
-    || taskType === TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE
-}
+import { readConsistentWorkspaceResourceSnapshot } from './resource-revision'
 
 /**
  * Reads the same DTO consumed by the canvas Query Cache after the worker has
@@ -31,13 +23,22 @@ export async function materializeWorkspaceResourcesForTask(
   const episodeId = task.episodeId?.trim() || payloadEpisodeId || null
   if (!episodeId) return []
 
-  if (isEditBibleQueryTask(task.type)) {
-    const [editBible, chapters] = await Promise.all([
-      readEpisodeEditBible({ projectId: task.projectId, episodeId }),
-      readEpisodeEditChapters({ projectId: task.projectId, episodeId }),
-    ])
+  const materializer = getTaskDefinition(task.type).materializer
+  if (materializer === 'edit_bible') {
+    const snapshot = await readConsistentWorkspaceResourceSnapshot({
+      projectId: task.projectId,
+      episodeId,
+      read: async () => {
+        const [editBible, chapters] = await Promise.all([
+          readEpisodeEditBible({ projectId: task.projectId, episodeId }),
+          readEpisodeEditChapters({ projectId: task.projectId, episodeId }),
+        ])
+        return { editBible, chapters }
+      },
+    })
+    const { editBible, chapters } = snapshot.data
     if (!editBible) throw new Error(`CANVAS_TERMINAL_RESOURCE_HANDOFF_MISSING:editBible:${task.taskId}`)
-    const data = createEditBibleQueryDto(editBible, chapters)
+    const data = createEditBibleQueryDto(editBible, chapters, snapshot.resourceRevision)
     return [{
       kind: 'editBible',
       taskId: task.taskId,
@@ -53,6 +54,11 @@ export async function materializeWorkspaceResourcesForTask(
     }]
   }
 
+  if (materializer !== 'episode_data') {
+    const exhaustive: never = materializer
+    throw new Error(`TASK_MATERIALIZER_UNSUPPORTED:${task.type}:${String(exhaustive)}`)
+  }
+
   const episode = await readProjectEpisodeDetail({
     projectId: task.projectId,
     episodeId,
@@ -61,7 +67,7 @@ export async function materializeWorkspaceResourcesForTask(
     'episodeData',
     episode.resourceVersion,
   )
-  if (!resourceVersion || resourceVersion.scheme !== 'aggregate_updated_at') {
+  if (!resourceVersion || resourceVersion.scheme !== 'resource_revision') {
     throw new Error(`CANVAS_TERMINAL_RESOURCE_VERSION_MISSING:episodeData:${task.taskId}`)
   }
   return [{

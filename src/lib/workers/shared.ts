@@ -6,17 +6,21 @@ import { TaskTerminatedError } from '@/lib/task/errors'
 import {
   touchTaskHeartbeat,
   tryMarkTaskQueuedForRetry,
-  tryMarkTaskProcessing,
+  tryClaimTaskAttempt,
   tryUpdateTaskProgress,
 } from '@/lib/task/service'
 import { publishTaskEvent, publishTaskStreamEvent } from '@/lib/task/publisher'
 import { TASK_EVENT_TYPE, type TaskJobData } from '@/lib/task/types'
-import { shouldRetryTaskFailure, TASK_RETRY_BACKOFF_BASE_MS } from '@/lib/task/retry-policy'
+import {
+  getTaskMaxAttempts,
+  shouldRetryTaskFailure,
+  TASK_RETRY_BACKOFF_BASE_MS,
+} from '@/lib/task/retry-policy'
 import { buildTaskProgressMessage, getTaskStageLabel } from '@/lib/task/progress-message'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 import { withTextUsageCollection } from '@/lib/billing/runtime-usage'
 import { onProjectNameAvailable } from '@/lib/logging/file-writer'
-import { withLogContext } from '@/lib/logging/context'
+import { getLogContext, withLogContext } from '@/lib/logging/context'
 import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
 import { commitTaskTerminal } from '@/lib/task/terminal'
 import {
@@ -193,12 +197,13 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
   const taskId = data.taskId
   const logger = buildWorkerLogger(data, job.queueName)
   const startedAt = Date.now()
+  let taskAttempt: number | null = null
 
   // Register project name for per-project log file routing
   void resolveProjectNameForLogging(data.projectId)
 
   const heartbeatTimer = setInterval(() => {
-    void touchTaskHeartbeat(taskId)
+    if (taskAttempt !== null) void touchTaskHeartbeat(taskId, taskAttempt)
   }, 10_000)
 
   try {
@@ -213,8 +218,8 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
         episodeId: data.episodeId || null,
       },
     })
-    const markedProcessing = await tryMarkTaskProcessing(taskId)
-    if (!markedProcessing) {
+    taskAttempt = await tryClaimTaskAttempt({ taskId })
+    if (taskAttempt === null) {
       logger.info({
         action: 'worker.skip.terminated',
         message: 'task is not active, skip worker execution',
@@ -253,7 +258,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     const existingCheckpoint = await loadTaskHandlerCheckpoint({ taskId, inputFingerprint })
     const checkpoint = existingCheckpoint ?? await withLogContext({
       taskId,
-      taskAttempt: job.attemptsMade + 1,
+      taskAttempt,
       projectId: data.projectId,
       userId: data.userId,
     }, async () => {
@@ -283,7 +288,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     const terminal = await commitTaskTerminal({
       kind: 'completed',
       taskId,
-      fence: { kind: 'attempt', attempt: job.attemptsMade + 1 },
+      fence: { kind: 'attempt', attempt: taskAttempt },
       executionCheckpointId: readyCheckpoint.id,
       eventPayload: {
         ...completedPayload,
@@ -301,6 +306,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
       details: { result: result || null, terminalEventId: terminal.terminalEventId },
     })
   } catch (error: unknown) {
+    if (taskAttempt === null) throw error
     if (error instanceof TaskTerminatedError) {
       logger.info({
         action: 'worker.terminated',
@@ -312,12 +318,8 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
 
     const normalizedError = normalizeAnyError(error, { context: 'worker' })
     const errorCauseChain = buildErrorCauseChain(error)
-    const rawMaxAttempts = job.opts?.attempts
-    const attemptsMade = Number.isFinite(job.attemptsMade) ? Math.max(0, Math.floor(job.attemptsMade)) : 0
-    const maxAttempts = typeof rawMaxAttempts === 'number' && Number.isFinite(rawMaxAttempts)
-      ? Math.max(1, Math.floor(rawMaxAttempts))
-      : 1
-    const currentAttempt = attemptsMade + 1
+    const currentAttempt = taskAttempt
+    const maxAttempts = getTaskMaxAttempts(data.type)
     const bullmqWillRetry = shouldRetryTaskFailure({
       taskType: data.type,
       failureClass: normalizedError.failureClass,
@@ -358,9 +360,9 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     logger[bullmqWillRetry ? 'warn' : 'error'](workerFailureLog)
 
     if (bullmqWillRetry) {
-      const requeued = await tryMarkTaskQueuedForRetry(taskId)
+      const requeued = await tryMarkTaskQueuedForRetry(taskId, currentAttempt)
       if (requeued) {
-        const nextRetryDelayMs = TASK_RETRY_BACKOFF_BASE_MS * Math.pow(2, attemptsMade)
+        const nextRetryDelayMs = TASK_RETRY_BACKOFF_BASE_MS * Math.pow(2, currentAttempt - 1)
         logger.warn({
           action: 'worker.retry_scheduled',
           message: normalizedError.message,
@@ -429,7 +431,7 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
     await commitTaskTerminal({
       kind: 'failed',
       taskId,
-      fence: { kind: 'attempt', attempt: job.attemptsMade + 1 },
+      fence: { kind: 'attempt', attempt: taskAttempt },
       source: 'worker',
       errorCode: normalizedError.code,
       errorMessage: normalizedError.message,
@@ -481,7 +483,11 @@ export async function reportTaskProgress(job: Job<TaskJobData>, progress: number
     },
   })
 
-  const updated = await tryUpdateTaskProgress(job.data.taskId, value, nextPayload)
+  const taskAttempt = getLogContext().taskAttempt
+  if (!Number.isInteger(taskAttempt) || (taskAttempt ?? 0) < 1) {
+    throw new Error(`TASK_ATTEMPT_CONTEXT_REQUIRED:${job.data.taskId}`)
+  }
+  const updated = await tryUpdateTaskProgress(job.data.taskId, taskAttempt!, value, nextPayload)
   if (!updated) {
     return
   }

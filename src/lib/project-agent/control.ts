@@ -21,6 +21,19 @@ export type ProjectAgentControlAction =
     output: UnknownRecord
   }
 
+export function createProjectAgentControlVisibleUserMessageId(params: {
+  type: ProjectAgentControlAction['type']
+  runId: string
+  interruptionId: string
+}): string {
+  const runId = params.runId.trim()
+  const interruptionId = params.interruptionId.trim()
+  if (!runId || !interruptionId) {
+    throw new Error('PROJECT_AGENT_CONTROL_MESSAGE_IDENTITY_REQUIRED')
+  }
+  return `workspace-control-user:${params.type}:${runId}:${interruptionId}`
+}
+
 function isRecord(value: unknown): value is UnknownRecord {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }

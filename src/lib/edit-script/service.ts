@@ -71,6 +71,7 @@ interface GenerateEditScriptInput {
   readonly chapterId?: string
   readonly userId: string
   readonly locale: Locale
+  readonly taskId: string
   readonly videoRatio?: '9:16' | '16:9' | '21:9'
   readonly onGenerationStepPersisted?: (step: EditScriptGenerationStep) => Promise<void>
 }
@@ -103,6 +104,7 @@ interface GenerateEditShotExecutionPlanInput {
   readonly userId: string
   readonly locale: Locale
   readonly editScriptId?: string
+  readonly taskId: string
 }
 
 interface UpdateEditScriptAssetRequirementDescriptionInput {
@@ -912,6 +914,7 @@ async function markEditScriptGenerating(input: {
   readonly episodeId: string
   readonly chapterId: string
   readonly initialDurationSeconds: number
+  readonly taskId: string
 }): Promise<void> {
   await prisma.projectEditScript.upsert({
     where: { chapterId: input.chapterId },
@@ -923,12 +926,14 @@ async function markEditScriptGenerating(input: {
       durationSec: input.initialDurationSeconds,
       shotCount: 0,
       status: 'generating',
+      generationTaskId: input.taskId,
     },
     update: {
       corePlanJson: Prisma.JsonNull,
       durationSec: input.initialDurationSeconds,
       shotCount: 0,
       status: 'generating',
+      generationTaskId: input.taskId,
     },
   })
 }
@@ -940,31 +945,26 @@ async function persistEditScriptGenerationStep(input: {
   readonly durationSec: number
   readonly shots: readonly EditScriptShot[]
   readonly generationSegments: readonly { readonly shotIds: readonly string[]; readonly continuity: string }[]
+  readonly taskId: string
 }) {
-  await prisma.projectEditScript.upsert({
-    where: { chapterId: input.chapterId },
-    create: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
+  const updated = await prisma.projectEditScript.updateMany({
+    where: {
       chapterId: input.chapterId,
-      corePlanJson: {
-        shots: input.shots,
-        generationSegments: input.generationSegments,
-      } as unknown as Prisma.InputJsonValue,
-      durationSec: input.durationSec,
-      shotCount: input.shots.length,
+      generationTaskId: input.taskId,
       status: 'generating',
     },
-    update: {
+    data: {
       corePlanJson: {
         shots: input.shots,
         generationSegments: input.generationSegments,
       } as unknown as Prisma.InputJsonValue,
       durationSec: input.durationSec,
       shotCount: input.shots.length,
-      status: 'generating',
     },
   })
+  if (updated.count !== 1) {
+    throw new Error(`EDIT_SCRIPT_TASK_OWNERSHIP_STALE:${input.chapterId}:${input.taskId}`)
+  }
 }
 
 async function notifyGenerationStep(
@@ -973,53 +973,6 @@ async function notifyGenerationStep(
 ) {
   if (!callback) return
   await callback(step)
-}
-
-async function markEditScriptFailed(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly chapterId: string
-  readonly initialDurationSeconds: number
-  readonly message: string
-}): Promise<void> {
-  await prisma.projectEditScript.upsert({
-    where: { chapterId: input.chapterId },
-    create: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      chapterId: input.chapterId,
-      corePlanJson: Prisma.JsonNull,
-      durationSec: input.initialDurationSeconds,
-      shotCount: 0,
-      status: 'failed',
-    },
-    update: {
-      corePlanJson: Prisma.JsonNull,
-      durationSec: input.initialDurationSeconds,
-      shotCount: 0,
-      status: 'failed',
-    },
-  })
-}
-
-async function markGeneratingEditScriptFailed(input: {
-  readonly projectId: string
-  readonly episodeId: string
-  readonly chapterId?: string
-  readonly message: string
-}): Promise<void> {
-  const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
-  await prisma.projectEditScript.updateMany({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      chapterId,
-      status: 'generating',
-    },
-    data: {
-      status: 'failed',
-    },
-  })
 }
 
 export async function readProjectEditScript(input: {
@@ -1139,41 +1092,42 @@ export async function approveProjectEpisodeEditScriptAssets(input: {
   readonly projectId: string
   readonly userId: string
   readonly episodeId: string
+  readonly client?: Prisma.TransactionClient
 }): Promise<EpisodeEditScriptAssetApprovalResult> {
-  const scripts = await prisma.projectEditScript.findMany({
-    where: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      project: {
-        userId: input.userId,
+  const approve = async (tx: Prisma.TransactionClient) => {
+    const scripts = await tx.projectEditScript.findMany({
+      where: {
+        projectId: input.projectId,
+        episodeId: input.episodeId,
+        project: {
+          userId: input.userId,
+        },
       },
-    },
-    include: {
-      requirements: {
-        orderBy: [
-          { kind: 'asc' },
-          { name: 'asc' },
-        ],
+      include: {
+        requirements: {
+          orderBy: [
+            { kind: 'asc' },
+            { name: 'asc' },
+          ],
+        },
       },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
-  if (scripts.length === 0) throw new ApiError('NOT_FOUND')
-
-  const notReady = scripts.flatMap((script) => {
-    const chapterId = script.chapterId ?? 'unknown'
-    return script.requirements
-      .filter((requirement) => normalizeStoredStatus(requirement.status) !== 'completed')
-      .map((requirement) => `${chapterId}:${requirement.name}`)
-  })
-  if (notReady.length > 0) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
-      message: `Edit script assets are not ready: ${notReady.join(', ')}`,
+      orderBy: { createdAt: 'asc' },
     })
-  }
+    if (scripts.length === 0) throw new ApiError('NOT_FOUND')
 
-  const updated = await prisma.$transaction(async (tx) => {
+    const notReady = scripts.flatMap((script) => {
+      const chapterId = script.chapterId ?? 'unknown'
+      return script.requirements
+        .filter((requirement) => normalizeStoredStatus(requirement.status) !== 'completed')
+        .map((requirement) => `${chapterId}:${requirement.name}`)
+    })
+    if (notReady.length > 0) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'EDIT_SCRIPT_ASSETS_NOT_READY',
+        message: `Edit script assets are not ready: ${notReady.join(', ')}`,
+      })
+    }
+
     await tx.projectEditScript.updateMany({
       where: {
         id: { in: scripts.map((script) => script.id) },
@@ -1198,22 +1152,25 @@ export async function approveProjectEpisodeEditScriptAssets(input: {
       },
       orderBy: { createdAt: 'asc' },
     })
-  })
-
+  }
+  const updated = input.client ? await approve(input.client) : await prisma.$transaction(approve)
   return {
     approvedCount: updated.length,
     scripts: await Promise.all(updated.map((script) => mapPersistedEditScript(script))),
   }
 }
 
-export async function confirmProjectEditStylePreview(input: ConfirmEditStylePreviewInput): Promise<EditStylePreviewPayload> {
-  const project = await prisma.project.findFirst({
-    where: { id: input.projectId, userId: input.userId },
-    select: { id: true },
-  })
-  if (!project) throw new ApiError('NOT_FOUND')
+export async function confirmProjectEditStylePreview(
+  input: ConfirmEditStylePreviewInput & { readonly client?: Prisma.TransactionClient },
+): Promise<EditStylePreviewPayload> {
+  const confirm = async (tx: Prisma.TransactionClient) => {
+    const project = await tx.project.findFirst({
+      where: { id: input.projectId, userId: input.userId },
+      select: { id: true },
+    })
+    if (!project) throw new ApiError('NOT_FOUND')
 
-  const selectedPreview = await prisma.projectEditStylePreview.findFirst({
+    const selectedPreview = await tx.projectEditStylePreview.findFirst({
     where: {
       id: input.stylePreviewId,
       projectId: input.projectId,
@@ -1226,39 +1183,36 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
         },
       },
     },
-  })
-  if (!selectedPreview) throw new ApiError('NOT_FOUND')
-
-  const editBible = selectedPreview.editBible
-  if (editBible.episodeId !== input.episodeId) {
-    throw new ApiError('NOT_FOUND')
-  }
-  if (selectedPreview.status !== 'completed' && selectedPreview.status !== 'confirmed') {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_STYLE_PREVIEW_NOT_READY',
-      message: 'Selected edit style preview image is not ready',
     })
-  }
-  if (!selectedPreview.imageKey) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_STYLE_PREVIEW_IMAGE_REQUIRED',
-      message: 'Selected edit style preview image is missing',
-    })
-  }
+    if (!selectedPreview) throw new ApiError('NOT_FOUND')
 
-  const allPreviewsTerminal = editBible.stylePreviews.length > 0
-    && editBible.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed' || preview.status === 'failed')
-  if (!allPreviewsTerminal) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_STYLE_PREVIEWS_NOT_READY',
-      message: 'All edit style preview image tasks must finish before confirmation',
-    })
-  }
+    const editBible = selectedPreview.editBible
+    if (editBible.episodeId !== input.episodeId) throw new ApiError('NOT_FOUND')
+    if (selectedPreview.status !== 'completed' && selectedPreview.status !== 'confirmed') {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'EDIT_STYLE_PREVIEW_NOT_READY',
+        message: 'Selected edit style preview image is not ready',
+      })
+    }
+    if (!selectedPreview.imageKey) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'EDIT_STYLE_PREVIEW_IMAGE_REQUIRED',
+        message: 'Selected edit style preview image is missing',
+      })
+    }
 
-  const selectedStyleBible = parseRequiredStyleBibleJson(selectedPreview.styleBibleJson)
-  const selectedAspectRatio = normalizeStylePreviewAspectRatio(input.aspectRatio)
-  await prisma.$transaction([
-    prisma.projectEditStylePreview.updateMany({
+    const allPreviewsTerminal = editBible.stylePreviews.length > 0
+      && editBible.stylePreviews.every((preview) => preview.status === 'completed' || preview.status === 'confirmed' || preview.status === 'failed')
+    if (!allPreviewsTerminal) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: 'EDIT_STYLE_PREVIEWS_NOT_READY',
+        message: 'All edit style preview image tasks must finish before confirmation',
+      })
+    }
+
+    const selectedStyleBible = parseRequiredStyleBibleJson(selectedPreview.styleBibleJson)
+    const selectedAspectRatio = normalizeStylePreviewAspectRatio(input.aspectRatio)
+    await tx.projectEditStylePreview.updateMany({
       where: {
         editBibleId: editBible.id,
         status: 'confirmed',
@@ -1266,32 +1220,34 @@ export async function confirmProjectEditStylePreview(input: ConfirmEditStylePrev
       data: {
         status: 'completed',
       },
-    }),
-    prisma.projectEditStylePreview.update({
+    })
+    await tx.projectEditStylePreview.update({
       where: { id: selectedPreview.id },
       data: {
         status: 'confirmed',
         errorMessage: null,
       },
-    }),
-    prisma.projectEditBible.update({
+    })
+    await tx.projectEditBible.update({
       where: { id: editBible.id },
       data: {
         styleBibleJson: styleBibleToJsonValue(selectedStyleBible),
       },
-    }),
-    prisma.project.update({
+    })
+    await tx.project.update({
       where: { id: project.id },
       data: {
         videoRatio: selectedAspectRatio,
       },
-    }),
-  ])
+    })
 
-  const next = await prisma.projectEditStylePreview.findUnique({
-    where: { id: selectedPreview.id },
-  })
-  if (!next) throw new ApiError('NOT_FOUND')
+    const next = await tx.projectEditStylePreview.findUnique({
+      where: { id: selectedPreview.id },
+    })
+    if (!next) throw new ApiError('NOT_FOUND')
+    return next
+  }
+  const next = input.client ? await confirm(input.client) : await prisma.$transaction(confirm)
   return mapPersistedStylePreview(next)
 }
 
@@ -1565,46 +1521,8 @@ export async function prepareProjectEditStylePreviewCandidates(input: {
   return { bibleId: bible.id, candidates }
 }
 
-export async function markProjectEditStylePreviewGenerationFailed(input: {
-  readonly bibleId: string
-  readonly message: string
-}) {
-  await prisma.$transaction([
-    prisma.projectEditBible.update({
-      where: { id: input.bibleId },
-      data: {
-        diagnosticsJson: {
-          error: input.message,
-          stage: 'style_preview_generation',
-        },
-      },
-    }),
-    prisma.projectEditStylePreview.updateMany({
-      where: {
-        editBibleId: input.bibleId,
-        status: { in: ['pending', 'generating'] },
-      },
-      data: {
-        status: 'failed',
-        errorMessage: input.message,
-      },
-    }),
-  ])
-}
-
 export async function generateProjectEditScript(input: GenerateEditScriptInput): Promise<EditScriptPayload> {
-  try {
-    return await generateProjectEditScriptInternal(input)
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : String(caught)
-    await markGeneratingEditScriptFailed({
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      chapterId: input.chapterId,
-      message,
-    })
-    throw caught
-  }
+  return await generateProjectEditScriptInternal(input)
 }
 
 async function generateProjectEditScriptInternal(input: GenerateEditScriptInput): Promise<EditScriptPayload> {
@@ -1625,6 +1543,20 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
   ])
   if (!episode || !project) throw new ApiError('NOT_FOUND')
   const chapterId = await resolveEditChapterId(input.episodeId, input.chapterId)
+  const completedOwnedByThisTask = await prisma.projectEditScript.findFirst({
+    where: { chapterId, generationTaskId: input.taskId, status: 'ready' },
+    select: { id: true },
+  })
+  if (completedOwnedByThisTask) {
+    const completed = await getPersistedEditScript(
+      input.projectId,
+      input.episodeId,
+      completedOwnedByThisTask.id,
+      chapterId,
+    )
+    if (!completed) throw new Error(`EDIT_SCRIPT_COMPLETED_RESOURCE_MISSING:${completedOwnedByThisTask.id}`)
+    return await mapPersistedEditScript(completed)
+  }
   const effectiveVideoRatio = input.videoRatio ?? project.videoRatio
   if (input.videoRatio && input.videoRatio !== project.videoRatio) {
     await prisma.project.update({
@@ -1653,6 +1585,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     episodeId: input.episodeId,
     chapterId,
     initialDurationSeconds: scriptSource.targetDurationSec,
+    taskId: input.taskId,
   })
   await notifyGenerationStep(input.onGenerationStepPersisted, {
     stage: 'edit_script_prepare',
@@ -1660,8 +1593,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     progress: 18,
   })
 
-  try {
-    const knownAssets = await loadKnownPlanAssets(input.projectId)
+  const knownAssets = await loadKnownPlanAssets(input.projectId)
     const structure = await runStructuredPromptStep({
       userId: input.userId,
       projectId: input.projectId,
@@ -1707,6 +1639,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       durationSec: structure.durationSec,
       shots: structure.shots,
       generationSegments: structure.generationSegments,
+      taskId: input.taskId,
     })
     await notifyGenerationStep(input.onGenerationStepPersisted, {
       stage: 'edit_script_primary',
@@ -1717,22 +1650,13 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     const core = structure
 
     const saved = await prisma.$transaction(async (tx) => {
-      const script = await tx.projectEditScript.upsert({
-        where: { chapterId },
-        create: {
-          projectId: input.projectId,
-          episodeId: input.episodeId,
+      const projected = await tx.projectEditScript.updateMany({
+        where: {
           chapterId,
-          corePlanJson: {
-            shots: core.shots,
-            generationSegments: core.generationSegments,
-          } as unknown as Prisma.InputJsonValue,
-          durationSec: core.durationSec,
-          shotCount: core.shotCount,
-          status: 'ready',
-          assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_PENDING,
+          generationTaskId: input.taskId,
+          status: 'generating',
         },
-        update: {
+        data: {
           corePlanJson: {
             shots: core.shots,
             generationSegments: core.generationSegments,
@@ -1741,8 +1665,13 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
           shotCount: core.shotCount,
           status: 'ready',
           assetReviewStatus: EDIT_SCRIPT_ASSET_REVIEW_PENDING,
+          generationTaskId: input.taskId,
         },
       })
+      if (projected.count !== 1) {
+        throw new Error(`EDIT_SCRIPT_TASK_OWNERSHIP_STALE:${chapterId}:${input.taskId}`)
+      }
+      const script = await tx.projectEditScript.findUniqueOrThrow({ where: { chapterId } })
       await tx.projectEditChapter.update({
         where: { id: chapterId },
         data: {
@@ -1802,18 +1731,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       progress: 92,
     })
 
-    return await mapPersistedEditScript(saved)
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : String(caught)
-    await markEditScriptFailed({
-      projectId: input.projectId,
-      episodeId: input.episodeId,
-      chapterId,
-      initialDurationSeconds: scriptSource.targetDurationSec,
-      message,
-    })
-    throw caught
-  }
+  return await mapPersistedEditScript(saved)
 }
 
 export async function generateProjectEditShotExecutionPlan(input: GenerateEditShotExecutionPlanInput): Promise<EditShotExecutionPlanPayload> {
@@ -1847,6 +1765,33 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
   if (!editScriptId) {
     throw new Error(`EDIT_SCRIPT_ID_REQUIRED:${editScript.id}`)
   }
+  const completedByThisTask = await prisma.projectEditShotExecutionPlan.findFirst({
+    where: {
+      chapterId,
+      editScriptId,
+      generationTaskId: input.taskId,
+      status: 'ready',
+    },
+  })
+  if (completedByThisTask) return await mapPersistedEditShotExecutionPlan(completedByThisTask)
+  await prisma.projectEditShotExecutionPlan.upsert({
+    where: { chapterId },
+    create: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      chapterId,
+      editScriptId,
+      executionPlanJson: {} as Prisma.InputJsonValue,
+      status: 'generating',
+      generationTaskId: input.taskId,
+    },
+    update: {
+      editScriptId,
+      executionPlanJson: {} as Prisma.InputJsonValue,
+      status: 'generating',
+      generationTaskId: input.taskId,
+    },
+  })
   const editBible = await prisma.projectEditBible.findUnique({
     where: { episodeId: input.episodeId },
     select: { bibleJson: true },
@@ -1896,21 +1841,22 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     shots: parsed.shots,
     generationSegmentExecutions: parsed.generationSegmentExecutions,
   }
-  const saved = await prisma.projectEditShotExecutionPlan.upsert({
-    where: { chapterId },
-    create: {
-      projectId: input.projectId,
-      episodeId: input.episodeId,
+  const projected = await prisma.projectEditShotExecutionPlan.updateMany({
+    where: {
       chapterId,
       editScriptId: editScript.id,
-      executionPlanJson: executionPlanJson as unknown as Prisma.InputJsonValue,
-      status: 'ready',
+      generationTaskId: input.taskId,
+      status: 'generating',
     },
-    update: {
-      editScriptId: editScript.id,
+    data: {
       executionPlanJson: executionPlanJson as unknown as Prisma.InputJsonValue,
       status: 'ready',
+      generationTaskId: input.taskId,
     },
   })
+  if (projected.count !== 1) {
+    throw new Error(`EDIT_SHOT_EXECUTION_PLAN_TASK_OWNERSHIP_STALE:${editScript.id}:${input.taskId}`)
+  }
+  const saved = await prisma.projectEditShotExecutionPlan.findUniqueOrThrow({ where: { chapterId } })
   return await mapPersistedEditShotExecutionPlan(saved)
 }

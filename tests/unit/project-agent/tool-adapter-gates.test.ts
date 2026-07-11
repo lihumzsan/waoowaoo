@@ -14,7 +14,40 @@ vi.mock('@/lib/operations/registry', () => ({
   createProjectAgentOperationRegistry: () => registryState.registry,
 }))
 
-import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    $transaction: vi.fn(async (work: (transaction: Record<string, never>) => Promise<unknown>) =>
+      await work({})),
+  },
+}))
+
+vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
+  assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
+  assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
+  runWithProjectAgentOperationExecutionFence: vi.fn(async (
+    _fence: unknown,
+    work: () => Promise<unknown>,
+  ) => await work()),
+}))
+
+import {
+  executeProjectAgentOperationFromTool as executeProjectAgentOperationFromToolAuthority,
+} from '@/lib/adapters/tools/execute-project-agent-operation'
+
+type ToolInvocation = Parameters<typeof executeProjectAgentOperationFromToolAuthority>[0]
+
+async function executeProjectAgentOperationFromTool(
+  params: Omit<ToolInvocation, 'executionFence'>,
+) {
+  return await executeProjectAgentOperationFromToolAuthority({
+    ...params,
+    executionFence: {
+      runFence: { runId: 'run-test', runVersion: 1, eventSeq: '1' },
+      signal: new AbortController().signal,
+    },
+  })
+}
 
 function buildWriter() {
   return {
@@ -63,6 +96,39 @@ describe('executeProjectAgentOperationFromTool gates', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('OPERATION_PREREQUISITE_MISSING')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('[api-only operation through tool] -> returns OPERATION_NOT_ALLOWED before parsing or execution', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    registryState.registry = {
+      api_only_op: makeTestOperation({
+        id: 'api_only_op',
+        channels: { tool: false, api: true },
+        intent: 'query',
+        effects: EFFECTS_NONE,
+        inputSchema: z.object({ requiredValue: z.string() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute,
+      }),
+    }
+
+    const result = await executeProjectAgentOperationFromTool({
+      request: buildRequest(),
+      operationId: 'api_only_op',
+      projectId: 'project-1',
+      userId: 'user-1',
+      context: {},
+      assistantPermissionMode: 'auto',
+      source: 'assistant-panel',
+      writer: buildWriter(),
+      input: {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('OPERATION_NOT_ALLOWED')
+    expect(result.error.details).toEqual(expect.objectContaining({ channel: 'tool' }))
     expect(execute).not.toHaveBeenCalled()
   })
 
@@ -169,7 +235,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
         confirmation: { kind: 'none', required: false },
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
-        execute,
+        executeInTransaction: async () => await execute(),
       }),
     }
 
@@ -199,7 +265,7 @@ describe('executeProjectAgentOperationFromTool gates', () => {
         confirmation: { kind: 'destructive', required: true },
         inputSchema: z.object({ confirmed: z.boolean().optional() }),
         outputSchema: z.object({ ok: z.boolean() }),
-        execute,
+        executeInTransaction: async () => await execute(),
       }),
     }
 

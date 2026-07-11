@@ -77,10 +77,6 @@ vi.mock('@/lib/task/batch', () => ({
   readLatestFailedTaskBatchKeyForTarget: vi.fn(async () => null),
 }))
 
-vi.mock('@/lib/operations/planning', () => ({
-  compensateSubmittedTasks: vi.fn(async () => undefined),
-}))
-
 vi.mock('@/lib/edit-script/service', () => ({
   generateProjectEditScriptAssets: vi.fn(),
 }))

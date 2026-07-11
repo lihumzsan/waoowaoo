@@ -1,6 +1,7 @@
 export {
   appendProjectAgentEvents,
   appendProjectAgentEventsInTransaction,
+  appendProjectAgentSessionEventInTransaction,
   type ProjectAgentEventTransactionClient,
 } from './append'
 export { getCurrentProjectAgentActivity } from './activity'
@@ -11,4 +12,5 @@ export type {
   ProjectAgentEventInput,
   ProjectAgentEventPayload,
   ProjectAgentEventScope,
+  ProjectAgentSessionEventPayload,
 } from './types'

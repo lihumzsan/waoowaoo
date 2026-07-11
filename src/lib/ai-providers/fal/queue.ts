@@ -1,5 +1,5 @@
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
+import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import { buildFalQueueUrl } from './base-url'
 
@@ -27,6 +27,7 @@ export async function submitFalTask(endpoint: string, input: FalQueueInput, apiK
       Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify(input),
+    policy: RETRY_POLICY.providerSubmit,
     // Stryker disable next-line StringLiteral: retry scope is observability metadata, not provider behavior.
     scope: `fal:submit:${endpoint}`,
     fetchFn: fetchWithProviderProxy,

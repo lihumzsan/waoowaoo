@@ -7,22 +7,19 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { submitOperationTask, submitOperationTaskBatch } from '@/lib/operations/submit-operation-task'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import { createTaskBatchKey } from '@/lib/task/batch'
-import { compensateSubmittedTasks } from '@/lib/operations/planning'
 
 const finalRenderInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
   bgmVolume: z.number().min(0).max(1).optional(),
 }).passthrough()
 
 const renderChaptersInputSchema = z.object({
-  confirmed: z.boolean().optional(),
   episodeId: z.string().min(1).optional(),
   chapterId: z.string().trim().min(1).optional(),
   chapterIds: z.array(z.string().trim().min(1)).min(1).optional(),
@@ -106,6 +103,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: true,
         longRunning: true,
       },
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -121,14 +119,12 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
           ...(input.chapterIds ? { chapterIds: input.chapterIds } : input.chapterId ? { chapterIds: [input.chapterId] } : {}),
         })
         const batchKey = createTaskBatchKey('render_chapters')
-        const submitted: Array<{ readonly chapterId: string; readonly taskId: string }> = []
-        try {
-          for (const chapter of chapters) {
-            const payload: Record<string, unknown> = {
+        const submissions = chapters.map((chapter) => {
+          const payload: Record<string, unknown> = {
               episodeId,
               chapterId: chapter.id,
             }
-            const result = await submitOperationTask({
+          return {
               request: ctx.request,
               userId: ctx.userId,
               projectId: ctx.projectId,
@@ -142,16 +138,14 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
               dedupeKey: `chapter_render:${ctx.projectId}:${episodeId}:${chapter.id}`,
               batchKey,
               billingInfo: null,
-            })
-            submitted.push({
-              chapterId: chapter.id,
-              taskId: result.taskId,
-            })
-          }
-        } catch (error) {
-          await compensateSubmittedTasks(submitted.map((item) => item.taskId))
-          throw error
-        }
+            }
+        })
+        const submittedResults = await submitOperationTaskBatch(submissions)
+        const submitted = chapters.map((chapter, index) => {
+          const result = submittedResults[index]
+          if (!result) throw new Error(`RENDER_CHAPTER_TASK_RESULT_MISSING:${chapter.id}`)
+          return { chapterId: chapter.id, taskId: result.taskId }
+        })
         const output = batchSubmitOutput.parse({
           success: true,
           async: true,
@@ -192,6 +186,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
         externalSideEffects: true,
         longRunning: true,
       },
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,

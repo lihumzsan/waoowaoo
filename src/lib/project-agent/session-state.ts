@@ -1,10 +1,9 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentLocale } from './locale'
 import type { EditFirstChoiceType } from './edit-first-choice-tools'
 import { parseProjectAgentChoiceOffer } from './choice-offer'
 import type {
-  EditStylePreviewGenerationPartData,
   ProjectAgentChoiceCardPartData,
   ProjectAssistantId,
 } from './types'
@@ -17,6 +16,7 @@ import {
   type ProjectAgentRunRecord,
   type ProjectAgentRunStatus,
 } from './runs'
+import { normalizeProjectAgentRunStatus } from './run-state-machine'
 import {
   listProjectAgentSessionWaits,
   type ProjectAgentSessionWait,
@@ -31,6 +31,8 @@ import {
 } from '@/lib/project-workflow/edit-first'
 import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
+import { buildProjectAssistantScopeRef } from './persistence'
+import { readProjectAgentSessionEventWatermark } from './session-event'
 
 interface ProjectAgentSessionScopeInput {
   projectId: string
@@ -80,30 +82,198 @@ export interface ProjectAgentSessionTask {
   status: TaskStatus | string
 }
 
-export interface ProjectAgentSessionStylePreviewGeneration {
-  key: string
-  data: EditStylePreviewGenerationPartData
-}
-
 export interface ProjectAgentSessionState {
   currentRun: ProjectAgentSessionRun | null
   currentActivity: ProjectAgentSessionActivity | null
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
-  activeStylePreviewGeneration: ProjectAgentSessionStylePreviewGeneration | null
   editFirstWorkflow: EditFirstWorkflowState
 }
 
-function isActiveRunStatus(status: ProjectAgentRunStatus): boolean {
-  return status === 'running'
-    || status === 'awaiting_approval'
-    || status === 'awaiting_choice'
-    || status === 'awaiting_task'
+export interface ProjectAgentSessionSnapshot {
+  sessionState: ProjectAgentSessionState
+  eventWatermark: string
 }
 
-function resolveCurrentRun(runs: readonly ProjectAgentRunRecord[]): ProjectAgentRunRecord | null {
-  return runs.find((run) => isActiveRunStatus(run.status)) ?? runs[0] ?? null
+type ProjectAgentSessionRunCandidate = Pick<
+  ProjectAgentRunRecord,
+  'id' | 'status' | 'controlKind' | 'errorCode' | 'errorMessage'
+>
+
+function resolveCurrentRun(params: {
+  activeRuns: readonly ProjectAgentSessionRunCandidate[]
+  recentRuns: readonly ProjectAgentSessionRunCandidate[]
+}): ProjectAgentSessionRunCandidate | null {
+  if (params.activeRuns.length > 1) {
+    throw new Error(`PROJECT_AGENT_SESSION_ACTIVE_RUN_CONFLICT:${params.activeRuns.map((run) => run.id).join(',')}`)
+  }
+  return params.activeRuns[0] ?? params.recentRuns[0] ?? null
+}
+
+function normalizeSessionRunControlKind(value: string): ProjectAgentRunRecord['controlKind'] {
+  if (
+    value === 'user_turn'
+    || value === 'approval_response'
+    || value === 'choice_response'
+    || value === 'task_follow_up'
+  ) return value
+  throw new Error(`PROJECT_AGENT_SESSION_RUN_CONTROL_KIND_INVALID:${value}`)
+}
+
+async function readUniqueActiveProjectAgentRun(
+  input: ProjectAgentSessionScopeInput & { assistantId: ProjectAssistantId },
+): Promise<ProjectAgentSessionRunCandidate | null> {
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: input.projectId,
+    episodeId: input.episodeId ?? null,
+  })
+  const rows = await prisma.projectAgentRun.findMany({
+    where: {
+      projectId: input.projectId,
+      userId: input.userId,
+      assistantId: input.assistantId,
+      scopeRef,
+      status: { in: ['running', 'awaiting_approval', 'awaiting_choice', 'awaiting_task'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      status: true,
+      controlKind: true,
+      errorCode: true,
+      errorMessage: true,
+    },
+  })
+  if (rows.length > 1) {
+    throw new Error(`PROJECT_AGENT_SESSION_ACTIVE_RUN_CONFLICT:${rows.map((row) => row.id).join(',')}`)
+  }
+  const run = rows[0]
+  if (!run) return null
+  return {
+    id: run.id,
+    status: normalizeProjectAgentRunStatus(run.status),
+    controlKind: normalizeSessionRunControlKind(run.controlKind),
+    errorCode: run.errorCode,
+    errorMessage: run.errorMessage,
+  }
+}
+
+function isOpenSessionWait(wait: ProjectAgentSessionWait): boolean {
+  return wait.status === 'pending' || wait.status === 'claimed'
+}
+
+const SESSION_FACT_RUN_MISMATCH_CODES = {
+  WAIT: 'PROJECT_AGENT_SESSION_WAIT_RUN_MISMATCH',
+  INTERRUPTION: 'PROJECT_AGENT_SESSION_INTERRUPTION_RUN_MISMATCH',
+  ACTIVITY: 'PROJECT_AGENT_SESSION_ACTIVITY_RUN_MISMATCH',
+} as const
+
+type ProjectAgentSessionOpenFact = {
+  kind: keyof typeof SESSION_FACT_RUN_MISMATCH_CODES
+  id: string
+  runId: string | null
+}
+
+async function readOpenProjectAgentSessionFacts(
+  input: ProjectAgentSessionScopeInput & { assistantId: ProjectAssistantId },
+): Promise<ProjectAgentSessionOpenFact[]> {
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: input.projectId,
+    episodeId: input.episodeId ?? null,
+  })
+  return await prisma.$queryRaw<ProjectAgentSessionOpenFact[]>(Prisma.sql`
+    SELECT 'WAIT' AS kind, id, runId
+    FROM project_agent_waits
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${input.assistantId}
+      AND scopeRef = ${scopeRef}
+      AND status IN ('pending', 'claimed')
+    UNION ALL
+    SELECT 'INTERRUPTION' AS kind, id, runId
+    FROM project_agent_interruptions
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${input.assistantId}
+      AND scopeRef = ${scopeRef}
+      AND status = 'pending'
+    UNION ALL
+    SELECT 'ACTIVITY' AS kind, id, runId
+    FROM project_agent_activities
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND assistantId = ${input.assistantId}
+      AND scopeRef = ${scopeRef}
+      AND status IN ('running', 'waiting')
+  `)
+}
+
+function resolveRunOwnedSessionFacts(params: {
+  run: ProjectAgentSessionRunCandidate | null
+  waits: readonly ProjectAgentSessionWait[]
+  interruption: ProjectAgentInterruptionSnapshot | null
+  activity: ProjectAgentActivitySnapshot | null
+  openFacts: readonly ProjectAgentSessionOpenFact[]
+}): {
+  waits: ProjectAgentSessionWait[]
+  interruption: ProjectAgentInterruptionSnapshot | null
+  activity: ProjectAgentActivitySnapshot | null
+} {
+  const openWaits = params.waits.filter(isOpenSessionWait)
+  const projectedFacts: ProjectAgentSessionOpenFact[] = openWaits.map((wait) => ({
+    kind: 'WAIT',
+    id: wait.waitId,
+    runId: wait.runId,
+  }))
+  if (params.interruption) {
+    projectedFacts.push({
+      kind: 'INTERRUPTION',
+      id: params.interruption.id,
+      runId: params.interruption.runId,
+    })
+  }
+  if (params.activity) {
+    projectedFacts.push({
+      kind: 'ACTIVITY',
+      id: params.activity.activityId,
+      runId: params.activity.runId,
+    })
+  }
+  const factRunIds: ProjectAgentSessionOpenFact[] = [
+    ...params.openFacts,
+    ...projectedFacts,
+  ]
+  if (!params.run) {
+    if (factRunIds.length > 0) {
+      const fact = factRunIds[0]
+      throw new Error(`PROJECT_AGENT_SESSION_${fact.kind}_WITHOUT_RUN:${fact.id}`)
+    }
+    return { waits: [], interruption: null, activity: null }
+  }
+  for (const fact of factRunIds) {
+    if (fact.runId !== params.run.id) {
+      throw new Error(
+        `${SESSION_FACT_RUN_MISMATCH_CODES[fact.kind]}:${fact.id}:${fact.runId ?? 'null'}:${params.run.id}`,
+      )
+    }
+  }
+  if (
+    params.run.status === 'completed'
+    || params.run.status === 'failed'
+    || params.run.status === 'cancelled'
+  ) {
+    if (factRunIds.length > 0) {
+      const fact = factRunIds[0]
+      throw new Error(`PROJECT_AGENT_SESSION_TERMINAL_RUN_HAS_OPEN_${fact.kind}:${params.run.id}:${fact.id}`)
+    }
+    return { waits: [], interruption: null, activity: null }
+  }
+  return {
+    waits: openWaits,
+    interruption: params.interruption,
+    activity: params.activity,
+  }
 }
 
 function readRecord(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
@@ -211,109 +381,7 @@ async function listActiveTasksForWaits(params: {
   }))
 }
 
-function isStylePreviewKey(value: string): value is EditStylePreviewGenerationPartData['items'][number]['styleKey'] {
-  return /^style_[abc](?:_[2-9]\d*)?$/.test(value)
-}
-
-function isAspectRatio(value: string | null): value is NonNullable<EditStylePreviewGenerationPartData['items'][number]['aspectRatio']> {
-  return value === '9:16' || value === '16:9' || value === '21:9'
-}
-
-function resolveStylePreviewAgentRunId(params: {
-  run: ProjectAgentSessionRun | null
-  activity: ProjectAgentSessionActivity | null
-}): string | null {
-  if (!params.run || !params.activity || params.activity.runId !== params.run.runId) return null
-  if (
-    params.activity.type === 'waiting_task'
-    && params.activity.operationId === 'generate_edit_style_previews'
-  ) return params.run.runId
-  if (
-    params.activity.type === 'awaiting_choice'
-    && params.activity.sourceOperationId === 'generate_edit_style_previews'
-    && params.activity.choiceType === 'style'
-  ) return params.run.runId
-  return null
-}
-
-async function buildActiveStylePreviewGeneration(params: {
-  projectId: string
-  userId: string
-  episodeId?: string | null
-  run: ProjectAgentSessionRun | null
-  activity: ProjectAgentSessionActivity | null
-}): Promise<ProjectAgentSessionStylePreviewGeneration | null> {
-  if (!params.episodeId) return null
-  const editBible = await prisma.projectEditBible.findFirst({
-    where: {
-      episodeId: params.episodeId,
-      episode: {
-        projectId: params.projectId,
-        project: {
-          userId: params.userId,
-        },
-      },
-    },
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      id: true,
-      episodeId: true,
-      episode: {
-        select: {
-          projectId: true,
-        },
-      },
-      stylePreviews: {
-        orderBy: [
-          { createdAt: 'asc' },
-          { styleKey: 'asc' },
-        ],
-        select: {
-          id: true,
-          styleKey: true,
-          title: true,
-          summary: true,
-          taskId: true,
-          aspectRatio: true,
-          status: true,
-        },
-      },
-    },
-  })
-  if (!editBible) return null
-  if (editBible.stylePreviews.some((preview) => preview.status === 'confirmed')) return null
-  const agentRunId = resolveStylePreviewAgentRunId({
-    run: params.run,
-    activity: params.activity,
-  })
-  if (!agentRunId) return null
-  const items = editBible.stylePreviews.flatMap((preview): EditStylePreviewGenerationPartData['items'] => {
-    // taskId 缺失（追加候选刚建行、尚未回填）也要收录，否则停靠卡会停在旧的候选数、看不到新生成的。
-    if (!isStylePreviewKey(preview.styleKey)) return []
-    return [{
-      id: preview.id,
-      styleKey: preview.styleKey,
-      title: preview.title,
-      summary: preview.summary,
-      ...(preview.taskId ? { taskId: preview.taskId } : {}),
-      ...(isAspectRatio(preview.aspectRatio) ? { aspectRatio: preview.aspectRatio } : {}),
-    }]
-  })
-  if (items.length === 0) return null
-  return {
-    key: `bible:${editBible.id}:style-previews`,
-    data: {
-      operationId: 'generate_edit_style_previews',
-      agentRunId,
-      projectId: editBible.episode.projectId,
-      episodeId: editBible.episodeId,
-      bibleId: editBible.id,
-      items,
-    },
-  }
-}
-
-export async function getProjectAgentSessionState(
+async function buildProjectAgentSessionState(
   input: ProjectAgentSessionScopeInput,
 ): Promise<ProjectAgentSessionState> {
   const assistantId = input.assistantId ?? 'workspace-command'
@@ -321,18 +389,25 @@ export async function getProjectAgentSessionState(
     ...input,
     assistantId,
   }
-  const [workflow, runs, waits, pendingInterruption] = await Promise.all([
+  const [workflow, activeRun, recentRuns, waits, pendingInterruption, openFacts] = await Promise.all([
     resolveEditFirstWorkflowState({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
+    }),
+    readUniqueActiveProjectAgentRun({
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
+      locale: input.locale,
     }),
     listRecentProjectAgentRunsForScope({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       assistantId,
-      limit: 10,
+      limit: 1,
     }),
     listProjectAgentSessionWaits({
       projectId: input.projectId,
@@ -347,25 +422,39 @@ export async function getProjectAgentSessionState(
       episodeId: input.episodeId ?? null,
       assistantId,
     }),
-  ])
-  const run = resolveCurrentRun(runs)
-  const [pendingInteraction, currentActivity, activeTasks] = await Promise.all([
-    buildPendingInteraction({
-      scope,
-      workflow,
-      interruption: pendingInterruption,
-    }),
-    getCurrentProjectAgentActivity({
+    readOpenProjectAgentSessionFacts({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       assistantId,
-      ...(run ? { runId: run.id } : {}),
+      locale: input.locale,
+    }),
+  ])
+  const run = resolveCurrentRun({ activeRuns: activeRun ? [activeRun] : [], recentRuns })
+  const currentActivity = await getCurrentProjectAgentActivity({
+    projectId: input.projectId,
+    userId: input.userId,
+    episodeId: input.episodeId ?? null,
+    assistantId,
+    ...(run ? { runId: run.id } : {}),
+  })
+  const facts = resolveRunOwnedSessionFacts({
+    run,
+    waits,
+    interruption: pendingInterruption,
+    activity: currentActivity,
+    openFacts,
+  })
+  const [pendingInteraction, activeTasks] = await Promise.all([
+    buildPendingInteraction({
+      scope,
+      workflow,
+      interruption: facts.interruption,
     }),
     listActiveTasksForWaits({
       projectId: input.projectId,
       userId: input.userId,
-      waits,
+      waits: facts.waits,
     }),
   ])
   const currentRun: ProjectAgentSessionRun | null = run
@@ -377,28 +466,38 @@ export async function getProjectAgentSessionState(
       errorMessage: run.errorMessage ?? null,
     }
     : null
-  const stylePreviewInteractionPending = (
-    pendingInteraction?.kind === 'choice' && pendingInteraction.choiceType === 'style'
-  ) || (
-    pendingInteraction?.kind === 'approval' && pendingInteraction.operationId === 'generate_edit_style_previews'
-  )
-  const activeStylePreviewGeneration = stylePreviewInteractionPending
-    ? null
-    : await buildActiveStylePreviewGeneration({
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: input.episodeId ?? null,
-        run: currentRun,
-        activity: currentActivity,
-      })
-
   return {
     currentRun,
-    currentActivity,
+    currentActivity: facts.activity,
     pendingInteraction,
-    activeWaits: waits,
+    activeWaits: facts.waits,
     activeTasks,
-    activeStylePreviewGeneration,
     editFirstWorkflow: workflow,
   }
+}
+
+export async function getProjectAgentSessionSnapshot(
+  input: ProjectAgentSessionScopeInput,
+): Promise<ProjectAgentSessionSnapshot> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const before = await readProjectAgentSessionEventWatermark({
+      ...input,
+      assistantId: input.assistantId ?? 'workspace-command',
+    })
+    const sessionState = await buildProjectAgentSessionState(input)
+    const after = await readProjectAgentSessionEventWatermark({
+      ...input,
+      assistantId: input.assistantId ?? 'workspace-command',
+    })
+    if (before === after) {
+      return { sessionState, eventWatermark: after }
+    }
+  }
+  throw new Error('PROJECT_AGENT_SESSION_SNAPSHOT_UNSTABLE')
+}
+
+export async function getProjectAgentSessionState(
+  input: ProjectAgentSessionScopeInput,
+): Promise<ProjectAgentSessionState> {
+  return await buildProjectAgentSessionState(input)
 }

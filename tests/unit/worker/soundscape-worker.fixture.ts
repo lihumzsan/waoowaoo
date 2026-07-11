@@ -22,6 +22,7 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
   },
   projectEditSoundscape: {
+    findFirst: vi.fn(async (): Promise<unknown> => null),
     findUnique: vi.fn(),
     upsert: vi.fn(),
   },

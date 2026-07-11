@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
 import { createProjectAgentWait } from '@/lib/project-agent/waits'
+import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
@@ -95,5 +96,88 @@ describe('system - Assistant awaiting-task reload', () => {
       status: TASK_STATUS.QUEUED,
     }])
     expect(reloaded.pendingInteraction).toBeNull()
+  })
+
+  it('rejects two persisted active Runs instead of selecting one', async () => {
+    const seeded = await seedMinimalDomainState()
+    const scopeRef = `episode:${seeded.episode.id}`
+    await prisma.projectAgentRun.createMany({
+      data: [
+        {
+          projectId: seeded.project.id,
+          userId: seeded.user.id,
+          episodeId: seeded.episode.id,
+          assistantId: 'workspace-command',
+          scopeRef,
+          requestId: `system-conflict-a:${seeded.project.id}`,
+          status: 'running',
+          controlKind: 'user_turn',
+        },
+        {
+          projectId: seeded.project.id,
+          userId: seeded.user.id,
+          episodeId: seeded.episode.id,
+          assistantId: 'workspace-command',
+          scopeRef,
+          requestId: `system-conflict-b:${seeded.project.id}`,
+          status: 'awaiting_task',
+          controlKind: 'approval_response',
+        },
+      ],
+    })
+
+    await expect(getProjectAgentSessionState({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow('PROJECT_AGENT_SESSION_ACTIVE_RUN_CONFLICT')
+  })
+
+  it('rejects an open Activity owned by a different Run', async () => {
+    const seeded = await seedMinimalDomainState()
+    const activeRun = await createProjectAgentRun({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      requestId: `system-active:${seeded.project.id}`,
+      controlKind: 'user_turn',
+    })
+    const foreignRun = await prisma.projectAgentRun.create({
+      data: {
+        projectId: seeded.project.id,
+        userId: seeded.user.id,
+        episodeId: seeded.episode.id,
+        assistantId: 'workspace-command',
+        scopeRef: `episode:${seeded.episode.id}`,
+        requestId: `system-foreign:${seeded.project.id}`,
+        status: 'completed',
+        controlKind: 'user_turn',
+      },
+    })
+    const foreignActivity = await prisma.projectAgentActivity.create({
+      data: {
+        runId: foreignRun.id,
+        projectId: seeded.project.id,
+        userId: seeded.user.id,
+        episodeId: seeded.episode.id,
+        assistantId: 'workspace-command',
+        scopeRef: `episode:${seeded.episode.id}`,
+        type: 'operation',
+        status: 'running',
+        operationId: 'generate_character_image',
+      },
+    })
+
+    await expect(getProjectAgentSessionState({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow(
+      `PROJECT_AGENT_SESSION_ACTIVITY_RUN_MISMATCH:${foreignActivity.id}:${foreignRun.id}:${activeRun.id}`,
+    )
   })
 })

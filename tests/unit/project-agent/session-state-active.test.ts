@@ -27,7 +27,6 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
@@ -132,5 +131,111 @@ describe('project agent session-state', () => {
       targetId: 'location-image-1',
       status: 'processing',
     }])
+  })
+
+  it('fails explicitly instead of choosing one of multiple active Runs', async () => {
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([
+      {
+        id: 'run-1',
+        status: 'awaiting_task',
+        controlKind: 'approval_response',
+        errorCode: null,
+        errorMessage: null,
+      },
+      {
+        id: 'run-2',
+        status: 'running',
+        controlKind: 'user_turn',
+        errorCode: null,
+        errorMessage: null,
+      },
+    ])
+
+    await expect(getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow('PROJECT_AGENT_SESSION_ACTIVE_RUN_CONFLICT:run-1,run-2')
+  })
+
+  it('fails explicitly when a pending Interruption belongs to a different Run', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { kind: 'INTERRUPTION', id: 'interruption-foreign', runId: 'run-foreign' },
+    ])
+    interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
+      id: 'interruption-foreign',
+      runId: 'run-foreign',
+      activityId: 'activity-foreign',
+      type: 'approval',
+      status: 'pending',
+      operationId: 'generate_edit_script_assets',
+      approvalId: 'approval-foreign',
+      toolCallId: 'tool-foreign',
+      payload: {},
+    })
+
+    await expect(getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow(
+      'PROJECT_AGENT_SESSION_INTERRUPTION_RUN_MISMATCH:interruption-foreign:run-foreign:run-1',
+    )
+  })
+
+  it('fails explicitly when an open Wait belongs to a different Run', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { kind: 'WAIT', id: 'wait-foreign', runId: 'run-foreign' },
+    ])
+    waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([{
+      runId: 'run-foreign',
+      waitId: 'wait-foreign',
+      operationId: 'generate_edit_script_assets',
+      taskIds: ['task-1'],
+      failedTaskIds: [],
+      status: 'pending',
+      followUpMode: 'resume_agent',
+      terminalStatus: null,
+      total: 1,
+      claimId: null,
+    }])
+
+    await expect(getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow('PROJECT_AGENT_SESSION_WAIT_RUN_MISMATCH:wait-foreign:run-foreign:run-1')
+  })
+
+  it('fails explicitly when the open Activity belongs to a different Run', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { kind: 'ACTIVITY', id: 'activity-foreign', runId: 'run-foreign' },
+    ])
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-foreign',
+      runId: 'run-foreign',
+      type: 'waiting_task',
+      status: 'waiting',
+      operationId: 'generate_edit_script_assets',
+      sourceOperationId: null,
+      toolCallId: null,
+      choiceType: null,
+    })
+
+    await expect(getProjectAgentSessionState({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })).rejects.toThrow(
+      'PROJECT_AGENT_SESSION_ACTIVITY_RUN_MISMATCH:activity-foreign:run-foreign:run-1',
+    )
   })
 })

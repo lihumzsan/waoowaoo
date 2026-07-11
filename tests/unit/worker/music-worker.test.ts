@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq'
 import { describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 
 const generateMusicMock = vi.hoisted(() => vi.fn())
 const handleBgmScoreGenerateTaskMock = vi.hoisted(() => vi.fn())
@@ -113,9 +114,14 @@ describe('music worker', () => {
         vocalMode: 'instrumental',
         outputFormat: 'mp3',
       },
+      { key: 'media:music:primary' },
     )
     const uploadCall = uploadObjectMock.mock.calls[0]
-    expect(uploadCall?.[1]).toBe('music/asset.mp3')
+    expect(uploadCall?.[1]).toBe(buildTaskArtifactStorageKey({
+      taskId: 'task-1',
+      artifact: 'music:primary',
+      extension: 'mp3',
+    }))
     expect(uploadCall?.[3]).toBe('audio/mpeg')
     expect(ensureMediaObjectFromStorageKeyMock).toHaveBeenCalledWith('music/asset.mp3', {
       mimeType: 'audio/mpeg',

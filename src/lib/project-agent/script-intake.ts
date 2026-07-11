@@ -166,6 +166,7 @@ function buildScriptIntakeGroups(plan: ScriptIntakePlannerOutput): ProjectAgentC
     key: question.key,
     label: question.label,
     required: true,
+    presentation: 'options',
     options: question.options.map((option) => ({
       value: option.value,
       label: option.label,
@@ -197,6 +198,7 @@ export function buildScriptIntakeChoiceCard(params: {
     toolCallId: params.toolCallId,
     choiceType: 'script_intake',
     variant: 'confirm_or_reply',
+    replyMode: 'per_group',
     autoSubmitOnReady: true,
     title: isEnglish ? 'Refine the story brief' : '补充创作方向',
     description: isEnglish
@@ -206,6 +208,7 @@ export function buildScriptIntakeChoiceCard(params: {
     submitLabel: isEnglish ? 'Use these choices' : '使用这些选择',
     submit: {
       kind: 'submit_tool_output',
+      decision: 'approve',
     },
     replyLabel: isEnglish ? 'Or write your own brief' : '或直接补充你的想法',
     replyPlaceholder: isEnglish

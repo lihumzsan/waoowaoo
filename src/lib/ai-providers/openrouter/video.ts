@@ -1,6 +1,6 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
-import { FetchStatusError, fetchWithRetry } from '@/lib/retry'
+import { FetchStatusError, fetchWithRetry, RETRY_POLICY } from '@/lib/retry'
 import { fetchWithProviderProxy } from '@/lib/http/outbound-proxy'
 import type {
   AiProviderVideoExecutionContext,
@@ -292,6 +292,7 @@ export async function submitOpenRouterVideoTask(input: {
       Authorization: `Bearer ${input.apiKey}`,
     },
     body: JSON.stringify(input.payload),
+    policy: RETRY_POLICY.providerSubmit,
     cache: 'no-store',
     scope: `openrouter:video:submit:${input.payload.model}`,
     fetchFn: fetchWithProviderProxy,

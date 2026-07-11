@@ -2,6 +2,7 @@ export const OUTBOX_COMMAND_KIND = {
   TASK_ENQUEUE: 'task.enqueue',
   TASK_LIFECYCLE_BROADCAST: 'task.lifecycle.broadcast',
   PROJECT_AGENT_CONTINUE_WAIT: 'project_agent.continue_wait',
+  PROJECT_AGENT_SESSION_BROADCAST: 'project_agent.session_broadcast',
 } as const
 
 export type OutboxCommandKind = (typeof OUTBOX_COMMAND_KIND)[keyof typeof OUTBOX_COMMAND_KIND]
@@ -17,7 +18,7 @@ export type TaskEnqueueCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.TASK_ENQUEUE
   version: 1
   taskId: string
-  operationExecutionId: string
+  operationExecutionId: string | null
 }
 
 export type ProjectAgentContinueWaitCommand = {
@@ -29,14 +30,21 @@ export type ProjectAgentContinueWaitCommand = {
   expectedEventSeq: string
 }
 
+export type ProjectAgentSessionBroadcastCommand = {
+  kind: typeof OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST
+  version: 1
+  projectAgentEventId: string
+}
+
 export type OutboxCommandPayload =
   | TaskEnqueueCommand
   | TaskLifecycleBroadcastCommand
   | ProjectAgentContinueWaitCommand
+  | ProjectAgentSessionBroadcastCommand
 
 export type CreateOutboxCommandInput = {
   idempotencyKey: string
-  aggregateType: 'task' | 'project_agent_wait'
+  aggregateType: 'task' | 'project_agent_wait' | 'project_agent_event'
   aggregateId: string
   payload: OutboxCommandPayload
   availableAt?: Date
@@ -62,6 +70,12 @@ function readRequiredString(record: Record<string, unknown>, key: string): strin
     throw new Error(`OUTBOX_COMMAND_${key.toUpperCase()}_INVALID`)
   }
   return value
+}
+
+function readNullableString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key]
+  if (value === null) return null
+  return readRequiredString(record, key)
 }
 
 function readRequiredInteger(record: Record<string, unknown>, key: string): number {
@@ -104,7 +118,7 @@ export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload 
         kind,
         version,
         taskId: readRequiredString(record, 'taskId'),
-        operationExecutionId: readRequiredString(record, 'operationExecutionId'),
+        operationExecutionId: readNullableString(record, 'operationExecutionId'),
       }
     case OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST:
       return {
@@ -121,6 +135,12 @@ export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload 
         runId: readRequiredString(record, 'runId'),
         expectedRunVersion: readNonNegativeInteger(record, 'expectedRunVersion'),
         expectedEventSeq: readCanonicalBigIntString(record, 'expectedEventSeq'),
+      }
+    case OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST:
+      return {
+        kind,
+        version,
+        projectAgentEventId: readCanonicalBigIntString(record, 'projectAgentEventId'),
       }
     default:
       throw new Error(`OUTBOX_COMMAND_KIND_UNSUPPORTED:${kind}`)

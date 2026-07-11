@@ -17,7 +17,10 @@ import type { TaskBatchSubmittedPartData, TaskSubmittedPartData } from '@/lib/pr
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import {
+  submitOperationTask,
+  submitOperationTaskBatch,
+} from '@/lib/operations/submit-operation-task'
 import { buildEditFirstAssistantChoiceOfferCandidate } from '@/lib/project-agent/choice-card'
 import { buildScriptIntakeChoiceOfferCandidate, planScriptIntakeQuestions } from '@/lib/project-agent/script-intake'
 import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
@@ -38,7 +41,7 @@ import {
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
-import { compensateSubmittedTasks, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import { submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { planProjectEditStylePreviews, readEditStylePreviewPlanMetadata } from '@/lib/edit-script/style-preview-operation-plan'
 import {
   commitProjectEditScriptAssetsOperation,
@@ -709,7 +712,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         summary: '将生成视觉风格候选图片并产生媒体费用。批准后执行当前已确定的生成调用。',
       },
       agentFlow: {
-        onTaskComplete: 'await_user_choice',
+        onTaskComplete: 'resume_agent',
       },
       toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
@@ -756,13 +759,13 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       toolInputSchema: EDIT_FIRST_CONFIRM_STYLE_PREVIEW_TOOL_INPUT_SCHEMA,
       inputSchema: confirmEditStylePreviewInputSchema,
       outputSchema: confirmEditStylePreviewOutputSchema,
-      execute: async (ctx, input: ConfirmEditStylePreviewInput) => {
+      executeInTransaction: async (ctx, input: ConfirmEditStylePreviewInput, transaction) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         const choiceDecision = ctx.context.choiceDecision
         if (choiceDecision?.choiceType !== 'style' || choiceDecision.decision !== 'select') {
           throw new Error('EDIT_STYLE_PREVIEW_CHOICE_DECISION_REQUIRED')
         }
-        const project = await prisma.project.findFirst({
+        const project = await transaction.project.findFirst({
           where: { id: ctx.projectId, userId: ctx.userId },
           select: { videoRatio: true },
         })
@@ -776,6 +779,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           episodeId,
           stylePreviewId: choiceDecision.stylePreviewId,
           aspectRatio: aspectRatio.data,
+          client: transaction,
         })
         return confirmEditStylePreviewOutputSchema.parse(confirmed)
       },
@@ -791,6 +795,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -836,6 +841,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_SYNC_AI_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -893,6 +899,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -908,13 +915,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           ...(input.chapterIds ? { chapterIds: input.chapterIds } : {}),
         })
         const batchKey = createTaskBatchKey('plan_chapters')
-        const submitted: Array<{
-          readonly chapterId: string
-          readonly taskId: string
-        }> = []
-        try {
-          for (const chapter of chapters) {
-            const payload = await buildEditFirstTextTaskPayload({
+        const submissions = await Promise.all(chapters.map(async (chapter) => {
+          const payload = await buildEditFirstTextTaskPayload({
               projectId: ctx.projectId,
               userId: ctx.userId,
               payload: {
@@ -923,7 +925,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
                 ...(input.videoRatio ? { videoRatio: input.videoRatio } : {}),
               },
             })
-            const result = await submitOperationTask({
+          return {
               request: ctx.request,
               projectId: ctx.projectId,
               userId: ctx.userId,
@@ -937,16 +939,14 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
               dedupeKey: `edit_script_generate:${ctx.projectId}:${episodeId}:${chapter.id}`,
               batchKey,
               locale: resolveLocale(ctx.context.locale),
-            })
-            submitted.push({
-              chapterId: chapter.id,
-              taskId: result.taskId,
-            })
-          }
-        } catch (error) {
-          await compensateSubmittedTasks(submitted.map((item) => item.taskId))
-          throw error
-        }
+            }
+        }))
+        const submittedResults = await submitOperationTaskBatch(submissions)
+        const submitted = chapters.map((chapter, index) => {
+          const result = submittedResults[index]
+          if (!result) throw new Error(`PLAN_CHAPTERS_TASK_RESULT_MISSING:${chapter.id}`)
+          return { chapterId: chapter.id, taskId: result.taskId }
+        })
 
         const output = planChaptersOutputSchema.parse({
           success: true,
@@ -1021,13 +1021,14 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: requestEditChoiceInputSchema,
       outputSchema: editScriptAssetApprovalOutputSchema,
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         return editScriptAssetApprovalOutputSchema.parse(
           await approveProjectEpisodeEditScriptAssets({
             projectId: ctx.projectId,
             userId: ctx.userId,
             episodeId,
+            client: transaction,
           }),
         )
       },
@@ -1090,6 +1091,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -1101,25 +1103,15 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
         if (ctx.source === 'assistant-panel' || (!input.chapterId && !input.editScriptId)) {
           const batchKey = createTaskBatchKey('edit_shot_execution_plan_generate')
-          const submittedTaskIds: string[] = []
-          let result: Awaited<ReturnType<typeof submitProjectEditShotExecutionPlanBatchTasks>>
-          try {
-            result = await submitProjectEditShotExecutionPlanBatchTasks({
-              request: ctx.request,
-              projectId: ctx.projectId,
-              userId: ctx.userId,
-              episodeId,
-              batchKey,
-              source: ctx.source,
-              locale: resolveLocale(ctx.context.locale),
-              onSubmittedTask: (taskId) => {
-                submittedTaskIds.push(taskId)
-              },
-            })
-          } catch (error) {
-            await compensateSubmittedTasks(submittedTaskIds)
-            throw error
-          }
+          const result = await submitProjectEditShotExecutionPlanBatchTasks({
+            request: ctx.request,
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+            batchKey,
+            source: ctx.source,
+            locale: resolveLocale(ctx.context.locale),
+          })
           writeOperationDataPart<TaskBatchSubmittedPartData>(ctx.writer, 'data-task-batch-submitted', {
             operationId: 'generate_edit_shot_execution_plan',
             total: result.total,
@@ -1165,6 +1157,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
         kind: 'none',
         required: false,
@@ -1182,6 +1175,8 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           locale: resolveLocale(ctx.context.locale),
           ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
           requestId: ctx.request.headers.get('x-request-id'),
+          request: ctx.request,
+          source: ctx.source,
         })
 
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {

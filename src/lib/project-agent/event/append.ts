@@ -6,6 +6,7 @@ import {
   type ProjectAgentEventInput,
   type ProjectAgentEventPayload,
   type ProjectAgentPersistedEventPayload,
+  type ProjectAgentSessionEventPayload,
   type ProjectAgentEventScope,
   type ProjectAgentEventScopeRef,
 } from './types'
@@ -15,6 +16,8 @@ import {
   assignProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from '../run-fence'
+import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
+import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 
 export type ProjectAgentEventTransactionClient = Prisma.TransactionClient
 
@@ -43,6 +46,54 @@ function eventActivityId(event: ProjectAgentEventPayload): string | null {
 
 function toInputJsonValue(value: ProjectAgentPersistedEventPayload): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
+
+function toSessionEventInputJsonValue(value: ProjectAgentSessionEventPayload): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
+
+async function createSessionBroadcastOutbox(
+  tx: ProjectAgentEventTransactionClient,
+  eventId: bigint,
+): Promise<void> {
+  const projectAgentEventId = eventId.toString()
+  await createOutboxCommandInTransaction(tx, {
+    idempotencyKey: `project-agent-session-broadcast:${projectAgentEventId}`,
+    aggregateType: 'project_agent_event',
+    aggregateId: projectAgentEventId,
+    payload: {
+      kind: OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST,
+      version: 1,
+      projectAgentEventId,
+    },
+  })
+}
+
+export async function appendProjectAgentSessionEventInTransaction(
+  tx: ProjectAgentEventTransactionClient,
+  params: {
+    scope: ProjectAgentEventScope
+    event: ProjectAgentSessionEventPayload
+  },
+): Promise<string> {
+  const scope = resolveEventScope(params.scope)
+  const createdEvent = await tx.projectAgentEvent.create({
+    data: {
+      projectId: scope.projectId,
+      userId: scope.userId,
+      assistantId: scope.assistantId,
+      scopeRef: scope.scopeRef,
+      episodeId: scope.episodeId,
+      runId: null,
+      activityId: null,
+      kind: params.event.kind,
+      idempotencyKey: null,
+      payload: toSessionEventInputJsonValue(params.event),
+    },
+    select: { id: true },
+  })
+  await createSessionBroadcastOutbox(tx, createdEvent.id)
+  return createdEvent.id.toString()
 }
 
 export async function appendProjectAgentEvents(params: {
@@ -105,6 +156,7 @@ export async function appendProjectAgentEventsInTransaction(
         ) {
           throw new Error(`PROJECT_AGENT_EVENT_IDEMPOTENCY_FENCE_CONFLICT key=${idempotencyKey} runId=${runId}`)
         }
+        await createSessionBroadcastOutbox(tx, existing.id)
         currentFenceByRun.set(runId, advanceProjectAgentRunFence(expectedFence, existing.id))
         continue
       }
@@ -137,6 +189,7 @@ export async function appendProjectAgentEventsInTransaction(
       eventId: createdEvent.id,
       expectedFence,
     }) ?? lastActivity
+    await createSessionBroadcastOutbox(tx, createdEvent.id)
     currentFenceByRun.set(runId, advanceProjectAgentRunFence(expectedFence, createdEvent.id))
   }
   for (const [runId, targets] of targetFencesByRun) {

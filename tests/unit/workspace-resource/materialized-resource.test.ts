@@ -35,14 +35,22 @@ const episodeMock = vi.hoisted(() => ({
       updatedAt: new Date('2026-07-10T00:00:02.000Z'),
     }],
     resourceVersion: {
-      scheme: 'aggregate_updated_at' as const,
-      value: '2026-07-10T00:00:02.000Z',
+      scheme: 'resource_revision' as const,
+      value: 12,
     },
+  })),
+}))
+
+const revisionMock = vi.hoisted(() => ({
+  readConsistentWorkspaceResourceSnapshot: vi.fn(async <T>(input: { read: () => Promise<T> }) => ({
+    data: await input.read(),
+    resourceRevision: 12,
   })),
 }))
 
 vi.mock('@/lib/edit-bible', () => bibleMock)
 vi.mock('@/lib/projects/read-episode-detail', () => episodeMock)
+vi.mock('@/lib/workspace-resource/resource-revision', () => revisionMock)
 
 import { materializeWorkspaceResourcesForTask } from '@/lib/workspace-resource/materialized-resource'
 import {
@@ -74,8 +82,8 @@ describe('workspace terminal resource materialization', () => {
       taskId: 'task-1',
       resourceKey: 'editBible:project-1:episode-1',
       resourceVersion: {
-        scheme: 'revision_updated_at',
-        value: { revision: 3, updatedAt: '2026-07-10T00:00:04.000Z' },
+        scheme: 'resource_revision',
+        value: 12,
       },
       data: expect.objectContaining({
         editBible: expect.objectContaining({
@@ -95,15 +103,15 @@ describe('workspace terminal resource materialization', () => {
       kind: 'episodeData',
       taskId: 'task-1',
       resourceVersion: {
-        scheme: 'aggregate_updated_at',
-        value: '2026-07-10T00:00:02.000Z',
+        scheme: 'resource_revision',
+        value: 12,
       },
       data: expect.objectContaining({ id: 'episode-1' }),
     })])
     expect(bibleMock.readEpisodeEditBible).not.toHaveBeenCalled()
   })
 
-  it('advances episodeData version when a child row changes without touching the episode', () => {
+  it('uses the database-owned episode resource revision instead of timestamps', () => {
     const initial = createEpisodeDataQueryDto({
       id: 'episode-1',
       updatedAt: new Date('2026-07-10T00:00:00.000Z'),
@@ -112,7 +120,7 @@ describe('workspace terminal resource materialization', () => {
         updatedAt: new Date('2026-07-10T00:00:01.000Z'),
         panels: [{ id: 'panel-1', updatedAt: new Date('2026-07-10T00:00:02.000Z') }],
       }],
-    })
+    }, 12)
     const childUpdated = createEpisodeDataQueryDto({
       id: 'episode-1',
       updatedAt: new Date('2026-07-10T00:00:00.000Z'),
@@ -121,40 +129,34 @@ describe('workspace terminal resource materialization', () => {
         updatedAt: new Date('2026-07-10T00:00:01.000Z'),
         panels: [{ id: 'panel-1', updatedAt: new Date('2026-07-10T00:00:03.000Z') }],
       }],
-    })
+    }, 13)
 
     expect(initial.resourceVersion).toEqual({
-      scheme: 'aggregate_updated_at',
-      value: '2026-07-10T00:00:02.000Z',
+      scheme: 'resource_revision',
+      value: 12,
     })
     expect(childUpdated.resourceVersion).toEqual({
-      scheme: 'aggregate_updated_at',
-      value: '2026-07-10T00:00:03.000Z',
+      scheme: 'resource_revision',
+      value: 13,
     })
   })
 
-  it('advances editBible version when a style preview changes at the same bible revision', () => {
+  it('uses the same database-owned resource revision for editBible snapshots', () => {
     const initial = createEditBibleQueryDto({
       id: 'bible-1',
       version: 7,
       updatedAt: new Date('2026-07-10T00:00:01.000Z'),
       stylePreviews: [{ id: 'preview-1', updatedAt: new Date('2026-07-10T00:00:02.000Z') }],
-    }, [])
+    }, [], 12)
     const previewUpdated = createEditBibleQueryDto({
       id: 'bible-1',
       version: 7,
       updatedAt: new Date('2026-07-10T00:00:01.000Z'),
       stylePreviews: [{ id: 'preview-1', updatedAt: new Date('2026-07-10T00:00:03.000Z') }],
-    }, [])
+    }, [], 13)
 
-    expect(initial.resourceVersion.value).toEqual({
-      revision: 7,
-      updatedAt: '2026-07-10T00:00:02.000Z',
-    })
-    expect(previewUpdated.resourceVersion.value).toEqual({
-      revision: 7,
-      updatedAt: '2026-07-10T00:00:03.000Z',
-    })
+    expect(initial.resourceVersion.value).toBe(12)
+    expect(previewUpdated.resourceVersion.value).toBe(13)
   })
 
   it('fails explicitly when a required editBible resource is absent', async () => {

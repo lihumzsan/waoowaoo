@@ -10,7 +10,8 @@ import {
   addCharacterPromptSuffix,
 } from '@/lib/constants'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
+import { getSignedUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive, waitExternalResult } from '@/lib/workers/utils'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
@@ -30,7 +31,7 @@ async function generateReferenceImage(params: {
   prompt: string
   referenceImages?: string[]
   keyPrefix: string
-}): Promise<string | null> {
+}): Promise<string> {
   const {
     job,
     imageIndex,
@@ -41,8 +42,7 @@ async function generateReferenceImage(params: {
     keyPrefix,
   } = params
 
-  try {
-    await assertTaskActive(job, `reference_to_character_generate_${imageIndex + 1}`)
+  await assertTaskActive(job, `reference_to_character_generate_${imageIndex + 1}`)
     const options: {
       referenceImages?: string[]
       aspectRatio: string
@@ -58,29 +58,24 @@ async function generateReferenceImage(params: {
       imageModel,
       prompt,
       options,
+      { key: `media:image:reference:${imageIndex}` },
     )
 
     let finalImageUrl = result.imageUrl
-    if (result.async) {
+  if (result.async) {
       const externalId = result.externalId
         ?? (result.endpoint && result.requestId ? `FAL:IMAGE:${result.endpoint}:${result.requestId}` : null)
-      if (!externalId) {
-        return null
-      }
-      try {
-        const polled = await waitExternalResult(job, externalId, userId, {
-          progressStart: 40,
-          progressEnd: 85,
-        })
-        finalImageUrl = polled.url
-      } catch {
-        return null
-      }
-    }
+    if (!externalId) throw new Error(`REFERENCE_TO_CHARACTER_EXTERNAL_ID_MISSING:${imageIndex}`)
+    const polled = await waitExternalResult(job, externalId, userId, {
+      progressStart: 40,
+      progressEnd: 85,
+    })
+    finalImageUrl = polled.url
+  }
 
-    if (!result.success || !finalImageUrl) {
-      return null
-    }
+  if (!result.success || !finalImageUrl) {
+    throw new Error(`REFERENCE_TO_CHARACTER_RESULT_MISSING:${imageIndex}`)
+  }
 
     const imgRes = await fetchWithRetry(finalImageUrl, {
       scope: `reference-to-character:${imageIndex + 1}`,
@@ -90,11 +85,12 @@ async function generateReferenceImage(params: {
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer()
 
-    const key = generateUniqueKey(`${keyPrefix}-${Date.now()}-${imageIndex}`, 'jpg')
-    return await uploadObject(processed, key)
-  } catch {
-    return null
-  }
+  const key = buildTaskArtifactStorageKey({
+    taskId: job.data.taskId,
+    artifact: `${keyPrefix}:reference:${imageIndex}`,
+    extension: 'jpg',
+  })
+  return await uploadObject(processed, key)
 }
 
 export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
@@ -155,6 +151,13 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
       imageUrls: allReferenceImages,
       temperature: 0.3,
       ...(isProject ? { projectId: job.data.projectId } : {}),
+      action: 'reference_to_character_extract',
+      meta: {
+        stepId: 'reference_to_character_extract',
+        stepTitle: 'Extract character description from references',
+        stepIndex: 1,
+        stepTotal: 1,
+      },
     })
     await assertTaskActive(job, 'reference_to_character_extract_done')
     await reportTaskProgress(job, 96, {
@@ -196,10 +199,7 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
     }),
   ))
 
-  const successfulCosKeys = imageResults.filter((item): item is string => Boolean(item))
-  if (successfulCosKeys.length === 0) {
-    throw new Error('图片生成失败')
-  }
+  const successfulCosKeys = imageResults
 
   await assertTaskActive(job, 'reference_to_character_persist')
   if (isBackgroundJob && appearanceId) {

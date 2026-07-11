@@ -47,7 +47,6 @@ import {
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
-  createProjectAgentWait,
   type ProjectAgentTaskFollowUpSettlementOutcome,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
@@ -63,19 +62,19 @@ import {
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
-  clearProjectAgentInterruptionRunState,
   createProjectAgentApprovalInterruption,
-  reopenProjectAgentInterruption,
   type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
 import {
+  settleProjectAgentRunFailureWithMessage,
   settleProjectAgentRunWithMessage,
-  updateProjectAgentRunStatus,
   type ProjectAgentRunRecord,
   type ProjectAgentRunStatus,
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
+import type { ProjectAgentOperationExecutionFence } from './operation-execution-fence'
+import { appendProjectAgentEvents } from './event'
 import {
   isProjectAgentOperationAlwaysEnabled,
   isProjectAgentOperationEnabled,
@@ -108,6 +107,10 @@ import {
   createProjectAgentApprovalPreflightStore,
   type ProjectAgentApprovalPreflightStore,
 } from './approval-preflight'
+import {
+  createProjectAgentExecutionSegment,
+  projectAgentExecutionStartedIdempotencyKey,
+} from './execution-segment'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -130,7 +133,6 @@ function resolveProjectAgentRunFailureTerminal(params: {
   errorMessage: string
 }): {
   status: 'failed' | 'cancelled'
-  expectedStatuses: readonly ['running']
   stopReason: string
   errorCode?: string
   errorMessage?: string
@@ -138,13 +140,11 @@ function resolveProjectAgentRunFailureTerminal(params: {
   if (params.ownershipLoss) {
     return {
       status: 'cancelled',
-      expectedStatuses: ['running'],
       stopReason: 'run_lock_lost',
     }
   }
   return {
     status: 'failed',
-    expectedStatuses: ['running'],
     stopReason: params.stopReason,
     errorCode: params.errorCode,
     errorMessage: params.errorMessage,
@@ -169,7 +169,7 @@ export type ProjectAgentResolvedControl =
   }
   | {
     kind: 'choice'
-    interruptionId: string | null
+    interruptionId: string
     choiceType: EditFirstChoiceType
     toolCallId: string | null
     cardId: string | null
@@ -588,46 +588,31 @@ function resolveWaitFollowUpModeForOperations(
     registry[operationId]?.agentFlow?.onTaskComplete === 'complete'
   ))
   if (allComplete) return 'complete'
-  const allAwaitUserChoice = operationIds.every((operationId) => (
-    registry[operationId]?.agentFlow?.onTaskComplete === 'await_user_choice'
-  ))
-  return allAwaitUserChoice ? 'await_user_choice' : 'resume_agent'
+  return 'resume_agent'
 }
 
-async function maybeCreateProjectAgentWait(params: {
+async function createProjectAgentWaitBindings(params: {
   stopPart: ProjectAgentStopPartData | null
   registry: ProjectAgentOperationRegistry
-  runId: string
-  projectId: string
-  userId: string
-  episodeId: string | null
-  runFence: ReturnType<typeof createProjectAgentRunFence>
+  transactionallyBoundTaskBatches: ReadonlyMap<string, readonly string[]>
 }): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
   }
-  const followUpModes: ProjectAgentWaitFollowUpMode[] = []
-  for (const taskWait of params.stopPart.taskWaits) {
-    const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, [taskWait.operationId])
-    const waitId = await createProjectAgentWait({
-      runFence: params.runFence,
-      runId: params.runId,
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      assistantId: 'workspace-command',
-      operationId: taskWait.operationId,
-      taskIds: taskWait.taskIds,
-      followUpMode,
-    })
-    if (!waitId) {
-      throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED runId=${params.runId} operationId=${taskWait.operationId}`)
-    }
-    followUpModes.push(followUpMode)
+  if (params.stopPart.taskWaits.length !== 1) {
+    throw new Error(`PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:${params.stopPart.operationIds.join(',')}`)
   }
-  if (followUpModes.every((mode) => mode === 'complete')) return 'complete'
-  if (followUpModes.every((mode) => mode === 'await_user_choice')) return 'await_user_choice'
-  return 'resume_agent'
+  const taskWait = params.stopPart.taskWaits[0]
+  if (!taskWait) throw new Error('PROJECT_AGENT_TASK_WAIT_DESCRIPTOR_MISSING')
+  const followUpMode = resolveWaitFollowUpModeForOperations(params.registry, [taskWait.operationId])
+  const boundTaskIds = params.transactionallyBoundTaskBatches.get(taskWait.operationId)
+  if (!boundTaskIds) throw new Error(`PROJECT_AGENT_TASK_BATCH_WAIT_NOT_BOUND:${taskWait.operationId}`)
+  const expected = Array.from(new Set(taskWait.taskIds)).sort()
+  const actual = Array.from(new Set(boundTaskIds)).sort()
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`PROJECT_AGENT_TASK_BATCH_WAIT_IDENTITY_MISMATCH:${taskWait.operationId}`)
+  }
+  return followUpMode
 }
 
 interface ProjectAgentLiveWorkflowState {
@@ -701,6 +686,8 @@ export async function createProjectAgentChatResponse(input: {
   run: ProjectAgentRunRecord
   control: ProjectAgentResolvedControl
   runLock?: ProjectAgentRunLock | null
+  ownershipSignal?: AbortSignal | null
+  continuationClaim?: ProjectAgentOperationExecutionFence['continuationClaim']
   settleTaskFollowUp?: (outcome: ProjectAgentTaskFollowUpSettlement) => Promise<void>
 }): Promise<Response> {
   const stableRequestId = getRequestId(input.request) ?? crypto.randomUUID()
@@ -717,6 +704,23 @@ export async function createProjectAgentChatResponse(input: {
   const assistantModelKey = await resolveProjectAgentAssistantModelKey(input.userId)
 
   const control = input.control
+  const executionSegment = control.kind === 'user_turn'
+    ? createProjectAgentExecutionSegment({ kind: 'user_turn', runId: input.run.id })
+    : control.kind === 'approval'
+      ? createProjectAgentExecutionSegment({
+          kind: 'approval_response',
+          interruptionId: control.interruption.id,
+        })
+      : control.kind === 'choice'
+        ? createProjectAgentExecutionSegment({
+            kind: 'choice_response',
+            interruptionId: control.interruptionId,
+          })
+        : createProjectAgentExecutionSegment({
+            kind: 'task_follow_up',
+            commandId: control.followUp.commandId,
+          })
+  const executionControlKind = executionSegment.controlKind
   const contextBase = normalizeProjectAgentContext(input.context)
   const approvedPlanSnapshotId = control.kind === 'approval' && control.approved
     ? readPlanSnapshotIdFromInterruptionPayload(control.interruption.payload)
@@ -773,14 +777,6 @@ export async function createProjectAgentChatResponse(input: {
     openRouterSessionId,
   })
   const locale = normalizeProjectAgentLocale(context.locale)
-  const runtimeMessages = control.kind === 'approval'
-    ? normalizedMessages
-    : await compressMessages({
-        messages: normalizedMessages,
-        locale,
-        model: resolved.languageModel,
-      })
-
   let runLockReleased = false
   const releaseRunLockOnce = async () => {
     if (!input.runLock || runLockReleased) return
@@ -789,16 +785,64 @@ export async function createProjectAgentChatResponse(input: {
   }
   let heartbeatStopped = false
   const runAbortController = new AbortController()
+  const abortFromOwnershipSignal = (): void => {
+    if (!runAbortController.signal.aborted) {
+      runAbortController.abort(input.ownershipSignal?.reason)
+    }
+  }
+  if (input.ownershipSignal?.aborted) {
+    abortFromOwnershipSignal()
+  } else {
+    input.ownershipSignal?.addEventListener('abort', abortFromOwnershipSignal, { once: true })
+  }
+  const detachOwnershipSignal = (): void => {
+    input.ownershipSignal?.removeEventListener('abort', abortFromOwnershipSignal)
+  }
   let heartbeatController: ReturnType<typeof startProjectAgentRunHeartbeat> | null = null
   const stopHeartbeatOnce = async () => {
     if (!heartbeatController || heartbeatStopped) return
     heartbeatStopped = true
     await heartbeatController.stop()
   }
+  const requestId = stableRequestId
+
+  try {
+    heartbeatController = startProjectAgentRunHeartbeat({
+      runId: input.run.id,
+      runLock: input.runLock,
+      onOwnershipLost: (error) => {
+        if (!runAbortController.signal.aborted) runAbortController.abort(error)
+      },
+    })
+    await appendProjectAgentEvents({
+      scope: {
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId || null,
+        assistantId: 'workspace-command',
+      },
+      events: [{
+        runFence,
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+        event: {
+          kind: 'run.execution_started',
+          runId: input.run.id,
+          executionSegmentId: executionSegment.id,
+          controlKind: executionControlKind,
+        },
+      }],
+    })
+    const runtimeMessages = control.kind === 'approval'
+      ? normalizedMessages
+      : await compressMessages({
+          messages: normalizedMessages,
+          locale,
+          model: resolved.languageModel,
+          signal: runAbortController.signal,
+        })
 
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
-  const requestId = stableRequestId
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
   const liveWorkflow = createProjectAgentLiveWorkflowState({
     requestId,
@@ -866,7 +910,7 @@ export async function createProjectAgentChatResponse(input: {
       runId: input.run.id,
       requestId,
       status: 'running',
-      controlKind: input.run.controlKind,
+      controlKind: executionControlKind,
       stopReason: null,
     }),
     createDataChunk('data-agent-runtime-context', {
@@ -977,6 +1021,7 @@ export async function createProjectAgentChatResponse(input: {
   })
 
   let latestStopPart: ProjectAgentStopPartData | null = null
+  const transactionallyBoundTaskBatches = new Map<string, readonly string[]>()
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -989,6 +1034,8 @@ export async function createProjectAgentChatResponse(input: {
       userId: input.userId,
       context,
       runFence,
+      operationSignal: runAbortController.signal,
+      continuationClaim: input.continuationClaim ?? null,
       assistantPermissionMode: input.assistantPermissionMode,
       writer: {
         write: (chunk) => {
@@ -1008,6 +1055,12 @@ export async function createProjectAgentChatResponse(input: {
       }),
       onExecutionSettled: () => {
         liveWorkflow.invalidate()
+      },
+      onTaskBatchBound: (batch) => {
+        if (transactionallyBoundTaskBatches.has(batch.operationId)) {
+          throw new Error(`PROJECT_AGENT_TASK_BATCH_DUPLICATE_BINDING:${batch.operationId}`)
+        }
+        transactionallyBoundTaskBatches.set(batch.operationId, [...batch.taskIds])
       },
       approvalPreflightStore,
     }) as Tool<ProjectAgentAgentsRunContext>
@@ -1071,14 +1124,6 @@ export async function createProjectAgentChatResponse(input: {
       })()
     : agentInput
 
-  try {
-    heartbeatController = startProjectAgentRunHeartbeat({
-      runId: input.run.id,
-      runLock: input.runLock,
-      onOwnershipLost: (error) => {
-        if (!runAbortController.signal.aborted) runAbortController.abort(error)
-      },
-    })
     const result = await run(agent, runInput, {
       stream: true,
       maxTurns: PROJECT_AGENT_MAX_TURNS,
@@ -1114,7 +1159,7 @@ export async function createProjectAgentChatResponse(input: {
         runId: input.run.id,
         requestId,
         status,
-        controlKind: input.run.controlKind,
+        controlKind: executionControlKind,
         stopReason,
       })
     }
@@ -1124,7 +1169,7 @@ export async function createProjectAgentChatResponse(input: {
       preparedAssistantMessage = await buildAssistantMessageFromChunks({
         messageId: createPersistedAssistantMessageId({
           runId: input.run.id,
-          controlKind: input.run.controlKind,
+          controlKind: executionControlKind,
           requestId,
         }),
         chunks: persistedAssistantChunks,
@@ -1154,6 +1199,7 @@ export async function createProjectAgentChatResponse(input: {
       const message = await buildAssistantMessageOnce()
       await settleProjectAgentRunWithMessage({
         runFence,
+        expectedStatuses: ['running'],
         ...pendingRunSettlement,
         message,
       })
@@ -1182,7 +1228,7 @@ export async function createProjectAgentChatResponse(input: {
         runId: input.run.id,
         requestId,
         status: latestRunStatusForPersistence.status,
-        controlKind: input.run.controlKind,
+        controlKind: executionControlKind,
         stopReason: latestRunStatusForPersistence.stopReason,
       }))
     }
@@ -1252,20 +1298,12 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
         }
 
-        if (approvalInterruption) {
-          await clearProjectAgentInterruptionRunState(approvalInterruption.id)
-        }
-
         let waitFollowUpMode: ProjectAgentWaitFollowUpMode | null = null
         try {
-          waitFollowUpMode = await maybeCreateProjectAgentWait({
-            runFence,
+          waitFollowUpMode = await createProjectAgentWaitBindings({
             stopPart: latestStopPart,
             registry: operations,
-            runId: input.run.id,
-            projectId: input.projectId,
-            userId: input.userId,
-            episodeId: context.episodeId || null,
+            transactionallyBoundTaskBatches,
           })
         } catch (error) {
           if (input.settleTaskFollowUp) throw error
@@ -1313,7 +1351,7 @@ export async function createProjectAgentChatResponse(input: {
         }
         if (!shouldPersistApprovalInterruption) {
           if (latestStopPart?.reason === 'awaiting_external_task') {
-            chunks.push(createRuntimeStatusChunk('awaiting_task', waitFollowUpMode === 'await_user_choice' ? 'awaiting_task_then_choice' : 'awaiting_task'))
+            chunks.push(createRuntimeStatusChunk('awaiting_task', 'awaiting_task'))
             if (input.settleTaskFollowUp) taskFollowUpSettlement = 'awaiting_task'
             runStatusFinalized = true
           } else if (latestStopPart?.reason === 'awaiting_user_confirmation') {
@@ -1421,6 +1459,7 @@ export async function createProjectAgentChatResponse(input: {
           })
           throw error
         } finally {
+          detachOwnershipSignal()
           await stopHeartbeatOnce()
           await releaseRunLockOnce()
         }
@@ -1430,20 +1469,22 @@ export async function createProjectAgentChatResponse(input: {
     response.headers.set('x-request-id', stableRequestId)
     return response
   } catch (error) {
+    detachOwnershipSignal()
     await stopHeartbeatOnce()
     try {
-      if (approvalInterruption) {
-        await reopenProjectAgentInterruption(approvalInterruption.id)
-      } else if (!input.settleTaskFollowUp) {
+      if (!input.settleTaskFollowUp) {
         const ownershipLoss = readProjectAgentRunOwnershipLoss(runAbortController.signal)
-        await updateProjectAgentRunStatus({
+        const terminal = resolveProjectAgentRunFailureTerminal({
+          ownershipLoss,
+          stopReason: 'run_failed',
+          errorCode: 'PROJECT_AGENT_RUN_FAILED',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        })
+        await settleProjectAgentRunFailureWithMessage({
           runFence,
-          ...resolveProjectAgentRunFailureTerminal({
-            ownershipLoss,
-            stopReason: 'run_failed',
-            errorCode: 'PROJECT_AGENT_RUN_FAILED',
-            errorMessage: error instanceof Error ? error.message : String(error),
-          }),
+          controlKind: executionControlKind,
+          requestId,
+          ...terminal,
         })
       }
     } finally {

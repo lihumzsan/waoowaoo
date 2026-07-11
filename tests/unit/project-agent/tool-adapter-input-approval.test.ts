@@ -1,5 +1,5 @@
 import {
-  EFFECTS_WRITE,
+  EFFECTS_NONE,
   afterEach,
   beforeEach,
   buildRequest,
@@ -41,7 +41,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'test_op',
         summary: 'test',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({ name: z.string().min(1) }),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => ({ ok: true })),
@@ -66,7 +66,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.error.issues).toBeDefined()
   })
 
-  it('[confirmed input] -> executes operation when confirmation required', async () => {
+  it('[legacy confirmed input] -> rejects the retired boolean approval path without executing', async () => {
     const writer = buildWriter()
     const execute = vi.fn(async () => ({ ok: true }))
     registryState.registry = {
@@ -74,7 +74,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'confirm_ok_op',
         summary: 'confirm ok',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         confirmation: {
           kind: 'destructive',
           required: true,
@@ -98,10 +98,12 @@ describe('executeProjectAgentOperationFromTool', () => {
       input: { confirmed: true },
     })
 
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.data).toEqual({ ok: true })
-    expect(execute).toHaveBeenCalledTimes(1)
-    expect(execute).toHaveBeenCalledWith(expect.any(Object), { confirmed: true })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('OPERATION_INPUT_INVALID')
+    expect(result.error.details).toEqual(expect.objectContaining({
+      code: 'LEGACY_OPERATION_CONFIRMATION_UNSUPPORTED',
+    }))
+    expect(execute).not.toHaveBeenCalled()
   })
 })

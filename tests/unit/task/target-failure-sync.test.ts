@@ -5,23 +5,38 @@ import { TASK_TYPE } from '@/lib/task/types'
 const prismaMock = vi.hoisted(() => ({
   projectEditBible: {
     updateMany: vi.fn(async () => ({ count: 1 })),
-    findUnique: vi.fn(async () => ({ generationTaskId: 'task-new', status: 'generating' })),
+    findUnique: vi.fn(async () => ({
+      generationTaskId: 'task-new',
+      status: 'generating',
+    })),
   },
   projectEditStylePreview: {
     updateMany: vi.fn(async () => ({ count: 0 })),
-    findUnique: vi.fn(async () => ({ taskId: 'task-new', status: 'generating' })),
+    findUnique: vi.fn(async () => ({
+      taskId: 'task-new',
+      status: 'generating',
+    })),
   },
   projectVideoGroup: {
     updateMany: vi.fn(async () => ({ count: 0 })),
-    findUnique: vi.fn(async () => ({ taskId: 'task-new', status: 'processing' })),
+    findUnique: vi.fn(async () => ({
+      taskId: 'task-new',
+      status: 'processing',
+    })),
   },
   projectEditChapter: {
     updateMany: vi.fn(async () => ({ count: 1 })),
-    findUnique: vi.fn(async () => ({ renderTaskId: 'task-new', renderStatus: 'processing' })),
+    findUnique: vi.fn(async () => ({
+      renderTaskId: 'task-new',
+      renderStatus: 'processing',
+    })),
   },
   projectEpisodeFinalOutput: {
     updateMany: vi.fn(async () => ({ count: 1 })),
-    findUnique: vi.fn(async () => ({ renderTaskId: 'task-new', renderStatus: 'processing' })),
+    findUnique: vi.fn(async () => ({
+      renderTaskId: 'task-new',
+      renderStatus: 'processing',
+    })),
   },
 }))
 
@@ -29,7 +44,6 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 import {
   projectTaskTargetTerminalInTransaction,
-  syncTaskTargetFailureInTransaction,
 } from '@/lib/task/target-failure-sync'
 
 describe('task target failure sync', () => {
@@ -38,7 +52,8 @@ describe('task target failure sync', () => {
   })
 
   it('projects edit bible failure only through the exact generation Task fence', async () => {
-    await syncTaskTargetFailureInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+    await projectTaskTargetTerminalInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+      kind: 'failed',
       taskId: 'task-1',
       type: TASK_TYPE.EDIT_BIBLE_GENERATE,
       targetType: 'ProjectEditBible',
@@ -66,7 +81,8 @@ describe('task target failure sync', () => {
   })
 
   it('fences video group failure by terminal task ownership and active status', async () => {
-    await syncTaskTargetFailureInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+    await projectTaskTargetTerminalInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+      kind: 'failed',
       taskId: 'task-2',
       type: TASK_TYPE.VIDEO_GROUP,
       targetType: 'ProjectVideoGroup',
@@ -96,17 +112,26 @@ describe('task target failure sync', () => {
       targetType: 'ProjectEditChapter',
       targetId: 'chapter-1',
       model: 'projectEditChapter' as const,
-      where: { id: 'chapter-1', renderTaskId: 'task-render', renderStatus: 'processing' },
+      where: {
+        id: 'chapter-1',
+        renderTaskId: 'task-render',
+        renderStatus: 'processing',
+      },
     },
     {
       type: TASK_TYPE.FINAL_VIDEO_RENDER,
       targetType: 'ProjectEpisode',
       targetId: 'episode-1',
       model: 'projectEpisodeFinalOutput' as const,
-      where: { episodeId: 'episode-1', renderTaskId: 'task-render', renderStatus: 'processing' },
+      where: {
+        episodeId: 'episode-1',
+        renderTaskId: 'task-render',
+        renderStatus: 'processing',
+      },
     },
   ])('projects $type failure only from the unified Task terminal edge', async (fixture) => {
-    await syncTaskTargetFailureInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+    await projectTaskTargetTerminalInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+      kind: 'failed',
       taskId: 'task-render',
       type: fixture.type,
       targetType: fixture.targetType,
@@ -127,7 +152,11 @@ describe('task target failure sync', () => {
       targetType: 'ProjectEditBible',
       targetId: 'bible-1',
       model: 'projectEditBible' as const,
-      data: { status: 'pending', generationTaskId: null, diagnosticsJson: expect.anything() },
+      data: {
+        status: 'pending',
+        generationTaskId: null,
+        diagnosticsJson: expect.anything(),
+      },
     },
     {
       type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
@@ -141,7 +170,12 @@ describe('task target failure sync', () => {
       targetType: 'ProjectVideoGroup',
       targetId: 'group-1',
       model: 'projectVideoGroup' as const,
-      data: { status: 'pending', taskId: null, errorCode: null, errorMessage: null },
+      data: {
+        status: 'pending',
+        taskId: null,
+        errorCode: null,
+        errorMessage: null,
+      },
     },
   ])('projects $type cancellation as ownership cleanup, never failure', async (fixture) => {
     const model = prismaMock[fixture.model]
@@ -156,27 +190,50 @@ describe('task target failure sync', () => {
     })
 
     expect(model.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: fixture.data }))
-    expect(model.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: 'failed' }),
-    }))
+    expect(model.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'failed' }),
+      }),
+    )
   })
 
   it('treats an old canceled Task as a no-op after ownership moved', async () => {
-    prismaMock.projectEditStylePreview.updateMany.mockResolvedValueOnce({ count: 0 })
+    prismaMock.projectEditStylePreview.updateMany.mockResolvedValueOnce({
+      count: 0,
+    })
     prismaMock.projectEditStylePreview.findUnique.mockResolvedValueOnce({
       taskId: 'task-new',
       status: 'generating',
     })
 
-    await expect(projectTaskTargetTerminalInTransaction(
-      prismaMock as unknown as Prisma.TransactionClient,
-      {
+    await expect(
+      projectTaskTargetTerminalInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
         kind: 'canceled',
         taskId: 'task-old',
         type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
         targetType: 'ProjectEditStylePreview',
         targetId: 'preview-1',
-      },
-    )).resolves.toBeUndefined()
+      }),
+    ).resolves.toBe('stale_owner')
+  })
+
+  it('reports success materialization so a late cancel cannot overwrite the winning handler', async () => {
+    prismaMock.projectEditStylePreview.updateMany.mockResolvedValueOnce({
+      count: 0,
+    })
+    prismaMock.projectEditStylePreview.findUnique.mockResolvedValueOnce({
+      taskId: 'task-1',
+      status: 'completed',
+    })
+
+    await expect(
+      projectTaskTargetTerminalInTransaction(prismaMock as unknown as Prisma.TransactionClient, {
+        kind: 'canceled',
+        taskId: 'task-1',
+        type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'preview-1',
+      }),
+    ).resolves.toBe('success_materialized')
   })
 })

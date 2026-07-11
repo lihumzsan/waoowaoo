@@ -9,7 +9,7 @@ import {
 import { WorkspaceAssistantPendingTurnPlaceholder } from '@/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers'
 import {
   resolveWorkspaceAssistantReplyInFlight,
-} from '@/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime'
+} from '@/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state'
 
 describe('workspace assistant reply loading indicator', () => {
   it('shows while the assistant turn is active before transport status flips', () => {

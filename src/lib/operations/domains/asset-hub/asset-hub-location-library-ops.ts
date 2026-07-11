@@ -244,7 +244,6 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         summary: '将删除该场景记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         locationId: z.string().min(1),
       }),
       outputSchema: z.unknown(),

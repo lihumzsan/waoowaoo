@@ -43,7 +43,7 @@ describe('bgm score worker', () => {
     }))
   })
 
-  it('fails explicitly and skips upload when generated audio is shorter than the target timeline', async () => {
+  it('fails explicitly without writing target terminal state for a short generated cue', async () => {
     mockReadyProject()
     mockCompleteTimeline()
     executeAiTextStepMock.mockResolvedValue({ text: buildValidPlanText() })
@@ -75,6 +75,6 @@ describe('bgm score worker', () => {
       return arg.update?.status === 'failed'
         && arg.update.diagnosticsJson?.errorMessage === 'BGM_SCORE_CUE_AUDIO_DURATION_SHORT:cue-001:2.000:3.000'
     })
-    expect(failedCall).toBeTruthy()
+    expect(failedCall).toBeUndefined()
   })
 })

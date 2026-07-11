@@ -5,7 +5,7 @@
   { "id": "SYS-ASSISTANT-AWAITING-TASK-RELOAD", "status": "protected" },
   { "id": "SYS-TASK-RETRY-SUCCESS", "status": "protected" },
   { "id": "SYS-TERMINAL-FAILURE-CONSISTENCY", "status": "protected" },
-  { "id": "SYS-QUEUE-ENQUEUE-COMPENSATION", "status": "protected" },
+  { "id": "SYS-TASK-SUBMISSION-DURABLE-OUTBOX", "status": "protected" },
   { "id": "SYS-SSE-DUPLICATE-LATE-REPLAY", "status": "protected" },
   { "id": "SYS-PROVIDER-FAILURE-NO-FALLBACK", "status": "protected" },
   { "id": "SYS-CANVAS-TERMINAL-NO-GAP", "status": "protected" }

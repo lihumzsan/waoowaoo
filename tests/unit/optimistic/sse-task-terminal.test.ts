@@ -29,6 +29,7 @@ describe('sse invalidation behavior', () => {
       clearTimeout: typeof clearTimeout
       setInterval: typeof setInterval
       clearInterval: typeof clearInterval
+      sessionStorage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
     } }).window = {
       setTimeout: ((cb: () => void) => {
         runtime.scheduledTimers.push(cb)
@@ -40,7 +41,77 @@ describe('sse invalidation behavior', () => {
         return runtime.scheduledIntervals.length as unknown as ReturnType<typeof setInterval>
       }) as unknown as typeof setInterval,
       clearInterval: (() => undefined) as unknown as typeof clearInterval,
+      sessionStorage: {
+        getItem: runtime.getStoredCursor,
+        setItem: runtime.setStoredCursor,
+        removeItem: runtime.removeStoredCursor,
+      },
     }
+  })
+
+  it('invalid SSE payload closes the stream, clears the cursor, and requests a snapshot resync', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    expect(source).toBeTruthy()
+
+    source?.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      malformed: true,
+    })
+
+    expect(source?.readyState).toBe(2)
+    expect(runtime.removeStoredCursor).toHaveBeenCalledWith(
+      'workspace-sse-cursor:v1:project-1:episode-1',
+    )
+    expect(runtime.setState).toHaveBeenCalledTimes(1)
+    const advanceGeneration = runtime.setState.mock.calls[0]?.[0]
+    expect(advanceGeneration).toBeTypeOf('function')
+    expect(advanceGeneration?.(7)).toBe(8)
+  })
+
+  it('same live SSE identity with a different fingerprint closes the stream and requests a snapshot resync', async () => {
+    const { useSSE } = await import('@/lib/query/hooks/useSSE')
+
+    useSSE({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      enabled: true,
+    })
+
+    const source = FakeEventSource.instances[0]
+    const baseEvent = {
+      id: '31',
+      type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
+      taskId: 'task-identity-conflict',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-04-24T00:00:00.000Z',
+      taskType: 'image_character',
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      episodeId: 'episode-1',
+    }
+    source?.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      ...baseEvent,
+      payload: { lifecycleType: TASK_EVENT_TYPE.PROCESSING, progress: 10 },
+    })
+    source?.emit(TASK_SSE_EVENT_TYPE.LIFECYCLE, {
+      ...baseEvent,
+      payload: { lifecycleType: TASK_EVENT_TYPE.PROCESSING, progress: 20 },
+    })
+
+    expect(source?.readyState).toBe(2)
+    expect(runtime.removeStoredCursor).toHaveBeenCalledWith(
+      'workspace-sse-cursor:v1:project-1:episode-1',
+    )
+    expect(runtime.setState).toHaveBeenCalledTimes(1)
   })
 
   it('PROCESSING(progress 数值) 不触发 target-state invalidation；COMPLETED 触发', async () => {
@@ -167,8 +238,8 @@ describe('sse invalidation behavior', () => {
       name: 'Materialized episode',
       updatedAt: '2026-04-24T00:00:01.000Z',
       resourceVersion: {
-        scheme: 'aggregate_updated_at',
-        value: '2026-04-24T00:00:01.000Z',
+        scheme: 'resource_revision',
+        value: 1,
       },
     }
     const runtimeClear = vi.fn(() => {
@@ -204,8 +275,8 @@ describe('sse invalidation behavior', () => {
           episodeId: 'episode-1',
           resourceKey: 'episodeData:project-1:episode-1',
           resourceVersion: {
-            scheme: 'aggregate_updated_at',
-            value: '2026-04-24T00:00:01.000Z',
+            scheme: 'resource_revision',
+            value: 1,
           },
           taskId: 'task-materialized-1',
           data: episode,

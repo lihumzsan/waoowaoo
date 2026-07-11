@@ -1,5 +1,6 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
+import { assertAssistantToolWriteAuthority } from './write-authority'
 export type { ProjectAgentOperationContext, ProjectAgentOperationDefinition, ProjectAgentOperationRegistry } from './types'
 
 function mustTrimmedString(value: unknown, label: string): string {
@@ -57,7 +58,6 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     const agentFlow = op.agentFlow as
       | {
           onTaskComplete?: unknown
-          onTaskFailed?: unknown
           interruptsFor?: unknown
         }
       | undefined
@@ -68,13 +68,9 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (
         agentFlow.onTaskComplete !== undefined &&
         agentFlow.onTaskComplete !== 'resume_agent' &&
-        agentFlow.onTaskComplete !== 'await_user_choice' &&
         agentFlow.onTaskComplete !== 'complete'
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
-      }
-      if (agentFlow.onTaskFailed !== undefined && agentFlow.onTaskFailed !== 'resume_agent' && agentFlow.onTaskFailed !== 'fail') {
-        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_FAILED_INVALID:${operationId}`)
       }
       if (
         agentFlow.interruptsFor !== undefined &&
@@ -102,12 +98,23 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)
       }
-      if (op.execute !== undefined) {
+      if (
+        op.execute !== undefined
+        || op.executeInTransaction !== undefined
+      ) {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_EXECUTOR_FORBIDDEN:${operationId}`)
       }
-    } else if (typeof op.execute !== 'function') {
-      throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_EXECUTOR_REQUIRED:${operationId}`)
+    } else {
+      const hasDirectExecutor = typeof op.execute === 'function'
+      const hasTransactionalExecutor = typeof op.executeInTransaction === 'function'
+      if (Number(hasDirectExecutor) + Number(hasTransactionalExecutor) !== 1) {
+        throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_EXECUTOR_REQUIRED:${operationId}`)
+      }
+      if (op.plan !== undefined || op.commit !== undefined) {
+        throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_PLAN_COMMIT_FORBIDDEN:${operationId}`)
+      }
     }
+    assertAssistantToolWriteAuthority(operationId, op)
     const toolInputSchema = op.toolInputSchema as
       | {
           properties?: unknown
@@ -132,13 +139,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
   }
 }
 
-export function createProjectAgentOperationRegistry() {
-  const registry = createRawProjectAgentOperationRegistry()
-  validateOperationRegistry(registry)
-  return registry
-}
-
-export function createProjectAgentOperationRegistryForApi() {
+function createCompleteProjectAgentOperationRegistry() {
   const base = createRawProjectAgentOperationRegistry()
   const apiOnly = createApiOnlyOperationRegistry()
 
@@ -154,4 +155,12 @@ export function createProjectAgentOperationRegistryForApi() {
   }
   validateOperationRegistry(merged)
   return merged
+}
+
+export function createProjectAgentOperationRegistry() {
+  return createCompleteProjectAgentOperationRegistry()
+}
+
+export function createProjectAgentOperationRegistryForApi() {
+  return createCompleteProjectAgentOperationRegistry()
 }

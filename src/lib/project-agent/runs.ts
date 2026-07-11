@@ -13,6 +13,7 @@ import {
   appendProjectAgentEvents,
   appendProjectAgentEventsInTransaction,
   type ProjectAgentEventTransactionClient,
+  type ProjectAgentEventInput,
 } from './event'
 import { normalizeProjectAgentRunStatus } from './run-state-machine'
 import {
@@ -20,6 +21,14 @@ import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
+import type {
+  DeclinedProjectAgentInterruption,
+  ProjectAgentInterruptionType,
+} from './interruptions'
+import {
+  createProjectAgentExecutionSegment,
+  projectAgentExecutionStartedIdempotencyKey,
+} from './execution-segment'
 
 export type ProjectAgentRunStatus =
   | 'running'
@@ -232,6 +241,305 @@ export async function createProjectAgentRun(params: ProjectAgentRunScope & {
   return run
 }
 
+type LockedConsumedInterruption = {
+  id: string
+  runId: string | null
+  type: string
+  status: string
+}
+
+export async function createProjectAgentConsumedControlRetryRun(
+  params: ProjectAgentRunScope & {
+    interruptionId: string
+    requestId: string
+    controlKind: 'approval_response' | 'choice_response'
+    runId?: string
+  },
+): Promise<ProjectAgentRunRecord> {
+  const assistantId = params.assistantId ?? 'workspace-command'
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: params.projectId,
+    episodeId: params.episodeId ?? null,
+  })
+  return await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<LockedConsumedInterruption[]>(Prisma.sql`
+      SELECT id, runId, type, status
+      FROM project_agent_interruptions
+      WHERE id = ${params.interruptionId}
+        AND projectId = ${params.projectId}
+        AND userId = ${params.userId}
+        AND assistantId = ${assistantId}
+        AND scopeRef = ${scopeRef}
+      FOR UPDATE
+    `)
+    const interruption = locked[0] ?? null
+    const expectedType = params.controlKind === 'approval_response' ? 'approval' : 'choice'
+    if (
+      !interruption?.runId
+      || interruption.type !== expectedType
+      || interruption.status !== 'consumed'
+    ) {
+      throw new Error(`PROJECT_AGENT_CONSUMED_CONTROL_RETRY_INVALID:${params.interruptionId}`)
+    }
+
+    const retryRequestPrefix = `project-agent-control-retry:${params.interruptionId}:`
+    const attempts = await tx.projectAgentRun.findMany({
+      where: {
+        projectId: params.projectId,
+        userId: params.userId,
+        assistantId,
+        scopeRef,
+        requestId: { startsWith: retryRequestPrefix },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: projectAgentRunRecordSelect,
+    })
+    const source = attempts[0] ?? await tx.projectAgentRun.findUnique({
+      where: { id: interruption.runId },
+      select: projectAgentRunRecordSelect,
+    })
+    if (!source) throw new Error(`PROJECT_AGENT_CONTROL_RETRY_SOURCE_RUN_MISSING:${interruption.runId}`)
+    const sourceIsOriginalRun = source.id === interruption.runId
+    if (
+      source.projectId !== params.projectId
+      || source.userId !== params.userId
+      || source.assistantId !== assistantId
+      || source.scopeRef !== scopeRef
+      || (!sourceIsOriginalRun && source.controlKind !== params.controlKind)
+    ) {
+      throw new Error(`PROJECT_AGENT_CONTROL_RETRY_SOURCE_RUN_MISMATCH:${source.id}`)
+    }
+    const decisionSegment = createProjectAgentExecutionSegment({
+      kind: params.controlKind,
+      interruptionId: interruption.id,
+    })
+    const executionStarted = await tx.projectAgentEvent.findUnique({
+      where: {
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(decisionSegment.id),
+      },
+      select: { id: true },
+    })
+    if (executionStarted) {
+      throw new Error(`PROJECT_AGENT_CONTROL_EXECUTION_OUTCOME_UNKNOWN:${source.id}`)
+    }
+    const retryableBootstrapFailure = source.status === 'failed'
+      && source.errorCode === 'PROJECT_AGENT_CONTROL_FAILED'
+    const retryablePreExecutionCrash = source.status === 'cancelled'
+      && source.stopReason === 'stale_running_run'
+    if (!retryableBootstrapFailure && !retryablePreExecutionCrash) {
+      throw new Error(`PROJECT_AGENT_CONTROL_RETRY_NOT_ALLOWED:${source.id}:${source.status}`)
+    }
+
+    const runId = params.runId?.trim() || randomUUID()
+    const runFence = createInitialProjectAgentRunFence(runId)
+    const attempt = attempts.length + 1
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId ?? null,
+        assistantId,
+        scopeRef,
+      },
+      events: [{
+        runFence,
+        idempotencyKey: `run-started:${runId}`,
+        event: {
+          kind: 'run.started',
+          runId,
+          requestId: `${retryRequestPrefix}${attempt}:${params.requestId}`,
+          controlKind: params.controlKind,
+        },
+      }],
+    })
+    const run = await getProjectAgentRunInTransaction(tx, {
+      ...params,
+      assistantId,
+      runId,
+    })
+    if (!run) throw new Error(`PROJECT_AGENT_RUN_CREATE_FAILED:${runId}`)
+    return run
+  })
+}
+
+type PendingRunForUserTurn = {
+  id: string
+  status: string
+  runVersion: number
+  eventSeq: bigint
+}
+
+type PendingInterruptionForUserTurn = {
+  id: string
+  approvalId: string
+  runId: string | null
+  activityId: string | null
+  type: string
+  operationId: string
+}
+
+/**
+ * Starts a fresh user turn and retires the previous waiting turn as one scope
+ * transaction. The user's message, the immutable rejection/supersede decision,
+ * Run/Activity/Wait cancellation, and the new Run therefore cannot be observed
+ * as a half-applied handoff.
+ */
+export async function createProjectAgentUserTurnRun(params: ProjectAgentRunScope & {
+  runId?: string
+  requestId: string
+  message: UIMessage
+}): Promise<{
+  run: ProjectAgentRunRecord
+  declinedInterruptions: DeclinedProjectAgentInterruption[]
+}> {
+  const runId = params.runId?.trim() || randomUUID()
+  const assistantId = params.assistantId ?? 'workspace-command'
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: params.projectId,
+    episodeId: params.episodeId ?? null,
+  })
+  return await prisma.$transaction(async (tx) => {
+    const pendingRuns = await tx.$queryRaw<PendingRunForUserTurn[]>(Prisma.sql`
+      SELECT id, status, runVersion, eventSeq
+      FROM project_agent_runs
+      WHERE projectId = ${params.projectId}
+        AND userId = ${params.userId}
+        AND assistantId = ${assistantId}
+        AND scopeRef = ${scopeRef}
+        AND status IN ('awaiting_approval', 'awaiting_choice', 'awaiting_task')
+      ORDER BY createdAt ASC
+      FOR UPDATE
+    `)
+    const pendingRunIds = pendingRuns.map((run) => run.id)
+    const pendingInterruptions = pendingRunIds.length > 0
+      ? await tx.projectAgentInterruption.findMany({
+          where: {
+            runId: { in: pendingRunIds },
+            status: 'pending',
+          },
+          select: {
+            id: true,
+            approvalId: true,
+            runId: true,
+            activityId: true,
+            type: true,
+            operationId: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+    const interruptionsByRun = new Map<string, PendingInterruptionForUserTurn[]>()
+    for (const interruption of pendingInterruptions) {
+      if (!interruption.runId) throw new Error(`PROJECT_AGENT_PENDING_INTERRUPTION_RUN_ID_MISSING:${interruption.id}`)
+      const existing = interruptionsByRun.get(interruption.runId) ?? []
+      existing.push(interruption)
+      interruptionsByRun.set(interruption.runId, existing)
+    }
+    for (const [pendingRunId, interruptions] of interruptionsByRun) {
+      if (interruptions.length > 1) {
+        throw new Error(`PROJECT_AGENT_MULTIPLE_PENDING_INTERRUPTS_FOR_RUN:${pendingRunId}`)
+      }
+    }
+
+    const retirementEvents: ProjectAgentEventInput[] = pendingRuns.flatMap((pendingRun): ProjectAgentEventInput[] => {
+      const runFence = createProjectAgentRunFence(pendingRun)
+      const interruption = interruptionsByRun.get(pendingRun.id)?.[0] ?? null
+      const events: ProjectAgentEventInput[] = []
+      if (interruption) {
+        const isApproval = interruption.type === 'approval'
+        events.push({
+          runFence,
+          idempotencyKey: `interruption-resolved:${interruption.id}:${isApproval ? 'consumed' : 'superseded'}`,
+          event: {
+            kind: 'interruption.resolved' as const,
+            runId: pendingRun.id,
+            activityId: interruption.activityId,
+            interruptionId: interruption.id,
+            outcome: isApproval ? 'consumed' as const : 'superseded' as const,
+            ...(isApproval
+              ? {
+                  response: {
+                    approved: false,
+                    via: 'user_message',
+                  } satisfies Prisma.InputJsonObject,
+                }
+              : {}),
+          },
+        })
+      }
+      events.push({
+        runFence,
+        idempotencyKey: `run-superseded:${pendingRun.id}:${runId}`,
+        event: {
+          kind: 'run.status_changed' as const,
+          runId: pendingRun.id,
+          status: 'cancelled' as const,
+          expectedStatuses: interruption
+            ? ['running']
+            : [normalizeProjectAgentRunStatus(pendingRun.status)],
+          stopReason: 'superseded',
+          errorCode: null,
+          errorMessage: null,
+        },
+      })
+      return events
+    })
+    if (retirementEvents.length > 0) {
+      await appendProjectAgentEventsInTransaction(tx, {
+        scope: {
+          projectId: params.projectId,
+          userId: params.userId,
+          episodeId: params.episodeId ?? null,
+          assistantId,
+          scopeRef,
+        },
+        events: retirementEvents,
+      })
+    }
+
+    await appendProjectAssistantThreadMessagesInTransaction(tx, {
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId ?? null,
+      assistantId,
+      messages: [params.message],
+    })
+    const runFence = createInitialProjectAgentRunFence(runId)
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId ?? null,
+        assistantId,
+        scopeRef,
+      },
+      events: [{
+        runFence,
+        idempotencyKey: `run-started:${runId}`,
+        event: {
+          kind: 'run.started',
+          runId,
+          requestId: params.requestId,
+          controlKind: 'user_turn',
+        },
+      }],
+    })
+    const run = await getProjectAgentRunInTransaction(tx, { ...params, runId })
+    if (!run) throw new Error(`PROJECT_AGENT_RUN_CREATE_FAILED:${runId}`)
+    return {
+      run,
+      declinedInterruptions: pendingInterruptions.map((interruption) => ({
+        id: interruption.id,
+        approvalId: interruption.approvalId,
+        runId: interruption.runId,
+        activityId: interruption.activityId,
+        type: interruption.type as ProjectAgentInterruptionType,
+        operationId: interruption.operationId,
+      })),
+    }
+  })
+}
+
 export async function getProjectAgentRun(params: ProjectAgentRunScope & {
   runId: string
 }): Promise<ProjectAgentRunRecord | null> {
@@ -364,35 +672,43 @@ export async function settleProjectAgentRunWithMessage(params: {
   })
 }
 
-export async function safelyUpdateProjectAgentRunStatus(params: {
-  runFence: ProjectAgentRunFence | null | undefined
-  status: ProjectAgentRunStatus
-  expectedStatuses?: readonly ProjectAgentRunStatus[]
-  stopReason?: string | null
+export async function settleProjectAgentRunFailureWithMessage(params: {
+  runFence: ProjectAgentRunFence
+  controlKind: ProjectAgentRunControlKind
+  requestId: string
+  status: 'failed' | 'cancelled'
+  stopReason: string
   errorCode?: string | null
   errorMessage?: string | null
 }): Promise<void> {
-  if (!params.runFence) return
-  try {
-    await updateProjectAgentRunStatus({
-      runFence: params.runFence,
-      status: params.status,
-      expectedStatuses: params.expectedStatuses,
-      stopReason: params.stopReason,
-      errorCode: params.errorCode,
-      errorMessage: params.errorMessage,
-    })
-  } catch (error) {
-    projectAgentRunLogger.error({
-      action: 'assistant.run.status-update.failed',
-      message: 'Failed to update project agent run status',
-      details: {
-        runId: params.runFence.runId,
-        status: params.status,
-        error: error instanceof Error ? error.message : String(error),
+  const message: UIMessage = {
+    id: `workspace-assistant-run:${params.controlKind}:${params.runFence.runId}:${params.requestId}`,
+    role: 'assistant',
+    metadata: {
+      custom: {
+        projectAgentRunId: params.runFence.runId,
       },
-    })
+    },
+    parts: [{
+      type: 'data-agent-run',
+      data: {
+        runId: params.runFence.runId,
+        requestId: params.requestId,
+        status: params.status,
+        controlKind: params.controlKind,
+        stopReason: params.stopReason,
+      },
+    }],
   }
+  await settleProjectAgentRunWithMessage({
+    runFence: params.runFence,
+    status: params.status,
+    expectedStatuses: ['running'],
+    stopReason: params.stopReason,
+    errorCode: params.errorCode,
+    errorMessage: params.errorMessage,
+    message,
+  })
 }
 
 export async function cancelRunningProjectAgentRun(params: {
@@ -433,33 +749,6 @@ export async function cancelRunningProjectAgentRun(params: {
     }],
   })
   return true
-}
-
-export async function safelyCancelRunningProjectAgentRun(params: {
-  runFence: ProjectAgentRunFence | null | undefined
-  stopReason: string
-  errorCode?: string | null
-  errorMessage?: string | null
-}): Promise<void> {
-  if (!params.runFence) return
-  try {
-    await cancelRunningProjectAgentRun({
-      runFence: params.runFence,
-      stopReason: params.stopReason,
-      errorCode: params.errorCode,
-      errorMessage: params.errorMessage,
-    })
-  } catch (error) {
-    projectAgentRunLogger.error({
-      action: 'assistant.run.cancel-running.failed',
-      message: 'Failed to cancel running project agent run',
-      details: {
-        runId: params.runFence.runId,
-        stopReason: params.stopReason,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    })
-  }
 }
 
 export async function touchProjectAgentRunHeartbeat(params: {
@@ -554,50 +843,4 @@ export async function ensureProjectAgentRunSlotAvailable(scope: ProjectAgentRunS
   if (freshRun) {
     throw new Error('PROJECT_AGENT_RUN_ACTIVE')
   }
-}
-
-export async function listBlockingProjectAgentRunsForThreadClear(
-  scope: ProjectAgentRunScope,
-): Promise<ProjectAgentRunRecord[]> {
-  await cancelStaleRunningProjectAgentRunsForScope(scope)
-  const { assistantId, scopeRef } = buildRunScope(scope)
-  const runs = await prisma.projectAgentRun.findMany({
-    where: {
-      projectId: scope.projectId,
-      userId: scope.userId,
-      assistantId,
-      scopeRef,
-      status: {
-        in: ['running', 'awaiting_approval', 'awaiting_choice', 'awaiting_task'],
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    select: projectAgentRunRecordSelect,
-  })
-  return runs.map((run) => toProjectAgentRunRecord(run))
-}
-
-export async function supersedePendingRunsInScope(scope: ProjectAgentRunScope): Promise<string[]> {
-  const { assistantId, scopeRef } = buildRunScope(scope)
-  const pending = await prisma.projectAgentRun.findMany({
-    where: {
-      projectId: scope.projectId,
-      userId: scope.userId,
-      assistantId,
-      scopeRef,
-      status: {
-        in: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
-      },
-    },
-    select: { id: true, runVersion: true, eventSeq: true },
-  })
-  if (pending.length === 0) return []
-  const ids = pending.map((run) => run.id)
-  await Promise.all(pending.map((run) => updateProjectAgentRunStatus({
-    runFence: createProjectAgentRunFence(run),
-    status: 'cancelled',
-    expectedStatuses: ['awaiting_approval', 'awaiting_choice', 'awaiting_task'],
-    stopReason: 'superseded',
-  })))
-  return ids
 }

@@ -5,13 +5,17 @@ import type {
   ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCardPartData,
 } from './types'
-import { EDIT_FIRST_CHOICE_TYPES, type EditFirstChoiceType } from './edit-first-choice-tools'
+import {
+  getEditFirstChoiceDefinition,
+  isEditFirstChoiceType,
+  type EditFirstChoiceType,
+} from './edit-first-choice-tools'
 import {
   parseEditFirstChoiceDecision,
   type EditFirstChoiceDecision,
 } from './edit-first-choice-result'
 
-const choiceTypeSchema = z.enum(EDIT_FIRST_CHOICE_TYPES)
+const choiceTypeSchema = z.custom<EditFirstChoiceType>(isEditFirstChoiceType)
 
 const choiceCardOptionSchema = z.object({
   value: z.string().min(1),
@@ -25,10 +29,14 @@ const choiceCardGroupSchema = z.object({
   key: z.string().min(1),
   label: z.string().min(1),
   required: z.boolean(),
+  presentation: z.enum(['options', 'aspect_ratio', 'image']),
   options: z.array(choiceCardOptionSchema),
 }).strict()
 
-const choiceCardSubmitSchema = z.object({ kind: z.literal('submit_tool_output') }).strict()
+const choiceCardSubmitSchema = z.object({
+  kind: z.literal('submit_tool_output'),
+  decision: z.enum(['approve', 'select']),
+}).strict()
 
 export const projectAgentChoiceCardSchema = z.object({
   cardId: z.string().min(1),
@@ -37,6 +45,7 @@ export const projectAgentChoiceCardSchema = z.object({
   toolCallId: z.string().min(1),
   choiceType: choiceTypeSchema,
   variant: z.enum(['choice', 'confirm', 'confirm_or_reply']).optional(),
+  replyMode: z.enum(['whole_card', 'per_group']),
   autoSubmitOnReady: z.boolean().optional(),
   title: z.string().min(1),
   description: z.string().nullable().optional(),
@@ -187,150 +196,153 @@ export function parseProjectAgentChoiceDecision(params: {
 }
 
 export function expectedReviewedResourceKind(choiceType: EditFirstChoiceType): ProjectAgentChoiceReviewedResourceKind {
-  const kinds = {
-    script_intake: 'script_intake_prompt',
-    script_review: 'script_review_document',
-    bible_review: 'bible_review_plan',
-    style: 'style_preview_set',
-    asset_review: 'asset_review_set',
-  } as const satisfies Record<EditFirstChoiceType, ProjectAgentChoiceReviewedResourceKind>
-  return kinds[choiceType]
+  return getEditFirstChoiceDefinition(choiceType).reviewedResourceKind
 }
 
-export async function resolveCurrentProjectAgentChoiceReviewedResource(params: {
+interface ChoiceResourceResolverParams {
   tx: Prisma.TransactionClient
   projectId: string
   userId: string
   episodeId: string
   card: ProjectAgentChoiceCardPartData
-}): Promise<ProjectAgentChoiceReviewedResource> {
-  const { tx } = params
-  const kind = expectedReviewedResourceKind(params.card.choiceType)
-  if (kind === 'script_intake_prompt') {
-    return fingerprintProjectAgentChoiceResource({
-      kind,
-      snapshot: {
-        cardId: params.card.cardId,
-        choiceType: params.card.choiceType,
-        groups: params.card.groups,
-      },
-    })
-  }
+}
 
-  if (kind === 'script_review_document') {
-    const editBible = await tx.projectEditBible.findFirst({
-      where: {
-        episodeId: params.episodeId,
-        episode: {
-          projectId: params.projectId,
-          project: { userId: params.userId },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        version: true,
-        updatedAt: true,
-        sourceDocument: {
-          select: {
-            id: true,
-            sourceKind: true,
-            checksum: true,
-            version: true,
-            normalizedText: true,
-            updatedAt: true,
-          },
-        },
-      },
-    })
-    if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-    return fingerprintProjectAgentChoiceResource({ kind, snapshot: editBible })
-  }
+export async function resolveScriptIntakeChoiceResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  return fingerprintProjectAgentChoiceResource({
+    kind: 'script_intake_prompt',
+    snapshot: {
+      cardId: params.card.cardId,
+      choiceType: params.card.choiceType,
+      groups: params.card.groups,
+    },
+  })
+}
 
-  if (kind === 'bible_review_plan') {
-    const editBible = await tx.projectEditBible.findFirst({
-      where: {
-        episodeId: params.episodeId,
-        episode: {
-          projectId: params.projectId,
-          project: { userId: params.userId },
-        },
+export async function resolveScriptReviewChoiceResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  const editBible = await params.tx.projectEditBible.findFirst({
+    where: {
+      episodeId: params.episodeId,
+      episode: {
+        projectId: params.projectId,
+        project: { userId: params.userId },
       },
-      select: {
-        id: true,
-        status: true,
-        version: true,
-        bibleJson: true,
-        beatSheetJson: true,
-        ledgerJson: true,
-        emotionalCurveJson: true,
-        styleBibleJson: true,
-        diagnosticsJson: true,
-        updatedAt: true,
-        sourceDocument: {
-          select: {
-            id: true,
-            checksum: true,
-            version: true,
-            updatedAt: true,
-          },
-        },
-      },
-    })
-    if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-    return fingerprintProjectAgentChoiceResource({ kind, snapshot: editBible })
-  }
-
-  if (kind === 'style_preview_set') {
-    const [project, editBible] = await Promise.all([
-      tx.project.findFirst({
-        where: { id: params.projectId, userId: params.userId },
-        select: { id: true, videoRatio: true },
-      }),
-      tx.projectEditBible.findFirst({
-        where: {
-          episodeId: params.episodeId,
-          episode: {
-            projectId: params.projectId,
-            project: { userId: params.userId },
-          },
-        },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      updatedAt: true,
+      sourceDocument: {
         select: {
           id: true,
-          status: true,
+          sourceKind: true,
+          checksum: true,
           version: true,
-          stylePreviews: {
-            where: { status: { in: ['completed', 'confirmed'] } },
-            orderBy: { createdAt: 'asc' },
-            select: {
-              id: true,
-              styleKey: true,
-              title: true,
-              summary: true,
-              imageKey: true,
-              status: true,
-              updatedAt: true,
-            },
+          normalizedText: true,
+          updatedAt: true,
+        },
+      },
+    },
+  })
+  if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
+  return fingerprintProjectAgentChoiceResource({ kind: 'script_review_document', snapshot: editBible })
+}
+
+export async function resolveBibleReviewChoiceResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  const editBible = await params.tx.projectEditBible.findFirst({
+    where: {
+      episodeId: params.episodeId,
+      episode: {
+        projectId: params.projectId,
+        project: { userId: params.userId },
+      },
+    },
+    select: {
+      id: true,
+      status: true,
+      version: true,
+      bibleJson: true,
+      beatSheetJson: true,
+      ledgerJson: true,
+      emotionalCurveJson: true,
+      styleBibleJson: true,
+      diagnosticsJson: true,
+      updatedAt: true,
+      sourceDocument: {
+        select: {
+          id: true,
+          checksum: true,
+          version: true,
+          updatedAt: true,
+        },
+      },
+    },
+  })
+  if (!editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
+  return fingerprintProjectAgentChoiceResource({ kind: 'bible_review_plan', snapshot: editBible })
+}
+
+export async function resolveStyleChoiceResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  const [project, editBible] = await Promise.all([
+    params.tx.project.findFirst({
+      where: { id: params.projectId, userId: params.userId },
+      select: { id: true, videoRatio: true },
+    }),
+    params.tx.projectEditBible.findFirst({
+      where: {
+        episodeId: params.episodeId,
+        episode: {
+          projectId: params.projectId,
+          project: { userId: params.userId },
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        stylePreviews: {
+          where: { status: { in: ['completed', 'confirmed'] } },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            styleKey: true,
+            title: true,
+            summary: true,
+            imageKey: true,
+            status: true,
+            updatedAt: true,
           },
         },
-      }),
-    ])
-    if (!project || !editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
-    return fingerprintProjectAgentChoiceResource({
-      kind,
-      snapshot: {
-        project,
-        bible: {
-          id: editBible.id,
-          status: editBible.status,
-          version: editBible.version,
-        },
-        stylePreviews: editBible.stylePreviews,
       },
-    })
-  }
+    }),
+  ])
+  if (!project || !editBible) throw new Error('PROJECT_AGENT_CHOICE_REVIEWED_RESOURCE_MISSING')
+  return fingerprintProjectAgentChoiceResource({
+    kind: 'style_preview_set',
+    snapshot: {
+      project,
+      bible: {
+        id: editBible.id,
+        status: editBible.status,
+        version: editBible.version,
+      },
+      stylePreviews: editBible.stylePreviews,
+    },
+  })
+}
 
-  const editScripts = await tx.projectEditScript.findMany({
+export async function resolveAssetReviewChoiceResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  const editScripts = await params.tx.projectEditScript.findMany({
     where: {
       projectId: params.projectId,
       episodeId: params.episodeId,
@@ -355,7 +367,13 @@ export async function resolveCurrentProjectAgentChoiceReviewedResource(params: {
       },
     },
   })
-  return fingerprintProjectAgentChoiceResource({ kind, snapshot: editScripts })
+  return fingerprintProjectAgentChoiceResource({ kind: 'asset_review_set', snapshot: editScripts })
+}
+
+export async function resolveCurrentProjectAgentChoiceReviewedResource(
+  params: ChoiceResourceResolverParams,
+): Promise<ProjectAgentChoiceReviewedResource> {
+  return await getEditFirstChoiceDefinition(params.card.choiceType).resolveReviewedResource(params)
 }
 
 export async function assertProjectAgentChoiceOfferCurrent(params: {

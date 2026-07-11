@@ -50,13 +50,13 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(runMock.createProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({
-      appendMessages: [{
+    expect(runMock.createProjectAgentUserTurnRun).toHaveBeenCalledWith(expect.objectContaining({
+      message: {
         id: 'u-file',
         role: 'user',
         parts: [{ type: 'text', text: '' }],
         metadata,
-      }],
+      },
     }))
     expect(projectAgentMock.createProjectAgentChatResponse).toHaveBeenCalledWith(expect.objectContaining({
       messages: [{

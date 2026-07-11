@@ -7,10 +7,16 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+  projectAgentEvent: {
+    findUnique: vi.fn(),
+  },
+  $queryRaw: vi.fn(),
+  $transaction: vi.fn(),
 }))
 
 const eventMock = vi.hoisted(() => ({
   appendProjectAgentEvents: vi.fn(async () => null),
+  appendProjectAgentEventsInTransaction: vi.fn(async () => null),
 }))
 
 const runLockMock = vi.hoisted(() => ({
@@ -24,6 +30,7 @@ vi.mock('@/lib/project-agent/event', () => eventMock)
 import {
   cancelRunningProjectAgentRun,
   cancelStaleRunningProjectAgentRunsForScope,
+  createProjectAgentConsumedControlRetryRun,
   ensureProjectAgentRunSlotAvailable,
 } from '@/lib/project-agent/runs'
 
@@ -39,7 +46,13 @@ describe('project agent runs', () => {
     })
     prismaMock.projectAgentRun.findMany.mockResolvedValue([])
     prismaMock.projectAgentRun.updateMany.mockResolvedValue({ count: 0 })
+    prismaMock.projectAgentEvent.findUnique.mockResolvedValue(null)
+    prismaMock.$queryRaw.mockResolvedValue([])
+    prismaMock.$transaction.mockImplementation(async (work: (tx: typeof prismaMock) => Promise<unknown>) => (
+      await work(prismaMock)
+    ))
     eventMock.appendProjectAgentEvents.mockResolvedValue(null)
+    eventMock.appendProjectAgentEventsInTransaction.mockResolvedValue(null)
     runLockMock.releaseProjectAgentRunLockForRun.mockResolvedValue(false)
   })
 
@@ -150,5 +163,115 @@ describe('project agent runs', () => {
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
     })).rejects.toThrow('PROJECT_AGENT_RUN_ACTIVE')
+  })
+
+  it('creates a new Run attempt from a consumed decision only after a pre-execution failure', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([{
+      id: 'interruption-1',
+      runId: 'run-origin',
+      type: 'choice',
+      status: 'consumed',
+    }])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
+    prismaMock.projectAgentRun.findUnique.mockResolvedValueOnce({
+      id: 'run-origin',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'request-origin',
+      status: 'failed',
+      runVersion: 1,
+      eventSeq: BigInt(4),
+      terminalEventSeq: BigInt(4),
+      controlKind: 'user_turn',
+      stopReason: 'control_resolution_failed',
+      errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
+      errorMessage: 'DB_DOWN',
+      heartbeatAt: new Date(),
+    })
+    prismaMock.projectAgentRun.findFirst.mockResolvedValueOnce({
+      id: 'run-retry',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      requestId: 'project-agent-control-retry:interruption-1:1:req-2',
+      status: 'running',
+      runVersion: 1,
+      eventSeq: BigInt(5),
+      terminalEventSeq: null,
+      controlKind: 'choice_response',
+      stopReason: null,
+      errorCode: null,
+      errorMessage: null,
+      heartbeatAt: new Date(),
+    })
+
+    const run = await createProjectAgentConsumedControlRetryRun({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      interruptionId: 'interruption-1',
+      requestId: 'req-2',
+      controlKind: 'choice_response',
+      runId: 'run-retry',
+    })
+
+    expect(run.id).toBe('run-retry')
+    expect(eventMock.appendProjectAgentEventsInTransaction).toHaveBeenCalledWith(
+      prismaMock,
+      expect.objectContaining({
+        events: [expect.objectContaining({
+          event: expect.objectContaining({
+            kind: 'run.started',
+            runId: 'run-retry',
+            controlKind: 'choice_response',
+          }),
+        })],
+      }),
+    )
+  })
+
+  it('never replays a consumed decision after the execution-started fence exists', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([{
+      id: 'interruption-1',
+      runId: 'run-origin',
+      type: 'approval',
+      status: 'consumed',
+    }])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
+    prismaMock.projectAgentRun.findUnique.mockResolvedValueOnce({
+      id: 'run-origin',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      controlKind: 'approval_response',
+      status: 'failed',
+      errorCode: 'PROJECT_AGENT_CONTROL_FAILED',
+    })
+    prismaMock.projectAgentEvent.findUnique.mockResolvedValueOnce({ id: BigInt(9) })
+
+    await expect(createProjectAgentConsumedControlRetryRun({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      interruptionId: 'interruption-1',
+      requestId: 'req-2',
+      controlKind: 'approval_response',
+      runId: 'run-retry',
+    })).rejects.toThrow('PROJECT_AGENT_CONTROL_EXECUTION_OUTCOME_UNKNOWN:run-origin')
+    expect(prismaMock.projectAgentEvent.findUnique).toHaveBeenCalledWith({
+      where: {
+        idempotencyKey: 'run-execution-started:decision:interruption-1',
+      },
+      select: { id: true },
+    })
+    expect(eventMock.appendProjectAgentEventsInTransaction).not.toHaveBeenCalled()
   })
 })

@@ -28,32 +28,6 @@ describe('workspace assistant panel layout', () => {
     })).toBe('fallback')
   })
 
-  it('keeps style preview loading label scoped to the card namespace in supported locales', () => {
-    const rendererSource = readFileSync(
-      join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
-      'utf8',
-    )
-    const zhMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/zh/assistantAgent.json'), 'utf8')) as {
-      cards: {
-        stylePreviewLoading?: string
-        stylePreviewConfirmed?: string
-      }
-    }
-    const enMessages = JSON.parse(readFileSync(join(process.cwd(), 'messages/en/assistantAgent.json'), 'utf8')) as {
-      cards: {
-        stylePreviewLoading?: string
-        stylePreviewConfirmed?: string
-      }
-    }
-
-    expect(rendererSource).toContain("t('cards.stylePreviewLoading')")
-    expect(rendererSource).not.toContain("t('loading')")
-    expect(zhMessages.cards.stylePreviewLoading).toBe('加载中...')
-    expect(enMessages.cards.stylePreviewLoading).toBe('Loading...')
-    expect(zhMessages.cards.stylePreviewConfirmed).toBe('已确认风格')
-    expect(enMessages.cards.stylePreviewConfirmed).toBe('Style confirmed')
-  })
-
   it('keeps project phase card summary free of runtime phase metadata', () => {
     const rendererSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'),
@@ -94,7 +68,7 @@ describe('workspace assistant panel layout', () => {
     expect(enProgressSource).toContain('"editScriptPersist"')
   })
 
-  it('keeps style preview image modal state outside the volatile generation card', () => {
+  it('does not restore a style-preview modal or generation-card lifecycle beside the persisted Choice card', () => {
     const panelSource = readFileSync(
       join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
       'utf8',
@@ -104,13 +78,12 @@ describe('workspace assistant panel layout', () => {
       'utf8',
     )
 
-    expect(panelSource).toContain('const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)')
-    expect(panelSource).toContain('onPreviewImage: setPreviewImageUrl')
-    expect(panelSource).toContain('onPreviewImage={setPreviewImageUrl}')
-    expect(panelSource).toContain('<ImagePreviewModal imageUrl={previewImageUrl}')
-    expect(rendererSource).toContain('onPreviewImage?: (imageUrl: string) => void')
-    expect(rendererSource).toContain('props.onPreviewImage(imageUrl)')
-    expect(rendererSource).not.toContain('onClick={() => setPreviewImageUrl(preview.imageUrl)}')
+    expect(panelSource).not.toContain('previewImageUrl')
+    expect(panelSource).not.toContain('setPreviewImageUrl')
+    expect(panelSource).not.toContain('<ImagePreviewModal')
+    expect(rendererSource).toContain("'edit-style-preview-generation': HiddenRuntimeContextDataCard")
+    expect(rendererSource).not.toContain('onPreviewImage')
+    expect(rendererSource).not.toContain('EditStylePreviewGenerationDataCard')
   })
 
   it('keeps the unified media-generation loading overlay non-interactive and full-cover', () => {

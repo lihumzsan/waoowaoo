@@ -212,8 +212,7 @@ async function generateImageToStorage(params: {
     allowTaskExternalIdResume: params.allowTaskExternalIdResume,
   })
 
-  const cosKey = await uploadImageSourceToCos(source, params.keyPrefix, params.targetId)
-  return cosKey
+  return await uploadImageSourceToCos(source, params.keyPrefix, params.targetId, { taskId: params.job.data.taskId, artifact: `${params.keyPrefix}:${params.targetId}` })
 }
 
 export async function generateCleanImageToStorage(params: {

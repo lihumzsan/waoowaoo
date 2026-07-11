@@ -326,7 +326,7 @@ export async function publishPersistedTaskEventById(eventId: number, expectedTas
   return message
 }
 
-export async function publishTaskLifecycleEvent(params: {
+async function publishTaskLifecycleEvent(params: {
   taskId: string
   projectId: string
   userId: string

@@ -1,6 +1,6 @@
 import {
   ApiError,
-  EFFECTS_WRITE,
+  EFFECTS_NONE,
   TASK_TYPE,
   afterEach,
   beforeEach,
@@ -44,7 +44,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'fail_op',
         summary: 'fail',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {
@@ -77,7 +77,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'forbidden_op',
         summary: 'forbidden',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {

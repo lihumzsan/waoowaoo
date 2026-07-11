@@ -124,7 +124,6 @@ export function createAssetHubFolderOperations(): ProjectAgentOperationRegistryD
         summary: '将删除该资产文件夹（文件夹内资产会移动到根目录）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         folderId: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),

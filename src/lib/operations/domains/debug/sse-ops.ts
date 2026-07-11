@@ -15,6 +15,7 @@ import { withTaskCoveredTargetsPayload } from '@/lib/task/covered-targets'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { parseWorkspaceSseCursor } from '@/lib/sse/protocol'
+import { listLatestProjectAgentSessionChangedEvent } from '@/lib/project-agent/session-event'
 
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -161,6 +162,7 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({
         episodeId: z.string().optional().nullable(),
+        assistantId: z.literal('workspace-command').optional(),
         lastEventId: z.string().optional().nullable(),
         includeRecoverableSnapshot: z.boolean().optional(),
         replayLimit: z.number().int().positive().max(5000).optional(),
@@ -171,11 +173,12 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         const channel = getProjectChannel(ctx.projectId)
         const cursor = parseWorkspaceSseCursor(input.lastEventId || null)
         const includeRecoverableSnapshot = input.includeRecoverableSnapshot !== false
+        const episodeId = input.episodeId ? input.episodeId.trim() : null
+        const assistantId = input.assistantId ?? 'workspace-command'
 
-        if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0) {
+        if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0 || cursor.agentEventId !== '0') {
           const replayLimit = input.replayLimit ?? 5000
-          const episodeId = input.episodeId ? input.episodeId.trim() : null
-          const [taskEvents, mutationEvents] = await Promise.all([
+          const [taskEvents, mutationEvents, assistantEvents] = await Promise.all([
             cursor.taskEventId > 0
               ? listEventsAfter(ctx.projectId, cursor.taskEventId, replayLimit)
               : Promise.resolve([]),
@@ -191,14 +194,22 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
                   limit: replayLimit,
                 })
               : Promise.resolve([]),
+            listLatestProjectAgentSessionChangedEvent({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              episodeId,
+              assistantId,
+              afterEventId: cursor.agentEventId,
+            }),
           ])
           const userTaskEvents = taskEvents.filter((event) => event.userId === ctx.userId)
-          const activeTaskEvents = includeRecoverableSnapshot && cursor.taskEventId === 0
-            ? await listActiveLifecycleSnapshot({
+          const recoverableTaskEvents = includeRecoverableSnapshot
+            ? await listRecoverableLifecycleSnapshot({
                 projectId: ctx.projectId,
                 episodeId,
                 userId: ctx.userId,
-                limit: input.snapshotLimit ?? 500,
+                activeLimit: input.snapshotLimit ?? 500,
+                terminalLimit: Math.min(input.snapshotLimit ?? 500, 200),
               })
             : []
           const recoveryCheckpoint = cursor.mutationEventAtMs === 0
@@ -208,7 +219,13 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
                 episodeId,
               })]
             : []
-          const events = [...userTaskEvents, ...mutationEvents, ...activeTaskEvents, ...recoveryCheckpoint]
+          const events = [
+            ...userTaskEvents,
+            ...mutationEvents,
+            ...assistantEvents,
+            ...recoverableTaskEvents,
+            ...recoveryCheckpoint,
+          ]
             .sort((left, right) => left.ts.localeCompare(right.ts) || left.id.localeCompare(right.id))
           return {
             channel,
@@ -233,20 +250,29 @@ export function createSseOperations(): ProjectAgentOperationRegistryDraft {
         }
 
         const snapshotLimit = input.snapshotLimit ?? 500
-        const events = await listRecoverableLifecycleSnapshot({
-          projectId: ctx.projectId,
-          episodeId: input.episodeId ? input.episodeId.trim() : null,
-          userId: ctx.userId,
-          activeLimit: snapshotLimit,
-          terminalLimit: Math.min(snapshotLimit, 200),
-        })
+        const [events, assistantEvents] = await Promise.all([
+          listRecoverableLifecycleSnapshot({
+            projectId: ctx.projectId,
+            episodeId,
+            userId: ctx.userId,
+            activeLimit: snapshotLimit,
+            terminalLimit: Math.min(snapshotLimit, 200),
+          }),
+          listLatestProjectAgentSessionChangedEvent({
+            projectId: ctx.projectId,
+            userId: ctx.userId,
+            episodeId,
+            assistantId,
+            afterEventId: '0',
+          }),
+        ])
         return {
           channel,
           mode: 'recoverable_snapshot',
-          events: [...events, buildRecoveryMutationCheckpoint({
+          events: [...events, ...assistantEvents, buildRecoveryMutationCheckpoint({
             projectId: ctx.projectId,
             userId: ctx.userId,
-            episodeId: input.episodeId ? input.episodeId.trim() : null,
+            episodeId,
           })],
         }
       },

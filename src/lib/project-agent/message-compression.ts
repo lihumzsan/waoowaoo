@@ -110,6 +110,7 @@ export async function compressMessages(params: {
   messages: UIMessage[]
   locale: ProjectAgentLocale
   model: LanguageModel
+  signal?: AbortSignal
 }): Promise<UIMessage[]> {
   if (!shouldCompressMessages(params.messages, params.locale)) return params.messages
   if (params.messages.length <= KEEP_RECENT_MESSAGES) return params.messages
@@ -125,6 +126,7 @@ export async function compressMessages(params: {
     system: compressionPrompt.system,
     prompt: compressionPrompt.prompt,
     temperature: 0,
+    abortSignal: params.signal,
   })
   const summary = normalizeText(summaryResult.text)
   if (!summary) {

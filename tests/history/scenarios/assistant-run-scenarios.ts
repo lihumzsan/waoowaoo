@@ -9,6 +9,7 @@ import {
   type HistoricalRegressionScenario,
 } from '../../harness/historical-regression'
 import { runLifecycleSequence } from '../../harness/lifecycle-sequence'
+import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-authority'
 
 type TransitionFacts = {
   readonly from: ProjectAgentRunStatus
@@ -96,8 +97,50 @@ const awaitingTaskReload: HistoricalRegressionScenario = {
   },
 }
 
+function assertUnsafeOperationWriteRejected(
+  resolve: (operationId: string, operation: Record<string, unknown>) => void,
+  recordExecution: (id: string) => void,
+): void {
+  const scenarioId = 'SCENARIO-ASSISTANT-OPERATION-WRITE-AFTER-LOCK-LOSS'
+  let rejected = false
+  try {
+    resolve('unsafe_write', {
+      channels: { tool: true, api: true },
+      effects: { writes: true },
+      confirmation: { kind: 'none', required: false },
+      execute: async () => ({ committed: true }),
+    })
+  } catch {
+    rejected = true
+  }
+  assertHistoricalValue(rejected, true, `${scenarioId}:ordinary write executor rejected`)
+  recordExecution(scenarioId)
+}
+
+const operationWriteAfterLockLoss: HistoricalRegressionScenario = {
+  id: 'SCENARIO-ASSISTANT-OPERATION-WRITE-AFTER-LOCK-LOSS',
+  identity: 'SCENARIO-ASSISTANT-OPERATION-WRITE-AFTER-LOCK-LOSS',
+  defectId: 'BUG-AR-001',
+  severity: 'P0',
+  invariantIds: ['AR-05A'],
+  historicalDefectIds: ['BUG-AR-001'],
+  layers: ['regression'],
+  async execute(context) {
+    assertUnsafeOperationWriteRejected(
+      assertAssistantToolWriteAuthority,
+      context.recordExecution,
+    )
+  },
+  async verifyFailBefore() {
+    await proveSemanticFaultRejected(() => {
+      assertUnsafeOperationWriteRejected(() => undefined, () => undefined)
+    })
+  },
+}
+
 export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   settlementDisconnect,
   staleHeartbeatWriter,
   awaitingTaskReload,
+  operationWriteAfterLockLoss,
 ]

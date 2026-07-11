@@ -15,6 +15,7 @@ import {
   submitProjectEditBibleGenerationTask,
 } from '@/lib/edit-bible'
 import { createEditBibleQueryDto } from '@/lib/workspace-resource/query-dto-version'
+import { readConsistentWorkspaceResourceSnapshot } from '@/lib/workspace-resource/resource-revision'
 
 const patchEditBibleRequestSchema = z.discriminatedUnion('action', [
   z.object({
@@ -41,17 +42,28 @@ export const GET = apiHandler(async (
   })
   if (!parsed.success) throw new ApiError('INVALID_PARAMS')
 
-  const [editBible, chapters] = await Promise.all([
-    readEpisodeEditBible({
-      projectId,
-      episodeId: parsed.data.episodeId,
-    }),
-    readEpisodeEditChapters({
-      projectId,
-      episodeId: parsed.data.episodeId,
-    }),
-  ])
-  return NextResponse.json(createEditBibleQueryDto(editBible, chapters))
+  const snapshot = await readConsistentWorkspaceResourceSnapshot({
+    projectId,
+    episodeId: parsed.data.episodeId,
+    read: async () => {
+      const [editBible, chapters] = await Promise.all([
+        readEpisodeEditBible({
+          projectId,
+          episodeId: parsed.data.episodeId,
+        }),
+        readEpisodeEditChapters({
+          projectId,
+          episodeId: parsed.data.episodeId,
+        }),
+      ])
+      return { editBible, chapters }
+    },
+  })
+  return NextResponse.json(createEditBibleQueryDto(
+    snapshot.data.editBible,
+    snapshot.data.chapters,
+    snapshot.resourceRevision,
+  ))
 })
 
 export const POST = apiHandler(async (
@@ -75,7 +87,6 @@ export const POST = apiHandler(async (
     text: parsed.data.text,
     ...(parsed.data.rawFileMediaId ? { rawFileMediaId: parsed.data.rawFileMediaId } : {}),
     source: 'project-ui',
-    confirmed: true,
     locale: resolveRequiredTaskLocale(request, body),
   })
 

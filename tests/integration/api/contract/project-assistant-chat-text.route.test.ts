@@ -99,13 +99,12 @@ describe('project assistant chat route', () => {
         },
       ],
     }))
-    expect(runMock.createProjectAgentRun).toHaveBeenCalledWith(expect.objectContaining({
-      appendMessages: [{
+    expect(runMock.createProjectAgentUserTurnRun).toHaveBeenCalledWith(expect.objectContaining({
+      message: {
         id: 'u1',
         role: 'user',
         parts: [{ type: 'text', text: '运行故事到剧本' }],
-      }],
+      },
     }))
-    expect(interruptionMock.declinePendingProjectAgentInterruptionsForUserTurn).toHaveBeenCalledTimes(1)
   })
 })

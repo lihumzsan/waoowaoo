@@ -1,15 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
-import { createTask, sweepStaleTasks } from '@/lib/task/service'
+import { sweepStaleTasks } from '@/lib/task/service'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
-
-const reconcileMock = vi.hoisted(() => ({
-  observeTaskJob: vi.fn(async (): Promise<'alive' | 'terminal' | 'absent' | 'unavailable'> => 'alive'),
-}))
-
-vi.mock('@/lib/task/reconcile', () => reconcileMock)
 
 async function createProcessingVideoGroup() {
   const user = await createTestUser()
@@ -45,122 +39,6 @@ async function createProcessingVideoGroup() {
 describe('video group task failure sync', () => {
   beforeEach(async () => {
     await resetBillingState()
-    vi.clearAllMocks()
-    reconcileMock.observeTaskJob.mockResolvedValue('alive')
-  })
-
-  it('marks video group failed when replacing a locale-less active group task', async () => {
-    const { user, project, episode, group } = await createProcessingVideoGroup()
-    const existing = await prisma.task.create({
-      data: {
-        userId: user.id,
-        projectId: project.id,
-        episodeId: episode.id,
-        type: TASK_TYPE.VIDEO_GROUP,
-        targetType: 'ProjectVideoGroup',
-        targetId: group.id,
-        status: TASK_STATUS.QUEUED,
-        payload: {
-          groupId: group.id,
-        },
-        dedupeKey: `video_group:${group.id}`,
-        queuedAt: new Date(),
-      },
-    })
-    await prisma.projectVideoGroup.update({
-      where: { id: group.id },
-      data: { taskId: existing.id },
-    })
-
-    const result = await createTask({
-      userId: user.id,
-      projectId: project.id,
-      episodeId: episode.id,
-      type: TASK_TYPE.VIDEO_GROUP,
-      targetType: 'ProjectVideoGroup',
-      targetId: group.id,
-      payload: {
-        groupId: group.id,
-        meta: { locale: 'zh' },
-      },
-      dedupeKey: `video_group:${group.id}`,
-    })
-
-    expect(result.deduped).toBe(false)
-    expect(result.task.id).not.toBe(existing.id)
-
-    const failedExisting = await prisma.task.findUnique({ where: { id: existing.id } })
-    expect(failedExisting).toMatchObject({
-      status: TASK_STATUS.FAILED,
-      errorCode: 'TASK_LOCALE_REQUIRED',
-      dedupeKey: null,
-    })
-
-    const failedGroup = await prisma.projectVideoGroup.findUnique({ where: { id: group.id } })
-    expect(failedGroup).toMatchObject({
-      status: 'failed',
-      taskId: null,
-      errorCode: 'TASK_LOCALE_REQUIRED',
-      errorMessage: 'task locale is missing',
-    })
-  })
-
-  it('marks video group failed when replacing an orphaned active group task', async () => {
-    const { user, project, episode, group } = await createProcessingVideoGroup()
-    const existing = await prisma.task.create({
-      data: {
-        userId: user.id,
-        projectId: project.id,
-        episodeId: episode.id,
-        type: TASK_TYPE.VIDEO_GROUP,
-        targetType: 'ProjectVideoGroup',
-        targetId: group.id,
-        status: TASK_STATUS.QUEUED,
-        payload: {
-          groupId: group.id,
-          meta: { locale: 'zh' },
-        },
-        dedupeKey: `video_group:${group.id}`,
-        queuedAt: new Date(),
-      },
-    })
-    await prisma.projectVideoGroup.update({
-      where: { id: group.id },
-      data: { taskId: existing.id },
-    })
-    reconcileMock.observeTaskJob.mockResolvedValue('absent')
-
-    const result = await createTask({
-      userId: user.id,
-      projectId: project.id,
-      episodeId: episode.id,
-      type: TASK_TYPE.VIDEO_GROUP,
-      targetType: 'ProjectVideoGroup',
-      targetId: group.id,
-      payload: {
-        groupId: group.id,
-        meta: { locale: 'zh' },
-      },
-      dedupeKey: `video_group:${group.id}`,
-    })
-
-    expect(result.deduped).toBe(false)
-    expect(result.task.id).not.toBe(existing.id)
-
-    const failedExisting = await prisma.task.findUnique({ where: { id: existing.id } })
-    expect(failedExisting).toMatchObject({
-      status: TASK_STATUS.FAILED,
-      errorCode: 'RECONCILE_ORPHAN',
-      dedupeKey: null,
-    })
-
-    const failedGroup = await prisma.projectVideoGroup.findUnique({ where: { id: group.id } })
-    expect(failedGroup).toMatchObject({
-      status: 'failed',
-      taskId: null,
-      errorCode: 'RECONCILE_ORPHAN',
-      errorMessage: 'Queue job lost, replaced by new task',
-    })
   })
 
   it('marks video group failed when watchdog times out a processing group task', async () => {

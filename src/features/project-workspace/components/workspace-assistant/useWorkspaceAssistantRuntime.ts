@@ -12,20 +12,15 @@ import {
 } from 'ai'
 import { useLocale } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '@/lib/api-fetch'
 import {
   useProjectAssistantThread,
 } from '@/lib/query/hooks'
-import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type {
-  ProjectAgentSessionActivity,
   ProjectAgentSessionPendingInteraction,
   ProjectAgentSessionState,
 } from '@/lib/project-agent/session-state'
-import {
-  ensureUniqueUIMessages,
-} from '@/lib/project-agent/ui-message-validation'
 import type { AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
+import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import {
   buildProjectAssistantTextAttachmentMetadata,
   type ProjectAssistantTextAttachment,
@@ -33,12 +28,28 @@ import {
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 import {
   areWorkspaceAssistantMessagesEqual,
-  mergeWorkspaceAssistantPersistedMessages,
+  resolveWorkspaceAssistantThreadSnapshotMessages,
 } from './thread-sync'
-
-export type WorkspaceAssistantChoiceType = 'script_intake' | 'script_review' | 'bible_review' | 'style' | 'asset_review'
-export type WorkspaceAssistantControlEndpoint = 'approval' | 'choice'
-type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
+import { useWorkspaceAssistantSessionSync } from './useWorkspaceAssistantSessionSync'
+import {
+  buildWorkspaceAssistantChatId,
+  canStopWorkspaceAssistantReply,
+  createWorkspaceAssistantControlMessageId,
+  createWorkspaceAssistantControlVisibleUserMessage,
+  isWorkspaceAssistantRunBusyStatus,
+  isWorkspaceAssistantOperationPendingStatus,
+  mergeWorkspaceAssistantStreamedMessage,
+  resolveWorkspaceAssistantActiveFocusRequest,
+  resolveWorkspaceAssistantDisplayedPendingInteraction,
+  resolveWorkspaceAssistantPendingOperationId,
+  resolveWorkspaceAssistantReplyInFlight,
+  resolveOperationIdFromActivity,
+  shouldClearWorkspaceAssistantControlPending,
+  shouldSendWorkspaceAssistantAutomatically,
+  type WorkspaceAssistantControlEndpoint,
+  type WorkspaceAssistantControlIntent,
+  type WorkspaceAssistantRunStatus,
+} from './workspace-assistant-runtime-state'
 
 /**
  * 'approve' resumes the run and executes the approved operation, so the UI may
@@ -46,8 +57,6 @@ type WorkspaceAssistantRunStatus = ProjectAgentRunPartData['status']
  * the agent — nothing executes, and the reply streams like a normal assistant
  * turn without any operation-running affordance.
  */
-type WorkspaceAssistantControlIntent = 'approve' | 'deny' | 'choice'
-
 interface WorkspaceAssistantTrackedRun {
   runId: string
   status: WorkspaceAssistantRunStatus
@@ -107,7 +116,6 @@ interface UseWorkspaceAssistantRuntimeResult {
   submitChoiceResponse: (params: {
     runId: string
     interruptionId: string
-    choiceType: WorkspaceAssistantChoiceType
     toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
@@ -124,193 +132,9 @@ interface UseWorkspaceAssistantRuntimeResult {
   appendMessages: (messages: UIMessage[]) => void
 }
 
-export function buildWorkspaceAssistantChatId(params: {
-  projectId: string
-  episodeId?: string
-}): string {
-  return `workspace-command:${params.projectId}:${params.episodeId || 'global'}`
-}
-
-let workspaceAssistantControlMessageSequence = 0
-
-function createWorkspaceAssistantControlNonce(): string {
-  workspaceAssistantControlMessageSequence += 1
-  const sequence = workspaceAssistantControlMessageSequence.toString(36)
-  const randomId = typeof globalThis.crypto?.randomUUID === 'function'
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now().toString(36)}-${sequence}`
-  return `${sequence}-${randomId}`
-}
-
-export function createWorkspaceAssistantControlMessageId(params: {
-  runId: string
-  endpoint: WorkspaceAssistantControlEndpoint
-  nonce?: string
-}): string {
-  const runId = params.runId.trim()
-  if (!runId) throw new Error('PROJECT_ASSISTANT_CONTROL_RUN_ID_MISSING')
-  const nonce = params.nonce?.trim() || createWorkspaceAssistantControlNonce()
-  return `workspace-control:${params.endpoint}:${runId}:${nonce}`
-}
-
-export function createWorkspaceAssistantControlVisibleUserMessage(params: {
-  runId: string
-  endpoint: WorkspaceAssistantControlEndpoint
-  text: string
-  nonce?: string
-}): UIMessage {
-  const runId = params.runId.trim()
-  if (!runId) throw new Error('PROJECT_ASSISTANT_CONTROL_RUN_ID_MISSING')
-  const text = params.text.trim()
-  if (!text) throw new Error('PROJECT_ASSISTANT_CONTROL_VISIBLE_USER_TEXT_EMPTY')
-  const nonce = params.nonce?.trim() || createWorkspaceAssistantControlNonce()
-  return {
-    id: `workspace-control-user:${params.endpoint}:${runId}:${nonce}`,
-    role: 'user',
-    parts: [{ type: 'text', text }],
-  }
-}
-
-export function mergeWorkspaceAssistantStreamedMessage(
-  currentMessages: readonly UIMessage[],
-  message: UIMessage,
-): UIMessage[] {
-  const messageId = message.id.trim()
-  if (!messageId) throw new Error('PROJECT_ASSISTANT_STREAM_MESSAGE_ID_EMPTY')
-  const normalizedMessage = messageId === message.id
-    ? message
-    : {
-      ...message,
-      id: messageId,
-    }
-  const existingIndex = currentMessages.findIndex((item) => item.id === messageId)
-  const nextMessages = existingIndex >= 0
-    ? [
-      ...currentMessages.slice(0, existingIndex),
-      normalizedMessage,
-      ...currentMessages.slice(existingIndex + 1),
-    ]
-    : [...currentMessages, normalizedMessage]
-  return ensureUniqueUIMessages(nextMessages)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function buildWorkspaceAssistantControlError(endpoint: WorkspaceAssistantControlEndpoint, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
   return new Error(`PROJECT_ASSISTANT_CARD_RESPONSE_FAILED:${message}`)
-}
-
-export function isWorkspaceAssistantRunBusyStatus(status: WorkspaceAssistantRunStatus): boolean {
-  return status === 'running'
-}
-
-export function resolveWorkspaceAssistantReplyInFlight(input: {
-  requestActive: boolean
-  chatTransportActive: boolean
-  controlRunActive: boolean
-  serverRunActive: boolean
-}): boolean {
-  return input.requestActive
-    || input.controlRunActive
-    || input.serverRunActive
-    || input.chatTransportActive
-}
-
-export function canStopWorkspaceAssistantReply(input: {
-  chatStatus: ChatStatus
-  controlRequestActive: boolean
-}): boolean {
-  return input.chatStatus === 'submitted'
-    || input.chatStatus === 'streaming'
-    || input.controlRequestActive
-}
-
-export function isWorkspaceAssistantOperationPendingStatus(status: WorkspaceAssistantRunStatus): boolean {
-  return status === 'running' || status === 'awaiting_task'
-}
-
-function isWorkspaceAssistantActivityPending(activity: ProjectAgentSessionActivity | null): activity is ProjectAgentSessionActivity {
-  return !!activity && (activity.status === 'running' || activity.status === 'waiting')
-}
-
-function resolveOperationIdFromActivity(activity: ProjectAgentSessionActivity | null): string | null {
-  if (!isWorkspaceAssistantActivityPending(activity)) return null
-  if (activity.type === 'task_follow_up' || activity.type === 'awaiting_choice') return null
-  return activity.operationId ?? activity.sourceOperationId
-}
-
-/**
- * The operation-running affordance is only meaningful when the tracked control
- * action actually executes the operation. Denying an approval merely delivers
- * the rejection to the agent, so no operation is pending.
- */
-export function resolveWorkspaceAssistantPendingOperationId(
-  trackedRun: (Pick<WorkspaceAssistantTrackedRun, 'operationId' | 'intent'> & Partial<Pick<WorkspaceAssistantTrackedRun, 'status'>>) | null,
-): string | null {
-  if (!trackedRun || trackedRun.intent === 'deny') return null
-  if (trackedRun.status && !isWorkspaceAssistantOperationPendingStatus(trackedRun.status)) return null
-  return trackedRun.operationId
-}
-
-export function resolveWorkspaceAssistantActiveFocusRequest(input: {
-  readonly pendingRun: { readonly runId: string } | null
-  readonly operationId: string | null
-  readonly activities: readonly (ProjectAgentSessionActivity | null)[]
-}): WorkspaceAssistantActiveFocusRequest | null {
-  if (!input.pendingRun || !input.operationId) return null
-  const activity = input.activities.find((candidate) => (
-    candidate?.runId === input.pendingRun?.runId
-    && resolveOperationIdFromActivity(candidate) === input.operationId
-  ))
-  return {
-    operationId: input.operationId,
-    requestKey: activity
-      ? `${activity.runId}:${activity.activityId}:${input.operationId}`
-      : `${input.pendingRun.runId}:${input.operationId}`,
-  }
-}
-
-/**
- * The user's response is the authoritative dismissal edge for interaction
- * cards: once a control request is dispatched for an interruption, the card
- * must disappear immediately instead of waiting for session-state polling to
- * observe the server-side consumption. The server stays authoritative for
- * conflicts — a failed control request removes the id again so the card
- * reappears together with the surfaced error.
- */
-export function resolveWorkspaceAssistantDisplayedPendingInteraction(input: {
-  pendingInteraction: ProjectAgentSessionPendingInteraction | null
-  respondedInterruptionIds: ReadonlySet<string>
-}): ProjectAgentSessionPendingInteraction | null {
-  if (!input.pendingInteraction) return null
-  if (input.respondedInterruptionIds.has(input.pendingInteraction.interruptionId)) return null
-  return input.pendingInteraction
-}
-
-export function shouldClearWorkspaceAssistantControlPending(status: WorkspaceAssistantRunStatus): boolean {
-  return !isWorkspaceAssistantOperationPendingStatus(status)
-}
-
-async function fetchWorkspaceAssistantSessionState(params: {
-  projectId: string
-  episodeId?: string | null
-  locale: string
-}): Promise<ProjectAgentSessionState> {
-  const query = new URLSearchParams()
-  if (params.episodeId) query.set('episodeId', params.episodeId)
-  query.set('locale', params.locale)
-  const response = await apiFetch(
-    `/api/projects/${params.projectId}/assistant/session-state?${query.toString()}`,
-  )
-  const payload: unknown = await response.json().catch(() => null)
-  if (!response.ok || !isRecord(payload)) {
-    throw new Error('PROJECT_AGENT_SESSION_STATE_FETCH_FAILED')
-  }
-  if (!isRecord(payload.sessionState)) throw new Error('PROJECT_AGENT_SESSION_STATE_INVALID')
-  return payload.sessionState as unknown as ProjectAgentSessionState
 }
 
 export function useWorkspaceAssistantRuntime({
@@ -322,11 +146,7 @@ export function useWorkspaceAssistantRuntime({
   assistantPermissionMode,
 }: UseWorkspaceAssistantRuntimeParams): UseWorkspaceAssistantRuntimeResult {
   const locale = useLocale()
-  const chatId = buildWorkspaceAssistantChatId({
-    projectId,
-    episodeId,
-  })
-  const assistantThread = useProjectAssistantThread(projectId, episodeId)
+  const chatId = buildWorkspaceAssistantChatId({ projectId, episodeId })
   const contextPayload = useMemo(() => ({
     locale,
     projectId,
@@ -365,20 +185,25 @@ export function useWorkspaceAssistantRuntime({
   const runtime = useAISDKRuntime(chat)
   const controlTransport = useMemo(() => new WorkspaceAssistantControlTransport(), [])
   const latestMessagesRef = useRef<UIMessage[]>(chat.messages)
-  const sessionStateRequestRef = useRef<{
-    key: string
-    promise: Promise<ProjectAgentSessionState | null>
-  } | null>(null)
   const refreshSessionStateRef = useRef<(() => Promise<ProjectAgentSessionState | null>) | null>(null)
   const controlAbortControllerRef = useRef<AbortController | null>(null)
   const replyActivitySequenceRef = useRef(0)
-  const [sessionStateError, setSessionStateError] = useState<string | null>(null)
   const [controlError, setControlError] = useState<Error | null>(null)
   const [respondedInterruptionIds, setRespondedInterruptionIds] = useState<ReadonlySet<string>>(() => new Set<string>())
   const [activeControlRun, setActiveControlRun] = useState<WorkspaceAssistantTrackedRun | null>(null)
   const [controlRequestActive, setControlRequestActive] = useState(false)
   const [replyActivity, setReplyActivity] = useState<WorkspaceAssistantReplyActivity | null>(null)
-  const [sessionState, setSessionState] = useState<ProjectAgentSessionState | null>(null)
+  const {
+    sessionState,
+    sessionStateError,
+    sessionEventWatermark,
+    refreshSessionState,
+  } = useWorkspaceAssistantSessionSync({
+    projectId,
+    episodeId,
+    locale,
+  })
+  const assistantThread = useProjectAssistantThread(projectId, episodeId, sessionEventWatermark)
 
   useEffect(() => {
     latestMessagesRef.current = chat.messages
@@ -437,8 +262,10 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages(nextMessages)
   }, [chat])
 
-  const syncPersistedThreadMessages = useCallback((messages: readonly UIMessage[]) => {
-    const nextMessages = mergeWorkspaceAssistantPersistedMessages(latestMessagesRef.current, messages)
+  const syncPersistedThreadMessages = useCallback((persistedThread: {
+    readonly messages: readonly UIMessage[]
+  } | null) => {
+    const nextMessages = resolveWorkspaceAssistantThreadSnapshotMessages(latestMessagesRef.current, persistedThread)
     if (areWorkspaceAssistantMessagesEqual(latestMessagesRef.current, nextMessages)) return
     latestMessagesRef.current = nextMessages
     chat.setMessages(nextMessages)
@@ -505,39 +332,15 @@ export function useWorkspaceAssistantRuntime({
     return nextMessages
   }, [chat])
 
-  const applySessionState = useCallback((nextState: ProjectAgentSessionState) => {
-    setSessionState(nextState)
-    const currentRun = nextState.currentRun
-    if (currentRun) setActiveControlRun(null)
-  }, [])
-
-  const refreshSessionState = useCallback(async (): Promise<ProjectAgentSessionState | null> => {
-    const requestKey = `${projectId}:${episodeId ?? ''}:${locale}`
-    if (sessionStateRequestRef.current?.key === requestKey) {
-      return sessionStateRequestRef.current.promise
-    }
-    const promise = (async (): Promise<ProjectAgentSessionState | null> => {
-      const nextState = await fetchWorkspaceAssistantSessionState({ projectId, episodeId, locale })
-      applySessionState(nextState)
-      setSessionStateError(null)
-      return nextState
-    })()
-      .catch((error: unknown) => {
-        setSessionStateError(error instanceof Error ? error.message : String(error))
-        return null
-      })
-      .finally(() => {
-        if (sessionStateRequestRef.current?.promise === promise) {
-          sessionStateRequestRef.current = null
-        }
-      })
-    sessionStateRequestRef.current = {
-      key: requestKey,
-      promise,
-    }
-    return promise
-  }, [applySessionState, episodeId, locale, projectId])
   refreshSessionStateRef.current = refreshSessionState
+
+  useEffect(() => {
+    const pendingInterruptionId = sessionState?.pendingInteraction?.interruptionId ?? null
+    setRespondedInterruptionIds((current) => {
+      if (current.size === 0 || (pendingInterruptionId && current.has(pendingInterruptionId))) return current
+      return new Set<string>()
+    })
+  }, [sessionState?.pendingInteraction?.interruptionId])
 
   const sendControlRequest = useCallback(async (params: {
     runId: string
@@ -558,7 +361,7 @@ export function useWorkspaceAssistantRuntime({
     // Suppress the answered interaction card in the same render as the click.
     // The mark stays until the post-run session refresh so stale polls cannot
     // revive the card; unmarking after that refresh lets a server-side
-    // reopened interruption (failed run) render its card again.
+    // authoritative server response that still reports pending render its card again.
     const respondedInterruptionId = params.interruptionId?.trim() || null
     if (respondedInterruptionId) markInterruptionResponded(respondedInterruptionId)
     setActiveControlRun({
@@ -574,12 +377,16 @@ export function useWorkspaceAssistantRuntime({
     try {
       const currentMessages = latestMessagesRef.current.length > 0 ? latestMessagesRef.current : chat.messages
       const visibleUserText = params.visibleUserText?.trim() ?? ''
-      const displayMessages = visibleUserText
+      if (visibleUserText && !respondedInterruptionId) {
+        throw new Error('PROJECT_AGENT_CONTROL_VISIBLE_USER_MESSAGE_IDENTITY_REQUIRED')
+      }
+      const displayMessages = visibleUserText && respondedInterruptionId
         ? ensureUniqueUIMessages([
             ...currentMessages,
             createWorkspaceAssistantControlVisibleUserMessage({
               runId: params.runId,
               endpoint: params.endpoint,
+              interruptionId: respondedInterruptionId,
               text: visibleUserText,
             }),
           ])
@@ -621,6 +428,7 @@ export function useWorkspaceAssistantRuntime({
       requestSucceeded = true
     } catch (error) {
       if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
+      setActiveControlRun((current) => current?.runId === params.runId ? null : current)
       if (abortController.signal.aborted) {
         clearReplyActivity(activitySequence)
         return
@@ -633,11 +441,11 @@ export function useWorkspaceAssistantRuntime({
         controlAbortControllerRef.current = null
         setControlRequestActive(false)
       }
-      await refreshSessionState().catch(() => undefined)
+      setActiveControlRun((current) => current?.runId === params.runId ? null : current)
       if (requestSucceeded) {
         markReplyActivityRequestSettled(activitySequence)
-        if (respondedInterruptionId) unmarkInterruptionResponded(respondedInterruptionId)
       }
+      await refreshSessionState().catch(() => undefined)
     }
   }, [
     assistantPermissionMode,
@@ -657,7 +465,6 @@ export function useWorkspaceAssistantRuntime({
   const submitChoiceResponse = useCallback(async (params: {
     runId: string
     interruptionId: string
-    choiceType: WorkspaceAssistantChoiceType
     toolCallId: string
     output: Record<string, unknown>
     visibleUserText?: string
@@ -714,14 +521,9 @@ export function useWorkspaceAssistantRuntime({
   }, [chat])
 
   useEffect(() => {
-    if (assistantThread.isLoading) return
-    syncPersistedThreadMessages(assistantThread.data?.messages || [])
+    if (assistantThread.isLoading || !assistantThread.data) return
+    syncPersistedThreadMessages(assistantThread.data.thread)
   }, [assistantThread.data, assistantThread.isLoading, chatId, syncPersistedThreadMessages])
-
-  useEffect(() => {
-    void refreshSessionState()
-  }, [chatId, refreshSessionState])
-
   const pendingInteraction = resolveWorkspaceAssistantDisplayedPendingInteraction({
     pendingInteraction: sessionState?.pendingInteraction ?? null,
     respondedInterruptionIds,
@@ -798,8 +600,4 @@ export function useWorkspaceAssistantRuntime({
     replaceMessages,
     appendMessages,
   }
-}
-
-export function shouldSendWorkspaceAssistantAutomatically(): boolean {
-  return false
 }

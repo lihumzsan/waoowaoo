@@ -8,12 +8,14 @@ export type WorkspaceSseCursor = {
   taskEventId: number
   mutationEventAtMs: number
   mutationBatchId: string | null
+  agentEventId: string
 }
 
 export const EMPTY_WORKSPACE_SSE_CURSOR: WorkspaceSseCursor = {
   taskEventId: 0,
   mutationEventAtMs: 0,
   mutationBatchId: null,
+  agentEventId: '0',
 }
 
 function parsePositiveInteger(value: string): number {
@@ -32,6 +34,20 @@ function parseMutationEventIdentity(value: string): { mutationEventAtMs: number;
   return { mutationEventAtMs, mutationBatchId }
 }
 
+function parseCanonicalBigInt(value: string): string {
+  if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error('SSE_CURSOR_BIGINT_INVALID')
+  return value
+}
+
+function maxCanonicalBigInt(left: string, right: string): string {
+  return BigInt(left) >= BigInt(right) ? left : right
+}
+
+function parseAgentEventIdentity(value: string): string | null {
+  const match = /^agent:(\d+)$/.exec(value)
+  return match ? parseCanonicalBigInt(match[1]) : null
+}
+
 export function parseWorkspaceSseCursor(value: string | null | undefined): WorkspaceSseCursor {
   const trimmed = value?.trim() ?? ''
   if (!trimmed) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
@@ -39,8 +55,10 @@ export function parseWorkspaceSseCursor(value: string | null | undefined): Works
     return { ...EMPTY_WORKSPACE_SSE_CURSOR, taskEventId: parsePositiveInteger(trimmed) }
   }
   const legacyMutation = parseMutationEventIdentity(trimmed)
-  if (legacyMutation) return { taskEventId: 0, ...legacyMutation }
-  const match = /^v1;t=(\d+);m=(\d+):(.+|-)$/.exec(trimmed)
+  if (legacyMutation) return { taskEventId: 0, ...legacyMutation, agentEventId: '0' }
+  const v1 = /^v1;t=(\d+);m=(\d+):(.+|-)$/.exec(trimmed)
+  const v2 = /^v2;t=(\d+);m=(\d+):(.+|-);a=(\d+)$/.exec(trimmed)
+  const match = v2 ?? v1
   if (!match) throw new Error('SSE_CURSOR_INVALID')
   const taskEventId = parsePositiveInteger(match[1])
   const mutationEventAtMs = parsePositiveInteger(match[2])
@@ -49,19 +67,25 @@ export function parseWorkspaceSseCursor(value: string | null | undefined): Works
   if ((mutationEventAtMs === 0) !== (mutationBatchId === null)) {
     throw new Error('SSE_MUTATION_CURSOR_INVALID')
   }
-  return { taskEventId, mutationEventAtMs, mutationBatchId }
+  return {
+    taskEventId,
+    mutationEventAtMs,
+    mutationBatchId,
+    agentEventId: v2 ? parseCanonicalBigInt(v2[4]) : '0',
+  }
 }
 
 export function serializeWorkspaceSseCursor(cursor: WorkspaceSseCursor): string {
   const normalized = parseWorkspaceSseCursor(
-    `v1;t=${String(cursor.taskEventId)};m=${String(cursor.mutationEventAtMs)}:${cursor.mutationBatchId ? encodeURIComponent(cursor.mutationBatchId) : '-'}`,
+    `v2;t=${String(cursor.taskEventId)};m=${String(cursor.mutationEventAtMs)}:${cursor.mutationBatchId ? encodeURIComponent(cursor.mutationBatchId) : '-'};a=${cursor.agentEventId}`,
   )
-  return `v1;t=${String(normalized.taskEventId)};m=${String(normalized.mutationEventAtMs)}:${normalized.mutationBatchId ? encodeURIComponent(normalized.mutationBatchId) : '-'}`
+  return `v2;t=${String(normalized.taskEventId)};m=${String(normalized.mutationEventAtMs)}:${normalized.mutationBatchId ? encodeURIComponent(normalized.mutationBatchId) : '-'};a=${normalized.agentEventId}`
 }
 
 export function advanceWorkspaceSseCursor(cursor: WorkspaceSseCursor, event: SSEEvent): WorkspaceSseCursor {
   const numericTaskEventId = /^\d+$/.test(event.id) ? parsePositiveInteger(event.id) : 0
   const mutation = parseMutationEventIdentity(event.id)
+  const agentEventId = parseAgentEventIdentity(event.id)
   const shouldAdvanceMutation = Boolean(mutation) && (
     mutation!.mutationEventAtMs > cursor.mutationEventAtMs
     || (
@@ -73,6 +97,9 @@ export function advanceWorkspaceSseCursor(cursor: WorkspaceSseCursor, event: SSE
     taskEventId: Math.max(cursor.taskEventId, numericTaskEventId),
     mutationEventAtMs: shouldAdvanceMutation ? mutation!.mutationEventAtMs : cursor.mutationEventAtMs,
     mutationBatchId: shouldAdvanceMutation ? mutation!.mutationBatchId : cursor.mutationBatchId,
+    agentEventId: agentEventId
+      ? maxCanonicalBigInt(cursor.agentEventId, agentEventId)
+      : cursor.agentEventId,
   }
 }
 
@@ -99,6 +126,16 @@ export function isWorkspaceSseEvent(value: unknown): value is SSEEvent {
   }
   if (record.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
     return Array.isArray(record.affectedResources)
+  }
+  if (record.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
+    return typeof record.assistantId === 'string'
+      && record.assistantId.length > 0
+      && typeof record.scopeRef === 'string'
+      && record.scopeRef.length > 0
+      && typeof record.agentEventId === 'string'
+      && /^(0|[1-9]\d*)$/.test(record.agentEventId)
+      && record.id === `agent:${record.agentEventId}`
+      && (typeof record.episodeId === 'string' || record.episodeId === null)
   }
   const type = record.type
   return typeof type === 'string'

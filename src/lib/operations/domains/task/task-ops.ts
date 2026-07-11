@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { normalizeTaskError } from '@/lib/errors/normalize'
-import { removeTaskJob } from '@/lib/task/queues'
 import { listTaskLifecycleEvents } from '@/lib/task/publisher'
 import { cancelTask, dismissFailedTasks, getTaskById, queryTasks } from '@/lib/task/service'
 import type { TaskStatus } from '@/lib/task/types'
@@ -95,7 +94,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       },
       inputSchema: z.object({}).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const payload = toObject(input)
         const taskIdsRaw = Array.isArray(payload.taskIds) ? payload.taskIds : null
         const taskIds = taskIdsRaw
@@ -109,7 +108,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const count = await dismissFailedTasks(taskIds, ctx.userId)
+        const count = await dismissFailedTasks(taskIds, ctx.userId, transaction)
         return { success: true, dismissed: count }
       },
     }),
@@ -168,15 +167,15 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         destructive: true,
         overwrite: true,
         bulk: false,
-        externalSideEffects: true,
+        externalSideEffects: false,
         longRunning: false,
       },
+      channels: { tool: false, api: true },
       confirmation: {
         required: true,
         summary: '将取消该任务。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         taskId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
@@ -189,10 +188,6 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
         const { task: updatedTask, cancelled } = await cancelTask(input.taskId)
         if (!updatedTask) {
           throw new ApiError('NOT_FOUND')
-        }
-
-        if (cancelled) {
-          await removeTaskJob(input.taskId).catch(() => false)
         }
 
         return {

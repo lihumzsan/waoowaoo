@@ -119,7 +119,7 @@ export async function executeGoogleVideoGeneration(input: AiProviderVideoExecuti
 
   const response = await withRetry({
     scope: `google:video:submit:${modelId}`,
-    policy: RETRY_POLICY.mediaFetch,
+    policy: RETRY_POLICY.providerSubmit,
     run: async () => await withProviderProxyDispatcher(
       GOOGLE_PROVIDER_PROXY_TARGET,
       async () => await ai.models.generateVideos(request as unknown as Parameters<typeof ai.models.generateVideos>[0]),

@@ -12,10 +12,7 @@ export function inspectApprovalPlanBatchAuthority(input) {
     violations.push('legacy operationConfirmed provenance must remain deleted from production source')
   }
   for (const required of [
-    'approvalGrant.updateMany',
-    'tx.task.create',
-    'prepareTaskBillingInTransaction',
-    'OUTBOX_COMMAND_KIND.TASK_ENQUEUE',
+    'persistSubmittedTaskBatchInTransaction',
     'transaction: Prisma.TransactionClient',
   ]) {
     if (!input.batchSubmitter.includes(required)) {
@@ -25,10 +22,36 @@ export function inspectApprovalPlanBatchAuthority(input) {
   if (!input.planning.includes('submitApprovedOperationPlanTasks')) {
     violations.push('planned Task submission must delegate to the plan-level batch authority')
   }
+  if (input.batchSubmitter.includes('approvalGrant.updateMany')) {
+    violations.push('approved plan batch submitter must not consume ApprovalGrant')
+  }
+  if (/\b(?:tx|params\.transaction)\.task\.(?:find|create|update|upsert|delete)/.test(input.batchSubmitter)) {
+    violations.push('approved plan batch submitter must not bypass the transactional Task bundle primitive')
+  }
+  const grantConsumeWriterCount = input.execution.match(/approvalGrant\.updateMany/g)?.length ?? 0
+  if (grantConsumeWriterCount !== 1) {
+    violations.push(`invokeApprovedOperationPlan must be the single ApprovalGrant consume writer; found ${grantConsumeWriterCount}`)
+  }
+  for (const forbidden of [
+    'assertTaskApprovalAuthorization',
+    'approvalGrantId?:',
+    'operationExecutionId?:',
+    'operationPlanTaskId?:',
+  ]) {
+    if (input.genericSubmitter.includes(forbidden)) {
+      violations.push(`generic Task submitter restores billable authorization input: ${forbidden}`)
+    }
+  }
+  if (!input.genericSubmitter.includes('BILLABLE_MEDIA_APPROVED_PLAN_SUBMITTER_REQUIRED')) {
+    violations.push('generic Task submitter must fail closed for billable media')
+  }
+  if (input.legacyAuthorizationExists) {
+    violations.push('legacy generic Task approval authorization module must remain deleted')
+  }
   if (!input.outboxTypes.includes("TASK_ENQUEUE: 'task.enqueue'")) {
     violations.push('Task enqueue responsibility must be represented by a durable Outbox command')
   }
-  if (!input.outboxWorker.includes('enqueuePersistedApprovedTask(payload)')) {
+  if (!input.outboxWorker.includes('enqueuePersistedTask(payload)')) {
     violations.push('Outbox worker must deliver approved Task enqueue commands')
   }
   for (const required of [
@@ -72,6 +95,8 @@ function runCli() {
     outboxTypes: read('src/lib/outbox/types.ts'),
     outboxWorker: read('src/lib/workers/outbox.worker.ts'),
     execution: read('src/lib/operations/planned-operation-invocation.ts'),
+    genericSubmitter: read('src/lib/task/submitter.ts'),
+    legacyAuthorizationExists: fs.existsSync(path.join(cwd, 'src/lib/task/approval-authorization.ts')),
   })
   if (violations.length > 0) {
     console.error('[approval-plan-batch-authority] violations detected')

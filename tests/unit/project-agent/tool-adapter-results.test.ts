@@ -1,6 +1,5 @@
 import {
   EFFECTS_NONE,
-  EFFECTS_WRITE,
   afterEach,
   beforeEach,
   buildRequest,
@@ -77,7 +76,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'fail_undefined',
         summary: 'fail undefined',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {
@@ -110,7 +109,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'fail_symbol',
         summary: 'fail symbol',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {
@@ -143,7 +142,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         id: 'fail_function',
         summary: 'fail function',
         intent: 'act',
-        effects: EFFECTS_WRITE,
+        effects: EFFECTS_NONE,
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {

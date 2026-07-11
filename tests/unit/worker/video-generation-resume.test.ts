@@ -175,6 +175,7 @@ describe('worker utils video generation resume', () => {
         resolution: '4K',
         quality: 'medium',
       }),
+      { key: 'media:image:primary' },
     )
   })
 })

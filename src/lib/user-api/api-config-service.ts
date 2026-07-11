@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { encryptApiKey, decryptApiKey } from '@/lib/crypto-utils'
 import { ApiError } from '@/lib/api-errors'
 import { buildApiConfigServerCatalog } from '@/lib/ai-registry/api-config-catalog'
@@ -119,7 +120,11 @@ export async function getUserApiConfig(userId: string) {
   }
 }
 
-export async function putUserApiConfig(userId: string, body: unknown) {
+export async function putUserApiConfig(
+  userId: string,
+  body: unknown,
+  client: Pick<Prisma.TransactionClient, 'userPreference'> = prisma,
+) {
   if (!isRecord(body)) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'BODY_PARSE_FAILED',
@@ -146,7 +151,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
   }
 
   const updateData: Record<string, unknown> = {}
-  const existingPref = await prisma.userPreference.findUnique({
+  const existingPref = await client.userPreference.findUnique({
     where: { userId },
     select: {
       customProviders: true,
@@ -292,7 +297,7 @@ export async function putUserApiConfig(userId: string, body: unknown) {
     updateData.capabilityDefaults = serializeCapabilitySelections(cleanedCapabilityDefaults)
   }
 
-  await prisma.userPreference.upsert({
+  await client.userPreference.upsert({
     where: { userId },
     update: updateData,
     create: { userId, ...updateData },

@@ -27,7 +27,6 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
@@ -93,6 +92,8 @@ describe('project agent session-state', () => {
   })
 
   it('does not revive a consumed approval as the current operation after a stale run is cancelled', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([])
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
       {
         id: 'run-stale-1',

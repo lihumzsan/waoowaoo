@@ -42,7 +42,7 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         imageIndex: z.number().int().nullable().optional(),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) =>
+      executeInTransaction: async (ctx, input, transaction) =>
         selectAssetRender({
           kind: input.type,
           assetId: input.assetId,
@@ -55,7 +55,7 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
             userId: ctx.userId,
             projectId: ctx.projectId,
           },
-        }),
+        }, transaction),
     }),
     update_character_appearance_description: defineOperation({
       id: 'update_character_appearance_description',
@@ -69,8 +69,8 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         descriptionIndex: z.number().int().min(0).optional().nullable(),
       }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const appearance = await prisma.characterAppearance.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const appearance = await transaction.characterAppearance.findFirst({
           where: {
             id: input.appearanceId,
             characterId: input.characterId,
@@ -104,7 +104,7 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         descriptions[index] = trimmedDescription
         if (!descriptions[0]) descriptions[0] = trimmedDescription
 
-        await prisma.characterAppearance.update({
+        await transaction.characterAppearance.update({
           where: { id: appearance.id },
           data: {
             descriptions: JSON.stringify(descriptions),
@@ -126,23 +126,23 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         newDescription: z.string().min(1),
       }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const cleanDescription = removeLocationPromptSuffix(input.newDescription.trim())
         const imageIndex = input.imageIndex ?? 0
 
-        const location = await prisma.projectLocation.findFirst({
+        const location = await transaction.projectLocation.findFirst({
           where: { id: input.locationId, projectId: ctx.projectId },
           select: { id: true },
         })
         if (!location) throw new Error('NOT_FOUND')
 
-        const locationImage = await prisma.locationImage.findFirst({
+        const locationImage = await transaction.locationImage.findFirst({
           where: { locationId: input.locationId, imageIndex },
           select: { id: true },
         })
         if (!locationImage) throw new Error('NOT_FOUND')
 
-        await prisma.locationImage.update({
+        await transaction.locationImage.update({
           where: { id: locationImage.id },
           data: { description: cleanDescription },
         })
@@ -153,13 +153,13 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
       id: 'cleanup_unselected_images',
       summary: 'Clean up unselected images for characters/locations by deleting unchosen objects and normalizing indices.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: EFFECTS_DESTRUCTIVE_BULK_LONG_RUNNING,
       confirmation: {
         required: true,
         summary: '将清理未选中的图片（会删除存储对象且不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
       }),
       outputSchema: z.object({
         success: z.boolean(),

@@ -179,6 +179,20 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.PROVIDER_SUBMIT_FAILED',
     defaultMessage: 'Provider submission failed',
   },
+  PROVIDER_SUBMISSION_REJECTED: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_SUBMISSION_REJECTED',
+    defaultMessage: 'Provider rejected the generation request',
+  },
+  PROVIDER_SUBMISSION_OUTCOME_UNKNOWN: {
+    httpStatus: 502,
+    retryable: false,
+    category: ERROR_CATEGORY.PROVIDER,
+    userMessageKey: 'errors.PROVIDER_SUBMISSION_OUTCOME_UNKNOWN',
+    defaultMessage: 'Provider submission outcome is unknown',
+  },
   INSUFFICIENT_BALANCE: {
     httpStatus: 402,
     retryable: false,

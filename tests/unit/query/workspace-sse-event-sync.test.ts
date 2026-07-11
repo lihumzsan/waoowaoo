@@ -29,18 +29,17 @@ function targetState(): TaskTargetState {
   }
 }
 
-function episodeSnapshot(updatedAt: string, name: string) {
+function episodeSnapshot(resourceRevision: number, name: string) {
   return {
     id: 'episode-1',
     name,
-    updatedAt,
-    resourceVersion: { scheme: 'aggregate_updated_at' as const, value: updatedAt },
+    resourceVersion: { scheme: 'resource_revision' as const, value: resourceRevision },
   }
 }
 
-function completedEvent(updatedAt: string): TaskSSEEvent {
+function completedEvent(resourceRevision: number): TaskSSEEvent {
   return {
-    id: `event:${updatedAt}`,
+    id: `event:${String(resourceRevision)}`,
     type: TASK_SSE_EVENT_TYPE.LIFECYCLE,
     taskId: 'task-1',
     taskType: 'video_panel',
@@ -58,8 +57,8 @@ function completedEvent(updatedAt: string): TaskSSEEvent {
         projectId: 'project-1',
         episodeId: 'episode-1',
         resourceKey: 'episodeData:project-1:episode-1',
-        resourceVersion: { scheme: 'aggregate_updated_at', value: updatedAt },
-        data: episodeSnapshot(updatedAt, 'terminal snapshot'),
+        resourceVersion: { scheme: 'resource_revision', value: resourceRevision },
+        data: episodeSnapshot(resourceRevision, 'terminal snapshot'),
       }],
     },
   }
@@ -77,12 +76,31 @@ function apply(queryClient: QueryClient, event: SSEEvent) {
 }
 
 describe('workspace SSE terminal materialized handoff', () => {
+  it('actively invalidates the exact Assistant Thread when Session state changes', () => {
+    const queryClient = new QueryClient()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
+    apply(queryClient, {
+      id: 'agent:42',
+      type: 'assistant.session.changed',
+      projectId: 'project-1',
+      userId: 'user-1',
+      ts: '2026-07-11T00:00:00.000Z',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      agentEventId: '42',
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.project.assistantThread('project-1', 'episode-1'),
+      exact: true,
+    })
+  })
   it('projects canceled as a terminal state and does not require a materialized resource', () => {
     const queryClient = new QueryClient()
     const stateKey = queryKeys.tasks.targetStates('project-1', JSON.stringify([target]))
     queryClient.setQueryData(stateKey, [targetState()])
     const event: TaskSSEEvent = {
-      ...completedEvent('2026-07-11T00:02:00.000Z'),
+      ...completedEvent(2),
       id: 'event:canceled',
       payload: { lifecycleType: TASK_EVENT_TYPE.CANCELED },
     }
@@ -97,15 +115,15 @@ describe('workspace SSE terminal materialized handoff', () => {
   })
 
   it.each([
-    ['duplicate', '2026-07-11T00:02:00.000Z'],
-    ['stale', '2026-07-11T00:01:00.000Z'],
+    ['duplicate', 2],
+    ['stale', 1],
   ] as const)('treats a %s terminal snapshot as a valid idempotent handoff', (_case, incomingVersion) => {
     const queryClient = new QueryClient()
     const stateKey = queryKeys.tasks.targetStates('project-1', JSON.stringify([target]))
     queryClient.setQueryData(stateKey, [targetState()])
     queryClient.setQueryData(
       queryKeys.episodeData('project-1', 'episode-1'),
-      episodeSnapshot('2026-07-11T00:02:00.000Z', 'current snapshot'),
+      episodeSnapshot(2, 'current snapshot'),
     )
 
     apply(queryClient, completedEvent(incomingVersion))
@@ -117,14 +135,14 @@ describe('workspace SSE terminal materialized handoff', () => {
       lastError: null,
     })
     expect(queryClient.getQueryData(queryKeys.episodeData('project-1', 'episode-1')))
-      .toEqual(episodeSnapshot('2026-07-11T00:02:00.000Z', 'current snapshot'))
+      .toEqual(episodeSnapshot(2, 'current snapshot'))
   })
 
   it('projects identity conflict as an explicit terminal contract failure', () => {
     const queryClient = new QueryClient()
     const stateKey = queryKeys.tasks.targetStates('project-1', JSON.stringify([target]))
     queryClient.setQueryData(stateKey, [targetState()])
-    const event = completedEvent('2026-07-11T00:02:00.000Z')
+    const event = completedEvent(2)
     const payload = event.payload as Record<string, unknown>
     const resources = payload.materializedResources as Array<Record<string, unknown>>
     resources[0] = { ...resources[0], projectId: 'different-project' }

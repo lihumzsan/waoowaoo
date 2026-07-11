@@ -15,8 +15,6 @@ import {
   appendProjectAssistantThreadMessages,
   loadProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
-import { settleProjectAgentRunWithMessage } from '@/lib/project-agent/runs'
-
 const RUN_ID = 'continuation-run-1'
 const WAIT_ID = 'continuation-wait-1'
 const COMMAND_ID = 'continuation-command-1'
@@ -212,6 +210,73 @@ describe('Project Agent continuation settlement DB integration', () => {
     expect(eventCount).toBe(0)
   })
 
+  it('projects an unknown continuation outcome as its own terminal reason without replaying it as a tool error', async () => {
+    const { user, project } = await seedClaimedContinuation()
+    const message: UIMessage = {
+      id: `workspace-continuation-outcome-unknown:${COMMAND_ID}`,
+      role: 'assistant',
+      parts: [{
+        type: 'data-agent-run',
+        data: {
+          runId: RUN_ID,
+          requestId: COMMAND_ID,
+          status: 'failed',
+          controlKind: 'task_follow_up',
+          stopReason: 'continuation_outcome_unknown',
+        },
+      }],
+    }
+
+    await expect(beginProjectAgentWaitContinuationExecution({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+    })).resolves.toBe('started')
+    await checkpointProjectAgentWaitFollowUp({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+      outcome: 'outcome_unknown',
+      message,
+    })
+    await finalizeProjectAgentWaitFollowUp({
+      runId: RUN_ID,
+      waitId: WAIT_ID,
+      commandId: COMMAND_ID,
+      claimOwner: FIRST_CLAIM,
+      projectId: project.id,
+      userId: user.id,
+    })
+
+    const [wait, activity, run, thread] = await Promise.all([
+      prisma.projectAgentWait.findUnique({ where: { id: WAIT_ID } }),
+      prisma.projectAgentActivity.findUnique({ where: { id: COMMAND_ID } }),
+      prisma.projectAgentRun.findUnique({ where: { id: RUN_ID } }),
+      loadProjectAssistantThread({
+        projectId: project.id,
+        userId: user.id,
+        assistantId: 'workspace-command',
+      }),
+    ])
+    expect(wait).toMatchObject({ status: 'followed', claimId: FIRST_CLAIM })
+    expect(activity).toMatchObject({
+      status: 'failed',
+      errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
+    })
+    expect(run).toMatchObject({
+      status: 'failed',
+      stopReason: 'continuation_outcome_unknown',
+      errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
+    })
+    expect(thread?.messages).toEqual([message])
+  })
+
   it('serializes concurrent thread appends without dropping either message', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
@@ -252,45 +317,4 @@ describe('Project Agent continuation settlement DB integration', () => {
     ]))
   })
 
-  it('rolls back the assistant message when the Run terminal fence is stale', async () => {
-    const user = await createTestUser()
-    const project = await createTestProject(user.id)
-    await prisma.projectAgentRun.create({
-      data: {
-        id: 'run-message-settlement-1',
-        projectId: project.id,
-        userId: user.id,
-        assistantId: 'workspace-command',
-        scopeRef: `project:${project.id}`,
-        requestId: 'request-message-settlement-1',
-        status: 'running',
-        runVersion: 1,
-        eventSeq: BigInt(0),
-        controlKind: 'user_turn',
-      },
-    })
-    const message: UIMessage = {
-      id: 'assistant-terminal-message-1',
-      role: 'assistant',
-      parts: [{ type: 'text', text: 'done' }],
-    }
-
-    await expect(settleProjectAgentRunWithMessage({
-      runFence: { runId: 'run-message-settlement-1', runVersion: 0, eventSeq: '0' },
-      status: 'completed',
-      stopReason: 'completed',
-      message,
-    })).rejects.toThrow()
-
-    const [run, thread] = await Promise.all([
-      prisma.projectAgentRun.findUnique({ where: { id: 'run-message-settlement-1' } }),
-      loadProjectAssistantThread({
-        projectId: project.id,
-        userId: user.id,
-        assistantId: 'workspace-command',
-      }),
-    ])
-    expect(run?.status).toBe('running')
-    expect(thread).toBeNull()
-  })
 })

@@ -224,7 +224,6 @@ export const ingestEditBibleScriptInputSchema = z.object({
   sourceKind: z.enum(['upload', 'paste', 'prompt_generated_outline']),
   text: z.string().min(1),
   rawFileMediaId: z.string().trim().min(1).optional(),
-  confirmed: z.boolean().optional(),
 })
 
 export const reviseEditBibleInputSchema = z.object({

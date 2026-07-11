@@ -7,8 +7,7 @@ import {
   describe,
   expect,
   it,
-  persistenceMock,
-  runMock,
+  threadClearMock,
   vi,
 } from './project-assistant-routes.fixture'
 
@@ -32,27 +31,19 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(persistenceMock.clearProjectAssistantThread).toHaveBeenCalledWith({
+    expect(threadClearMock.clearProjectAssistantThread).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
     })
+    await expect(response.json()).resolves.toEqual({ success: true, eventWatermark: '42' })
   })
 
   it('DELETE /api/projects/[projectId]/assistant/chat -> rejects clearing while an assistant run is active', async () => {
-    runMock.listBlockingProjectAgentRunsForThreadClear.mockResolvedValueOnce([{
-      id: 'run-active',
-      projectId: 'project-1',
-      userId: 'user-1',
-      assistantId: 'workspace-command',
-      scopeRef: 'episode:episode-1',
-      episodeId: 'episode-1',
-      requestId: 'request-1',
-      status: 'running',
-      controlKind: 'user_turn',
-      heartbeatAt: new Date('2026-07-03T00:00:00.000Z'),
-    }])
+    threadClearMock.clearProjectAssistantThread.mockRejectedValueOnce(
+      new Error('PROJECT_AGENT_THREAD_ACTIVE:run-active'),
+    )
 
     const response = await chatDelete(
       buildMockRequest({
@@ -66,7 +57,7 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(409)
-    expect(persistenceMock.clearProjectAssistantThread).not.toHaveBeenCalled()
+    expect(threadClearMock.clearProjectAssistantThread).toHaveBeenCalledTimes(1)
     await expect(response.json()).resolves.toEqual(expect.objectContaining({
       error: expect.objectContaining({
         details: expect.objectContaining({ code: 'PROJECT_AGENT_THREAD_ACTIVE' }),

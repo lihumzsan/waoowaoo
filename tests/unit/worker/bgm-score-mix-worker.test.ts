@@ -43,7 +43,7 @@ describe('bgm score worker', () => {
     }))
   })
 
-  it('fails the task and does not upload a mix when final music generation fails', async () => {
+  it('leaves final failure projection to Terminal Service when music generation fails', async () => {
     mockReadyProject()
     mockCompleteTimeline()
     executeAiTextStepMock.mockResolvedValue({ text: buildValidPlanText() })
@@ -64,6 +64,6 @@ describe('bgm score worker', () => {
       return arg.update?.status === 'failed'
         && arg.update.diagnosticsJson?.errorMessage === 'provider rejected final BGM'
     })
-    expect(failedCall).toBeTruthy()
+    expect(failedCall).toBeUndefined()
   })
 })

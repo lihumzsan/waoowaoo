@@ -9,15 +9,20 @@ import type {
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 export {
+  EDIT_FIRST_CHOICE_REGISTRY,
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   EDIT_FIRST_CHOICE_TOOL_IDS,
+  getEditFirstChoiceDefinition,
   isEditFirstChoiceToolId,
 } from './edit-first-choice-tools'
 export type {
   EditFirstChoiceToolId,
   EditFirstChoiceType,
 } from './edit-first-choice-tools'
-import type { EditFirstChoiceType } from './edit-first-choice-tools'
+import {
+  getEditFirstChoiceDefinition,
+  type EditFirstChoiceType,
+} from './edit-first-choice-tools'
 import {
   fingerprintProjectAgentChoiceResource,
   type ProjectAgentChoiceReviewedResource,
@@ -44,13 +49,20 @@ function buildAspectRatioOptions(isEnglish: boolean): ProjectAgentChoiceCardOpti
   }))
 }
 
-async function buildStyleAndRatioChoiceCard(params: {
+export async function buildStyleAndRatioChoiceCard(params: {
   projectId: string
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
+  workflow: EditFirstWorkflowState
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
+  if (params.workflow.stage === 'style_preview_generating') {
+    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
+  }
+  if (params.workflow.stage !== 'needs_style_choice') {
+    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:stage=${params.workflow.stage}`)
+  }
   const [project, editBible] = await Promise.all([
     prisma.project.findFirst({
       where: {
@@ -117,6 +129,7 @@ async function buildStyleAndRatioChoiceCard(params: {
     cardId: `edit-first-style:${editBible.id}`,
     toolCallId: params.toolCallId,
     choiceType: 'style',
+    replyMode: 'whole_card',
     title: isEnglish ? 'Choose Visual Style' : '选择视觉风格',
     description: isEnglish
       ? `Choose one style candidate before generating the core edit plan. The selected aspect ratio is ${selectedAspectRatio}.`
@@ -126,6 +139,7 @@ async function buildStyleAndRatioChoiceCard(params: {
         key: 'stylePreviewId',
         label: isEnglish ? 'Visual Style' : '视觉风格',
         required: true,
+        presentation: 'image',
         options: editBible.stylePreviews.map((preview, index) => ({
           value: preview.id,
           label: `${isEnglish ? 'Candidate' : '候选'} ${String(index + 1)} · ${preview.title}`,
@@ -136,7 +150,7 @@ async function buildStyleAndRatioChoiceCard(params: {
       },
     ],
     submitLabel: isEnglish ? 'Confirm and Continue' : '确认并继续',
-    submit: { kind: 'submit_tool_output' },
+    submit: { kind: 'submit_tool_output', decision: 'select' },
   }
   return {
     card,
@@ -155,7 +169,7 @@ async function buildStyleAndRatioChoiceCard(params: {
   }
 }
 
-async function buildScriptReviewChoiceCard(params: {
+export async function buildScriptReviewChoiceCard(params: {
   projectId: string
   userId: string
   episodeId: string
@@ -216,6 +230,7 @@ async function buildScriptReviewChoiceCard(params: {
     cardId: `edit-first-script-review:${params.episodeId}:${cardVersion}`,
     toolCallId: params.toolCallId,
     choiceType: 'script_review',
+    replyMode: 'whole_card',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Script' : '确认剧本',
     description: isEnglish
@@ -225,6 +240,7 @@ async function buildScriptReviewChoiceCard(params: {
     submitLabel: isEnglish ? 'Approve Script and Generate Production Plan' : '确认剧本，生成制作规划',
     submit: {
       kind: 'submit_tool_output',
+      decision: 'approve',
     },
     replyLabel: isEnglish ? 'Request changes' : '需要修改',
     replyPlaceholder: isEnglish
@@ -248,7 +264,7 @@ async function buildScriptReviewChoiceCard(params: {
   }
 }
 
-async function buildBibleReviewChoiceCard(params: {
+export async function buildBibleReviewChoiceCard(params: {
   projectId: string
   userId: string
   episodeId: string
@@ -301,6 +317,7 @@ async function buildBibleReviewChoiceCard(params: {
     cardId: `edit-first-bible-review:${reviewedResource.fingerprint.slice(0, 12)}`,
     toolCallId: params.toolCallId,
     choiceType: 'bible_review',
+    replyMode: 'whole_card',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     description: isEnglish
@@ -311,12 +328,14 @@ async function buildBibleReviewChoiceCard(params: {
         key: 'aspectRatio',
         label: isEnglish ? 'Aspect Ratio' : '画面比例',
         required: true,
+        presentation: 'aspect_ratio',
         options: buildAspectRatioOptions(isEnglish),
       },
     ],
     submitLabel: isEnglish ? 'Confirm Production Plan' : '确认制作规划',
     submit: {
       kind: 'submit_tool_output',
+      decision: 'approve',
     },
     replyLabel: isEnglish ? 'Request changes' : '需要修改',
     replyPlaceholder: isEnglish
@@ -349,7 +368,7 @@ function buildAssetReviewVersion(input: readonly {
   return createHash('sha256').update(source).digest('hex').slice(0, 12)
 }
 
-async function buildAssetReviewChoiceCard(params: {
+export async function buildAssetReviewChoiceCard(params: {
   projectId: string
   userId: string
   episodeId: string
@@ -406,6 +425,7 @@ async function buildAssetReviewChoiceCard(params: {
     cardId: `edit-first-asset-review:${params.episodeId}:${version}`,
     toolCallId: params.toolCallId,
     choiceType: 'asset_review',
+    replyMode: 'whole_card',
     variant: 'confirm_or_reply',
     title: isEnglish ? 'Review Required Assets' : '审核分镜资产',
     description: isEnglish
@@ -415,6 +435,7 @@ async function buildAssetReviewChoiceCard(params: {
       key: 'assetSummary',
       label: isEnglish ? 'Ready assets' : '已就绪资产',
       required: false,
+      presentation: 'options',
       options: editScripts.map((script, index) => ({
         value: script.id,
         label: isEnglish
@@ -426,6 +447,7 @@ async function buildAssetReviewChoiceCard(params: {
     submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
     submit: {
       kind: 'submit_tool_output',
+      decision: 'approve',
     },
     replyLabel: isEnglish ? 'Need changes' : '需要调整',
     replyPlaceholder: isEnglish
@@ -464,54 +486,16 @@ export async function buildEditFirstAssistantChoiceOfferCandidate(params: {
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (params.choiceType === 'script_intake') {
+  const definition = getEditFirstChoiceDefinition(params.choiceType)
+  if (definition.offerBuilder.kind === 'persisted_payload') {
     throw new Error('SCRIPT_INTAKE_CHOICE_CARD_REQUIRES_PERSISTED_PAYLOAD')
   }
-
-  if (params.choiceType === 'bible_review') {
-    return await buildBibleReviewChoiceCard({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      locale: params.locale,
-      workflow: params.workflow,
-      toolCallId: params.toolCallId,
-    })
-  }
-
-  if (params.choiceType === 'script_review') {
-    return await buildScriptReviewChoiceCard({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      locale: params.locale,
-      workflow: params.workflow,
-      toolCallId: params.toolCallId,
-    })
-  }
-
-  if (params.choiceType === 'asset_review') {
-    return await buildAssetReviewChoiceCard({
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      locale: params.locale,
-      workflow: params.workflow,
-      toolCallId: params.toolCallId,
-    })
-  }
-
-  if (params.workflow.stage === 'style_preview_generating') {
-    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
-  }
-  if (params.workflow.stage !== 'needs_style_choice') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:stage=${params.workflow.stage}`)
-  }
-  return await buildStyleAndRatioChoiceCard({
+  return await definition.offerBuilder.build({
     projectId: params.projectId,
     userId: params.userId,
     episodeId: params.episodeId,
     locale: params.locale,
+    workflow: params.workflow,
     toolCallId: params.toolCallId,
   })
 }

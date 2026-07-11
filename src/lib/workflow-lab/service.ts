@@ -4,7 +4,11 @@ import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { appendProjectAgentEventsInTransaction } from '@/lib/project-agent/event'
-import { buildProjectAssistantScopeRef, loadProjectAssistantThread } from '@/lib/project-agent/persistence'
+import {
+  appendProjectAssistantThreadMessagesInTransaction,
+  buildProjectAssistantScopeRef,
+  loadProjectAssistantThread,
+} from '@/lib/project-agent/persistence'
 import { ensureUniqueUIMessages } from '@/lib/project-agent/ui-message-validation'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
@@ -111,10 +115,6 @@ async function validateWorkflowLabMessages(messages: readonly UIMessage[]): Prom
     throw new Error('WORKFLOW_LAB_ASSISTANT_MESSAGES_INVALID')
   }
   return ensureUniqueUIMessages(validation.data)
-}
-
-function serializeWorkflowLabMessages(messages: readonly UIMessage[]): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(messages)) as Prisma.InputJsonValue
 }
 
 function serializeWorkflowLabValue(value: unknown): Prisma.InputJsonValue {
@@ -487,18 +487,12 @@ export async function forkWorkflowLabCheckpointProject(params: {
       checkpoint,
       messages: validatedMessages,
     })
-    await tx.projectAssistantThread.create({
-      data: {
-        projectId: labProject.id,
-        userId: params.userId,
-        episodeId: labEpisode.id,
-        assistantId: 'workspace-command',
-        scopeRef: buildProjectAssistantScopeRef({
-          projectId: labProject.id,
-          episodeId: labEpisode.id,
-        }),
-        messagesJson: serializeWorkflowLabMessages(messages),
-      },
+    await appendProjectAssistantThreadMessagesInTransaction(tx, {
+      projectId: labProject.id,
+      userId: params.userId,
+      episodeId: labEpisode.id,
+      assistantId: 'workspace-command',
+      messages,
     })
 
     await tx.project.update({

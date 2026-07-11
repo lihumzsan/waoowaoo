@@ -7,7 +7,7 @@ import {
   describe,
   expect,
   it,
-  persistenceMock,
+  threadSnapshotMock,
   vi,
 } from './project-assistant-routes.fixture'
 
@@ -19,21 +19,24 @@ describe('project assistant chat route', () => {
   })
 
   it('GET /api/projects/[projectId]/assistant/chat -> loads persisted workspace thread from database service', async () => {
-    persistenceMock.loadProjectAssistantThread.mockResolvedValueOnce({
-      id: 'thread-1',
-      assistantId: 'workspace-command',
-      projectId: 'project-1',
-      episodeId: 'episode-1',
-      scopeRef: 'episode:episode-1',
-      messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          parts: [{ type: 'text', text: 'persisted' }],
-        },
-      ],
-      createdAt: '2026-04-13T00:00:00.000Z',
-      updatedAt: '2026-04-13T00:00:00.000Z',
+    threadSnapshotMock.getProjectAssistantThreadWatermarkedSnapshot.mockResolvedValueOnce({
+      thread: {
+        id: 'thread-1',
+        assistantId: 'workspace-command',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        scopeRef: 'episode:episode-1',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            parts: [{ type: 'text', text: 'persisted' }],
+          },
+        ],
+        createdAt: '2026-04-13T00:00:00.000Z',
+        updatedAt: '2026-04-13T00:00:00.000Z',
+      },
+      eventWatermark: '42',
     })
 
     const response = await chatGet(
@@ -48,7 +51,7 @@ describe('project assistant chat route', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(persistenceMock.loadProjectAssistantThread).toHaveBeenCalledWith({
+    expect(threadSnapshotMock.getProjectAssistantThreadWatermarkedSnapshot).toHaveBeenCalledWith({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -60,6 +63,7 @@ describe('project assistant chat route', () => {
         id: 'thread-1',
         scopeRef: 'episode:episode-1',
       }),
+      eventWatermark: '42',
     })
   })
 

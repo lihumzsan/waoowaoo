@@ -2,12 +2,15 @@ import { Worker, type Job } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { generateMusic } from '@/lib/ai-exec/engine'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
-import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { toFetchableUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
+import { getTaskDefinitionForQueue, type MusicTaskHandlerKey } from '@/lib/task/definition'
 import { QUEUE_NAME } from '@/lib/task/queues'
-import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import type { TaskJobData } from '@/lib/task/types'
 import { handleBgmScoreGenerateTask } from '@/lib/bgm-score/generate'
 import { handleSoundscapeGenerateTask, handleSoundscapePlanTask } from '@/lib/soundscape/generate'
 import { reportTaskProgress, withTaskLifecycle } from './shared'
+import { getWorkerConcurrency } from './runtime-config'
 
 type MusicPayload = {
   musicModel?: unknown
@@ -113,7 +116,7 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
     ...(mood ? { mood } : {}),
     ...(typeof bpm === 'number' ? { bpm } : {}),
     ...(outputFormat ? { outputFormat } : {}),
-  })
+  }, { key: 'media:music:primary' })
   if (!generated.success) {
     throw new Error(generated.error || 'MUSIC_GENERATE_PROVIDER_FAILED')
   }
@@ -127,7 +130,11 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
   })
   const storageKey = await uploadObject(
     audio.buffer,
-    generateUniqueKey('music', extensionFromMimeType(audio.mimeType)),
+    buildTaskArtifactStorageKey({
+      taskId: job.data.taskId,
+      artifact: 'music:primary',
+      extension: extensionFromMimeType(audio.mimeType),
+    }),
     1,
     audio.mimeType,
   )
@@ -147,21 +154,19 @@ export async function handleMusicGenerateTask(job: Job<TaskJobData>) {
   }
 }
 
+type MusicTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
+
+const MUSIC_TASK_HANDLERS = {
+  music_generate: handleMusicGenerateTask,
+  music_score: handleBgmScoreGenerateTask,
+  soundscape_plan: handleSoundscapePlanTask,
+  soundscape_generate: handleSoundscapeGenerateTask,
+} satisfies Record<MusicTaskHandlerKey, MusicTaskHandler>
+
 async function processMusicTask(job: Job<TaskJobData>) {
   await reportTaskProgress(job, 5, { stage: 'received' })
-
-  switch (job.data.type) {
-    case TASK_TYPE.MUSIC_GENERATE:
-      return await handleMusicGenerateTask(job)
-    case TASK_TYPE.MUSIC_SCORE_PLAN:
-      return await handleBgmScoreGenerateTask(job)
-    case TASK_TYPE.SOUNDSCAPE_PLAN:
-      return await handleSoundscapePlanTask(job)
-    case TASK_TYPE.SOUNDSCAPE_GENERATE:
-      return await handleSoundscapeGenerateTask(job)
-    default:
-      throw new Error(`Unsupported music task type: ${job.data.type}`)
-  }
+  const definition = getTaskDefinitionForQueue(job.data.type, 'music')
+  return await MUSIC_TASK_HANDLERS[definition.workerHandler](job)
 }
 
 export function createMusicWorker() {
@@ -170,7 +175,7 @@ export function createMusicWorker() {
     async (job) => await withTaskLifecycle(job, processMusicTask),
     {
       connection: queueRedis,
-      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_MUSIC || '3', 10) || 3,
+      concurrency: getWorkerConcurrency('music'),
     },
   )
 }

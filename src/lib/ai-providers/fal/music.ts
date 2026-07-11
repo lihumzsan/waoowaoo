@@ -115,6 +115,7 @@ async function submitFalMusic(endpoint: string, apiKey: string, payload: Record<
       Authorization: `Key ${apiKey}`,
     },
     body: JSON.stringify(payload),
+    policy: RETRY_POLICY.providerSubmit,
     cache: 'no-store',
     scope: `fal:music:submit:${endpoint}`,
     fetchFn: fetchWithProviderProxy,

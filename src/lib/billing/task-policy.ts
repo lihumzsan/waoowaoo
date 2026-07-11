@@ -7,45 +7,12 @@ import {
 } from './cost'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { ensureAiCatalogsRegistered } from '@/lib/ai-exec/catalog-bootstrap'
-import { TASK_TYPE, type TaskType } from '@/lib/task/types'
+import { getTaskDefinition } from '@/lib/task/definition'
+import type { TaskType } from '@/lib/task/types'
 import type { TaskBillingInfo } from './types'
 import { readImageRuntimeGenerationOptions } from '@/lib/image-generation/runtime-options'
 
 type AnyPayload = Record<string, unknown> | null | undefined
-
-const BILLABLE_TASK_TYPES = new Set<TaskType>([
-  TASK_TYPE.IMAGE_PANEL,
-  TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-  TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-  TASK_TYPE.IMAGE_CHARACTER,
-  TASK_TYPE.IMAGE_LOCATION,
-  TASK_TYPE.MUSIC_GENERATE,
-  TASK_TYPE.MUSIC_SCORE_PLAN,
-  TASK_TYPE.SOUNDSCAPE_PLAN,
-  TASK_TYPE.SOUNDSCAPE_GENERATE,
-  TASK_TYPE.VIDEO_PANEL,
-  TASK_TYPE.VIDEO_GROUP,
-  TASK_TYPE.MODIFY_ASSET_IMAGE,
-  TASK_TYPE.REGENERATE_GROUP,
-  TASK_TYPE.ASSET_HUB_IMAGE,
-  TASK_TYPE.ASSET_HUB_MODIFY,
-  TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
-  TASK_TYPE.EDIT_BIBLE_GENERATE,
-  TASK_TYPE.EDIT_SCRIPT_GENERATE,
-  TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
-  TASK_TYPE.AI_MODIFY_APPEARANCE,
-  TASK_TYPE.AI_MODIFY_LOCATION,
-  TASK_TYPE.AI_MODIFY_PROP,
-  TASK_TYPE.AI_CREATE_CHARACTER,
-  TASK_TYPE.AI_CREATE_LOCATION,
-  TASK_TYPE.REFERENCE_TO_CHARACTER,
-  TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER,
-  TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION,
-  TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER,
-  TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION,
-  TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP,
-  TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER,
-])
 
 function toNumber(value: unknown, fallback: number) {
   const n = Number(value)
@@ -241,52 +208,26 @@ function buildSoundEffectTaskInfo(taskType: TaskType, payload: AnyPayload): Task
 }
 
 export function isBillableTaskType(taskType: TaskType) {
-  return BILLABLE_TASK_TYPES.has(taskType)
+  return getTaskDefinition(taskType).billingPolicy !== 'none'
 }
 
 export function buildDefaultTaskBillingInfo(taskType: TaskType, payload: AnyPayload): TaskBillingInfo | null {
-  if (!isBillableTaskType(taskType)) return null
-
-  switch (taskType) {
-    case TASK_TYPE.IMAGE_PANEL:
-    case TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE:
-    case TASK_TYPE.IMAGE_CHARACTER:
-    case TASK_TYPE.IMAGE_LOCATION:
-    case TASK_TYPE.MODIFY_ASSET_IMAGE:
-    case TASK_TYPE.REGENERATE_GROUP:
-    case TASK_TYPE.ASSET_HUB_IMAGE:
-    case TASK_TYPE.ASSET_HUB_MODIFY:
-      return buildImageTaskInfo(taskType, payload)
-    case TASK_TYPE.VIDEO_PANEL:
-    case TASK_TYPE.VIDEO_GROUP:
-      return buildVideoTaskInfo(taskType, payload)
-    case TASK_TYPE.MUSIC_GENERATE:
-    case TASK_TYPE.MUSIC_SCORE_PLAN:
-      return buildMusicTaskInfo(taskType, payload)
-    case TASK_TYPE.SOUNDSCAPE_GENERATE:
-      return buildSoundEffectTaskInfo(taskType, payload)
-    case TASK_TYPE.SOUNDSCAPE_PLAN:
-      return buildTextTaskInfo(taskType, payload)
-    case TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN:
-    case TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE:
-    case TASK_TYPE.EDIT_BIBLE_GENERATE:
-    case TASK_TYPE.EDIT_SCRIPT_GENERATE:
-    case TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE:
-    case TASK_TYPE.AI_MODIFY_APPEARANCE:
-    case TASK_TYPE.AI_MODIFY_LOCATION:
-    case TASK_TYPE.AI_MODIFY_PROP:
-    case TASK_TYPE.AI_CREATE_CHARACTER:
-    case TASK_TYPE.AI_CREATE_LOCATION:
-    case TASK_TYPE.REFERENCE_TO_CHARACTER:
-    case TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER:
-    case TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION:
-    case TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER:
-    case TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION:
-    case TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP:
-    case TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER:
-      return buildTextTaskInfo(taskType, payload)
-    default:
+  const billingPolicy = getTaskDefinition(taskType).billingPolicy
+  switch (billingPolicy) {
+    case 'none':
       return null
+    case 'image':
+      return buildImageTaskInfo(taskType, payload)
+    case 'video':
+      return buildVideoTaskInfo(taskType, payload)
+    case 'music':
+      return buildMusicTaskInfo(taskType, payload)
+    case 'sound_effect':
+      return buildSoundEffectTaskInfo(taskType, payload)
+    case 'text':
+      return buildTextTaskInfo(taskType, payload)
   }
+  const exhaustive: never = billingPolicy
+  throw new Error(`TASK_BILLING_POLICY_UNSUPPORTED:${String(exhaustive)}`)
 }
 ensureAiCatalogsRegistered()

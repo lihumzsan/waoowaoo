@@ -48,7 +48,7 @@ describe('provider contract - fal queue', () => {
     })
   })
 
-  it('retries transient submit failures before an external request id exists', async () => {
+  it('does not retry an uncertain provider POST when the submit response is an error', async () => {
     server!.defineScenario({
       method: 'POST',
       path: '/fal/fal-ai/nano-banana-pro',
@@ -62,17 +62,15 @@ describe('provider contract - fal queue', () => {
       ],
     })
 
-    const requestId = await submitFalTask(
+    await expect(submitFalTask(
       'fal-ai/nano-banana-pro',
       { prompt: 'retry submit' },
       'fal-key-retry',
-    )
+    )).rejects.toMatchObject({ status: 503 })
 
-    expect(requestId).toBe('req_image_retry_1')
     const requests = server!.getRequests('POST', '/fal/fal-ai/nano-banana-pro')
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(1)
     expect(requests[0]?.headers.authorization).toBe('Key fal-key-retry')
-    expect(requests[1]?.headers.authorization).toBe('Key fal-key-retry')
   })
 
   it('throws transient status failure so the worker poll loop can retry explicitly', async () => {

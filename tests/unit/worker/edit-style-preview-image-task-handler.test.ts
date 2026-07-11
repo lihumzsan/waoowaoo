@@ -83,6 +83,8 @@ describe('worker edit-style-preview-image-task-handler', () => {
     prismaMock.projectEditStylePreview.findFirst.mockResolvedValue({
       id: 'preview-1',
       editBibleId: 'bible-1',
+      status: 'pending',
+      imageKey: null,
     })
     prismaMock.projectEditStylePreview.findMany.mockResolvedValue([
       { status: 'completed' },
@@ -215,6 +217,26 @@ describe('worker edit-style-preview-image-task-handler', () => {
       prompt: 'single image, 3x3 grid',
     }))).rejects.toThrow('EDIT_STYLE_PREVIEW_NOT_FOUND:preview-1')
 
+    expect(handlerSharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
+    expect(prismaMock.projectEditStylePreview.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('replays an already persisted success without calling the provider again', async () => {
+    prismaMock.projectEditStylePreview.findFirst.mockResolvedValueOnce({
+      id: 'preview-1',
+      status: 'completed',
+      imageKey: 'edit-style-preview/preview-1.png',
+    })
+
+    const result = await handleEditStylePreviewImageTask(buildJob({
+      imageModel: 'storyboard-image-model',
+      prompt: 'single image, 3x3 grid',
+    }))
+
+    expect(result).toMatchObject({
+      stylePreviewId: 'preview-1',
+      imageKey: 'edit-style-preview/preview-1.png',
+    })
     expect(handlerSharedMock.generateCleanImageToStorage).not.toHaveBeenCalled()
     expect(prismaMock.projectEditStylePreview.updateMany).not.toHaveBeenCalled()
   })

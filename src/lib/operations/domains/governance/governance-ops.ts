@@ -54,6 +54,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       id: 'revert_mutation_batch',
       summary: 'Revert (undo) a mutation batch by id.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         writes: true,
         billable: false,
@@ -68,7 +69,6 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
         summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         batchId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
@@ -83,6 +83,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       id: 'revert_mutation_batch_by_id',
       summary: 'Revert (undo) a mutation batch by id without requiring the caller to know its projectId.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         writes: true,
         billable: false,
@@ -97,7 +98,6 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
         summary: '将撤回一次批量变更（可能删除或覆盖已有内容）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         batchId: z.string().min(1),
       }),
       outputSchema: z.unknown(),

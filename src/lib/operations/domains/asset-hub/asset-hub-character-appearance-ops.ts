@@ -177,7 +177,6 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         summary: '将删除该角色形象记录（不可恢复）。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
-        confirmed: z.boolean().optional(),
         characterId: z.string().min(1),
         appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
       }),

@@ -8,6 +8,7 @@ import {
   expect,
   handleEditBibleGenerateTask,
   it,
+  prismaMock,
   sourceDocumentMock,
   vi,
 } from './edit-bible-generate.fixture'
@@ -122,5 +123,25 @@ describe('worker edit-bible-generate behavior', () => {
       chapterCount: 0,
       version: null,
     })
+  })
+
+  it('replays a persisted Bible success without invoking the model or persistence again', async () => {
+    prismaMock.projectEditBible.findFirst.mockResolvedValueOnce({
+      status: 'ready_for_review',
+      sourceDocumentId: 'source-1',
+      version: 3,
+    })
+    prismaMock.projectEditChapter.count.mockResolvedValueOnce(2)
+
+    const result = await handleEditBibleGenerateTask(buildJob({
+      episodeId: 'episode-1',
+      sourceDocumentId: 'source-1',
+      editBibleId: 'bible-1',
+      analysisModel: 'analysis-model',
+    }))
+
+    expect(result).toMatchObject({ status: 'ready_for_review', chapterCount: 2, version: 3 })
+    expect(editBibleMock.generateEditBibleArtifacts).not.toHaveBeenCalled()
+    expect(editBibleMock.persistGeneratedEditBibleBundle).not.toHaveBeenCalled()
   })
 })

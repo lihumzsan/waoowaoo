@@ -109,10 +109,14 @@ const sseHook = read('src/lib/query/hooks/useSSE.ts')
 const sseSequence = read('src/lib/query/workspace-sse-event-sequence.ts')
 if (
   !sseHook.includes('WorkspaceSSEEventSequence')
-  || !sseSequence.includes('MAX_TRACKED_EVENT_IDENTITIES')
-  || !sseSequence.includes('MAX_TRACKED_TERMINAL_TASKS')
+  || !sseSequence.includes('MAX_TRACKED_SSE_EVENT_IDENTITIES')
+  || !sseSequence.includes('MAX_TRACKED_SSE_TASK_WATERMARKS')
+  || !sseSequence.includes('WorkspaceSSESnapshotResyncRequiredError')
+  || !sseSequence.includes('event_identity_window_overflow')
+  || !sseSequence.includes('task_watermark_window_overflow')
+  || !sseHook.includes('requestSnapshotResync')
 ) {
-  violations.push('SSE client event identity dedupe must be explicitly bounded')
+  violations.push('SSE client event identity dedupe must be bounded and overflow into snapshot resync')
 }
 
 const episodeMutations = read('src/lib/query/mutations/useEpisodeMutations.ts')

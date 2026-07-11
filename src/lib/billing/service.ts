@@ -40,7 +40,6 @@ import type {
 } from './types'
 import { BUILTIN_PRICING_VERSION } from '@/lib/ai-registry/pricing-resolution'
 import { assertPositiveChargeForBillingMode } from './billing-policy'
-import { parseTaskBillingInfo } from '@/lib/task/billing-info'
 
 type CostInput = {
   apiType: ApiType
@@ -499,6 +498,11 @@ async function withSyncBillingCore<T>(
   recordParams: BillingRecordParams,
   execute: () => Promise<T>,
 ): Promise<T> {
+  // Task billing is owned by Task creation + Terminal Service. Running the
+  // synchronous freeze/confirm protocol inside a worker would create a second
+  // billing lifecycle and would also hide usage from the outer Task collector.
+  if (getLogContext().taskId) return await execute()
+
   const pricingVersion = BUILTIN_PRICING_VERSION
   const pricingSelections = params.metadata || {}
   const mode = await getBillingMode()
@@ -667,6 +671,7 @@ export async function withTextBilling<T>(
   recordParams: BillingRecordParams,
   generateFn: () => Promise<T>,
 ): Promise<T> {
+  if (getLogContext().taskId) return await generateFn()
   const mode = await getBillingMode()
   if (mode === 'OFF') {
     return await generateFn()
@@ -850,11 +855,6 @@ async function prepareTaskBillingSnapshot(
   return next
 }
 
-export async function prepareTaskBilling(task: TaskBillingPreparation) {
-  const mode = await getBillingMode()
-  return await prepareTaskBillingSnapshot(task, mode, freezeBalance)
-}
-
 export async function prepareTaskBillingInTransaction(
   tx: Prisma.TransactionClient,
   task: TaskBillingPreparation,
@@ -863,60 +863,6 @@ export async function prepareTaskBillingInTransaction(
   return await prepareTaskBillingSnapshot(task, mode, async (userId, amount, options) => (
     await freezeBalanceInTransaction(tx, userId, amount, options)
   ))
-}
-
-type LockedTaskBillingRow = {
-  id: string
-  userId: string
-  projectId: string
-  episodeId: string | null
-  type: string
-  status: string
-  billingInfo: unknown
-}
-
-export async function authorizeTaskBilling(taskId: string): Promise<TaskBillingInfo | null> {
-  const mode = await getBillingMode()
-  return await prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<LockedTaskBillingRow[]>(Prisma.sql`
-      SELECT id, userId, projectId, episodeId, type, status, billingInfo
-      FROM tasks
-      WHERE id = ${taskId}
-      FOR UPDATE
-    `)
-    const task = rows[0]
-    if (!task) throw new BillingOperationError('BILLING_INVALID_FREEZE', 'task not found during billing authorization', { taskId })
-    if (task.status !== 'queued' && task.status !== 'processing') {
-      throw new BillingOperationError('BILLING_FREEZE_NOT_PENDING', 'cannot authorize billing for terminal task', {
-        taskId,
-        status: task.status,
-      })
-    }
-    const info = parseTaskBillingInfo(task.billingInfo)
-    if (info?.billable && info.taskType !== task.type) {
-      throw new BillingOperationError('BILLING_FREEZE_OWNERSHIP_MISMATCH', 'task billing type does not match Task row', {
-        taskId,
-        taskType: task.type,
-        billingTaskType: info.taskType,
-      })
-    }
-    const prepared = await prepareTaskBillingInTransaction(tx, {
-      id: task.id,
-      userId: task.userId,
-      projectId: task.projectId,
-      episodeId: task.episodeId,
-      billingInfo: info,
-    }, mode)
-    await tx.task.update({
-      where: { id: task.id },
-      data: {
-        billingInfo: prepared === null
-          ? Prisma.JsonNull
-          : JSON.parse(JSON.stringify(prepared)) as Prisma.InputJsonValue,
-      },
-    })
-    return prepared as TaskBillingInfo | null
-  }, { maxWait: 10_000, timeout: 15_000 })
 }
 
 export async function settleTaskBillingInTransaction(tx: Prisma.TransactionClient, task: {
@@ -1044,181 +990,4 @@ export async function rollbackTaskBillingInTransaction(
   return { ...info, status: 'rolled_back' }
 }
 
-export async function settleTaskBilling(task: {
-  id: string
-  projectId: string
-  episodeId?: string | null
-  userId: string
-  billingInfo: TaskBillingInfo | { billable: false } | null
-}, options?: {
-  result?: Record<string, unknown> | void
-  textUsage?: TextUsageEntry[]
-}) {
-  const info = task.billingInfo
-  if (!info || !info.billable) return info
-
-  const mode = info.modeSnapshot || await getBillingMode()
-  const noChargeStatus = info.status === 'skipped' ? 'skipped' : 'settled'
-  if (mode === 'OFF') {
-    return {
-      ...info,
-      modeSnapshot: mode,
-      status: noChargeStatus,
-      chargedCost: 0,
-    } satisfies TaskBillingInfo
-  }
-
-  const quotedCost = resolveCost({
-    apiType: info.apiType,
-    model: info.model,
-    quantity: info.quantity,
-    unit: info.unit,
-    metadata: info.metadata,
-    quotedCost: info.maxFrozenCost,
-  })
-
-  if (mode === 'SHADOW' && quotedCost <= 0) {
-    return {
-      ...info,
-      modeSnapshot: mode,
-      status: noChargeStatus,
-      chargedCost: 0,
-    } satisfies TaskBillingInfo
-  }
-
-  const actual = resolveTaskActual(info, quotedCost, options)
-
-  if (mode === 'SHADOW') {
-    await recordShadowUsage(task.userId, {
-      projectId: task.projectId,
-      episodeId: typeof task.episodeId === 'string' ? task.episodeId : null,
-      taskType: info.taskType || null,
-      action: info.action,
-      apiType: info.apiType,
-      model: info.model,
-      quantity: actual.actualQuantity,
-      unit: info.unit,
-      cost: actual.actualCost,
-      metadata: {
-        ...(info.metadata || {}),
-        ...(actual.metadata || {}),
-        mode: 'SHADOW',
-        taskId: task.id,
-        taskType: info.taskType,
-        quotedCost,
-        pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
-        pricingSelections: info.metadata || {},
-      },
-    })
-    return {
-      ...info,
-      modeSnapshot: mode,
-      status: info.status === 'skipped' ? 'skipped' : 'settled',
-      chargedCost: 0,
-    } satisfies TaskBillingInfo
-  }
-
-  if (mode !== 'ENFORCE') {
-    return {
-      ...info,
-      modeSnapshot: mode,
-      status: info.status === 'skipped' ? 'skipped' : 'settled',
-      chargedCost: 0,
-    } satisfies TaskBillingInfo
-  }
-
-  if (!info.freezeId) {
-    return {
-      ...info,
-      status: 'failed',
-    } satisfies TaskBillingInfo
-  }
-
-  const chargedCost = await ensureFreezeCoverage({
-    freezeId: info.freezeId,
-    userId: task.userId,
-    actualCost: actual.actualCost,
-    quotedCost,
-  })
-  const recordModel = resolveRecordModel(info.model, actual.metadata)
-  try {
-    await confirmChargeWithRecord(
-      info.freezeId,
-      {
-        projectId: task.projectId,
-        episodeId: typeof task.episodeId === 'string' ? task.episodeId : null,
-        action: info.action,
-        apiType: info.apiType,
-        model: recordModel.model,
-        quantity: actual.actualQuantity,
-        unit: info.unit,
-        metadata: {
-          ...(info.metadata || {}),
-          ...(actual.metadata || {}),
-          billingKey: info.billingKey || task.id,
-          source: 'task',
-          taskType: info.taskType,
-          taskId: task.id,
-          mode: 'ENFORCE',
-          quotedCost,
-          actualCost: actual.actualCost,
-          chargedCost,
-          pricingVersion: info.pricingVersion || BUILTIN_PRICING_VERSION,
-          pricingSelections: info.metadata || {},
-          ...(recordModel.actualModels.length > 0 ? { actualModels: recordModel.actualModels } : {}),
-        },
-      },
-      { chargedAmount: chargedCost },
-    )
-  } catch (error) {
-    const rolledBack = (await rollbackTaskBilling({
-      id: task.id,
-      billingInfo: info,
-    })) as TaskBillingInfo
-    if (rolledBack.billable && rolledBack.status !== 'rolled_back') {
-      throw new BillingOperationError('BILLING_CONFIRM_FAILED', 'confirm task charge failed; billing rollback failed', {
-        taskId: task.id,
-        freezeId: info.freezeId,
-      }, error)
-    }
-    if (error instanceof BillingOperationError) {
-      throw new BillingOperationError(error.code, error.message, {
-        ...(error.details || {}),
-        taskId: task.id,
-        freezeId: info.freezeId,
-      }, error)
-    }
-    throw error
-  }
-
-  return {
-    ...info,
-    status: 'settled',
-    chargedCost,
-  } satisfies TaskBillingInfo
-}
-
-export async function rollbackTaskBilling(task: {
-  id: string
-  billingInfo: TaskBillingInfo | { billable: false } | null
-}) {
-  const info = task.billingInfo
-  if (!info || !info.billable) return info
-  if (!info.freezeId) return info
-  if (info.modeSnapshot !== 'ENFORCE') return info
-
-  try {
-    await rollbackFreeze(info.freezeId)
-    return {
-      ...info,
-      status: 'rolled_back',
-    } satisfies TaskBillingInfo
-  } catch (error) {
-    _ulogError('[Billing] rollback task freeze failed:', error)
-    return {
-      ...info,
-      status: 'failed',
-    } satisfies TaskBillingInfo
-  }
-}
 ensureAiCatalogsRegistered()

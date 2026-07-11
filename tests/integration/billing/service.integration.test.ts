@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { calcMusic } from '@/lib/billing/cost'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing/task-policy'
-import { prepareTaskBilling, rollbackTaskBilling, settleTaskBilling } from '@/lib/billing/service'
+import {
+  prepareTaskBillingInTransaction,
+  rollbackTaskBillingInTransaction,
+  settleTaskBillingInTransaction,
+} from '@/lib/billing/service'
 import { BillingOperationError } from '@/lib/billing/errors'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
@@ -32,12 +36,12 @@ describe('billing/service integration', () => {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 5,
     })!
-    const result = await prepareTaskBilling({
+    const result = await prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
       id: randomUUID(),
       userId: user.id,
       projectId: project.id,
       billingInfo: info,
-    })
+    }, 'OFF'))
 
     expect(result?.billable).toBe(true)
     expect((result as TaskBillingInfo & { status: string }).status).toBe('skipped')
@@ -54,23 +58,23 @@ describe('billing/service integration', () => {
       durationSeconds: 5,
     })!
     const taskId = randomUUID()
-    const prepared = expectBillableInfo(await prepareTaskBilling({
+    const prepared = expectBillableInfo(await prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
       id: taskId,
       userId: user.id,
       projectId: project.id,
       billingInfo: info,
-    }))
+    }, 'SHADOW')))
 
     expect(prepared.status).toBe('quoted')
 
-    const settled = expectBillableInfo(await settleTaskBilling({
+    const settled = expectBillableInfo(await prisma.$transaction(async (tx) => await settleTaskBillingInTransaction(tx, {
       id: taskId,
       userId: user.id,
       projectId: project.id,
       billingInfo: prepared,
     }, {
       result: { actualDurationSeconds: 2 },
-    }))
+    })))
 
     expect(settled.status).toBe('settled')
     expect(settled.chargedCost).toBe(0)
@@ -92,24 +96,24 @@ describe('billing/service integration', () => {
       durationSeconds: 5,
     })!
     const taskId = randomUUID()
-    const prepared = expectBillableInfo(await prepareTaskBilling({
+    const prepared = expectBillableInfo(await prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
       id: taskId,
       userId: user.id,
       projectId: project.id,
       billingInfo: info,
-    }))
+    }, 'ENFORCE')))
 
     expect(prepared.status).toBe('frozen')
     expect(prepared.freezeId).toBeTruthy()
 
-    const settled = expectBillableInfo(await settleTaskBilling({
+    const settled = expectBillableInfo(await prisma.$transaction(async (tx) => await settleTaskBillingInTransaction(tx, {
       id: taskId,
       userId: user.id,
       projectId: project.id,
       billingInfo: prepared,
     }, {
       result: { actualDurationSeconds: 2 },
-    }))
+    })))
 
     expect(settled.status).toBe('settled')
     expect(settled.chargedCost).toBeCloseTo(calcMusic('google::lyria-3-pro-preview', 1), 8)
@@ -138,12 +142,12 @@ describe('billing/service integration', () => {
       status: 'quoted',
     }
 
-    await expect(prepareTaskBilling({
+    await expect(prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
       id: randomUUID(),
       userId: user.id,
       projectId: project.id,
       billingInfo: info,
-    })).rejects.toMatchObject({
+    }, 'ENFORCE'))).rejects.toMatchObject({
       code: 'BILLING_INVALID_CHARGED_AMOUNT',
     } satisfies Partial<BillingOperationError>)
 
@@ -163,17 +167,18 @@ describe('billing/service integration', () => {
       durationSeconds: 5,
     })!
     const taskId = randomUUID()
-    const prepared = expectBillableInfo(await prepareTaskBilling({
+    const prepared = expectBillableInfo(await prisma.$transaction(async (tx) => await prepareTaskBillingInTransaction(tx, {
       id: taskId,
       userId: user.id,
       projectId: project.id,
       billingInfo: info,
-    }))
+    }, 'ENFORCE')))
 
-    const rolled = expectBillableInfo(await rollbackTaskBilling({
+    const rolled = expectBillableInfo(await prisma.$transaction(async (tx) => await rollbackTaskBillingInTransaction(tx, {
       id: taskId,
+      userId: user.id,
       billingInfo: prepared,
-    }))
+    })))
 
     expect(rolled.status).toBe('rolled_back')
     const balance = await prisma.userBalance.findUnique({ where: { userId: user.id } })

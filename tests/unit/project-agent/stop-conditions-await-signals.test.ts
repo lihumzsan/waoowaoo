@@ -59,9 +59,9 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('preserves one operation-to-task mapping for each wait instead of joining operation ids', () => {
+  it('rejects multiple long-running Operations in one model step instead of creating parallel Wait state machines', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([
+    expect(() => controller.evaluateStep([
       {
         toolName: 'generate_edit_script',
         output: { ok: true, data: { async: true, taskId: 'task-script-1' } },
@@ -70,14 +70,7 @@ describe('project agent business stop signals', () => {
         toolName: 'generate_episode_videos',
         output: { ok: true, data: { async: true, taskIds: ['task-video-1', 'task-video-2'] } },
       },
-    ])
-
-    expect(stopPart?.reason).toBe('awaiting_external_task')
-    if (!stopPart || stopPart.reason !== 'awaiting_external_task') return
-    expect(stopPart.taskWaits).toEqual([
-      { operationId: 'generate_edit_script', taskIds: ['task-script-1'], phases: [] },
-      { operationId: 'generate_episode_videos', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
-    ])
+    ])).toThrow('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:generate_edit_script,generate_episode_videos')
   })
 
   it('[task status active] -> remains an observation so the agent can answer without creating a wait', () => {

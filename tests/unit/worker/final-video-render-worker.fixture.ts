@@ -14,6 +14,7 @@ const readFileMock = vi.hoisted(() => vi.fn())
 
 const prismaMock = vi.hoisted(() => ({
   projectEpisodeFinalOutput: {
+    findFirst: vi.fn(async (): Promise<unknown> => null),
     findUnique: vi.fn(),
     upsert: vi.fn(),
   },
@@ -59,6 +60,7 @@ const executeAiTextStepMock = vi.hoisted(() => vi.fn())
 
 const mediaServiceMock = vi.hoisted(() => ({
   ensureMediaObjectFromStorageKey: vi.fn(),
+  getMediaObjectById: vi.fn(),
   resolveStorageKeyFromMediaValue: vi.fn(),
 }))
 
@@ -100,6 +102,7 @@ vi.mock('@/lib/ai-registry/selection', () => ({
 
 vi.mock('@/lib/media/service', () => ({
   ensureMediaObjectFromStorageKey: mediaServiceMock.ensureMediaObjectFromStorageKey,
+  getMediaObjectById: mediaServiceMock.getMediaObjectById,
   resolveStorageKeyFromMediaValue: mediaServiceMock.resolveStorageKeyFromMediaValue,
 }))
 

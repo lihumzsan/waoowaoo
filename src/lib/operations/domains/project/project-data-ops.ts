@@ -6,7 +6,6 @@ import { getProjectCostDetails } from '@/lib/billing'
 import { BILLING_CURRENCY } from '@/lib/billing/currency'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { buildProjectReadModel } from '@/lib/projects/build-project-read-model'
-import { logError } from '@/lib/logging/core'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
@@ -91,7 +90,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
         globalAssetId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) =>
+      executeInTransaction: async (ctx, input, transaction) =>
         copyAssetFromGlobal({
           kind: input.type,
           targetId: input.targetId,
@@ -100,7 +99,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
             userId: ctx.userId,
             projectId: ctx.projectId,
           },
-        }),
+        }, transaction),
     }),
 
     get_project_costs: defineOperation({
@@ -148,7 +147,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       summary: 'Load unified project data payload for the project owner (includes workflow and assets).',
       intent: 'query',
       effects: {
-        writes: true,
+        writes: false,
         billable: false,
         destructive: false,
         overwrite: false,
@@ -171,11 +170,6 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
         if (project.userId !== ctx.userId) {
           throw new ApiError('FORBIDDEN')
         }
-
-        prisma.project.update({
-          where: { id: ctx.projectId },
-          data: { lastAccessedAt: new Date() },
-        }).catch((error: unknown) => logError('update lastAccessedAt failed', error))
 
         const projectWithWorkflow = await prisma.project.findUnique({
           where: { id: ctx.projectId },

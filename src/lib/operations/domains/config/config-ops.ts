@@ -332,7 +332,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
         capabilityOverrides: z.unknown().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
         const cloudDeployment = isCloudDeployment(deployment)
         const body = input as unknown as Record<string, unknown>
@@ -341,7 +341,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           assertCloudProjectConfigFields(body)
         }
 
-        const currentProjectConfig = await prisma.project.findUnique({
+        const currentProjectConfig = await transaction.project.findUnique({
           where: { id: ctx.projectId },
           select: {
             id: true,
@@ -388,7 +388,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
           updateData[field] = body[field]
         }
 
-        const updatedProject = await prisma.project.update({
+        const updatedProject = await transaction.project.update({
           where: { id: ctx.projectId },
           data: updateData,
         })

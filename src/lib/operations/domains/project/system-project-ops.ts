@@ -210,7 +210,7 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
         description: z.string().optional().nullable(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const draft = readProjectDraftBody(input)
         const validationIssue = validateProjectDraft(draft)
         if (validationIssue) {
@@ -230,11 +230,11 @@ export function createSystemProjectOperations(): ProjectAgentOperationRegistryDr
           : null
         const userPreference = platformDefaults
           ? null
-          : await prisma.userPreference.findUnique({
+          : await transaction.userPreference.findUnique({
               where: { userId: ctx.userId },
             })
 
-        const project = await prisma.project.create({
+        const project = await transaction.project.create({
           data: {
             name: normalized.name.trim(),
             description: normalized.description?.trim() || null,

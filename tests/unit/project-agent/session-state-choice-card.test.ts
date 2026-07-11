@@ -29,7 +29,6 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    prismaMock.projectEditBible.findFirst.mockResolvedValue(null)
     workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
@@ -95,6 +94,17 @@ describe('project agent session-state', () => {
   })
 
   it('rebuilds a pending choice card from the pending interruption row', async () => {
+    prismaMock.$queryRaw.mockResolvedValueOnce([
+      { kind: 'INTERRUPTION', id: 'choice-interruption-1', runId: 'run-choice-1' },
+      { kind: 'ACTIVITY', id: 'activity-choice-1', runId: 'run-choice-1' },
+    ])
+    prismaMock.projectAgentRun.findMany.mockResolvedValueOnce([{
+      id: 'run-choice-1',
+      status: 'awaiting_choice',
+      controlKind: 'user_turn',
+      errorCode: null,
+      errorMessage: null,
+    }])
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValueOnce([
       {
         id: 'run-choice-1',
@@ -110,6 +120,16 @@ describe('project agent session-state', () => {
       },
     ])
     waitsMock.listProjectAgentSessionWaits.mockResolvedValueOnce([])
+    eventMock.getCurrentProjectAgentActivity.mockResolvedValueOnce({
+      activityId: 'activity-choice-1',
+      runId: 'run-choice-1',
+      type: 'awaiting_choice',
+      status: 'waiting',
+      operationId: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+      sourceOperationId: null,
+      toolCallId: 'tool-choice-1',
+      choiceType: 'bible_review',
+    })
     interruptionsMock.getPendingProjectAgentInterruptionForScope.mockResolvedValueOnce({
       id: 'choice-interruption-1',
       runId: 'run-choice-1',
@@ -127,10 +147,11 @@ describe('project agent session-state', () => {
           interruptionId: 'choice-interruption-1',
           toolCallId: 'tool-choice-1',
           choiceType: 'bible_review',
+          replyMode: 'whole_card',
           title: '确认制作规划',
           groups: [],
           submitLabel: '确认制作规划',
-          submit: { kind: 'submit_tool_output' },
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
         },
         reviewedResource: {
           kind: 'bible_review_plan',
@@ -155,10 +176,11 @@ describe('project agent session-state', () => {
           interruptionId: 'choice-interruption-1',
           toolCallId: 'tool-choice-1',
           choiceType: 'bible_review',
+          replyMode: 'whole_card',
           title: '确认制作规划',
           groups: [],
           submitLabel: '确认制作规划',
-          submit: { kind: 'submit_tool_output' },
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
         },
         reviewedResource: {
           kind: 'bible_review_plan',

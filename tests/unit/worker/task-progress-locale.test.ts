@@ -2,13 +2,14 @@ import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from '@/lib/workers/shared'
+import { withLogContext } from '@/lib/logging/context'
 
 const taskServiceMock = vi.hoisted(() => ({
   rollbackTaskBillingForTask: vi.fn(async () => ({ attempted: false, rolledBack: true, billingInfo: null })),
   touchTaskHeartbeat: vi.fn(async () => true),
   tryMarkTaskCompleted: vi.fn(async () => true),
   tryMarkTaskFailed: vi.fn(async () => true),
-  tryMarkTaskProcessing: vi.fn(async () => true),
+  tryClaimTaskAttempt: vi.fn(async () => true),
   tryUpdateTaskProgress: vi.fn(async () => true),
   updateTaskBillingInfo: vi.fn(async () => undefined),
 }))
@@ -30,8 +31,8 @@ vi.mock('@/lib/logging/core', () => ({
 vi.mock('@/lib/task/service', () => taskServiceMock)
 vi.mock('@/lib/task/publisher', () => publisherMock)
 vi.mock('@/lib/billing', () => ({
-  rollbackTaskBilling: vi.fn(async (_input) => ({ billable: false })),
-  settleTaskBilling: vi.fn(async (_input) => ({ billable: false })),
+  rollbackTaskBillingInTransaction: vi.fn(async (_tx, _input) => ({ billable: false })),
+  settleTaskBillingInTransaction: vi.fn(async (_tx, _input) => ({ billable: false })),
 }))
 vi.mock('@/lib/billing/runtime-usage', () => ({
   withTextUsageCollection: vi.fn(async (_input, run: () => Promise<unknown>) => await run()),
@@ -65,13 +66,16 @@ describe('worker task progress locale metadata', () => {
   })
 
   it('preserves task locale in progress payloads so queued task recovery can re-enqueue them', async () => {
-    await reportTaskProgress(buildJob({ flowId: 'single:video_group' }), 42, {
-      stage: 'polling_external',
-      meta: { source: 'worker-progress' },
+    await withLogContext({ taskId: 'task-1', taskAttempt: 3 }, async () => {
+      await reportTaskProgress(buildJob({ flowId: 'single:video_group' }), 42, {
+        stage: 'polling_external',
+        meta: { source: 'worker-progress' },
+      })
     })
 
     expect(taskServiceMock.tryUpdateTaskProgress).toHaveBeenCalledWith(
       'task-1',
+      3,
       42,
       expect.objectContaining({
         stage: 'polling_external',

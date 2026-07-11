@@ -191,7 +191,12 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
       pollProgress: { start: 30, end: 90 },
     })
 
-    const cosKey = await uploadImageSourceToCos(source, 'panel-candidate', `${panel.id}-${i}`)
+    const cosKey = await uploadImageSourceToCos(
+      source,
+      'panel-candidate',
+      `${panel.id}-${i}`,
+      { taskId: job.data.taskId, artifact: `panel-candidate:${panel.id}:${i}` },
+    )
     candidates.push(cosKey)
   }
 

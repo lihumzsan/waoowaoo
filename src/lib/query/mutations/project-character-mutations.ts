@@ -144,12 +144,14 @@ export function useCreateProjectCharacter(projectId: string) {
         mutationFn: async (payload: {
             name: string
             description: string
-            generateFromReference?: boolean
-            referenceImageUrls?: string[]
-            customDescription?: string
-            count?: number
         }) =>
-            await requestJsonWithError(
+            await requestJsonWithError<{
+                success: boolean
+                character?: {
+                    id: string
+                    appearances?: Array<{ id: string; appearanceIndex: number }>
+                }
+            }>(
                 `/api/projects/${projectId}/character`,
                 {
                     method: 'POST',
@@ -159,6 +161,36 @@ export function useCreateProjectCharacter(projectId: string) {
                 'Failed to create character',
             ),
         onSuccess: invalidateProjectAssets,
+    })
+}
+
+/**
+ * Explicitly submit reference generation after the character records exist.
+ * Record creation and Task submission are separate user-visible operations;
+ * neither operation calls the other route internally.
+ */
+export function useGenerateProjectCharacterFromReference(projectId: string) {
+    return useMutation({
+        mutationFn: async (payload: {
+            referenceImageUrls: string[]
+            characterName: string
+            characterId: string
+            appearanceId: string
+            count: number
+            customDescription?: string
+        }) =>
+            await requestJsonWithError<{ async: true; taskId: string }>(
+                `/api/projects/${projectId}/reference-to-character`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...payload,
+                        isBackgroundJob: true,
+                    }),
+                },
+                'Failed to submit reference character generation',
+            ),
     })
 }
 

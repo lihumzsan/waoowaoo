@@ -33,6 +33,7 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
   },
   projectEditMusicScore: {
+    findFirst: vi.fn(async (): Promise<unknown> => null),
     upsert: vi.fn(),
   },
 }))

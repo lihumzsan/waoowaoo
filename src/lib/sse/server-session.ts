@@ -2,6 +2,7 @@ import type { SSEEvent } from '@/lib/task/types'
 import { getWorkspaceSseEventIdentity } from './protocol'
 
 export const DEFAULT_SSE_BOOTSTRAP_BUFFER_LIMIT = 1000
+export const DEFAULT_SSE_EVENT_IDENTITY_LIMIT = 2048
 
 export class SseBootstrapBufferOverflowError extends Error {
   constructor(limit: number) {
@@ -17,25 +18,51 @@ export class SseEventIdentityConflictError extends Error {
   }
 }
 
+export class SseEventIdentityWindowOverflowError extends Error {
+  constructor(limit: number) {
+    super(`SSE_EVENT_IDENTITY_WINDOW_OVERFLOW limit=${String(limit)}`)
+    this.name = 'SseEventIdentityWindowOverflowError'
+  }
+}
+
 type SessionPhase = 'buffering' | 'live' | 'closed'
 
 export class WorkspaceSseServerSession {
   private phase: SessionPhase = 'buffering'
   private bufferedEvents: SSEEvent[] = []
+  private readonly emittedIdentities = new Map<string, string>()
 
   constructor(
     private readonly emit: (event: SSEEvent) => void,
     private readonly bufferLimit = DEFAULT_SSE_BOOTSTRAP_BUFFER_LIMIT,
+    private readonly identityLimit = DEFAULT_SSE_EVENT_IDENTITY_LIMIT,
   ) {
     if (!Number.isInteger(bufferLimit) || bufferLimit <= 0) {
       throw new Error('SSE_BOOTSTRAP_BUFFER_LIMIT_INVALID')
     }
+    if (!Number.isInteger(identityLimit) || identityLimit <= 0) {
+      throw new Error('SSE_EVENT_IDENTITY_LIMIT_INVALID')
+    }
+  }
+
+  private emitOnce(event: SSEEvent): void {
+    const identity = getWorkspaceSseEventIdentity(event)
+    const existingFingerprint = this.emittedIdentities.get(identity.key)
+    if (existingFingerprint === identity.fingerprint) return
+    if (existingFingerprint !== undefined) {
+      throw new SseEventIdentityConflictError(identity.key)
+    }
+    if (this.emittedIdentities.size >= this.identityLimit) {
+      throw new SseEventIdentityWindowOverflowError(this.identityLimit)
+    }
+    this.emit(event)
+    this.emittedIdentities.set(identity.key, identity.fingerprint)
   }
 
   receiveLiveEvent(event: SSEEvent): void {
     if (this.phase === 'closed') return
     if (this.phase === 'live') {
-      this.emit(event)
+      this.emitOnce(event)
       return
     }
     if (this.bufferedEvents.length >= this.bufferLimit) {
@@ -48,30 +75,20 @@ export class WorkspaceSseServerSession {
     if (this.phase !== 'buffering') {
       throw new Error(`SSE_BOOTSTRAP_PHASE_INVALID phase=${this.phase}`)
     }
-    const emittedIdentities = new Map<string, string>()
-    const emitOnce = (event: SSEEvent): void => {
-      const identity = getWorkspaceSseEventIdentity(event)
-      const existingFingerprint = emittedIdentities.get(identity.key)
-      if (existingFingerprint === identity.fingerprint) return
-      if (existingFingerprint !== undefined) {
-        throw new SseEventIdentityConflictError(identity.key)
-      }
-      emittedIdentities.set(identity.key, identity.fingerprint)
-      this.emit(event)
-    }
     for (const event of events) {
-      emitOnce(event)
+      this.emitOnce(event)
     }
     const buffered = this.bufferedEvents
     this.bufferedEvents = []
     this.phase = 'live'
     for (const event of buffered) {
-      emitOnce(event)
+      this.emitOnce(event)
     }
   }
 
   close(): void {
     this.phase = 'closed'
     this.bufferedEvents = []
+    this.emittedIdentities.clear()
   }
 }

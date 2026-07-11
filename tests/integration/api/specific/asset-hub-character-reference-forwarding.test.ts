@@ -11,6 +11,7 @@ const authMock = vi.hoisted(() => ({
 }))
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => await run(prismaMock)),
   globalAssetFolder: {
     findUnique: vi.fn(),
   },
@@ -41,14 +42,14 @@ const configServiceMock = vi.hoisted(() => ({
 }))
 
 const submitterMock = vi.hoisted(() => ({
-  submitTask: vi.fn<(input: {
+  prepareTaskSubmissionInput: vi.fn<(input: {
     projectId: string
     type: string
     targetType: string
     targetId: string
     payload: Record<string, unknown>
     dedupeKey?: string | null
-  }) => Promise<unknown>>(async () => ({ ok: true })),
+  }) => Promise<unknown>>(async (input) => ({ input, billingMode: 'OFF' })),
 }))
 
 const billingMock = vi.hoisted(() => ({
@@ -62,6 +63,16 @@ vi.mock('@/lib/media/attach', () => mediaAttachMock)
 vi.mock('@/lib/media/service', () => mediaServiceMock)
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/submitter', () => submitterMock)
+vi.mock('@/lib/task/transactional-create', () => ({
+  persistSubmittedTaskBatchInTransaction: vi.fn(async (params) => {
+    const tasks = params.inputs.map((input: Record<string, unknown>) => ({
+      task: { ...input, id: 'task-1', status: 'queued', billingInfo: null },
+      deduped: false,
+    }))
+    await params.onBatchCreatedInTransaction?.(params.tx, tasks)
+    return tasks
+  }),
+}))
 vi.mock('@/lib/billing', () => billingMock)
 
 describe('api specific - asset hub character reference forwarding', () => {
@@ -90,8 +101,8 @@ describe('api specific - asset hub character reference forwarding', () => {
     const res = await mod.POST(req, { params: Promise.resolve({}) })
     expect(res.status).toBe(200)
 
-    expect(submitterMock.submitTask).toHaveBeenCalledTimes(1)
-    const submitted = submitterMock.submitTask.mock.calls[0]?.[0] as {
+    expect(submitterMock.prepareTaskSubmissionInput).toHaveBeenCalledTimes(1)
+    const submitted = submitterMock.prepareTaskSubmissionInput.mock.calls[0]?.[0] as {
       projectId?: string
       type?: string
       targetType?: string

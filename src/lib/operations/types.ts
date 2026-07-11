@@ -4,6 +4,8 @@ import type { NextRequest } from 'next/server'
 import type { ProjectAgentContext, WorkspaceAssistantPartType } from '@/lib/project-agent/types'
 import type { OperationPlan } from './planning'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
+import type { Prisma } from '@prisma/client'
+import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
 
 export type ProjectAgentOperationId = string
 
@@ -21,10 +23,30 @@ export interface ProjectAgentOperationContext {
   writer?: UIMessageStreamWriter<UIMessage> | null
   toolCallId?: string | null
   executionAuthorization?: OperationExecutionAuthorization | null
+  executionFence?: ProjectAgentOperationExecutionFence | null
+  taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
+}
+
+export interface ProjectAgentOperationTaskBatchBinding {
+  bindInTransaction(
+    transaction: Prisma.TransactionClient,
+    batch: { operationId: string; taskIds: readonly string[] },
+  ): Promise<void>
+  isBound(): boolean
+  markCommitted(): void
+  isCommitted(): boolean
 }
 
 type BivariantOperationExecute<Input, Output> = {
   bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<Output>
+}['bivarianceHack']
+
+type BivariantTransactionalOperationExecute<Input, Output> = {
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+    transaction: Prisma.TransactionClient,
+  ): Promise<Output>
 }['bivarianceHack']
 
 type BivariantOperationPlan<Input> = {
@@ -58,6 +80,10 @@ export interface OperationEffects {
   longRunning: boolean
 }
 
+export type AssistantOperationWriteAuthority = {
+  kind: 'transactional_task_submission'
+}
+
 export type OperationApprovalKind = 'none' | 'billable_media' | 'destructive'
 
 export interface OperationConfirmation {
@@ -76,13 +102,10 @@ export interface OperationConfirmation {
  * onTaskComplete controls what happens when all async tasks submitted by this
  * operation complete successfully:
  * - resume_agent (default): wake the agent with a follow-up turn.
- * - await_user_choice: the completed artifacts require a user decision next
- *   (e.g. picking a style preview); the agent must NOT be woken.
  * Failed tasks always resume the agent so it can report and recover.
  */
 export interface OperationAgentFlow {
-  onTaskComplete?: 'resume_agent' | 'await_user_choice' | 'complete'
-  onTaskFailed?: 'resume_agent' | 'fail'
+  onTaskComplete?: 'resume_agent' | 'complete'
   interruptsFor?: 'approval' | 'choice' | null
 }
 
@@ -158,14 +181,33 @@ interface ProjectAgentOperationDefinitionFields<Input = unknown, Output = unknow
   outputSchema: RuntimeSchema<Output>
 }
 
-type DirectOperationBehavior<Input, Output> = {
+type NonTransactionalDirectOperationBehavior<Input, Output> = {
   confirmation?: Omit<OperationConfirmation, 'kind'> & {
     kind?: Exclude<OperationApprovalKind, 'billable_media'>
   }
-  plan?: BivariantOperationPlan<Input>
-  commit?: BivariantOperationCommit<Input, Output>
+  plan?: never
+  commit?: never
   execute: BivariantOperationExecute<Input, Output>
+  executeInTransaction?: never
+  assistantWriteAuthority?: Extract<AssistantOperationWriteAuthority, {
+    kind: 'transactional_task_submission'
+  }>
 }
+
+type TransactionalDirectOperationBehavior<Input, Output> = {
+  confirmation?: Omit<OperationConfirmation, 'kind'> & {
+    kind?: Exclude<OperationApprovalKind, 'billable_media'>
+  }
+  plan?: never
+  commit?: never
+  execute?: never
+  executeInTransaction: BivariantTransactionalOperationExecute<Input, Output>
+  assistantWriteAuthority?: never
+}
+
+type DirectOperationBehavior<Input, Output> =
+  | NonTransactionalDirectOperationBehavior<Input, Output>
+  | TransactionalDirectOperationBehavior<Input, Output>
 
 type BillablePlannedOperationBehavior<Input, Output> = {
   confirmation: Omit<OperationConfirmation, 'kind'> & {
@@ -175,6 +217,8 @@ type BillablePlannedOperationBehavior<Input, Output> = {
   plan: BivariantOperationPlan<Input>
   commit: BivariantOperationCommit<Input, Output>
   execute?: never
+  executeInTransaction?: never
+  assistantWriteAuthority?: never
 }
 
 export type ProjectAgentOperationDefinitionBase<Input = unknown, Output = unknown> = ProjectAgentOperationDefinitionFields<Input, Output> &

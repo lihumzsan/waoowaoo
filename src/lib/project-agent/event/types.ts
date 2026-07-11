@@ -34,6 +34,10 @@ export interface ProjectAgentEventScopeRef {
   scopeRef: string
 }
 
+export type ProjectAgentSessionEventPayload = {
+  kind: 'thread.cleared'
+}
+
 export type ProjectAgentEventPayload =
   | {
     kind: 'run.started'
@@ -49,6 +53,12 @@ export type ProjectAgentEventPayload =
     stopReason?: string | null
     errorCode?: string | null
     errorMessage?: string | null
+  }
+  | {
+    kind: 'run.execution_started'
+    runId: string
+    executionSegmentId: string
+    controlKind: ProjectAgentRunControlKind
   }
   | {
     kind: 'run.completed'
@@ -123,7 +133,6 @@ export type ProjectAgentEventPayload =
     terminalTaskIds: string[]
     failedTaskIds: string[]
     canceledTaskIds: string[]
-    nextActivityId?: string | null
   }
   | {
     kind: 'wait.followed'
@@ -154,12 +163,6 @@ export type ProjectAgentEventPayload =
     interruptionId: string
     outcome: 'consumed' | 'superseded'
     response?: Prisma.InputJsonValue | null
-  }
-  | {
-    kind: 'interruption.reopened'
-    runId: string
-    activityId: string | null
-    interruptionId: string
   }
 
 export interface ProjectAgentEventInput {

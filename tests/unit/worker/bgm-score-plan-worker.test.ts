@@ -10,11 +10,13 @@ import {
   it,
   mediaServiceMock,
   mockReadyProject,
+  prismaMock,
   storageMock,
   streamMock,
   vi,
   writeFileSync,
 } from './bgm-score-worker.fixture'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 
 describe('bgm score worker', () => {
   beforeEach(() => {
@@ -57,10 +59,15 @@ describe('bgm score worker', () => {
       musicModel: 'google::lyria-3-pro-preview',
     }))
 
+    const storageKey = buildTaskArtifactStorageKey({
+      taskId: 'task-bgm-1',
+      artifact: 'bgm-score:mix',
+      extension: 'm4a',
+    })
     expect(result).toMatchObject({
       episodeId: 'episode-1',
-      mediaId: 'media-mix',
-      audioUrl: '/m/bgm-mix',
+      mediaId: `media-${storageKey}`,
+      audioUrl: `/m/${storageKey}`,
       durationMs: 3500,
     })
     expect(executeAiTextStepMock).toHaveBeenCalledTimes(1)
@@ -70,5 +77,29 @@ describe('bgm score worker', () => {
     expect(planPrompt).toContain('所有会显示在画布上的字段值必须使用中文自然语言')
     expect(generateMusicMock).toHaveBeenCalledTimes(1)
     expect(streamMock.flush).toHaveBeenCalled()
+  })
+
+  it('replays a completed score without invoking the model or music provider again', async () => {
+    prismaMock.projectEditMusicScore.findFirst.mockResolvedValueOnce({
+      status: 'completed',
+      musicModel: 'google::lyria-3-pro-preview',
+      mixJson: {
+        mediaId: 'media-mix',
+        url: '/m/bgm-mix',
+        storageKey: 'music/bgm-score/mix.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 3500,
+      },
+    })
+
+    const { handleBgmScoreGenerateTask } = await import('@/lib/bgm-score/generate')
+    const result = await handleBgmScoreGenerateTask(buildJob({
+      episodeId: 'episode-1',
+      musicModel: 'google::lyria-3-pro-preview',
+    }))
+
+    expect(result).toMatchObject({ mediaId: 'media-mix', durationMs: 3500 })
+    expect(executeAiTextStepMock).not.toHaveBeenCalled()
+    expect(generateMusicMock).not.toHaveBeenCalled()
   })
 })

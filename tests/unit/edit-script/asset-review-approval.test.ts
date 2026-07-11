@@ -128,7 +128,7 @@ describe('approveProjectEpisodeEditScriptAssets', () => {
       scriptRow('script-2', 'chapter-2', 'completed'),
       scriptRow('script-3', 'chapter-3', 'completed'),
     ]
-    prismaMock.projectEditScript.findMany.mockResolvedValueOnce(scripts)
+    prismaMock.tx.projectEditScript.findMany.mockResolvedValueOnce(scripts)
     prismaMock.tx.projectEditScript.updateMany.mockResolvedValueOnce({ count: 3 })
     prismaMock.tx.projectEditScript.findMany.mockResolvedValueOnce(scripts.map((script) => ({
       ...script,
@@ -157,7 +157,7 @@ describe('approveProjectEpisodeEditScriptAssets', () => {
   })
 
   it('refuses partial approval when any chapter asset is not completed', async () => {
-    prismaMock.projectEditScript.findMany.mockResolvedValueOnce([
+    prismaMock.tx.projectEditScript.findMany.mockResolvedValueOnce([
       scriptRow('script-1', 'chapter-1', 'completed'),
       scriptRow('script-2', 'chapter-2', 'generating'),
     ])
@@ -168,7 +168,7 @@ describe('approveProjectEpisodeEditScriptAssets', () => {
       episodeId: 'episode-1',
     })).rejects.toThrow('Edit script assets are not ready: chapter-2:老李')
 
-    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
     expect(prismaMock.tx.projectEditScript.updateMany).not.toHaveBeenCalled()
   })
 })

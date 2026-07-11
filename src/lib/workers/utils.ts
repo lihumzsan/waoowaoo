@@ -21,9 +21,10 @@ import {
   resolveProviderVideoReferencePayload,
   type VideoReferenceImageInput,
 } from '@/lib/video-generation/reference-images'
+import { getWorkerExternalPollMs, getWorkerExternalTimeoutMs } from './runtime-config'
 
-const DEFAULT_POLL_TIMEOUT_MS = Number.parseInt(process.env.WORKER_EXTERNAL_TIMEOUT_MS || String(20 * 60 * 1000), 10)
-const DEFAULT_POLL_INTERVAL_MS = Number.parseInt(process.env.WORKER_EXTERNAL_POLL_MS || '3000', 10)
+const DEFAULT_POLL_TIMEOUT_MS = getWorkerExternalTimeoutMs()
+const DEFAULT_POLL_INTERVAL_MS = getWorkerExternalPollMs()
 
 function summarizeImageGenerationOptions(options: Record<string, unknown> | undefined): Record<string, unknown> {
   const value = options || {}
@@ -289,7 +290,9 @@ export async function resolveImageSourceFromGeneration(
   try {
     result = await withLogContext(
       { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
-      () => generateImage(params.userId, params.modelId, params.prompt, finalOptions),
+      () => generateImage(params.userId, params.modelId, params.prompt, finalOptions, {
+        key: 'media:image:primary',
+      }),
     )
   } catch (error) {
     const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
@@ -439,7 +442,9 @@ export async function resolveImageSourcesFromGeneration(
   try {
     result = await withLogContext(
       { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
-      () => generateImage(params.userId, params.modelId, params.prompt, finalOptions),
+      () => generateImage(params.userId, params.modelId, params.prompt, finalOptions, {
+        key: 'media:image:sources',
+      }),
     )
   } catch (error) {
     const providerKey = typeof (finalOptions as { provider?: unknown }).provider === 'string'
@@ -628,11 +633,17 @@ export async function resolveVideoSourceFromGeneration(
 
   const result = await withLogContext(
     { projectId: job.data.projectId, taskId: job.data.taskId, userId: params.userId },
-    () => generateVideo(params.userId, params.modelId, providerReferencePayload.imageUrl, {
-      ...providerRequestOptions,
-      ...providerReferencePayload.options,
-      ...providerCapabilityOptions,
-    }),
+    () => generateVideo(
+      params.userId,
+      params.modelId,
+      providerReferencePayload.imageUrl,
+      {
+        ...providerRequestOptions,
+        ...providerReferencePayload.options,
+        ...providerCapabilityOptions,
+      },
+      { key: 'media:video:primary' },
+    ),
   )
   if (!result.success) {
     throw new Error(result.error || 'Video generation failed')
@@ -669,12 +680,18 @@ export async function resolveVideoSourceFromGeneration(
   }
 }
 
-export async function uploadImageSourceToCos(source: string | Buffer, keyPrefix: string, targetId: string) {
+export async function uploadImageSourceToCos(
+  source: string | Buffer,
+  keyPrefix: string,
+  targetId: string,
+  taskArtifact?: { taskId: string; artifact: string },
+) {
   return await processMediaResult({
     source,
     type: 'image',
     keyPrefix,
     targetId,
+    taskArtifact,
   })
 }
 
@@ -683,6 +700,7 @@ export async function uploadVideoSourceToCos(
   keyPrefix: string,
   targetId: string,
   downloadHeaders?: Record<string, string>,
+  taskArtifact?: { taskId: string; artifact: string },
 ) {
   return await processMediaResult({
     source,
@@ -690,15 +708,22 @@ export async function uploadVideoSourceToCos(
     keyPrefix,
     targetId,
     downloadHeaders,
+    taskArtifact,
   })
 }
 
-export async function uploadAudioSourceToCos(source: string | Buffer, keyPrefix: string, targetId: string) {
+export async function uploadAudioSourceToCos(
+  source: string | Buffer,
+  keyPrefix: string,
+  targetId: string,
+  taskArtifact?: { taskId: string; artifact: string },
+) {
   return await processMediaResult({
     source,
     type: 'audio',
     keyPrefix,
     targetId,
+    taskArtifact,
   })
 }
 

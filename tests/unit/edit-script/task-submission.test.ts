@@ -22,10 +22,12 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const submitOperationTaskMock = vi.hoisted(() => vi.fn())
+const submitOperationTaskBatchMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/operations/submit-operation-task', () => ({
   submitOperationTask: submitOperationTaskMock,
+  submitOperationTaskBatch: submitOperationTaskBatchMock,
 }))
 vi.mock('@/lib/config-service', () => ({
   getProjectModelConfig: vi.fn(async () => ({
@@ -88,26 +90,11 @@ describe('edit shot execution plan task submission', () => {
         shotExecutionPlan: { status: 'failed' },
       },
     ])
-    prismaMock.projectEditScript.findFirst
-      .mockResolvedValueOnce({
-        id: 'script-missing',
-        episodeId: 'episode-1',
-        chapterId: 'chapter-missing',
-        status: 'ready',
-        requirements: [],
-      })
-      .mockResolvedValueOnce({
-        id: 'script-failed',
-        episodeId: 'episode-1',
-        chapterId: 'chapter-failed',
-        status: 'ready',
-        requirements: [],
-      })
-    submitOperationTaskMock
-      .mockResolvedValueOnce(mockSubmitResult('task-missing'))
-      .mockResolvedValueOnce(mockSubmitResult('task-failed'))
+    submitOperationTaskBatchMock.mockResolvedValueOnce([
+      mockSubmitResult('task-missing'),
+      mockSubmitResult('task-failed'),
+    ])
 
-    const submittedTaskIds: string[] = []
     const result = await submitProjectEditShotExecutionPlanBatchTasks({
       request: request(),
       projectId: 'project-1',
@@ -116,9 +103,6 @@ describe('edit shot execution plan task submission', () => {
       batchKey: 'edit_shot_execution_plan_generate:batch-1',
       source: 'project-agent',
       locale: 'zh',
-      onSubmittedTask: (taskId) => {
-        submittedTaskIds.push(taskId)
-      },
     })
 
     expect(prismaMock.projectEditScript.findMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -128,8 +112,8 @@ describe('edit shot execution plan task submission', () => {
         status: 'ready',
       },
     }))
-    expect(submitOperationTaskMock).toHaveBeenCalledTimes(2)
-    expect(submitOperationTaskMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(submitOperationTaskBatchMock).toHaveBeenCalledWith([
+      expect.objectContaining({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
@@ -145,8 +129,8 @@ describe('edit shot execution plan task submission', () => {
         editScriptId: 'script-missing',
         displayMode: 'detail',
       }),
-    }))
-    expect(submitOperationTaskMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      }),
+      expect.objectContaining({
       targetId: 'script-failed',
       dedupeKey: 'edit_shot_execution_plan_generate:project-1:script-failed',
       batchKey: 'edit_shot_execution_plan_generate:batch-1',
@@ -154,7 +138,8 @@ describe('edit shot execution plan task submission', () => {
         chapterId: 'chapter-failed',
         editScriptId: 'script-failed',
       }),
-    }))
+      }),
+    ])
     expect(result).toEqual(expect.objectContaining({
       success: true,
       async: true,
@@ -175,7 +160,6 @@ describe('edit shot execution plan task submission', () => {
         targetId: 'script-failed',
       }),
     ])
-    expect(submittedTaskIds).toEqual(['task-missing', 'task-failed'])
   })
 
   it('rejects a single shot execution plan task when the edit script already has a ready plan', async () => {
@@ -211,6 +195,7 @@ describe('edit shot execution plan task submission', () => {
       select: { id: true },
     })
     expect(submitOperationTaskMock).not.toHaveBeenCalled()
+    expect(submitOperationTaskBatchMock).not.toHaveBeenCalled()
   })
 
   it('fails explicitly when no episode edit scripts need shot execution planning', async () => {

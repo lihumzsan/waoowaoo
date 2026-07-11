@@ -83,8 +83,8 @@ npm install
 # Start infrastructure only
 docker compose up mysql redis minio -d
 
-# Run database migration
-npx prisma db push
+# Prepare the schema and required database triggers
+npm run db:prepare
 
 # Start development server
 npm run dev
@@ -95,6 +95,11 @@ npm run dev
 Visit [http://localhost:13000](http://localhost:13000) (Method 1 & 2) or [http://localhost:3000](http://localhost:3000) (Method 3) to get started!
 
 > The database is initialized automatically on first launch — no extra configuration needed.
+
+> [!WARNING]
+> When running the app directly, do not skip `npm run db:prepare`. It synchronizes the Prisma schema and installs the complete Episode resource-revision trigger set with fail-closed validation. Bare `prisma db push` is not sufficient.
+>
+> Before applying async Task/Assistant lifecycle migrations, stop new submissions and workers, then run `npm run db:async-migration-preflight`. Proceed only when active Tasks, the retired parent Task type, pending Outbox commands, and non-terminal Runs/Waits are all zero. The check is read-only and never backfills legacy Tasks.
 
 > [!TIP]
 > **If you experience lag**: HTTP mode may limit browser connections. Install [Caddy](https://caddyserver.com/docs/install) for HTTPS:

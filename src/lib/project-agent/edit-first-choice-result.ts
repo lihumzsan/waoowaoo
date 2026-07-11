@@ -1,7 +1,10 @@
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { EditFirstWorkflowChoiceDecision } from '@/lib/project-workflow/edit-first'
-import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
+import {
+  getEditFirstChoiceDefinition,
+  type EditFirstChoiceType,
+} from './edit-first-choice-tools'
 import { normalizeScriptIntakeChoiceBrief } from './script-intake'
 
 interface UnknownRecord {
@@ -31,6 +34,11 @@ export type EditFirstChoiceDecision =
   | { choiceType: 'asset_review'; decision: 'revise'; revisionNotes: string }
   | { choiceType: 'style'; decision: 'select'; stylePreviewId: string }
 
+export interface EditFirstChoiceDecisionInput {
+  output: UnknownRecord
+  latestUserText: string
+}
+
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -58,7 +66,7 @@ function buildChoiceInputItems(params: {
   result: UnknownRecord
 }): AgentInputItem[] {
   const callId = params.toolCallId
-  const toolName = EDIT_FIRST_CHOICE_TOOL_IDS[params.choiceType]
+  const toolName = getEditFirstChoiceDefinition(params.choiceType).toolId
   return [
     {
       type: 'function_call',
@@ -84,59 +92,70 @@ function buildChoiceInputItems(params: {
   ]
 }
 
-export function parseEditFirstChoiceDecision(params: {
-  choiceType: EditFirstChoiceType
-  output: UnknownRecord
-  latestUserText: string
-}): EditFirstChoiceDecision | null {
+export function parseScriptIntakeChoiceDecision(
+  params: EditFirstChoiceDecisionInput,
+): Extract<EditFirstChoiceDecision, { choiceType: 'script_intake' }> | null {
   if (params.output.ok !== true && params.output.ok !== undefined) return null
+  const normalizedBrief = normalizeScriptIntakeChoiceBrief({
+    seedText: params.latestUserText,
+    output: params.output,
+  })
+  if (!normalizedBrief) return null
+  return { choiceType: 'script_intake', decision: 'submit', normalizedBrief }
+}
 
-  if (params.choiceType === 'script_intake') {
-    const normalizedBrief = normalizeScriptIntakeChoiceBrief({
-      seedText: params.latestUserText,
-      output: params.output,
-    })
-    if (!normalizedBrief) return null
-    return { choiceType: 'script_intake', decision: 'submit', normalizedBrief }
+export function parseBibleReviewChoiceDecision(
+  params: EditFirstChoiceDecisionInput,
+): Extract<EditFirstChoiceDecision, { choiceType: 'bible_review' }> | null {
+  if (params.output.ok !== true && params.output.ok !== undefined) return null
+  const decision = readString(params.output.decision)
+  if (decision === 'revise') {
+    const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
+    if (!revisionNotes) return null
+    return { choiceType: 'bible_review', decision: 'revise', revisionNotes }
   }
-
-  if (params.choiceType === 'bible_review') {
-    const decision = readString(params.output.decision)
-    if (decision === 'revise') {
-      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
-      if (!revisionNotes) return null
-      return { choiceType: 'bible_review', decision: 'revise', revisionNotes }
-    }
-    if (decision === 'approve') {
-      const aspectRatio = readChoiceAspectRatio(params.output)
-      if (!aspectRatio) return null
-      return { choiceType: 'bible_review', decision: 'approve', aspectRatio }
-    }
-    return null
+  if (decision === 'approve') {
+    const aspectRatio = readChoiceAspectRatio(params.output)
+    if (!aspectRatio) return null
+    return { choiceType: 'bible_review', decision: 'approve', aspectRatio }
   }
+  return null
+}
 
-  if (params.choiceType === 'script_review') {
-    const decision = readString(params.output.decision)
-    if (decision === 'revise') {
-      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
-      if (!revisionNotes) return null
-      return { choiceType: 'script_review', decision: 'revise', revisionNotes }
-    }
-    if (decision !== 'approve') return null
-    return { choiceType: 'script_review', decision: 'approve' }
+export function parseScriptReviewChoiceDecision(
+  params: EditFirstChoiceDecisionInput,
+): Extract<EditFirstChoiceDecision, { choiceType: 'script_review' }> | null {
+  if (params.output.ok !== true && params.output.ok !== undefined) return null
+  const decision = readString(params.output.decision)
+  if (decision === 'revise') {
+    const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
+    if (!revisionNotes) return null
+    return { choiceType: 'script_review', decision: 'revise', revisionNotes }
   }
+  return decision === 'approve'
+    ? { choiceType: 'script_review', decision: 'approve' }
+    : null
+}
 
-  if (params.choiceType === 'asset_review') {
-    const decision = readString(params.output.decision)
-    if (decision === 'revise') {
-      const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
-      if (!revisionNotes) return null
-      return { choiceType: 'asset_review', decision: 'revise', revisionNotes }
-    }
-    if (decision !== 'approve') return null
-    return { choiceType: 'asset_review', decision: 'approve' }
+export function parseAssetReviewChoiceDecision(
+  params: EditFirstChoiceDecisionInput,
+): Extract<EditFirstChoiceDecision, { choiceType: 'asset_review' }> | null {
+  if (params.output.ok !== true && params.output.ok !== undefined) return null
+  const decision = readString(params.output.decision)
+  if (decision === 'revise') {
+    const revisionNotes = readString(params.output.revisionNotes) ?? readString(params.output.replyText)
+    if (!revisionNotes) return null
+    return { choiceType: 'asset_review', decision: 'revise', revisionNotes }
   }
+  return decision === 'approve'
+    ? { choiceType: 'asset_review', decision: 'approve' }
+    : null
+}
 
+export function parseStyleChoiceDecision(
+  params: EditFirstChoiceDecisionInput,
+): Extract<EditFirstChoiceDecision, { choiceType: 'style' }> | null {
+  if (params.output.ok !== true && params.output.ok !== undefined) return null
   const selections = isRecord(params.output.selections) ? params.output.selections : null
   const stylePreviewId = readString(params.output.stylePreviewId)
     ?? readString(selections?.stylePreviewId)
@@ -148,28 +167,25 @@ export function parseEditFirstChoiceDecision(params: {
   }
 }
 
+export function parseEditFirstChoiceDecision(params: {
+  choiceType: EditFirstChoiceType
+  output: UnknownRecord
+  latestUserText: string
+}): EditFirstChoiceDecision | null {
+  return getEditFirstChoiceDefinition(params.choiceType).parseDecision({
+    output: params.output,
+    latestUserText: params.latestUserText,
+  })
+}
+
 export function buildEditFirstChoiceResultFromDecision(params: {
   decision: EditFirstChoiceDecision
   toolCallId: string
 }): EditFirstChoiceResult {
   const decision = params.decision
-  const choiceDecision: EditFirstWorkflowChoiceDecision = decision.choiceType === 'script_review'
-    ? { choiceType: 'script_review', decision: decision.decision }
-    : decision.choiceType === 'bible_review'
-      ? { choiceType: 'bible_review', decision: decision.decision }
-      : decision.choiceType === 'asset_review'
-        ? { choiceType: 'asset_review', decision: decision.decision }
-        : decision.choiceType === 'style'
-          ? { choiceType: 'style', decision: decision.decision, stylePreviewId: decision.stylePreviewId }
-          : { choiceType: 'script_intake', decision: decision.decision, normalizedBrief: decision.normalizedBrief }
-  const result: UnknownRecord = decision.choiceType === 'style'
-    ? {
-        decision: decision.decision,
-        stylePreviewId: decision.stylePreviewId,
-        saved: true,
-      }
-    : { ...decision }
-  delete result.choiceType
+  const definition = getEditFirstChoiceDefinition(decision.choiceType)
+  const choiceDecision: EditFirstWorkflowChoiceDecision = definition.toWorkflowDecision(decision)
+  const result = definition.serializeDecision(decision)
   return {
     decision,
     choiceDecision,

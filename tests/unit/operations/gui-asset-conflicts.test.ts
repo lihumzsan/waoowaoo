@@ -7,6 +7,7 @@ const prismaMock = vi.hoisted(() => ({
   projectCharacter: {
     findFirst: vi.fn(),
     create: vi.fn(),
+    findUnique: vi.fn(),
   },
   characterAppearance: {
     create: vi.fn(),
@@ -70,16 +71,36 @@ describe('GUI asset creation conflicts', () => {
   it('rejects duplicate character names before creating records', async () => {
     prismaMock.projectCharacter.findFirst.mockResolvedValueOnce({ id: 'character-1' })
     const operation = createGuiOperations().create_character
-    if (!operation?.execute) throw new Error('create_character operation missing')
+    if (!operation?.executeInTransaction) throw new Error('create_character transactional operation missing')
 
-    await expect(operation.execute(buildCtx(), {
+    await expect(operation.executeInTransaction(buildCtx(), {
       name: 'Hero',
       description: 'A lead character.',
-    })).rejects.toMatchObject({
+    }, prismaMock as never)).rejects.toMatchObject({
       code: 'CONFLICT',
       details: expect.objectContaining({
         code: 'PROJECT_CHARACTER_NAME_CONFLICT',
         field: 'name',
+      }),
+    })
+
+    expect(prismaMock.projectCharacter.create).not.toHaveBeenCalled()
+    expect(prismaMock.characterAppearance.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects legacy reference generation instead of hiding a second Task submission', async () => {
+    const operation = createGuiOperations().create_character
+    if (!operation?.executeInTransaction) throw new Error('create_character transactional operation missing')
+
+    await expect(operation.executeInTransaction(buildCtx(), {
+      name: 'Hero',
+      description: 'A lead character.',
+      generateFromReference: true,
+      referenceImageUrls: ['https://example.com/hero.png'],
+    }, prismaMock as never)).rejects.toMatchObject({
+      code: 'INVALID_PARAMS',
+      details: expect.objectContaining({
+        code: 'PROJECT_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
       }),
     })
 

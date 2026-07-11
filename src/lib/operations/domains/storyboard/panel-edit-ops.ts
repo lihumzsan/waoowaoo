@@ -34,15 +34,16 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       inputSchema: updateStoryboardPanelPromptInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,
-      execute: async (ctx, input) => executeStoryboardMutationOperation(ctx, {
+      executeInTransaction: async (ctx, input, transaction) => executeStoryboardMutationOperation(ctx, {
         ...input,
         action: 'update_panel_prompt',
-      }, 'update_storyboard_panel_prompt'),
+      }, 'update_storyboard_panel_prompt', transaction),
     }),
     select_storyboard_panel_candidate: defineOperation({
       id: 'select_storyboard_panel_candidate',
       summary: 'Select one storyboard panel candidate image as the final panel image.',
       intent: 'act',
+      channels: { tool: false, api: true },
       effects: {
         ...EFFECTS_WRITE,
         overwrite: true,
@@ -72,10 +73,10 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       inputSchema: cancelStoryboardPanelCandidatesInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,
-      execute: async (ctx, input) => executeStoryboardMutationOperation(ctx, {
+      executeInTransaction: async (ctx, input, transaction) => executeStoryboardMutationOperation(ctx, {
         ...input,
         action: 'cancel_panel_candidates',
-      }, 'cancel_storyboard_panel_candidates'),
+      }, 'cancel_storyboard_panel_candidates', transaction),
     }),
   }
 }

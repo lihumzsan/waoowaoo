@@ -6,6 +6,11 @@ const root = process.cwd()
 const sourceRoot = path.join(root, 'src')
 const assignmentPattern = /\boperationConfirmed\b/g
 const legacyInstructionPattern = /confirmed\s*=\s*true/g
+const retiredBooleanApprovalFiles = new Set([
+  'src/app/api/projects/[projectId]/bible/route.ts',
+  'src/lib/edit-bible/task-submission.ts',
+  'src/lib/operations/domains/media/bible-ops.ts',
+])
 
 async function listSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -30,6 +35,15 @@ for (const filePath of await listSourceFiles(sourceRoot)) {
     const index = match.index ?? 0
     const line = source.slice(0, index).split('\n').length
     violations.push(`${relativePath}:${line}: legacy model instruction confirmed=true`)
+  }
+  if (retiredBooleanApprovalFiles.has(relativePath) && /\bconfirmed\b/.test(source)) {
+    violations.push(`${relativePath}: retired boolean approval argument`)
+  }
+  if (
+    relativePath.startsWith('src/lib/operations/domains/')
+    && /\bconfirmed\s*:\s*z\.boolean\s*\(/.test(source)
+  ) {
+    violations.push(`${relativePath}: Operation business schema still declares the retired boolean approval field`)
   }
 }
 

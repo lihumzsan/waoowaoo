@@ -79,6 +79,32 @@ function buildContinuationOutcomeUnknownMessage(params: {
   }
 }
 
+function buildContinuationDeliveryExhaustedMessage(params: {
+  runId: string
+  commandId: string
+}): UIMessage {
+  return {
+    id: `workspace-continuation-delivery-exhausted:${params.commandId}`,
+    role: 'assistant',
+    metadata: {
+      custom: {
+        projectAgentRunId: params.runId,
+        projectAgentContinuationCommandId: params.commandId,
+      },
+    },
+    parts: [{
+      type: 'data-agent-run',
+      data: {
+        runId: params.runId,
+        requestId: params.commandId,
+        status: 'failed',
+        controlKind: 'task_follow_up',
+        stopReason: 'continuation_delivery_exhausted',
+      },
+    }],
+  }
+}
+
 async function drainResponseBody(response: Response): Promise<void> {
   if (!response.body) return
   const reader = response.body.getReader()
@@ -114,6 +140,7 @@ async function runClaimedFollowUp(params: {
   followUp: ProjectAgentWaitFollowUp
   commandId: string
   claimOwner: string
+  claimSignal: AbortSignal
 }): Promise<boolean> {
   let run = await loadRunForFollowUp(params)
   if (!run) {
@@ -177,7 +204,7 @@ async function runClaimedFollowUp(params: {
         claimOwner: params.claimOwner,
         projectId: params.projectId,
         userId: params.userId,
-        outcome: 'failed',
+        outcome: 'outcome_unknown',
         message: buildContinuationOutcomeUnknownMessage({
           runId: run.id,
           commandId: params.commandId,
@@ -234,6 +261,12 @@ async function runClaimedFollowUp(params: {
         followUp: consumed,
       },
       runLock: lock,
+      ownershipSignal: params.claimSignal,
+      continuationClaim: {
+        waitId: params.followUp.waitId,
+        commandId: params.commandId,
+        claimOwner: params.claimOwner,
+      },
       settleTaskFollowUp: async (settlement) => {
         await checkpointProjectAgentWaitFollowUp({
           runId: continuationRunId,
@@ -290,6 +323,7 @@ export async function runProjectAgentWaitContinuationCommand(
     claimOwner,
   })
   if (claim.status === 'already_followed') return
+  if (claim.status === 'abandoned') return
   if (claim.status === 'busy') throw new Error(`PROJECT_AGENT_CONTINUATION_BUSY:${command.waitId}`)
   if (claim.status === 'stale_or_not_claimable') {
     throw new OutboxPermanentError(
@@ -314,6 +348,13 @@ export async function runProjectAgentWaitContinuationCommand(
   }
   let ran = false
   let claimLeaseLost = false
+  const claimAbortController = new AbortController()
+  const loseClaimLease = (): void => {
+    claimLeaseLost = true
+    if (!claimAbortController.signal.aborted) {
+      claimAbortController.abort(new Error(`PROJECT_AGENT_CONTINUATION_CLAIM_LEASE_LOST:${command.waitId}`))
+    }
+  }
   const claimHeartbeat = setInterval(() => {
     void extendProjectAgentWaitContinuationClaim({
       waitId: command.waitId,
@@ -321,9 +362,9 @@ export async function runProjectAgentWaitContinuationCommand(
       claimOwner,
       claimTtlMs: 10 * 60 * 1000,
     }).then((extended) => {
-      if (!extended) claimLeaseLost = true
+      if (!extended) loseClaimLease()
     }).catch(() => {
-      claimLeaseLost = true
+      loseClaimLease()
     })
   }, 60_000)
   try {
@@ -334,6 +375,7 @@ export async function runProjectAgentWaitContinuationCommand(
       followUp: claim.followUp,
       commandId: outboxId,
       claimOwner,
+      claimSignal: claimAbortController.signal,
     })
     if (claimLeaseLost) throw new Error(`PROJECT_AGENT_CONTINUATION_CLAIM_LEASE_LOST:${command.waitId}`)
   } catch (error) {
@@ -347,4 +389,78 @@ export async function runProjectAgentWaitContinuationCommand(
     clearInterval(claimHeartbeat)
   }
   if (!ran) throw new Error(`PROJECT_AGENT_CONTINUATION_NOT_RUN:${command.waitId}`)
+}
+
+export type ProjectAgentContinuationDeliveryExhaustedSettlement =
+  | 'settled'
+  | 'already_settled'
+  | 'not_applicable'
+
+export async function settleProjectAgentWaitContinuationDeliveryExhausted(
+  command: ProjectAgentContinueWaitCommand,
+  outboxId: string,
+): Promise<ProjectAgentContinuationDeliveryExhaustedSettlement> {
+  const claimOwner = randomUUID()
+  const claim = await claimProjectAgentWaitContinuation({
+    waitId: command.waitId,
+    runId: command.runId,
+    expectedRunVersion: command.expectedRunVersion,
+    expectedEventSeq: command.expectedEventSeq,
+    commandId: outboxId,
+    claimOwner,
+  })
+  if (claim.status === 'already_followed') return 'already_settled'
+  if (claim.status === 'abandoned' || claim.status === 'stale_or_not_claimable') {
+    return 'not_applicable'
+  }
+  if (claim.status === 'busy') {
+    throw new Error(`PROJECT_AGENT_CONTINUATION_DELIVERY_SETTLEMENT_BUSY:${command.waitId}`)
+  }
+
+  const consumed = await startProjectAgentWaitFollowUp({
+    runId: command.runId,
+    waitId: command.waitId,
+    commandId: outboxId,
+    claimOwner,
+    projectId: claim.projectId,
+    userId: claim.userId,
+  })
+  if (!consumed) {
+    throw new Error(`PROJECT_AGENT_CONTINUATION_DELIVERY_SETTLEMENT_NOT_STARTED:${command.waitId}`)
+  }
+
+  const executionStart = await beginProjectAgentWaitContinuationExecution({
+    runId: command.runId,
+    waitId: command.waitId,
+    commandId: outboxId,
+    claimOwner,
+    projectId: claim.projectId,
+    userId: claim.userId,
+  })
+  if (executionStart !== 'settled') {
+    const outcome = executionStart === 'already_started'
+      ? 'outcome_unknown' as const
+      : 'delivery_exhausted' as const
+    await checkpointProjectAgentWaitFollowUp({
+      runId: command.runId,
+      waitId: command.waitId,
+      commandId: outboxId,
+      claimOwner,
+      projectId: claim.projectId,
+      userId: claim.userId,
+      outcome,
+      message: outcome === 'outcome_unknown'
+        ? buildContinuationOutcomeUnknownMessage({ runId: command.runId, commandId: outboxId })
+        : buildContinuationDeliveryExhaustedMessage({ runId: command.runId, commandId: outboxId }),
+    })
+  }
+  await finalizeProjectAgentWaitFollowUp({
+    runId: command.runId,
+    waitId: command.waitId,
+    commandId: outboxId,
+    claimOwner,
+    projectId: claim.projectId,
+    userId: claim.userId,
+  })
+  return 'settled'
 }

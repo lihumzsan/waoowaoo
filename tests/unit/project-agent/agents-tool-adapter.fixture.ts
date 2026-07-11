@@ -6,7 +6,10 @@ import { z } from 'zod'
 
 import type { NextRequest } from 'next/server'
 
-import { createProjectAgentOperationTool } from '@/lib/project-agent/agents-tool-adapter'
+import {
+  createProjectAgentOperationTool as createProjectAgentOperationToolAuthority,
+  type CreateProjectAgentOperationToolParams,
+} from '@/lib/project-agent/agents-tool-adapter'
 
 import { createProjectAgentApprovalPreflightStore } from '@/lib/project-agent/approval-preflight'
 
@@ -53,6 +56,15 @@ const prismaState = vi.hoisted(() => ({
     count: vi.fn(async () => 0),
   },
 }))
+
+function createProjectAgentOperationTool(
+  params: Omit<CreateProjectAgentOperationToolParams, 'operationSignal'>,
+) {
+  return createProjectAgentOperationToolAuthority({
+    ...params,
+    operationSignal: new AbortController().signal,
+  })
+}
 
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaState,
@@ -110,10 +122,9 @@ export { beforeEach, describe, expect, it, vi } from 'vitest'
 export { RunContext } from '@openai/agents'
 export { z } from 'zod'
 export type { NextRequest } from 'next/server'
-export { createProjectAgentOperationTool } from '@/lib/project-agent/agents-tool-adapter'
 export { createProjectAgentApprovalPreflightStore } from '@/lib/project-agent/approval-preflight'
 export type { ProjectAgentOperationDefinition, RuntimeSchema } from '@/lib/operations/types'
 export { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 export { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 export { EFFECTS_BILLABLE, EFFECTS_NONE } from '../../helpers/project-agent-operations'
-export { buildOperation, eventState, executeState, prismaState }
+export { buildOperation, createProjectAgentOperationTool, eventState, executeState, prismaState }

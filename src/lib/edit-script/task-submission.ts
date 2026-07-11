@@ -3,7 +3,11 @@ import type { Locale } from '@/i18n/routing'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { EDIT_BIBLE_STATUS } from '@/lib/edit-bible/constraints'
-import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import {
+  submitOperationTask,
+  submitOperationTaskBatch,
+  type OperationTaskSubmissionParams,
+} from '@/lib/operations/submit-operation-task'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { buildEditFirstTextTaskPayload } from './task-billing'
 import {
@@ -302,7 +306,6 @@ export async function submitProjectEditShotExecutionPlanBatchTasks(input: {
   readonly batchKey: string
   readonly source: string
   readonly locale: Locale
-  readonly onSubmittedTask?: (taskId: string) => void
 }): Promise<EditShotExecutionPlanBatchTaskSubmitResult> {
   const targets = await resolveEpisodeEditShotExecutionPlanTaskTargets({
     projectId: input.projectId,
@@ -315,32 +318,53 @@ export async function submitProjectEditShotExecutionPlanBatchTasks(input: {
     })
   }
 
-  const submittedTasks: EditShotExecutionPlanBatchTaskSubmitResult['submittedTasks'] = []
-  for (const target of targets) {
-    const result = await submitProjectEditShotExecutionPlanTask({
+  const submissions = await Promise.all(targets.map(async (target): Promise<OperationTaskSubmissionParams> => {
+    await assertEditShotExecutionPlanNeedsGeneration({
+      projectId: input.projectId,
+      episodeId: target.episodeId,
+      editScriptId: target.editScriptId,
+    })
+    return {
       request: input.request,
       projectId: input.projectId,
       userId: input.userId,
       episodeId: target.episodeId,
+      type: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
+      targetType: 'ProjectEditScript',
+      targetId: target.editScriptId,
+      operationId: 'generate_edit_shot_execution_plan',
+      source: input.source,
+      payload: await buildEditFirstTextTaskPayload({
+        projectId: input.projectId,
+        userId: input.userId,
+        payload: {
+          episodeId: target.episodeId,
+          chapterId: target.chapterId,
+          editScriptId: target.editScriptId,
+          displayMode: 'detail',
+        },
+      }),
+      dedupeKey: `edit_shot_execution_plan_generate:${input.projectId}:${target.editScriptId}`,
+      batchKey: input.batchKey,
+      locale: input.locale,
+    }
+  }))
+  const results = await submitOperationTaskBatch(submissions)
+  const submittedTasks: EditShotExecutionPlanBatchTaskSubmitResult['submittedTasks'] = targets.map((target, index) => {
+    const result = results[index]
+    if (!result) throw new Error(`EDIT_SHOT_EXECUTION_PLAN_TASK_RESULT_MISSING:${target.editScriptId}`)
+    return {
       chapterId: target.chapterId,
       editScriptId: target.editScriptId,
-      batchKey: input.batchKey,
-      source: input.source,
-      locale: input.locale,
-    })
-    input.onSubmittedTask?.(result.taskId)
-    submittedTasks.push({
-      chapterId: result.chapterId,
-      editScriptId: result.editScriptId,
       taskId: result.taskId,
       status: result.status,
       runId: result.runId ?? null,
       deduped: result.deduped,
       taskType: TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE,
       targetType: 'ProjectEditScript',
-      targetId: result.editScriptId,
-    })
-  }
+      targetId: target.editScriptId,
+    }
+  })
 
   return {
     success: true,

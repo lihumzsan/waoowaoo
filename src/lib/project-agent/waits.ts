@@ -21,11 +21,13 @@ import {
   type ProjectAgentRunFence,
 } from './run-fence'
 
-export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed'
+export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
 export type ProjectAgentTaskFollowUpSettlementOutcome =
   | 'completed'
   | 'failed'
+  | 'outcome_unknown'
+  | 'delivery_exhausted'
   | 'awaiting_task'
   | 'awaiting_choice'
   | 'awaiting_approval'
@@ -43,13 +45,10 @@ export type ProjectAgentContinuationExecutionStart = 'started' | 'already_starte
 /**
  * What happens when every task behind the wait reaches a terminal state.
  * - resume_agent: the wait becomes claimable and the agent is woken with a follow-up turn.
- * - await_user_choice: completion means the user must pick something next; the wait is
- *   closed immediately and the agent is never woken. Failures still resume the agent
- *   so it can report and recover.
  * The mode is declared on the operation definition (agentFlow.onTaskComplete) and
  * recorded here when the wait is created.
  */
-export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'await_user_choice' | 'complete'
+export type ProjectAgentWaitFollowUpMode = 'resume_agent' | 'complete'
 
 interface ProjectAgentWaitScopeInput {
   projectId: string
@@ -64,6 +63,7 @@ export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput 
   operationId: string
   taskIds: string[]
   followUpMode: ProjectAgentWaitFollowUpMode
+  previousActivityId?: string | null
 }
 
 interface ProjectAgentWaitRow {
@@ -348,12 +348,18 @@ function buildWaitScope(input: ProjectAgentWaitScopeInput): {
 }
 
 function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode {
-  if (value === 'resume_agent' || value === 'await_user_choice' || value === 'complete') return value
+  if (value === 'resume_agent' || value === 'complete') return value
   throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_MODE_INVALID:${value}`)
 }
 
 function normalizeWaitStatus(value: string): ProjectAgentWaitStatus {
-  if (value === 'pending' || value === 'resolved' || value === 'claimed' || value === 'followed') return value
+  if (
+    value === 'pending'
+    || value === 'resolved'
+    || value === 'claimed'
+    || value === 'followed'
+    || value === 'abandoned'
+  ) return value
   throw new Error(`PROJECT_AGENT_WAIT_STATUS_INVALID:${value}`)
 }
 
@@ -366,19 +372,43 @@ function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerm
 export async function createProjectAgentWait(input: CreateProjectAgentWaitInput): Promise<string | null> {
   const taskIds = normalizeTaskIds(input.taskIds)
   if (taskIds.length === 0) return null
+  return await prisma.$transaction(async (tx) => (
+    await bindProjectAgentWaitToTasksInTransaction(tx, {
+      ...input,
+      taskIds,
+    })
+  ))
+}
+
+export async function bindProjectAgentWaitToTasksInTransaction(
+  tx: Prisma.TransactionClient,
+  input: CreateProjectAgentWaitInput,
+): Promise<string | null> {
+  const taskIds = normalizeTaskIds(input.taskIds)
+  if (taskIds.length === 0) return null
   const waitId = randomUUID()
   const activityId = randomUUID()
-  await prisma.$transaction(async (tx) => {
-    const { assistantId, scopeRef } = buildWaitScope(input)
-    await appendProjectAgentEventsInTransaction(tx, {
-      scope: {
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: input.episodeId ?? null,
-        assistantId,
-        scopeRef,
-      },
-      events: [
+  const { assistantId, scopeRef } = buildWaitScope(input)
+  await appendProjectAgentEventsInTransaction(tx, {
+    scope: {
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
+      scopeRef,
+    },
+    events: [
+      ...(input.previousActivityId
+        ? [{
+            runFence: input.runFence,
+            idempotencyKey: `activity-completed:${input.previousActivityId}:before:${activityId}`,
+            event: {
+              kind: 'activity.completed' as const,
+              runId: input.runId,
+              activityId: input.previousActivityId,
+            },
+          }]
+        : []),
       {
         runFence: input.runFence,
         idempotencyKey: `activity-started:${activityId}`,
@@ -403,17 +433,22 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
           followUpMode: input.followUpMode,
         },
       },
-      ],
-    })
-    const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
-      SELECT id, status
-      FROM tasks
-      WHERE projectId = ${input.projectId}
-        AND userId = ${input.userId}
-        AND id IN (${Prisma.join(taskIds)})
-    `)
-    const terminalTask = tasks.find((task) => readTerminalLifecycleTypeFromTaskStatus(task.status) !== null)
-    if (!terminalTask) return
+    ],
+  })
+  const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
+    SELECT id, status
+    FROM tasks
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND id IN (${Prisma.join(taskIds)})
+  `)
+  const taskIdSet = new Set(tasks.map((task) => task.id))
+  const missingTaskIds = taskIds.filter((taskId) => !taskIdSet.has(taskId))
+  if (missingTaskIds.length > 0) {
+    throw new Error(`PROJECT_AGENT_WAIT_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
+  }
+  const terminalTask = tasks.find((task) => readTerminalLifecycleTypeFromTaskStatus(task.status) !== null)
+  if (terminalTask) {
     const terminalType = readTerminalLifecycleTypeFromTaskStatus(terminalTask.status)
     if (!terminalType) throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_TYPE_MISSING:${terminalTask.id}`)
     await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
@@ -422,7 +457,7 @@ export async function createProjectAgentWait(input: CreateProjectAgentWaitInput)
       userId: input.userId,
       lifecycleType: terminalType,
     })
-  })
+  }
   return waitId
 }
 
@@ -479,9 +514,9 @@ export function applyProjectAgentWaitTerminalEvent(
 }
 
 /**
- * Pure decision: a completed await_user_choice wait is closed immediately
- * (the next step belongs to the user, not the agent); everything else becomes
- * claimable so a follow-up turn can wake the agent.
+ * Pure decision: a completed operation that explicitly owns the Run terminal
+ * closes the wait; every other completed/failed wait becomes claimable so the
+ * durable continuation can compute the next Workflow action.
  */
 export function resolveWaitTerminalNextStatus(params: {
   followUpMode: string
@@ -489,8 +524,7 @@ export function resolveWaitTerminalNextStatus(params: {
 }): Extract<ProjectAgentWaitStatus, 'resolved' | 'followed'> {
   if (params.terminalStatus === 'canceled') return 'followed'
   if (
-    (params.followUpMode === 'await_user_choice' || params.followUpMode === 'complete')
-    && params.terminalStatus === 'completed'
+    params.followUpMode === 'complete' && params.terminalStatus === 'completed'
   ) {
     return 'followed'
   }
@@ -512,11 +546,6 @@ async function applyWaitTerminalStatus(input: {
   failedTaskIds: string[]
   canceledTaskIds: string[]
 }): Promise<void> {
-  const nextActivityId = input.followUpMode === 'await_user_choice'
-    && input.terminalStatus === 'completed'
-    && input.runId
-    ? randomUUID()
-    : null
   await appendProjectAgentEvents({
     scope: {
       projectId: input.projectId,
@@ -542,7 +571,6 @@ async function applyWaitTerminalStatus(input: {
         terminalTaskIds: input.terminalTaskIds,
         failedTaskIds: input.failedTaskIds,
         canceledTaskIds: input.canceledTaskIds,
-        nextActivityId,
       },
     }],
   })
@@ -655,10 +683,6 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
       followUpMode: row.followUpMode,
       terminalStatus: result.terminalStatus,
     })
-    const nextActivityId = row.followUpMode === 'await_user_choice'
-      && result.terminalStatus === 'completed'
-      ? randomUUID()
-      : null
     await appendProjectAgentEventsInTransaction(tx, {
       scope,
       events: [{
@@ -679,7 +703,6 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
           terminalTaskIds: result.terminalTaskIds,
           failedTaskIds: result.failedTaskIds,
           canceledTaskIds: result.canceledTaskIds,
-          nextActivityId,
         },
       }],
     })
@@ -786,6 +809,7 @@ export type ProjectAgentContinuationClaimResult =
       episodeId: string | null
     }
   | { status: 'already_followed' }
+  | { status: 'abandoned' }
   | { status: 'busy' }
   | { status: 'stale_or_not_claimable' }
 
@@ -807,6 +831,7 @@ export async function claimProjectAgentWaitContinuation(input: {
   return await prisma.$transaction(async (tx) => {
     const current = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
     if (!current || current.runId !== input.runId) return { status: 'stale_or_not_claimable' }
+    if (current.status === 'abandoned') return { status: 'abandoned' }
     if (current.status === 'followed' && current.followUpCommandId === input.commandId) {
       return { status: 'already_followed' }
     }
@@ -1055,6 +1080,8 @@ function normalizeProjectAgentTaskFollowUpSettlementOutcome(
   switch (value) {
     case 'completed':
     case 'failed':
+    case 'outcome_unknown':
+    case 'delivery_exhausted':
     case 'awaiting_task':
     case 'awaiting_choice':
     case 'awaiting_approval':
@@ -1298,6 +1325,8 @@ export async function finalizeProjectAgentWaitFollowUp(input: {
     if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
     const runFence = createProjectAgentRunFence(run)
     const activityEvent = outcome === 'failed'
+      || outcome === 'outcome_unknown'
+      || outcome === 'delivery_exhausted'
       ? {
           runFence,
           idempotencyKey: `activity-failed:${input.commandId}:continuation`,
@@ -1305,8 +1334,16 @@ export async function finalizeProjectAgentWaitFollowUp(input: {
             kind: 'activity.failed' as const,
             runId: input.runId,
             activityId: input.commandId,
-            errorCode: 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
-            errorMessage: 'Project agent continuation reached a tool error',
+            errorCode: outcome === 'outcome_unknown'
+              ? 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN'
+              : outcome === 'delivery_exhausted'
+                ? 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED'
+                : 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
+            errorMessage: outcome === 'outcome_unknown'
+              ? 'Project agent continuation outcome is unknown and must not be replayed automatically'
+              : outcome === 'delivery_exhausted'
+                ? 'Project agent continuation delivery exhausted before execution could complete'
+                : 'Project agent continuation reached a tool error',
           },
         }
       : {
@@ -1340,7 +1377,31 @@ export async function finalizeProjectAgentWaitFollowUp(input: {
               errorMessage: 'Project agent continuation reached a tool error',
             },
           }
-        : null
+        : outcome === 'outcome_unknown'
+          ? {
+              runFence,
+              idempotencyKey: `run-failed:${input.runId}:continuation-outcome-unknown:${input.commandId}`,
+              event: {
+                kind: 'run.failed' as const,
+                runId: input.runId,
+                stopReason: 'continuation_outcome_unknown',
+                errorCode: 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN',
+                errorMessage: 'Project agent continuation outcome is unknown and must not be replayed automatically',
+              },
+            }
+          : outcome === 'delivery_exhausted'
+            ? {
+                runFence,
+                idempotencyKey: `run-failed:${input.runId}:continuation-delivery-exhausted:${input.commandId}`,
+                event: {
+                  kind: 'run.failed' as const,
+                  runId: input.runId,
+                  stopReason: 'continuation_delivery_exhausted',
+                  errorCode: 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED',
+                  errorMessage: 'Project agent continuation delivery exhausted before execution could complete',
+                },
+              }
+          : null
     await appendProjectAgentEventsInTransaction(tx, {
       scope: {
         projectId: wait.projectId,

@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 type AddCall = {
@@ -163,10 +164,23 @@ describe('chain contract - music queue behavior', () => {
         vocalMode: 'instrumental',
         outputFormat: 'mp3',
       },
+      { key: 'media:music:primary' },
     )
+    const uploadCall = uploadObjectMock.mock.calls[0]
+    const uploadedBinary = uploadCall?.[0] as Buffer | { readonly type: 'Buffer'; readonly data: readonly number[] } | undefined
+    const uploadedBytes = Buffer.isBuffer(uploadedBinary)
+      ? uploadedBinary
+      : uploadedBinary?.type === 'Buffer'
+        ? Buffer.from(uploadedBinary.data)
+        : null
+    expect(uploadedBytes).toEqual(Buffer.from('fake-mp3'))
     expect(uploadObjectMock).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      'music/asset.mp3',
+      uploadedBinary,
+      buildTaskArtifactStorageKey({
+        taskId: 'task-music-chain-worker-1',
+        artifact: 'music:primary',
+        extension: 'mp3',
+      }),
       1,
       'audio/mpeg',
     )

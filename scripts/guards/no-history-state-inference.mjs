@@ -68,11 +68,43 @@ for (const retiredPath of [
 
 const runtimePath = 'src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts'
 const runtime = fs.readFileSync(path.resolve(process.cwd(), runtimePath), 'utf8')
+const runtimeStatePath = 'src/features/project-workspace/components/workspace-assistant/workspace-assistant-runtime-state.ts'
+const runtimeState = fs.readFileSync(path.resolve(process.cwd(), runtimeStatePath), 'utf8')
+const renderersPath = 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'
+const renderers = fs.readFileSync(path.resolve(process.cwd(), renderersPath), 'utf8')
+const controlPath = 'src/lib/project-agent/control.ts'
+const control = fs.readFileSync(path.resolve(process.cwd(), controlPath), 'utf8')
+const chatRoutePath = 'src/app/api/projects/[projectId]/assistant/chat/route.ts'
+const chatRoute = fs.readFileSync(path.resolve(process.cwd(), chatRoutePath), 'utf8')
 if (/activeControlRun\s*\?\?\s*serverOperationRun/.test(runtime)) {
   violations.push(`${runtimePath} lets client control state override an existing server run`)
 }
 if (/setTimeout\([\s\S]{0,240}refreshSessionState/.test(runtime)) {
   violations.push(`${runtimePath} restores timer-driven session-state correctness polling`)
+}
+if (!control.includes('createProjectAgentControlVisibleUserMessageId')) {
+  violations.push(`${controlPath} is missing the canonical control visible-message identity authority`)
+}
+if (
+  !runtime.includes('createWorkspaceAssistantControlVisibleUserMessage')
+  || !runtimeState.includes('createProjectAgentControlVisibleUserMessageId({')
+  || !chatRoute.includes('createProjectAgentControlVisibleUserMessageId(params.controlAction)')
+) {
+  violations.push('client optimistic and server persisted control messages do not share one canonical identity authority')
+}
+if (!renderers.includes("'edit-style-preview-generation': HiddenRuntimeContextDataCard")) {
+  violations.push(`${renderersPath} restores a rendered historical style-generation surface instead of Session/Choice projection`)
+}
+for (const marker of [
+  'EditStylePreviewGenerationDataCard',
+  'refetchInterval',
+  'useTaskTargetStateMap',
+  'data.items',
+  "targetType: 'ProjectEditStylePreview'",
+]) {
+  if (renderers.includes(marker)) {
+    violations.push(`${renderersPath} restores private style-preview lifecycle via ${JSON.stringify(marker)}`)
+  }
 }
 
 if (violations.length > 0) {

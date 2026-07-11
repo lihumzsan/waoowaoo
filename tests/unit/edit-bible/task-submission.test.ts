@@ -162,7 +162,6 @@ describe('edit bible task submission', () => {
       sourceKind: 'prompt_generated_outline',
       text: '一个车站悬疑故事',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
     })
 
@@ -211,7 +210,6 @@ describe('edit bible task submission', () => {
       sourceKind: 'paste',
       text: '完整剧本文本',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
     })
 
@@ -229,7 +227,6 @@ describe('edit bible task submission', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
     })
 
@@ -267,7 +264,6 @@ describe('edit bible task submission', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
     })).rejects.toMatchObject({
       details: expect.objectContaining({
@@ -306,7 +302,6 @@ describe('edit bible task submission', () => {
       episodeId: 'episode-1',
       revisionNotes: '把结尾改成更冷峻',
       source: 'project-ui',
-      confirmed: true,
       locale: 'zh',
     })
 

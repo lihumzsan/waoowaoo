@@ -9,6 +9,9 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
     deleteMany: vi.fn(),
   },
+  projectAgentRun: {
+    findFirst: vi.fn(),
+  },
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -16,7 +19,6 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 import {
   appendProjectAssistantThreadMessages,
   buildProjectAssistantScopeRef,
-  clearProjectAssistantThread,
   loadProjectAssistantThread,
 } from '@/lib/project-agent/persistence'
 
@@ -27,6 +29,7 @@ describe('project assistant persistence', () => {
       await callback(prismaMock)
     ))
     prismaMock.$queryRaw.mockResolvedValue([{ id: 'thread-1' }])
+    prismaMock.projectAgentRun.findFirst.mockResolvedValue(null)
   })
 
   it('buildProjectAssistantScopeRef -> uses episode scope when episode is present', () => {
@@ -80,7 +83,7 @@ describe('project assistant persistence', () => {
     })
   })
 
-  it('loadProjectAssistantThread -> repairs duplicate message ids before returning persisted messages', async () => {
+  it('loadProjectAssistantThread -> fails explicitly on duplicate persisted message ids', async () => {
     prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
       id: 'thread-1',
       projectId: 'project-1',
@@ -104,25 +107,12 @@ describe('project assistant persistence', () => {
       updatedAt: new Date('2026-04-13T00:00:00.000Z'),
     })
 
-    const thread = await loadProjectAssistantThread({
+    await expect(loadProjectAssistantThread({
       projectId: 'project-1',
       userId: 'user-1',
       episodeId: 'episode-1',
       assistantId: 'workspace-command',
-    })
-
-    expect(thread?.messages).toEqual([
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'first' }],
-      },
-      {
-        id: 'assistant-1--dedup-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'second' }],
-      },
-    ])
+    })).rejects.toThrow('PROJECT_ASSISTANT_DUPLICATE_MESSAGE_ID:assistant-1')
   })
 
   it('appendProjectAssistantThreadMessages -> appends new message ids while preserving order', async () => {
@@ -175,7 +165,7 @@ describe('project assistant persistence', () => {
         {
           id: 'user-1',
           role: 'user',
-          parts: [{ type: 'text', text: '重复请求不应追加' }],
+          parts: [{ type: 'text', text: '第一条' }],
         },
         {
           id: 'assistant-1',
@@ -240,7 +230,7 @@ describe('project assistant persistence', () => {
     }))
   })
 
-  it('appendProjectAssistantThreadMessages -> skips storage write when all appended ids already exist', async () => {
+  it('appendProjectAssistantThreadMessages -> skips storage write when the same message id and payload already exist', async () => {
     prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
       id: 'thread-1',
       projectId: 'project-1',
@@ -268,7 +258,7 @@ describe('project assistant persistence', () => {
         {
           id: 'assistant-1',
           role: 'assistant',
-          parts: [{ type: 'text', text: '重复响应' }],
+          parts: [{ type: 'text', text: '已保存' }],
         },
       ],
     })
@@ -280,6 +270,38 @@ describe('project assistant persistence', () => {
         parts: [{ type: 'text', text: '已保存' }],
       },
     ])
+    expect(prismaMock.projectAssistantThread.update).not.toHaveBeenCalled()
+  })
+
+  it('appendProjectAssistantThreadMessages -> rejects the same message id with a different payload', async () => {
+    prismaMock.projectAssistantThread.findUnique.mockResolvedValueOnce({
+      id: 'thread-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      messagesJson: [{
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '已保存' }],
+      }],
+      createdAt: new Date('2026-04-13T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-13T00:00:00.000Z'),
+    })
+
+    await expect(appendProjectAssistantThreadMessages({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      messages: [{
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '同一 ID 的冲突内容' }],
+      }],
+    })).rejects.toThrow('PROJECT_ASSISTANT_MESSAGE_ID_CONFLICT:assistant-1')
+
     expect(prismaMock.projectAssistantThread.update).not.toHaveBeenCalled()
   })
 
@@ -304,23 +326,4 @@ describe('project assistant persistence', () => {
     })).rejects.toThrow('PROJECT_ASSISTANT_INVALID_THREAD_MESSAGES')
   })
 
-  it('clearProjectAssistantThread -> deletes the scoped thread row', async () => {
-    prismaMock.projectAssistantThread.deleteMany.mockResolvedValueOnce({ count: 1 })
-
-    await clearProjectAssistantThread({
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-    })
-
-    expect(prismaMock.projectAssistantThread.deleteMany).toHaveBeenCalledWith({
-      where: {
-        projectId: 'project-1',
-        userId: 'user-1',
-        assistantId: 'workspace-command',
-        scopeRef: 'episode:episode-1',
-      },
-    })
-  })
 })

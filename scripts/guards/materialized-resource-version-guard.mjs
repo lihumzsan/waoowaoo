@@ -18,6 +18,12 @@ const versionContract = read('src/lib/workspace-resource/materialized-resource-v
 const queryDtoVersion = read('src/lib/workspace-resource/query-dto-version.ts')
 const episodeReader = read('src/lib/projects/read-episode-detail.ts')
 const editBibleRoute = read('src/app/api/projects/[projectId]/bible/route.ts')
+const resourceRevision = read('src/lib/workspace-resource/resource-revision.ts')
+const schema = read('prisma/schema.prisma')
+const migration = read('prisma/migrations/20260711060000_add_episode_resource_revision/migration.sql')
+const installer = read('scripts/install-resource-revision-triggers.ts')
+const packageJson = read('package.json')
+const dockerCompose = read('docker-compose.yml')
 const eventSync = read('src/lib/query/workspace-sse-event-sync.ts')
 const taskTypes = read('src/lib/task/types.ts')
 const violations = []
@@ -48,8 +54,8 @@ for (const required of [
 }
 
 for (const required of [
-  "REVISION_UPDATED_AT: 'revision_updated_at'",
-  "AGGREGATE_UPDATED_AT: 'aggregate_updated_at'",
+  "RESOURCE_REVISION: 'resource_revision'",
+  'createWorkspaceResourceRevisionVersion',
   'compareWorkspaceMaterializedResourceVersions',
   'readWorkspaceMaterializedResourceVersionFromData',
 ]) {
@@ -59,7 +65,7 @@ for (const required of [
 for (const required of [
   'createEpisodeDataQueryDto',
   'createEditBibleQueryDto',
-  'collectLatestPersistenceTimestamp',
+  'createWorkspaceResourceRevisionVersion',
 ]) {
   if (!queryDtoVersion.includes(required)) violations.push(`formal Query DTO version constructor is incomplete: ${required}`)
 }
@@ -68,6 +74,69 @@ if (!episodeReader.includes('createEpisodeDataQueryDto')) {
 }
 if (!editBibleRoute.includes('createEditBibleQueryDto')) {
   violations.push('edit Bible GET must construct its resourceVersion at the formal Query DTO boundary')
+}
+if (!/resourceRevision\s+Int\s+@default\(0\)/.test(schema)) {
+  violations.push('ProjectEpisode must own the persisted resourceRevision')
+}
+if (!resourceRevision.includes('select: { resourceRevision: true }')) {
+  violations.push('Query DTOs must read the persisted ProjectEpisode resourceRevision')
+}
+for (const required of [
+  'readConsistentWorkspaceResourceSnapshot',
+  'const before = await readWorkspaceResourceRevision(input)',
+  'const data = await input.read()',
+  'const after = await readWorkspaceResourceRevision(input)',
+  'if (before === after)',
+  'WORKSPACE_RESOURCE_SNAPSHOT_CHANGED_DURING_READ',
+]) {
+  if (!resourceRevision.includes(required)) {
+    violations.push(`resource snapshot seqlock is incomplete: ${required}`)
+  }
+}
+if (!episodeReader.includes('readConsistentWorkspaceResourceSnapshot')) {
+  violations.push('episode detail must read its aggregate and resourceRevision through one seqlock boundary')
+}
+if (!editBibleRoute.includes('readConsistentWorkspaceResourceSnapshot')) {
+  violations.push('edit Bible GET must read its aggregate and resourceRevision through one seqlock boundary')
+}
+for (const table of [
+  'project_episode_source_documents',
+  'project_edit_chapters',
+  'project_edit_bibles',
+  'project_edit_style_previews',
+  'project_edit_scripts',
+  'project_edit_shot_execution_plans',
+  'project_edit_asset_requirements',
+  'project_episode_final_outputs',
+  'project_edit_music_scores',
+  'project_edit_soundscapes',
+  'project_video_groups',
+  'project_storyboards',
+  'project_panels',
+]) {
+  for (const edge of ['INSERT', 'UPDATE', 'DELETE']) {
+    if (!migration.includes(`${edge} ON \`${table}\``)) {
+      violations.push(`resource revision migration is missing ${table} ${edge} edge`)
+    }
+  }
+}
+if (migration.includes('CURRENT_TIMESTAMP') || migration.includes('updatedAt')) {
+  violations.push('resource revision must not depend on timestamp ordering')
+}
+for (const required of [
+  'RESOURCE_REVISION_TRIGGER_SET_PARTIAL',
+  "outcome: 'already_installed'",
+  "outcome: 'installed'",
+]) {
+  if (!installer.includes(required)) {
+    violations.push(`resource revision trigger installer is incomplete: ${required}`)
+  }
+}
+if (!packageJson.includes('prisma db push --skip-generate && tsx --env-file-if-exists=.env scripts/install-resource-revision-triggers.ts')) {
+  violations.push('db:prepare must install resource revision triggers after Prisma schema sync')
+}
+if (!dockerCompose.includes('npm run db:prepare')) {
+  violations.push('Docker startup must use db:prepare instead of bare prisma db push')
 }
 for (const required of [
   "materializedResult.outcome === 'missing'",

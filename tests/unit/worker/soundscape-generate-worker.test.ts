@@ -99,4 +99,26 @@ describe('soundscape worker', () => {
 
     expect(generateSoundEffectMock.mock.calls).toEqual([])
   })
+
+  it('replays a completed mix without invoking the sound provider again', async () => {
+    prismaMock.projectEditSoundscape.findFirst.mockResolvedValueOnce({
+      status: 'completed',
+      mixJson: {
+        mediaId: 'media-mix-1',
+        url: '/m/soundscape-mix',
+        storageKey: 'soundscape/mix/asset.m4a',
+        mimeType: 'audio/mp4',
+        durationMs: 30_000,
+      },
+    })
+    const { handleSoundscapeGenerateTask } = await import('@/lib/soundscape/generate')
+
+    const result = await handleSoundscapeGenerateTask(
+      buildJob(TASK_TYPE.SOUNDSCAPE_GENERATE, approvedGeneratePayload),
+    )
+
+    expect(result).toMatchObject({ mediaId: 'media-mix-1', durationMs: 30_000 })
+    expect(generateSoundEffectMock).not.toHaveBeenCalled()
+    expect(renderSoundscapeMixMock).not.toHaveBeenCalled()
+  })
 })

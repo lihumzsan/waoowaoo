@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
+import type { Prisma } from '@prisma/client'
 
 const prismaMock = vi.hoisted(() => ({
   project: {
@@ -92,9 +93,11 @@ describe('project config operations in cloud deployment', () => {
     prismaMock.project.findUnique.mockResolvedValue(projectRow)
     prismaMock.project.update.mockResolvedValue(updatedProject)
 
-    const result = await createConfigOperations().update_project_config.execute!(buildContext(), {
-      videoRatio: '9:16',
-    })
+    const result = await createConfigOperations().update_project_config.executeInTransaction!(
+      buildContext(),
+      { videoRatio: '9:16' },
+      prismaMock as unknown as Prisma.TransactionClient,
+    )
 
     expect(prismaMock.project.update.mock.calls).toEqual([
       [
@@ -109,9 +112,11 @@ describe('project config operations in cloud deployment', () => {
 
   it('rejects platform-managed model config writes in cloud mode', async () => {
     await expect(
-      createConfigOperations().update_project_config.execute!(buildContext(), {
-        editModel: 'openrouter::anthropic/claude-sonnet-4.6',
-      }),
+      createConfigOperations().update_project_config.executeInTransaction!(
+        buildContext(),
+        { editModel: 'openrouter::anthropic/claude-sonnet-4.6' },
+        prismaMock as unknown as Prisma.TransactionClient,
+      ),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       details: expect.objectContaining({

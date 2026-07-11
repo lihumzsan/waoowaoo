@@ -60,21 +60,7 @@ function readEnvelope(value: unknown, index: number): EnvelopeReadResult {
       error: `CANVAS_TERMINAL_RESOURCE_VERSION_INVALID:${kind}:${index}`,
     }
   }
-  if (kind === 'editBible' && resourceVersion.scheme === 'revision_updated_at') {
-    return {
-      error: null,
-      envelope: {
-        kind,
-        projectId: value.projectId,
-        episodeId: value.episodeId,
-        resourceKey: value.resourceKey,
-        resourceVersion,
-        taskId: value.taskId,
-        data: value.data,
-      },
-    }
-  }
-  if (kind === 'episodeData' && resourceVersion.scheme === 'aggregate_updated_at') {
+  if (resourceVersion.scheme === 'resource_revision') {
     return {
       error: null,
       envelope: {

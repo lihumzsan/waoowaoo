@@ -59,6 +59,15 @@ const loggerState = vi.hoisted(() => ({
 
 const runState = vi.hoisted(() => ({
   safelyUpdateProjectAgentRunStatus: vi.fn(async (_input?: unknown) => undefined),
+  settleProjectAgentRunFailureWithMessage: vi.fn(async (input: {
+    runFence: { runId: string }
+    status: string
+    stopReason: string
+    errorCode?: string
+    errorMessage?: string
+  }) => {
+    await runState.safelyUpdateProjectAgentRunStatus(input)
+  }),
   cancelRunningProjectAgentRun: vi.fn(async () => true),
   settleProjectAgentRunWithMessage: vi.fn(async (input: {
     runFence: { runId: string }
@@ -361,17 +370,30 @@ vi.mock('@/lib/project-workflow/edit-first', async () => {
 })
 
 vi.mock('@/lib/adapters/tools/execute-project-agent-operation', () => ({
-  executeProjectAgentOperationFromTool: vi.fn(async () => ({
-    ok: true,
-    data: {
-      success: true,
-      async: true,
-      taskId: 'task-generated-1',
-      status: 'queued',
-      runId: null,
-      deduped: false,
-    },
-  })),
+  executeProjectAgentOperationFromTool: vi.fn(async (params: {
+    operationId: string
+    taskBatchBinding?: {
+      bindInTransaction(tx: unknown, batch: { operationId: string; taskIds: string[] }): Promise<void>
+      markCommitted(): void
+    } | null
+  }) => {
+    await params.taskBatchBinding?.bindInTransaction({}, {
+      operationId: params.operationId,
+      taskIds: ['task-generated-1'],
+    })
+    params.taskBatchBinding?.markCommitted()
+    return {
+      ok: true,
+      data: {
+        success: true,
+        async: true,
+        taskId: 'task-generated-1',
+        status: 'queued',
+        runId: null,
+        deduped: false,
+      },
+    }
+  }),
 }))
 
 vi.mock('@/lib/operations/registry', () => ({
@@ -395,19 +417,18 @@ vi.mock('@/lib/api-errors', () => ({
 
 vi.mock('@/lib/project-agent/interruptions', () => ({
   createProjectAgentApprovalInterruption: vi.fn(async () => 'interruption-row-1'),
-  clearProjectAgentInterruptionRunState: vi.fn(async () => undefined),
-  reopenProjectAgentInterruption: vi.fn(async () => undefined),
-  declinePendingProjectAgentInterruptionsForUserTurn: vi.fn(async () => []),
 }))
 
 vi.mock('@/lib/project-agent/waits', () => ({
   createProjectAgentWait: vi.fn(async () => 'wait-1'),
+  bindProjectAgentWaitToTasksInTransaction: vi.fn(async () => 'wait-transactional-1'),
 }))
 
 vi.mock('@/lib/project-agent/runs', () => ({
   safelyUpdateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
   updateProjectAgentRunStatus: runState.safelyUpdateProjectAgentRunStatus,
   cancelRunningProjectAgentRun: runState.cancelRunningProjectAgentRun,
+  settleProjectAgentRunFailureWithMessage: runState.settleProjectAgentRunFailureWithMessage,
   settleProjectAgentRunWithMessage: runState.settleProjectAgentRunWithMessage,
 }))
 
@@ -447,6 +468,7 @@ import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from
 import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 
 import { createProjectAgentWait } from '@/lib/project-agent/waits'
+import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
   kind: 'user_turn',
@@ -635,6 +657,6 @@ export { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers
 export { createProjectAgentChatResponse } from '@/lib/project-agent/runtime'
 export type { ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 export { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
-export { createProjectAgentWait } from '@/lib/project-agent/waits'
+export { bindProjectAgentWaitToTasksInTransaction, createProjectAgentWait } from '@/lib/project-agent/waits'
 export { USER_TURN_CONTROL, buildRequest, buildRun, buildWorkflow, createRegistry, drainCapturedResponseStream, eventState, expectLastPersistedRunStatus, flushAsyncWork, loggerState, makeOperation, persistenceState, phaseState, readLastPersistedAssistantMessage, readLastPersistedRuntimeContext, registryState, runAssistant, runHeartbeatState, runLockState, runState, streamState, workflowRefreshState }
 export type { PersistedAssistantMessage }

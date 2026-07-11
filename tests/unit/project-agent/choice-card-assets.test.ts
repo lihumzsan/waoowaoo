@@ -68,12 +68,14 @@ describe('edit-first assistant choice cards', () => {
       cardId: expect.stringMatching(/^edit-first-asset-review:episode-1:[a-f0-9]{12}$/),
       toolCallId: 'tool-call-1',
       choiceType: 'asset_review',
+      replyMode: 'whole_card',
       variant: 'confirm_or_reply',
       title: '审核分镜资产',
       groups: [{
         key: 'assetSummary',
         label: '已就绪资产',
         required: false,
+        presentation: 'options',
         options: [{
           value: 'edit-script-1',
           label: '第 1 章 · 2 个资产',
@@ -83,6 +85,7 @@ describe('edit-first assistant choice cards', () => {
       submitLabel: '资产满意，继续',
       submit: {
         kind: 'submit_tool_output',
+        decision: 'approve',
       },
       replyLabel: '需要调整',
       replyPlaceholder: '输入你希望调整的人物、场景、空间关系或视觉问题...',

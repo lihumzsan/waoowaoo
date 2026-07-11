@@ -33,11 +33,14 @@ const finalRenderMock = vi.hoisted(() => ({
   writeVideoSourceToFile: vi.fn(),
 }))
 
+const mediaServiceMock = vi.hoisted(() => ({
+  ensureMediaObjectFromStorageKey: vi.fn(),
+  getMediaObjectById: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('node:fs/promises', () => fsMock)
-vi.mock('@/lib/media/service', () => ({
-  ensureMediaObjectFromStorageKey: vi.fn(),
-}))
+vi.mock('@/lib/media/service', () => mediaServiceMock)
 vi.mock('@/lib/storage', () => ({
   generateUniqueKey: vi.fn(() => 'chapter-video/key.mp4'),
   uploadObject: vi.fn(async () => 'chapter-video/key.mp4'),
@@ -119,5 +122,28 @@ describe('handleChapterRenderTask', () => {
     expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ renderStatus: 'failed' }),
     }))
+  })
+
+  it('replays a persisted chapter output without composing the video again', async () => {
+    prismaMock.projectEditChapter.findFirst.mockResolvedValueOnce({
+      id: 'chapter-1',
+      renderStatus: 'completed',
+      renderTaskId: 'task-1',
+      outputMediaId: 'media-chapter',
+    })
+    mediaServiceMock.getMediaObjectById.mockResolvedValueOnce({
+      id: 'media-chapter',
+      url: '/m/chapter.mp4',
+      storageKey: 'video/chapter.mp4',
+      durationMs: 3000,
+      width: 1920,
+      height: 1080,
+    })
+
+    const result = await handleChapterRenderTask(chapterJob())
+
+    expect(result).toMatchObject({ mediaId: 'media-chapter', durationSeconds: 3 })
+    expect(prismaMock.projectEditChapter.update).not.toHaveBeenCalled()
+    expect(finalRenderMock.concatClips).not.toHaveBeenCalled()
   })
 })

@@ -6,10 +6,12 @@ import type {
   OperationGroupPath,
   OperationIntent,
   OperationPrerequisites,
+  AssistantOperationWriteAuthority,
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
   RuntimeSchema,
 } from '@/lib/operations/types'
+import type { Prisma } from '@prisma/client'
 import { createProjectAgentToolInputSchema } from '@/lib/operations/tool-input-schema'
 
 export const EFFECTS_NONE: OperationEffects = {
@@ -49,6 +51,12 @@ export function makeTestOperation<Input, Output>(params: {
   plan?: ProjectAgentOperationDefinition<Input, Output>['plan']
   commit?: ProjectAgentOperationDefinition<Input, Output>['commit']
   execute?: (ctx: ProjectAgentOperationContext, input: Input) => Promise<Output>
+  executeInTransaction?: (
+    ctx: ProjectAgentOperationContext,
+    input: Input,
+    transaction: Prisma.TransactionClient,
+  ) => Promise<Output>
+  assistantWriteAuthority?: AssistantOperationWriteAuthority
 }): ProjectAgentOperationDefinition<Input, Output> {
   const confirmation = params.confirmation ?? {
     kind: 'none' as const,
@@ -70,14 +78,24 @@ export function makeTestOperation<Input, Output>(params: {
     }),
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,
+    ...(params.assistantWriteAuthority
+      ? { assistantWriteAuthority: params.assistantWriteAuthority }
+      : {}),
     ...(params.plan ? { plan: params.plan } : {}),
     ...(params.commit ? { commit: params.commit } : {}),
   }
   if (confirmation.kind === 'billable_media') {
-    if (!params.plan || !params.commit || params.execute) {
+    if (!params.plan || !params.commit || params.execute || params.executeInTransaction) {
       throw new Error(`TEST_BILLABLE_OPERATION_MUST_BE_PLAN_COMMIT_ONLY:${params.id}`)
     }
     return common as ProjectAgentOperationDefinition<Input, Output>
+  }
+  if (params.executeInTransaction) {
+    if (params.execute) throw new Error(`TEST_DIRECT_OPERATION_EXECUTOR_AMBIGUOUS:${params.id}`)
+    return {
+      ...common,
+      executeInTransaction: params.executeInTransaction,
+    } as ProjectAgentOperationDefinition<Input, Output>
   }
   if (!params.execute) throw new Error(`TEST_DIRECT_OPERATION_EXECUTOR_REQUIRED:${params.id}`)
   return {

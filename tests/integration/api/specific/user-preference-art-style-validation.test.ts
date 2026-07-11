@@ -8,14 +8,21 @@ const authMock = vi.hoisted(() => ({
   isErrorResponse: vi.fn((value: unknown) => value instanceof Response),
 }))
 
-const prismaMock = vi.hoisted(() => ({
-  userPreference: {
-    upsert: vi.fn(async () => ({
-      userId: 'user-1',
-      artStyle: 'realistic',
-    })),
-  },
-}))
+const prismaMock = vi.hoisted(() => {
+  const transaction = {
+    userPreference: {
+      upsert: vi.fn(async () => ({
+        userId: 'user-1',
+        artStyle: 'realistic',
+      })),
+    },
+  }
+  return {
+    ...transaction,
+    $transaction: vi.fn(async (work: (tx: typeof transaction) => Promise<unknown>) =>
+      await work(transaction)),
+  }
+})
 
 vi.mock('@/lib/api-auth', () => authMock)
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))

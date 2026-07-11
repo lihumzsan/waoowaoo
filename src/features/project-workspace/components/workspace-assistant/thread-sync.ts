@@ -17,6 +17,14 @@ export function mergeWorkspaceAssistantPersistedMessages(
     : normalizedPersistedMessages)
 }
 
+export function resolveWorkspaceAssistantThreadSnapshotMessages(
+  currentMessages: readonly UIMessage[],
+  persistedThread: { readonly messages: readonly UIMessage[] } | null,
+): UIMessage[] {
+  if (!persistedThread) return []
+  return mergeWorkspaceAssistantPersistedMessages(currentMessages, persistedThread.messages)
+}
+
 export function areWorkspaceAssistantMessagesEqual(
   left: readonly UIMessage[],
   right: readonly UIMessage[],

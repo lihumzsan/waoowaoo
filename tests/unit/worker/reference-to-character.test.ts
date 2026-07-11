@@ -243,7 +243,7 @@ describe('worker reference-to-character', () => {
     expect(updateArg?.where).toEqual({ id: 'appearance-1' })
     expect(Object.prototype.hasOwnProperty.call(updateData, 'description')).toBe(false)
     expect(typeof updateData.imageUrls).toBe('string')
-    expect(updateData.imageUrl).toMatch(/^cos\/reference-key-\d+\.jpg$/)
+    expect(updateData.imageUrl).toMatch(/^cos\/images\/task-artifacts\/[a-f0-9]{24}\/[a-f0-9]{24}\.jpg$/)
   })
 
   it('uses requested count when generating reference character sheets', async () => {
@@ -262,7 +262,7 @@ describe('worker reference-to-character', () => {
     expect(generatorApiMock.generateImage).toHaveBeenCalledTimes(5)
     const cosKeys = (result as { cosKeys?: string[] }).cosKeys
     expect(cosKeys).toHaveLength(5)
-    expect(cosKeys?.every((item) => item.startsWith('cos/reference-key-'))).toBe(true)
+    expect(cosKeys?.every((item) => /^cos\/images\/task-artifacts\/[a-f0-9]{24}\/[a-f0-9]{24}\.jpg$/.test(item))).toBe(true)
   })
 
   it('does not append legacy fixed visual style for project reference generation', async () => {

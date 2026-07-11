@@ -51,6 +51,7 @@ export async function handleEditShotExecutionPlanGenerateTask(job: Job<TaskJobDa
         ...(chapterId ? { chapterId } : {}),
         editScriptId,
         locale: job.data.locale,
+        taskId: job.data.taskId,
       }),
     )
 

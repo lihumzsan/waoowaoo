@@ -17,7 +17,9 @@ import {
   resolveMusicScoreMaxCueDurationSeconds,
   resolveMusicScoreRequestDurationSeconds,
 } from '@/lib/music-score/constraints'
-import { generateUniqueKey, toFetchableUrl, uploadObject } from '@/lib/storage'
+import { readCompletedMusicScoreMix } from '@/lib/music-score/project-data'
+import { toFetchableUrl, uploadObject } from '@/lib/storage'
+import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
 import { createWorkerLLMStreamCallbacks, createWorkerLLMStreamContext } from '@/lib/workers/handlers/llm-stream'
 import {
@@ -309,6 +311,7 @@ async function writeBgmScoreProjectData(input: {
 async function uploadGeneratedBgmMix(input: {
   readonly audio: GeneratedAudioBuffer
   readonly durationSeconds: number
+  readonly taskId: string
 }): Promise<BgmScoreMix> {
   const measuredDurationSeconds = await probeAudioDurationSeconds(input.audio)
   if (measuredDurationSeconds + BGM_SCORE_DURATION_TOLERANCE_SECONDS < input.durationSeconds) {
@@ -317,7 +320,11 @@ async function uploadGeneratedBgmMix(input: {
   const measuredDurationMs = Math.round(measuredDurationSeconds * 1000)
   const storageKey = await uploadObject(
     input.audio.buffer,
-    generateUniqueKey('music/bgm-score', extensionFromMimeType(input.audio.mimeType)),
+    buildTaskArtifactStorageKey({
+      taskId: input.taskId,
+      artifact: 'bgm-score:mix',
+      extension: extensionFromMimeType(input.audio.mimeType),
+    }),
     1,
     input.audio.mimeType,
   )
@@ -447,6 +454,23 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
   if (!episodeId) throw new Error('BGM_SCORE_EPISODE_REQUIRED')
   if (!musicModel) throw new Error('BGM_SCORE_MUSIC_MODEL_REQUIRED')
 
+  const completed = await prisma.projectEditMusicScore.findFirst({
+    where: { episodeId, taskId: job.data.taskId, status: BGM_SCORE_STATUS.COMPLETED },
+    select: { status: true, mixJson: true, musicModel: true },
+  })
+  const completedMix = readCompletedMusicScoreMix(completed)
+  if (completedMix) {
+    if (!completed?.musicModel) throw new Error(`BGM_SCORE_COMPLETED_MODEL_MISSING:${episodeId}`)
+    return {
+      episodeId,
+      mediaId: completedMix.mediaId,
+      audioUrl: completedMix.url,
+      storageKey: completedMix.storageKey,
+      musicModel: completed.musicModel,
+      durationMs: completedMix.durationMs,
+    }
+  }
+
   let editScriptId = ''
   let signature = ''
   let durationSeconds = 0
@@ -571,7 +595,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
         }),
         vocalMode: 'instrumental',
         outputFormat,
-      })
+      }, { key: `media:music:cue:${cue.cueId}` })
       if (!generated.success) {
         throw new Error(generated.error || `BGM_SCORE_PROVIDER_FAILED:${cue.cueId}`)
       }
@@ -605,7 +629,7 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
 
     await reportTaskProgress(job, 88, { stage: 'bgm_score_persist' })
     const audio = await concatCueAudioBuffers({ cues: cueAudios })
-    const mix = await uploadGeneratedBgmMix({ audio, durationSeconds })
+    const mix = await uploadGeneratedBgmMix({ audio, durationSeconds, taskId: job.data.taskId })
     const bgmScore: BgmScoreProjectData = {
       schemaVersion: 2,
       status: BGM_SCORE_STATUS.COMPLETED,
@@ -632,22 +656,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
       durationMs: mix.durationMs,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (editScriptId && signature && durationSeconds > 0) {
-      await writeBgmScoreProjectData({
-        episodeId,
-        bgmScore: {
-          schemaVersion: 2,
-          status: BGM_SCORE_STATUS.FAILED,
-          taskId: job.data.taskId,
-          editScriptId,
-          timelineSignature: signature,
-          durationSeconds,
-          musicModel,
-          errorMessage: message,
-        },
-      })
-    }
     throw error
   }
 }
