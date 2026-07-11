@@ -28,7 +28,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - **AR-04B — Tool 写入 authority 必须穷尽。** 每个 Tool-visible 写 Operation 必须恰好属于 `billable plan commit`、`executeInTransaction` 或 `transactional_task_submission` 三种 commit authority 之一；未能证明 Run fence 内原子提交的能力必须保留 API-only。Operation domain 禁止通过 HTTP 调用本应用 route，也不得用 fire-and-forget 或吞错把记录创建与 Task 提交拼成第二执行入口。`create_character` 只事务性创建记录；参考图描述提取是独立文本 Task，参考图生图是独立 `billable_media plan/commit` Operation，两者不得再由 `extractOnly` 在同一 Task type 内切换计费和授权语义。
 - **AR-05 — 并发与心跳可证明。** 锁、心跳、超时取消和恢复必须由同一运行时状态协调；旧 run 不得覆盖新 run 的结果。
 - **AR-05A — Operation 副作用服从 Run execution fence。** Assistant Tool 调用必须把同一个 abort signal 与 `runId + runVersion + eventSeq` 交给 `invokeProjectAgentOperation`；continuation 还必须携带 `waitId + commandId + claimOwner`。统一入口在执行前拒绝已失效 Run；普通 Task 创建事务、批准计划事务与同步领域写入事务必须在 commit 前锁定 Run 行，并在 continuation 中同时锁定 Wait claim 行后再次校验 fence。心跳、Redis lock 或 continuation claim 失效后，即使 Operation 已经开始，未提交的领域写入也必须整体回滚；只在 execute 返回后检查状态不构成防线。
-- **AR-05B — Domain effect 与 Run outcome 分离。** `effects.writes` 只描述领域数据写入，不得推导 Operation 是否保持 `running`。`agentFlow.interruptsFor: choice` 是明确的生命周期 outcome：成功后只能由本次 invocation 提交 `awaiting_choice`，并必须同时证明同一 advanced fence 下存在匹配的 pending Interruption、waiting Activity、operationId、toolCallId、cardId 与 choiceType。其他 Run 的 `awaiting_choice`、缺失 Interaction 或旧版本均不得被当作成功 fallback。Choice 是 Tool-only、非领域写、无媒体审批的 direct Operation；缺少其 durable outcome 的调用必须失败。
+- **AR-05B — Execution eligibility 与 Suspension outcome 分离。** `effects.writes` 只描述领域数据写入，Run 的 `status` 只描述业务正在等待什么；二者都不得裁决一个 execution segment 是否仍能提交。fence 只校验 `runId + runVersion + eventSeq`、abort 与可选 Wait claim，并且只在执行前或写入事务内使用。暂停 settlement 在写自己的 Event 前必须通过 transaction barrier，在 Event 已推进本次 Run fence 后、提交前必须再次检查 abort signal；失锁时整笔手动交接回滚。`agentFlow.suspendsFor: choice` 要求当前 invocation 在 Choice 自己的原子 settlement 成功后登记完全匹配的 `SuspensionReceipt`（run、operation、activity、interruption、card、toolCall、choiceType）；通用 invocation 只验证该 receipt，绝不在提交后要求 Run 仍为 `running` 或为 Choice 添加 awaiting 白名单。Choice 是 Tool-only、非领域写、无媒体审批的 direct Operation；缺少其 durable receipt 的调用必须失败。
 - **AR-06 — Run 转换单调。** Run 只使用 `running`、`awaiting_approval`、`awaiting_choice`、`awaiting_task`、`completed`、`failed`、`cancelled` 七种状态。状态转换必须经事件 reducer 校验合法前驱并执行 CAS；三个终态不可重开。失去 DB heartbeat 或 Redis lock 所有权必须中止模型流并进入 `cancelled/run_lock_lost`，不得继续写入或伪装成业务失败。
 - **AR-06A — Interaction 与 Activity 单调。** Approval 和 Choice 创建都必须通过同一个事务 authority，在持有目标 Run 行锁时一次性读取并 supersede 旧 pending interruption、结算其 Activity、完成前序 Activity 并 raise 新 interruption；任一 Event/reducer 写入失败必须整体回滚，禁止先 supersede 后 raise 的两阶段窗口。`activity.started` 只能 create，重复 identity 必须 conflict；`completed/failed/cancelled` 必须从 open 状态执行恰好一行的 CAS，零行或多行都原地失败，禁止终态重开或错误 activityId 静默前进。
 - **AR-07 — Session/UI 只投影持久协议。** Panel 不得扫描历史 message、tool output 或 `task-submitted` part 推断 active Task、资源刷新、operation source 或 style generation；这些 identity 必须由 Session `currentActivity/activeTasks/pendingInteraction` 和正式 SSE resource envelope 提供。历史 `edit-style-preview-generation` part 只可作为隐藏协议记录，不得再启动 2.5 秒轮询、用 `data.items` 补候选或按 Task target 构造私有生命周期；风格候选交互只投影持久 Choice Offer。Session projector 必须用一次只读 scope 查询证明 active Run 至多一个，并只投影属于该 Run 的 open Activity、Interruption 与 Wait；多 active Run、缺失 runId、跨 Run 事实或终态 Run 仍有 open 事实都必须显式失败，禁止挑一条或拼成混合快照。已有 server runId 时，本地 control state 无权覆盖；本地 control pending 只覆盖实际 HTTP 请求窗口，错误或 Session 刷新失败均不得永久保持。成功提交后，已回答 interruption 的本地抑制必须保留到新的权威 Session 快照确认其消失，禁止旧快照重开已消费卡片。control 可见用户消息的 optimistic 与服务端持久副本必须复用 `runId + interruptionId + control type` 的同一个 canonical ID，使 Thread 收敛按身份替换而不是刷新后重复。每个 `ProjectAgentEvent` 必须在同一事务写入 `project_agent.session_broadcast` Outbox，Outbox worker 是 `assistant.session.changed` 的唯一发布者；SSE v2 cursor 以 `ProjectAgentEvent.id` 作为独立 Assistant 水位，并按 user/project/episode/assistant scope 提供最新 level-triggered bootstrap。服务端和客户端都必须在有界窗口内保存 `event identity → canonical fingerprint`；只有 identity 与 fingerprint 都相同才是 duplicate，同 identity 不同 fingerprint 必须 conflict 并触发 snapshot resync，不得静默吞掉。客户端收到通知后主动刷新 Session 与 Thread，Session 响应水位低于已见事件时必须拒绝。禁止 1.5 秒 polling、catch-up timer cascade 或持续 replay timer 承担正确性；客户端去重集合必须有界。
@@ -41,13 +41,13 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - Continuation 三段交接：`beginProjectAgentWaitContinuationExecution` → `checkpointProjectAgentWaitFollowUp` → `finalizeProjectAgentWaitFollowUp`。
 - Choice Offer 契约、fingerprint 与严格解析：`src/lib/project-agent/choice-offer.ts`。
 - Choice 身份、能力与 Workflow policy 的穷尽入口：`src/lib/project-agent/edit-first-choice-tools.ts` 的 `EDIT_FIRST_CHOICE_REGISTRY`。
-- Choice 唯一创建/消费入口：`createProjectAgentChoiceInterruption` 与 `consumeProjectAgentChoiceInterruption`。
+- Interaction-backed Suspension 唯一 settlement/消费入口：`settleProjectAgentInterruptionSuspension` 与 `consumeProjectAgentChoiceInterruption` / `consumeProjectAgentApprovalInterruption`。
 - 已消费 Decision 的恢复入口：`readRetryableConsumedProjectAgent*Interruption` 只重读同一持久决定；`createProjectAgentConsumedControlRetryRun` 是唯一新 attempt 创建者；`run.execution_started` 是禁止再次执行的持久水位。
 - Approval/Choice 原子替换 authority：`appendProjectAgentInterruptionReplacementInTransaction`；Activity 单调终态 authority：`transitionProjectAgentActivity`。
 - Operation registry 验证：`src/lib/operations/registry.ts`。
 - Operation API/Tool 唯一执行入口：`src/lib/operations/invocation.ts` 的 `invokeProjectAgentOperation`。
 - Operation Run fence 唯一裁判：`src/lib/project-agent/operation-execution-fence.ts`；Task 提交、批准计划与 transactional executor 只能复用该 commit barrier。
-- Choice post-invocation outcome authority：`recordProjectAgentChoiceExecutionOutcome` → `assertProjectAgentChoiceExecutionFenceAfterInvocation`；任何 Choice 都不得以 `effects.writes === false` 落回 generic `running` postcondition。
+- Suspension receipt authority：`src/lib/project-agent/suspension.ts` 定义 `choice / approval / task` 的统一 receipt；`recordProjectAgentSuspensionReceipt` 只在各协议事务提交后登记，`requireProjectAgentSuspensionReceipt` 是 invocation 的唯一协议核验。它不是第二份持久状态，也不读取 Run status。
 - Tool 写 Operation 穷尽 authority：`src/lib/operations/write-authority.ts` 与实际 registry conformance；Thread clear 唯一入口：`src/lib/project-agent/thread-clear.ts`。
 - Assistant Task batch 接线：`submitOperationTaskBatch` 只负责编排通用 Task persistence primitive；`ProjectAgentOperationTaskBatchBinding` 在同一 transaction 调用 `bindProjectAgentWaitToTasksInTransaction`，不得复制 Task/billing/Event/enqueue。
 - Operation 类型和 agentFlow：`src/lib/operations/types.ts`。
@@ -68,8 +68,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `tests/system/assistant-reload.system.test.ts` 由 P0 journey registry 强制收集，验证 `awaiting_task` 与 `awaiting_choice` 刷新后仍从持久 Run/Activity/Wait/Interruption/Thread 恢复，并在真实 MySQL 中验证双 active Run 与跨 Run open Activity 都显式失败，而不是依赖当前标签页内存或单元 mock。
 - `tests/unit/project-agent/run-state-machine.test.ts` 验证七状态转换、终态单调和 expected-status 门禁。
 - `tests/unit/project-agent/run-heartbeat.test.ts` 验证 DB/Redis 续租失败和异常都会触发 ownership loss。
-- `tests/integration/task/project-agent-choice-execution-fence.integration.test.ts` 用真实 MySQL 验证 Choice 的精确 durable Interaction、Run fence 与 `awaiting_choice` 是一次成功结果；`tests/unit/operations/invocation-execution-fence.test.ts` 反证缺失/外来 Interaction 不能被接受。
-- `tests/unit/operations/invocation.test.ts` 用未注册的未来 Choice identity 证明 invocation 只根据 `agentFlow.interruptsFor: choice` 选择 postcondition；`assistant-choice-offer-authority` guard 禁止在 invocation 内按 `operationId` 或 `operation.id` 建立 Choice 生命周期分支。新增第六种 Choice 只能扩展其 registry 声明与业务内容，不得修改 invocation 或 fence。
+- `tests/integration/task/project-agent-choice-execution-fence.integration.test.ts` 用真实 MySQL 验证 Choice 的精确 durable Interaction、Run fence 与 `awaiting_choice` 是一次成功结果；`tests/unit/operations/invocation-execution-fence.test.ts` 证明合法 awaiting status 不会被误判失去执行权，且缺失/错协议 receipt 不能被接受。
+- `tests/unit/operations/invocation.test.ts` 用未注册的未来 Choice identity 证明 invocation 只根据 `agentFlow.suspendsFor: choice` 核验通用 receipt；`assistant-choice-offer-authority` guard 禁止 invocation 恢复 operation-id 分支、旧 postcondition 或 Choice 专属 fence。新增第六种 Choice 只能扩展其 registry 声明与业务内容，不得修改 invocation、fence 或 stop controller。
 - `tests/unit/project-agent/interruption-consume.test.ts` 验证重复/并发消费由 pending 状态 CAS 拒绝，基础设施故障不会伪装成重复提交。
 - 同一测试同时验证 Approval 的 supersede + raise 只调用一个带 Run 锁的事务入口，投影故障不会落入第二写入路径；`tests/unit/project-agent/event-reducer.test.ts` 验证 Activity create-only、终态 identity 冲突以及三种零行终态 CAS 都显式失败。
 - `tests/unit/project-agent/interruption-consume.test.ts` 验证 consumed Approval/Choice 只能重读完全相同的持久决定；`tests/unit/project-agent/runs.test.ts` 验证 bootstrap 失败可创建独立 retry Run，而 execution-started 后必须 outcome unknown；route contract 验证 retry 不复活旧 Run。
@@ -121,7 +121,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 | 事实 | 唯一所有者 / 写入者 | 消费者 |
 |---|---|---|
-| 用户看到并回答的 Choice Offer | `ProjectAgentInterruption.payload` / `createProjectAgentChoiceInterruption` | 首屏 stream、Session refresh、Choice control |
+| 用户看到并回答的 Choice Offer | `ProjectAgentInterruption.payload` / `settleProjectAgentInterruptionSuspension(kind: choice)` | 首屏 stream、Session refresh、Choice control |
+| 当前 execution 已提交的暂停回执 | scoped `SuspensionReceipt` / 各协议 settlement 在事务提交后登记 | invocation、tool adapter、stop controller；不得作为持久事实或 UI 状态 |
 | Offer 身份 | Offer 内必填的 `runId + interruptionId + cardId + toolCallId` | API control 与原子消费服务 |
 | 受审资源代次 | Offer 的 `reviewedResource.kind + fingerprint` / Choice card builder | 原子消费服务在同事务内重读正式资源后比较 |
 | 用户决定 | `interruption.resolved.response` 中的规范化 ChoiceDecision / `consumeProjectAgentChoiceInterruption` | Workflow 与下一回合 runtime |
@@ -164,7 +165,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
 - 制作规划 choice 曾通过局部副作用提交视觉风格 Task，导致模型文案、候选记录、run/Wait 三套状态分离；Choice 只负责落用户决定，异步执行必须回到 registry 与 runtime。
-- `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导：Choice 成功持久化后会合法进入 `awaiting_choice`，必须以同一 Interaction identity 验证，而不是将其报告成 Tool failure。
+- `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。详见 [Assistant Suspension 收敛设计](../assistant-suspension-convergence.md)。
 
 ## 修改检查表
 
@@ -176,4 +177,4 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 6. Choice 落库后若 Workflow 存在 `nextAction`，run 是否证明已执行、等待或显式失败？
 7. 此转换是否带有可区分同状态代次的持久 `runVersion/eventSeq`？仅比较 status 不能阻止 ABA，未具备版本围栏时必须明确记录为未完成风险。
 8. Choice 卡片是否来自持久 Offer，提交是否验证 card/tool/resource fingerprint，Event 是否只保存规范化 Decision？
-9. 若 Operation 声明了 Choice outcome，post-invocation 是否验证本次 Interaction identity 与 advanced Run fence，而不是泛化接受状态或要求继续 `running`？
+9. 若 Operation 声明了 Choice suspension，是否只验证本次已提交的通用 receipt，而没有在提交后读取 Run status、按 operation id 分支或要求继续 `running`？

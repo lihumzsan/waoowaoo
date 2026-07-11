@@ -26,6 +26,7 @@ const FATAL_TOOL_ERROR_CODES: ReadonlySet<string> = new Set([
 export interface ProjectAgentToolOutputSignalInput {
   toolName: string
   output: unknown
+  suspendsFor?: 'choice' | null
 }
 
 type RuntimeSignalDescriptor =
@@ -124,6 +125,7 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
         const signal = normalizeOperationRuntimeSignal({
           toolName: result.toolName,
           output: result.output,
+          suspendsFor: result.suspendsFor,
         })
         const descriptor = signalToDescriptor(signal)
         return descriptor ? [descriptor] : []

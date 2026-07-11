@@ -22,7 +22,7 @@ export function shouldRequireAssistantToolApproval(params: {
   mode: AssistantPermissionMode
   operation: ProjectAgentOperationDefinition
 }): boolean {
-  if (params.operation.agentFlow?.interruptsFor === 'choice') return false
+  if (params.operation.agentFlow?.suspendsFor === 'choice') return false
   if (params.operation.confirmation.kind === 'billable_media') return true
   if (params.mode === 'auto') return false
   return params.operation.confirmation.kind === 'destructive'

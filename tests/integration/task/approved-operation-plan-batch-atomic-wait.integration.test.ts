@@ -288,7 +288,7 @@ describe('approved operation plan Task batch integration', () => {
     let committed = false
     const taskBatchBinding: ProjectAgentOperationTaskBatchBinding = {
       async bindInTransaction(transaction, batch) {
-        const waitId = await bindProjectAgentWaitToTasksInTransaction(transaction, {
+        const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, {
           runFence,
           runId: initialRun.id,
           projectId: seeded.project.id,
@@ -299,8 +299,9 @@ describe('approved operation plan Task batch integration', () => {
           followUpMode: 'resume_agent',
           previousActivityId: operationActivityId,
         })
-        if (!waitId) throw new Error('EXPECTED_ASSISTANT_WAIT')
+        if (!suspension) throw new Error('EXPECTED_ASSISTANT_WAIT')
         bound = true
+        return suspension
       },
       isBound: () => bound,
       markCommitted: () => { committed = bound },

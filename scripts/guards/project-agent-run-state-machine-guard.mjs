@@ -270,17 +270,16 @@ for (const requiredFragment of ['$queryRaw', 'projectAgentInterruption.findMany'
     violations.push(`src/lib/project-agent/interruptions.ts: atomic interruption replacement must retain ${requiredFragment}`)
   }
 }
-for (const functionName of [
-  'createProjectAgentApprovalInterruption',
-  'createProjectAgentChoiceInterruption',
-]) {
-  const body = functionBody(interruptionSource, functionName)
-  if (
-    !body.includes('prisma.$transaction')
-    || !body.includes('appendProjectAgentInterruptionReplacementInTransaction')
-  ) {
-    violations.push(`src/lib/project-agent/interruptions.ts: ${functionName} must replace and raise under one transaction authority`)
-  }
+const suspensionSettlementBody = functionBody(
+  interruptionSource,
+  'settleProjectAgentInterruptionSuspension',
+)
+if (
+  !suspensionSettlementBody.includes('prisma.$transaction')
+  || !suspensionSettlementBody.includes('appendProjectAgentInterruptionReplacementInTransaction')
+  || !suspensionSettlementBody.includes('recordProjectAgentSuspensionReceipt')
+) {
+  violations.push('src/lib/project-agent/interruptions.ts: settleProjectAgentInterruptionSuspension must atomically replace, raise, and record its receipt')
 }
 
 const runSourceText = fs.readFileSync(runMaintenancePath, 'utf8')

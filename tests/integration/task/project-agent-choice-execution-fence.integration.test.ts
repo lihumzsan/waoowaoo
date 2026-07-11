@@ -45,7 +45,7 @@ describe('Project Agent Choice execution fence DB integration', () => {
     await resetBillingState()
   })
 
-  it('accepts a Choice Operation only when its own durable Interaction advances the Run to awaiting_choice', async () => {
+  it('commits a Choice receipt and awaiting_choice without a post-invocation running check', async () => {
     const user = await createFixtureUser()
     const project = await createFixtureProject(user.id)
     const episode = await createFixtureEpisode(project.id)
@@ -87,7 +87,16 @@ describe('Project Agent Choice execution fence DB integration', () => {
         executionFence,
       },
       input: { seedText: '恐怖故事' },
-    })).resolves.toMatchObject({ kind: 'executed', data: { emitted: true, choiceType: 'script_intake' } })
+    })).resolves.toMatchObject({
+      kind: 'executed',
+      data: { emitted: true, choiceType: 'script_intake' },
+      suspension: {
+        kind: 'choice',
+        runId: run.id,
+        operationId: 'request_script_intake_choice',
+        toolCallId: 'tool-choice-1',
+      },
+    })
 
     const [persistedRun, interruptions, activities] = await Promise.all([
       prisma.projectAgentRun.findUniqueOrThrow({

@@ -31,7 +31,7 @@ function interruptBoundaryToolErrorOutput(operationId: string, code: string) {
         operationId,
         code,
         details: {
-          interruptsFor: 'choice',
+          suspendsFor: 'choice',
         },
       },
     },

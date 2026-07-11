@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback(prismaMock)),
-  $queryRaw: vi.fn(async () => [{ id: 'run-1' }]),
+  $queryRaw: vi.fn(async () => [{ id: 'run-1', runVersion: 2, eventSeq: BigInt(10) }]),
   projectAgentInterruption: {
     findMany: vi.fn(async (): Promise<Array<{
       id: string
@@ -23,8 +23,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
 import {
-  createProjectAgentApprovalInterruption,
-  createProjectAgentChoiceInterruption,
+  settleProjectAgentInterruptionSuspension,
 } from '@/lib/project-agent/interruptions'
 import {
   runWithProjectAgentOperationExecutionFence,
@@ -33,6 +32,7 @@ import {
 import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
 
 const createApprovalInput = {
+  kind: 'approval' as const,
   projectId: 'project-1',
   userId: 'user-1',
   episodeId: 'episode-1',
@@ -49,7 +49,7 @@ const createApprovalInput = {
 describe('project agent interruption creation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.$queryRaw.mockResolvedValue([{ id: 'run-1' }])
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'run-1', runVersion: 2, eventSeq: BigInt(10) }])
     prismaMock.projectAgentInterruption.findMany.mockResolvedValue([])
     eventMock.appendProjectAgentEventsInTransaction.mockResolvedValue(null)
   })
@@ -63,9 +63,12 @@ describe('project agent interruption creation', () => {
       eventSeq: BigInt(10),
     }])
 
-    const interruptionId = await createProjectAgentApprovalInterruption(createApprovalInput)
+    const suspension = await settleProjectAgentInterruptionSuspension(createApprovalInput)
 
-    expect(interruptionId).toEqual(expect.any(String))
+    expect(suspension).toMatchObject({
+      kind: 'approval',
+      interruptionId: expect.any(String),
+    })
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1)
     expect(eventMock.appendProjectAgentEventsInTransaction).toHaveBeenCalledWith(
@@ -98,7 +101,7 @@ describe('project agent interruption creation', () => {
       new Error('PROJECT_AGENT_ACTIVITY_TRANSITION_RACED'),
     )
 
-    await expect(createProjectAgentApprovalInterruption(createApprovalInput))
+    await expect(settleProjectAgentInterruptionSuspension(createApprovalInput))
       .rejects.toThrow('PROJECT_AGENT_ACTIVITY_TRANSITION_RACED')
 
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
@@ -106,14 +109,28 @@ describe('project agent interruption creation', () => {
     expect(eventMock.appendProjectAgentEvents).not.toHaveBeenCalled()
   })
 
-  it('records the committed Choice identity on the current Operation fence', async () => {
+  it('rejects a suspension whose write fence diverges from its execution fence', async () => {
+    await expect(settleProjectAgentInterruptionSuspension({
+      ...createApprovalInput,
+      executionFence: {
+        runFence: { runId: 'run-1', runVersion: 3, eventSeq: '11' },
+        signal: new AbortController().signal,
+      },
+    })).rejects.toThrow('PROJECT_AGENT_SUSPENSION_EXECUTION_FENCE_MISMATCH:run-1')
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('records the committed Choice suspension receipt on the current Operation fence', async () => {
     const fence: ProjectAgentOperationExecutionFence = {
       runFence: { runId: 'run-1', runVersion: 2, eventSeq: '10' },
       signal: new AbortController().signal,
     }
 
     await runWithProjectAgentOperationExecutionFence(fence, async () => {
-      await createProjectAgentChoiceInterruption({
+      await settleProjectAgentInterruptionSuspension({
+        kind: 'choice',
+        executionFence: fence,
         projectId: 'project-1',
         userId: 'user-1',
         episodeId: 'episode-1',
@@ -145,11 +162,62 @@ describe('project agent interruption creation', () => {
       })
     })
 
-    expect(fence.choiceExecutionOutcome).toEqual(expect.objectContaining({
+    expect(fence.suspensionReceipt).toEqual(expect.objectContaining({
+      kind: 'choice',
       cardId: 'card-choice-1',
       toolCallId: 'tool-choice-1',
       choiceType: 'script_intake',
     }))
-    expect(fence.choiceExecutionOutcome?.interruptionId).toEqual(expect.any(String))
+    expect(fence.suspensionReceipt?.kind).toBe('choice')
+    if (fence.suspensionReceipt?.kind === 'choice') {
+      expect(fence.suspensionReceipt.interruptionId).toEqual(expect.any(String))
+    }
+  })
+
+  it('rolls back a Choice handoff when ownership is lost after projection but before commit', async () => {
+    const controller = new AbortController()
+    const fence: ProjectAgentOperationExecutionFence = {
+      runFence: { runId: 'run-1', runVersion: 2, eventSeq: '10' },
+      signal: controller.signal,
+    }
+    eventMock.appendProjectAgentEventsInTransaction.mockImplementationOnce(async () => {
+      controller.abort(new Error('RUN_LOCK_LOST'))
+      return null
+    })
+
+    await expect(runWithProjectAgentOperationExecutionFence(fence, async () => {
+      await settleProjectAgentInterruptionSuspension({
+        kind: 'choice',
+        executionFence: fence,
+        projectId: 'project-1',
+        userId: 'user-1',
+        episodeId: 'episode-1',
+        assistantId: 'workspace-command',
+        runId: 'run-1',
+        runFence: fence.runFence,
+        operationId: 'request_script_intake_choice',
+        toolCallId: 'tool-choice-1',
+        card: {
+          cardId: 'card-choice-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'script_intake',
+          replyMode: 'per_group',
+          title: 'Refine story brief',
+          groups: [],
+          submitLabel: 'Continue',
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
+        },
+        reviewedResource: fingerprintProjectAgentChoiceResource({
+          kind: 'script_intake_prompt',
+          snapshot: {
+            cardId: 'card-choice-1',
+            choiceType: 'script_intake',
+            groups: [],
+          },
+        }),
+      })
+    })).rejects.toThrow('PROJECT_AGENT_OPERATION_EXECUTION_FENCE_REJECTED runId=run-1 reason=aborted')
+
+    expect(fence.suspensionReceipt).toBeUndefined()
   })
 })

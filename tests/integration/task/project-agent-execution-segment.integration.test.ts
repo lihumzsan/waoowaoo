@@ -9,7 +9,7 @@ import {
 } from '@/lib/project-agent/runs'
 import {
   consumeProjectAgentApprovalInterruption,
-  createProjectAgentApprovalInterruption,
+  settleProjectAgentInterruptionSuspension,
 } from '@/lib/project-agent/interruptions'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import {
@@ -65,7 +65,8 @@ describe('Project Agent execution segment DB integration', () => {
       runId,
     })
     if (!afterUserExecution) throw new Error('EXPECTED_RUN')
-    const interruptionId = await createProjectAgentApprovalInterruption({
+    const suspension = await settleProjectAgentInterruptionSuspension({
+      kind: 'approval',
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
@@ -76,6 +77,8 @@ describe('Project Agent execution segment DB integration', () => {
       toolCallId: `${PREFIX}tool`,
       runState: '{"checkpoint":"approval"}',
     })
+    if (suspension.kind !== 'approval') throw new Error('EXPECTED_APPROVAL_SUSPENSION')
+    const interruptionId = suspension.interruptionId
     const consumed = await consumeProjectAgentApprovalInterruption({
       projectId: project.id,
       userId: user.id,

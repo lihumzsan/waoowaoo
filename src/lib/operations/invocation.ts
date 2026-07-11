@@ -1,13 +1,12 @@
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import {
-  assertProjectAgentChoiceExecutionFenceAfterInvocation,
-  assertProjectAgentOperationExecutionFenceAfterInvocation,
   assertProjectAgentOperationExecutionFenceCurrent,
   assertProjectAgentOperationExecutionFenceInTransaction,
-  resolveProjectAgentOperationPostInvocationStatus,
+  requireProjectAgentSuspensionReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
+import type { ProjectAgentSuspensionReceipt } from '@/lib/project-agent/suspension'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
 import {
@@ -33,6 +32,7 @@ export type ProjectAgentOperationInvocationResult =
       kind: 'executed'
       data: unknown
       operation: ProjectAgentOperationDefinition
+      suspension: ProjectAgentSuspensionReceipt | null
     }
   | {
       kind: 'approval_required'
@@ -245,19 +245,13 @@ export async function invokeProjectAgentOperation(params: {
       issues: parsedOutput.error.issues,
     })
   }
-  const postInvocationStatus = resolveProjectAgentOperationPostInvocationStatus(operation)
-  if (executionFence && postInvocationStatus === 'awaiting_choice') {
-    await assertProjectAgentChoiceExecutionFenceAfterInvocation({
-      fence: executionFence,
-      projectId: params.context.projectId,
-      userId: params.context.userId,
-      episodeId: effectiveEpisodeId || null,
-      assistantId: 'workspace-command',
-      operationId: operation.id,
-    })
-  } else if (executionFence && !operation.effects.writes) {
-    await assertProjectAgentOperationExecutionFenceAfterInvocation(executionFence)
-  }
+  const suspension = executionFence && operation.agentFlow?.suspendsFor
+    ? requireProjectAgentSuspensionReceipt({
+        fence: executionFence,
+        kind: operation.agentFlow.suspendsFor,
+        operationId: operation.id,
+      })
+    : null
   await publishWorkspaceResourceChangedEventsFromWriteResult({
     result: parsedOutput.data,
     fallbackProjectId: params.context.projectId,
@@ -268,6 +262,7 @@ export async function invokeProjectAgentOperation(params: {
     kind: 'executed',
     data: parsedOutput.data,
     operation,
+    suspension,
   }
   }
 

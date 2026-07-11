@@ -106,7 +106,7 @@ describe('project agent operation registry', () => {
       })
       expect(registry[operationId]?.intent).toBe('query')
       expect(registry[operationId]?.effects.writes).toBe(false)
-      expect(registry[operationId]?.agentFlow).toEqual({ interruptsFor: 'choice' })
+      expect(registry[operationId]?.agentFlow).toEqual({ suspendsFor: 'choice' })
     }
 
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])

@@ -12,7 +12,7 @@ import { runLifecycleSequence } from '../../harness/lifecycle-sequence'
 import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-authority'
 import { applyProjectAgentWaitTerminalEvent } from '@/lib/project-agent/waits'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
-import { resolveProjectAgentOperationPostInvocationStatus } from '@/lib/project-agent/operation-execution-fence'
+import { requireProjectAgentSuspensionReceipt } from '@/lib/project-agent/operation-execution-fence'
 
 type TransitionFacts = {
   readonly from: ProjectAgentRunStatus
@@ -189,37 +189,74 @@ const concurrentTaskTerminalWait: HistoricalRegressionScenario = {
   },
 }
 
-function assertChoiceLifecyclePostcondition(
-  resolve: typeof resolveProjectAgentOperationPostInvocationStatus,
+function assertChoiceSuspensionReceipt(
+  requireReceipt: typeof requireProjectAgentSuspensionReceipt,
   recordExecution: (id: string) => void,
 ): void {
-  const scenarioId = 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION'
-  const status = resolve({ agentFlow: { interruptsFor: 'choice' } })
+  const scenarioId = 'SCENARIO-ASSISTANT-CHOICE-SUSPENSION-RECEIPT'
+  const receipt = requireReceipt({
+    fence: {
+      runFence: { runId: 'run-choice', runVersion: 1, eventSeq: '1' },
+      signal: new AbortController().signal,
+      suspensionReceipt: {
+        kind: 'choice',
+        runId: 'run-choice',
+        operationId: 'request_future_editorial_choice',
+        activityId: 'activity-choice',
+        interruptionId: 'interruption-choice',
+        cardId: 'card-choice',
+        toolCallId: 'tool-choice',
+        choiceType: 'script_intake',
+        card: {
+          cardId: 'card-choice',
+          runId: 'run-choice',
+          interruptionId: 'interruption-choice',
+          toolCallId: 'tool-choice',
+          choiceType: 'script_intake',
+          replyMode: 'per_group',
+          title: 'Choice',
+          groups: [],
+          submitLabel: 'Continue',
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
+        },
+      },
+    },
+    kind: 'choice',
+    operationId: 'request_future_editorial_choice',
+  })
   assertHistoricalValue(
-    status,
-    'awaiting_choice',
-    `${scenarioId}:Choice owns a legal awaiting_choice postcondition`,
+    receipt.kind,
+    'choice',
+    `${scenarioId}:Choice must commit its own durable protocol receipt`,
   )
   recordExecution(scenarioId)
 }
 
-const choiceLifecyclePostcondition: HistoricalRegressionScenario = {
-  id: 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION',
-  identity: 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION',
+const choiceSuspensionReceipt: HistoricalRegressionScenario = {
+  id: 'SCENARIO-ASSISTANT-CHOICE-SUSPENSION-RECEIPT',
+  identity: 'SCENARIO-ASSISTANT-CHOICE-SUSPENSION-RECEIPT',
   defectId: 'BUG-AR-003',
   severity: 'P0',
   invariantIds: ['AR-02B', 'AR-04A', 'AR-05A', 'AR-06', 'AR-07'],
   historicalDefectIds: ['BUG-AR-003'],
   layers: ['regression'],
   async execute(context) {
-    assertChoiceLifecyclePostcondition(
-      resolveProjectAgentOperationPostInvocationStatus,
+    assertChoiceSuspensionReceipt(
+      requireProjectAgentSuspensionReceipt,
       context.recordExecution,
     )
   },
   async verifyFailBefore() {
     await proveSemanticFaultRejected(() => {
-      assertChoiceLifecyclePostcondition(() => 'running', () => undefined)
+      assertChoiceSuspensionReceipt(() => ({
+        kind: 'task',
+        runId: 'run-choice',
+        operationId: 'request_future_editorial_choice',
+        activityId: 'activity-choice',
+        waitId: 'wait-choice',
+        taskIds: [],
+        followUpMode: 'resume_agent',
+      }), () => undefined)
     })
   },
 }
@@ -230,5 +267,5 @@ export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionSc
   awaitingTaskReload,
   operationWriteAfterLockLoss,
   concurrentTaskTerminalWait,
-  choiceLifecyclePostcondition,
+  choiceSuspensionReceipt,
 ]

@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { isEditFirstChoiceToolId } from './edit-first-choice-tools'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -35,6 +34,7 @@ export type OperationRuntimeSignal =
 export interface NormalizeOperationRuntimeSignalInput {
   toolName: string
   output: unknown
+  suspendsFor?: 'choice' | null
 }
 
 export interface ToolCallSignatureInput {
@@ -79,7 +79,7 @@ function readErrorRecord(output: unknown): UnknownRecord | null {
 
 function isInterruptBoundaryError(error: UnknownRecord): boolean {
   const details = isRecord(error.details) ? error.details : null
-  return details?.interruptsFor === 'choice' || details?.interruptsFor === 'approval'
+  return details?.suspendsFor === 'choice'
 }
 
 function normalizeTaskIds(value: UnknownRecord): string[] {
@@ -170,11 +170,11 @@ function normalizeActiveOperationTasks(toolName: string, data: UnknownRecord | n
   }
 }
 
-function normalizeChoiceCardSignal(toolName: string, data: UnknownRecord | null): OperationRuntimeSignal | null {
-  if (!isEditFirstChoiceToolId(toolName) || !data || data.emitted !== true) return null
+function normalizeChoiceCardSignal(input: NormalizeOperationRuntimeSignalInput, data: UnknownRecord | null): OperationRuntimeSignal | null {
+  if (input.suspendsFor !== 'choice' || !data || data.emitted !== true) return null
   return {
     kind: 'await_user_confirmation',
-    operationId: toolName,
+    operationId: input.toolName,
   }
 }
 
@@ -188,7 +188,7 @@ export function normalizeOperationRuntimeSignal(input: NormalizeOperationRuntime
     if (asyncSignal) return asyncSignal
   }
 
-  const choiceCardSignal = normalizeChoiceCardSignal(input.toolName, readWrappedData(input.output))
+  const choiceCardSignal = normalizeChoiceCardSignal(input, readWrappedData(input.output))
   if (choiceCardSignal) return choiceCardSignal
 
   if (isRecord(input.output) && input.output.confirmationRequired === true) {

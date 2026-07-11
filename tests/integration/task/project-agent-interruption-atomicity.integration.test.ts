@@ -3,7 +3,7 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
-import { createProjectAgentApprovalInterruption } from '@/lib/project-agent/interruptions'
+import { settleProjectAgentInterruptionSuspension } from '@/lib/project-agent/interruptions'
 
 const TEST_PREFIX = 'interruption-atomicity:'
 
@@ -31,7 +31,16 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
         parts: [{ type: 'text', text: 'start' }],
       },
     })
-    const firstInterruptionId = await createProjectAgentApprovalInterruption({
+    const firstSuspension = await settleProjectAgentInterruptionSuspension({
+      kind: 'approval',
+      executionFence: {
+        runFence: {
+          runId: run.id,
+          runVersion: run.runVersion,
+          eventSeq: run.eventSeq,
+        },
+        signal: new AbortController().signal,
+      },
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',
@@ -46,6 +55,8 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
       toolCallId: `${TEST_PREFIX}tool-first`,
       runState: '{"checkpoint":"first"}',
     })
+    if (firstSuspension.kind !== 'approval') throw new Error('EXPECTED_APPROVAL_SUSPENSION')
+    const firstInterruptionId = firstSuspension.interruptionId
     const firstInterruption = await prisma.projectAgentInterruption.findUniqueOrThrow({
       where: { id: firstInterruptionId },
       select: { activityId: true, status: true },
@@ -56,7 +67,16 @@ describe('Project Agent interruption atomic replacement DB integration', () => {
     })
     const eventCountBefore = await prisma.projectAgentEvent.count({ where: { runId: run.id } })
 
-    await expect(createProjectAgentApprovalInterruption({
+    await expect(settleProjectAgentInterruptionSuspension({
+      kind: 'approval',
+      executionFence: {
+        runFence: {
+          runId: run.id,
+          runVersion: currentRun.runVersion,
+          eventSeq: currentRun.eventSeq.toString(),
+        },
+        signal: new AbortController().signal,
+      },
       projectId: project.id,
       userId: user.id,
       assistantId: 'workspace-command',

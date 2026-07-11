@@ -162,15 +162,24 @@ function expressionUsesOperationIdentity(node) {
   return found
 }
 
-export function inspectChoiceLifecyclePostconditionAuthority(input) {
+export function inspectChoiceSuspensionReceiptAuthority(input) {
   const violations = []
   for (const marker of [
-    'resolveProjectAgentOperationPostInvocationStatus(operation)',
-    "postInvocationStatus === 'awaiting_choice'",
-    'assertProjectAgentChoiceExecutionFenceAfterInvocation({',
+    'operation.agentFlow?.suspendsFor',
+    'requireProjectAgentSuspensionReceipt({',
   ]) {
     if (!input.operationInvocation.includes(marker)) {
-      violations.push(`Operation invocation is missing declared Choice lifecycle authority ${JSON.stringify(marker)}`)
+      violations.push(`Operation invocation is missing declared Choice suspension authority ${JSON.stringify(marker)}`)
+    }
+  }
+  for (const forbidden of [
+    'resolveProjectAgentOperationPostInvocationStatus',
+    'assertProjectAgentChoiceExecutionFenceAfterInvocation',
+    'assertProjectAgentOperationExecutionFenceAfterInvocation',
+    'choiceExecutionOutcome',
+  ]) {
+    if (input.operationInvocation.includes(forbidden)) {
+      violations.push(`Operation invocation restores legacy Choice postcondition ${JSON.stringify(forbidden)}`)
     }
   }
   const sourceFile = parseTypeScript(input.operationInvocation)
@@ -333,7 +342,7 @@ violations.push(...inspectChoiceRegistryAuthority({
   workflowCheckpoints: read('src/lib/workflow-lab/checkpoints.ts'),
   assistantRenderers,
 }))
-violations.push(...inspectChoiceLifecyclePostconditionAuthority({ operationInvocation }))
+violations.push(...inspectChoiceSuspensionReceiptAuthority({ operationInvocation }))
 for (const [label, source, forbidden] of [
   ['choice card dispatcher', choiceCard, ['params.choiceType ===', 'switch (params.choiceType)']],
   ['choice resource dispatcher', choiceOffer, ["if (kind === '", 'switch (kind)']],

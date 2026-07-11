@@ -62,7 +62,7 @@ import {
 import type { EditFirstChoiceResult } from './edit-first-choice-result'
 import { EDIT_FIRST_CHOICE_TOOL_IDS, type EditFirstChoiceType } from './edit-first-choice-tools'
 import {
-  createProjectAgentApprovalInterruption,
+  settleProjectAgentInterruptionSuspension,
   type DeclinedProjectAgentInterruption,
   type ProjectAgentApprovalInterruptionRecord,
 } from './interruptions'
@@ -74,6 +74,10 @@ import {
 } from './runs'
 import { createProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentOperationExecutionFence } from './operation-execution-fence'
+import {
+  isSameProjectAgentSuspensionReceipt,
+  type ProjectAgentSuspensionReceipt,
+} from './suspension'
 import { appendProjectAgentEvents } from './event'
 import {
   isProjectAgentOperationAlwaysEnabled,
@@ -493,12 +497,14 @@ function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
 
 function collectFunctionToolOutputs(
   toolResults: FunctionToolResult[],
-): Array<{ toolName: string; output: unknown }> {
+  registry: ProjectAgentOperationRegistry,
+): Array<{ toolName: string; output: unknown; suspendsFor?: 'choice' | null }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
     return [{
       toolName: result.tool.name,
       output: result.output,
+      suspendsFor: registry[result.tool.name]?.agentFlow?.suspendsFor,
     }]
   })
 }
@@ -595,6 +601,7 @@ async function createProjectAgentWaitBindings(params: {
   stopPart: ProjectAgentStopPartData | null
   registry: ProjectAgentOperationRegistry
   transactionallyBoundTaskBatches: ReadonlyMap<string, readonly string[]>
+  committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
 }): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
@@ -612,7 +619,35 @@ async function createProjectAgentWaitBindings(params: {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(`PROJECT_AGENT_TASK_BATCH_WAIT_IDENTITY_MISMATCH:${taskWait.operationId}`)
   }
-  return followUpMode
+  const suspension = params.committedSuspensions.get(taskWait.operationId)
+  if (!suspension || suspension.kind !== 'task') {
+    throw new Error(`PROJECT_AGENT_TASK_SUSPENSION_RECEIPT_MISSING:${taskWait.operationId}`)
+  }
+  const suspendedTaskIds = Array.from(new Set(suspension.taskIds)).sort()
+  if (
+    suspension.operationId !== taskWait.operationId
+    || JSON.stringify(suspendedTaskIds) !== JSON.stringify(expected)
+    || suspension.followUpMode !== followUpMode
+  ) {
+    throw new Error(`PROJECT_AGENT_TASK_SUSPENSION_RECEIPT_MISMATCH:${taskWait.operationId}`)
+  }
+  return suspension.followUpMode
+}
+
+function requireProjectAgentChoiceSuspensionReceipt(params: {
+  stopPart: ProjectAgentStopPartData | null
+  committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
+}): void {
+  if (!params.stopPart || params.stopPart.reason !== 'awaiting_user_confirmation') return
+  if (params.stopPart.operationIds.length !== 1) {
+    throw new Error(`PROJECT_AGENT_MULTIPLE_CHOICE_SUSPENSIONS_UNSUPPORTED:${params.stopPart.operationIds.join(',')}`)
+  }
+  const operationId = params.stopPart.operationIds[0]
+  if (!operationId) throw new Error('PROJECT_AGENT_CHOICE_SUSPENSION_OPERATION_MISSING')
+  const suspension = params.committedSuspensions.get(operationId)
+  if (!suspension || suspension.kind !== 'choice' || suspension.operationId !== operationId) {
+    throw new Error(`PROJECT_AGENT_CHOICE_SUSPENSION_RECEIPT_MISSING:${operationId}`)
+  }
 }
 
 interface ProjectAgentLiveWorkflowState {
@@ -1022,6 +1057,7 @@ export async function createProjectAgentChatResponse(input: {
 
   let latestStopPart: ProjectAgentStopPartData | null = null
   const transactionallyBoundTaskBatches = new Map<string, readonly string[]>()
+  const committedSuspensions = new Map<string, ProjectAgentSuspensionReceipt>()
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -1053,7 +1089,14 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: () => {
+      onExecutionSettled: ({ suspension }) => {
+        if (suspension) {
+          const existing = committedSuspensions.get(suspension.operationId)
+          if (existing && !isSameProjectAgentSuspensionReceipt(existing, suspension)) {
+            throw new Error(`PROJECT_AGENT_SUSPENSION_RECEIPT_DUPLICATE:${suspension.operationId}`)
+          }
+          committedSuspensions.set(suspension.operationId, suspension)
+        }
         liveWorkflow.invalidate()
       },
       onTaskBatchBound: (batch) => {
@@ -1061,6 +1104,11 @@ export async function createProjectAgentChatResponse(input: {
           throw new Error(`PROJECT_AGENT_TASK_BATCH_DUPLICATE_BINDING:${batch.operationId}`)
         }
         transactionallyBoundTaskBatches.set(batch.operationId, [...batch.taskIds])
+        const existing = committedSuspensions.get(batch.operationId)
+        if (existing && !isSameProjectAgentSuspensionReceipt(existing, batch.suspension)) {
+          throw new Error(`PROJECT_AGENT_SUSPENSION_RECEIPT_DUPLICATE:${batch.operationId}`)
+        }
+        committedSuspensions.set(batch.operationId, batch.suspension)
       },
       approvalPreflightStore,
     }) as Tool<ProjectAgentAgentsRunContext>
@@ -1081,7 +1129,7 @@ export async function createProjectAgentChatResponse(input: {
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
-      const toolOutputs = collectFunctionToolOutputs(toolResults)
+      const toolOutputs = collectFunctionToolOutputs(toolResults, operations)
       const stopPart = stopController.evaluateStep(toolOutputs)
       if (!stopPart) {
         return {
@@ -1260,7 +1308,13 @@ export async function createProjectAgentChatResponse(input: {
             toolCallId: approvalToolCallId,
             approvalPreflightStore,
           })
-          const interruptionId = await createProjectAgentApprovalInterruption({
+          const suspension = await settleProjectAgentInterruptionSuspension({
+            kind: 'approval',
+            executionFence: {
+              runFence,
+              signal: runAbortController.signal,
+              continuationClaim: input.continuationClaim ?? null,
+            },
             runFence,
             runId: input.run.id,
             projectId: input.projectId,
@@ -1279,10 +1333,13 @@ export async function createProjectAgentChatResponse(input: {
             } as unknown as Prisma.InputJsonValue,
             previousActivityId: control.kind === 'task_follow_up' ? control.followUp.followUpActivityId : null,
           })
+          if (suspension.kind !== 'approval') {
+            throw new Error(`PROJECT_AGENT_APPROVAL_SUSPENSION_KIND_INVALID:${suspension.kind}`)
+          }
           chunks.push(createDataChunk('data-agent-interruption', {
             runId: input.run.id,
             requestId,
-            interruptionId,
+            interruptionId: suspension.interruptionId,
             approvalId,
             operationId,
             toolCallId: approvalToolCallId,
@@ -1304,6 +1361,7 @@ export async function createProjectAgentChatResponse(input: {
             stopPart: latestStopPart,
             registry: operations,
             transactionallyBoundTaskBatches,
+            committedSuspensions,
           })
         } catch (error) {
           if (input.settleTaskFollowUp) throw error
@@ -1319,6 +1377,10 @@ export async function createProjectAgentChatResponse(input: {
           return chunks
         }
         if (latestStopPart) {
+          requireProjectAgentChoiceSuspensionReceipt({
+            stopPart: latestStopPart,
+            committedSuspensions,
+          })
           chunks.push(createDataChunk('data-agent-stop', latestStopPart))
         }
 

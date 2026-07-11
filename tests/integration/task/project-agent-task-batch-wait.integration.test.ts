@@ -62,7 +62,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
     let committed = false
     const binding: ProjectAgentOperationTaskBatchBinding = {
       async bindInTransaction(tx, batch) {
-        const waitId = await bindProjectAgentWaitToTasksInTransaction(tx, {
+        const suspension = await bindProjectAgentWaitToTasksInTransaction(tx, {
           runFence,
           runId: run.id,
           projectId: project.id,
@@ -73,8 +73,9 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
           followUpMode: 'resume_agent',
           previousActivityId: activityId,
         })
-        if (!waitId) throw new Error('EXPECTED_WAIT')
+        if (!suspension) throw new Error('EXPECTED_WAIT')
         bound = true
+        return suspension
       },
       isBound: () => bound,
       markCommitted: () => { committed = bound },

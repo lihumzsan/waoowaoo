@@ -5,6 +5,7 @@ import type { UIMessage } from 'ai'
 import { prisma } from '@/lib/prisma'
 import { TASK_EVENT_TYPE, TASK_STATUS, type TaskLifecycleEventType } from '@/lib/task/types'
 import type { ProjectAssistantId } from './types'
+import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
@@ -337,7 +338,7 @@ function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerm
 export async function bindProjectAgentWaitToTasksInTransaction(
   tx: Prisma.TransactionClient,
   input: CreateProjectAgentWaitInput,
-): Promise<string | null> {
+): Promise<ProjectAgentTaskSuspensionReceipt | null> {
   const taskIds = normalizeTaskIds(input.taskIds)
   if (taskIds.length === 0) return null
   const waitId = randomUUID()
@@ -412,7 +413,15 @@ export async function bindProjectAgentWaitToTasksInTransaction(
       lifecycleType: terminalType,
     })
   }
-  return waitId
+  return {
+    kind: 'task',
+    runId: input.runId,
+    operationId: input.operationId,
+    activityId,
+    waitId,
+    taskIds,
+    followUpMode: input.followUpMode,
+  }
 }
 
 export interface ApplyProjectAgentWaitTerminalEventInput {

@@ -74,14 +74,23 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     'invokeApprovedOperationPlan',
     'runWithProjectAgentOperationExecutionFence',
     'assertProjectAgentOperationExecutionFenceCurrent',
-    'assertProjectAgentOperationExecutionFenceAfterInvocation',
     'assertProjectAgentOperationExecutionFenceInTransaction',
+    'requireProjectAgentSuspensionReceipt',
     'assertAssistantToolWriteAuthority',
     'PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED',
     'PROJECT_AGENT_OPERATION_TASK_SUBMISSION_NOT_COMMITTED',
   ]) {
     if (!authority.includes(required)) {
       violations.push(`${authorityPath} is missing required authority ${required}`)
+    }
+  }
+  for (const forbidden of [
+    'assertProjectAgentOperationExecutionFenceAfterInvocation',
+    'assertProjectAgentChoiceExecutionFenceAfterInvocation',
+    'resolveProjectAgentOperationPostInvocationStatus',
+  ]) {
+    if (authority.includes(forbidden)) {
+      violations.push(`${authorityPath} restores retired post-invocation fence authority ${forbidden}`)
     }
   }
   const channelPolicyPath = 'src/lib/operations/channel-policy.ts'

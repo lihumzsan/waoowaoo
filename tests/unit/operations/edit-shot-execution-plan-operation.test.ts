@@ -114,7 +114,7 @@ vi.mock('@/lib/project-agent/choice-card', () => ({
 }))
 
 vi.mock('@/lib/project-agent/interruptions', () => ({
-  createProjectAgentChoiceInterruption: vi.fn(),
+  settleProjectAgentInterruptionSuspension: vi.fn(),
 }))
 
 vi.mock('@/lib/project-workflow/edit-first', () => ({

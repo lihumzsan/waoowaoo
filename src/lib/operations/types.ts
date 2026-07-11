@@ -6,6 +6,7 @@ import type { OperationPlan } from './planning'
 import type { OperationExecutionAuthorization } from './planned-operation-invocation'
 import type { Prisma } from '@prisma/client'
 import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
+import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 
 export type ProjectAgentOperationId = string
 
@@ -31,7 +32,7 @@ export interface ProjectAgentOperationTaskBatchBinding {
   bindInTransaction(
     transaction: Prisma.TransactionClient,
     batch: { operationId: string; taskIds: readonly string[] },
-  ): Promise<void>
+  ): Promise<ProjectAgentTaskSuspensionReceipt | null>
   isBound(): boolean
   markCommitted(): void
   isCommitted(): boolean
@@ -106,7 +107,12 @@ export interface OperationConfirmation {
  */
 export interface OperationAgentFlow {
   onTaskComplete?: 'resume_agent' | 'complete'
-  interruptsFor?: 'approval' | 'choice' | null
+  /**
+   * A tool-owned, durable suspension protocol. Approval is created by the
+   * Agents SDK approval boundary, while Choice is declared by the operation
+   * that settles its Offer.
+   */
+  suspendsFor?: 'choice' | null
 }
 
 export type RuntimeSchemaSafeParseResult<T> = { success: true; data: T } | { success: false; error: { issues: unknown } }

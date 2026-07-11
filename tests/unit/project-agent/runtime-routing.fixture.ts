@@ -416,11 +416,27 @@ vi.mock('@/lib/api-errors', () => ({
 }))
 
 vi.mock('@/lib/project-agent/interruptions', () => ({
-  createProjectAgentApprovalInterruption: vi.fn(async () => 'interruption-row-1'),
+  settleProjectAgentInterruptionSuspension: vi.fn(async () => ({
+    kind: 'approval',
+    runId: 'run-1',
+    operationId: 'generate_edit_style_previews',
+    activityId: 'activity-approval-1',
+    interruptionId: 'interruption-row-1',
+    approvalId: 'approval-row-1',
+    toolCallId: 'tool-approval-1',
+  })),
 }))
 
 vi.mock('@/lib/project-agent/waits', () => ({
-  bindProjectAgentWaitToTasksInTransaction: vi.fn(async () => 'wait-transactional-1'),
+  bindProjectAgentWaitToTasksInTransaction: vi.fn(async () => ({
+    kind: 'task',
+    runId: 'run-1',
+    operationId: 'generate_edit_style_previews',
+    activityId: 'activity-task-1',
+    waitId: 'wait-transactional-1',
+    taskIds: ['task-1'],
+    followUpMode: 'resume_agent',
+  })),
 }))
 
 vi.mock('@/lib/project-agent/runs', () => ({

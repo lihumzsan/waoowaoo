@@ -58,7 +58,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     const agentFlow = op.agentFlow as
       | {
           onTaskComplete?: unknown
-          interruptsFor?: unknown
+          suspendsFor?: unknown
         }
       | undefined
     if (agentFlow !== undefined) {
@@ -73,12 +73,11 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
         throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_ON_TASK_COMPLETE_INVALID:${operationId}`)
       }
       if (
-        agentFlow.interruptsFor !== undefined &&
-        agentFlow.interruptsFor !== null &&
-        agentFlow.interruptsFor !== 'approval' &&
-        agentFlow.interruptsFor !== 'choice'
+        agentFlow.suspendsFor !== undefined &&
+        agentFlow.suspendsFor !== null &&
+        agentFlow.suspendsFor !== 'choice'
       ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_INTERRUPTS_FOR_INVALID:${operationId}`)
+        throw new Error(`PROJECT_AGENT_OPERATION_AGENT_FLOW_SUSPENDS_FOR_INVALID:${operationId}`)
       }
     }
     const confirmation = op.confirmation as { kind?: unknown; required?: unknown } | undefined
@@ -94,7 +93,7 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
     }
-    if (agentFlow?.interruptsFor === 'choice') {
+    if (agentFlow?.suspendsFor === 'choice') {
       if (
         channels.tool !== true
         || channels.api !== false

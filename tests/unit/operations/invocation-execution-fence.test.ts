@@ -66,8 +66,9 @@ vi.mock('@/lib/workspace-resource/resource-change-events', () => ({
 
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import {
-  assertProjectAgentChoiceExecutionFenceAfterInvocation,
+  assertProjectAgentOperationExecutionFenceCurrent,
   assertProjectAgentOperationExecutionFenceInTransaction,
+  requireProjectAgentSuspensionReceipt,
 } from '@/lib/project-agent/operation-execution-fence'
 
 function buildContext(controller: AbortController): ProjectAgentOperationContext {
@@ -196,79 +197,50 @@ describe('Assistant operation execution fence', () => {
     expect(query).toHaveBeenCalledTimes(2)
   })
 
-  it('accepts only this invocation\'s durable Choice transition after it advances the Run fence', async () => {
+  it('does not reinterpret an awaiting Choice as lost execution ownership', async () => {
     fenceState.run = {
       status: 'awaiting_choice',
-      runVersion: 5,
-      eventSeq: BigInt(13),
+      runVersion: 4,
+      eventSeq: BigInt(12),
     }
-    fenceState.choiceInterruption = {
-      activityId: 'activity-choice-1',
-      payload: {
-        schemaVersion: 1,
-        card: {
-          cardId: 'card-choice-1',
-          runId: 'run-1',
-          interruptionId: 'interruption-choice-1',
-          toolCallId: 'tool-choice-1',
-          choiceType: 'script_intake',
-          replyMode: 'per_group',
-          title: 'Refine story brief',
-          groups: [],
-          submitLabel: 'Continue',
-          submit: { kind: 'submit_tool_output', decision: 'approve' },
-        },
-        reviewedResource: {
-          kind: 'script_intake_prompt',
-          fingerprint: 'a'.repeat(64),
-        },
-      },
-    }
-    fenceState.choiceActivity = { id: 'activity-choice-1' }
 
-    await expect(assertProjectAgentChoiceExecutionFenceAfterInvocation({
-      fence: {
-        runFence: { runId: 'run-1', runVersion: 5, eventSeq: '13' },
-        signal: new AbortController().signal,
-        choiceExecutionOutcome: {
-          interruptionId: 'interruption-choice-1',
-          cardId: 'card-choice-1',
-          toolCallId: 'tool-choice-1',
-          choiceType: 'script_intake',
-        },
-      },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
-      operationId: 'request_script_intake_choice',
+    await expect(assertProjectAgentOperationExecutionFenceCurrent({
+      runFence: { runId: 'run-1', runVersion: 4, eventSeq: '12' },
+      signal: new AbortController().signal,
     })).resolves.toBeUndefined()
   })
 
-  it('rejects an awaiting Choice that lacks this invocation\'s durable Interaction identity', async () => {
-    fenceState.run = {
-      status: 'awaiting_choice',
-      runVersion: 5,
-      eventSeq: BigInt(13),
-    }
-
-    await expect(assertProjectAgentChoiceExecutionFenceAfterInvocation({
+  it('requires a matching committed suspension receipt instead of an awaiting status exception', () => {
+    expect(() => requireProjectAgentSuspensionReceipt({
       fence: {
-        runFence: { runId: 'run-1', runVersion: 5, eventSeq: '13' },
+        runFence: { runId: 'run-1', runVersion: 4, eventSeq: '12' },
         signal: new AbortController().signal,
-        choiceExecutionOutcome: {
-          interruptionId: 'foreign-interruption',
-          cardId: 'foreign-card',
-          toolCallId: 'foreign-tool',
+        suspensionReceipt: {
+          kind: 'choice',
+          runId: 'run-1',
+          operationId: 'different_choice',
+          activityId: 'activity-choice-1',
+          interruptionId: 'interruption-choice-1',
+          cardId: 'card-choice-1',
+          toolCallId: 'tool-choice-1',
           choiceType: 'script_intake',
+          card: {
+            cardId: 'card-choice-1',
+            runId: 'run-1',
+            interruptionId: 'interruption-choice-1',
+            toolCallId: 'tool-choice-1',
+            choiceType: 'script_intake',
+            replyMode: 'per_group',
+            title: 'Refine story brief',
+            groups: [],
+            submitLabel: 'Continue',
+            submit: { kind: 'submit_tool_output', decision: 'approve' },
+          },
         },
       },
-      projectId: 'project-1',
-      userId: 'user-1',
-      episodeId: 'episode-1',
-      assistantId: 'workspace-command',
       operationId: 'request_script_intake_choice',
-    })).rejects.toThrow('PROJECT_AGENT_OPERATION_CHOICE_OUTCOME_INVALID:request_script_intake_choice')
+      kind: 'choice',
+    })).toThrow('PROJECT_AGENT_SUSPENSION_RECEIPT_OPERATION_MISMATCH')
   })
 
 })

@@ -29,6 +29,8 @@ npm run architecture:impact -- <准备修改的文件或目录>
 
 文档与代码冲突时，不允许在调用方加兼容分支。必须先确认产品决策，再同步收敛文档、权威入口和测试。
 
+Assistant 的暂停协议（Choice、Approval、Task）发生架构性调整时，还必须阅读 [Assistant Suspension 收敛设计](assistant-suspension-convergence.md)：执行资格与等待结果是两个事实，不能用 Run status 互相推导。
+
 ## 维护规则
 
 - 新增或变更一个模块的语义不变量时，必须同步更新该模块文档、`modules.json`、权威代码和验证。

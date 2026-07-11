@@ -11,7 +11,7 @@ import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operation
 import { createProjectAgentRun, getProjectAgentRun } from '@/lib/project-agent/runs'
 import {
   consumeProjectAgentApprovalInterruption,
-  createProjectAgentApprovalInterruption,
+  settleProjectAgentInterruptionSuspension,
 } from '@/lib/project-agent/interruptions'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
@@ -91,7 +91,8 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
     requestId: `system-assistant-approval:${scope.projectId}`,
     controlKind: 'user_turn',
   })
-  const interruptionId = await createProjectAgentApprovalInterruption({
+  const suspension = await settleProjectAgentInterruptionSuspension({
+    kind: 'approval',
     projectId: scope.projectId,
     userId: scope.userId,
     episodeId: scope.episodeId,
@@ -103,6 +104,8 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
     runState: '{"kind":"system-approval-checkpoint"}',
     payload: { operationPlan: planView as unknown as Prisma.InputJsonValue },
   })
+  if (suspension.kind !== 'approval') throw new Error('SYSTEM_ASSISTANT_APPROVAL_SUSPENSION_INVALID')
+  const interruptionId = suspension.interruptionId
   const awaitingApproval = await getProjectAgentSessionState({
     projectId: scope.projectId,
     userId: scope.userId,
@@ -154,7 +157,7 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
   const taskId = (output.data as Record<string, unknown>).taskId
   if (typeof taskId !== 'string' || !taskId) throw new Error('SYSTEM_ASSISTANT_TASK_ID_MISSING')
   await enqueueApprovedSystemTask(taskId)
-  const waitId = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
+  const taskSuspension = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
     projectId: scope.projectId,
     userId: scope.userId,
     episodeId: scope.episodeId,
@@ -168,7 +171,8 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
     taskIds: [taskId],
     followUpMode: 'resume_agent',
   }))
-  if (!waitId) throw new Error('SYSTEM_ASSISTANT_WAIT_MISSING')
+  if (!taskSuspension) throw new Error('SYSTEM_ASSISTANT_WAIT_MISSING')
+  const waitId = taskSuspension.waitId
   expect((await getProjectAgentRun({ ...scope, runId: run.id }))?.status).toBe('awaiting_task')
   return { runId: run.id, waitId, taskId }
 }

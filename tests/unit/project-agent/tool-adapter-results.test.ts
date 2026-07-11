@@ -43,7 +43,7 @@ describe('executeProjectAgentOperationFromTool', () => {
         intent: 'query',
         effects: EFFECTS_NONE,
         confirmation: { kind: 'none', required: false },
-        agentFlow: { interruptsFor: 'choice' },
+        agentFlow: { suspendsFor: 'choice' },
         inputSchema: z.object({}),
         outputSchema: z.object({ ok: z.boolean() }),
         execute: vi.fn(async () => {
@@ -67,7 +67,7 @@ describe('executeProjectAgentOperationFromTool', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('OPERATION_EXECUTION_FAILED')
-    expect(result.error.details).toEqual({ interruptsFor: 'choice' })
+    expect(result.error.details).toEqual({ suspendsFor: 'choice' })
   })
 
   it('[execution throws undefined] -> returns fallback message', async () => {

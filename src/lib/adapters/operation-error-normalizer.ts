@@ -1,7 +1,7 @@
 import { ApiError } from '@/lib/api-errors'
 import type { ProjectAgentToolError, ProjectAgentToolErrorCode } from '@/lib/operations/types'
 
-type InterruptsFor = 'approval' | 'choice'
+type SuspensionKind = 'choice'
 
 const SENSITIVE_DETAIL_KEYS = new Set([
   'authorization',
@@ -103,20 +103,20 @@ export function buildToolError(params: {
 }
 
 export function withOperationErrorDetails(
-  operation: { agentFlow?: { interruptsFor?: InterruptsFor | null } },
+  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } },
   details?: Record<string, unknown> | null,
 ): Record<string, unknown> | null {
-  const interruptsFor = operation.agentFlow?.interruptsFor ?? null
-  if (!interruptsFor) return details ?? null
+  const suspendsFor = operation.agentFlow?.suspendsFor ?? null
+  if (!suspendsFor) return details ?? null
   return {
     ...(details ?? {}),
-    interruptsFor,
+    suspendsFor,
   }
 }
 
 export function normalizeOperationExecutionToolError(params: {
   error: unknown
-  operation: { agentFlow?: { interruptsFor?: InterruptsFor | null } }
+  operation: { agentFlow?: { suspendsFor?: SuspensionKind | null } }
   operationId: string
 }): ProjectAgentToolError {
   if (params.error instanceof ApiError) {

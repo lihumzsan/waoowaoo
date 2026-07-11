@@ -23,11 +23,17 @@ vi.mock('@/lib/workspace-resource/resource-change-events', () => ({
 
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
-  assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
-  assertProjectAgentChoiceExecutionFenceAfterInvocation: vi.fn(async () => undefined),
-  resolveProjectAgentOperationPostInvocationStatus: vi.fn((operation: {
-    agentFlow?: { interruptsFor?: string | null } | null
-  }) => operation.agentFlow?.interruptsFor === 'choice' ? 'awaiting_choice' : 'running'),
+  requireProjectAgentSuspensionReceipt: vi.fn(() => ({
+    kind: 'choice',
+    runId: 'run-test',
+    operationId: 'request_future_editorial_choice',
+    activityId: 'activity-choice',
+    interruptionId: 'interruption-choice',
+    cardId: 'card-choice',
+    toolCallId: 'tool-choice',
+    choiceType: 'script_intake',
+    card: {},
+  })),
   assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
   runWithProjectAgentOperationExecutionFence: vi.fn(async (
     _fence: unknown,
@@ -98,7 +104,7 @@ describe('invokeProjectAgentOperation', () => {
     expect(execute).toHaveBeenNthCalledWith(2, expect.any(Object), { title: 'same' })
   })
 
-  it('applies the Choice lifecycle postcondition to a future Choice identity without an invocation branch', async () => {
+  it('requires the declared Choice protocol receipt for a future Choice identity without an invocation branch', async () => {
     const execute = vi.fn(async () => ({
       emitted: true,
       choiceType: 'script_intake',
@@ -108,7 +114,7 @@ describe('invokeProjectAgentOperation', () => {
     const operation = makeTestOperation({
       id: 'request_future_editorial_choice',
       channels: { tool: true, api: false },
-      agentFlow: { interruptsFor: 'choice' },
+      agentFlow: { suspendsFor: 'choice' },
       effects: EFFECTS_NONE,
       inputSchema: z.object({}),
       outputSchema: z.object({
@@ -129,11 +135,10 @@ describe('invokeProjectAgentOperation', () => {
     })).resolves.toMatchObject({ kind: 'executed' })
 
     const fence = await import('@/lib/project-agent/operation-execution-fence')
-    expect(fence.assertProjectAgentChoiceExecutionFenceAfterInvocation).toHaveBeenCalledWith(expect.objectContaining({
+    expect(fence.requireProjectAgentSuspensionReceipt).toHaveBeenCalledWith(expect.objectContaining({
       operationId: 'request_future_editorial_choice',
-      episodeId: 'episode-1',
+      kind: 'choice',
     }))
-    expect(fence.assertProjectAgentOperationExecutionFenceAfterInvocation).not.toHaveBeenCalled()
   })
 
   it('returns an explicit approval edge without executing a billable operation', async () => {

@@ -80,7 +80,7 @@ describe('assistant choice offer conformance', () => {
         channels: { tool: true, api: false },
         effects: { writes: false },
         confirmation: { kind: 'none', required: false },
-        agentFlow: { interruptsFor: 'choice' },
+        agentFlow: { suspendsFor: 'choice' },
       })
       expect(operation?.execute, choiceType).toBeTypeOf('function')
       expect(operation?.executeInTransaction, choiceType).toBeUndefined()

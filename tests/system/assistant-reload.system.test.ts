@@ -3,7 +3,7 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
 import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
-import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
+import { settleProjectAgentInterruptionSuspension } from '@/lib/project-agent/interruptions'
 import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
 import { appendProjectAssistantThreadMessages } from '@/lib/project-agent/persistence'
 import { resetSystemState } from '../helpers/db-reset'
@@ -40,7 +40,7 @@ describe('system - Assistant awaiting-task reload', () => {
         enqueuedAt: new Date(),
       },
     })
-    const waitId = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
+    const wait = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
       projectId: seeded.project.id,
       userId: seeded.user.id,
       episodeId: seeded.episode.id,
@@ -50,7 +50,9 @@ describe('system - Assistant awaiting-task reload', () => {
       taskIds: [task.id],
       followUpMode: 'resume_agent',
     }))
-    expect(waitId).toEqual(expect.any(String))
+    expect(wait?.waitId).toEqual(expect.any(String))
+    if (!wait) throw new Error('SYSTEM_ASSISTANT_WAIT_RECEIPT_MISSING')
+    const waitId = wait.waitId
 
     const firstModule = await import('@/lib/project-agent/session-state')
     const first = await firstModule.getProjectAgentSessionState({
@@ -110,7 +112,12 @@ describe('system - Assistant awaiting-task reload', () => {
       requestId: `system-choice-reload:${seeded.project.id}`,
       controlKind: 'user_turn',
     })
-    const offer = await createProjectAgentChoiceInterruption({
+    const suspension = await settleProjectAgentInterruptionSuspension({
+      kind: 'choice',
+      executionFence: {
+        runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
+        signal: new AbortController().signal,
+      },
       projectId: seeded.project.id,
       userId: seeded.user.id,
       episodeId: seeded.episode.id,
@@ -139,6 +146,7 @@ describe('system - Assistant awaiting-task reload', () => {
         },
       }),
     })
+    if (suspension.kind !== 'choice') throw new Error('SYSTEM_ASSISTANT_CHOICE_SUSPENSION_INVALID')
     await appendProjectAssistantThreadMessages({
       projectId: seeded.project.id,
       userId: seeded.user.id,
@@ -149,7 +157,7 @@ describe('system - Assistant awaiting-task reload', () => {
         role: 'assistant',
         parts: [
           { type: 'text', text: '请先补充几个创作方向。' },
-          { type: 'data-assistant-choice-card', data: offer.card },
+          { type: 'data-assistant-choice-card', data: suspension.card },
         ],
       }],
     })
@@ -185,7 +193,7 @@ describe('system - Assistant awaiting-task reload', () => {
     expect(reloaded.pendingInteraction).toMatchObject({
       kind: 'choice',
       runId: run.id,
-      interruptionId: offer.card.interruptionId,
+      interruptionId: suspension.card.interruptionId,
       operationId: 'request_script_intake_choice',
       choiceType: 'script_intake',
     })
@@ -194,7 +202,7 @@ describe('system - Assistant awaiting-task reload', () => {
       parts: expect.arrayContaining([
         expect.objectContaining({ type: 'text', text: '请先补充几个创作方向。' }),
         expect.objectContaining({ type: 'data-assistant-choice-card', data: expect.objectContaining({
-          interruptionId: offer.card.interruptionId,
+          interruptionId: suspension.card.interruptionId,
         }) }),
       ]),
     })])

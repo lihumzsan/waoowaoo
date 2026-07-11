@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { inspectHistoryStateInference } from '../../../scripts/guards/no-history-state-inference.mjs'
 import {
-  inspectChoiceLifecyclePostconditionAuthority,
+  inspectChoiceSuspensionReceiptAuthority,
   inspectChoiceRegistryAuthority,
 } from '../../../scripts/guards/assistant-choice-offer-authority-guard.mjs'
 import { inspectProjectAgentProjectionWrites } from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
@@ -30,16 +30,15 @@ describe('Assistant architecture guards', () => {
     expect(violations.some((violation) => violation.includes('type-specific control semantics'))).toBe(true)
   })
 
-  it('rejects Choice lifecycle dispatch that branches on an operation identity', () => {
-    const violations = inspectChoiceLifecyclePostconditionAuthority({
+  it('rejects Choice suspension dispatch that branches on an operation identity', () => {
+    const violations = inspectChoiceSuspensionReceiptAuthority({
       operationInvocation: `
-        resolveProjectAgentOperationPostInvocationStatus(operation)
-        postInvocationStatus === 'awaiting_choice'
-        assertProjectAgentChoiceExecutionFenceAfterInvocation({})
+        operation.agentFlow?.suspendsFor
+        requireProjectAgentSuspensionReceipt({})
         if (operationId === 'request_future_editorial_choice') {}
       `,
     })
-    expect(violations).toContain('Operation invocation restores Choice lifecycle identity branching at line 5')
+    expect(violations).toContain('Operation invocation restores Choice lifecycle identity branching at line 4')
   })
 
   it('rejects computed Prisma delegates and raw SQL projection writes', () => {

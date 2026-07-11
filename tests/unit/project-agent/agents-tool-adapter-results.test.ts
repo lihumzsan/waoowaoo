@@ -96,7 +96,7 @@ describe('createProjectAgentOperationTool', () => {
         required: false,
       },
       agentFlow: {
-        interruptsFor: 'choice' as const,
+        suspendsFor: 'choice' as const,
       },
     } as ProjectAgentOperationDefinition
     const tool = createProjectAgentOperationTool({
@@ -191,7 +191,7 @@ describe('createProjectAgentOperationTool', () => {
         },
       },
     })
-    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
+    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false, suspension: null })
 
     executeState.executeProjectAgentOperationFromTool.mockRejectedValueOnce(new Error('PROVIDER_THROWN'))
     await expect(tool.invoke(new RunContext(), JSON.stringify({ episodeId: 'episode-1' }), {
@@ -202,6 +202,6 @@ describe('createProjectAgentOperationTool', () => {
         arguments: JSON.stringify({ episodeId: 'episode-1' }),
       },
     })).resolves.toContain('PROVIDER_THROWN')
-    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false })
+    expect(onExecutionSettled).toHaveBeenLastCalledWith({ ok: false, suspension: null })
   })
 })

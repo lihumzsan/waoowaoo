@@ -121,6 +121,7 @@ describe('project agent runtime signal', () => {
   it('[choice card emitted] -> await_user_confirmation signal', () => {
     expect(normalizeOperationRuntimeSignal({
       toolName: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
+      suspendsFor: 'choice',
       output: {
         ok: true,
         data: {

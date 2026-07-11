@@ -25,7 +25,7 @@ import { buildEditFirstAssistantChoiceOfferCandidate } from '@/lib/project-agent
 import { buildScriptIntakeChoiceOfferCandidate, planScriptIntakeQuestions } from '@/lib/project-agent/script-intake'
 import type { EditFirstChoiceType } from '@/lib/project-agent/edit-first-choice-tools'
 import { EDIT_FIRST_CHOICE_TYPES, EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
+import { settleProjectAgentInterruptionSuspension } from '@/lib/project-agent/interruptions'
 import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
@@ -558,7 +558,7 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
     prerequisites: { episodeId: 'required' },
     effects: EFFECTS_NONE,
     agentFlow: {
-      interruptsFor: 'choice',
+      suspendsFor: 'choice',
     },
     toolInputSchema: isScriptIntake ? EDIT_FIRST_SCRIPT_INTAKE_TOOL_INPUT_SCHEMA : EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
     inputSchema: isScriptIntake ? requestScriptIntakeChoiceInputSchema : requestEditChoiceInputSchema,
@@ -601,7 +601,12 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
             choiceType,
             toolCallId,
           })
-      const offer = await createProjectAgentChoiceInterruption({
+      const suspension = await settleProjectAgentInterruptionSuspension({
+        kind: 'choice',
+        executionFence: (() => {
+          if (!ctx.executionFence) throw new Error('PROJECT_AGENT_CHOICE_EXECUTION_FENCE_REQUIRED')
+          return ctx.executionFence
+        })(),
         runFence: (() => {
           if (!ctx.context.runFence) throw new Error('PROJECT_AGENT_RUN_FENCE_REQUIRED')
           return ctx.context.runFence
@@ -617,11 +622,14 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
         card: candidate.card,
         reviewedResource: candidate.reviewedResource,
       })
-      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', offer.card)
+      if (suspension.kind !== 'choice') {
+        throw new Error(`PROJECT_AGENT_CHOICE_SUSPENSION_KIND_INVALID:${suspension.kind}`)
+      }
+      writeOperationDataPart<ProjectAgentChoiceCardPartData>(ctx.writer, 'data-assistant-choice-card', suspension.card)
       return requestEditFirstChoiceOutputSchema.parse({
         emitted: true,
         choiceType,
-        cardId: offer.card.cardId,
+        cardId: suspension.cardId,
         workflowStage: workflow.stage,
       })
     },

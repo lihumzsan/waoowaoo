@@ -62,7 +62,7 @@ describe('Project Agent Task terminal Wait concurrency', () => {
         payload: {},
       })),
     })
-    const waitId = await prisma.$transaction(async (tx) => await bindProjectAgentWaitToTasksInTransaction(tx, {
+    const suspension = await prisma.$transaction(async (tx) => await bindProjectAgentWaitToTasksInTransaction(tx, {
       runFence,
       runId: run.id,
       projectId: project.id,
@@ -73,7 +73,8 @@ describe('Project Agent Task terminal Wait concurrency', () => {
       followUpMode: 'resume_agent',
       previousActivityId: activityId,
     }))
-    if (!waitId) throw new Error('EXPECTED_WAIT')
+    if (!suspension) throw new Error('EXPECTED_WAIT')
+    const waitId = suspension.waitId
 
     const results = await Promise.all(taskIds.map(async (taskId) => await commitTaskTerminal({
       kind: 'failed',

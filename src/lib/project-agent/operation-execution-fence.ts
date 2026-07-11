@@ -3,20 +3,12 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProjectAgentRunFence } from './run-fence'
 import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
-import { parseProjectAgentChoiceOffer } from './choice-offer'
-
-export interface ProjectAgentChoiceExecutionOutcome {
-  interruptionId: string
-  cardId: string
-  toolCallId: string
-  choiceType: string
-}
-
-export function resolveProjectAgentOperationPostInvocationStatus(input: {
-  agentFlow?: { interruptsFor?: 'approval' | 'choice' | null } | null
-}): 'running' | 'awaiting_choice' {
-  return input.agentFlow?.interruptsFor === 'choice' ? 'awaiting_choice' : 'running'
-}
+import {
+  assertProjectAgentSuspensionReceipt,
+  isSameProjectAgentSuspensionReceipt,
+  type ProjectAgentSuspensionKind,
+  type ProjectAgentSuspensionReceipt,
+} from './suspension'
 
 export interface ProjectAgentOperationExecutionFence {
   runFence: ProjectAgentRunFence
@@ -27,13 +19,18 @@ export interface ProjectAgentOperationExecutionFence {
     claimOwner: string
   } | null
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
-  choiceExecutionOutcome?: ProjectAgentChoiceExecutionOutcome | null
+  /**
+   * In-memory committed receipt for this one invocation. It is never a
+   * substitute for persisted Interaction/Wait facts; it merely prevents an
+   * operation from reporting a suspension that it did not commit.
+   */
+  suspensionReceipt?: ProjectAgentSuspensionReceipt | null
 }
 
 export class ProjectAgentOperationExecutionFenceError extends Error {
   constructor(params: {
     runId: string
-    reason: 'aborted' | 'run_not_running' | 'stale_run_fence' | 'continuation_claim_lost'
+    reason: 'aborted' | 'run_missing' | 'stale_run_fence' | 'continuation_claim_lost'
     cause?: unknown
   }) {
     super(`PROJECT_AGENT_OPERATION_EXECUTION_FENCE_REJECTED runId=${params.runId} reason=${params.reason}`, {
@@ -54,20 +51,29 @@ function assertNotAborted(fence: ProjectAgentOperationExecutionFence): void {
   })
 }
 
+/**
+ * For a transaction that legitimately advances the Run fence itself, callers
+ * cannot re-run the version check after writing their own Event. They still
+ * must check the shared ownership signal before committing so lock loss rolls
+ * the transaction back instead of leaving a late suspension behind.
+ */
+export function assertProjectAgentOperationExecutionFenceSignal(
+  fence: ProjectAgentOperationExecutionFence,
+): void {
+  assertNotAborted(fence)
+}
+
 function assertRunSnapshot(params: {
   fence: ProjectAgentOperationExecutionFence
   run: {
-    status: string
     runVersion: number
     eventSeq: bigint
   } | null
-  expectedStatus?: 'running' | 'awaiting_choice'
 }): void {
-  const expectedStatus = params.expectedStatus ?? 'running'
-  if (!params.run || params.run.status !== expectedStatus) {
+  if (!params.run) {
     throw new ProjectAgentOperationExecutionFenceError({
       runId: params.fence.runFence.runId,
-      reason: 'run_not_running',
+      reason: 'run_missing',
     })
   }
   if (
@@ -93,41 +99,52 @@ export function getProjectAgentOperationExecutionFence(): ProjectAgentOperationE
 }
 
 /**
- * Records the durable Interaction created by the current Operation invocation.
- * This is intentionally bound only after the Choice transaction commits. The
- * post-invocation fence can then distinguish this invocation's legal
- * `running -> awaiting_choice` transition from an external state change.
+ * Records the committed protocol handoff created by the current Operation
+ * invocation. A receipt is only allowed after the protocol's own transaction
+ * has committed. Execution eligibility remains a pre-commit fence concern;
+ * this function never interprets a Run status.
  */
-export function recordProjectAgentChoiceExecutionOutcome(
-  outcome: ProjectAgentChoiceExecutionOutcome & { runId: string },
+export function recordProjectAgentSuspensionReceipt(
+  receipt: ProjectAgentSuspensionReceipt,
 ): void {
   const fence = getProjectAgentOperationExecutionFence()
   if (!fence) return
-  if (fence.runFence.runId !== outcome.runId) {
-    throw new ProjectAgentOperationExecutionFenceError({
-      runId: fence.runFence.runId,
-      reason: 'stale_run_fence',
-    })
+  assertProjectAgentSuspensionReceipt({
+    receipt,
+    runId: fence.runFence.runId,
+  })
+  const current = fence.suspensionReceipt
+  if (current) {
+    if (!isSameProjectAgentSuspensionReceipt(current, receipt)) {
+      throw new Error(`PROJECT_AGENT_OPERATION_SUSPENSION_RECEIPT_CONFLICT:${fence.runFence.runId}`)
+    }
+    return
   }
-  const next: ProjectAgentChoiceExecutionOutcome = {
-    interruptionId: outcome.interruptionId,
-    cardId: outcome.cardId,
-    toolCallId: outcome.toolCallId,
-    choiceType: outcome.choiceType,
+  fence.suspensionReceipt = receipt
+}
+
+/**
+ * An operation may declare a suspension protocol. Its result is accepted only
+ * if the current invocation committed a receipt of that exact protocol and
+ * operation. This is deliberately independent of `Run.status`: a legal
+ * suspension advances the Run to awaiting_* as part of its own transaction.
+ */
+export function requireProjectAgentSuspensionReceipt(params: {
+  fence: ProjectAgentOperationExecutionFence
+  kind: ProjectAgentSuspensionKind
+  operationId: string
+}): ProjectAgentSuspensionReceipt {
+  const receipt = params.fence.suspensionReceipt
+  if (!receipt) {
+    throw new Error(`PROJECT_AGENT_SUSPENSION_RECEIPT_MISSING:${params.operationId}:${params.kind}`)
   }
-  const current = fence.choiceExecutionOutcome
-  if (
-    current
-    && (
-      current.interruptionId !== next.interruptionId
-      || current.cardId !== next.cardId
-      || current.toolCallId !== next.toolCallId
-      || current.choiceType !== next.choiceType
-    )
-  ) {
-    throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_OUTCOME_CONFLICT:${fence.runFence.runId}`)
-  }
-  fence.choiceExecutionOutcome = next
+  assertProjectAgentSuspensionReceipt({
+    receipt,
+    runId: params.fence.runFence.runId,
+    kind: params.kind,
+    operationId: params.operationId,
+  })
+  return receipt
 }
 
 export async function assertProjectAgentOperationExecutionFenceCurrent(
@@ -137,118 +154,11 @@ export async function assertProjectAgentOperationExecutionFenceCurrent(
   const run = await prisma.projectAgentRun.findUnique({
     where: { id: fence.runFence.runId },
     select: {
-      status: true,
       runVersion: true,
       eventSeq: true,
     },
   })
   assertRunSnapshot({ fence, run })
-  assertNotAborted(fence)
-}
-
-export async function assertProjectAgentOperationExecutionFenceAfterInvocation(
-  fence: ProjectAgentOperationExecutionFence,
-): Promise<void> {
-  assertNotAborted(fence)
-  const run = await prisma.projectAgentRun.findUnique({
-    where: { id: fence.runFence.runId },
-    select: {
-      status: true,
-      runVersion: true,
-      eventSeq: true,
-    },
-  })
-  assertRunSnapshot({ fence, run })
-  assertNotAborted(fence)
-}
-
-/**
- * A Choice Operation is not a domain write, but it is a durable Run-lifecycle
- * write. Accept only the exact pending Interaction that this invocation
- * committed under the advanced fence; never accept a generic awaiting_choice
- * state as a fallback.
- */
-export async function assertProjectAgentChoiceExecutionFenceAfterInvocation(params: {
-  fence: ProjectAgentOperationExecutionFence
-  projectId: string
-  userId: string
-  episodeId: string | null
-  assistantId: string
-  operationId: string
-}): Promise<void> {
-  const { fence } = params
-  const outcome = fence.choiceExecutionOutcome
-  if (!outcome) {
-    throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_OUTCOME_MISSING:${params.operationId}`)
-  }
-  assertNotAborted(fence)
-  await prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<Array<{
-      status: string
-      runVersion: number
-      eventSeq: bigint
-    }>>(Prisma.sql`
-      SELECT status, runVersion, eventSeq
-      FROM project_agent_runs
-      WHERE id = ${fence.runFence.runId}
-      FOR UPDATE
-    `)
-    assertRunSnapshot({
-      fence,
-      run: rows[0] ?? null,
-      expectedStatus: 'awaiting_choice',
-    })
-    const interruption = await tx.projectAgentInterruption.findFirst({
-      where: {
-        id: outcome.interruptionId,
-        runId: fence.runFence.runId,
-        projectId: params.projectId,
-        userId: params.userId,
-        episodeId: params.episodeId,
-        assistantId: params.assistantId,
-        type: 'choice',
-        status: 'pending',
-        operationId: params.operationId,
-        toolCallId: outcome.toolCallId,
-      },
-      select: {
-        activityId: true,
-        payload: true,
-      },
-    })
-    if (!interruption?.activityId) {
-      throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_OUTCOME_INVALID:${params.operationId}`)
-    }
-    const offer = parseProjectAgentChoiceOffer(interruption.payload)
-    if (
-      offer.card.runId !== fence.runFence.runId
-      || offer.card.interruptionId !== outcome.interruptionId
-      || offer.card.cardId !== outcome.cardId
-      || offer.card.toolCallId !== outcome.toolCallId
-      || offer.card.choiceType !== outcome.choiceType
-    ) {
-      throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_OFFER_MISMATCH:${params.operationId}`)
-    }
-    const activity = await tx.projectAgentActivity.findFirst({
-      where: {
-        id: interruption.activityId,
-        runId: fence.runFence.runId,
-        projectId: params.projectId,
-        userId: params.userId,
-        episodeId: params.episodeId,
-        assistantId: params.assistantId,
-        type: 'awaiting_choice',
-        status: 'waiting',
-        operationId: params.operationId,
-        toolCallId: outcome.toolCallId,
-        choiceType: outcome.choiceType,
-      },
-      select: { id: true },
-    })
-    if (!activity) {
-      throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_ACTIVITY_MISMATCH:${params.operationId}`)
-    }
-  })
   assertNotAborted(fence)
 }
 
@@ -265,11 +175,10 @@ export async function assertProjectAgentOperationExecutionFenceInTransaction(
 ): Promise<void> {
   assertNotAborted(fence)
   const rows = await tx.$queryRaw<Array<{
-    status: string
     runVersion: number
     eventSeq: bigint
   }>>(Prisma.sql`
-    SELECT status, runVersion, eventSeq
+    SELECT runVersion, eventSeq
     FROM project_agent_runs
     WHERE id = ${fence.runFence.runId}
     FOR UPDATE
