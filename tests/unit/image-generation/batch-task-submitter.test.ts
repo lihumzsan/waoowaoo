@@ -110,4 +110,33 @@ describe('submitImageBatchTasks', () => {
       dedupeKey: `${TASK_TYPE.IMAGE_CHARACTER}:appearance-1:single:0:regen:regen-1`,
     }))
   })
+
+  it('cancels children already submitted when a later child cannot be submitted', async () => {
+    mocks.submitTask
+      .mockResolvedValueOnce({
+        success: true,
+        async: true,
+        taskId: 'task-0',
+        status: 'queued',
+        deduped: false,
+      })
+      .mockRejectedValueOnce(new Error('enqueue failed'))
+
+    await expect(submitImageBatchTasks({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_LOCATION,
+      targetType: 'LocationImage',
+      targetId: 'location-1',
+      payload: { count: 3 },
+      count: 3,
+    })).rejects.toThrow('enqueue failed')
+
+    expect(mocks.cancelTask).toHaveBeenCalledWith(
+      'task-0',
+      'Image batch submission failed before every child was queued',
+    )
+    expect(mocks.removeTaskJob).toHaveBeenCalledWith('task-0')
+  })
 })

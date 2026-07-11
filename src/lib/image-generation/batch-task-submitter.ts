@@ -51,27 +51,35 @@ export async function submitImageBatchTasks(input: {
   }
 
   const results = []
-  for (let index = 0; index < count; index += 1) {
-    const batch: ImageBatchMeta = { id: batchId, index, total: count }
-    const regenerationSuffix = input.regenerationToken
-      ? `:regen:${input.regenerationToken}`
-      : ''
-    results.push(await submitTask({
-      userId: input.userId,
-      locale: input.locale,
-      requestId: input.requestId,
-      projectId: input.projectId,
-      type: input.type,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      payload: {
-        ...input.payload,
-        count: 1,
-        imageIndex: index,
-        batch,
-      },
-      dedupeKey: `${input.type}:${input.targetId}:single:${index}${regenerationSuffix}`,
-    }))
+  try {
+    for (let index = 0; index < count; index += 1) {
+      const batch: ImageBatchMeta = { id: batchId, index, total: count }
+      const regenerationSuffix = input.regenerationToken
+        ? `:regen:${input.regenerationToken}`
+        : ''
+      results.push(await submitTask({
+        userId: input.userId,
+        locale: input.locale,
+        requestId: input.requestId,
+        projectId: input.projectId,
+        type: input.type,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        payload: {
+          ...input.payload,
+          count: 1,
+          imageIndex: index,
+          batch,
+        },
+        dedupeKey: `${input.type}:${input.targetId}:single:${index}${regenerationSuffix}`,
+      }))
+    }
+  } catch (error) {
+    for (const result of results) {
+      await cancelTask(result.taskId, 'Image batch submission failed before every child was queued')
+      await removeTaskJob(result.taskId).catch(() => false)
+    }
+    throw error
   }
 
   const first = results[0]
