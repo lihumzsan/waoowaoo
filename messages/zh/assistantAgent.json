@@ -62,6 +62,7 @@
     "submitted": "已提交",
     "taskCount": "{count} 个任务",
     "failed": "失败",
+    "failedDetail": "操作未能完成，请重试。",
     "running": "进行中",
     "needsAction": "待处理",
     "show": "展开",

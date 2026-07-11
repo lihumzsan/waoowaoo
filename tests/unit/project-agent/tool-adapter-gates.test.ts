@@ -5,7 +5,6 @@ import type { NextRequest } from 'next/server'
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
 import { makeTestOperation, EFFECTS_NONE, EFFECTS_WRITE } from '../../helpers/project-agent-operations'
-
 const registryState = vi.hoisted(() => ({
   registry: {} as ProjectAgentOperationRegistry,
 }))
@@ -24,6 +23,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
   assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  assertProjectAgentChoiceExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  resolveProjectAgentOperationPostInvocationStatus: vi.fn(() => 'running'),
   assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
   runWithProjectAgentOperationExecutionFence: vi.fn(async (
     _fence: unknown,

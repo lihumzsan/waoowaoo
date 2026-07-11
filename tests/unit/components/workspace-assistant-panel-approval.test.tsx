@@ -28,7 +28,8 @@ describe('workspace assistant panel layout', () => {
     })
 
     expect(html).toContain('失败 · 确认制作规划')
-    expect(html).toContain('PROJECT_AGENT_ACTIVITY_OVERLAP')
+    expect(html).toContain('操作未能完成，请重试。')
+    expect(html).not.toContain('PROJECT_AGENT_ACTIVITY_OVERLAP')
     expect(html).not.toContain('成功 · 确认制作规划')
   })
 
@@ -40,6 +41,16 @@ describe('workspace assistant panel layout', () => {
 
     expect(runtimeSource).not.toContain('pendingApprovalId: findPendingToolApprovalId')
     expect(runtimeSource).toContain('pendingApprovalId: pendingRunApproval?.approvalId ?? null')
+  })
+
+  it('never sends raw Assistant transport errors to the composer', () => {
+    const panelSource = readFileSync(
+      join(process.cwd(), 'src/features/project-workspace/components/WorkspaceAssistantPanel.tsx'),
+      'utf8',
+    )
+
+    expect(panelSource).toContain("assistantRuntime.error ? t('panel.sendErrorGeneric') : null")
+    expect(panelSource).not.toContain('assistantRuntime.error.message ||')
   })
 
   it('resolves progress stage labels without crashing on missing translations', () => {

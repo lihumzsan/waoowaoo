@@ -102,9 +102,11 @@ describe('project agent operation registry', () => {
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.channels).toEqual({
         tool: true,
-        api: true,
+        api: false,
       })
       expect(registry[operationId]?.intent).toBe('query')
+      expect(registry[operationId]?.effects.writes).toBe(false)
+      expect(registry[operationId]?.agentFlow).toEqual({ interruptsFor: 'choice' })
     }
 
     expect(registry.update_storyboard_panel_prompt?.groupPath).toEqual(['storyboard', 'edit'])

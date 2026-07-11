@@ -146,6 +146,47 @@ export function inspectChoiceRegistryAuthority(input) {
   return violations
 }
 
+function expressionUsesOperationIdentity(node) {
+  if (!node) return false
+  if (ts.isIdentifier(node) && node.text === 'operationId') return true
+  if (
+    ts.isPropertyAccessExpression(node)
+    && ts.isIdentifier(node.expression)
+    && node.expression.text === 'operation'
+    && node.name.text === 'id'
+  ) return true
+  let found = false
+  ts.forEachChild(node, (child) => {
+    if (!found && expressionUsesOperationIdentity(child)) found = true
+  })
+  return found
+}
+
+export function inspectChoiceLifecyclePostconditionAuthority(input) {
+  const violations = []
+  for (const marker of [
+    'resolveProjectAgentOperationPostInvocationStatus(operation)',
+    "postInvocationStatus === 'awaiting_choice'",
+    'assertProjectAgentChoiceExecutionFenceAfterInvocation({',
+  ]) {
+    if (!input.operationInvocation.includes(marker)) {
+      violations.push(`Operation invocation is missing declared Choice lifecycle authority ${JSON.stringify(marker)}`)
+    }
+  }
+  const sourceFile = parseTypeScript(input.operationInvocation)
+  visit(sourceFile, (node) => {
+    const condition = ts.isIfStatement(node) || ts.isConditionalExpression(node)
+      ? node.expression ?? node.condition
+      : ts.isSwitchStatement(node)
+        ? node.expression
+        : null
+    if (!condition || !expressionUsesOperationIdentity(condition)) return
+    const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+    violations.push(`Operation invocation restores Choice lifecycle identity branching at line ${line + 1}`)
+  })
+  return violations
+}
+
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8')
 }
@@ -168,6 +209,7 @@ const editScriptHooks = read('src/lib/query/hooks/useProjectEditScript.ts')
 const editFirstWorkflow = read('src/lib/project-workflow/edit-first.ts')
 const toolset = read('src/lib/project-agent/toolset.ts')
 const editScriptOperations = read('src/lib/operations/domains/media/edit-script-ops.ts')
+const operationInvocation = read('src/lib/operations/invocation.ts')
 
 for (const marker of [
   'getCurrentProjectAgentActivity',
@@ -291,6 +333,7 @@ violations.push(...inspectChoiceRegistryAuthority({
   workflowCheckpoints: read('src/lib/workflow-lab/checkpoints.ts'),
   assistantRenderers,
 }))
+violations.push(...inspectChoiceLifecyclePostconditionAuthority({ operationInvocation }))
 for (const [label, source, forbidden] of [
   ['choice card dispatcher', choiceCard, ['params.choiceType ===', 'switch (params.choiceType)']],
   ['choice resource dispatcher', choiceOffer, ["if (kind === '", 'switch (kind)']],

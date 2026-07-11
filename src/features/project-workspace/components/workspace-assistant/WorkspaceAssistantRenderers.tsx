@@ -729,7 +729,7 @@ export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) 
       </div>
       {failureMessage ? (
         <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[11px] leading-4">
-          {failureMessage}
+          {t('toolCall.failedDetail')}
         </div>
       ) : null}
     </div>

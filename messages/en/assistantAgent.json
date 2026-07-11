@@ -62,6 +62,7 @@
     "submitted": "Submitted",
     "taskCount": "{count} tasks",
     "failed": "Failed",
+    "failedDetail": "The operation could not be completed. Please retry.",
     "running": "Running",
     "needsAction": "Needs Action",
     "show": "Show",

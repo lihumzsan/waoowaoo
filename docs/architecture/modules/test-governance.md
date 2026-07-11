@@ -29,7 +29,7 @@
 - Git 候选报告：`scripts/test-history/candidate-report.mjs`。
 - 必跑测试收集证明：`scripts/test-verification/verify-vitest-report.mjs`。
 - 必跑 suite 执行器：`scripts/test-verification/run-required-suite.mjs`，统一生成 Vitest JSON 并立即核对发现文件、实际文件、case 与 skip 数。
-- P0 System Journey：`tests/system/p0-journeys.json` 是十条旅程的 identity/status Registry；`verify-system-journeys.mjs` 只接受 Vitest JSON 中实际通过的 `[P0:<id>]` 作为执行证据。
+- P0 System Journey：`tests/system/p0-journeys.json` 是至少十条旅程的 identity/status Registry；新增 P0 必须扩展该穷尽 registry，不能被固定数量上限拒绝；`verify-system-journeys.mjs` 只接受 Vitest JSON 中实际通过的 `[P0:<id>]` 作为执行证据。
 - Mutation：`stryker.incremental.config.mjs`、`vitest.mutation.config.ts` 与 `scripts/mutation/verify-baseline.mjs`。
 - 统一完整验证：`scripts/verify-push.sh`。
 
@@ -57,6 +57,7 @@
 - 旧 route/task behavior matrix 主要验证测试文件存在，不能证明每个 route 或 task scenario 实际执行。
 - Task type 的旧文件名 catalog、behavior matrix 与文本 guard 已由穷尽型可执行 Registry 一次性替换。
 - Route 的旧文件名 behavior matrix 与文本 guard 已删除；源文件发现 guard、唯一 identity catalog 和执行账本共同保证新增 Route 必须实际运行。
+- `BUG-AR-003` 表明围栏、状态机与 Choice Offer 即使各有单测，也会在真实 `Operation → Interaction → Run` 组合中产生互相矛盾的结论；凡是 Operation 自己可推进持久生命周期的路径，必须有真实 invocation integration 与刷新 system scenario，不能只 mock fence 或手工 seed 终态。
 
 ## 修改检查表
 

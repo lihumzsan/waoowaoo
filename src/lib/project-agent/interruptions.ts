@@ -24,6 +24,7 @@ import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
+import { recordProjectAgentChoiceExecutionOutcome } from './operation-execution-fence'
 import type { ProjectAgentEventInput, ProjectAgentEventScopeRef } from './event/types'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
@@ -354,6 +355,13 @@ export async function createProjectAgentChoiceInterruption(params: ProjectAgentI
       details: { supersededIds },
     })
   }
+  recordProjectAgentChoiceExecutionOutcome({
+    runId: params.runId,
+    interruptionId,
+    cardId: offer.card.cardId,
+    toolCallId: offer.card.toolCallId,
+    choiceType: offer.card.choiceType,
+  })
   return offer
 }
 

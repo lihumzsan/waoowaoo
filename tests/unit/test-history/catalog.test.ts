@@ -4,7 +4,7 @@ import { HISTORICAL_DEFECT_CATALOG, validateHistoricalDefectCatalog } from '../.
 describe('historical defect catalog', () => {
   it('uses unique ids, full commit hashes, invariants, and planned scenarios', () => {
     expect(() => validateHistoricalDefectCatalog()).not.toThrow()
-    expect(HISTORICAL_DEFECT_CATALOG).toHaveLength(6)
+    expect(HISTORICAL_DEFECT_CATALOG).toHaveLength(7)
     expect(HISTORICAL_DEFECT_CATALOG.map((defect) => defect.module)).toEqual([
       'assistant-run-lifecycle',
       'async-task-lifecycle',
@@ -12,6 +12,7 @@ describe('historical defect catalog', () => {
       'canvas-node',
       'provider-gateway',
       'provider-gateway',
+      'assistant-run-lifecycle',
     ])
   })
 

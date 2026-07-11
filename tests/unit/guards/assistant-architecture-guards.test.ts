@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { inspectHistoryStateInference } from '../../../scripts/guards/no-history-state-inference.mjs'
-import { inspectChoiceRegistryAuthority } from '../../../scripts/guards/assistant-choice-offer-authority-guard.mjs'
+import {
+  inspectChoiceLifecyclePostconditionAuthority,
+  inspectChoiceRegistryAuthority,
+} from '../../../scripts/guards/assistant-choice-offer-authority-guard.mjs'
 import { inspectProjectAgentProjectionWrites } from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
 
 describe('Assistant architecture guards', () => {
@@ -25,6 +28,18 @@ describe('Assistant architecture guards', () => {
     })
     expect(violations).toContain('Workflow Lab restores a private Choice-to-stage map outside EDIT_FIRST_CHOICE_REGISTRY')
     expect(violations.some((violation) => violation.includes('type-specific control semantics'))).toBe(true)
+  })
+
+  it('rejects Choice lifecycle dispatch that branches on an operation identity', () => {
+    const violations = inspectChoiceLifecyclePostconditionAuthority({
+      operationInvocation: `
+        resolveProjectAgentOperationPostInvocationStatus(operation)
+        postInvocationStatus === 'awaiting_choice'
+        assertProjectAgentChoiceExecutionFenceAfterInvocation({})
+        if (operationId === 'request_future_editorial_choice') {}
+      `,
+    })
+    expect(violations).toContain('Operation invocation restores Choice lifecycle identity branching at line 5')
   })
 
   it('rejects computed Prisma delegates and raw SQL projection writes', () => {

@@ -1,9 +1,11 @@
 import { ApiError } from '@/lib/api-errors'
 import { prisma } from '@/lib/prisma'
 import {
+  assertProjectAgentChoiceExecutionFenceAfterInvocation,
   assertProjectAgentOperationExecutionFenceAfterInvocation,
   assertProjectAgentOperationExecutionFenceCurrent,
   assertProjectAgentOperationExecutionFenceInTransaction,
+  resolveProjectAgentOperationPostInvocationStatus,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
@@ -243,7 +245,17 @@ export async function invokeProjectAgentOperation(params: {
       issues: parsedOutput.error.issues,
     })
   }
-  if (executionFence && !operation.effects.writes) {
+  const postInvocationStatus = resolveProjectAgentOperationPostInvocationStatus(operation)
+  if (executionFence && postInvocationStatus === 'awaiting_choice') {
+    await assertProjectAgentChoiceExecutionFenceAfterInvocation({
+      fence: executionFence,
+      projectId: params.context.projectId,
+      userId: params.context.userId,
+      episodeId: effectiveEpisodeId || null,
+      assistantId: 'workspace-command',
+      operationId: operation.id,
+    })
+  } else if (executionFence && !operation.effects.writes) {
     await assertProjectAgentOperationExecutionFenceAfterInvocation(executionFence)
   }
   await publishWorkspaceResourceChangedEventsFromWriteResult({

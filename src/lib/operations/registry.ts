@@ -94,6 +94,18 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
     if ((confirmation.kind === 'none') !== (confirmation.required === false)) {
       throw new Error(`PROJECT_AGENT_OPERATION_CONFIRMATION_KIND_REQUIRED_MISMATCH:${operationId}`)
     }
+    if (agentFlow?.interruptsFor === 'choice') {
+      if (
+        channels.tool !== true
+        || channels.api !== false
+        || effects.writes !== false
+        || confirmation.kind !== 'none'
+        || confirmation.required !== false
+        || agentFlow.onTaskComplete !== undefined
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_CHOICE_LIFECYCLE_CONTRACT_INVALID:${operationId}`)
+      }
+    }
     if (confirmation.kind === 'billable_media') {
       if (typeof op.plan !== 'function' || typeof op.commit !== 'function') {
         throw new Error(`PROJECT_AGENT_BILLABLE_OPERATION_PLAN_COMMIT_REQUIRED:${operationId}`)

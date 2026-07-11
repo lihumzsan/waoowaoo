@@ -18,8 +18,8 @@ export const P0_SYSTEM_JOURNEY_REGISTRY: readonly P0SystemJourney[] = journeyDat
 }))
 
 export function validateP0SystemJourneyRegistry(): void {
-  if (P0_SYSTEM_JOURNEY_REGISTRY.length !== 10) {
-    throw new Error(`P0 system journey registry must contain exactly 10 journeys, received ${P0_SYSTEM_JOURNEY_REGISTRY.length}`)
+  if (P0_SYSTEM_JOURNEY_REGISTRY.length < 10) {
+    throw new Error(`P0 system journey registry must contain at least 10 journeys, received ${P0_SYSTEM_JOURNEY_REGISTRY.length}`)
   }
   const ids = P0_SYSTEM_JOURNEY_REGISTRY.map((journey) => journey.id)
   if (new Set(ids).size !== ids.length) throw new Error('P0 system journey ids must be unique')

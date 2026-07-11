@@ -12,6 +12,7 @@ import { runLifecycleSequence } from '../../harness/lifecycle-sequence'
 import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-authority'
 import { applyProjectAgentWaitTerminalEvent } from '@/lib/project-agent/waits'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
+import { resolveProjectAgentOperationPostInvocationStatus } from '@/lib/project-agent/operation-execution-fence'
 
 type TransitionFacts = {
   readonly from: ProjectAgentRunStatus
@@ -188,10 +189,46 @@ const concurrentTaskTerminalWait: HistoricalRegressionScenario = {
   },
 }
 
+function assertChoiceLifecyclePostcondition(
+  resolve: typeof resolveProjectAgentOperationPostInvocationStatus,
+  recordExecution: (id: string) => void,
+): void {
+  const scenarioId = 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION'
+  const status = resolve({ agentFlow: { interruptsFor: 'choice' } })
+  assertHistoricalValue(
+    status,
+    'awaiting_choice',
+    `${scenarioId}:Choice owns a legal awaiting_choice postcondition`,
+  )
+  recordExecution(scenarioId)
+}
+
+const choiceLifecyclePostcondition: HistoricalRegressionScenario = {
+  id: 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION',
+  identity: 'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION',
+  defectId: 'BUG-AR-003',
+  severity: 'P0',
+  invariantIds: ['AR-02B', 'AR-04A', 'AR-05A', 'AR-06', 'AR-07'],
+  historicalDefectIds: ['BUG-AR-003'],
+  layers: ['regression'],
+  async execute(context) {
+    assertChoiceLifecyclePostcondition(
+      resolveProjectAgentOperationPostInvocationStatus,
+      context.recordExecution,
+    )
+  },
+  async verifyFailBefore() {
+    await proveSemanticFaultRejected(() => {
+      assertChoiceLifecyclePostcondition(() => 'running', () => undefined)
+    })
+  },
+}
+
 export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   settlementDisconnect,
   staleHeartbeatWriter,
   awaitingTaskReload,
   operationWriteAfterLockLoss,
   concurrentTaskTerminalWait,
+  choiceLifecyclePostcondition,
 ]

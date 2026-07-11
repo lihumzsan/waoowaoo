@@ -24,6 +24,10 @@ vi.mock('@/lib/workspace-resource/resource-change-events', () => ({
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
   assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  assertProjectAgentChoiceExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  resolveProjectAgentOperationPostInvocationStatus: vi.fn((operation: {
+    agentFlow?: { interruptsFor?: string | null } | null
+  }) => operation.agentFlow?.interruptsFor === 'choice' ? 'awaiting_choice' : 'running'),
   assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
   runWithProjectAgentOperationExecutionFence: vi.fn(async (
     _fence: unknown,
@@ -92,6 +96,44 @@ describe('invokeProjectAgentOperation', () => {
     expect(toolResult).toMatchObject({ kind: 'executed', data: { title: 'SAME' } })
     expect(execute).toHaveBeenNthCalledWith(1, expect.any(Object), { title: 'same' })
     expect(execute).toHaveBeenNthCalledWith(2, expect.any(Object), { title: 'same' })
+  })
+
+  it('applies the Choice lifecycle postcondition to a future Choice identity without an invocation branch', async () => {
+    const execute = vi.fn(async () => ({
+      emitted: true,
+      choiceType: 'script_intake',
+      cardId: 'card-1',
+      workflowStage: 'ready_to_ingest_script',
+    }))
+    const operation = makeTestOperation({
+      id: 'request_future_editorial_choice',
+      channels: { tool: true, api: false },
+      agentFlow: { interruptsFor: 'choice' },
+      effects: EFFECTS_NONE,
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        emitted: z.literal(true),
+        choiceType: z.literal('script_intake'),
+        cardId: z.string(),
+        workflowStage: z.string(),
+      }),
+      execute,
+    })
+
+    await expect(invokeProjectAgentOperation({
+      registry: { request_future_editorial_choice: operation },
+      channel: 'tool',
+      operationId: 'request_future_editorial_choice',
+      context: buildToolContext('episode-1'),
+      input: {},
+    })).resolves.toMatchObject({ kind: 'executed' })
+
+    const fence = await import('@/lib/project-agent/operation-execution-fence')
+    expect(fence.assertProjectAgentChoiceExecutionFenceAfterInvocation).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: 'request_future_editorial_choice',
+      episodeId: 'episode-1',
+    }))
+    expect(fence.assertProjectAgentOperationExecutionFenceAfterInvocation).not.toHaveBeenCalled()
   })
 
   it('returns an explicit approval edge without executing a billable operation', async () => {

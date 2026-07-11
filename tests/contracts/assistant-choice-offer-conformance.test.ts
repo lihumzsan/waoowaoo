@@ -10,6 +10,7 @@ import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
   EDIT_FIRST_CHOICE_TYPES,
 } from '@/lib/project-agent/edit-first-choice-tools'
+import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type { ProjectAgentChoiceCardDefinition } from '@/lib/project-agent/types'
 
 function card(choiceType: (typeof EDIT_FIRST_CHOICE_TYPES)[number]): ProjectAgentChoiceCardDefinition {
@@ -69,6 +70,21 @@ describe('assistant choice offer conformance', () => {
       ['style', 'style_preview_set'],
       ['asset_review', 'asset_review_set'],
     ])
+  })
+
+  it('gives every Choice a tool-only lifecycle contract instead of treating it as a generic read', () => {
+    const operations = createProjectAgentOperationRegistry()
+    for (const choiceType of EDIT_FIRST_CHOICE_TYPES) {
+      const operation = operations[EDIT_FIRST_CHOICE_REGISTRY[choiceType].toolId]
+      expect(operation, choiceType).toMatchObject({
+        channels: { tool: true, api: false },
+        effects: { writes: false },
+        confirmation: { kind: 'none', required: false },
+        agentFlow: { interruptsFor: 'choice' },
+      })
+      expect(operation?.execute, choiceType).toBeTypeOf('function')
+      expect(operation?.executeInTransaction, choiceType).toBeUndefined()
+    }
   })
 
   it.each(EDIT_FIRST_CHOICE_TYPES)('requires persisted run, interruption, card, and tool identity for %s', (choiceType) => {

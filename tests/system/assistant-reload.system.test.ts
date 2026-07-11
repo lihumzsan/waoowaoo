@@ -3,6 +3,9 @@ import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
 import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
+import { createProjectAgentChoiceInterruption } from '@/lib/project-agent/interruptions'
+import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
+import { appendProjectAssistantThreadMessages } from '@/lib/project-agent/persistence'
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
 import { seedMinimalDomainState } from './helpers/seed'
@@ -96,6 +99,105 @@ describe('system - Assistant awaiting-task reload', () => {
       status: TASK_STATUS.QUEUED,
     }])
     expect(reloaded.pendingInteraction).toBeNull()
+  })
+
+  it('[P0:SYS-ASSISTANT-AWAITING-CHOICE-RELOAD] rebuilds the durable assistant reply and its pending Choice after module reload', async () => {
+    const seeded = await seedMinimalDomainState()
+    const run = await createProjectAgentRun({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      requestId: `system-choice-reload:${seeded.project.id}`,
+      controlKind: 'user_turn',
+    })
+    const offer = await createProjectAgentChoiceInterruption({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      runId: run.id,
+      runFence: { runId: run.id, runVersion: run.runVersion, eventSeq: run.eventSeq },
+      operationId: 'request_script_intake_choice',
+      toolCallId: `system-choice-tool:${run.id}`,
+      card: {
+        cardId: `system-choice-card:${run.id}`,
+        toolCallId: `system-choice-tool:${run.id}`,
+        choiceType: 'script_intake',
+        replyMode: 'per_group',
+        title: '补充创作方向',
+        description: '请选择创作方向。',
+        groups: [],
+        submitLabel: '继续',
+        submit: { kind: 'submit_tool_output', decision: 'approve' },
+      },
+      reviewedResource: fingerprintProjectAgentChoiceResource({
+        kind: 'script_intake_prompt',
+        snapshot: {
+          cardId: `system-choice-card:${run.id}`,
+          choiceType: 'script_intake',
+          groups: [],
+        },
+      }),
+    })
+    await appendProjectAssistantThreadMessages({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      messages: [{
+        id: `system-choice-message:${run.id}`,
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: '请先补充几个创作方向。' },
+          { type: 'data-assistant-choice-card', data: offer.card },
+        ],
+      }],
+    })
+
+    const first = await getProjectAgentSessionState({
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      episodeId: seeded.episode.id,
+      assistantId: 'workspace-command',
+      locale: 'zh',
+    })
+    vi.resetModules()
+    const reloadedSession = await import('@/lib/project-agent/session-state')
+    const reloadedThread = await import('@/lib/project-agent/thread-snapshot')
+    const [reloaded, snapshot] = await Promise.all([
+      reloadedSession.getProjectAgentSessionState({
+        projectId: seeded.project.id,
+        userId: seeded.user.id,
+        episodeId: seeded.episode.id,
+        assistantId: 'workspace-command',
+        locale: 'zh',
+      }),
+      reloadedThread.getProjectAssistantThreadWatermarkedSnapshot({
+        projectId: seeded.project.id,
+        userId: seeded.user.id,
+        episodeId: seeded.episode.id,
+        assistantId: 'workspace-command',
+      }),
+    ])
+
+    expect(reloaded.currentRun).toEqual(first.currentRun)
+    expect(reloaded.currentRun).toMatchObject({ runId: run.id, status: 'awaiting_choice' })
+    expect(reloaded.pendingInteraction).toMatchObject({
+      kind: 'choice',
+      runId: run.id,
+      interruptionId: offer.card.interruptionId,
+      operationId: 'request_script_intake_choice',
+      choiceType: 'script_intake',
+    })
+    expect(snapshot.thread?.messages).toEqual([expect.objectContaining({
+      id: `system-choice-message:${run.id}`,
+      parts: expect.arrayContaining([
+        expect.objectContaining({ type: 'text', text: '请先补充几个创作方向。' }),
+        expect.objectContaining({ type: 'data-assistant-choice-card', data: expect.objectContaining({
+          interruptionId: offer.card.interruptionId,
+        }) }),
+      ]),
+    })])
   })
 
   it('rejects two persisted active Runs instead of selecting one', async () => {

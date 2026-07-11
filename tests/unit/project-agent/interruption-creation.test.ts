@@ -22,7 +22,15 @@ const eventMock = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/project-agent/event', () => eventMock)
 
-import { createProjectAgentApprovalInterruption } from '@/lib/project-agent/interruptions'
+import {
+  createProjectAgentApprovalInterruption,
+  createProjectAgentChoiceInterruption,
+} from '@/lib/project-agent/interruptions'
+import {
+  runWithProjectAgentOperationExecutionFence,
+  type ProjectAgentOperationExecutionFence,
+} from '@/lib/project-agent/operation-execution-fence'
+import { fingerprintProjectAgentChoiceResource } from '@/lib/project-agent/choice-offer'
 
 const createApprovalInput = {
   projectId: 'project-1',
@@ -96,5 +104,52 @@ describe('project agent interruption creation', () => {
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1)
     expect(eventMock.appendProjectAgentEventsInTransaction).toHaveBeenCalledTimes(1)
     expect(eventMock.appendProjectAgentEvents).not.toHaveBeenCalled()
+  })
+
+  it('records the committed Choice identity on the current Operation fence', async () => {
+    const fence: ProjectAgentOperationExecutionFence = {
+      runFence: { runId: 'run-1', runVersion: 2, eventSeq: '10' },
+      signal: new AbortController().signal,
+    }
+
+    await runWithProjectAgentOperationExecutionFence(fence, async () => {
+      await createProjectAgentChoiceInterruption({
+        projectId: 'project-1',
+        userId: 'user-1',
+        episodeId: 'episode-1',
+        assistantId: 'workspace-command',
+        runId: 'run-1',
+        runFence: fence.runFence,
+        operationId: 'request_script_intake_choice',
+        toolCallId: 'tool-choice-1',
+        card: {
+          cardId: 'card-choice-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'script_intake',
+          replyMode: 'per_group',
+          title: 'Refine story brief',
+          groups: [],
+          submitLabel: 'Continue',
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
+        },
+        reviewedResource: {
+          ...fingerprintProjectAgentChoiceResource({
+            kind: 'script_intake_prompt',
+            snapshot: {
+              cardId: 'card-choice-1',
+              choiceType: 'script_intake',
+              groups: [],
+            },
+          }),
+        },
+      })
+    })
+
+    expect(fence.choiceExecutionOutcome).toEqual(expect.objectContaining({
+      cardId: 'card-choice-1',
+      toolCallId: 'tool-choice-1',
+      choiceType: 'script_intake',
+    }))
+    expect(fence.choiceExecutionOutcome?.interruptionId).toEqual(expect.any(String))
   })
 })

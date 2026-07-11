@@ -445,7 +445,7 @@ export default function WorkspaceAssistantPanel({
   })
   const composerError = showRunFailureNotice
     ? null
-    : assistantRuntime.error ? assistantRuntime.error.message || 'UNKNOWN_ERROR' : null
+    : assistantRuntime.error ? t('panel.sendErrorGeneric') : null
   const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
     resizeStateRef.current = {

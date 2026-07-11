@@ -24,6 +24,11 @@ const fenceState = vi.hoisted(() => ({
   committed: false,
   staged: false,
   authorizedWait: { id: 'wait-1' } as { id: string } | null,
+  choiceInterruption: null as {
+    activityId: string | null
+    payload: unknown
+  } | null,
+  choiceActivity: null as { id: string } | null,
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -41,6 +46,12 @@ vi.mock('@/lib/prisma', () => ({
         stageDomainWrite: () => {
           fenceState.staged = true
         },
+        projectAgentInterruption: {
+          findFirst: vi.fn(async () => fenceState.choiceInterruption),
+        },
+        projectAgentActivity: {
+          findFirst: vi.fn(async () => fenceState.choiceActivity),
+        },
       } as unknown as Prisma.TransactionClient
       const result = await work(tx)
       fenceState.committed = fenceState.staged
@@ -54,7 +65,10 @@ vi.mock('@/lib/workspace-resource/resource-change-events', () => ({
 }))
 
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
-import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
+import {
+  assertProjectAgentChoiceExecutionFenceAfterInvocation,
+  assertProjectAgentOperationExecutionFenceInTransaction,
+} from '@/lib/project-agent/operation-execution-fence'
 
 function buildContext(controller: AbortController): ProjectAgentOperationContext {
   return {
@@ -86,6 +100,8 @@ describe('Assistant operation execution fence', () => {
     fenceState.committed = false
     fenceState.staged = false
     fenceState.authorizedWait = { id: 'wait-1' }
+    fenceState.choiceInterruption = null
+    fenceState.choiceActivity = null
   })
 
   it('rolls back a transactional domain write when ownership is lost after execute starts', async () => {
@@ -178,6 +194,81 @@ describe('Assistant operation execution fence', () => {
     )
 
     expect(query).toHaveBeenCalledTimes(2)
+  })
+
+  it('accepts only this invocation\'s durable Choice transition after it advances the Run fence', async () => {
+    fenceState.run = {
+      status: 'awaiting_choice',
+      runVersion: 5,
+      eventSeq: BigInt(13),
+    }
+    fenceState.choiceInterruption = {
+      activityId: 'activity-choice-1',
+      payload: {
+        schemaVersion: 1,
+        card: {
+          cardId: 'card-choice-1',
+          runId: 'run-1',
+          interruptionId: 'interruption-choice-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'script_intake',
+          replyMode: 'per_group',
+          title: 'Refine story brief',
+          groups: [],
+          submitLabel: 'Continue',
+          submit: { kind: 'submit_tool_output', decision: 'approve' },
+        },
+        reviewedResource: {
+          kind: 'script_intake_prompt',
+          fingerprint: 'a'.repeat(64),
+        },
+      },
+    }
+    fenceState.choiceActivity = { id: 'activity-choice-1' }
+
+    await expect(assertProjectAgentChoiceExecutionFenceAfterInvocation({
+      fence: {
+        runFence: { runId: 'run-1', runVersion: 5, eventSeq: '13' },
+        signal: new AbortController().signal,
+        choiceExecutionOutcome: {
+          interruptionId: 'interruption-choice-1',
+          cardId: 'card-choice-1',
+          toolCallId: 'tool-choice-1',
+          choiceType: 'script_intake',
+        },
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      operationId: 'request_script_intake_choice',
+    })).resolves.toBeUndefined()
+  })
+
+  it('rejects an awaiting Choice that lacks this invocation\'s durable Interaction identity', async () => {
+    fenceState.run = {
+      status: 'awaiting_choice',
+      runVersion: 5,
+      eventSeq: BigInt(13),
+    }
+
+    await expect(assertProjectAgentChoiceExecutionFenceAfterInvocation({
+      fence: {
+        runFence: { runId: 'run-1', runVersion: 5, eventSeq: '13' },
+        signal: new AbortController().signal,
+        choiceExecutionOutcome: {
+          interruptionId: 'foreign-interruption',
+          cardId: 'foreign-card',
+          toolCallId: 'foreign-tool',
+          choiceType: 'script_intake',
+        },
+      },
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      assistantId: 'workspace-command',
+      operationId: 'request_script_intake_choice',
+    })).rejects.toThrow('PROJECT_AGENT_OPERATION_CHOICE_OUTCOME_INVALID:request_script_intake_choice')
   })
 
 })

@@ -71,6 +71,7 @@ const assistantToolCallMessages = {
     toolCall: {
       success: '成功',
       failed: '失败',
+      failedDetail: '操作未能完成，请重试。',
       needsAction: '待处理',
       running: '进行中',
       arguments: '参数',

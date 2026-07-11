@@ -250,6 +250,7 @@
         "tests/integration/task/project-agent-continuation-dead-delivery.integration.test.ts",
         "tests/integration/task/project-agent-session-broadcast.integration.test.ts",
         "tests/integration/task/project-agent-interruption-atomicity.integration.test.ts",
+        "tests/integration/task/project-agent-choice-execution-fence.integration.test.ts",
         "tests/unit/outbox/project-agent-session-broadcast.test.ts",
         "tests/unit/outbox/project-agent-continuation-dead-letter.test.ts",
         "tests/unit/guards/single-project-agent-continuation.test.ts",

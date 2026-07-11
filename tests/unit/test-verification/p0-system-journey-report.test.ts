@@ -34,6 +34,16 @@ describe('P0 system journey report verification', () => {
     expect(compareSystemJourneyExecution(report(['[P0:SYS-1]', '[P0:SYS-X]']), registry).unexpected).toEqual(['SYS-1', 'SYS-X'])
   })
 
+  it('allows a new protected P0 journey while still rejecting a registry below the minimum', () => {
+    expect(() => validateSystemJourneyRegistry([
+      ...registry,
+      { id: 'SYS-NEW-P0', status: 'protected' },
+    ])).not.toThrow()
+    expect(() => validateSystemJourneyRegistry(registry.slice(0, 9))).toThrow(
+      'at least 10 journeys',
+    )
+  })
+
   it('keeps the typed and runtime registries exhaustive and valid', () => {
     expect(() => validateP0SystemJourneyRegistry()).not.toThrow()
     expect(() => validateSystemJourneyRegistry(P0_SYSTEM_JOURNEY_REGISTRY)).not.toThrow()

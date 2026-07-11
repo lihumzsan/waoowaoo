@@ -34,6 +34,10 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/project-agent/operation-execution-fence', () => ({
   assertProjectAgentOperationExecutionFenceCurrent: vi.fn(async () => undefined),
   assertProjectAgentOperationExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  assertProjectAgentChoiceExecutionFenceAfterInvocation: vi.fn(async () => undefined),
+  resolveProjectAgentOperationPostInvocationStatus: vi.fn((operation: {
+    agentFlow?: { interruptsFor?: string | null } | null
+  }) => operation.agentFlow?.interruptsFor === 'choice' ? 'awaiting_choice' : 'running'),
   assertProjectAgentOperationExecutionFenceInTransaction: vi.fn(async () => undefined),
   runWithProjectAgentOperationExecutionFence: vi.fn(async (
     _fence: unknown,

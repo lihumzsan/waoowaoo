@@ -8,8 +8,8 @@ const JOURNEY_PATTERN = /\[P0:([A-Z0-9-]+)\]/g
 const VALID_STATUSES = new Set(['protected', 'scenario-required'])
 
 export function validateSystemJourneyRegistry(registry) {
-  if (!Array.isArray(registry) || registry.length !== 10) {
-    throw new Error(`P0 system journey registry must contain exactly 10 journeys, received ${Array.isArray(registry) ? registry.length : 'non-array'}`)
+  if (!Array.isArray(registry) || registry.length < 10) {
+    throw new Error(`P0 system journey registry must contain at least 10 journeys, received ${Array.isArray(registry) ? registry.length : 'non-array'}`)
   }
   const ids = registry.map((journey) => journey.id)
   if (ids.some((id) => typeof id !== 'string' || !/^SYS-[A-Z0-9-]+$/.test(id))) {

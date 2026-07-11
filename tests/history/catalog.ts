@@ -127,6 +127,24 @@ export const HISTORICAL_DEFECT_CATALOG = [
     replayMode: 'semantic-fault-injection',
     status: 'protected',
   },
+  {
+    id: 'BUG-AR-003',
+    commits: [
+      '3c084eeb12084dce84b9e2a3422751800882a344',
+    ],
+    symptom: 'A durable Choice can correctly move its Run to awaiting_choice, then be reported as a failed Tool call and lose its streamed assistant reply on reload.',
+    rootCause: 'The unified invocation layer treated effects.writes=false as preserving running, conflating domain writes with a Choice Operation\'s declared Assistant lifecycle transition.',
+    severity: 'P0',
+    module: 'assistant-run-lifecycle',
+    invariantIds: ['AR-02B', 'AR-04A', 'AR-05A', 'AR-06', 'AR-07'],
+    affectedLayers: ['unit', 'integration-task', 'system', 'regression', 'contract'],
+    escapedLayers: ['unit', 'integration-task', 'system'],
+    scenarioIds: [
+      'SCENARIO-ASSISTANT-CHOICE-LIFECYCLE-POSTCONDITION',
+    ],
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
+  },
 ] as const satisfies readonly HistoricalDefect[]
 
 export function validateHistoricalDefectCatalog(

@@ -554,6 +554,7 @@ function buildRequestEditChoiceOperation(choiceType: EditFirstChoiceType) {
     id: operationId,
     summary: REQUEST_EDIT_CHOICE_SUMMARIES[choiceType],
     intent: 'query',
+    channels: { tool: true, api: false },
     prerequisites: { episodeId: 'required' },
     effects: EFFECTS_NONE,
     agentFlow: {
