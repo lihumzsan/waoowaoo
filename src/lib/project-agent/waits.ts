@@ -298,41 +298,6 @@ function readTerminalLifecycleTypeFromTaskStatus(status: string): TaskLifecycleE
   return null
 }
 
-export function applyProjectAgentWaitTaskSnapshot(input: {
-  taskIds: string[]
-  tasks: ProjectAgentWaitTaskSnapshot[]
-}): ApplyProjectAgentWaitTerminalEventResult {
-  const taskIds = normalizeTaskIds(input.taskIds)
-  let terminalTaskIds: string[] = []
-  let failedTaskIds: string[] = []
-  let canceledTaskIds: string[] = []
-  let terminalStatus: ProjectAgentWaitTerminalStatus | null = null
-
-  for (const task of input.tasks) {
-    const lifecycleType = readTerminalLifecycleTypeFromTaskStatus(task.status)
-    if (!lifecycleType) continue
-    const result = applyProjectAgentWaitTerminalEvent({
-      taskId: task.id,
-      lifecycleType,
-      taskIds,
-      terminalTaskIds,
-      failedTaskIds,
-      canceledTaskIds,
-    })
-    terminalTaskIds = result.terminalTaskIds
-    failedTaskIds = result.failedTaskIds
-    canceledTaskIds = result.canceledTaskIds
-    terminalStatus = result.terminalStatus
-  }
-
-  return {
-    terminalTaskIds,
-    failedTaskIds,
-    canceledTaskIds,
-    terminalStatus,
-  }
-}
-
 function buildWaitScope(input: ProjectAgentWaitScopeInput): {
   assistantId: ProjectAssistantId
   scopeRef: string
@@ -367,17 +332,6 @@ function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerm
   if (value === null) return null
   if (value === 'completed' || value === 'failed' || value === 'canceled') return value
   throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_STATUS_INVALID:${value}`)
-}
-
-export async function createProjectAgentWait(input: CreateProjectAgentWaitInput): Promise<string | null> {
-  const taskIds = normalizeTaskIds(input.taskIds)
-  if (taskIds.length === 0) return null
-  return await prisma.$transaction(async (tx) => (
-    await bindProjectAgentWaitToTasksInTransaction(tx, {
-      ...input,
-      taskIds,
-    })
-  ))
 }
 
 export async function bindProjectAgentWaitToTasksInTransaction(
@@ -441,18 +395,18 @@ export async function bindProjectAgentWaitToTasksInTransaction(
     WHERE projectId = ${input.projectId}
       AND userId = ${input.userId}
       AND id IN (${Prisma.join(taskIds)})
+    FOR UPDATE
   `)
   const taskIdSet = new Set(tasks.map((task) => task.id))
   const missingTaskIds = taskIds.filter((taskId) => !taskIdSet.has(taskId))
   if (missingTaskIds.length > 0) {
     throw new Error(`PROJECT_AGENT_WAIT_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
   }
-  const terminalTask = tasks.find((task) => readTerminalLifecycleTypeFromTaskStatus(task.status) !== null)
-  if (terminalTask) {
-    const terminalType = readTerminalLifecycleTypeFromTaskStatus(terminalTask.status)
-    if (!terminalType) throw new Error(`PROJECT_AGENT_WAIT_TERMINAL_TYPE_MISSING:${terminalTask.id}`)
+  for (const task of tasks) {
+    const terminalType = readTerminalLifecycleTypeFromTaskStatus(task.status)
+    if (!terminalType) continue
     await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
-      taskId: terminalTask.id,
+      taskId: task.id,
       projectId: input.projectId,
       userId: input.userId,
       lifecycleType: terminalType,
@@ -632,14 +586,14 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
     if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
     if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
     const taskIds = parseStringArray(row.taskIds)
-    const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
-      SELECT id, status
-      FROM tasks
-      WHERE projectId = ${row.projectId}
-        AND userId = ${row.userId}
-        AND id IN (${Prisma.join(taskIds)})
-    `)
-    const result = applyProjectAgentWaitTaskSnapshot({ taskIds, tasks })
+    const result = applyProjectAgentWaitTerminalEvent({
+      taskId: input.taskId,
+      lifecycleType: input.lifecycleType,
+      taskIds,
+      terminalTaskIds: parseStringArray(row.terminalTaskIds),
+      failedTaskIds: parseStringArray(row.failedTaskIds),
+      canceledTaskIds: parseStringArray(row.canceledTaskIds),
+    })
     if (result.terminalTaskIds.length === 0) continue
     const runFence = createProjectAgentRunFence({
       id: row.runId,
@@ -724,17 +678,6 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
     }
   }
   return outboxCommandIds
-}
-
-export async function resolveProjectAgentWaitsForTaskEvent(input: {
-  taskId: string
-  projectId: string
-  userId: string
-  lifecycleType: TaskLifecycleEventType
-}): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, input)
-  })
 }
 
 export async function listProjectAgentSessionWaits(input: ProjectAgentWaitScopeInput & {
@@ -945,6 +888,8 @@ export async function startProjectAgentWaitFollowUp(input: {
   }
   if (!row.runId) throw new Error(`PROJECT_AGENT_WAIT_RUN_MISSING:${row.id}`)
   if (!row.activityId) throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${row.id}`)
+  const rowRunId = row.runId
+  const rowActivityId = row.activityId
   const runFence = createProjectAgentRunFence({
     id: row.runId,
     runVersion: row.runVersion,
@@ -956,36 +901,61 @@ export async function startProjectAgentWaitFollowUp(input: {
     runId: input.runId,
   })
   if (!wakeupBudgetAvailable) {
-    await appendProjectAgentEvents({
-      scope: {
+    const message: UIMessage = {
+      id: `workspace-assistant-run:wakeup-budget:${rowRunId}:${row.id}`,
+      role: 'assistant',
+      metadata: { custom: { projectAgentRunId: rowRunId } },
+      parts: [{
+        type: 'data-agent-run',
+        data: {
+          runId: rowRunId,
+          requestId: input.commandId,
+          status: 'failed',
+          controlKind: 'task_follow_up',
+          stopReason: 'run_budget_exceeded',
+        },
+      }],
+    }
+    await prisma.$transaction(async (tx) => {
+      await appendProjectAssistantThreadMessagesInTransaction(tx, {
         projectId: row.projectId,
         userId: row.userId,
         episodeId: row.episodeId,
         assistantId: row.assistantId as ProjectAssistantId,
-      },
-      events: [{
-        runFence,
-        idempotencyKey: `wait-followed:${row.id}:${input.commandId}:budget-exhausted`,
-        event: {
-          kind: 'wait.followed',
-          runId: row.runId,
-          activityId: row.activityId,
-          waitId: row.id,
-          claimId: input.claimOwner,
-          commandId: input.commandId,
-          sourceOperationId: row.operationId,
+        messages: [message],
+      })
+      await appendProjectAgentEventsInTransaction(tx, {
+        scope: {
+          projectId: row.projectId,
+          userId: row.userId,
+          episodeId: row.episodeId,
+          assistantId: row.assistantId as ProjectAssistantId,
+          scopeRef: row.scopeRef,
         },
-      }, {
-        runFence,
-        idempotencyKey: `run-failed:${row.runId}:wakeup-budget`,
-        event: {
-          kind: 'run.failed',
-          runId: row.runId,
-          stopReason: 'run_budget_exceeded',
-          errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
-          errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
-        },
-      }],
+        events: [{
+          runFence,
+          idempotencyKey: `wait-followed:${row.id}:${input.commandId}:budget-exhausted`,
+          event: {
+            kind: 'wait.followed',
+            runId: rowRunId,
+            activityId: rowActivityId,
+            waitId: row.id,
+            claimId: input.claimOwner,
+            commandId: input.commandId,
+            sourceOperationId: row.operationId,
+          },
+        }, {
+          runFence,
+          idempotencyKey: `run-failed:${rowRunId}:wakeup-budget`,
+          event: {
+            kind: 'run.failed',
+            runId: rowRunId,
+            stopReason: 'run_budget_exceeded',
+            errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
+            errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
+          },
+        }],
+      })
     })
     return null
   }

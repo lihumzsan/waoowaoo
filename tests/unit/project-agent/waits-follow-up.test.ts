@@ -20,6 +20,10 @@ const eventState = vi.hoisted(() => ({
   }),
 }))
 
+const persistenceState = vi.hoisted(() => ({
+  appendProjectAssistantThreadMessagesInTransaction: vi.fn(async () => null),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRaw: prismaState.queryRaw,
@@ -47,6 +51,14 @@ vi.mock('@/lib/project-agent/event', () => ({
   appendProjectAgentEventsInTransaction: eventState.appendProjectAgentEventsInTransaction,
 }))
 
+vi.mock('@/lib/project-agent/persistence', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/project-agent/persistence')>()
+  return {
+    ...actual,
+    appendProjectAssistantThreadMessagesInTransaction: persistenceState.appendProjectAssistantThreadMessagesInTransaction,
+  }
+})
+
 import {
   claimProjectAgentWaitContinuation,
   startProjectAgentWaitFollowUp,
@@ -65,6 +77,66 @@ describe('project agent wait follow-up details', () => {
     prismaState.activityFindUnique.mockResolvedValue(null)
     eventState.appendProjectAgentEvents.mockClear()
     eventState.appendProjectAgentEventsInTransaction.mockClear()
+    persistenceState.appendProjectAssistantThreadMessagesInTransaction.mockClear()
+  })
+
+  it('atomically appends a visible Thread settlement when the wake-up budget is exhausted', async () => {
+    prismaState.eventCount.mockResolvedValue(10)
+    prismaState.queryRaw.mockResolvedValueOnce([{
+      id: 'wait-budget',
+      runId: 'run-budget',
+      activityId: 'activity-budget',
+      projectId: 'project-1',
+      userId: 'user-1',
+      assistantId: 'workspace-command',
+      scopeRef: 'episode:episode-1',
+      episodeId: 'episode-1',
+      operationId: 'generate_episode_videos',
+      taskIds: ['task-1'],
+      followUpMode: 'resume_agent',
+      status: 'claimed',
+      runVersion: 1,
+      eventSeq: BigInt(1),
+      terminalStatus: 'completed',
+      terminalTaskIds: ['task-1'],
+      failedTaskIds: [],
+      canceledTaskIds: [],
+      followUpKey: 'project-agent-wait:wait-budget:completed',
+      followUpCommandId: 'command-budget',
+      claimId: 'claim-budget',
+      claimedAt: new Date(),
+      claimExpiresAt: new Date(Date.now() + 60_000),
+      followedAt: null,
+      createdAt: new Date(),
+      resolvedAt: new Date(),
+    }])
+
+    await expect(startProjectAgentWaitFollowUp({
+      runId: 'run-budget',
+      waitId: 'wait-budget',
+      commandId: 'command-budget',
+      claimOwner: 'claim-budget',
+      projectId: 'project-1',
+      userId: 'user-1',
+    })).resolves.toBeNull()
+
+    expect(persistenceState.appendProjectAssistantThreadMessagesInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        messages: [expect.objectContaining({
+          id: 'workspace-assistant-run:wakeup-budget:run-budget:wait-budget',
+        })],
+      }),
+    )
+    expect(eventState.appendProjectAgentEventsInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        events: expect.arrayContaining([
+          expect.objectContaining({ event: expect.objectContaining({ kind: 'wait.followed' }) }),
+          expect.objectContaining({ event: expect.objectContaining({ kind: 'run.failed' }) }),
+        ]),
+      }),
+    )
   })
 
   it('includes failed task error details when consuming a claimed follow-up', async () => {

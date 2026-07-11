@@ -8,7 +8,7 @@ import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
 import {
   claimProjectAgentWaitContinuation,
-  createProjectAgentWait,
+  bindProjectAgentWaitToTasksInTransaction,
   startProjectAgentWaitFollowUp,
 } from '@/lib/project-agent/waits'
 import { prisma } from '../../helpers/prisma'
@@ -31,7 +31,7 @@ export async function bindAssistantWaitToSystemTask(scope: FailureJourneyScope):
     requestId: `system-terminal-failure:${scope.taskId}`,
     controlKind: 'approval_response',
   })
-  const waitId = await createProjectAgentWait({
+  const waitId = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
     projectId: scope.projectId,
     userId: scope.userId,
     episodeId: scope.episodeId,
@@ -40,7 +40,7 @@ export async function bindAssistantWaitToSystemTask(scope: FailureJourneyScope):
     operationId: 'generate_character_image',
     taskIds: [scope.taskId],
     followUpMode: 'resume_agent',
-  })
+  }))
   expect(waitId).not.toBeNull()
 }
 

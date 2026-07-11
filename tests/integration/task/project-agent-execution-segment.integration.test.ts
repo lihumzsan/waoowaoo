@@ -146,4 +146,41 @@ describe('Project Agent execution segment DB integration', () => {
       expect.objectContaining({ id: `${PREFIX}approval-visible-message` }),
     ])
   })
+
+  it('rejects a durable replay of the same execution segment before model or tool execution can run twice', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const runId = `${PREFIX}segment-replay-run`
+    const { run } = await createProjectAgentUserTurnRun({
+      runId,
+      projectId: project.id,
+      userId: user.id,
+      assistantId: 'workspace-command',
+      requestId: `${PREFIX}segment-replay-request`,
+      message: {
+        id: `${PREFIX}segment-replay-message`,
+        role: 'user',
+        parts: [{ type: 'text', text: 'start' }],
+      },
+    })
+    const segment = createProjectAgentExecutionSegment({ kind: 'user_turn', runId })
+    const append = () => appendProjectAgentEvents({
+      scope: { projectId: project.id, userId: user.id, assistantId: 'workspace-command' },
+      events: [{
+        runFence: createProjectAgentRunFence(run),
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(segment.id),
+        event: {
+          kind: 'run.execution_started' as const,
+          runId,
+          executionSegmentId: segment.id,
+          controlKind: segment.controlKind,
+        },
+      }],
+    })
+    await append()
+    await expect(append()).rejects.toThrow('PROJECT_AGENT_EXECUTION_SEGMENT_ALREADY_STARTED')
+    expect(await prisma.projectAgentEvent.count({
+      where: { runId, kind: 'run.execution_started' },
+    })).toBe(1)
+  })
 })

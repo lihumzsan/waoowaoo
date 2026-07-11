@@ -420,7 +420,6 @@ vi.mock('@/lib/project-agent/interruptions', () => ({
 }))
 
 vi.mock('@/lib/project-agent/waits', () => ({
-  createProjectAgentWait: vi.fn(async () => 'wait-1'),
   bindProjectAgentWaitToTasksInTransaction: vi.fn(async () => 'wait-transactional-1'),
 }))
 
@@ -467,7 +466,6 @@ import { createProjectAgentChatResponse, type ProjectAgentResolvedControl } from
 
 import { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
 
-import { createProjectAgentWait } from '@/lib/project-agent/waits'
 import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 
 const USER_TURN_CONTROL: ProjectAgentResolvedControl = {
@@ -657,6 +655,6 @@ export { EFFECTS_BILLABLE, EFFECTS_NONE, makeTestOperation } from '../../helpers
 export { createProjectAgentChatResponse } from '@/lib/project-agent/runtime'
 export type { ProjectAgentResolvedControl } from '@/lib/project-agent/runtime'
 export { buildEditFirstChoiceResult } from '@/lib/project-agent/edit-first-choice-result'
-export { bindProjectAgentWaitToTasksInTransaction, createProjectAgentWait } from '@/lib/project-agent/waits'
+export { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 export { USER_TURN_CONTROL, buildRequest, buildRun, buildWorkflow, createRegistry, drainCapturedResponseStream, eventState, expectLastPersistedRunStatus, flushAsyncWork, loggerState, makeOperation, persistenceState, phaseState, readLastPersistedAssistantMessage, readLastPersistedRuntimeContext, registryState, runAssistant, runHeartbeatState, runLockState, runState, streamState, workflowRefreshState }
 export type { PersistedAssistantMessage }

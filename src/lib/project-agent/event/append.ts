@@ -149,6 +149,11 @@ export async function appendProjectAgentEventsInTransaction(
         select: { id: true, payload: true },
       })
       if (existing) {
+        if (item.event.kind === 'run.execution_started') {
+          throw new Error(
+            `PROJECT_AGENT_EXECUTION_SEGMENT_ALREADY_STARTED segmentId=${item.event.executionSegmentId} runId=${runId}`,
+          )
+        }
         const payload = existing.payload as Partial<ProjectAgentPersistedEventPayload>
         if (
           payload.expectedRunVersion !== expectedFence.runVersion

@@ -23,6 +23,26 @@ import {
 
 type ProjectAgentProjectionTx = Prisma.TransactionClient
 
+type LockedProjectAgentRunRow = {
+  status: string
+  runVersion: number
+  eventSeq: bigint
+  terminalEventSeq: bigint | null
+}
+
+async function loadProjectAgentRunForUpdate(
+  tx: ProjectAgentProjectionTx,
+  runId: string,
+): Promise<LockedProjectAgentRunRow | null> {
+  const rows = await tx.$queryRaw<LockedProjectAgentRunRow[]>(Prisma.sql`
+    SELECT status, runVersion, eventSeq, terminalEventSeq
+    FROM project_agent_runs
+    WHERE id = ${runId}
+    FOR UPDATE
+  `)
+  return rows[0] ?? null
+}
+
 const OPEN_ACTIVITY_STATUSES: ProjectAgentActivityStatus[] = ['running', 'waiting']
 
 function runStatusForActivityType(type: ProjectAgentActivityType): ProjectAgentRunStatus {
@@ -161,10 +181,7 @@ async function markRunStatus(
     errorMessage?: string | null
   },
 ): Promise<void> {
-  const current = await tx.projectAgentRun.findUnique({
-    where: { id: params.runId },
-    select: { status: true, runVersion: true, eventSeq: true },
-  })
+  const current = await loadProjectAgentRunForUpdate(tx, params.runId)
   if (!current) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
   const currentStatus = normalizeProjectAgentRunStatus(current.status)
   if (
@@ -623,14 +640,7 @@ async function assertProjectAgentRunEventFence(
   tx: ProjectAgentProjectionTx,
   expectedFence: ProjectAgentRunFence,
 ): Promise<void> {
-  const run = await tx.projectAgentRun.findUnique({
-    where: { id: expectedFence.runId },
-    select: {
-      runVersion: true,
-      eventSeq: true,
-      terminalEventSeq: true,
-    },
-  })
+  const run = await loadProjectAgentRunForUpdate(tx, expectedFence.runId)
   if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${expectedFence.runId}`)
   if (run.terminalEventSeq !== null) {
     throw new Error(
@@ -654,10 +664,7 @@ async function finalizeProjectAgentRunEventFence(
     eventId: bigint
   },
 ): Promise<void> {
-  const run = await tx.projectAgentRun.findUnique({
-    where: { id: params.expectedFence.runId },
-    select: { status: true },
-  })
+  const run = await loadProjectAgentRunForUpdate(tx, params.expectedFence.runId)
   if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.expectedFence.runId}`)
   const status = normalizeProjectAgentRunStatus(run.status)
   const updated = await tx.projectAgentRun.updateMany({

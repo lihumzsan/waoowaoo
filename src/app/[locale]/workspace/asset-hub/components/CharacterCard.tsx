@@ -61,6 +61,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
 
     const t = useTranslations('assetHub')
     const tAssets = useTranslations('assets')
+    const tErrors = useTranslations('errors')
     const { count: generationCount, setCount: setGenerationCount } = useImageGenerationCount('character')
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -94,7 +95,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
     const transientSubmitting = generateImage.isPending
     const isAppearanceTaskRunning = serverTaskRunning || transientSubmitting
     const taskErrorDisplay = !isAppearanceTaskRunning && appearance?.lastError
-        ? resolveErrorDisplay(appearance.lastError)
+        ? resolveErrorDisplay(appearance.lastError, (code) => tErrors(code))
         : null
     const displayTaskPresentation = isAppearanceTaskRunning
         ? resolveTaskPresentationState({

@@ -56,10 +56,33 @@ function projectAgentProjectionMutation(node) {
   const method = node.expression.name.text
   if (!['create', 'update', 'updateMany', 'upsert', 'delete', 'deleteMany'].includes(method)) return null
   const delegate = node.expression.expression
-  if (!ts.isPropertyAccessExpression(delegate)) return null
-  const model = delegate.name.text
+  const model = ts.isPropertyAccessExpression(delegate)
+    ? delegate.name.text
+    : ts.isElementAccessExpression(delegate)
+      ? propertyName(delegate.argumentExpression)
+      : null
+  if (!model) return null
   if (!projectionModels.has(model)) return null
   return { method, model }
+}
+
+export function inspectProjectAgentProjectionWrites(filePath, sourceText) {
+  const source = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true)
+  const found = []
+  const visit = (node) => {
+    const mutation = projectAgentProjectionMutation(node)
+    if (mutation) {
+      const position = source.getLineAndCharacterOfPosition(node.getStart(source))
+      found.push(`${filePath}:${position.line + 1} (${mutation.model}.${mutation.method})`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  const tablePattern = 'project_agent_(?:runs|activities|interruptions|waits|continuation_checkpoints)|project_assistant_threads'
+  if (new RegExp(`\\b(?:UPDATE|INSERT\\s+INTO|DELETE\\s+FROM)\\s+[\u0060\"]?(?:${tablePattern})[\u0060\"]?`, 'i').test(sourceText)) {
+    found.push(`${filePath}: raw SQL mutates an Assistant lifecycle projection table`)
+  }
+  return found
 }
 
 function mutationDataKeys(node) {
@@ -86,6 +109,12 @@ function isDeclaredMaintenanceMutation(filePath, node, mutation) {
 const violations = []
 for (const filePath of collectTypeScriptFiles(sourceRoot)) {
   const sourceText = fs.readFileSync(filePath, 'utf8')
+  if (filePath !== reducerPath) {
+    violations.push(...inspectProjectAgentProjectionWrites(
+      path.relative(root, filePath),
+      sourceText,
+    ).filter((violation) => violation.includes('raw SQL mutates')))
+  }
   const source = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true)
   const visit = (node) => {
     const mutation = projectAgentProjectionMutation(node)

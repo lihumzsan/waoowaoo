@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 import { createProjectAgentRun } from '@/lib/project-agent/runs'
-import { createProjectAgentWait } from '@/lib/project-agent/waits'
+import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import { resetSystemState } from '../helpers/db-reset'
 import { prisma } from '../helpers/prisma'
@@ -37,7 +37,7 @@ describe('system - Assistant awaiting-task reload', () => {
         enqueuedAt: new Date(),
       },
     })
-    const waitId = await createProjectAgentWait({
+    const waitId = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
       projectId: seeded.project.id,
       userId: seeded.user.id,
       episodeId: seeded.episode.id,
@@ -46,7 +46,7 @@ describe('system - Assistant awaiting-task reload', () => {
       operationId: 'generate_character_image',
       taskIds: [task.id],
       followUpMode: 'resume_agent',
-    })
+    }))
     expect(waitId).toEqual(expect.any(String))
 
     const firstModule = await import('@/lib/project-agent/session-state')

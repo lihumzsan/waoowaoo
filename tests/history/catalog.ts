@@ -47,6 +47,25 @@ export const HISTORICAL_DEFECT_CATALOG = [
     status: 'protected',
   },
   {
+    id: 'BUG-AR-002',
+    commits: [
+      'fac392c9909e12f1f0026b1a4712c5f485bf9041',
+      'ea17800411cec79b4cff5e0e9f30ce16bbc8d6da',
+    ],
+    symptom: 'Concurrent terminal Tasks in one Assistant batch can both make progress yet leave the Wait and Run permanently awaiting_task.',
+    rootCause: 'The Wait row was locked, but each terminal transaction reinterpreted the whole batch from a REPEATABLE READ Task snapshot instead of merging the current terminal event into the locked Wait aggregate.',
+    severity: 'P1',
+    module: 'assistant-run-lifecycle',
+    invariantIds: ['AR-03C', 'AR-05'],
+    affectedLayers: ['integration-task', 'regression'],
+    escapedLayers: ['unit', 'integration-task'],
+    scenarioIds: [
+      'SCENARIO-ASSISTANT-CONCURRENT-TASK-TERMINAL-WAIT',
+    ],
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
+  },
+  {
     id: 'BUG-CN-001',
     commits: [
       '6ef1a201ee6ff8e47336d3404ed8544ac0cf1bf8',

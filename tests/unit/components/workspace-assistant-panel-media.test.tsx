@@ -8,22 +8,19 @@ import {
 } from './workspace-assistant-panel.fixture'
 
 describe('workspace assistant panel layout', () => {
-  it('shows authoritative failed run details from session-state error fields', () => {
+  it('shows only localized failed run details and never exposes raw server errors', () => {
     expect(resolveWorkspaceAssistantRunFailureDetail({
-      errorMessage: 'This model is not available in your region.',
-      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      localizedError: 'Localized provider error',
       fallback: 'fallback',
-    })).toBe('This model is not available in your region.')
+    })).toBe('Localized provider error')
 
     expect(resolveWorkspaceAssistantRunFailureDetail({
-      errorMessage: ' ',
-      errorCode: 'PROJECT_AGENT_STREAM_FAILED',
+      localizedError: ' ',
       fallback: 'fallback',
-    })).toBe('PROJECT_AGENT_STREAM_FAILED')
+    })).toBe('fallback')
 
     expect(resolveWorkspaceAssistantRunFailureDetail({
-      errorMessage: null,
-      errorCode: null,
+      localizedError: null,
       fallback: 'fallback',
     })).toBe('fallback')
   })

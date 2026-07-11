@@ -3,7 +3,7 @@
     "FORBIDDEN": "Access denied",
     "NOT_FOUND": "Resource not found",
     "INSUFFICIENT_BALANCE": "Insufficient API balance. Please top up and retry",
-    "RATE_LIMIT": "Too many requests. Please retry in {retryAfter} seconds",
+    "RATE_LIMIT": "Too many requests. Please retry later",
     "MODEL_NOT_OPEN": "Model permission is not activated. Go to https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=model and click \"Activate all models\" in the top-right of Model Management",
     "MODEL_NOT_REGISTERED": "Model is not registered. Add an available model in configuration first",
     "MODEL_NOT_CONFIGURED": "No model configured. Please go to Settings and add the required model type before generating.",
@@ -28,5 +28,8 @@
     "EXTERNAL_ERROR": "External service temporarily unavailable. Please retry later",
     "TASK_NOT_READY": "Task is still processing",
     "NO_RESULT": "Task has no result",
-    "CONFLICT": "Resource state conflict"
+    "CONFLICT": "Resource state conflict",
+    "VIDEO_API_FORMAT_UNSUPPORTED": "This video API format is not supported",
+    "WATCHDOG_TIMEOUT": "Task execution timed out and was stopped",
+    "WORKER_EXECUTION_ERROR": "Task execution failed. Please retry later"
 }

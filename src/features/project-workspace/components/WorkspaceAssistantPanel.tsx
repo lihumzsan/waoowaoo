@@ -149,17 +149,13 @@ export function shouldShowWorkspaceAssistantRunFailureNotice(params: {
 }
 
 export function resolveWorkspaceAssistantRunFailureDetail(params: {
-  errorMessage?: string | null
-  errorCode?: string | null
+  localizedError?: string | null
   fallback: string
 }): string {
-  const errorMessage = params.errorMessage?.trim()
-  if (errorMessage) return errorMessage
-  const errorCode = params.errorCode?.trim()
-  if (errorCode) return errorCode
+  const localizedError = params.localizedError?.trim()
+  if (localizedError) return localizedError
   return params.fallback
 }
-
 export function resolveWorkspaceAssistantAwaitingUserInput(params: {
   replyInFlight: boolean
   hasPendingInteraction: boolean
@@ -184,9 +180,10 @@ function WorkspaceAssistantRunFailureNotice({
   run: Pick<NonNullable<ProjectAgentSessionState['currentRun']>, 'errorCode' | 'errorMessage'> | null
 }) {
   const t = useTranslations('assistantAgent')
+  const tErrors = useTranslations('errors')
+  const errorCode = run?.errorCode?.trim() ?? ''
   const detail = resolveWorkspaceAssistantRunFailureDetail({
-    errorMessage: run?.errorMessage ?? null,
-    errorCode: run?.errorCode ?? null,
+    localizedError: errorCode && tErrors.has(errorCode) ? tErrors(errorCode) : null,
     fallback: t('panel.runFailedDetail'),
   })
   return (
@@ -537,6 +534,9 @@ export default function WorkspaceAssistantPanel({
                     </ThreadPrimitive.Messages>
                     {showAssistantReplyLoading ? (
                       <WorkspaceAssistantPendingTurnPlaceholder />
+                    ) : null}
+                    {assistantRuntime.sessionStateError ? (
+                      <div role="alert" className="rounded-md border border-[var(--glass-tone-warn-fg)]/25 bg-[var(--glass-tone-warn-bg)]/70 px-3 py-2 text-[11px] leading-4 text-[var(--glass-tone-warn-fg)]">{t('panel.sessionStateError')}</div>
                     ) : null}
                     {showRunFailureNotice ? (
                       <WorkspaceAssistantRunFailureNotice run={assistantRuntime.sessionState?.currentRun ?? null} />

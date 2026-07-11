@@ -132,6 +132,8 @@ vi.mock('@/lib/ai-prompts', () => aiPromptMock)
 import { handleReferenceToCharacterTask } from '@/lib/workers/handlers/reference-to-character'
 
 function buildJob(payload: Record<string, unknown>, type: TaskType): Job<TaskJobData> {
+  const extraction = type === TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
+    || type === TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
   return {
     data: {
       taskId: 'task-1',
@@ -140,7 +142,10 @@ function buildJob(payload: Record<string, unknown>, type: TaskType): Job<TaskJob
       projectId: 'project-1',
       targetType: 'GlobalCharacter',
       targetId: 'target-1',
-      payload,
+      payload: {
+        ...payload,
+        ...(extraction ? { analysisModel: 'analysis-model-1' } : { imageModel: 'character-model-1' }),
+      },
       userId: 'user-1',
     },
   } as unknown as Job<TaskJobData>
@@ -164,17 +169,38 @@ describe('worker reference-to-character', () => {
     vi.clearAllMocks()
   })
 
-  it('fails fast when reference images are missing', async () => {
+  it('fails fast when reference images are missing or the Task type is unsupported', async () => {
     const job = buildJob({}, TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER)
     await expect(handleReferenceToCharacterTask(job)).rejects.toThrow('Missing referenceImageUrl or referenceImageUrls')
-  })
-
-  it('fails fast on unsupported task type', async () => {
-    const job = buildJob(
+    const unsupportedJob = buildJob(
       { referenceImageUrl: 'https://example.com/ref.png' },
       'unsupported-task' as TaskType,
     )
-    await expect(handleReferenceToCharacterTask(job)).rejects.toThrow('Unsupported task type')
+    await expect(handleReferenceToCharacterTask(unsupportedJob)).rejects.toThrow('Unsupported task type')
+  })
+
+  it('runs description extraction only for the dedicated text Task type', async () => {
+    const job = buildJob({
+      referenceImageUrls: ['https://example.com/ref.png'],
+      extractOnly: true,
+    }, TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT)
+
+    const result = await handleReferenceToCharacterTask(job)
+
+    expect(result).toEqual({ success: true, description: 'AI_EXTRACTED_DESCRIPTION' })
+    expect(generatorApiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+    expect(generatorApiMock.generateImage).not.toHaveBeenCalled()
+  })
+
+  it('rejects payload flags that contradict the registered Task semantics', async () => {
+    const job = buildJob({
+      referenceImageUrls: ['https://example.com/ref.png'],
+      extractOnly: true,
+    }, TASK_TYPE.REFERENCE_TO_CHARACTER)
+
+    await expect(handleReferenceToCharacterTask(job)).rejects.toThrow(
+      'REFERENCE_TO_CHARACTER_TASK_SEMANTICS_MISMATCH',
+    )
   })
 
   it('uses suffix prompt and disables reference-image injection when customDescription is provided', async () => {

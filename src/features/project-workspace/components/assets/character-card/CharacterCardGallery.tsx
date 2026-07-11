@@ -40,6 +40,7 @@ type CharacterCardGalleryProps =
 
 export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
   const t = useTranslations('assets')
+  const tErrors = useTranslations('errors')
 
   if (props.mode === 'selection') {
     return (
@@ -112,7 +113,7 @@ export default function CharacterCardGallery(props: CharacterCardGalleryProps) {
   const appearanceErrorDisplay = resolveErrorDisplay({
     code: props.appearanceErrorMessage || null,
     message: props.appearanceErrorMessage || null,
-  })
+  }, (code) => tErrors(code))
 
   return (
     <div className={`relative overflow-hidden rounded-lg border-2 border-[var(--glass-stroke-base)] ${props.aspectClassName}`}>

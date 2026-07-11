@@ -15,6 +15,7 @@
 - **TG-05 — 必跑测试零跳过。** required-suite verifier 必须比较发现文件与 Vitest JSON 实际结果，并拒绝缺失文件、重复文件、跨 suite 文件及 skipped/todo case。
 - **TG-06 — 测试能力可反证。** P0/P1 历史缺陷必须有错误实现失败、修复实现通过的证据；关键纯逻辑使用增量 mutation testing 检查测试是否能识别小错误。
 - **TG-07 — 测试代码保持单一职责。** 新测试文件不得超过仓库约定的职责和规模边界；删除旧测试必须先提供替代 scenario id 与 CI 收集证据。
+- **TG-08 — Guard 必须可反证。** 架构 guard 的关键 inspector 必须可由测试直接调用，并用会绕过旧实现的最小恶意 fixture 证明失败；仅在当前仓库输出 OK、仅检查固定文件或精确字符串不构成 guard 自身测试。
 
 ## 权威入口
 
@@ -40,10 +41,13 @@
 - `tests/unit/test-verification/verify-vitest-report.test.ts` 验证未收集与 skipped case 原地失败。
 - `tests/unit/guards/verify-push-fail-closed.test.ts` 验证测试服务不可用不会跳过高价值 suite。
 - `tests/unit/guards/changed-file-test-impact-guard.test.ts` 验证 CI base/head range 与测试影响规则。
+- `tests/unit/guards/assistant-architecture-guards.test.ts` 反证历史消息推断、可绕过旧精确字符串的 Choice 私有 stage map/别名 type switch、computed Prisma delegate 与 raw SQL 生命周期写入；`no-plan-run-runtime.test.ts` 反证 runtime marker 与 Prisma model 恢复。
 - `tests/contracts/tasktype-scenario-conformance.test.ts` 逐项执行生产队列归属与任务意图入口，并核对场景执行账本。
 - `tests/integration/api/contract/route-scenario-conformance.test.ts` 动态调用每个 Route 的真实导出方法，并拒绝未执行、重复执行和 5xx。
 - `tests/regression/historical-defect-scenarios.test.ts` 对全部 P0/P1 历史场景先验证语义故障会被业务断言击中，再验证当前生产入口通过。
 - `scripts/guards/test-size-guard.mjs` 穷尽扫描全仓测试，任何超过 350 行或 10 个 case 的测试文件都会失败；历史超限豁免已删除。
+
+仍以生产源码字符串为断言对象的组件测试只能算结构 guard，不能作为渲染、交互或跨进程恢复的行为证明；高风险 Assistant UI 生命周期必须由 render/interaction、integration 或 system 测试另行覆盖。现有 `workspace-assistant-{approval-dismissal,panel-approval,panel-style-runtime,renderers}` 源码断言是明确的 P3 测试治理债务，不得据此宣称对应用户路径已被完整验证。
 
 ## 历史回归
 

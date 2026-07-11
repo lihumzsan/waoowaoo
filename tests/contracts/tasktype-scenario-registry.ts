@@ -36,12 +36,14 @@ const TASK_TYPE_CONTRACTS = {
   [TASK_TYPE.AI_CREATE_CHARACTER]: { queue: 'text', intent: 'generate' },
   [TASK_TYPE.AI_CREATE_LOCATION]: { queue: 'text', intent: 'generate' },
   [TASK_TYPE.REFERENCE_TO_CHARACTER]: { queue: 'text', intent: 'process' },
+  [TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT]: { queue: 'text', intent: 'process' },
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER]: { queue: 'text', intent: 'generate' },
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: { queue: 'text', intent: 'generate' },
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: { queue: 'text', intent: 'modify' },
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: { queue: 'text', intent: 'modify' },
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: { queue: 'text', intent: 'modify' },
   [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: { queue: 'text', intent: 'process' },
+  [TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT]: { queue: 'text', intent: 'process' },
 } as const satisfies Record<TaskType, TaskTypeContract>
 
 function assertTaskContract(taskType: TaskType, expected: TaskTypeContract): void {

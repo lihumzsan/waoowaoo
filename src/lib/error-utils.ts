@@ -1,6 +1,6 @@
 import { logInfo as _ulogInfo } from '@/lib/logging/core'
 import type { UnifiedErrorCode } from '@/lib/errors/codes'
-import { getUserMessageByCode } from '@/lib/errors/user-messages'
+import { getUserMessageByCode, type UserErrorTranslator } from '@/lib/errors/user-messages'
 import { normalizeAnyError } from '@/lib/errors/normalize'
 
 /**
@@ -39,7 +39,11 @@ export function isAbortError(error: unknown): boolean {
     return false
 }
 
-export function resolveClientError(error: unknown, fallbackCode: UnifiedErrorCode = 'INTERNAL_ERROR'): {
+export function resolveClientError(
+    error: unknown,
+    translate: UserErrorTranslator,
+    fallbackCode: UnifiedErrorCode = 'INTERNAL_ERROR',
+): {
     code: UnifiedErrorCode
     message: string
     rawMessage: string
@@ -51,7 +55,7 @@ export function resolveClientError(error: unknown, fallbackCode: UnifiedErrorCod
 
     return {
         code: normalized.code,
-        message: getUserMessageByCode(normalized.code),
+        message: getUserMessageByCode(normalized.code, translate),
         rawMessage: normalized.message,
     }
 }
@@ -64,12 +68,6 @@ export function safeAlert(message: string, error?: unknown): void {
     // 如果是页面刷新导致的错误，静默处理
     if (error && isAbortError(error)) {
         _ulogInfo('[Info] 请求被中止（可能是页面刷新）:', message)
-        return
-    }
-
-    if (error) {
-        const resolved = resolveClientError(error)
-        alert(message || resolved.message)
         return
     }
 

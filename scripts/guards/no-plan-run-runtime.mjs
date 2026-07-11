@@ -3,9 +3,9 @@
 import fs from 'fs'
 import path from 'path'
 import process from 'process'
+import { pathToFileURL } from 'url'
 
 const root = process.cwd()
-const SOURCE_ROOT = path.join(root, 'src')
 const FORBIDDEN_PATHS = [
   'src/lib/plan-run-runtime',
   'src/app/api/plan-runs',
@@ -24,6 +24,14 @@ const FORBIDDEN_MARKERS = [
   'activePlanRunCount',
 ]
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
+const FORBIDDEN_SCHEMA_MARKERS = [
+  'model PlanRun',
+  'model PlanStepRun',
+  'model PlanRunEvent',
+  'model PlanArtifact',
+  'PlanRun[]',
+  'PlanRunEvent[]',
+]
 
 function walk(dir, out = []) {
   if (!fs.existsSync(dir)) return out
@@ -39,28 +47,48 @@ function walk(dir, out = []) {
   return out
 }
 
-const violations = []
-for (const relativePath of FORBIDDEN_PATHS) {
-  const absolutePath = path.join(root, relativePath)
-  if (
-    fs.existsSync(absolutePath)
-    && (fs.statSync(absolutePath).isFile() || walk(absolutePath).length > 0)
-  ) {
-    violations.push(`${relativePath} restores the retired PlanRun execution surface`)
-  }
+export function inspectRetiredPlanRunContent(relativePath, content) {
+  const markers = relativePath === 'prisma/schema.prisma'
+    ? FORBIDDEN_SCHEMA_MARKERS
+    : FORBIDDEN_MARKERS
+  return markers
+    .filter((marker) => content.includes(marker))
+    .map((marker) => `${relativePath} contains retired PlanRun marker ${JSON.stringify(marker)}`)
 }
 
-for (const fullPath of walk(SOURCE_ROOT)) {
-  const content = fs.readFileSync(fullPath, 'utf8')
-  const relativePath = path.relative(root, fullPath).split(path.sep).join('/')
-  for (const marker of FORBIDDEN_MARKERS) {
-    if (content.includes(marker)) {
-      violations.push(`${relativePath} contains retired PlanRun marker ${JSON.stringify(marker)}`)
+export function findNoPlanRunRuntimeViolations(scanRoot = root) {
+  const violations = []
+  for (const relativePath of FORBIDDEN_PATHS) {
+    const absolutePath = path.join(scanRoot, relativePath)
+    if (
+      fs.existsSync(absolutePath)
+      && (fs.statSync(absolutePath).isFile() || walk(absolutePath).length > 0)
+    ) {
+      violations.push(`${relativePath} restores the retired PlanRun execution surface`)
     }
   }
+
+  for (const fullPath of walk(path.join(scanRoot, 'src'))) {
+    const content = fs.readFileSync(fullPath, 'utf8')
+    const relativePath = path.relative(scanRoot, fullPath).split(path.sep).join('/')
+    violations.push(...inspectRetiredPlanRunContent(relativePath, content))
+  }
+  const schemaPath = path.join(scanRoot, 'prisma/schema.prisma')
+  if (fs.existsSync(schemaPath)) {
+    violations.push(...inspectRetiredPlanRunContent(
+      'prisma/schema.prisma',
+      fs.readFileSync(schemaPath, 'utf8'),
+    ))
+  }
+  return violations
 }
 
-if (violations.length > 0) {
+export function main() {
+  const violations = findNoPlanRunRuntimeViolations(root)
+  if (violations.length === 0) {
+    process.stdout.write('[no-plan-run-runtime] OK\n')
+    return
+  }
   process.stderr.write([
     '[no-plan-run-runtime] Retired PlanRun execution surface detected.',
     'AR-01/AR-04: Assistant execution must use the project-agent runtime and unified Operation/Task/Wait lifecycle.',
@@ -71,4 +99,4 @@ if (violations.length > 0) {
   process.exit(1)
 }
 
-process.stdout.write('[no-plan-run-runtime] OK\n')
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

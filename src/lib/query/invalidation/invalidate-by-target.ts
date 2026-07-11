@@ -14,7 +14,15 @@ function invalidateEpisodeScoped(params: {
   projectId: string
   episodeId: string | null
 }) {
-  if (!params.episodeId) return
+  if (!params.episodeId) {
+    params.queryClient.invalidateQueries({ queryKey: ['episode-data', params.projectId] })
+    params.queryClient.invalidateQueries({ queryKey: ['storyboards'] })
+    params.queryClient.invalidateQueries({ queryKey: ['project', params.projectId, 'edit-bible'] })
+    params.queryClient.invalidateQueries({ queryKey: ['project', params.projectId, 'edit-script'] })
+    params.queryClient.invalidateQueries({ queryKey: ['project', params.projectId, 'edit-shot-execution-plan'] })
+    params.queryClient.invalidateQueries({ queryKey: ['project', params.projectId, 'context'] })
+    return
+  }
   params.queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(params.projectId, params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(params.episodeId) })
   params.queryClient.invalidateQueries({ queryKey: queryKeys.project.editBible(params.projectId, params.episodeId) })

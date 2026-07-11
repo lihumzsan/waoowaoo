@@ -19,6 +19,7 @@ function expectBillableInfo(info: TaskBillingInfo | null): Extract<TaskBillingIn
 
 export { describe, expect, it } from 'vitest'
 export { TASK_TYPE } from '@/lib/task/types'
+export { getTaskDefinition } from '@/lib/task/definition'
 export { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing/task-policy'
 export type { TaskBillingInfo, TaskType } from '@/lib/task/types'
 export { expectBillableInfo }

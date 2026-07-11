@@ -27,9 +27,8 @@ import {
 } from '@/lib/project-agent/text-attachments'
 import type { WorkspaceAssistantActiveFocusRequest } from '../../workspace-assistant-focus'
 import {
-  areWorkspaceAssistantMessagesEqual,
-  resolveWorkspaceAssistantThreadSnapshotMessages,
-} from './thread-sync'
+  useWorkspaceAssistantThreadSnapshotSync,
+} from './useWorkspaceAssistantThreadSnapshotSync'
 import { useWorkspaceAssistantSessionSync } from './useWorkspaceAssistantSessionSync'
 import {
   buildWorkspaceAssistantChatId,
@@ -44,7 +43,6 @@ import {
   resolveWorkspaceAssistantPendingOperationId,
   resolveWorkspaceAssistantReplyInFlight,
   resolveOperationIdFromActivity,
-  shouldClearWorkspaceAssistantControlPending,
   shouldSendWorkspaceAssistantAutomatically,
   type WorkspaceAssistantControlEndpoint,
   type WorkspaceAssistantControlIntent,
@@ -262,14 +260,11 @@ export function useWorkspaceAssistantRuntime({
     chat.setMessages(nextMessages)
   }, [chat])
 
-  const syncPersistedThreadMessages = useCallback((persistedThread: {
-    readonly messages: readonly UIMessage[]
-  } | null) => {
-    const nextMessages = resolveWorkspaceAssistantThreadSnapshotMessages(latestMessagesRef.current, persistedThread)
-    if (areWorkspaceAssistantMessagesEqual(latestMessagesRef.current, nextMessages)) return
-    latestMessagesRef.current = nextMessages
-    chat.setMessages(nextMessages)
-  }, [chat])
+  const syncPersistedThreadMessages = useWorkspaceAssistantThreadSnapshotSync({
+    chatId,
+    latestMessagesRef,
+    setMessages: chat.setMessages,
+  })
 
   // The user's new message supersedes any pending approval server-side; the
   // stream answers with an interruption-resolved part so the card closes.

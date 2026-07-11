@@ -174,4 +174,27 @@ describe('workspace assistant runtime chat id', () => {
     expect(resolved).toEqual([])
   })
 
+  it('replaces messages when clear and recreate produces a new persistent Thread identity', () => {
+    const resolved = resolveWorkspaceAssistantThreadSnapshotMessages([
+      {
+        id: 'old-user',
+        role: 'user',
+        parts: [{ type: 'text', text: 'deleted in another tab' }],
+      },
+    ], {
+      id: 'thread-after-clear',
+      messages: [{
+        id: 'new-user',
+        role: 'user',
+        parts: [{ type: 'text', text: 'new generation' }],
+      }],
+    }, 'thread-before-clear')
+
+    expect(resolved).toEqual([{
+      id: 'new-user',
+      role: 'user',
+      parts: [{ type: 'text', text: 'new generation' }],
+    }])
+  })
+
 })

@@ -19,8 +19,12 @@ import type {
   ProjectAgentOperationRegistry,
 } from './types'
 import { assertAssistantToolWriteAuthority } from './write-authority'
+import {
+  assertOperationChannelAllowed,
+  type OperationInvocationChannel,
+} from './channel-policy'
 
-export type OperationInvocationChannel = 'api' | 'tool'
+export type { OperationInvocationChannel } from './channel-policy'
 
 export type ProjectAgentOperationInvocationResult =
   | {
@@ -46,19 +50,6 @@ function requireOperation(
     })
   }
   return operation
-}
-
-function assertChannelAllowed(
-  operation: ProjectAgentOperationDefinition,
-  channel: OperationInvocationChannel,
-): void {
-  if (operation.channels[channel]) return
-  throw new ApiError('FORBIDDEN', {
-    code: 'OPERATION_NOT_ALLOWED',
-    operationId: operation.id,
-    channel,
-    message: `operation ${operation.id} is not available through the ${channel} channel`,
-  })
 }
 
 function normalizeInvocationInput(params: {
@@ -151,7 +142,7 @@ export async function invokeProjectAgentOperation(params: {
   }
 
   const invoke = async (): Promise<ProjectAgentOperationInvocationResult> => {
-  assertChannelAllowed(operation, params.channel)
+  assertOperationChannelAllowed(operation, params.channel)
   if (params.channel === 'tool') {
     assertAssistantToolWriteAuthority(
       operation.id,

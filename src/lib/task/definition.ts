@@ -107,13 +107,15 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.AI_MODIFY_PROP]: definition('text', 'shot_ai', 'text', 3, 'none', 'none'),
   [TASK_TYPE.AI_CREATE_CHARACTER]: definition('text', 'asset_hub_ai_design', 'text', 3, 'none', 'none'),
   [TASK_TYPE.AI_CREATE_LOCATION]: definition('text', 'asset_hub_ai_design', 'text', 3, 'none', 'none'),
-  [TASK_TYPE.REFERENCE_TO_CHARACTER]: definition('text', 'reference_to_character', 'text', 3, 'none', 'none'),
+  [TASK_TYPE.REFERENCE_TO_CHARACTER]: definition('text', 'reference_to_character', 'image', 3, 'none', 'none'),
+  [TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT]: definition('text', 'reference_to_character', 'text', 3, 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER]: definition('text', 'asset_hub_ai_design', 'text', 3, 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION]: definition('text', 'asset_hub_ai_design', 'text', 3, 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER]: definition('text', 'asset_hub_ai_modify', 'text', 3, 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: definition('text', 'asset_hub_ai_modify', 'text', 3, 'none', 'none'),
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: definition('text', 'asset_hub_ai_modify', 'text', 3, 'none', 'none'),
-  [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: definition('text', 'reference_to_character', 'text', 3, 'none', 'none'),
+  [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: definition('text', 'reference_to_character', 'image', 3, 'none', 'none'),
+  [TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT]: definition('text', 'reference_to_character', 'text', 3, 'none', 'none'),
 } satisfies Record<TaskType, TaskDefinition>
 
 export function getTaskDefinition(type: TaskType): TaskDefinition {

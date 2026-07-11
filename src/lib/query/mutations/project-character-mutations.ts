@@ -6,6 +6,7 @@ import {
   requestJsonWithError,
   requestTaskResponseWithError,
 } from './mutation-shared'
+import { fetchOperationPlanView, issueOperationApprovalGrant } from '@/lib/query/operation-plan-client'
 
 export function useUpdateProjectCharacterIntroduction(projectId: string) {
     const queryClient = useQueryClient()
@@ -115,14 +116,11 @@ export function useExtractProjectReferenceCharacterDescription(projectId: string
     return useMutation({
         mutationFn: async (referenceImageUrls: string[]) => {
             const response = await requestTaskResponseWithError(
-                `/api/projects/${projectId}/reference-to-character`,
+                `/api/projects/${projectId}/reference-to-character/extract`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        referenceImageUrls,
-                        extractOnly: true,
-                    }),
+                    body: JSON.stringify({ referenceImageUrls }),
                 },
                 'Failed to extract character description',
             )
@@ -178,19 +176,27 @@ export function useGenerateProjectCharacterFromReference(projectId: string) {
             appearanceId: string
             count: number
             customDescription?: string
-        }) =>
-            await requestJsonWithError<{ async: true; taskId: string }>(
+        }) => {
+            const input = { ...payload, isBackgroundJob: true }
+            const plan = await fetchOperationPlanView({
+                projectId,
+                operationId: 'reference_to_character',
+                input,
+            })
+            const authorization = await issueOperationApprovalGrant(plan)
+            return await requestJsonWithError<{ async: true; taskId: string }>(
                 `/api/projects/${projectId}/reference-to-character`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        ...payload,
-                        isBackgroundJob: true,
+                        ...input,
+                        ...authorization,
                     }),
                 },
                 'Failed to submit reference character generation',
-            ),
+            )
+        },
     })
 }
 

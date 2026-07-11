@@ -10,6 +10,8 @@ import {
 } from '../../harness/historical-regression'
 import { runLifecycleSequence } from '../../harness/lifecycle-sequence'
 import { assertAssistantToolWriteAuthority } from '@/lib/operations/write-authority'
+import { applyProjectAgentWaitTerminalEvent } from '@/lib/project-agent/waits'
+import { TASK_EVENT_TYPE } from '@/lib/task/types'
 
 type TransitionFacts = {
   readonly from: ProjectAgentRunStatus
@@ -138,9 +140,58 @@ const operationWriteAfterLockLoss: HistoricalRegressionScenario = {
   },
 }
 
+function resolveConcurrentTaskTerminalWait(
+  merge: typeof applyProjectAgentWaitTerminalEvent,
+  recordExecution: (id: string) => void,
+): void {
+  const first = merge({
+    taskId: 'task-a',
+    lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+    taskIds: ['task-a', 'task-b'],
+    terminalTaskIds: [],
+    failedTaskIds: [],
+    canceledTaskIds: [],
+  })
+  const second = merge({
+    taskId: 'task-b',
+    lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+    taskIds: ['task-a', 'task-b'],
+    terminalTaskIds: first.terminalTaskIds,
+    failedTaskIds: first.failedTaskIds,
+    canceledTaskIds: first.canceledTaskIds,
+  })
+  assertHistoricalValue(second.terminalStatus, 'completed', 'locked Wait accumulates both concurrent terminal facts')
+  assertHistoricalValue(second.terminalTaskIds, ['task-a', 'task-b'], 'locked Wait retains the first terminal fact')
+  recordExecution('SCENARIO-ASSISTANT-CONCURRENT-TASK-TERMINAL-WAIT')
+}
+
+const concurrentTaskTerminalWait: HistoricalRegressionScenario = {
+  id: 'SCENARIO-ASSISTANT-CONCURRENT-TASK-TERMINAL-WAIT',
+  identity: 'SCENARIO-ASSISTANT-CONCURRENT-TASK-TERMINAL-WAIT',
+  defectId: 'BUG-AR-002',
+  severity: 'P1',
+  invariantIds: ['AR-03C', 'AR-05'],
+  historicalDefectIds: ['BUG-AR-002'],
+  layers: ['regression'],
+  async execute(context) {
+    resolveConcurrentTaskTerminalWait(applyProjectAgentWaitTerminalEvent, context.recordExecution)
+  },
+  async verifyFailBefore() {
+    await proveSemanticFaultRejected(() => {
+      resolveConcurrentTaskTerminalWait((input) => applyProjectAgentWaitTerminalEvent({
+        ...input,
+        terminalTaskIds: [],
+        failedTaskIds: [],
+        canceledTaskIds: [],
+      }), () => undefined)
+    })
+  },
+}
+
 export const ASSISTANT_RUN_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   settlementDisconnect,
   staleHeartbeatWriter,
   awaitingTaskReload,
   operationWriteAfterLockLoss,
+  concurrentTaskTerminalWait,
 ]

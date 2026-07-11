@@ -16,7 +16,7 @@ import {
 import { getProjectAgentSessionState } from '@/lib/project-agent/session-state'
 import {
   claimProjectAgentWaitContinuation,
-  createProjectAgentWait,
+  bindProjectAgentWaitToTasksInTransaction,
   startProjectAgentWaitFollowUp,
 } from '@/lib/project-agent/waits'
 import { getCurrentProjectAgentActivity } from '@/lib/project-agent/event'
@@ -154,7 +154,7 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
   const taskId = (output.data as Record<string, unknown>).taskId
   if (typeof taskId !== 'string' || !taskId) throw new Error('SYSTEM_ASSISTANT_TASK_ID_MISSING')
   await enqueueApprovedSystemTask(taskId)
-  const waitId = await createProjectAgentWait({
+  const waitId = await prisma.$transaction(async (tx) => bindProjectAgentWaitToTasksInTransaction(tx, {
     projectId: scope.projectId,
     userId: scope.userId,
     episodeId: scope.episodeId,
@@ -167,7 +167,7 @@ export async function submitApprovedAssistantImageTask(scope: ApprovedTaskScope)
     operationId: 'generate_character_image',
     taskIds: [taskId],
     followUpMode: 'resume_agent',
-  })
+  }))
   if (!waitId) throw new Error('SYSTEM_ASSISTANT_WAIT_MISSING')
   expect((await getProjectAgentRun({ ...scope, runId: run.id }))?.status).toBe('awaiting_task')
   return { runId: run.id, waitId, taskId }

@@ -229,10 +229,10 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'global-asset-hub',
   },
   {
-    routeFile: 'src/app/api/asset-hub/reference-to-character/route.ts',
-    body: { referenceImageUrl: 'https://example.com/ref.png' },
-    expectedTaskType: TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER,
-    expectedTargetType: 'GlobalCharacter',
+    routeFile: 'src/app/api/asset-hub/reference-to-character/extract/route.ts',
+    body: { referenceImageUrls: ['https://example.com/ref.png'] },
+    expectedTaskType: TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT,
+    expectedTargetType: 'GlobalAssetHub',
     expectedProjectId: 'global-asset-hub',
   },
   {
@@ -290,10 +290,10 @@ const ROUTE_CASES: ReadonlyArray<LLMRouteCase> = [
     expectedProjectId: 'project-1',
   },
   {
-    routeFile: 'src/app/api/projects/[projectId]/reference-to-character/route.ts',
-    body: { referenceImageUrl: 'https://example.com/ref.png' },
+    routeFile: 'src/app/api/projects/[projectId]/reference-to-character/extract/route.ts',
+    body: { referenceImageUrls: ['https://example.com/ref.png'] },
     params: { projectId: 'project-1' },
-    expectedTaskType: TASK_TYPE.REFERENCE_TO_CHARACTER,
+    expectedTaskType: TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT,
     expectedTargetType: 'Project',
     expectedProjectId: 'project-1',
   },

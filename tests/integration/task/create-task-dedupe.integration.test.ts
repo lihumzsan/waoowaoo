@@ -125,6 +125,27 @@ describe('transactional Task batch dedupe', () => {
     await expect(prisma.task.count()).resolves.toBe(1)
   })
 
+  it('rechecks a deduped Task under row lock before binding it to new transactional work', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const input = buildInput({ userId: user.id, projectId: project.id, suffix: 'terminal-race' })
+    const [created] = await persistBatch([input])
+    if (!created) throw new Error('EXPECTED_TASK')
+
+    await expect(prisma.$transaction(async (tx) => {
+      await tx.task.findUniqueOrThrow({ where: { id: created.task.id } })
+      await prisma.task.update({
+        where: { id: created.task.id },
+        data: { status: TASK_STATUS.COMPLETED, finishedAt: new Date() },
+      })
+      return await persistSubmittedTaskBatchInTransaction({
+        tx,
+        inputs: [{ ...input, id: created.task.id }],
+        billingMode: 'OFF',
+      })
+    })).rejects.toThrow('TASK_BATCH_TERMINAL_DEDUPE_COLLISION')
+  })
+
   it('fails closed when the same dedupe identity carries a different execution fingerprint', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)

@@ -824,7 +824,6 @@ model Project {
   editScripts        ProjectEditScript[]
   editShotExecutionPlans ProjectEditShotExecutionPlan[]
   editAssetRequirements ProjectEditAssetRequirement[]
-  planRuns           PlanRun[]
   characters         ProjectCharacter[]
   locations          ProjectLocation[]
   canvasLayouts      ProjectCanvasLayout[]
@@ -932,8 +931,6 @@ model User {
   globalLocations         GlobalLocation[]
   tasks                   Task[]
   taskEvents              TaskEvent[]
-  planRuns                PlanRun[]
-  planRunEvents           PlanRunEvent[]
   projectAssistantThreads ProjectAssistantThread[]
   projectAgentRuns        ProjectAgentRun[]
   projectAgentActivities  ProjectAgentActivity[]
@@ -1300,102 +1297,6 @@ model OutboxCommand {
   @@index([leaseExpiresAt])
   @@index([aggregateType, aggregateId])
   @@map("outbox_commands")
-}
-
-model PlanRun {
-  id                String          @id @default(uuid())
-  userId            String
-  projectId         String
-  episodeId         String?
-  goal              String?         @db.Text
-  status            String          @default("queued")
-  currentStepKey    String?
-  errorCode         String?
-  errorMessage      String?         @db.Text
-  cancelRequestedAt DateTime?
-  queuedAt          DateTime        @default(now())
-  startedAt         DateTime?
-  finishedAt        DateTime?
-  lastSeq           Int             @default(0)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  steps             PlanStepRun[]
-  events            PlanRunEvent[]
-  artifacts         PlanArtifact[]
-
-  @@index([projectId, status, updatedAt])
-  @@index([userId, createdAt])
-  @@index([episodeId, status, updatedAt])
-  @@map("plan_runs")
-}
-
-model PlanStepRun {
-  id                  String    @id @default(uuid())
-  planRunId           String
-  stepKey             String
-  operationId         String
-  taskId              String?
-  status              String    @default("pending")
-  stepIndex           Int
-  stepTotal           Int
-  dependsOnJson       Json?
-  inputArtifactsJson  Json?
-  outputArtifactsJson Json?
-  inputJson           Json?
-  outputJson          Json?
-  errorCode           String?
-  errorMessage        String?   @db.Text
-  startedAt           DateTime?
-  finishedAt          DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  planRun             PlanRun   @relation(fields: [planRunId], references: [id], onDelete: Cascade)
-
-  @@unique([planRunId, stepKey])
-  @@index([planRunId, status])
-  @@index([planRunId, stepIndex])
-  @@index([taskId])
-  @@index([operationId, status])
-  @@map("plan_step_runs")
-}
-
-model PlanRunEvent {
-  id        BigInt   @id @default(autoincrement())
-  planRunId String
-  projectId String
-  userId    String
-  seq       Int
-  eventType String
-  stepKey   String?
-  payload   Json?
-  createdAt DateTime @default(now())
-  planRun   PlanRun  @relation(fields: [planRunId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([planRunId, seq])
-  @@index([projectId, id])
-  @@index([planRunId, id])
-  @@index([userId, id])
-  @@map("plan_run_events")
-}
-
-model PlanArtifact {
-  id           String   @id @default(uuid())
-  planRunId    String
-  stepKey      String   @default("")
-  artifactType String
-  refId        String
-  payload      Json?
-  createdAt    DateTime @default(now())
-  planRun      PlanRun  @relation(fields: [planRunId], references: [id], onDelete: Cascade)
-
-  @@unique([planRunId, stepKey, artifactType, refId])
-  @@index([planRunId])
-  @@index([planRunId, stepKey])
-  @@index([artifactType, refId])
-  @@map("plan_artifacts")
 }
 
 // ==================== 资产中心 ====================

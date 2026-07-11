@@ -81,7 +81,7 @@ describe('api specific - asset hub character reference forwarding', () => {
     prismaMock.globalAssetFolder.findUnique.mockResolvedValue(null)
   })
 
-  it('submits reference-to-character task with locale and reference fields', async () => {
+  it('rejects the retired create-and-submit payload before creating asset records', async () => {
     const mod = await import('@/app/api/asset-hub/characters/route')
     const req = buildMockRequest({
       path: '/api/asset-hub/characters',
@@ -99,6 +99,30 @@ describe('api specific - asset hub character reference forwarding', () => {
     })
 
     const res = await mod.POST(req, { params: Promise.resolve({}) })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error.details).toMatchObject({
+      code: 'ASSET_HUB_CHARACTER_REFERENCE_GENERATION_SEPARATE_OPERATION_REQUIRED',
+      field: 'referenceImageUrl',
+    })
+    expect(prismaMock.globalCharacter.create).not.toHaveBeenCalled()
+    expect(submitterMock.prepareTaskSubmissionInput).not.toHaveBeenCalled()
+  })
+
+  it('submits description extraction through its distinct text Operation', async () => {
+    const mod = await import('@/app/api/asset-hub/reference-to-character/extract/route')
+    const req = buildMockRequest({
+      path: '/api/asset-hub/reference-to-character',
+      method: 'POST',
+      headers: {
+        'accept-language': 'zh-CN,zh;q=0.9',
+      },
+      body: {
+        referenceImageUrls: ['https://example.com/ref.png'],
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({}) })
     expect(res.status).toBe(200)
 
     expect(submitterMock.prepareTaskSubmissionInput).toHaveBeenCalledTimes(1)
@@ -112,31 +136,46 @@ describe('api specific - asset hub character reference forwarding', () => {
     } | undefined
 
     expect(submitted?.projectId).toBe('global-asset-hub')
-    expect(submitted?.type).toBe(TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER)
-    expect(submitted?.targetType).toBe('GlobalCharacterAppearance')
-    expect(submitted?.targetId).toBe('appearance-1')
-    expect(submitted?.dedupeKey).toBe('asset_hub_reference_to_character:appearance-1:5')
+    expect(submitted?.type).toBe(TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT)
+    expect(submitted?.targetType).toBe('GlobalAssetHub')
+    expect(submitted?.targetId).toBe('global-asset-hub')
+    expect(submitted?.dedupeKey).toMatch(/^asset_hub_extract_reference_character_description:/)
 
     const forwarded = (submitted?.payload || {}) as {
       locale?: string
       meta?: { locale?: string }
-      customDescription?: string
       referenceImageUrls?: string[]
       analysisModel?: string
-      appearanceId?: string
-      characterId?: string
-      count?: number
+      extractOnly?: boolean
     }
 
-    expect(forwarded.locale).toBe('zh')
     expect(forwarded.meta?.locale).toBe('zh')
-    expect(forwarded.customDescription).toBe('冷静，黑发')
-    expect(forwarded).not.toHaveProperty('artStyle')
     expect(forwarded.referenceImageUrls).toEqual(['https://example.com/ref.png'])
-    expect(forwarded.analysisModel).toBeUndefined()
-    expect(forwarded.characterId).toBe('character-1')
-    expect(forwarded.appearanceId).toBe('appearance-1')
-    expect(forwarded.count).toBe(5)
+    expect(forwarded.analysisModel).toBe('analysis-model')
+    expect(forwarded.extractOnly).toBe(true)
+  })
+
+  it('rejects image generation until an immutable plan grant is supplied', async () => {
+    const mod = await import('@/app/api/asset-hub/reference-to-character/route')
+    const req = buildMockRequest({
+      path: '/api/asset-hub/reference-to-character',
+      method: 'POST',
+      headers: { 'accept-language': 'en' },
+      body: {
+        referenceImageUrls: ['https://example.com/ref.png'],
+        characterId: 'character-1',
+        appearanceId: 'appearance-1',
+        isBackgroundJob: true,
+        count: 1,
+      },
+    })
+
+    const res = await mod.POST(req, { params: Promise.resolve({}) })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      error: { details: { code: 'OPERATION_APPROVAL_GRANT_REQUIRED' } },
+    })
+    expect(submitterMock.prepareTaskSubmissionInput).not.toHaveBeenCalled()
   })
 
   it('returns unauthorized when auth fails', async () => {

@@ -4,28 +4,13 @@ import {
   describe,
   expect,
   expectBillableInfo,
+  getTaskDefinition,
   isBillableTaskType,
   it,
   type TaskType,
 } from './task-policy.fixture'
 
 describe('billing/task-policy', () => {
-  const imageTaskTypes = new Set<TaskType>([
-    TASK_TYPE.IMAGE_PANEL,
-    TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-    TASK_TYPE.IMAGE_CHARACTER,
-    TASK_TYPE.IMAGE_LOCATION,
-    TASK_TYPE.MODIFY_ASSET_IMAGE,
-    TASK_TYPE.REGENERATE_GROUP,
-    TASK_TYPE.ASSET_HUB_IMAGE,
-    TASK_TYPE.ASSET_HUB_MODIFY,
-  ])
-
-  const videoTaskTypes = new Set<TaskType>([
-    TASK_TYPE.VIDEO_PANEL,
-    TASK_TYPE.VIDEO_GROUP,
-  ])
-
   const billingPayload = {
     analysisModel: 'anthropic/claude-sonnet-4',
     imageModel: 'fal::gpt-image-2',
@@ -62,9 +47,10 @@ describe('billing/task-policy', () => {
       ) {
         continue
       }
-      const payload = imageTaskTypes.has(taskType)
+      const billingPolicy = getTaskDefinition(taskType).billingPolicy
+      const payload = billingPolicy === 'image'
         ? imageBillingPayload
-        : videoTaskTypes.has(taskType)
+        : billingPolicy === 'video'
           ? videoBillingPayload
           : billingPayload
       const info = expectBillableInfo(buildDefaultTaskBillingInfo(taskType, payload))

@@ -62,6 +62,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
 
   const t = useTranslations('assetHub')
   const tAssets = useTranslations('assets')
+  const tErrors = useTranslations('errors')
   const assetLabel = assetType === 'prop' ? t('propLabel') : t('locationLabel')
   const { count: generationCount, setCount: setGenerationCount } = useImageGenerationCount('location')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -108,7 +109,9 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
   const firstImageError = !isTaskRunning
     ? (location.images || []).find(img => img.lastError)?.lastError || null
     : null
-  const taskErrorDisplay = firstImageError ? resolveErrorDisplay(firstImageError) : null
+  const taskErrorDisplay = firstImageError
+    ? resolveErrorDisplay(firstImageError, (code) => tErrors(code))
+    : null
   const selectImageRunningState = selectImage.isPending
     ? resolveTaskPresentationState({
       phase: 'processing',
@@ -280,7 +283,7 @@ export function LocationCard({ location, assetType = 'location', onImageClick, o
             const imageError = resolveErrorDisplay(img.lastError || {
               code: img.imageErrorMessage || null,
               message: img.imageErrorMessage || null,
-            })
+            }, (code) => tErrors(code))
             return (
               <div key={img.id} className="relative group/thumb">
                 <div

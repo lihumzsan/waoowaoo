@@ -89,12 +89,14 @@ export const TASK_TYPE = {
   AI_CREATE_CHARACTER: 'ai_create_character',
   AI_CREATE_LOCATION: 'ai_create_location',
   REFERENCE_TO_CHARACTER: 'reference_to_character',
+  REFERENCE_CHARACTER_DESCRIPTION_EXTRACT: 'reference_character_description_extract',
   ASSET_HUB_AI_DESIGN_CHARACTER: 'asset_hub_ai_design_character',
   ASSET_HUB_AI_DESIGN_LOCATION: 'asset_hub_ai_design_location',
   ASSET_HUB_AI_MODIFY_CHARACTER: 'asset_hub_ai_modify_character',
   ASSET_HUB_AI_MODIFY_LOCATION: 'asset_hub_ai_modify_location',
   ASSET_HUB_AI_MODIFY_PROP: 'asset_hub_ai_modify_prop',
   ASSET_HUB_REFERENCE_TO_CHARACTER: 'asset_hub_reference_to_character',
+  ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT: 'asset_hub_reference_character_description_extract',
 } as const
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]

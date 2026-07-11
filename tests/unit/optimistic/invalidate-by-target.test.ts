@@ -22,6 +22,23 @@ function hasInvalidation(
 }
 
 describe('invalidateByTarget', () => {
+  it('invalidates every episode-scoped projection when a project recovery checkpoint has no episode id', () => {
+    const testClient = createQueryClient()
+
+    invalidateByTarget({
+      queryClient: testClient.queryClient,
+      projectId: 'project-1',
+      targetType: 'ProjectEpisode',
+      episodeId: null,
+    })
+
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['episode-data', 'project-1'] })
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['storyboards'] })
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['project', 'project-1', 'edit-bible'] })
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['project', 'project-1', 'edit-script'] })
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['project', 'project-1', 'edit-shot-execution-plan'] })
+    expect(testClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['project', 'project-1', 'context'] })
+  })
   it('ProjectPanel invalidates episode scoped GUI queries', () => {
     const testClient = createQueryClient()
 

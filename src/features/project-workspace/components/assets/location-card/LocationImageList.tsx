@@ -56,6 +56,7 @@ type LocationImageListProps =
 
 export default function LocationImageList(props: LocationImageListProps) {
   const t = useTranslations('assets')
+  const tErrors = useTranslations('errors')
 
   if (props.mode === 'selection') {
     const generatedCount = countGeneratedImageSlots(props.images)
@@ -81,7 +82,7 @@ export default function LocationImageList(props: LocationImageListProps) {
           const imageError = resolveErrorDisplay(img.lastError || {
             code: img.imageErrorMessage || null,
             message: img.imageErrorMessage || null,
-          })
+          }, (code) => tErrors(code))
           return (
             <div key={img.id} className="relative group/thumb">
               <div
@@ -181,7 +182,7 @@ export default function LocationImageList(props: LocationImageListProps) {
   const locationErrorDisplay = resolveErrorDisplay({
     code: props.imageErrorMessage || null,
     message: props.imageErrorMessage || null,
-  })
+  }, (code) => tErrors(code))
 
   return (
     <div className={`relative overflow-hidden rounded-lg border-2 border-[var(--glass-stroke-base)] ${props.aspectClassName}`}>

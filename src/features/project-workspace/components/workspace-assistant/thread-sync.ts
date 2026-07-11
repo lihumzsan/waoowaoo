@@ -19,9 +19,13 @@ export function mergeWorkspaceAssistantPersistedMessages(
 
 export function resolveWorkspaceAssistantThreadSnapshotMessages(
   currentMessages: readonly UIMessage[],
-  persistedThread: { readonly messages: readonly UIMessage[] } | null,
+  persistedThread: { readonly id?: string; readonly messages: readonly UIMessage[] } | null,
+  acceptedThreadId: string | null = null,
 ): UIMessage[] {
   if (!persistedThread) return []
+  if (persistedThread.id && acceptedThreadId && persistedThread.id !== acceptedThreadId) {
+    return ensureUniqueUIMessages([...persistedThread.messages])
+  }
   return mergeWorkspaceAssistantPersistedMessages(currentMessages, persistedThread.messages)
 }
 

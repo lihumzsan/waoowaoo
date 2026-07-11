@@ -29,6 +29,7 @@ export {
     useAiDesignCharacter,
     useExtractAssetHubReferenceCharacterDescription,
     useCreateAssetHubCharacter,
+    useGenerateAssetHubCharacterFromReference,
 } from './useAssetHubMutations'
 
 // ==================== Project (项目资产) ====================

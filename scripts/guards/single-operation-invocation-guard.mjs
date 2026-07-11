@@ -67,7 +67,7 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     ? fs.readFileSync(path.join(scanRoot, authorityPath), 'utf8')
     : ''
   for (const required of [
-    'assertChannelAllowed',
+    'assertOperationChannelAllowed',
     'assertPrerequisites',
     'inputSchema.safeParse',
     'outputSchema.safeParse',
@@ -83,6 +83,20 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     if (!authority.includes(required)) {
       violations.push(`${authorityPath} is missing required authority ${required}`)
     }
+  }
+  const channelPolicyPath = 'src/lib/operations/channel-policy.ts'
+  const channelPolicy = fs.existsSync(path.join(scanRoot, channelPolicyPath))
+    ? fs.readFileSync(path.join(scanRoot, channelPolicyPath), 'utf8')
+    : ''
+  if (!channelPolicy.includes('export function assertOperationChannelAllowed')) {
+    violations.push(`${channelPolicyPath} is missing the shared API/Tool channel policy`)
+  }
+  const planningPath = 'src/lib/operations/planning.ts'
+  const planning = fs.existsSync(path.join(scanRoot, planningPath))
+    ? fs.readFileSync(path.join(scanRoot, planningPath), 'utf8')
+    : ''
+  if (!planning.includes("assertOperationChannelAllowed(operation, 'api')")) {
+    violations.push(`${planningPath} must enforce the shared channel policy before API planning`)
   }
   const finalCommitAuthorities = [
     ['src/lib/operations/submit-operation-task.ts', 'assertProjectAgentOperationExecutionFenceInTransaction'],

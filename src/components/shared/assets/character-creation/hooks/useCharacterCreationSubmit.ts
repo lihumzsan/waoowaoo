@@ -7,6 +7,7 @@ import {
   useAiCreateProjectCharacter,
   useAiDesignCharacter,
   useCreateAssetHubCharacter,
+  useGenerateAssetHubCharacterFromReference,
   useCreateProjectCharacter,
   useGenerateProjectCharacterFromReference,
   useGenerateCharacterImage,
@@ -83,6 +84,7 @@ export function useCharacterCreationSubmit({
   const extractAssetHubDescription = useExtractAssetHubReferenceCharacterDescription()
   const extractProjectDescription = useExtractProjectReferenceCharacterDescription(projectId ?? '')
   const createAssetHubCharacter = useCreateAssetHubCharacter()
+  const generateAssetHubCharacterFromReference = useGenerateAssetHubCharacterFromReference()
   const createProjectCharacter = useCreateProjectCharacter(projectId ?? '')
   const generateProjectCharacterFromReference = useGenerateProjectCharacterFromReference(projectId ?? '')
   const generateAssetHubCharacterImage = useGenerateCharacterImage()
@@ -153,12 +155,21 @@ export function useCharacterCreationSubmit({
       }
 
       if (mode === 'asset-hub') {
-        await createAssetHubCharacter.mutateAsync({
+        const created = await createAssetHubCharacter.mutateAsync({
           name: name.trim(),
           description: finalDescription || t('character.defaultDescription', { name: name.trim() }),
           folderId: folderId ?? null,
-          generateFromReference: true,
+        })
+        const character = created.character
+        const appearance = character?.appearances?.find((item) => item.appearanceIndex === 0)
+        if (!character?.id || !appearance?.id) {
+          throw new Error('ASSET_HUB_CHARACTER_PRIMARY_APPEARANCE_MISSING')
+        }
+        await generateAssetHubCharacterFromReference.mutateAsync({
           referenceImageUrls,
+          characterName: name.trim(),
+          characterId: character.id,
+          appearanceId: appearance.id,
           customDescription: referenceSubMode === 'extract' ? finalDescription : undefined,
           count: referenceCharacterGenerationCount,
         })
@@ -198,6 +209,7 @@ export function useCharacterCreationSubmit({
     extractAssetHubDescription,
     extractProjectDescription,
     folderId,
+    generateAssetHubCharacterFromReference,
     generateProjectCharacterFromReference,
     mode,
     name,

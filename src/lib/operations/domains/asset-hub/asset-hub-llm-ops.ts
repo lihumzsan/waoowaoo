@@ -4,20 +4,16 @@ import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getUserModelConfig } from '@/lib/config-service'
 import { TASK_TYPE } from '@/lib/task/types'
-import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
-import { sanitizeImageInputsForTaskPayload } from '@/lib/media/outbound-image'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { normalizeString, submitOperationTask } from '@/lib/operations/submit-operation-task'
-
-function parseReferenceImages(body: Record<string, unknown>): string[] {
-  const list = Array.isArray(body.referenceImageUrls)
-    ? body.referenceImageUrls.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
-    : []
-  if (list.length > 0) return list.slice(0, 5)
-  const single = typeof body.referenceImageUrl === 'string' ? body.referenceImageUrl.trim() : ''
-  return single ? [single] : []
-}
+import {
+  commitReferenceCharacterGeneration,
+  planReferenceCharacterGeneration,
+  referenceCharacterExtractionInputSchema,
+  referenceCharacterGenerationInputSchema,
+  submitReferenceCharacterExtraction,
+} from '@/lib/operations/domains/reference-character-operations'
 
 const EFFECTS_BILLABLE_LONG_RUNNING = {
   writes: true,
@@ -285,66 +281,42 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
     asset_hub_reference_to_character: defineOperation({
       id: 'asset_hub_reference_to_character',
-      summary: 'Submit asset-hub reference-to-character task with normalized reference images.',
+      summary: 'Plan and submit billable asset-hub reference-to-character image generation.',
       intent: 'act',
       effects: EFFECTS_BILLABLE_LONG_RUNNING,
       confirmation: {
-        kind: 'none',
-        required: false,
+        kind: 'billable_media',
+        required: true,
+        summary: 'Generate asset-hub character images after approving the immutable media quote.',
       },
-      inputSchema: z.object({}).passthrough(),
+      inputSchema: referenceCharacterGenerationInputSchema,
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const body = input as unknown as Record<string, unknown>
-        const referenceImages = parseReferenceImages(body)
-        const { normalized, issues } = sanitizeImageInputsForTaskPayload(referenceImages)
-        if (normalized.length === 0) {
-          throw new ApiError('INVALID_PARAMS', {
-            code: 'REFERENCE_IMAGES_INVALID',
-            issues,
-          })
-        }
-
-        const count = normalizeImageGenerationCount('reference-to-character', body.count)
-        const isBackgroundJob = body.isBackgroundJob === true || body.isBackgroundJob === 1 || body.isBackgroundJob === '1'
-        const extractOnly = body.extractOnly === true || body.extractOnly === 1 || body.extractOnly === '1'
-        const characterId = typeof body.characterId === 'string' ? body.characterId.trim() : ''
-        const appearanceId = typeof body.appearanceId === 'string' ? body.appearanceId.trim() : ''
-        if (isBackgroundJob && (!characterId || !appearanceId)) {
-          throw new ApiError('INVALID_PARAMS')
-        }
-
-        let analysisModel = ''
-        if (extractOnly) {
-          const userConfig = await getUserModelConfig(ctx.userId)
-          analysisModel = userConfig.analysisModel || ''
-          if (!analysisModel) {
-            throw new ApiError('MISSING_CONFIG')
-          }
-        }
-
-        const payload: Record<string, unknown> = {
-          ...body,
-          count,
-          referenceImageUrls: normalized,
-          ...(issues.length > 0 ? { referenceImageIssues: issues } : {}),
-          ...(analysisModel ? { analysisModel } : {}),
-          displayMode: 'detail',
-        }
-
-        return await submitOperationTask({
-          request: ctx.request,
-          userId: ctx.userId,
-          projectId: 'global-asset-hub',
-          type: TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER,
-          targetType: appearanceId ? 'GlobalCharacterAppearance' : 'GlobalCharacter',
-          targetId: appearanceId || characterId || ctx.userId,
-          operationId: 'asset_hub_reference_to_character',
-          source: ctx.source,
-          payload,
-          dedupeKey: `asset_hub_reference_to_character:${appearanceId || characterId || ctx.userId}:${count}`,
-        })
-      },
+      plan: async (ctx, input) => await planReferenceCharacterGeneration({
+        ctx,
+        input,
+        scope: 'asset_hub',
+        operationId: 'asset_hub_reference_to_character',
+      }),
+      commit: async (ctx, _input, plan) => await commitReferenceCharacterGeneration({
+        ctx,
+        plan,
+        operationId: 'asset_hub_reference_to_character',
+      }),
+    }),
+    asset_hub_extract_reference_character_description: defineOperation({
+      id: 'asset_hub_extract_reference_character_description',
+      summary: 'Extract a text description from asset-hub character reference images.',
+      intent: 'act',
+      effects: EFFECTS_BILLABLE_LONG_RUNNING,
+      confirmation: { kind: 'none', required: false },
+      inputSchema: referenceCharacterExtractionInputSchema,
+      outputSchema: z.unknown(),
+      execute: async (ctx, input) => await submitReferenceCharacterExtraction({
+        ctx,
+        input,
+        scope: 'asset_hub',
+        operationId: 'asset_hub_extract_reference_character_description',
+      }),
     }),
   }
 }

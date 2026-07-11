@@ -23,6 +23,7 @@
 - **BA-12 — Channel 不得形成审批旁路。** API 与 Tool 共用 `invokeProjectAgentOperation`；`billable_media` 在任一 channel 都只能消费不可变 ApprovalGrant，direct operation 不得接收或忽略 Grant provenance。`channels` 必须在输入解析和任何业务执行之前强制。
 - **BA-11 — Grant 只有一个消费写入者。** `invokeApprovedOperationPlan` 在锁定 Grant、创建 `OperationExecution` 后无条件消费 Grant；零 Task 与有 Task 计划使用同一条边。`approved-plan-submitter` 只验证 Grant 已绑定当前 execution 并创建计划内 Task，不得更新 Grant。通用 Task submitter 不接收 Grant/Execution/planTask 授权参数，任何收费媒体输入必须显式失败并回到批准计划入口。
 - **BA-13 — Task runtime 不得启动同步计费。** 普通 Task 与批准 Task 必须通过 `transactional-create.ts` 在 Task/Created event/enqueue Outbox 同一事务内 freeze，Terminal Service 拥有 settle/rollback；不得保留 Task 创建后再授权计费的第二事务。worker 内部调用 `withTextBilling` 等同步包装时只执行 provider 并把 usage 留给外层 Task collector；不得创建第二个 sync freeze/confirm 生命周期，也不得让嵌套 collector 吞掉 Task usage。
+- **BA-14 — 一个 Task type 只对应一种成本语义。** 同一 handler 可以复用实现，但文本分析与收费媒体生成必须使用不同 TaskType/Operation identity。`reference_character_description_extract` 属文本直提交流程；`reference_to_character` 属图片 `plan → quote → ApprovalGrant → commit`。payload 布尔值不得在 worker 内把一种 billing policy 变成另一种。
 
 ## 权威入口
 
@@ -30,6 +31,7 @@
 - operation confirmation 分类：`src/lib/operations/types.ts` 和 `src/lib/operations/registry.ts`。
 - 不可变计划与 hash：`src/lib/operations/operation-plan-snapshot.ts`。
 - Grant 发放、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
+- API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
 - API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
 - 批准计划的唯一 Task 创建入口：`src/lib/task/approved-plan-submitter.ts`；它只消费已经由当前 invocation 绑定的 execution context，不拥有 Grant 消费权。
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
@@ -42,7 +44,10 @@
 
 - `tests/unit/billing/media-approval-policy.test.ts` 覆盖统一媒体分类。
 - `tests/unit/operations/planning.test.ts` 覆盖计划报价与确认额度边界。
+- `tests/unit/operations/planning.test.ts` 也反证 tool-only Operation 不能通过 API plan endpoint 暴露计划或开始业务处理。
+- `tests/unit/operations/reference-character-{authority,planning}.test.ts` 验证参考图文本提取与图片生成拥有不同 Task billing policy，图片计划绑定目标所有权并生成 image quote，未获 Grant 的 API 调用显式失败。
 - `tests/integration/task/approved-operation-plan-batch.integration.test.ts` 用真实 MySQL 验证 Grant/Execution/业务写入/全 Task/freeze/outbox 全有或全无、余额不足回滚、Task batch 后故障回滚与并发重复调用串行化。
+- `tests/integration/task/approval-grant-expiry-replay.integration.test.ts` 用真实 MySQL 证明未消费 Grant 过期后零执行副作用，已消费 Grant 超 TTL 只返回同一持久 output 且不再次 commit。
 - `tests/unit/worker/soundscape-plan-worker.test.ts` 与 `soundscape-generate-worker.test.ts` 覆盖 Soundscape 任务链路。
 - `tests/unit/billing/task-runtime-billing.test.ts` 验证 Task runtime 不读取同步 Billing mode、不创建第二计费生命周期，并把 usage 保留给 Terminal Service。
 - `scripts/guards/single-task-billing-owner-guard.mjs` 强制 Task billing 只保留 transaction API，并禁止重新导出 Terminal Service 之外的 Task settle/rollback 写入口。

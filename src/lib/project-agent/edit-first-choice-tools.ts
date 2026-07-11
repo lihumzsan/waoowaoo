@@ -1,6 +1,7 @@
 import type {
   EditFirstWorkflowAction,
   EditFirstWorkflowChoiceDecision,
+  EditFirstWorkflowStage,
   EditFirstWorkflowState,
 } from '@/lib/project-workflow/edit-first'
 import {
@@ -61,6 +62,7 @@ interface EditFirstChoiceResourceResolverParams {
 
 interface EditFirstChoiceDefinition {
   readonly choiceType: EditFirstChoiceType
+  readonly workflowStage: EditFirstWorkflowStage
   readonly toolId: string
   readonly reviewedResourceKind: ProjectAgentChoiceReviewedResourceKind
   readonly offerBuilder:
@@ -101,6 +103,7 @@ function assertDecisionType(
 export const EDIT_FIRST_CHOICE_REGISTRY = {
   script_intake: {
     choiceType: 'script_intake',
+    workflowStage: 'ready_to_ingest_script',
     toolId: 'request_script_intake_choice',
     reviewedResourceKind: 'script_intake_prompt',
     offerBuilder: { kind: 'persisted_payload' },
@@ -132,6 +135,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   },
   script_review: {
     choiceType: 'script_review',
+    workflowStage: 'script_ready_for_review',
     toolId: 'request_edit_script_review_choice',
     reviewedResourceKind: 'script_review_document',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildScriptReviewChoiceCard(params) },
@@ -164,6 +168,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   },
   bible_review: {
     choiceType: 'bible_review',
+    workflowStage: 'bible_ready_for_review',
     toolId: 'request_edit_bible_review_choice',
     reviewedResourceKind: 'bible_review_plan',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildBibleReviewChoiceCard(params) },
@@ -196,6 +201,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   },
   style: {
     choiceType: 'style',
+    workflowStage: 'needs_style_choice',
     toolId: 'request_edit_style_choice',
     reviewedResourceKind: 'style_preview_set',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildStyleAndRatioChoiceCard(params) },
@@ -231,6 +237,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
   },
   asset_review: {
     choiceType: 'asset_review',
+    workflowStage: 'assets_ready_for_review',
     toolId: 'request_edit_asset_review_choice',
     reviewedResourceKind: 'asset_review_set',
     offerBuilder: { kind: 'runtime', build: async (params) => await buildAssetReviewChoiceCard(params) },

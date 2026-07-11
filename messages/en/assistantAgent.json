@@ -17,6 +17,7 @@
     "errorHint": "Include the requestId for debugging, or retry the same instruction.",
     "runFailedTitle": "Assistant run failed",
     "runFailedDetail": "The run stopped before the assistant could finish. Retry the instruction or adjust the request.",
+    "sessionStateError": "Assistant status could not be refreshed. Retry or reload before continuing.",
     "sendErrorBusy": "The assistant is still processing the previous action, so this message was not sent. Wait for it to finish and try again.",
     "sendErrorInsufficientBalance": "Insufficient balance. The message was not sent; your input is kept. Top up and retry.",
     "cardResponseErrorGeneric": "Card response failed. Retry the card action.",

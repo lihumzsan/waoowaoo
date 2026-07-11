@@ -206,6 +206,17 @@ async function loadCollidedBatchTaskForUpdate(
   return byId ?? byDedupe
 }
 
+async function lockExistingBatchTaskById(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<Task> {
+  const task = (await tx.$queryRaw<Task[]>(Prisma.sql`
+    SELECT * FROM tasks WHERE id = ${taskId} FOR UPDATE
+  `))[0] ?? null
+  if (!task) throw new Error(`TASK_BATCH_EXISTING_TASK_DISAPPEARED:${taskId}`)
+  return task
+}
+
 export async function persistSubmittedTaskBatchInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly inputs: readonly (CreateTaskInput & { readonly id?: string })[]
@@ -230,8 +241,9 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
 
   const ordered: PersistedBatchTask[] = []
   for (const input of params.inputs) {
-    const existing = await loadExistingBatchTask(params.tx, input)
-    if (existing) {
+    const existingCandidate = await loadExistingBatchTask(params.tx, input)
+    if (existingCandidate) {
+      const existing = await lockExistingBatchTaskById(params.tx, existingCandidate.id)
       await assertExistingSubmissionBundle(params.tx, existing, input)
       ordered.push({ task: existing, deduped: true })
       continue

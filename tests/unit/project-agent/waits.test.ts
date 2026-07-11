@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TASK_EVENT_TYPE } from '@/lib/task/types'
 import {
-  applyProjectAgentWaitTaskSnapshot,
   applyProjectAgentWaitTerminalEvent,
   resolveWaitTerminalNextStatus,
 } from '@/lib/project-agent/waits'
@@ -55,33 +54,35 @@ describe('project agent waits', () => {
     })
   })
 
-  it('[creation race] -> resolves from task snapshots when tasks finished before the wait row exists', () => {
-    expect(applyProjectAgentWaitTaskSnapshot({
+  it('[duplicate terminal] -> preserves the locked Wait aggregate without inventing a second state', () => {
+    expect(applyProjectAgentWaitTerminalEvent({
+      taskId: 'task-1',
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
       taskIds: ['task-1', 'task-2'],
-      tasks: [
-        { id: 'task-1', status: 'completed' },
-        { id: 'task-2', status: 'completed' },
-      ],
-    })).toEqual({
-      terminalTaskIds: ['task-1', 'task-2'],
+      terminalTaskIds: ['task-1'],
       failedTaskIds: [],
       canceledTaskIds: [],
-      terminalStatus: 'completed',
-    })
-  })
-
-  it('[creation race partial] -> preserves already terminal task ids for later task events', () => {
-    expect(applyProjectAgentWaitTaskSnapshot({
-      taskIds: ['task-1', 'task-2'],
-      tasks: [
-        { id: 'task-1', status: 'completed' },
-        { id: 'task-2', status: 'processing' },
-      ],
     })).toEqual({
       terminalTaskIds: ['task-1'],
       failedTaskIds: [],
       canceledTaskIds: [],
       terminalStatus: null,
+    })
+  })
+
+  it('[serialized terminal events] -> resolves from the accumulated locked Wait state', () => {
+    expect(applyProjectAgentWaitTerminalEvent({
+      taskId: 'task-2',
+      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+      taskIds: ['task-1', 'task-2'],
+      terminalTaskIds: ['task-1'],
+      failedTaskIds: [],
+      canceledTaskIds: [],
+    })).toEqual({
+      terminalTaskIds: ['task-1', 'task-2'],
+      failedTaskIds: [],
+      canceledTaskIds: [],
+      terminalStatus: 'completed',
     })
   })
 

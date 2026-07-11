@@ -44,7 +44,7 @@ export const REQUIREMENTS_MATRIX: ReadonlyArray<RequirementCoverageEntry> = [
     scenarioIds: [
       'ROUTE:assets/[assetId]/generate',
       'TASKTYPE:image_panel',
-      'SCENARIO-CANVAS-MATERIALIZE-BEFORE-TERMINAL',
+      'SCENARIO-CANVAS-TERMINAL-REFETCH-CANONICAL-RESOURCE',
     ],
   },
   {

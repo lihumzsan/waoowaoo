@@ -53,6 +53,7 @@ export {
     useAiDesignCharacter,
     useExtractAssetHubReferenceCharacterDescription,
     useCreateAssetHubCharacter,
+    useGenerateAssetHubCharacterFromReference,
 } from '../mutations/useAssetHubMutations'
 
 // 项目资产

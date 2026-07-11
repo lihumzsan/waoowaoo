@@ -2,7 +2,7 @@ import type { UIMessage } from 'ai'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
-  type EditFirstChoiceType,
+  getEditFirstChoiceDefinition,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import type {
   ProjectAgentChoiceCardPartData,
@@ -10,13 +10,6 @@ import type {
 } from '@/lib/project-agent/types'
 import { projectAgentChoiceCardSchema } from '@/lib/project-agent/choice-offer'
 import type { WorkflowLabCheckpointSummary } from './types'
-
-const FIXED_CHOICE_STAGE_BY_TYPE: Partial<Record<EditFirstChoiceType, EditFirstWorkflowStage>> = {
-  script_review: 'script_ready_for_review',
-  bible_review: 'bible_ready_for_review',
-  style: 'needs_style_choice',
-  asset_review: 'assets_ready_for_review',
-}
 
 const OPERATION_STAGE_BY_ID: Readonly<Record<string, EditFirstWorkflowStage>> = {
   ingest_script: 'ready_to_ingest_script',
@@ -44,7 +37,7 @@ function readString(value: unknown): string | null {
 }
 
 function readChoiceWorkflowStage(choiceCard: ProjectAgentChoiceCardPartData): EditFirstWorkflowStage | null {
-  return FIXED_CHOICE_STAGE_BY_TYPE[choiceCard.choiceType] ?? null
+  return getEditFirstChoiceDefinition(choiceCard.choiceType).workflowStage
 }
 
 function readChoiceCard(part: unknown): ProjectAgentChoiceCardPartData | null {

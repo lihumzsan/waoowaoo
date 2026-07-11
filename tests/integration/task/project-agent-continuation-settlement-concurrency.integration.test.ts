@@ -95,6 +95,45 @@ describe('Project Agent continuation settlement DB integration', () => {
   beforeEach(async () => {
     await resetBillingState()
   })
+  it('grants exactly one owner when two workers concurrently claim the same resolved Wait', async () => {
+    await seedClaimedContinuation()
+    await prisma.projectAgentWait.update({
+      where: { id: WAIT_ID },
+      data: {
+        status: 'resolved',
+        claimId: null,
+        claimedAt: null,
+        claimExpiresAt: null,
+      },
+    })
+
+    const claims = await Promise.all([
+      claimProjectAgentWaitContinuation({
+        waitId: WAIT_ID,
+        runId: RUN_ID,
+        expectedRunVersion: 1,
+        expectedEventSeq: '0',
+        commandId: COMMAND_ID,
+        claimOwner: 'competing-owner-a',
+      }),
+      claimProjectAgentWaitContinuation({
+        waitId: WAIT_ID,
+        runId: RUN_ID,
+        expectedRunVersion: 1,
+        expectedEventSeq: '0',
+        commandId: COMMAND_ID,
+        claimOwner: 'competing-owner-b',
+      }),
+    ])
+
+    expect(claims.filter((claim) => claim.status === 'claimed')).toHaveLength(1)
+    expect(claims.filter((claim) => claim.status !== 'claimed')).toHaveLength(1)
+    const wait = await prisma.projectAgentWait.findUniqueOrThrow({ where: { id: WAIT_ID } })
+    const winningClaim = claims.find((claim) => claim.status === 'claimed')
+    expect(wait.status).toBe('claimed')
+    expect(wait.claimId).toBe(winningClaim?.status === 'claimed' ? winningClaim.followUp.claimId : null)
+    expect(await prisma.projectAgentActivity.count({ where: { runId: RUN_ID } })).toBe(1)
+  })
   it('rejects a conflicting replay of a persisted terminal message id', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)

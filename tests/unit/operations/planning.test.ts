@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  planProjectAgentOperationFromApi,
   quoteOperationPlan,
   toOperationPlanView,
   type OperationPlan,
 } from '@/lib/operations/planning'
+import { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistryForApi } from '@/lib/operations/registry'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 
@@ -159,5 +161,18 @@ describe('operation planning billing quote', () => {
       expect(operation.plan, operationId).toBeTypeOf('function')
       expect(operation.commit, operationId).toBeTypeOf('function')
     }
+  })
+
+  it('rejects a tool-only operation before API planning performs business work', async () => {
+    await expect(planProjectAgentOperationFromApi({
+      request: new NextRequest('http://localhost/api/operations/plan'),
+      operationId: 'confirm_edit_style_preview',
+      projectId: 'project-1',
+      userId: 'user-1',
+      input: {},
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      details: expect.objectContaining({ code: 'OPERATION_NOT_ALLOWED', channel: 'api' }),
+    })
   })
 })

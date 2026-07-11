@@ -127,6 +127,14 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     zh: '为当前还缺视频的连续片段提交视频生成任务。需要生成哪些片段，由系统根据当前剧本、分镜图片和已有视频状态自动决定，你只需发起调用。',
     en: 'Submit video generation tasks for the continuous segments that still lack video. The system decides which segments to generate from the current script, storyboard images, and existing video state — you just make the call.',
   },
+  reference_to_character: {
+    zh: '根据参考图片生成角色形象。该操作会先生成不可变图片任务与报价，只有用户批准后才提交。',
+    en: 'Generate character images from references. This operation first creates an immutable media plan and quote, and submits it only after user approval.',
+  },
+  extract_reference_character_description: {
+    zh: '只从参考图片提取角色文字描述，不生成图片，也不代表用户批准后续图片费用。',
+    en: 'Extract only a text character description from reference images. It does not generate images or approve later media charges.',
+  },
 }
 
 const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
@@ -149,6 +157,14 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
   get_chapter_detail: {
     zh: '章节详情',
     en: 'Chapter detail',
+  },
+  reference_to_character: {
+    zh: '参考图生成角色',
+    en: 'Generate character from references',
+  },
+  extract_reference_character_description: {
+    zh: '提取参考图角色描述',
+    en: 'Extract reference character description',
   },
   request_edit_bible_review_choice: {
     zh: '确认制作规划',

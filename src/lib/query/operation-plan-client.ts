@@ -53,6 +53,25 @@ export async function fetchAssetOperationPlanView(params: {
   return await response.json() as OperationPlanView
 }
 
+export async function fetchAssetHubOperationPlanView(params: {
+  operationId: string
+  input: Record<string, unknown>
+}): Promise<OperationPlanView> {
+  const response = await apiFetch(`/api/asset-hub/operations/${params.operationId}/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: params.input }),
+  })
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => ({}))
+    const message = isRecord(payload) && typeof payload.message === 'string'
+      ? payload.message
+      : 'OPERATION_PLAN_FAILED'
+    throw new Error(message)
+  }
+  return await response.json() as OperationPlanView
+}
+
 export async function issueOperationApprovalGrant(plan: OperationPlanView): Promise<{
   approvalGrantId: string
   operationRequestId: string

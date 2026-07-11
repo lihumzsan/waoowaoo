@@ -1,5 +1,5 @@
 import { resolveUnifiedErrorCode } from './codes'
-import { getUserMessageByCode } from './user-messages'
+import { getUserMessageByCode, type UserErrorTranslator } from './user-messages'
 import { normalizeAnyError } from './normalize'
 
 /** 从原始错误消息中提取面向用户的关键细节 */
@@ -20,7 +20,7 @@ function extractProviderDetail(raw: string | null | undefined): string | null {
 export function resolveErrorDisplay(input?: {
   code?: string | null
   message?: string | null
-} | null) {
+} | null, translate?: UserErrorTranslator) {
   if (!input) return null
   // code 和 message 都为空时，表示没有错误，直接返回 null
   // 如果不做这个判断，normalizeAnyError 会对空输入兜底返回 INTERNAL_ERROR，导致所有面板误报
@@ -28,7 +28,8 @@ export function resolveErrorDisplay(input?: {
 
   const code = resolveUnifiedErrorCode(input.code)
   if (code && code !== 'INTERNAL_ERROR') {
-    const userMessage = getUserMessageByCode(code)
+    if (!translate) throw new Error('USER_ERROR_TRANSLATOR_REQUIRED')
+    const userMessage = getUserMessageByCode(code, translate)
     if (code === 'VIDEO_API_FORMAT_UNSUPPORTED') {
       return {
         code,
@@ -50,7 +51,8 @@ export function resolveErrorDisplay(input?: {
     { context: 'api' },
   )
   if (normalized?.code) {
-    const userMessage = getUserMessageByCode(normalized.code)
+    if (!translate) throw new Error('USER_ERROR_TRANSLATOR_REQUIRED')
+    const userMessage = getUserMessageByCode(normalized.code, translate)
     const detail = extractProviderDetail(input.message)
     return {
       code: normalized.code,

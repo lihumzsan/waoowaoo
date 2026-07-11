@@ -12,6 +12,10 @@ import {
   invalidateGlobalCharacters,
   invalidateGlobalLocations,
 } from './asset-hub-mutations-shared'
+import {
+  fetchAssetHubOperationPlanView,
+  issueOperationApprovalGrant,
+} from '@/lib/query/operation-plan-client'
 
 type CreateAssetHubCharacterResponse = {
   character?: GlobalCharacter
@@ -21,10 +25,6 @@ type CreateAssetHubCharacterVariables = {
   name: string
   description: string
   folderId?: string | null
-  generateFromReference?: boolean
-  referenceImageUrls?: string[]
-  customDescription?: string
-  count?: number
 }
 
 function queryFolderFilter(queryKey: readonly unknown[], index: number): string | null {
@@ -148,14 +148,11 @@ export function useExtractAssetHubReferenceCharacterDescription() {
   return useMutation({
     mutationFn: async (referenceImageUrls: string[]) => {
       const response = await requestTaskResponseWithError(
-        '/api/asset-hub/reference-to-character',
+        '/api/asset-hub/reference-to-character/extract',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            referenceImageUrls,
-            extractOnly: true,
-          }),
+          body: JSON.stringify({ referenceImageUrls }),
         },
         'Failed to extract character description',
       )
@@ -180,6 +177,35 @@ export function useCreateAssetHubCharacter() {
         upsertCreatedCharacterCaches(queryClient, data.character)
       }
       invalidateCharacters()
+    },
+  })
+}
+
+export function useGenerateAssetHubCharacterFromReference() {
+  return useMutation({
+    mutationFn: async (payload: {
+      referenceImageUrls: string[]
+      characterName: string
+      characterId: string
+      appearanceId: string
+      count: number
+      customDescription?: string
+    }) => {
+      const input = { ...payload, isBackgroundJob: true }
+      const plan = await fetchAssetHubOperationPlanView({
+        operationId: 'asset_hub_reference_to_character',
+        input,
+      })
+      const authorization = await issueOperationApprovalGrant(plan)
+      return await requestJsonWithError<{ async: true; taskId: string }>(
+        '/api/asset-hub/reference-to-character',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...input, ...authorization }),
+        },
+        'Failed to submit asset-hub reference character generation',
+      )
     },
   })
 }

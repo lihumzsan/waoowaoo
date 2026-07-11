@@ -14,6 +14,7 @@ import type {
   ProjectAgentOperationId,
 } from './types'
 import { createProjectAgentOperationRegistryForApi } from './registry'
+import { assertOperationChannelAllowed } from './channel-policy'
 import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
 import {
   attachPersistedPlanIdentity,
@@ -279,6 +280,7 @@ export async function planProjectAgentOperationFromApi(params: {
       message: `operation not found: ${params.operationId}`,
     })
   }
+  assertOperationChannelAllowed(operation, 'api')
   const parsed = operation.inputSchema.safeParse(params.input)
   if (!parsed.success) {
     throw new ApiError('INVALID_PARAMS', {

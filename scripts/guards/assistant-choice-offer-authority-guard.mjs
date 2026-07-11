@@ -3,9 +3,148 @@
 import fs from 'fs'
 import path from 'path'
 import process from 'process'
+import ts from 'typescript'
 
 const root = process.cwd()
 const retiredStyleChoiceRoute = 'src/app/api/projects/[projectId]/bible/style-preview/route.ts'
+
+function parseTypeScript(source) {
+  return ts.createSourceFile('choice-authority-fixture.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+}
+
+function visit(node, visitor) {
+  visitor(node)
+  ts.forEachChild(node, (child) => visit(child, visitor))
+}
+
+function collectChoiceTypeAliases(sourceFile) {
+  const aliases = new Set()
+  let changed = true
+  const expressionUsesChoiceType = (node) => {
+    if (!node) return false
+    if (ts.isPropertyAccessExpression(node) && node.name.text === 'choiceType') return true
+    if (
+      ts.isElementAccessExpression(node)
+      && ts.isStringLiteral(node.argumentExpression)
+      && node.argumentExpression.text === 'choiceType'
+    ) return true
+    if (ts.isIdentifier(node) && aliases.has(node.text)) return true
+    let found = false
+    ts.forEachChild(node, (child) => {
+      if (!found && expressionUsesChoiceType(child)) found = true
+    })
+    return found
+  }
+  while (changed) {
+    changed = false
+    visit(sourceFile, (node) => {
+      if (!ts.isVariableDeclaration(node) || !node.initializer) return
+      if (ts.isIdentifier(node.name) && expressionUsesChoiceType(node.initializer) && !aliases.has(node.name.text)) {
+        aliases.add(node.name.text)
+        changed = true
+        return
+      }
+      if (!ts.isObjectBindingPattern(node.name)) return
+      for (const element of node.name.elements) {
+        const propertyName = element.propertyName ?? element.name
+        if (
+          ts.isIdentifier(propertyName)
+          && propertyName.text === 'choiceType'
+          && ts.isIdentifier(element.name)
+          && !aliases.has(element.name.text)
+        ) {
+          aliases.add(element.name.text)
+          changed = true
+        }
+      }
+    })
+  }
+  return { aliases, expressionUsesChoiceType }
+}
+
+function findChoiceTypeControlFlow(source) {
+  const sourceFile = parseTypeScript(source)
+  const { expressionUsesChoiceType } = collectChoiceTypeAliases(sourceFile)
+  const violations = []
+  visit(sourceFile, (node) => {
+    const expression = ts.isSwitchStatement(node)
+      ? node.expression
+      : ts.isIfStatement(node) || ts.isConditionalExpression(node)
+        ? node.expression ?? node.condition
+        : null
+    if (expression && expressionUsesChoiceType(expression)) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+      violations.push(line + 1)
+    }
+  })
+  return violations
+}
+
+function findPrivateChoiceStageMaps(choiceRegistry, workflowCheckpoints) {
+  const stages = new Set(
+    [...choiceRegistry.matchAll(/workflowStage\s*:\s*['"]([^'"]+)['"]/g)].map((match) => match[1]),
+  )
+  const registrySource = parseTypeScript(choiceRegistry)
+  const choiceKeys = new Set()
+  visit(registrySource, (node) => {
+    if (
+      !ts.isVariableDeclaration(node)
+      || !ts.isIdentifier(node.name)
+      || node.name.text !== 'EDIT_FIRST_CHOICE_REGISTRY'
+      || !node.initializer
+    ) return
+    const initializer = ts.isSatisfiesExpression(node.initializer) ? node.initializer.expression : node.initializer
+    if (!ts.isObjectLiteralExpression(initializer)) return
+    for (const property of initializer.properties) {
+      if (ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property)) {
+        if (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) choiceKeys.add(property.name.text)
+      }
+    }
+  })
+  if (stages.size === 0 || choiceKeys.size === 0) return []
+  const sourceFile = parseTypeScript(workflowCheckpoints)
+  const lines = []
+  visit(sourceFile, (node) => {
+    if (!ts.isObjectLiteralExpression(node) || node.properties.length === 0) return
+    const mappedStages = node.properties.flatMap((property) => {
+      if (
+        !ts.isPropertyAssignment(property)
+        || !ts.isStringLiteral(property.initializer)
+        || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+        || !choiceKeys.has(property.name.text)
+      ) return []
+      return [property.initializer.text]
+    })
+    if (mappedStages.some((value) => stages.has(value))) {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+      lines.push(line + 1)
+    }
+  })
+  return lines
+}
+
+export function inspectChoiceRegistryAuthority(input) {
+  const violations = []
+  for (const marker of [
+    'EDIT_FIRST_CHOICE_REGISTRY',
+    'satisfies Record<EditFirstChoiceType, EditFirstChoiceDefinition>',
+    'workflowStage:',
+    'offerBuilder:',
+    'parseDecision:',
+  ]) {
+    if (!input.choiceRegistry.includes(marker)) {
+      violations.push(`Choice registry is missing exhaustive capability ${JSON.stringify(marker)}`)
+    }
+  }
+  const privateStageMaps = findPrivateChoiceStageMaps(input.choiceRegistry, input.workflowCheckpoints)
+  if (input.workflowCheckpoints.includes('FIXED_CHOICE_STAGE_BY_TYPE') || privateStageMaps.length > 0) {
+    violations.push('Workflow Lab restores a private Choice-to-stage map outside EDIT_FIRST_CHOICE_REGISTRY')
+  }
+  for (const line of findChoiceTypeControlFlow(input.assistantRenderers)) {
+    violations.push(`Choice renderer restores type-specific control semantics at line ${line}`)
+  }
+  return violations
+}
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8')
@@ -121,11 +260,6 @@ if (!choiceCard.includes("submit: { kind: 'submit_tool_output' }")) {
     violations.push('Choice card builder does not submit every choice through the persisted decision control')
   }
 }
-for (const marker of ["card.choiceType ===", 'switch (card.choiceType)']) {
-  if (assistantRenderers.includes(marker)) {
-    violations.push(`Choice renderer restores type-specific control semantics via ${JSON.stringify(marker)}`)
-  }
-}
 for (const marker of [
   "card.replyMode === 'per_group'",
   'card.submit.decision',
@@ -142,11 +276,7 @@ for (const marker of ["activeGroup?.key === 'aspectRatio'", "activeGroup?.key ==
   }
 }
 for (const marker of [
-  'EDIT_FIRST_CHOICE_REGISTRY',
-  'satisfies Record<EditFirstChoiceType, EditFirstChoiceDefinition>',
   'reviewedResourceKind:',
-  'offerBuilder:',
-  'parseDecision:',
   'toWorkflowDecision:',
   'isEnabled:',
   'resolveWorkflowAction:',
@@ -156,6 +286,11 @@ for (const marker of [
     violations.push(`Choice registry is missing exhaustive capability ${JSON.stringify(marker)}`)
   }
 }
+violations.push(...inspectChoiceRegistryAuthority({
+  choiceRegistry,
+  workflowCheckpoints: read('src/lib/workflow-lab/checkpoints.ts'),
+  assistantRenderers,
+}))
 for (const [label, source, forbidden] of [
   ['choice card dispatcher', choiceCard, ['params.choiceType ===', 'switch (params.choiceType)']],
   ['choice resource dispatcher', choiceOffer, ["if (kind === '", 'switch (kind)']],

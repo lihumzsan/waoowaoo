@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { generateImage } from '@/lib/ai-exec/engine'
 import { fetchWithRetry } from '@/lib/retry'
 import { executeAiVisionStep } from '@/lib/ai-exec/engine'
-import { getUserModelConfig } from '@/lib/config-service'
 import {
   CHARACTER_IMAGE_BANANA_RATIO,
   addCharacterPromptSuffix,
@@ -101,7 +100,9 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
   }
 
   const isAssetHub = job.data.type === TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER
+    || job.data.type === TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
   const isProject = job.data.type === TASK_TYPE.REFERENCE_TO_CHARACTER
+    || job.data.type === TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
   if (!isAssetHub && !isProject) {
     throw new Error(`Unsupported task type: ${job.data.type}`)
   }
@@ -109,7 +110,11 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
   const isBackgroundJob = readBoolean(payload.isBackgroundJob)
   const appearanceId = readString(payload.appearanceId)
   const characterId = readString(payload.characterId)
-  const extractOnly = readBoolean(payload.extractOnly)
+  const extractOnly = job.data.type === TASK_TYPE.REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
+    || job.data.type === TASK_TYPE.ASSET_HUB_REFERENCE_CHARACTER_DESCRIPTION_EXTRACT
+  if (readBoolean(payload.extractOnly) !== extractOnly) {
+    throw new Error(`REFERENCE_TO_CHARACTER_TASK_SEMANTICS_MISMATCH:${job.data.type}`)
+  }
   const customDescription = readString(payload.customDescription)
   if (Object.prototype.hasOwnProperty.call(payload, 'artStyle')) {
     throw new Error('LEGACY_ART_STYLE_REMOVED')
@@ -125,9 +130,8 @@ export async function handleReferenceToCharacterTask(job: Job<TaskJobData>) {
     displayMode: 'detail',
   })
   await assertTaskActive(job, 'reference_to_character_prepare')
-  const userConfig = await getUserModelConfig(job.data.userId)
-  const imageModel = readString(userConfig.characterModel)
-  const analysisModel = readString(userConfig.analysisModel)
+  const imageModel = readString(payload.imageModel)
+  const analysisModel = readString(payload.analysisModel)
   if (!imageModel && !extractOnly) {
     throw new Error('请先在设置页面配置角色图片模型')
   }

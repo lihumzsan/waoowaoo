@@ -9,7 +9,7 @@
   "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts": 823,
   "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx": 616,
   "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 853,
-  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 604,
+  "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 599,
   "src/lib/query/hooks/useAssets.ts": 456,
   "src/lib/query/hooks/useProjectEditScript.ts": 464,
   "src/lib/query/hooks/useStoryboards.ts": 496,

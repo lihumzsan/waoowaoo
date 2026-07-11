@@ -26,6 +26,7 @@ interface ProjectAgentInterruptionTxMock {
   updateMany: MockFunction
 }
 interface ProjectAgentReducerTxMock {
+  $queryRaw: MockFunction
   projectAgentActivity: ProjectAgentActivityTxMock
   projectAgentRun: ProjectAgentRunTxMock
   projectAgentWait: ProjectAgentWaitTxMock
@@ -52,7 +53,17 @@ function reduceProjectAgentEvent(
   })
 }
 function createTxMock(): ProjectAgentReducerTxMock {
+  const findRun = vi.fn(async () => ({
+    status: 'running',
+    runVersion: 1,
+    eventSeq: BigInt(1),
+    terminalEventSeq: null,
+  }))
   return {
+    $queryRaw: vi.fn(async () => {
+      const run = await findRun()
+      return run ? [run] : []
+    }),
     projectAgentActivity: {
       findFirst: vi.fn(async () => null),
       findUnique: vi.fn(async () => ({
@@ -71,12 +82,7 @@ function createTxMock(): ProjectAgentReducerTxMock {
     },
     projectAgentRun: {
       create: vi.fn(async () => undefined),
-      findUnique: vi.fn(async () => ({
-        status: 'running',
-        runVersion: 1,
-        eventSeq: BigInt(1),
-        terminalEventSeq: null,
-      })),
+      findUnique: findRun,
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     projectAgentWait: {
