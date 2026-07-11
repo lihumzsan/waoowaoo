@@ -157,6 +157,30 @@ describe('submitImageBatchTasks', () => {
     expect(mocks.removeTaskJob).toHaveBeenCalledWith('old-1')
   })
 
+  it('supersedes an active legacy task without batch metadata', async () => {
+    mocks.findMany.mockResolvedValue([{
+      id: 'legacy-task',
+      payload: { count: 3 },
+    }])
+
+    await submitImageBatchTasks({
+      userId: 'user-1',
+      locale: 'zh',
+      projectId: 'project-1',
+      type: TASK_TYPE.IMAGE_CHARACTER,
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      payload: { count: 3 },
+      count: 3,
+    })
+
+    expect(mocks.cancelTask).toHaveBeenCalledWith(
+      'legacy-task',
+      'Superseded by a newer image batch',
+    )
+    expect(mocks.removeTaskJob).toHaveBeenCalledWith('legacy-task')
+  })
+
   it('cancels children already submitted when a later child cannot be submitted', async () => {
     mocks.submitTask
       .mockResolvedValueOnce({

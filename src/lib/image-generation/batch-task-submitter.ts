@@ -77,7 +77,7 @@ export async function submitImageBatchTasks(input: {
   const shouldSupersede = Boolean(input.regenerationToken)
     || activeTasks.some((task) => {
       const activeTotal = readBatchTotal(task.payload)
-      return activeTotal !== null && activeTotal !== count
+      return activeTotal === null || activeTotal !== count
     })
 
   if (shouldSupersede) {
