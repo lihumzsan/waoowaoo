@@ -3,6 +3,7 @@ import { taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 import type { WorkspaceCanvasStreamPatch } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
 import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
+import { resolveWorkspaceCanvasMotionPresenceAction } from '@/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence'
 import {
   assertHistoricalValue,
   proveSemanticFaultRejected,
@@ -104,6 +105,74 @@ function canvasScenario(
 
 const terminalExpected = { phase: 'succeeded', body: 'persisted source', errorCode: null }
 
+type MotionPresenceFacts = {
+  readonly visible: boolean
+  readonly exit: boolean
+  readonly rendered: boolean
+}
+
+type MotionPresenceExpected = {
+  readonly action: string
+}
+
+function resolveMotionPresence(facts: MotionPresenceFacts): MotionPresenceExpected {
+  return {
+    action: resolveWorkspaceCanvasMotionPresenceAction(facts),
+  }
+}
+
+function motionPresenceScenario(): HistoricalRegressionScenario {
+  const id = 'SCENARIO-CANVAS-MOTION-PRESENCE-VISIBLE-STABILITY'
+  const steps: readonly {
+    readonly id: string
+    readonly facts: MotionPresenceFacts
+    readonly expected: MotionPresenceExpected
+  }[] = [
+    {
+      id: 'stable-visible-rerender',
+      facts: { visible: true, exit: true, rendered: true },
+      expected: { action: 'idle' },
+    },
+    {
+      id: 'reopen-once',
+      facts: { visible: true, exit: true, rendered: false },
+      expected: { action: 'show' },
+    },
+  ]
+  const run = (
+    resolve: (facts: MotionPresenceFacts) => MotionPresenceExpected,
+    recordExecution: (scenarioId: string) => void,
+  ) => {
+    runLifecycleSequence({
+      scenarioId: id,
+      steps,
+      resolve,
+      assertStep({ stepId, view, expected }) {
+        assertHistoricalValue(view, expected, `${id}:${stepId}`)
+      },
+    }, { recordExecution })
+  }
+  return {
+    id,
+    identity: id,
+    defectId: 'BUG-CN-002',
+    severity: 'P1',
+    invariantIds: ['CN-12'],
+    historicalDefectIds: ['BUG-CN-002'],
+    layers: ['unit', 'regression', 'guard'],
+    async execute(context) {
+      run(resolveMotionPresence, context.recordExecution)
+    },
+    async verifyFailBefore() {
+      await proveSemanticFaultRejected(() => run((facts) => ({
+        // Historical implementation cached every newly-created React child
+        // while visible, so an already-visible render still wrote state.
+        action: facts.visible ? 'cache_visible_children' : 'idle',
+      }), () => undefined))
+    },
+  }
+}
+
 export const CANVAS_LIFECYCLE_HISTORICAL_SCENARIOS: readonly HistoricalRegressionScenario[] = [
   canvasScenario('SCENARIO-CANVAS-TERMINAL-REFETCH-CANONICAL-RESOURCE', [
     { id: 'streaming', facts: { persisted: 'pending', task: 'processing', stream: true }, expected: { phase: 'streaming', body: 'streamed source', errorCode: null } },
@@ -118,4 +187,5 @@ export const CANVAS_LIFECYCLE_HISTORICAL_SCENARIOS: readonly HistoricalRegressio
   canvasScenario('SCENARIO-CANVAS-LATE-STREAM-AFTER-TERMINAL', [
     { id: 'late-stream', facts: { persisted: 'succeeded', task: 'completed', stream: true }, expected: terminalExpected },
   ], () => ({ phase: 'streaming', body: 'streamed source', errorCode: null })),
+  motionPresenceScenario(),
 ]

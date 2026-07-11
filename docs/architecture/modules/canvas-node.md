@@ -22,6 +22,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
 - **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
+- **CN-12 — Renderer 本地动效不得驱动渲染。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
 
 ## 权威入口
 
@@ -38,6 +39,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
+- 本地 Presence transition：`src/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence.ts`；唯一 renderer host：`src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx`。
 
 ## 验证
 
@@ -54,12 +56,15 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 同一 guard 还阻止 `__running`、TTL overlay、operationId pending、generating→ready 改写和无界 stream/SSE identity 回流。
 - `scripts/guards/terminal-resource-refetch-guard.mjs` 阻止恢复 terminal payload 直接写 Cache、资源版本/trigger 协议或 materialization-only checkpoint 阶段。
 - `scripts/guards/no-history-state-inference.mjs` 与 `scripts/guards/no-server-mirror-state.mjs` 阻止从错误状态来源推断业务状态。
+- `scripts/guards/canvas-motion-presence-contract-guard.mjs` 阻止将 React children 恢复成 Presence state，且要求复用共享 transition authority。
+- `tests/unit/project-workspace/workspace-canvas-motion-presence.test.ts` 穷尽验证稳定可见、重开、立即隐藏与退出动画的 Presence action；`BUG-CN-002` history scenario 反证旧的 children-state 自循环。
 
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
 - `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后暴露生命周期与内容读取竞争。本阶段选择明确的最终一致性语义：终态立即清 runtime，内容只从正式 Query 重新读取；不得恢复 timer 或 terminal payload Cache writer。
+- `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write，详见 [动效 Presence 收敛](../canvas-motion-presence-convergence.md)。
 
 ## 修改检查表
 

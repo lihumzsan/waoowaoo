@@ -145,6 +145,24 @@ export const HISTORICAL_DEFECT_CATALOG = [
     replayMode: 'semantic-fault-injection',
     status: 'protected',
   },
+  {
+    id: 'BUG-CN-002',
+    commits: [
+      '340c33f6035cb8a00a7403bc815447b4c4ec169e',
+    ],
+    symptom: 'A visible Canvas node detail can recursively re-render until React reports Maximum update depth exceeded at the ReactFlow boundary.',
+    rootCause: 'The shared renderer motion helper mirrored freshly-created React children into local state on every visible render, so ordinary children identity churn became a self-triggering state update loop.',
+    severity: 'P1',
+    module: 'canvas-node',
+    invariantIds: ['CN-12'],
+    affectedLayers: ['unit', 'regression', 'guard'],
+    escapedLayers: ['unit'],
+    scenarioIds: [
+      'SCENARIO-CANVAS-MOTION-PRESENCE-VISIBLE-STABILITY',
+    ],
+    replayMode: 'semantic-fault-injection',
+    status: 'protected',
+  },
 ] as const satisfies readonly HistoricalDefect[]
 
 export function validateHistoricalDefectCatalog(

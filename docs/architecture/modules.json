@@ -95,6 +95,8 @@
       "testPaths": [
         "tests/unit/project-workspace/structured-stream-adapters.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
+        "tests/unit/project-workspace/workspace-canvas-motion-presence.test.ts",
+        "tests/unit/guards/canvas-motion-presence-contract.test.ts",
         "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
         "tests/regression/project-canvas-task-backed-running.test.ts",
         "tests/regression/project-canvas-bible-resource-lifecycle.test.ts",
@@ -114,6 +116,7 @@
         "scripts/guards/no-history-state-inference.mjs",
         "scripts/guards/no-server-mirror-state.mjs",
         "scripts/guards/canvas-node-lifecycle-contract-guard.mjs",
+        "scripts/guards/canvas-motion-presence-contract-guard.mjs",
         "scripts/guards/terminal-resource-refetch-guard.mjs"
       ]
     },

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
+import { inspectWorkspaceCanvasMotionPresenceContract } from './canvas-motion-presence-contract-guard.mjs'
 
 const root = process.cwd()
 const canvasRoot = path.join(root, 'src/features/project-workspace/canvas')
@@ -94,6 +95,10 @@ if (/activeAssistantOperationId\s*===\s*['"][^'"]+['"]/.test(canvasSurface)) {
   violations.push('ProjectWorkspaceCanvas uses operationId as a private pending lifecycle switch')
 }
 
+violations.push(...inspectWorkspaceCanvasMotionPresenceContract(
+  read('src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx'),
+))
+
 const overlay = read('src/lib/query/task-target-overlay.ts')
 const targetStateMap = read('src/lib/query/hooks/useTaskTargetStateMap.ts')
 if (/TASK_TARGET_OVERLAY_TTL_MS|expiresAt/.test(overlay) || /runtime\.expiresAt/.test(targetStateMap)) {
@@ -132,7 +137,7 @@ for (const rendererPath of walk(path.join(canvasRoot, 'nodes'))) {
 
 if (violations.length > 0) {
   console.error([
-    'CN-07/CN-08/CN-09: Canvas lifecycle must have one resolver, exhaustive registries, and no legacy writers.',
+    'CN-07/CN-08/CN-09/CN-12: Canvas lifecycle and renderer motion must have one resolver, exhaustive registries, and no recursive state writers.',
     'See docs/architecture/modules/canvas-node.md#不变量.',
     ...Array.from(new Set(violations)),
   ].join('\n'))

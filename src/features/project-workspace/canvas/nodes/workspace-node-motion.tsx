@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { resolveWorkspaceCanvasMotionPresenceAction } from './workspace-canvas-motion-presence'
 
 export const WORKSPACE_CANVAS_REVEAL_CLASS = 'workspace-canvas-soft-reveal'
 
@@ -40,26 +41,33 @@ export function WorkspaceCanvasMotionPresence({
   readonly children: ReactNode
 }) {
   const [rendered, setRendered] = useState(visible)
-  const [cachedChildren, setCachedChildren] = useState<ReactNode>(children)
+  const lastVisibleChildrenRef = useRef<ReactNode>(children)
   const [motionActive, setMotionActive] = useState(false)
   const renderedMotionKey = motionKey === undefined ? 'default' : String(motionKey)
+  const presenceAction = resolveWorkspaceCanvasMotionPresenceAction({
+    visible,
+    exit,
+    rendered,
+  })
 
   useEffect(() => {
-    if (visible) {
-      setCachedChildren(children)
+    if (visible) lastVisibleChildrenRef.current = children
+  }, [children, visible])
+
+  useEffect(() => {
+    if (presenceAction === 'show') {
       setRendered(true)
       return undefined
     }
-
-    if (!rendered) return undefined
-    if (!exit) {
+    if (presenceAction === 'hide') {
       setRendered(false)
       return undefined
     }
+    if (presenceAction !== 'schedule_exit') return undefined
 
     const timeoutId = window.setTimeout(() => setRendered(false), WORKSPACE_CANVAS_EXIT_DURATION_MS)
     return () => window.clearTimeout(timeoutId)
-  }, [children, exit, rendered, visible])
+  }, [presenceAction])
 
   useEffect(() => {
     if (!rendered || workspaceCanvasShouldReduceMotion()) {
@@ -86,7 +94,7 @@ export function WorkspaceCanvasMotionPresence({
       data-workspace-canvas-motion-active={motionActive ? 'true' : 'false'}
     >
       <div className={workspaceCanvasPresenceClass(className)}>
-        {visible ? children : cachedChildren}
+        {visible ? children : lastVisibleChildrenRef.current}
       </div>
     </div>
   )
