@@ -5,8 +5,12 @@ import { createImageWorker } from './image.worker'
 import { createVideoWorker } from './video.worker'
 import { createVoiceWorker } from './voice.worker'
 import { createTextWorker } from './text.worker'
+import { configureImageQueueGlobalConcurrency } from '@/lib/task/queues'
 
 async function start() {
+  const imageGlobalConcurrency = await configureImageQueueGlobalConcurrency()
+  logInfo(`[Workers] image global concurrency: ${imageGlobalConcurrency}`)
+
   try {
     await recoverTasksOnWorkerStartup()
   } catch (error) {
