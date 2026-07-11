@@ -75,7 +75,7 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
     'runWithProjectAgentOperationExecutionFence',
     'assertProjectAgentOperationExecutionFenceCurrent',
     'assertProjectAgentOperationExecutionFenceInTransaction',
-    'requireProjectAgentSuspensionReceipt',
+    'requireProjectAgentChoiceHandoffReceipt',
     'assertAssistantToolWriteAuthority',
     'PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED',
     'PROJECT_AGENT_OPERATION_TASK_SUBMISSION_NOT_COMMITTED',

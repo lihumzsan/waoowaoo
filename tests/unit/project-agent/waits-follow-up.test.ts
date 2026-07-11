@@ -4,6 +4,7 @@ const prismaState = vi.hoisted(() => ({
   queryRaw: vi.fn(),
   executeRaw: vi.fn(),
   eventCount: vi.fn(),
+  eventFindUnique: vi.fn(),
   waitFindUnique: vi.fn(),
   waitUpdateMany: vi.fn(),
   activityFindUnique: vi.fn(),
@@ -14,8 +15,10 @@ const eventState = vi.hoisted(() => ({
   appendProjectAgentEventsInTransaction: vi.fn(async (_tx: unknown, input: {
     events: Array<{ runFence: { runVersion: number; eventSeq: string } }>
   }) => {
-    input.events[0].runFence.runVersion += 1
-    input.events[0].runFence.eventSeq = '2'
+    for (const event of input.events) {
+      event.runFence.runVersion += 1
+      event.runFence.eventSeq = String(Number(event.runFence.eventSeq) + 1)
+    }
     return null
   }),
 }))
@@ -35,6 +38,9 @@ vi.mock('@/lib/prisma', () => ({
       },
       projectAgentActivity: {
         findUnique: prismaState.activityFindUnique,
+      },
+      projectAgentEvent: {
+        findUnique: prismaState.eventFindUnique,
       },
     })),
     projectAgentEvent: {
@@ -70,6 +76,8 @@ describe('project agent wait follow-up details', () => {
     prismaState.executeRaw.mockReset()
     prismaState.eventCount.mockReset()
     prismaState.eventCount.mockResolvedValue(0)
+    prismaState.eventFindUnique.mockReset()
+    prismaState.eventFindUnique.mockResolvedValue(null)
     prismaState.waitFindUnique.mockReset()
     prismaState.waitUpdateMany.mockReset()
     prismaState.waitUpdateMany.mockResolvedValue({ count: 1 })
@@ -233,14 +241,11 @@ describe('project agent wait follow-up details', () => {
     })
     expect(eventState.appendProjectAgentEventsInTransaction).toHaveBeenCalledTimes(1)
     expect(prismaState.waitUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
-      data: {
-        runVersion: 2,
-        eventSeq: BigInt(2),
-      },
+      data: { runVersion: 3, eventSeq: BigInt(3) },
     }))
   })
 
-  it('reuses the durable command activity without replaying activity.started on retry', async () => {
+  it('does not create a continuation Activity when retrying the durable command', async () => {
     const row = {
       id: 'wait-1',
       runId: 'run-1',
@@ -272,8 +277,7 @@ describe('project agent wait follow-up details', () => {
     }
     prismaState.queryRaw.mockResolvedValue([row])
     prismaState.waitFindUnique.mockResolvedValue(row)
-    prismaState.activityFindUnique.mockResolvedValue({ runId: 'run-1', type: 'task_follow_up' })
-
+    prismaState.eventFindUnique.mockResolvedValue({ id: BigInt(1) })
     const followUp = await startProjectAgentWaitFollowUp({
       runId: 'run-1',
       waitId: 'wait-1',
@@ -283,7 +287,7 @@ describe('project agent wait follow-up details', () => {
       userId: 'user-1',
     })
 
-    expect(followUp).toMatchObject({ waitId: 'wait-1', followUpActivityId: 'command-1' })
+    expect(followUp).toMatchObject({ waitId: 'wait-1' })
     expect(eventState.appendProjectAgentEventsInTransaction).not.toHaveBeenCalled()
     expect(prismaState.waitUpdateMany).not.toHaveBeenCalled()
   })

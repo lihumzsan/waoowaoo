@@ -5,7 +5,7 @@ const state = vi.hoisted(() => ({
   handoff: null as Record<string, unknown> | null,
   checkpoint: null as Record<string, unknown> | null,
   wait: {
-    id: 'wait-1', runId: 'run-1', projectId: 'project-1', userId: 'user-1', episodeId: 'episode-1',
+    id: 'wait-1', activityId: 'waiting-task-activity-1', runId: 'run-1', projectId: 'project-1', userId: 'user-1', episodeId: 'episode-1',
     assistantId: 'workspace-command', scopeRef: 'episode:episode-1', operationId: 'plan_chapters',
     status: 'claimed', followUpCommandId: 'command-1', claimId: 'claim-1',
     claimExpiresAt: new Date(Date.now() + 60_000), followedAt: null,
@@ -114,7 +114,7 @@ describe('project agent execution handoff', () => {
     state.handoff = null
     state.checkpoint = null
     state.wait = {
-      id: 'wait-1', runId: 'run-1', projectId: 'project-1', userId: 'user-1', episodeId: 'episode-1',
+      id: 'wait-1', activityId: 'waiting-task-activity-1', runId: 'run-1', projectId: 'project-1', userId: 'user-1', episodeId: 'episode-1',
       assistantId: 'workspace-command', scopeRef: 'episode:episode-1', operationId: 'plan_chapters',
       status: 'claimed', followUpCommandId: 'command-1', claimId: 'claim-1',
       claimExpiresAt: new Date(Date.now() + 60_000), followedAt: null,
@@ -229,7 +229,6 @@ describe('project agent execution handoff', () => {
     }))
     expect(state.appendEvents).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       events: expect.arrayContaining([
-        expect.objectContaining({ event: expect.objectContaining({ kind: 'activity.completed' }) }),
         expect.objectContaining({ event: expect.objectContaining({ kind: 'wait.followed' }) }),
         expect.objectContaining({ event: expect.objectContaining({ kind: 'run.completed' }) }),
       ]),

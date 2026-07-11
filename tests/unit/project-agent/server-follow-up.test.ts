@@ -11,7 +11,7 @@ const waitMock = vi.hoisted(() => ({
     userId: 'user-1',
     episodeId: 'episode-1',
     followUp: {
-      runId: 'run-1', activityId: 'activity-1', followUpActivityId: 'outbox-1',
+      runId: 'run-1', activityId: 'activity-1',
       waitId: 'wait-1', followUpKey: 'follow-up-key-1', followUpMode: 'resume_agent',
       operationId: 'plan_chapters', taskIds: ['task-1'], failedTaskIds: [], canceledTaskIds: [],
       failedTasks: [], terminalStatus: 'completed', total: 1, successCount: 1,
@@ -19,7 +19,7 @@ const waitMock = vi.hoisted(() => ({
     },
   })),
   startProjectAgentWaitFollowUp: vi.fn(async (input: { commandId: string; claimOwner: string }) => ({
-    runId: 'run-1', activityId: 'activity-1', followUpActivityId: input.commandId,
+    runId: 'run-1', activityId: 'activity-1',
     waitId: 'wait-1', followUpKey: 'follow-up-key-1', followUpMode: 'resume_agent',
     operationId: 'plan_chapters', taskIds: ['task-1'], failedTaskIds: [], canceledTaskIds: [],
     failedTasks: [], terminalStatus: 'completed', total: 1, successCount: 1,
@@ -212,7 +212,7 @@ describe('project agent durable server follow-up', () => {
       continuation: expect.objectContaining({
         waitId: 'wait-1',
         commandId: 'outbox-1',
-        executionActivityId: 'outbox-1',
+        waitActivityId: 'activity-1',
       }),
     }))
     expect(executionHandoffMock.settleProjectAgentContinuationTerminalHandoff).not.toHaveBeenCalled()

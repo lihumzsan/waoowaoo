@@ -248,7 +248,9 @@ async function runClaimedFollowUp(params: {
           waitId: params.followUp.waitId,
           commandId: params.commandId,
           claimOwner: params.claimOwner,
-          executionActivityId: consumed.followUpActivityId ?? params.commandId,
+          waitActivityId: consumed.activityId ?? (() => {
+            throw new Error(`PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${consumed.waitId}`)
+          })(),
         },
       })
       if (recovered) return true

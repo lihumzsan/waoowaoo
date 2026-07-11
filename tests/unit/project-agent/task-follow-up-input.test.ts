@@ -6,7 +6,6 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
   return {
     runId: 'run-1',
     activityId: 'activity-1',
-    followUpActivityId: 'activity-follow-up-1',
     waitId: 'wait-1',
     followUpKey: 'follow-up-key-1',
     followUpMode: 'resume_agent',

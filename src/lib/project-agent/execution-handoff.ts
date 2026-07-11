@@ -111,7 +111,8 @@ export interface ProjectAgentExecutionSegmentContinuation {
   waitId: string
   commandId: string
   claimOwner: string
-  executionActivityId: string
+  /** The original waiting-task Activity anchors the durable wait.followed Event. */
+  waitActivityId: string
 }
 
 function requireIdentity(value: string, code: string): string {
@@ -577,19 +578,11 @@ export async function appendProjectAgentExecutionSegmentMessageHandoffInTransact
     },
     events: [{
       runFence: input.runFence,
-      idempotencyKey: `activity-completed:${input.continuation.executionActivityId}:continuation`,
-      event: {
-        kind: 'activity.completed',
-        runId: input.runId,
-        activityId: input.continuation.executionActivityId,
-      },
-    }, {
-      runFence: input.runFence,
       idempotencyKey: `wait-followed:${input.continuation.waitId}:${input.continuation.commandId}`,
       event: {
         kind: 'wait.followed',
         runId: input.runId,
-        activityId: input.continuation.executionActivityId,
+        activityId: input.continuation.waitActivityId,
         waitId: input.continuation.waitId,
         claimId: input.continuation.claimOwner,
         commandId: input.continuation.commandId,
@@ -651,6 +644,7 @@ async function lockClaimedProjectAgentContinuationWait(
     || wait.claimId !== input.claimOwner
     || !wait.claimExpiresAt
     || wait.claimExpiresAt.getTime() <= Date.now()
+    || !wait.activityId
   ) {
     throw new Error(`PROJECT_AGENT_CONTINUATION_SETTLEMENT_STALE:${input.waitId}`)
   }
@@ -663,6 +657,7 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
     runId: string
     wait: {
       id: string
+      activityId: string | null
       projectId: string
       userId: string
       episodeId: string | null
@@ -675,43 +670,16 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
     outcome: ProjectAgentContinuationTerminalOutcome
   },
 ): Promise<void> {
+  const waitActivityId = requireIdentity(
+    input.wait.activityId ?? '',
+    `PROJECT_AGENT_WAIT_ACTIVITY_MISSING:${input.wait.id}`,
+  )
   const run = await tx.projectAgentRun.findUnique({
     where: { id: input.runId },
     select: { id: true, runVersion: true, eventSeq: true },
   })
   if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${input.runId}`)
   const runFence = createProjectAgentRunFence(run)
-  const activityEvent = input.outcome === 'failed'
-    || input.outcome === 'outcome_unknown'
-    || input.outcome === 'delivery_exhausted'
-    ? {
-        runFence,
-        idempotencyKey: `activity-failed:${input.commandId}:continuation`,
-        event: {
-          kind: 'activity.failed' as const,
-          runId: input.runId,
-          activityId: input.commandId,
-          errorCode: input.outcome === 'outcome_unknown'
-            ? 'PROJECT_AGENT_CONTINUATION_OUTCOME_UNKNOWN'
-            : input.outcome === 'delivery_exhausted'
-              ? 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED'
-              : 'PROJECT_AGENT_TASK_FOLLOW_UP_FAILED',
-          errorMessage: input.outcome === 'outcome_unknown'
-            ? 'Project agent continuation outcome is unknown and must not be replayed automatically'
-            : input.outcome === 'delivery_exhausted'
-              ? 'Project agent continuation delivery exhausted before execution could complete'
-              : 'Project agent continuation reached a tool error',
-        },
-      }
-    : {
-        runFence,
-        idempotencyKey: `activity-completed:${input.commandId}:continuation`,
-        event: {
-          kind: 'activity.completed' as const,
-          runId: input.runId,
-          activityId: input.commandId,
-        },
-      }
   const terminalRunEvent = input.outcome === 'completed'
     ? {
         runFence,
@@ -765,19 +733,19 @@ async function appendProjectAgentContinuationTerminalEventsInTransaction(
       assistantId: input.wait.assistantId as ProjectAssistantId,
       scopeRef: input.wait.scopeRef,
     },
-    events: [activityEvent, {
+    events: [{
       runFence,
       idempotencyKey: `wait-followed:${input.wait.id}:${input.commandId}`,
       event: {
         kind: 'wait.followed' as const,
         runId: input.runId,
-        activityId: input.commandId,
+        activityId: waitActivityId,
         waitId: input.wait.id,
         claimId: input.claimOwner,
         commandId: input.commandId,
         sourceOperationId: input.wait.operationId,
       },
-    }, terminalRunEvent],
+      }, terminalRunEvent],
   })
 }
 

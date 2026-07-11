@@ -26,7 +26,6 @@ import type {
   AgentRuntimeContextPartData,
   ProjectAgentChoiceResolvedPartData,
   ProjectAgentContext,
-  ProjectAgentActivityPartData,
   ProjectAgentInterruptionPartData,
   ProjectAgentInterruptionResolvedPartData,
   ProjectAgentRunPartData,
@@ -864,24 +863,26 @@ export async function createProjectAgentChatResponse(input: {
         if (!runAbortController.signal.aborted) runAbortController.abort(error)
       },
     })
-    await appendProjectAgentEvents({
-      scope: {
-        projectId: input.projectId,
-        userId: input.userId,
-        episodeId: context.episodeId || null,
-        assistantId: 'workspace-command',
-      },
-      events: [{
-        runFence,
-        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
-        event: {
-          kind: 'run.execution_started',
-          runId: input.run.id,
-          executionSegmentId: executionSegment.id,
-          controlKind: executionControlKind,
+    if (control.kind !== 'task_follow_up') {
+      await appendProjectAgentEvents({
+        scope: {
+          projectId: input.projectId,
+          userId: input.userId,
+          episodeId: context.episodeId || null,
+          assistantId: 'workspace-command',
         },
-      }],
-    })
+        events: [{
+          runFence,
+          idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+          event: {
+            kind: 'run.execution_started',
+            runId: input.run.id,
+            executionSegmentId: executionSegment.id,
+            controlKind: executionControlKind,
+          },
+        }],
+      })
+    }
     const runtimeMessages = control.kind === 'approval'
       ? normalizedMessages
       : await compressMessages({
@@ -992,19 +993,6 @@ export async function createProjectAgentChatResponse(input: {
       })),
     } satisfies AgentRuntimeContextPartData),
   ]
-
-  if (control.kind === 'task_follow_up' && control.followUp.followUpActivityId) {
-    initialChunks.push(createDataChunk('data-agent-activity', {
-      activityId: control.followUp.followUpActivityId,
-      runId: input.run.id,
-      type: 'task_follow_up',
-      status: 'running',
-      operationId: null,
-      sourceOperationId: control.followUp.operationId,
-      toolCallId: null,
-      choiceType: null,
-    } satisfies ProjectAgentActivityPartData))
-  }
 
   if (control.kind === 'approval') {
     initialChunks.push(createDataChunk('data-agent-interruption-resolved', {
@@ -1343,9 +1331,8 @@ export async function createProjectAgentChatResponse(input: {
           })()
           : null
 
-        let waitFollowUpMode: ProjectAgentWaitFollowUpMode | null = null
         try {
-          waitFollowUpMode = await createProjectAgentWaitBindings({
+          await createProjectAgentWaitBindings({
             stopPart: latestStopPart,
             registry: operations,
             transactionallyBoundTaskBatches,
@@ -1441,15 +1428,15 @@ export async function createProjectAgentChatResponse(input: {
             continuation: control.kind === 'task_follow_up'
               ? (() => {
                   const claimOwner = input.continuationClaim?.claimOwner
-                  const executionActivityId = control.followUp.followUpActivityId
-                  if (!claimOwner || !executionActivityId) {
+                  const waitActivityId = control.followUp.activityId
+                  if (!claimOwner || !waitActivityId) {
                     throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
                   }
                   return {
                     waitId: control.followUp.waitId,
                     commandId: control.followUp.commandId,
                     claimOwner,
-                    executionActivityId,
+                    waitActivityId,
                   }
                 })()
               : null,
@@ -1499,15 +1486,15 @@ export async function createProjectAgentChatResponse(input: {
               continuation: control.kind === 'task_follow_up'
                 ? (() => {
                     const claimOwner = input.continuationClaim?.claimOwner
-                    const executionActivityId = control.followUp.followUpActivityId
-                    if (!claimOwner || !executionActivityId) {
+                    const waitActivityId = control.followUp.activityId
+                    if (!claimOwner || !waitActivityId) {
                       throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
                     }
                     return {
                       waitId: control.followUp.waitId,
                       commandId: control.followUp.commandId,
                       claimOwner,
-                      executionActivityId,
+                      waitActivityId,
                     }
                   })()
                 : null,
@@ -1535,15 +1522,15 @@ export async function createProjectAgentChatResponse(input: {
               continuation: control.kind === 'task_follow_up'
                 ? (() => {
                     const claimOwner = input.continuationClaim?.claimOwner
-                    const executionActivityId = control.followUp.followUpActivityId
-                    if (!claimOwner || !executionActivityId) {
+                    const waitActivityId = control.followUp.activityId
+                    if (!claimOwner || !waitActivityId) {
                       throw new Error('PROJECT_AGENT_CONTINUATION_SETTLEMENT_IDENTITY_MISSING')
                     }
                     return {
                       waitId: control.followUp.waitId,
                       commandId: control.followUp.commandId,
                       claimOwner,
-                      executionActivityId,
+                      waitActivityId,
                     }
                   })()
                 : null,

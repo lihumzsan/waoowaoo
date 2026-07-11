@@ -228,7 +228,7 @@ export async function expectAssistantTaskContinuation(input: {
     taskIds: [input.taskId],
     terminalStatus: 'completed',
   })
-  const consumed = await startProjectAgentWaitFollowUp({
+  await startProjectAgentWaitFollowUp({
     runId: input.runId,
     waitId: input.waitId,
     commandId: command.id,
@@ -236,18 +236,13 @@ export async function expectAssistantTaskContinuation(input: {
     projectId: input.projectId,
     userId: input.userId,
   })
-  expect(consumed?.followUpActivityId).toEqual(expect.any(String))
-  expect((await getCurrentProjectAgentActivity({
+  expect(await getCurrentProjectAgentActivity({
     projectId: input.projectId,
     userId: input.userId,
     episodeId: input.episodeId,
     assistantId: 'workspace-command',
     runId: input.runId,
-  }))).toMatchObject({
-    type: 'task_follow_up',
-    status: 'running',
-    sourceOperationId: 'generate_character_image',
-  })
+  })).toBeNull()
   expect((await getProjectAgentRun({
     projectId: input.projectId,
     userId: input.userId,

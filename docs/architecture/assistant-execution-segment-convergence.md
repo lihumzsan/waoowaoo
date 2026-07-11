@@ -19,8 +19,8 @@ Assistant 生命周期事实。Choice、Approval、Task 与普通完成只是这
 
 ## 发现的旧多写入链
 
-当前 `task_follow_up` 将 `followUpActivityId` 以不可变的 `currentActivityId` 放入
-整个模型上下文。于是同一个 Activity 可能被下列路径结束：
+当前 `task_follow_up` 把 command id 伪装成运行中的 Activity，并将其传入整个模型上下文。
+于是同一个 Activity 可能被下列路径结束：
 
 | 旧入口 | 触发时机 | 写入的同一事实 |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ Assistant 生命周期事实。Choice、Approval、Task 与普通完成只是这
   -> execution-handoff（唯一 writer）
        锁定 Run 与（续跑时）Wait claim，验证 execution fence
        写 assistant message / checkpoint
-       结算 execution segment Activity 一次
+       不创建 execution segment Activity；只结算 Operation / waiting Activity 自己的生命周期
        按 outcome 创建 Interaction 或 Task Wait，或推进 Run 终态
        写事件与 Session Outbox
        仅提交成功后确认 continuation Outbox
@@ -58,11 +58,11 @@ Assistant 生命周期事实。Choice、Approval、Task 与普通完成只是这
 
 | Outcome | 事务内结果 |
 | --- | --- |
-| `completed` | message + segment Activity completed + Run completed |
-| `failed` / `outcome_unknown` / `delivery_exhausted` | message + segment Activity failed + Run failed |
-| `awaiting_choice` | message + segment Activity completed + Choice Interaction + 新 waiting Activity + Run awaiting_choice |
-| `awaiting_approval` | prepared Approval intent + message + segment Activity completed + Approval Interaction + 新 waiting Activity + Run awaiting_approval |
-| `awaiting_task` | message + segment Activity completed + Task Wait + 新 waiting Activity + Run awaiting_task |
+| `completed` | message + Run completed；执行段不拥有 Activity，工具已各自结算自己的 Activity |
+| `failed` / `outcome_unknown` / `delivery_exhausted` | message + Run failed；执行段不伪造一个 terminal Activity |
+| `awaiting_choice` | message + Choice Interaction + 新 waiting Activity + Run awaiting_choice |
+| `awaiting_approval` | prepared Approval intent + message + Approval Interaction + 新 waiting Activity + Run awaiting_approval |
+| `awaiting_task` | message + Task Wait + 新 waiting Activity + Run awaiting_task |
 
 “当前执行段”不是“当前运行中的工具”。一个执行段可先读取多次、执行多个短操作，
 最后再挂起；这些内部 Activity 只记录各工具本身，不能决定或提前终结该执行段。
@@ -71,8 +71,8 @@ Assistant 生命周期事实。Choice、Approval、Task 与普通完成只是这
 
 | 事实 | 唯一 writer | 其他层的权限 |
 | --- | --- | --- |
-| Execution segment Activity 终态 | `settleProjectAgentExecutionSegment` | 工具、adapter、Choice/Approval/Wait helper 禁止写入 |
-| Operation Activity | tool adapter | 仅创建/结束自己的 Activity；不得写 execution segment Activity |
+| Execution segment 执行身份 | `executionSegmentId + run.execution_started + continuation checkpoint` | 不是 `ProjectAgentActivity`，不得伪造为 Activity |
+| Operation / waiting Activity | tool adapter 与事件 reducer | 仅创建/结束自身的 Activity；不得承载 execution segment 生命周期 |
 | Choice / Approval Interaction | execution-handoff 的 outcome projector | Choice/Approval 先提供已验证、不可见的 intent/offer |
 | Task Wait | execution segment settlement 的 Task outcome projector | Task submission 只在同一事务提供 Task identity |
 | Continuation checkpoint、Thread message、Wait followed、Run 终态 | execution-handoff | Outbox worker 只 claim、调用、在成功后 ack |
@@ -96,8 +96,8 @@ Choice/Approval/Task 新等待的 Event、Activity 与 Run 状态可在同一事
 
 ## 明确删除项
 
-- `ProjectAgentContext.currentActivityId` 与所有 `previousActivityId` 参数；
-- 普通工具 adapter 在开始新工具前结束 follow-up Activity 的分支；
+- `ProjectAgentContext.currentActivityId`、`followUpActivityId` 与所有 `previousActivityId` 参数；
+- 普通工具 adapter 在开始新工具前结束 follow-up Activity 的分支，以及 task-follow-up Activity 的创建；
 - Choice、Approval、Task Wait helper 各自结束 predecessor Activity 的分支；
 - `checkpointProjectAgentWaitFollowUp` / `finalizeProjectAgentWaitFollowUp` 对 command Activity 的分裂式结算；
 - stream body drain 成功即等同于 Outbox delivery 成功的隐式约定；
@@ -126,9 +126,9 @@ registry 自动复用同一 Choice outcome；不为它们增加专属 lifecycle 
 - 断言不存在 `outbox accepted && wait claimed`、同一 Activity 两次终态、消息存在但
   无匹配权威 Run/Interaction/Wait，或 UI/持久 Run 状态分离。
 
-guard 必须从生产调用图而不是固定字符串证明：只有 execution segment settlement
-可以产生 segment Activity 的 terminal Event；旧 adapter/Choice/Approval/Wait/finalizer
-入口重新出现时，最小恶意 fixture 必须失败。
+guard 必须从生产调用图而不是固定字符串证明：continuation command 不能重新变成
+Activity，且只有各 Activity 自己的生命周期入口能产生其 terminal Event；旧
+adapter/Choice/Approval/Wait/finalizer 入口重新出现时，最小恶意 fixture 必须失败。
 
 ## 历史回归矩阵
 

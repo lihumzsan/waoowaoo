@@ -9,7 +9,7 @@ import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
 } from './persistence'
-import { appendProjectAgentEvents, appendProjectAgentEventsInTransaction } from './event'
+import { appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import {
@@ -21,6 +21,10 @@ import {
   type ProjectAgentRunFence,
 } from './run-fence'
 import { prepareProjectAgentTaskExecutionHandoffInTransaction } from './execution-handoff'
+import {
+  createProjectAgentExecutionSegment,
+  projectAgentExecutionStartedIdempotencyKey,
+} from './execution-segment'
 
 export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
@@ -124,7 +128,6 @@ export interface ProjectAgentWaitFailedTask {
 export interface ProjectAgentWaitFollowUp {
   runId: string | null
   activityId: string | null
-  followUpActivityId: string | null
   waitId: string
   followUpKey: string
   followUpMode: ProjectAgentWaitFollowUpMode
@@ -257,7 +260,6 @@ async function buildWaitFollowUpFromRow(
   row: ProjectAgentWaitRow,
   params: {
     claimId?: string | null
-    followUpActivityId: string | null
   },
 ): Promise<ProjectAgentWaitFollowUp | null> {
   if (row.terminalStatus !== 'completed' && row.terminalStatus !== 'failed' && row.terminalStatus !== 'canceled') return null
@@ -273,7 +275,6 @@ async function buildWaitFollowUpFromRow(
   return {
     runId: row.runId,
     activityId: row.activityId,
-    followUpActivityId: params.followUpActivityId,
     waitId: row.id,
     followUpKey: row.followUpKey,
     followUpMode: normalizeWaitFollowUpMode(row.followUpMode),
@@ -508,51 +509,6 @@ export function resolveWaitTerminalNextStatus(params: {
     return 'followed'
   }
   return 'resolved'
-}
-
-async function applyWaitTerminalStatus(input: {
-  waitId: string
-  runId: string
-  runFence: ProjectAgentRunFence
-  activityId: string
-  projectId: string
-  userId: string
-  episodeId?: string | null
-  assistantId?: ProjectAssistantId
-  followUpMode: string
-  terminalStatus: ProjectAgentWaitTerminalStatus
-  terminalTaskIds: string[]
-  failedTaskIds: string[]
-  canceledTaskIds: string[]
-}): Promise<void> {
-  await appendProjectAgentEvents({
-    scope: {
-      projectId: input.projectId,
-      userId: input.userId,
-      episodeId: input.episodeId ?? null,
-      assistantId: input.assistantId,
-    },
-    events: [{
-      runFence: input.runFence,
-      idempotencyKey: buildProjectAgentTaskTerminalIdempotencyKey({
-        waitId: input.waitId,
-        terminalStatus: input.terminalStatus,
-        terminalTaskIds: input.terminalTaskIds,
-        failedTaskIds: input.failedTaskIds,
-        canceledTaskIds: input.canceledTaskIds,
-      }),
-      event: {
-        kind: 'task.terminal',
-        runId: input.runId,
-        activityId: input.activityId,
-        waitId: input.waitId,
-        terminalStatus: input.terminalStatus,
-        terminalTaskIds: input.terminalTaskIds,
-        failedTaskIds: input.failedTaskIds,
-        canceledTaskIds: input.canceledTaskIds,
-      },
-    }],
-  })
 }
 
 export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
@@ -843,7 +799,6 @@ export async function claimProjectAgentWaitContinuation(input: {
     if (!row) throw new Error(`PROJECT_AGENT_WAIT_NOT_FOUND:${input.waitId}`)
     const followUp = await buildWaitFollowUpFromRow(row as ProjectAgentWaitRow, {
       claimId: input.claimOwner,
-      followUpActivityId: input.commandId,
     })
     if (!followUp) throw new Error(`PROJECT_AGENT_WAIT_FOLLOW_UP_INVALID:${input.waitId}`)
     return {
@@ -984,7 +939,10 @@ export async function startProjectAgentWaitFollowUp(input: {
     })
     return null
   }
-  const followUpActivityId = input.commandId
+  const executionSegment = createProjectAgentExecutionSegment({
+    kind: 'task_follow_up',
+    commandId: input.commandId,
+  })
   const startedRow = await prisma.$transaction(async (tx) => {
     const current = await tx.projectAgentWait.findUnique({ where: { id: input.waitId } })
     if (
@@ -1000,17 +958,13 @@ export async function startProjectAgentWaitFollowUp(input: {
       || current.followedAt !== null
     ) return null
 
-    const existingActivity = await tx.projectAgentActivity.findUnique({
-      where: { id: followUpActivityId },
-      select: { runId: true, type: true },
+    const executionStarted = await tx.projectAgentEvent.findUnique({
+      where: {
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+      },
+      select: { id: true },
     })
-    if (existingActivity) {
-      if (existingActivity.runId !== input.runId || existingActivity.type !== 'task_follow_up') {
-        throw new Error(`PROJECT_AGENT_CONTINUATION_ACTIVITY_IDENTITY_CONFLICT:${followUpActivityId}`)
-      }
-      return current as ProjectAgentWaitRow
-    }
-
+    if (executionStarted) return current as ProjectAgentWaitRow
     const currentFence = createProjectAgentRunFence({
       id: input.runId,
       runVersion: current.runVersion,
@@ -1026,14 +980,24 @@ export async function startProjectAgentWaitFollowUp(input: {
       },
       events: [{
         runFence: currentFence,
-        idempotencyKey: `activity-started:${followUpActivityId}`,
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
         event: {
-          kind: 'activity.started',
+          kind: 'run.execution_started',
           runId: input.runId,
-          activityId: followUpActivityId,
-          type: 'task_follow_up',
-          operationId: null,
-          sourceOperationId: current.operationId,
+          executionSegmentId: executionSegment.id,
+          controlKind: executionSegment.controlKind,
+        },
+      }, {
+        runFence: currentFence,
+        idempotencyKey: `run-running:${input.runId}:continuation:${input.commandId}`,
+        event: {
+          kind: 'run.status_changed',
+          runId: input.runId,
+          status: 'running',
+          expectedStatuses: ['awaiting_task'],
+          stopReason: 'task_follow_up',
+          errorCode: null,
+          errorMessage: null,
         },
       }],
     })
@@ -1065,7 +1029,6 @@ export async function startProjectAgentWaitFollowUp(input: {
   if (!startedRow) return null
   return await buildWaitFollowUpFromRow(startedRow, {
     claimId: input.claimOwner,
-    followUpActivityId,
   })
 }
 

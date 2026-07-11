@@ -108,6 +108,32 @@ export function inspectExecutionHandoffConvergence(files) {
   return violations
 }
 
+/**
+ * AR-03B: a task-follow-up command is an execution segment, never a synthetic
+ * Activity. Keeping this detector exported makes the boundary independently
+ * falsifiable instead of only checking today's production file.
+ */
+export function inspectContinuationExecutionSegmentBoundary(sourceText) {
+  const violations = []
+  if (sourceText.includes('followUpActivityId')) {
+    violations.push('continuation execution identity must not become an Activity (followUpActivityId)')
+  }
+  if (/type\s*:\s*['"]task_follow_up['"]/.test(sourceText)) {
+    violations.push("continuation execution identity must not become an Activity (type: 'task_follow_up')")
+  }
+  for (const [required, pattern] of [
+    ['createProjectAgentExecutionSegment', /createProjectAgentExecutionSegment/],
+    ['projectAgentExecutionStartedIdempotencyKey(executionSegment.id)', /projectAgentExecutionStartedIdempotencyKey\(\s*executionSegment\.id\s*\)/],
+    ["kind: 'run.execution_started'", /kind\s*:\s*['"]run\.execution_started['"]/],
+    ["status: 'running'", /status\s*:\s*['"]running['"]/],
+  ]) {
+    if (!pattern.test(sourceText)) {
+      violations.push(`continuation start must retain execution-segment Run transition ${required}`)
+    }
+  }
+  return violations
+}
+
 function mutationDataKeys(node) {
   const argument = node.arguments[0]
   if (!argument || !ts.isObjectLiteralExpression(argument)) return null
@@ -205,7 +231,7 @@ if (
 ) {
   violations.push('src/lib/project-agent/runtime.ts: user-visible failure must atomically settle message + Run and must not reopen a consumed decision')
 }
-const executionFenceIndex = runtimeSource.indexOf("kind: 'run.execution_started'")
+const executionFenceIndex = runtimeSource.search(/kind\s*:\s*['"]run\.execution_started['"]/)
 const compressionModelIndex = runtimeSource.indexOf('await compressMessages')
 const modelRunIndex = runtimeSource.indexOf('await run(agent, runInput')
 if (
@@ -217,12 +243,12 @@ if (
 ) {
   violations.push('src/lib/project-agent/runtime.ts: execution-segment fence must precede compression and primary model execution')
 }
-for (const required of [
-  'createProjectAgentExecutionSegment',
-  'projectAgentExecutionStartedIdempotencyKey(executionSegment.id)',
-  'executionSegmentId: executionSegment.id',
+for (const [required, pattern] of [
+  ['createProjectAgentExecutionSegment', /createProjectAgentExecutionSegment/],
+  ['projectAgentExecutionStartedIdempotencyKey(executionSegment.id)', /projectAgentExecutionStartedIdempotencyKey\(\s*executionSegment\.id\s*\)/],
+  ['executionSegmentId: executionSegment.id', /executionSegmentId\s*:\s*executionSegment\.id/],
 ]) {
-  if (!runtimeSource.includes(required)) {
+  if (!pattern.test(runtimeSource)) {
     violations.push(`src/lib/project-agent/runtime.ts: execution segment authority missing ${required}`)
   }
 }
@@ -240,6 +266,10 @@ const adapterSource = fs.readFileSync(path.join(root, 'src/lib/project-agent/age
 if (adapterSource.includes('currentActivityId')) {
   violations.push('src/lib/project-agent/agents-tool-adapter.ts: generic adapter must not close a continuation Activity')
 }
+const waitsSource = fs.readFileSync(path.join(root, 'src/lib/project-agent/waits.ts'), 'utf8')
+violations.push(...inspectContinuationExecutionSegmentBoundary(waitsSource).map(
+  (violation) => `src/lib/project-agent/waits.ts: ${violation}`,
+))
 const chatRouteSource = fs.readFileSync(
   path.join(root, 'src/app/api/projects/[projectId]/assistant/chat/route.ts'),
   'utf8',

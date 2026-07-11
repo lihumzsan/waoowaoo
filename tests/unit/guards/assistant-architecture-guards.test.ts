@@ -5,6 +5,7 @@ import {
   inspectChoiceRegistryAuthority,
 } from '../../../scripts/guards/assistant-choice-offer-authority-guard.mjs'
 import {
+  inspectContinuationExecutionSegmentBoundary,
   inspectExecutionHandoffConvergence,
   inspectProjectAgentProjectionWrites,
 } from '../../../scripts/guards/project-agent-run-state-machine-guard.mjs'
@@ -64,6 +65,19 @@ describe('Assistant architecture guards', () => {
     })).toEqual([
       'fixture.ts: retired execution handoff authority currentActivityId is forbidden',
       'fixture.ts: retired execution handoff authority settleProjectAgentInterruptionSuspension is forbidden',
+    ])
+  })
+
+  it('rejects turning a task continuation command into a synthetic Activity', () => {
+    expect(inspectContinuationExecutionSegmentBoundary(
+      "const followUpActivityId = commandId\nconst activity = { type: 'task_follow_up' }",
+    )).toEqual([
+      'continuation execution identity must not become an Activity (followUpActivityId)',
+      "continuation execution identity must not become an Activity (type: 'task_follow_up')",
+      'continuation start must retain execution-segment Run transition createProjectAgentExecutionSegment',
+      'continuation start must retain execution-segment Run transition projectAgentExecutionStartedIdempotencyKey(executionSegment.id)',
+      "continuation start must retain execution-segment Run transition kind: 'run.execution_started'",
+      "continuation start must retain execution-segment Run transition status: 'running'",
     ])
   })
 })

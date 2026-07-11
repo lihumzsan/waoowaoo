@@ -53,7 +53,7 @@ async function seedResolvedContinuation(status: 'resolved' | 'abandoned' = 'reso
       userId: user.id,
       assistantId: 'workspace-command',
       scopeRef,
-      type: 'task_execution',
+      type: 'waiting_task',
       status: 'completed',
       operationId: 'generate_episode_videos',
       completedAt: new Date(),
@@ -90,7 +90,7 @@ describe('Project Agent continuation dead delivery settlement DB integration', (
     await resetBillingState()
   })
 
-  it('settles final delivery exhaustion once through checkpoint, Activity, Wait, Run, and Thread', async () => {
+  it('settles final delivery exhaustion once through checkpoint, Wait, Run, and Thread', async () => {
     const { user, project } = await seedResolvedContinuation()
 
     await expect(settleProjectAgentWaitContinuationDeliveryExhausted(
@@ -100,7 +100,7 @@ describe('Project Agent continuation dead delivery settlement DB integration', (
 
     const [wait, activity, run, checkpoint, events, thread] = await Promise.all([
       prisma.projectAgentWait.findUniqueOrThrow({ where: { id: WAIT_ID } }),
-      prisma.projectAgentActivity.findUniqueOrThrow({ where: { id: COMMAND_ID } }),
+      prisma.projectAgentActivity.findUniqueOrThrow({ where: { id: SOURCE_ACTIVITY_ID } }),
       prisma.projectAgentRun.findUniqueOrThrow({ where: { id: RUN_ID } }),
       prisma.projectAgentContinuationCheckpoint.findUniqueOrThrow({ where: { commandId: COMMAND_ID } }),
       prisma.projectAgentEvent.findMany({ where: { runId: RUN_ID }, orderBy: { id: 'asc' } }),
@@ -111,10 +111,7 @@ describe('Project Agent continuation dead delivery settlement DB integration', (
       }),
     ])
     expect(wait).toMatchObject({ status: 'followed', followUpCommandId: COMMAND_ID })
-    expect(activity).toMatchObject({
-      status: 'failed',
-      errorCode: 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED',
-    })
+    expect(activity).toMatchObject({ status: 'completed' })
     expect(run).toMatchObject({
       status: 'failed',
       stopReason: 'continuation_delivery_exhausted',
@@ -126,8 +123,8 @@ describe('Project Agent continuation dead delivery settlement DB integration', (
       messageId: `workspace-continuation-delivery-exhausted:${COMMAND_ID}`,
     })
     expect(events.map((event) => event.kind)).toEqual([
-      'activity.started',
-      'activity.failed',
+      'run.execution_started',
+      'run.status_changed',
       'wait.followed',
       'run.failed',
     ])
@@ -165,7 +162,7 @@ describe('Project Agent continuation dead delivery settlement DB integration', (
       claimOwner: FIRST_CLAIM,
       projectId: project.id,
       userId: user.id,
-    })).resolves.toMatchObject({ followUpActivityId: COMMAND_ID })
+    })).resolves.toMatchObject({ waitId: WAIT_ID })
     await expect(beginProjectAgentWaitContinuationExecution({
       runId: RUN_ID,
       waitId: WAIT_ID,
