@@ -56,6 +56,97 @@ describe('task state service helpers', () => {
     expect(state.progress).toBe(42)
     expect(state.stage).toBe('image_generating')
     expect(state.stageLabel).toBe('Generating')
+    expect(state.batch).toBeNull()
+  })
+
+  it('aggregates active child tasks from the newest image batch', () => {
+    const state = resolveTargetState(
+      { targetType: 'LocationImage', targetId: 'location-1' },
+      [
+        {
+          id: 'task-completed',
+          type: 'image_location',
+          status: 'completed',
+          progress: 100,
+          payload: { batch: { id: 'batch-1', index: 0, total: 3 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:03:00.000Z'),
+        },
+        {
+          id: 'task-processing',
+          type: 'image_location',
+          status: 'processing',
+          progress: 50,
+          payload: { batch: { id: 'batch-1', index: 1, total: 3 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:02:00.000Z'),
+        },
+        {
+          id: 'task-queued',
+          type: 'image_location',
+          status: 'queued',
+          progress: 0,
+          payload: { batch: { id: 'batch-1', index: 2, total: 3 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:01:00.000Z'),
+        },
+      ],
+    )
+
+    expect(state.phase).toBe('processing')
+    expect(state.progress).toBe(50)
+    expect(state.batch).toEqual({
+      id: 'batch-1',
+      total: 3,
+      queued: 1,
+      processing: 1,
+      completed: 1,
+      failed: 0,
+      failedIndexes: [],
+    })
+  })
+
+  it('reports partial batch failure after every child becomes terminal', () => {
+    const state = resolveTargetState(
+      { targetType: 'CharacterAppearance', targetId: 'appearance-1' },
+      [
+        {
+          id: 'task-failed',
+          type: 'image_character',
+          status: 'failed',
+          progress: 45,
+          payload: { batch: { id: 'batch-2', index: 1, total: 2 } },
+          errorCode: 'GENERATION_TIMEOUT',
+          errorMessage: 'timed out',
+          updatedAt: new Date('2026-07-11T00:02:00.000Z'),
+        },
+        {
+          id: 'task-completed',
+          type: 'image_character',
+          status: 'completed',
+          progress: 100,
+          payload: { batch: { id: 'batch-2', index: 0, total: 2 } },
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: new Date('2026-07-11T00:01:00.000Z'),
+        },
+      ],
+    )
+
+    expect(state.phase).toBe('failed')
+    expect(state.lastError?.message).toBe('timed out')
+    expect(state.batch).toEqual({
+      id: 'batch-2',
+      total: 2,
+      queued: 0,
+      processing: 0,
+      completed: 1,
+      failed: 1,
+      failedIndexes: [1],
+    })
   })
 
   it('resolves failed state and normalizes error', () => {

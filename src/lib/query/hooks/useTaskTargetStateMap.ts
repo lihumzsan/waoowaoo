@@ -30,6 +30,15 @@ export type TaskTargetState = {
     message: string
   } | null
   updatedAt: string | null
+  batch?: {
+    id: string
+    total: number
+    queued: number
+    processing: number
+    completed: number
+    failed: number
+    failedIndexes: number[]
+  } | null
 }
 
 type TaskTargetStateBatchSubscriber = {
@@ -102,6 +111,7 @@ function buildIdleState(target: TaskTargetStateQuery): TaskTargetState {
     stageLabel: null,
     lastError: null,
     updatedAt: null,
+    batch: null,
   }
 }
 

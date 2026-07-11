@@ -10,6 +10,16 @@ export type TaskTargetQuery = {
 
 export type TaskTargetPhase = 'idle' | 'queued' | 'processing' | 'completed' | 'failed'
 
+export type TaskBatchState = {
+  id: string
+  total: number
+  queued: number
+  processing: number
+  completed: number
+  failed: number
+  failedIndexes: number[]
+}
+
 export type TaskTargetState = {
   targetType: string
   targetId: string
@@ -26,6 +36,7 @@ export type TaskTargetState = {
     message: string
   } | null
   updatedAt: string | null
+  batch: TaskBatchState | null
 }
 
 const ACTIVE_STATUS = new Set(['queued', 'processing'])
@@ -100,6 +111,112 @@ export function buildIdleState(target: TaskTargetQuery): TaskTargetState {
     stageLabel: null,
     lastError: null,
     updatedAt: null,
+    batch: null,
+  }
+}
+
+function readBatchMeta(payload: unknown): { id: string; index: number; total: number } | null {
+  const payloadObject = asObject(payload)
+  const batch = asObject(payloadObject?.batch)
+  const id = asNonEmptyString(batch?.id)
+  const index = batch?.index
+  const total = batch?.total
+  if (
+    !id
+    || typeof index !== 'number'
+    || !Number.isInteger(index)
+    || index < 0
+    || typeof total !== 'number'
+    || !Number.isInteger(total)
+    || total <= 0
+    || index >= total
+  ) {
+    return null
+  }
+  return { id, index, total }
+}
+
+function resolveBatchTargetState(
+  target: TaskTargetQuery,
+  tasks: Array<{
+    id: string
+    type: string
+    status: string
+    progress: number
+    payload: unknown
+    errorCode: string | null
+    errorMessage: string | null
+    updatedAt: Date
+  }>,
+  newestBatch: { id: string; index: number; total: number },
+): TaskTargetState {
+  const batchTasks = tasks
+    .map((task) => ({ task, batch: readBatchMeta(task.payload) }))
+    .filter((entry) => entry.batch?.id === newestBatch.id)
+    .sort((left, right) => right.task.updatedAt.getTime() - left.task.updatedAt.getTime())
+
+  let queued = 0
+  let processing = 0
+  let completed = 0
+  let failed = 0
+  let progressTotal = 0
+  const failedIndexes: number[] = []
+
+  for (const entry of batchTasks) {
+    if (entry.task.status === 'queued') queued += 1
+    else if (entry.task.status === 'processing') processing += 1
+    else if (entry.task.status === 'completed') completed += 1
+    else if (entry.task.status === 'failed' || entry.task.status === 'canceled') {
+      failed += 1
+      if (entry.batch) failedIndexes.push(entry.batch.index)
+    }
+
+    progressTotal += entry.task.status === 'completed'
+      ? 100
+      : (toProgress(entry.task.progress) || 0)
+  }
+
+  const phase: TaskTargetPhase = processing > 0
+    ? 'processing'
+    : queued > 0
+      ? 'queued'
+      : failed > 0
+        ? 'failed'
+        : 'completed'
+  const representative = phase === 'processing'
+    ? batchTasks.find((entry) => entry.task.status === 'processing')?.task
+    : phase === 'queued'
+      ? batchTasks.find((entry) => entry.task.status === 'queued')?.task
+      : batchTasks[0]?.task
+  const latestFields = representative
+    ? extractTaskStateFields(representative)
+    : { stage: null, stageLabel: null, hasOutputAtStart: null, intent: 'process' as const, progress: null }
+  const failedTask = batchTasks.find((entry) =>
+    entry.task.status === 'failed' || entry.task.status === 'canceled'
+  )?.task || null
+
+  return {
+    targetType: target.targetType,
+    targetId: target.targetId,
+    phase,
+    runningTaskId: phase === 'processing' || phase === 'queued' ? representative?.id || null : null,
+    runningTaskType: representative?.type || null,
+    intent: latestFields.intent,
+    hasOutputAtStart: latestFields.hasOutputAtStart,
+    progress: Math.floor(progressTotal / newestBatch.total),
+    stage: latestFields.stage,
+    stageLabel: latestFields.stageLabel,
+    lastError: phase === 'failed' && failedTask ? normalizeFailedError(failedTask) : null,
+    updatedAt: batchTasks[0]?.task.updatedAt.toISOString() || null,
+    batch: {
+      id: newestBatch.id,
+      total: newestBatch.total,
+      queued,
+      processing,
+      completed,
+      failed,
+      failedIndexes: failedIndexes.sort((left, right) => left - right),
+    },
   }
 }
 
@@ -122,6 +239,11 @@ export function resolveTargetState(
     : tasks
 
   if (filtered.length === 0) return buildIdleState(target)
+
+  const newestBatch = readBatchMeta(filtered[0]?.payload)
+  if (newestBatch) {
+    return resolveBatchTargetState(target, filtered, newestBatch)
+  }
 
   const running = filtered.find((task) => ACTIVE_STATUS.has(task.status)) || null
   const terminal = filtered.find((task) =>
@@ -148,6 +270,7 @@ export function resolveTargetState(
       stageLabel: runningFields.stageLabel,
       lastError: null,
       updatedAt: running.updatedAt.toISOString(),
+      batch: null,
     }
   }
 
@@ -165,6 +288,7 @@ export function resolveTargetState(
       stageLabel: latestFields.stageLabel,
       lastError: null,
       updatedAt: latest.updatedAt.toISOString(),
+      batch: null,
     }
   }
 
@@ -181,6 +305,7 @@ export function resolveTargetState(
     stageLabel: latestFields.stageLabel,
     lastError: normalizeFailedError(latest),
     updatedAt: latest.updatedAt.toISOString(),
+    batch: null,
   }
 }
 
