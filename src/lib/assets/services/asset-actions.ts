@@ -30,6 +30,7 @@ import {
 } from '@/lib/assets/services/location-backed-assets'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 import { confirmProjectLocationBackedSelection } from '@/lib/assets/services/project-location-backed-selection'
+import { submitImageBatchTasks } from '@/lib/image-generation/batch-task-submitter'
 
 type AssetWriteAccess = {
   scope: AssetScope
@@ -347,6 +348,22 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     throw new ApiError('INVALID_PARAMS', { code: 'IMAGE_MODEL_CAPABILITY_NOT_CONFIGURED', message })
   }
 
+  const taskPayloadWithUi = withTaskUiPayload(taskPayload, { hasOutputAtStart })
+  if (imageIndex === null && count > 1) {
+    return submitImageBatchTasks({
+      userId: input.access.userId,
+      locale,
+      requestId: getRequestId(input.request),
+      projectId,
+      type: taskType,
+      targetType,
+      targetId,
+      payload: taskPayloadWithUi,
+      count,
+      regenerationToken,
+    })
+  }
+
   return submitTask({
     userId: input.access.userId,
     locale,
@@ -355,7 +372,7 @@ async function submitProjectAssetGenerateTask(input: AssetGenerateInput) {
     type: taskType,
     targetType,
     targetId,
-    payload: withTaskUiPayload(taskPayload, { hasOutputAtStart }),
+    payload: taskPayloadWithUi,
     dedupeKey: withRegenerationDedupeKey(
       `${taskType}:${targetId}:${imageIndex === null ? count : `single:${imageIndex}`}`,
       regenerationToken,

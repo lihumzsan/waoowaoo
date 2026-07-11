@@ -75,9 +75,37 @@ const submitTaskMock = vi.hoisted(() => vi.fn<(input: SubmitTaskCapture) => Prom
   deduped: false,
 })))
 
+type SubmitImageBatchCapture = {
+  type?: string
+  targetType?: string
+  targetId?: string
+  payload?: Record<string, unknown>
+  count?: number
+  regenerationToken?: string | null
+}
+
+const submitImageBatchTasksMock = vi.hoisted(() => vi.fn<(input: SubmitImageBatchCapture) => Promise<{
+  success: boolean
+  async: boolean
+  taskId: string
+  taskIds: string[]
+  batchId: string
+  status: string
+}>>(async () => ({
+  success: true,
+  async: true,
+  taskId: 'task-0',
+  taskIds: ['task-0', 'task-1', 'task-2'],
+  batchId: 'batch-1',
+  status: 'queued',
+})))
+
 vi.mock('@/lib/config-service', () => configServiceMock)
 vi.mock('@/lib/task/has-output', () => hasOutputMock)
 vi.mock('@/lib/task/submitter', () => ({ submitTask: submitTaskMock }))
+vi.mock('@/lib/image-generation/batch-task-submitter', () => ({
+  submitImageBatchTasks: submitImageBatchTasksMock,
+}))
 vi.mock('@/lib/image-generation/location-slots', () => ({
   ensureGlobalLocationImageSlots: vi.fn(async () => undefined),
   ensureProjectLocationImageSlots: vi.fn(async () => undefined),
@@ -124,17 +152,19 @@ describe('asset generate regeneration task payload', () => {
       },
     })
 
-    const submitArgs = submitTaskMock.mock.calls[0]?.[0]
-    if (!submitArgs?.payload) throw new Error('expected submitTask to be called with payload')
+    const submitArgs = submitImageBatchTasksMock.mock.calls[0]?.[0]
+    if (!submitArgs?.payload) throw new Error('expected submitImageBatchTasks to be called with payload')
     expect(submitArgs).toEqual(expect.objectContaining({
       type: TASK_TYPE.IMAGE_CHARACTER,
       targetType: 'CharacterAppearance',
       targetId: 'appearance-1',
+      count: 3,
     }))
 
     const payload = submitArgs.payload
     expect(payload.regenerationToken).toEqual(expect.stringMatching(/^regen-[a-z0-9-]+$/))
-    expect(submitArgs.dedupeKey).toBe(`image_character:appearance-1:3:regen:${payload.regenerationToken}`)
+    expect(submitArgs.regenerationToken).toBe(payload.regenerationToken)
+    expect(submitTaskMock).not.toHaveBeenCalled()
 
     expect(configServiceMock.buildImageTaskPayload).toHaveBeenCalledWith(expect.objectContaining({
       basePayload: expect.objectContaining({
