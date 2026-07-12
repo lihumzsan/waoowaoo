@@ -471,27 +471,6 @@ function buildProjectStateInputItem(params: {
   } as AgentInputItem
 }
 
-function isProjectStateInputItem(item: AgentInputItem): boolean {
-  if (!isRecord(item)) return false
-  const record = item as unknown as UnknownObject
-  const role = record.role
-  if (role !== 'system') return false
-  const content = record.content
-  return typeof content === 'string' && content.includes('[project_state_snapshot]')
-}
-
-function replaceProjectStateInputItem(
-  items: string | AgentInputItem[] | null | undefined,
-  snapshotItem: AgentInputItem,
-): string | AgentInputItem[] {
-  if (!items) return [snapshotItem]
-  if (typeof items === 'string') return [snapshotItem, { role: 'user', content: items } as AgentInputItem]
-  return [
-    ...items.filter((item) => !isProjectStateInputItem(item)),
-    snapshotItem,
-  ]
-}
-
 function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
   return [
     { type: 'start' },
@@ -1198,7 +1177,12 @@ export async function createProjectAgentChatResponse(input: {
             message: (control.kind === 'approval' ? control.reason : null) || 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
           })
         }
-        state._originalInput = replaceProjectStateInputItem(state._originalInput, projectStateInputItem)
+        // The serialized SDK state is the immutable continuation of the exact
+        // tool call the model requested. Rewriting its original input here can
+        // turn an approval resume into a fresh model turn and strand the
+        // already-approved invocation. Tools read current durable workflow
+        // state through their execution context, so the frozen model turn must
+        // remain byte-for-byte intact until its approved call has settled.
         return state
       })()
     : agentInput
