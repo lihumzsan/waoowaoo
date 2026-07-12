@@ -1,7 +1,7 @@
 -- Rewrite only mutable model selections. Historical tasks, task events, and
 -- graph runs intentionally remain unchanged as audit records.
-SET @old_workflow = 'basevideo/ltx23-profiles/t8-smooth-first-last-frame';
-SET @new_workflow = 'basevideo/ltx23-profiles/goon-first-last-frame-2stage';
+SET @old_workflow = _utf8mb4'basevideo/ltx23-profiles/t8-smooth-first-last-frame' COLLATE utf8mb4_unicode_ci;
+SET @new_workflow = _utf8mb4'basevideo/ltx23-profiles/goon-first-last-frame-2stage' COLLATE utf8mb4_unicode_ci;
 
 UPDATE `novel_promotion_projects`
 SET `videoModel` = REPLACE(`videoModel`, @old_workflow, @new_workflow)

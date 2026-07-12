@@ -30,4 +30,22 @@ describe('Goon first/last-frame model migration', () => {
     expect(sql).not.toMatch(/UPDATE\s+`?(?:tasks|task_events|graph_runs)`?/i)
     expect(sql).not.toMatch(/DELETE\s+FROM/i)
   })
+
+  it('uses the target columns collation for workflow session variables', () => {
+    const migrationPath = join(
+      process.cwd(),
+      'prisma',
+      'migrations',
+      '20260712150000_migrate_smooth_first_last_frame_to_goon',
+      'migration.sql',
+    )
+    const sql = readFileSync(migrationPath, 'utf-8')
+
+    expect(sql).toMatch(
+      /SET @old_workflow = _utf8mb4'.*?' COLLATE utf8mb4_unicode_ci;/,
+    )
+    expect(sql).toMatch(
+      /SET @new_workflow = _utf8mb4'.*?' COLLATE utf8mb4_unicode_ci;/,
+    )
+  })
 })

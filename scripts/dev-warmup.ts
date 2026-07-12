@@ -5,6 +5,7 @@ const DEFAULT_BASE_URL = 'http://127.0.0.1:3000'
 const DEFAULT_STARTUP_TIMEOUT_MS = 120_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
 const STARTUP_RETRY_DELAY_MS = 500
+const PROJECT_START_SUCCESS_BANNER = '=========项目启动成功==========='
 const DEFAULT_PROJECT_NAME = '蛊真人后传'
 
 export type WarmupResult = {
@@ -290,6 +291,13 @@ export async function runDevWarmup(options: WarmupOptions): Promise<WarmupResult
     })
     results.push(outcome.result)
     logResult(outcome.result, log)
+  }
+
+  const allRequestsSucceeded = results.every(
+    (result) => typeof result.status === 'number' && result.status >= 200 && result.status < 300,
+  )
+  if (allRequestsSucceeded) {
+    log(PROJECT_START_SUCCESS_BANNER)
   }
 
   return results

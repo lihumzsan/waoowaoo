@@ -154,6 +154,7 @@ describe('runDevWarmup', () => {
     expect(logs.join('\n')).not.toContain('123456')
     expect(logs.join('\n')).not.toContain('csrf-secret')
     expect(logs.join('\n')).not.toContain('session-secret')
+    expect(logs.at(-1)).toBe('=========项目启动成功===========')
   })
 
   test('returns cleanly and skips authenticated routes when csrf fails', async () => {

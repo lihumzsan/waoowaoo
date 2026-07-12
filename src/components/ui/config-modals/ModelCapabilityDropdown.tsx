@@ -254,7 +254,10 @@ export function ModelCapabilityDropdown({
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                         {selectedModel ? (
                             <>
-                                <span className={`${textSize} text-[var(--glass-text-primary)] font-semibold truncate`}>
+                                <span
+                                    translate="no"
+                                    className={`${textSize} text-[var(--glass-text-primary)] font-semibold truncate notranslate`}
+                                >
                                     {selectedModel.label}
                                 </span>
                             </>
@@ -319,9 +322,9 @@ export function ModelCapabilityDropdown({
                                                         : 'border-transparent hover:bg-[var(--glass-bg-hover)]'
                                                     }`}
                                             >
-                                                <span className={value === m.value
-                                                    ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)]`
-                                                    : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)]`
+                                                <span translate="no" className={value === m.value
+                                                    ? `${modelOptionTextSize} font-bold text-[var(--glass-text-primary)] notranslate`
+                                                    : `${modelOptionTextSize} font-medium text-[var(--glass-text-secondary)] notranslate`
                                                 }>
                                                     {m.label}
                                                 </span>

@@ -84,6 +84,14 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
     provider: 'comfyui',
     price: 0,
   },
+  {
+    modelId: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    modelKey: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    name: 'ComfyUI · LTX2.3 Goon First/Last Frame',
+    type: 'video',
+    provider: 'comfyui',
+    price: 0,
+  },
 ]
 
 const CODEX_AUTO_ENABLED_HELPER_MODELS: ReadonlyArray<CustomModel> = [
