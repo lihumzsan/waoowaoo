@@ -5,6 +5,7 @@ import {
   normalizeVideoDurationBinding,
   resolveAudioDrivenVideoTiming,
 } from '@/lib/video-duration/audio-binding'
+import { retainEqualJsonState } from './video-state-sync'
 
 interface UsePanelVideoDurationBindingParams {
   binding?: VideoDurationBinding | null
@@ -37,7 +38,7 @@ export function usePanelVideoDurationBinding({
   const [localBinding, setLocalBinding] = useState<VideoDurationBinding>(normalizedBinding)
 
   useEffect(() => {
-    setLocalBinding(normalizedBinding)
+    setLocalBinding((previous) => retainEqualJsonState(previous, normalizedBinding))
   }, [normalizedBinding])
 
   const availableVoiceLines = useMemo(

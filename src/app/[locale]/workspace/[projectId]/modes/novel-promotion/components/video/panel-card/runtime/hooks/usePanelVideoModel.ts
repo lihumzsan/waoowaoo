@@ -8,6 +8,7 @@ import {
 } from '@/lib/model-capabilities/video-effective'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
 import { normalizeDefaultVideoModel } from '@/lib/novel-promotion/video-model-defaults'
+import { retainEqualJsonState } from './video-state-sync'
 
 interface UsePanelVideoModelParams {
   defaultVideoModel: string
@@ -124,19 +125,25 @@ export function usePanelVideoModel({
   )
 
   useEffect(() => {
-    setGenerationOptions(normalizeVideoGenerationSelections({
-      definitions: capabilityDefinitions,
-      pricingTiers,
-      selection: selectedModelOverrides,
-    }))
+    setGenerationOptions((previous) => retainEqualJsonState(
+      previous,
+      normalizeVideoGenerationSelections({
+        definitions: capabilityDefinitions,
+        pricingTiers,
+        selection: selectedModelOverrides,
+      }),
+    ))
   }, [selectedModel, selectedModelOverridesSignature, capabilityDefinitions, pricingTiers, selectedModelOverrides])
 
   useEffect(() => {
-    setGenerationOptions((previous) => normalizeVideoGenerationSelections({
-      definitions: capabilityDefinitions,
-      pricingTiers,
-      selection: previous,
-    }))
+    setGenerationOptions((previous) => retainEqualJsonState(
+      previous,
+      normalizeVideoGenerationSelections({
+        definitions: capabilityDefinitions,
+        pricingTiers,
+        selection: previous,
+      }),
+    ))
   }, [capabilityDefinitions, pricingTiers])
 
   const effectiveFields = useMemo(
