@@ -12,13 +12,18 @@ and pass under the repaired semantics.
 | Partial reload view | live prose and card became card-only after reload | prose and waiting handoff could settle through different failure paths | reload tests did not execute the real Choice invocation/failure combination | reload at every pending Choice/Approval/Task boundary and compare persisted Thread, Session, DOM, and canonical identities |
 | Choice consume stale watermark | `PROJECT_AGENT_RUN_EVENT_STALE expectedVersion=15 actualVersion=16` after a legitimate follow-up event | creation watermark was reused as the later consume precondition | consume tests used a frozen Run snapshot | create Choice, advance the Run through a legal event, consume through the browser, and prove exactly-once resolution |
 | Bible review vocabulary mismatch | `EDIT_FIRST_BIBLE_REVIEW_NOT_READY:ready_for_review` | entity status `ready_for_review` was compared with workflow stage `bible_ready_for_review` | fixture copied the wrong implementation string | enter the card from a production-created Bible state; fixture must be built from and diffed against the same canonical state |
-| Missing deterministic continuation | successful `confirm_bible` followed by `PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING: generate_edit_style_previews` | route bypass was correctly removed, but continuation ownership moved to probabilistic model behavior; runtime only punished absence | routing tests use `simulateSecondTurnAfterFirstWorkflowTool` and also assert the failure as correct behavior | local HTTP model stops after successful confirmation; orchestrator must still reach the declared Approval/Task/Choice boundary without repeating confirmation |
+| AI turn stops after a successful tool call | baseline: successful `confirm_bible` followed by `PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING: generate_edit_style_previews` | model prompt/context/completion protocol left an enabled obligation unaddressed; the repaired runtime preserves the completed handoff and classifies the turn as `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED` | routing tests manufacture a second model turn or assert the failure as correct behavior | local HTTP model stops after successful confirmation; prior handoff remains durable, server never invokes the next operation from `nextAction`, and the product emits the declared recoverable AI-turn protocol result |
 | Duplicate success/failure presentation | two confirmation successes and two AI failure cards while the database had one `confirm_bible` Activity | live, persisted, Activity, and Run terminal projections are not proven to share one canonical presentation identity | component tests do not execute stream + persistence + reload | count browser-visible lifecycle items by durable identity before and after reload; each fact is rendered once |
 | ReactFlow maximum update depth | `StoreUpdater.useIsomorphicLayoutEffect` / `Maximum update depth exceeded` without user selection | controlled ReactFlow props and streaming measurement can feed render-driven writes back into the store | renderer and lifecycle unit tests do not run real ReactFlow under streaming resize | Playwright observes a streaming Canvas with zero console/page errors and a bounded render/measurement stabilization window |
 
-## Baseline emergency changes excluded from this worktree
+## Diagnostic hunk disposition
 
-The original worktree currently contains five modified files in three groups:
+The handoff moved the diagnostic worktree evidence into this independent
+worktree. It was audited hunk by hunk before formal editing; it is neither an
+unrelated dirty baseline nor an acceptable patch stack. The formal
+dispositions are recorded in `root-cause-and-repair-plan.md`.
+
+The original diagnostic groups were:
 
 1. `ProjectWorkspaceCanvas.tsx`: callback/options stabilization and suppression
    of measurement writeback during streaming/running lifecycle.
@@ -27,10 +32,12 @@ The original worktree currently contains five modified files in three groups:
 3. `choice-card.ts` plus `choice-card-script-style.test.ts`: compare the Bible
    entity with `ready_for_review` rather than the workflow stage name.
 
-These changes remain uncommitted in the original worktree. The diagnostic
-branch begins before them so the corresponding scenarios can obtain real red
-evidence. They may be reapplied only after the complete first scan and root
-cause grouping.
+The Canvas suppression is deleted in favour of one-way ownership; the Choice
+consume hunk is replaced by a current-lock plus execution-segment transaction;
+and the Bible status correction is retained only as the canonical entity-state
+comparison. The remaining diagnostic edits are either deleted or have a named
+verification blind spot. No imported hunk is unrelated or of unknown
+ownership.
 
 ## Required first-scan report columns
 
@@ -49,4 +56,3 @@ Every scenario writes a row with:
   `INFRASTRUCTURE_FAIL`);
 - candidate shared root cause, which is analysis metadata rather than a test
   oracle.
-

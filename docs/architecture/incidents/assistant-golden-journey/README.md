@@ -10,11 +10,10 @@ failed at successive Assistant, workflow, persistence, task, SSE, and Canvas
 handoffs.
 
 The diagnostic baseline is Git commit
-`fb7d2fa42121409a469c3adaaaefa0f64b2c1ba6`. The five uncommitted emergency
-changes in `/Users/earth/Desktop/waoowaoo` are intentionally absent from this
-worktree. They remain available to the user in the original worktree and are
-recorded in `history-matrix.md` as candidate fixes, not as trusted baseline
-behavior.
+`fb7d2fa42121409a469c3adaaaefa0f64b2c1ba6`. The handoff intentionally moved
+the incident's uncommitted diagnostic evidence into this independent worktree.
+It is recorded in `root-cause-and-repair-plan.md` and `history-matrix.md` as
+evidence, never as trusted baseline behavior or a patch stack to commit.
 
 All incident-owned executable assets live under `tests/golden-journey/`.
 Provider simulators, browser harness code, fixtures, scenario declarations,
@@ -91,52 +90,39 @@ probe. A mount verifier runs Playwright discovery and fails when any declared
 scenario lacks an executable test. Moving stage ordering to one production
 runtime registry is deferred to the subsequent architecture-repair phase.
 
-## Test-only phase result
+## Frozen test-only phase result
 
-The current asset contains one full mainline, fourteen stable checkpoint
+The frozen asset declares one full mainline, fourteen stable checkpoint
 probes, three model-protocol variants, and four infrastructure/concurrency
 contracts. It uses real Chromium, Next, Agent SDK, MySQL, Redis, workers,
 Outbox, SSE, persistence, and reloads; only paid external providers are local.
-The frozen baseline has independently reproduced both the ReactFlow maximum
-update-depth failure and the exact legal Choice-consume stale watermark
+The baseline independently reproduced both the ReactFlow maximum update-depth
+failure and the exact legal Choice-consume stale watermark
 (`expectedVersion=13 actualVersion=14`, `expectedEventSeq=13 actualEventSeq=14`).
-No production file is changed by this phase.
+The subsequent formal repair is recorded in the revised root-cause plan; it is
+not part of the frozen baseline.
 
-## Deterministic orchestration decision
+## AI-driven turn protocol decision
 
-An authoritative workflow `nextAction` is an obligation owned by the server
-orchestrator, not a suggestion whose execution depends on the model choosing
-another tool call. The model may decide user intent and create content or
-arguments, but it cannot own whether an already-determined workflow handoff
-happens.
+An authoritative workflow `nextAction` constrains the AI turn; it does not
+authorize a server orchestrator to choose and invoke the next Operation. AI
+initiates and drives all AI behaviour. The server persists and validates
+Run/execution-segment/interaction/Task facts, and may start only the
+durable recovery paths already owned by user controls or Task Outbox delivery.
 
-The target execution result is an exhaustive directive:
-
-```text
-Stable
-Execute(operation continuation)
-Suspend(choice)
-Suspend(approval)
-Await(task)
-Failed
-```
-
-Each Operation continuation must declare in the registry how its trusted input
-is obtained. Deterministic inputs are resolved by the orchestrator; user-owned
-inputs suspend for a Choice; billable work suspends for Approval; external work
-creates a Task Wait; model-authored inputs may use the model as a bounded
-preparation step, while the orchestrator retains the outstanding obligation.
-
-The current `nextAction still exists -> workflow_continuation_missing -> Run
-failed` behavior is diagnostic evidence of missing orchestration. It must not
-be replaced with a direct route bypass, operation-id branch, or implicit paid
-submission.
+After a successful tool call, a stopped model is therefore a turn-protocol
+failure to classify through prompt/context/tool availability, completion
+conditions, or recovery/error expression. The server must preserve the
+completed handoff and express a recoverable protocol result. It must neither
+overwrite that fact with an unrelated failure nor execute `nextAction`
+deterministically. The revised repair plan is
+`root-cause-and-repair-plan.md`; it is the authority for this incident.
 
 ## Persistent facts, writers, and projectors
 
 | Fact | Existing/target unique writer | Consumer/projector |
 | --- | --- | --- |
-| Workflow stage and next directive | workflow resolver over durable domain facts | orchestrator, Session, Golden stage oracle |
+| Workflow stage and next directive | workflow resolver over durable domain facts | AI turn prompt/context, Session, Golden stage oracle |
 | Operation domain write | `invokeProjectAgentOperation` registry authority | workflow resolver and resource projection |
 | Execution eligibility | execution segment plus transaction fence | Operation/settlement commit barriers |
 | Choice/Approval/Task handoff | `execution-handoff` | Session and Thread projectors |
@@ -168,8 +154,8 @@ The implementation phase must delete, not preserve:
 - hand-written workflow-stage orderings outside the single registry;
 - tests that manufacture a second model turn instead of exercising the real
   Agent SDK/provider protocol;
-- assertions that define an unconsumed deterministic `nextAction` as a valid
-  product-level Run failure;
+- server executors, route bypasses, or test helpers that invoke an Operation
+  merely because `nextAction` exists;
 - fixture-local copies of production status strings;
 - UI lifecycle deductions from message text, DOM content, or duplicate stream
   and persisted facts;
@@ -185,7 +171,7 @@ stage-coverage authority.
 | Concern | Before | Target |
 | --- | ---: | ---: |
 | Runtime workflow-stage orderings | at least 3 (production type, E2E runner, Workflow Lab) | 1 registry |
-| Deterministic continuation owners | model plus late runtime failure detector; historical route bypass removed | 1 orchestrator through Operation invocation |
+| AI action initiators | model plus late runtime failure detector; historical route bypass removed | AI turn only; server retains only persistence, validation, and existing durable recovery owners |
 | Golden product journey authorities | 0 browser-complete; 1 API-only partial runner | 1 Playwright harness plus registry-derived scenarios |
 | Post-setup test business writers | API runner plus production services can drive controls; direct DB diagnostics available | production services only; oracle read-only |
 | UI lifecycle interpretations | persisted Session/Thread plus remaining renderer/stream duplication candidates | 1 canonical persisted identity projection |
@@ -204,9 +190,9 @@ Stage completion requires:
 - no skipped scenario or unavailable dependency to be reported as success.
 
 Architecture completion additionally requires the old authorities above to be
-deleted, the deterministic orchestrator to own all declared continuations, the
-main journey to pass repeatedly through reload checkpoints, failure variants
-to pass, and the same runner to be mounted as a required CI gate. Real paid
-provider behavior remains a named blind spot and prevents claims about
-provider quality, but not about the product's orchestration and persistence
-protocol.
+deleted, AI-driven turns to preserve and correctly classify their durable
+handoffs, and the main journey and declared failure variants to pass through
+reload checkpoints. Test scheduling in commit, push, PR, CI, or nightly
+policy is deliberately outside this incident. Real paid-provider behavior
+remains a named blind spot and prevents claims about provider quality, but not
+about the verified product persistence protocol.
