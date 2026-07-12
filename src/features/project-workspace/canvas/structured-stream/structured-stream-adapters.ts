@@ -1,5 +1,4 @@
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
-import { z } from 'zod'
 import {
   editBibleSchema,
   rawEditBibleBeatSchema,
@@ -13,13 +12,13 @@ import {
   type SourceScriptSceneSegment,
 } from '@/lib/edit-bible/schemas'
 import {
-  editShotExecutionPlanSchema,
-  EDIT_CHARACTER_ROLES,
-  EDIT_CHARACTER_VISIBILITIES,
-  EDIT_SHOT_PURPOSES,
-  type EditShotExecution,
-  type EditScriptShot,
+  rawEditShotExecutionPlanShotSchema,
+  type RawEditShotExecutionPlanShot,
 } from '@/lib/edit-script/types'
+import {
+  chapterPlanRawShotSchema,
+  type ChapterPlanRawShot,
+} from '@/lib/edit-chapter/schemas'
 import {
   bgmScoreDesignSectionSchema,
   bgmScorePromptSectionSchema,
@@ -29,59 +28,13 @@ import {
   type BgmScoreVirtualLayer,
 } from '@/lib/bgm-score/types'
 import {
-  soundscapePlanSectionSchema,
+  soundscapeRawPlanSectionSchema,
   soundscapePlanSourceSchema,
-  type SoundscapePlanSection,
+  type SoundscapeRawPlanSection,
   type SoundscapePlanSource,
 } from '@/lib/soundscape/types'
 import { TASK_TYPE, type TaskType } from '@/lib/task/types'
 
-const editShotExecutionPlanShotSchema = editShotExecutionPlanSchema.shape.shots.element
-const editScriptStreamShotSchema = z.object({
-  shotId: z.string().trim().min(1),
-  shotNumber: z.number().int().positive(),
-  shotPurpose: z.enum(EDIT_SHOT_PURPOSES).optional(),
-  durationSec: z.number().int().min(1).max(5),
-  scene: z.object({
-    locationId: z.string().trim().min(1),
-    name: z.string().trim().min(1).optional(),
-    subScene: z.string().trim().min(1),
-  }).strict(),
-  action: z.string().trim().min(1),
-  characters: z.array(z.object({
-    characterId: z.string().trim().min(1),
-    name: z.string().trim().min(1).optional(),
-    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-    role: z.enum(EDIT_CHARACTER_ROLES),
-    performance: z.string().trim().min(1),
-  }).strict()).min(0).max(20),
-  keyObjects: z.array(z.object({
-    name: z.string().trim().min(1),
-    role: z.string().trim().min(1),
-  }).strict()).min(0).max(20),
-  dialogue: z.array(z.object({
-    characterId: z.string().trim().min(1),
-    line: z.string().trim().min(1),
-  }).strict()).min(0).max(20),
-  sound: z.string().trim().min(1),
-}).strict()
-
-function parseEditScriptStreamShot(value: unknown): EditScriptShot {
-  const shot = editScriptStreamShotSchema.parse(value)
-  return {
-    ...shot,
-    shotPurpose: shot.shotPurpose ?? 'action',
-    scene: {
-      locationId: shot.scene.locationId,
-      name: shot.scene.name ?? shot.scene.locationId,
-      subScene: shot.scene.subScene,
-    },
-    characters: shot.characters.map((character) => ({
-      ...character,
-      name: character.name ?? character.characterId,
-    })),
-  }
-}
 
 export interface StructuredStreamTaskEventMeta {
   readonly taskType: string | null
@@ -128,11 +81,11 @@ export type StructuredStreamParsedItem =
   }
   | {
     readonly kind: 'editScriptShot'
-    readonly shot: EditScriptShot
+    readonly shot: ChapterPlanRawShot
   }
   | {
     readonly kind: 'shotExecutionPlanShot'
-    readonly shot: EditShotExecution
+    readonly shot: RawEditShotExecutionPlanShot
   }
   | {
     readonly kind: 'bgmDesignSection'
@@ -152,7 +105,7 @@ export type StructuredStreamParsedItem =
   }
   | {
     readonly kind: 'soundscapeSection'
-    readonly section: SoundscapePlanSection
+    readonly section: SoundscapeRawPlanSection
   }
 
 export interface StructuredStreamItem {
@@ -261,10 +214,10 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['shots'],
     parseItem: (value) => ({
       kind: 'editScriptShot',
-      shot: parseEditScriptStreamShot(value),
+      shot: chapterPlanRawShotSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'editScriptShot'
-      ? (item.shot.shotId || numberKey(item.shot.shotNumber, fallbackIndex))
+      ? (item.shot.shotRef || numberKey(item.shot.shotNumber, fallbackIndex))
       : String(fallbackIndex + 1),
   },
   {
@@ -275,10 +228,10 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['shots'],
     parseItem: (value) => ({
       kind: 'shotExecutionPlanShot',
-      shot: editShotExecutionPlanShotSchema.parse(value),
+      shot: rawEditShotExecutionPlanShotSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'shotExecutionPlanShot'
-      ? numberKey(item.shot.shotNumber, fallbackIndex)
+      ? item.shot.shotRef
       : String(fallbackIndex + 1),
   },
   {
@@ -345,10 +298,10 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['sections'],
     parseItem: (value) => ({
       kind: 'soundscapeSection',
-      section: soundscapePlanSectionSchema.parse(value),
+      section: soundscapeRawPlanSectionSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'soundscapeSection'
-      ? `${item.section.sourceId}:${item.section.fromShotId}:${item.section.toShotId}:${fallbackIndex}`
+      ? `${item.section.sourceId}:${item.section.fromClipOrder}:${item.section.toClipOrder}:${fallbackIndex}`
       : String(fallbackIndex + 1),
   },
 ]

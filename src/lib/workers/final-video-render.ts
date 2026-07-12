@@ -23,11 +23,11 @@ import type { TaskJobData } from '@/lib/task/types'
 import { reportTaskProgress } from './shared'
 import { assertTaskActive } from './utils'
 import {
-  parseFinalRenderEditScriptCore,
   resolveFinalRenderDimensions,
   type FinalRenderClipPlan,
   type FinalRenderEditScriptInput,
 } from '@/lib/video-compose/final-render-plan'
+import { loadEditScriptCoreView } from '@/lib/edit-script/core-view'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
 import {
   assertFinalRenderClipsHaveSources,
@@ -230,6 +230,7 @@ export async function buildEditScript(episodeId: string, chapterId: string): Pro
       where: { chapterId },
       select: {
         id: true,
+        projectId: true,
         durationSec: true,
         corePlanJson: true,
         chapter: {
@@ -246,8 +247,9 @@ export async function buildEditScript(episodeId: string, chapterId: string): Pro
     }),
   ])
   if (!script) return null
-  const core = parseFinalRenderEditScriptCore(script.corePlanJson)
-  if (!core || core.shots.length === 0) return null
+  if (!script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${script.id}`)
+  const core = await loadEditScriptCoreView(script.projectId, script.corePlanJson)
+  if (core.shots.length === 0) return null
   const userPrompt = [script.chapter.title, script.chapter.summary]
     .map((value) => value?.trim() ?? '')
     .filter(Boolean)

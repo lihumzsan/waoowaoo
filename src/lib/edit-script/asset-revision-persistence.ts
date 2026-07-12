@@ -2,7 +2,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
 import type { EditAssetKind, EditAssetRequirement, EditAssetStatus, EditScriptPayload } from './types'
-import { normalizeEditScriptStructure } from './normalize'
+import type { KnownPlanAsset } from '@/lib/edit-chapter/asset-menu'
+import { projectEditScriptCoreNames } from './core-view'
 
 export interface PersistedEditScriptRequirementForRevision {
   readonly id: string
@@ -40,9 +41,12 @@ function normalizeAssetStatus(value: string): EditAssetStatus {
   return value === 'pending' || value === 'generating' || value === 'completed' || value === 'failed' ? value : 'failed'
 }
 
-export function mapPersistedEditScriptForRevision(script: PersistedEditScriptForRevision): EditScriptPayload {
+export function mapPersistedEditScriptForRevision(
+  script: PersistedEditScriptForRevision,
+  knownAssets: readonly KnownPlanAsset[],
+): EditScriptPayload {
   if (!script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${script.id}`)
-  const core = normalizeEditScriptStructure(script.corePlanJson)
+  const core = projectEditScriptCoreNames(script.corePlanJson, knownAssets)
   return {
     id: script.id,
     projectId: script.projectId,
@@ -55,19 +59,28 @@ export function mapPersistedEditScriptForRevision(script: PersistedEditScriptFor
     assetReviewStatus: script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
     shots: core.shots,
     generationSegments: core.generationSegments,
-    requirements: script.requirements.map((requirement): EditAssetRequirement => ({
-      id: requirement.id,
-      kind: normalizeEditScriptAssetKindForRevision(requirement.kind) ?? 'character',
-      name: requirement.name,
-      description: requirement.description,
-      shotIds: readShotIds(requirement.requiredForShotIds),
-      status: normalizeAssetStatus(requirement.status),
-      targetId: requirement.targetId,
-      taskTargetType: null,
-      taskTargetId: null,
-      errorMessage: requirement.errorMessage,
-      previewImageUrl: null,
-    })),
+    requirements: script.requirements.map((requirement): EditAssetRequirement => {
+      const kind = normalizeEditScriptAssetKindForRevision(requirement.kind) ?? 'character'
+      const currentAsset = requirement.targetId
+        ? knownAssets.find((asset) => asset.id === requirement.targetId && asset.kind === kind)
+        : null
+      if (requirement.targetId && !currentAsset) {
+        throw new Error(`EDIT_SCRIPT_REQUIREMENT_ASSET_UNKNOWN:${requirement.id}:${requirement.targetId}`)
+      }
+      return {
+        id: requirement.id,
+        kind,
+        name: currentAsset?.name ?? requirement.name,
+        description: requirement.description,
+        shotIds: readShotIds(requirement.requiredForShotIds),
+        status: normalizeAssetStatus(requirement.status),
+        targetId: requirement.targetId,
+        taskTargetType: null,
+        taskTargetId: null,
+        errorMessage: requirement.errorMessage,
+        previewImageUrl: null,
+      }
+    }),
   }
 }
 

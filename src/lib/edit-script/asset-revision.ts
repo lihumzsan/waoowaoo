@@ -17,6 +17,7 @@ import {
   normalizeEditScriptAssetKindForRevision,
   type PersistedEditScriptRequirementForRevision,
 } from './asset-revision-persistence'
+import { loadKnownPlanAssets } from '@/lib/edit-chapter/asset-menu'
 
 interface ReviseEditScriptAssetsInput {
   readonly projectId: string
@@ -380,7 +381,10 @@ export async function commitProjectEditScriptAssetRevisions(params: {
     transaction,
   )
   if (!updated) throw new ApiError('NOT_FOUND')
-  const editScript = mapPersistedEditScriptForRevision(updated)
+  const editScript = mapPersistedEditScriptForRevision(
+    updated,
+    await loadKnownPlanAssets(params.plan.projectId, transaction),
+  )
   return {
     success: true,
     async: submittedTasks.length > 0,

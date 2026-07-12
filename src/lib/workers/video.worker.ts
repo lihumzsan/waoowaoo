@@ -285,7 +285,8 @@ function parseEditScriptShots(value: unknown): VideoGroupShot[] {
         const characterId = normalizeString(line.characterId)
         const dialogueLine = normalizeString(line.line)
         if (!characterId || !dialogueLine) throw new Error('VIDEO_GROUP_EDIT_SCRIPT_SHOT_DIALOGUE_LINE_INVALID')
-        const speaker = characterNameById.get(characterId) ?? characterId
+        const speaker = characterNameById.get(characterId)
+        if (!speaker) throw new Error(`VIDEO_GROUP_EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:${shotNumber}:${characterId}`)
         return `${speaker}: ${dialogueLine}`
       }),
       sound: normalizeString(record.sound),

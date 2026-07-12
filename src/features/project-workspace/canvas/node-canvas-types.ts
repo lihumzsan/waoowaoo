@@ -196,16 +196,18 @@ export interface WorkspaceCanvasSoundscapeDetails {
   readonly sourceCount: number
   readonly sectionCount: number
   readonly sources: readonly {
-    readonly sourceId: string
-    readonly environmentFingerprint: string
+    readonly key: string
+    readonly sourceIndex: number
     readonly prompt: string
     readonly loopDurationSeconds: number
     readonly promptInfluence: number
   }[]
   readonly sections: readonly {
-    readonly sourceId: string
-    readonly fromShotId: string
-    readonly toShotId: string
+    readonly key: string
+    readonly sourceIndex: number
+    readonly rangeKind: 'clip' | 'shot'
+    readonly rangeStart: number
+    readonly rangeEnd: number
     readonly perspective: string
     readonly intensity: string
     readonly transitionIn: string

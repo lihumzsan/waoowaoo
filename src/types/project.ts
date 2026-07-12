@@ -323,7 +323,7 @@ export interface ProjectEditShotExecutionPlan {
         screenDirection: string
       }
       characters: Array<{
-        name: string
+        characterId: string
         visibility: 'visible' | 'partial' | 'hidden' | 'occluded' | 'offscreen'
         position: string
         screenPosition: string

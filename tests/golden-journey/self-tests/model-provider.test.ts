@@ -17,11 +17,13 @@ import { buildEditSourceBlocks, formatEditSourceBlocksForPrompt } from '@/lib/ed
 import { editStylePreviewOptionsSchema } from '@/lib/edit-script/types'
 import { editScriptCoreSchema } from '@/lib/edit-script/types'
 import { normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
+import { buildShotExecutionPlanPromptStructure } from '@/lib/edit-script/shot-execution-plan-prompt'
 import { normalizeChapterPlanOutput } from '@/lib/edit-chapter'
 import { parseLocationCandidatePrompt } from '@/lib/asset-generation/location-candidate-prompts'
 import { parseLocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import { bgmScorePlanSchema } from '@/lib/bgm-score/types'
-import { soundscapePlanSchema } from '@/lib/soundscape/types'
+import { soundscapeRawPlanSchema } from '@/lib/soundscape/types'
+import { resolveSoundscapePlanReferences } from '@/lib/soundscape/plan-contract'
 import {
   applyGoldenRuntimeIdentity,
   resolveGoldenRuntimeIdentity,
@@ -169,7 +171,10 @@ describe('Golden local model provider', () => {
 
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const normalized = normalizeChapterPlanOutput(JSON.parse(decision.text), assetMenu)
+    const rawPlan = JSON.parse(decision.text) as unknown
+    expect(JSON.stringify(rawPlan)).not.toContain('location-real-1')
+    expect(JSON.stringify(rawPlan)).not.toContain('character-real-1')
+    const normalized = normalizeChapterPlanOutput(rawPlan, assetMenu)
     expect(normalized.shots).toHaveLength(3)
     expect(normalized.shots[1]?.scene.locationId).toBe('location-real-1')
     expect(normalized.shots[1]?.characters[0]?.characterId).toBe('character-real-1')
@@ -264,10 +269,13 @@ describe('Golden local model provider', () => {
         continuity: '共享祭坛空间与连续动作。',
       }],
     })
-    const productionPromptInput = {
+    const productionPromptInput = buildShotExecutionPlanPromptStructure({
+      durationSec: 8,
+      shotCount: 2,
+      sourceText: null,
       shots: core.shots,
-      videoGenerationSegments: core.generationSegments,
-    }
+      generationSegments: core.generationSegments,
+    })
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 22,
@@ -312,7 +320,7 @@ describe('Golden local model provider', () => {
     expect(plan.scoreDesign.sections).toHaveLength(1)
   })
 
-  it('uses real timeline shot identities in the production soundscape plan contract', () => {
+  it('uses short clip orders in the production soundscape model contract', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
       requestOrdinal: 24,
@@ -320,17 +328,51 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'user',
-          content: 'Required JSON shape: {"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"shotIds":["shot_real_1","shot_real_2"]}]',
+          content: 'Required JSON shape: {"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"clipOrder":1,"shotNumbers":[1]},{"clipOrder":2,"shotNumbers":[2]}]',
         }],
       },
     })
 
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const plan = soundscapePlanSchema.parse(JSON.parse(decision.text))
+    const rawPlan = soundscapeRawPlanSchema.parse(JSON.parse(decision.text))
+    expect(rawPlan.sections[0]).toMatchObject({
+      fromClipOrder: 1,
+      toClipOrder: 2,
+    })
+    const plan = resolveSoundscapePlanReferences(rawPlan, [
+      {
+        panelId: 'panel-1',
+        groupId: null,
+        sourceKind: 'panel',
+        source: 'clip-1.mp4',
+        durationSeconds: 4,
+        order: 1,
+        shotNumber: 1,
+        shotNumbers: [1],
+        shotId: 'shot-real-1',
+        shotIds: ['shot-real-1'],
+        description: null,
+        sound: null,
+      },
+      {
+        panelId: 'panel-2',
+        groupId: null,
+        sourceKind: 'panel',
+        source: 'clip-2.mp4',
+        durationSeconds: 4,
+        order: 2,
+        shotNumber: 2,
+        shotNumbers: [2],
+        shotId: 'shot-real-2',
+        shotIds: ['shot-real-2'],
+        description: null,
+        sound: null,
+      },
+    ])
     expect(plan.sections[0]).toMatchObject({
-      fromShotId: 'shot_real_1',
-      toShotId: 'shot_real_2',
+      fromShotId: 'shot-real-1',
+      toShotId: 'shot-real-2',
     })
   })
 

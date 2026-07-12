@@ -43,11 +43,22 @@ export const soundscapePlanSectionSchema = z.object({
   transitionOut: soundscapeTransitionSchema,
 }).strict()
 
-export const soundscapePlanSchema = z.object({
+export const soundscapeRawPlanSectionSchema = z.object({
+  sourceId: z.string().trim().min(1),
+  fromClipOrder: z.number().int().positive(),
+  toClipOrder: z.number().int().positive(),
+  perspective: soundscapePerspectiveSchema,
+  intensity: soundscapeIntensitySchema,
+  transitionIn: soundscapeTransitionSchema,
+  transitionOut: soundscapeTransitionSchema,
+}).strict()
+
+function createSoundscapePlanSchema<TSection extends z.ZodTypeAny>(sectionSchema: TSection) {
+  return z.object({
   decision: z.enum(['soundscape', 'none_needed']),
   sources: z.array(soundscapePlanSourceSchema).max(SOUNDSCAPE_MAX_SOURCE_COUNT),
-  sections: z.array(soundscapePlanSectionSchema).max(96),
-}).strict().superRefine((plan, ctx) => {
+  sections: z.array(sectionSchema).max(96),
+  }).strict().superRefine((plan, ctx) => {
   const sourceIds = new Set<string>()
   const fingerprints = new Set<string>()
   for (const [index, source] of plan.sources.entries()) {
@@ -104,7 +115,8 @@ export const soundscapePlanSchema = z.object({
   }
 
   for (const [index, section] of plan.sections.entries()) {
-    if (!sourceIds.has(section.sourceId)) {
+    const sourceId = (section as { readonly sourceId: string }).sourceId
+    if (!sourceIds.has(sourceId)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['sections', index, 'sourceId'],
@@ -112,11 +124,17 @@ export const soundscapePlanSchema = z.object({
       })
     }
   }
-})
+  })
+}
+
+export const soundscapePlanSchema = createSoundscapePlanSchema(soundscapePlanSectionSchema)
+export const soundscapeRawPlanSchema = createSoundscapePlanSchema(soundscapeRawPlanSectionSchema)
 
 export type SoundscapePlan = z.infer<typeof soundscapePlanSchema>
 export type SoundscapePlanSource = z.infer<typeof soundscapePlanSourceSchema>
 export type SoundscapePlanSection = z.infer<typeof soundscapePlanSectionSchema>
+export type SoundscapeRawPlan = z.infer<typeof soundscapeRawPlanSchema>
+export type SoundscapeRawPlanSection = z.infer<typeof soundscapeRawPlanSectionSchema>
 export type SoundscapePerspective = z.infer<typeof soundscapePerspectiveSchema>
 export type SoundscapeIntensity = z.infer<typeof soundscapeIntensitySchema>
 export type SoundscapeTransition = z.infer<typeof soundscapeTransitionSchema>

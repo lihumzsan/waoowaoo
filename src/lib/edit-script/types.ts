@@ -246,7 +246,7 @@ export interface EditShotExecutionAxis {
 }
 
 export interface EditShotExecutionCharacter {
-  readonly name: string
+  readonly characterId: string
   readonly visibility: EditCharacterVisibility
   readonly position: string
   readonly screenPosition: string
@@ -380,7 +380,7 @@ export const editShotExecutionPlanSchema = z
                   .array(
                     z
                       .object({
-                        name: z.string().trim().min(1),
+                        characterId: z.string().trim().min(1),
                         visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
                         position: z.string().trim().min(1),
                         screenPosition: z.string().trim().min(1),
@@ -425,6 +425,35 @@ export const editShotExecutionPlanSchema = z
       .max(60),
   })
   .strict()
+
+export const rawEditShotExecutionPlanShotSchema = z.object({
+  shotRef: z.string().trim().min(1),
+  camera: editShotExecutionPlanSchema.shape.shots.element.shape.camera,
+  blocking: z.object({
+    axis: editShotExecutionPlanSchema.shape.shots.element.shape.blocking.shape.axis,
+    characters: z.array(z.object({
+      characterName: z.string().trim().min(1),
+      visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+      position: z.string().trim().min(1),
+      screenPosition: z.string().trim().min(1),
+      facing: z.string().trim().min(1),
+      eyeline: z.string().trim().min(1),
+    }).strict()).min(0).max(20),
+    objects: editShotExecutionPlanSchema.shape.shots.element.shape.blocking.shape.objects,
+    spatialNote: z.string().trim().min(1),
+  }).strict(),
+  videoPrompt: z.string().trim().min(1),
+}).strict()
+
+export const rawEditShotExecutionPlanSchema = z.object({
+  shots: z.array(rawEditShotExecutionPlanShotSchema).min(1).max(60),
+  generationSegmentExecutions: z.array(z.object({
+    segmentRef: z.string().trim().min(1),
+    continuousVideoPrompt: z.string().trim().min(1),
+  }).strict()).min(1).max(60),
+}).strict()
+
+export type RawEditShotExecutionPlanShot = z.infer<typeof rawEditShotExecutionPlanShotSchema>
 
 export const editScriptStylePolicySchema = z.object({
   directing: z.object({

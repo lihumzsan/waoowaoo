@@ -53,102 +53,141 @@ export const chapterPlanInputSchema = z.object({
 
 export const chapterPlanOutputSchema = editScriptCoreSchema.strict()
 
+export const chapterPlanRawShotSchema = z.object({
+  shotRef: z.string().trim().min(1),
+  shotNumber: z.number().int().positive(),
+  shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
+  durationSec: z.number().int().min(1).max(5),
+  scene: z.object({
+    locationName: z.string().trim().min(1),
+    subScene: z.string().trim().min(1),
+  }).strict(),
+  action: z.string().trim().min(1),
+  characters: z.array(z.object({
+    characterName: z.string().trim().min(1),
+    visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
+    role: z.enum(EDIT_CHARACTER_ROLES),
+    performance: editScriptPerformanceSchema,
+  }).strict()).min(0).max(20),
+  keyObjects: z.array(z.object({
+    name: z.string().trim().min(1),
+    role: z.string().trim().min(1),
+  }).strict()).min(0).max(20),
+  dialogue: z.array(z.object({
+    speakerName: z.string().trim().min(1),
+    line: z.string().trim().min(1),
+  }).strict()).min(0).max(20),
+  sound: z.string().trim().min(1),
+}).strict()
+
+export const chapterPlanRawGenerationSegmentSchema = z.object({
+  shotRefs: z.array(z.string().trim().min(1)).min(1).max(9),
+  continuity: z.string().trim().min(1),
+}).strict()
+
+export const chapterPlanRawOutputSchema = z.object({
+  shots: z.array(chapterPlanRawShotSchema).min(1).max(60),
+  generationSegments: z.array(chapterPlanRawGenerationSegmentSchema).min(1).max(60),
+}).strict()
+
 export type ChapterPlanInput = z.infer<typeof chapterPlanInputSchema>
 export type ChapterPlanAssetMenu = z.infer<typeof chapterPlanAssetMenuSchema>
 export type ChapterPlanOutput = z.infer<typeof chapterPlanOutputSchema>
+export type ChapterPlanRawShot = z.infer<typeof chapterPlanRawShotSchema>
 export type NormalizedChapterPlanOutput = ReturnType<typeof normalizeEditScriptStructure>
 
 function nonEmptyEnum(values: readonly string[], label: string): [string, ...string[]] {
-  const unique = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+  const normalized = values.map((value) => value.trim()).filter(Boolean)
+  const unique = Array.from(new Set(normalized))
   if (unique.length === 0) throw new Error(`CHAPTER_PLAN_ASSET_MENU_EMPTY:${label}`)
+  if (unique.length !== normalized.length) throw new Error(`CHAPTER_PLAN_ASSET_NAME_DUPLICATE:${label}`)
   return unique as [string, ...string[]]
 }
 
 export function buildChapterPlanOutputSchema(assetMenu: ChapterPlanAssetMenu) {
-  const locationIds = nonEmptyEnum(assetMenu.locations.map((asset) => asset.id), 'location')
-  const characterIds = nonEmptyEnum(assetMenu.characters.map((asset) => asset.id), 'character')
-  const dynamicShotSchema = z.object({
-    shotId: z.string().trim().min(1),
-    shotNumber: z.number().int().positive(),
-    shotPurpose: z.enum(EDIT_SHOT_PURPOSES),
-    durationSec: z.number().int().min(1).max(5),
-    scene: z.object({
-      locationId: z.enum(locationIds),
-      subScene: z.string().trim().min(1),
+  const locationNames = nonEmptyEnum(assetMenu.locations.map((asset) => asset.name), 'location')
+  const characterNames = nonEmptyEnum(assetMenu.characters.map((asset) => asset.name), 'character')
+  const dynamicShotSchema = chapterPlanRawShotSchema.extend({
+    scene: chapterPlanRawShotSchema.shape.scene.extend({
+      locationName: z.enum(locationNames),
     }).strict(),
-    action: z.string().trim().min(1),
-    characters: z.array(z.object({
-      characterId: z.enum(characterIds),
-      visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
-      role: z.enum(EDIT_CHARACTER_ROLES),
-      performance: editScriptPerformanceSchema,
+    characters: z.array(chapterPlanRawShotSchema.shape.characters.element.extend({
+      characterName: z.enum(characterNames),
     }).strict()).min(0).max(20),
-    keyObjects: z.array(z.object({
-      name: z.string().trim().min(1),
-      role: z.string().trim().min(1),
+    dialogue: z.array(chapterPlanRawShotSchema.shape.dialogue.element.extend({
+      speakerName: z.enum(characterNames),
     }).strict()).min(0).max(20),
-    dialogue: z.array(z.object({
-      characterId: z.enum(characterIds),
-      line: z.string().trim().min(1),
-    }).strict()).min(0).max(20),
-    sound: z.string().trim().min(1),
   }).strict()
   return z.object({
     shots: z.array(dynamicShotSchema).min(1).max(60),
-    generationSegments: z.array(z.object({
-      shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
-      continuity: z.string().trim().min(1),
-    }).strict()).min(1).max(60),
+    generationSegments: chapterPlanRawOutputSchema.shape.generationSegments,
   }).strict()
 }
 
-export function enrichChapterPlanOutputWithAssetNames(raw: unknown, assetMenu: ChapterPlanAssetMenu): ChapterPlanOutput {
+export function resolveChapterPlanOutputReferences(raw: unknown, assetMenu: ChapterPlanAssetMenu): ChapterPlanOutput {
   const parsed = buildChapterPlanOutputSchema(assetMenu).parse(raw)
-  const locationById = new Map(assetMenu.locations.map((asset) => [asset.id, asset]))
-  const characterById = new Map(assetMenu.characters.map((asset) => [asset.id, asset]))
+  const locationByName = new Map(assetMenu.locations.map((asset) => [asset.name, asset]))
+  const characterByName = new Map(assetMenu.characters.map((asset) => [asset.name, asset]))
   return {
     shots: parsed.shots.map((shot) => {
-      const location = locationById.get(shot.scene.locationId)
+      const location = locationByName.get(shot.scene.locationName)
       if (!location) {
-        throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:LOCATION_ID_UNKNOWN:${shot.scene.locationId}`, {
+        throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:LOCATION_NAME_UNKNOWN:${shot.scene.locationName}`, {
           details: {
             assetKind: 'location',
-            assetId: shot.scene.locationId,
+            assetName: shot.scene.locationName,
           },
         })
       }
       return {
-        ...shot,
+        shotId: shot.shotRef,
+        shotNumber: shot.shotNumber,
+        shotPurpose: shot.shotPurpose,
+        durationSec: shot.durationSec,
         scene: {
-          locationId: shot.scene.locationId,
+          locationId: location.id,
           name: location.name,
           subScene: shot.scene.subScene,
         },
-        characters: shot.characters.map((character) => {
-          const asset = characterById.get(character.characterId)
+        action: shot.action,
+        characters: shot.characters.map(({ characterName, ...character }) => {
+          const asset = characterByName.get(characterName)
           if (!asset) {
-            throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:CHARACTER_ID_UNKNOWN:${character.characterId}`, {
+            throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:CHARACTER_NAME_UNKNOWN:${characterName}`, {
               details: {
                 assetKind: 'character',
-                assetId: character.characterId,
+                assetName: characterName,
               },
             })
           }
           return {
             ...character,
+            characterId: asset.id,
             name: asset.name,
           }
         }),
+        keyObjects: shot.keyObjects,
+        dialogue: shot.dialogue.map(({ speakerName, line }) => {
+          const speaker = characterByName.get(speakerName)
+          if (!speaker) {
+            throw new AppError('PLAN_VALIDATION_FAILED', `PLAN_VALIDATION_FAILED:DIALOGUE_SPEAKER_UNKNOWN:${speakerName}`, {
+              details: { assetKind: 'character', assetName: speakerName },
+            })
+          }
+          return { characterId: speaker.id, line }
+        }),
+        sound: shot.sound,
       }
     }),
-    generationSegments: parsed.generationSegments,
+    generationSegments: parsed.generationSegments.map((segment) => ({
+      shotIds: segment.shotRefs,
+      continuity: segment.continuity,
+    })),
   }
 }
 
-export function normalizeChapterPlanOutput(raw: unknown, assetMenu?: ChapterPlanAssetMenu): NormalizedChapterPlanOutput {
-  const parsed = assetMenu
-    ? enrichChapterPlanOutputWithAssetNames(raw, assetMenu)
-    : chapterPlanOutputSchema.parse(raw)
+export function normalizeChapterPlanOutput(raw: unknown, assetMenu: ChapterPlanAssetMenu): NormalizedChapterPlanOutput {
+  const parsed = resolveChapterPlanOutputReferences(raw, assetMenu)
   const normalizedCore = normalizeEditScriptStructure({
     shots: parsed.shots,
     generationSegments: parsed.generationSegments,

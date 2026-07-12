@@ -11,7 +11,6 @@ import { AI_PROMPT_IDS, buildAiPromptContent } from '@/lib/ai-prompts'
 import { flattenChatMessageContent } from '@/lib/ai-registry/message-content'
 import { buildDefaultTaskBillingInfo, withTextBilling } from '@/lib/billing'
 import { buildImageBillingPayloadFromUserConfig, getProjectModelConfig, getUserModelConfig } from '@/lib/config-service'
-import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { getSignedUrl } from '@/lib/storage'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
@@ -35,6 +34,7 @@ import type { Locale } from '@/i18n/routing'
 import {
   normalizeEditScriptStructure,
   normalizeEditShotExecutionPlan,
+  parsePersistedEditShotExecutionPlan,
 } from './normalize'
 import { resolveEditScriptDialogueVoiceContext } from './voice-profiles'
 import type {
@@ -52,7 +52,6 @@ import type {
   EditScriptShot,
   EditShotExecutionPlanPayload,
 } from './types'
-import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
 import {
   editStylePreviewKeySchema,
   editStylePreviewOptionsSchema,
@@ -63,6 +62,7 @@ import {
 import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
 import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
 import { buildShotExecutionPlanPromptStructure } from './shot-execution-plan-prompt'
+import { projectEditScriptCoreNames } from './core-view'
 
 interface GenerateEditScriptInput {
   readonly request: NextRequest
@@ -618,86 +618,6 @@ function normalizeStoredStatus(value: string): EditAssetStatus {
   return 'failed'
 }
 
-async function resolveCharacterAsset(projectId: string, targetId: string | null): Promise<ExistingAssetRef | null> {
-  if (!targetId) return null
-  const character = await prisma.projectCharacter.findFirst({
-    where: { id: targetId, projectId },
-    select: {
-      id: true,
-      appearances: {
-        orderBy: { appearanceIndex: 'asc' },
-        take: 1,
-        select: {
-          id: true,
-          imageUrl: true,
-          imageMediaId: true,
-          imageUrls: true,
-        },
-      },
-    },
-  })
-  const appearance = character?.appearances[0]
-  if (!character || !appearance) return null
-  const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'editScript.character.imageUrls')
-  const previewImageUrl = appearance.imageUrl || imageUrls[0] || null
-  return {
-    id: character.id,
-    previewImageUrl,
-    hasOutput: Boolean(appearance.imageMediaId || previewImageUrl),
-    taskTargetType: 'CharacterAppearance',
-    taskTargetId: appearance.id,
-  }
-}
-
-async function resolveLocationAsset(projectId: string, targetId: string | null): Promise<ExistingAssetRef | null> {
-  if (!targetId) return null
-  const location = await prisma.projectLocation.findFirst({
-    where: { id: targetId, projectId },
-    select: {
-      id: true,
-      selectedImageId: true,
-      images: {
-        orderBy: { imageIndex: 'asc' },
-        select: {
-          id: true,
-          imageUrl: true,
-          imageMediaId: true,
-          isSelected: true,
-          spatialProfileJson: true,
-          spatialProfileStatus: true,
-          spatialProfileError: true,
-          spatialProfileAnalyzedAt: true,
-          spatialProfileModel: true,
-        },
-      },
-    },
-  })
-  const image = location?.images.find((item) => item.id === location.selectedImageId)
-    ?? location?.images.find((item) => item.isSelected)
-    ?? location?.images.find((item) => Boolean(item.imageUrl))
-    ?? location?.images[0]
-    ?? null
-  if (!location || !image) return null
-  return {
-    id: location.id,
-    previewImageUrl: image.imageUrl || null,
-    hasOutput: Boolean(image.imageMediaId || image.imageUrl),
-    taskTargetType: 'LocationImage',
-    taskTargetId: location.id,
-    spatialProfileJson: image.spatialProfileJson ?? null,
-    spatialProfileStatus: image.spatialProfileStatus as LocationSpatialProfileStatus | null,
-    spatialProfileError: image.spatialProfileError ?? null,
-    spatialProfileAnalyzedAt: image.spatialProfileAnalyzedAt ?? null,
-    spatialProfileModel: image.spatialProfileModel ?? null,
-  }
-}
-
-async function resolveRequirementAsset(projectId: string, requirement: PersistedEditScriptRequirement): Promise<ExistingAssetRef | null> {
-  if (requirement.kind === 'character') return resolveCharacterAsset(projectId, requirement.targetId)
-  if (requirement.kind === 'location') return resolveLocationAsset(projectId, requirement.targetId)
-  return null
-}
-
 async function resolveAssetTaskFailure(input: {
   readonly projectId: string
   readonly taskTargetType: ExistingAssetRef['taskTargetType']
@@ -767,12 +687,19 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
   if (!script.corePlanJson && script.status === 'ready') {
     throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${script.id}`)
   }
+  const knownAssets = await loadKnownPlanAssets(script.projectId)
   const core = script.corePlanJson
-    ? normalizeEditScriptStructure(script.corePlanJson)
+    ? projectEditScriptCoreNames(script.corePlanJson, knownAssets)
     : { durationSec: script.durationSec, shotCount: script.shotCount, shots: [], generationSegments: [] }
   const source = await resolvePersistedEditScriptSource(script)
   const requirements = await Promise.all(script.requirements.map(async (requirement): Promise<EditAssetRequirement> => {
-    const resolvedAsset = await resolveRequirementAsset(script.projectId, requirement)
+    const currentAsset = requirement.targetId
+      ? knownAssets.find((asset) => asset.id === requirement.targetId && asset.kind === requirement.kind)
+      : null
+    if (requirement.targetId && !currentAsset) {
+      throw new Error(`EDIT_SCRIPT_REQUIREMENT_ASSET_UNKNOWN:${requirement.id}:${requirement.targetId}`)
+    }
+    const resolvedAsset = currentAsset?.asset ?? null
     const storedStatus = normalizeStoredStatus(requirement.status)
     const taskFailure = resolvedAsset
       ? await resolveAssetTaskFailure({
@@ -785,7 +712,7 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     return {
       id: requirement.id,
       kind: isEditAssetKind(requirement.kind) ? requirement.kind : 'character',
-      name: requirement.name,
+      name: currentAsset?.name ?? requirement.name,
       description: requirement.description,
       shotIds: readShotIds(requirement.requiredForShotIds),
       status,
@@ -827,7 +754,7 @@ async function mapPersistedEditShotExecutionPlan(plan: PersistedEditShotExecutio
   const script = await getPersistedEditScript(plan.projectId, plan.episodeId, plan.editScriptId, plan.chapterId)
   if (!script) throw new Error(`EDIT_SCRIPT_NOT_FOUND:${plan.editScriptId}`)
   const core = normalizeEditScriptStructure(script.corePlanJson)
-  const parsed = normalizeEditShotExecutionPlan(plan.executionPlanJson, core.shots, core.generationSegments)
+  const parsed = parsePersistedEditShotExecutionPlan(plan.executionPlanJson, core.shots, core.generationSegments)
   return {
     id: plan.id,
     projectId: plan.projectId,
@@ -1606,7 +1533,10 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
         story_bible_json: stringifyForPrompt(scriptSource.storyBibleJson),
         entry_snapshot_json: stringifyForPrompt(scriptSource.entrySnapshot),
         chapter_events_json: stringifyForPrompt(scriptSource.events),
-        asset_menu_json: stringifyForPrompt(scriptSource.assetMenu),
+        asset_menu_json: stringifyForPrompt({
+          locations: scriptSource.assetMenu.locations.map(({ name, description }) => ({ name, description })),
+          characters: scriptSource.assetMenu.characters.map(({ name, description }) => ({ name, description })),
+        }),
         duration_guidance: durationGuidance,
         generation_segment_max_duration_seconds: String(EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC),
         aspect_ratio: effectiveVideoRatio,
@@ -1807,7 +1737,6 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     variables: {
       style_bible_json: stringifyForPrompt(mappedEditScript.styleBible),
       structure_json: stringifyForPrompt(buildShotExecutionPlanPromptStructure({
-        id: editScriptId,
         durationSec: mappedEditScript.durationSec,
         shotCount: mappedEditScript.shotCount,
         sourceText: mappedEditScript.sourceText ?? null,

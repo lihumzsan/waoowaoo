@@ -1109,10 +1109,9 @@ export function SoundscapeContent({
     <div className="space-y-2">
       <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('soundscapeSources')}</p>
       {details.sources.map((source) => (
-        <section key={source.sourceId} className={`space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.lifecycle.stream?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
+        <section key={source.key} className={`space-y-1.5 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.lifecycle.stream?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
           <div className="min-w-0">
-            <p className={`${SELECTABLE_TEXT_CLASS} break-words text-xs font-semibold text-[var(--glass-text-primary)]`}>{source.sourceId}</p>
-            <p className={`${SELECTABLE_TEXT_CLASS} break-words text-[10px] text-[var(--glass-text-tertiary)]`}>{source.environmentFingerprint}</p>
+            <p className={`${SELECTABLE_TEXT_CLASS} break-words text-xs font-semibold text-[var(--glass-text-primary)]`}>{labels('sourceIndex', { index: source.sourceIndex })}</p>
           </div>
           {renderSummaryText(source.prompt, 4)}
           <div className="grid grid-cols-2 gap-2">
@@ -1128,18 +1127,19 @@ export function SoundscapeContent({
       <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-[var(--glass-text-tertiary)]`}>{labels('soundscapeSections')}</p>
       {details.sections.map((section, index) => {
         const transition = `${section.transitionIn} / ${section.transitionOut}`
+        const range = `${section.rangeStart} - ${section.rangeEnd}`
         return (
-          <section key={`${section.sourceId}-${section.fromShotId}-${section.toShotId}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.lifecycle.stream?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
+          <section key={`${section.key}-${index}`} className={`space-y-2 rounded-[16px] bg-slate-50 p-3 ring-1 ring-slate-100 ${data.lifecycle.stream?.isStreaming === true ? 'workspace-node-stream-soft-enter' : ''}`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className={`${SELECTABLE_TEXT_CLASS} break-words text-xs font-semibold text-[var(--glass-text-primary)]`}>{section.sourceId}</p>
-                <p className={`${SELECTABLE_TEXT_CLASS} break-words text-[10px] text-[var(--glass-text-tertiary)]`}>{section.fromShotId} - {section.toShotId}</p>
+                <p className={`${SELECTABLE_TEXT_CLASS} break-words text-xs font-semibold text-[var(--glass-text-primary)]`}>{labels('sourceIndex', { index: section.sourceIndex })}</p>
+                <p className={`${SELECTABLE_TEXT_CLASS} break-words text-[10px] text-[var(--glass-text-tertiary)]`}>{range}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {renderValue(labels('perspective'), section.perspective)}
               {renderValue(labels('intensity'), section.intensity)}
-              {renderValue(labels('shotRange'), `${section.fromShotId} - ${section.toShotId}`)}
+              {renderValue(labels(section.rangeKind === 'clip' ? 'clipRange' : 'shotRange'), range)}
               {renderValue(labels('transition'), transition)}
             </div>
           </section>

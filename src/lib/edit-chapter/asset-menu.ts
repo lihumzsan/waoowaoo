@@ -5,6 +5,8 @@ import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profil
 import { AppError } from '@/lib/errors/app-error'
 import type { ChapterPlanAssetMenu } from './schemas'
 
+type PlanAssetClient = Pick<typeof prisma, 'projectCharacter' | 'projectLocation'>
+
 export interface ExistingAssetRef {
   readonly id: string
   readonly previewImageUrl: string | null
@@ -30,8 +32,11 @@ function normalizePlanAssetName(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
 }
 
-export async function loadKnownPlanAssets(projectId: string): Promise<readonly KnownPlanAsset[]> {
-  const characters = await prisma.projectCharacter.findMany({
+export async function loadKnownPlanAssets(
+  projectId: string,
+  client: PlanAssetClient = prisma,
+): Promise<readonly KnownPlanAsset[]> {
+  const characters = await client.projectCharacter.findMany({
     where: { projectId },
     select: {
       id: true,
@@ -51,7 +56,7 @@ export async function loadKnownPlanAssets(projectId: string): Promise<readonly K
       },
     },
   })
-  const locations = await prisma.projectLocation.findMany({
+  const locations = await client.projectLocation.findMany({
     where: { projectId, assetKind: 'location' },
     select: {
       id: true,

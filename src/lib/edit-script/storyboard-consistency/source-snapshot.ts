@@ -4,7 +4,9 @@ import { ApiError } from '@/lib/api-errors'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
-import { normalizeEditScriptStructure, normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
+import { parsePersistedEditShotExecutionPlan } from '@/lib/edit-script/normalize'
+import { projectEditScriptCoreNames } from '@/lib/edit-script/core-view'
+import { loadKnownPlanAssets, type KnownPlanAsset } from '@/lib/edit-chapter/asset-menu'
 import { parseLocationSpatialProfile, type LocationSpatialProfile } from '@/lib/location-spatial-profile/types'
 import type { EditAssetRequirement, EditScriptPayload } from '@/lib/edit-script/types'
 import type {
@@ -207,9 +209,18 @@ function mapEditScriptPayload(input: {
 	    readonly requirements: readonly PersistedRequirement[]
 	  }
 	  readonly styleBibleJson: Prisma.JsonValue | null
+	  readonly knownAssets: readonly KnownPlanAsset[]
 	}): EditScriptPayload {
 	  if (!input.script.corePlanJson) throw new Error(`EDIT_SCRIPT_CORE_PLAN_REQUIRED:${input.script.id}`)
-	  const core = normalizeEditScriptStructure(input.script.corePlanJson)
+	  const core = projectEditScriptCoreNames(input.script.corePlanJson, input.knownAssets)
+	  const requirements = mapRequirements(input.script.requirements).map((requirement) => {
+	    if (!requirement.targetId) return requirement
+	    const asset = input.knownAssets.find((candidate) => (
+	      candidate.id === requirement.targetId && candidate.kind === requirement.kind
+	    ))
+	    if (!asset) throw new Error(`EDIT_SCRIPT_REQUIREMENT_ASSET_UNKNOWN:${requirement.id}:${requirement.targetId}`)
+	    return { ...requirement, name: asset.name }
+	  })
 	  const sourceStart = input.script.chapter.sourceStart
 	  const sourceEnd = input.script.chapter.sourceEnd
 	  const sourceDocument = input.script.chapter.sourceDocument
@@ -233,7 +244,7 @@ function mapEditScriptPayload(input: {
     assetReviewStatus: input.script.assetReviewStatus === 'approved' ? 'approved' : 'pending',
     shots: core.shots,
     generationSegments: core.generationSegments,
-    requirements: mapRequirements(input.script.requirements),
+    requirements,
   }
 }
 
@@ -247,7 +258,7 @@ export async function buildStoryboardConsistencySource(input: {
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
   readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
 }> {
-  const [project, script, editBible, executionPlan, config] = await Promise.all([
+  const [project, script, editBible, executionPlan, config, knownAssets] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -289,6 +300,7 @@ export async function buildStoryboardConsistencySource(input: {
       },
     }),
     getProjectModelConfig(input.projectId, input.userId),
+    loadKnownPlanAssets(input.projectId),
   ])
   if (!project || !script || !editBible) throw new ApiError('NOT_FOUND')
   if (script.status !== 'ready') {
@@ -303,7 +315,7 @@ export async function buildStoryboardConsistencySource(input: {
       message: 'Ready shot execution plan is required before storyboard generation',
     })
   }
-  const editScript = mapEditScriptPayload({ script, styleBibleJson: editBible.styleBibleJson })
+  const editScript = mapEditScriptPayload({ script, styleBibleJson: editBible.styleBibleJson, knownAssets })
   if (!editScript.id) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
   const styleBible = editScript.styleBible
   if (!styleBible) {
@@ -312,7 +324,7 @@ export async function buildStoryboardConsistencySource(input: {
       message: 'Style Bible is required before storyboard generation',
     })
   }
-  const parsedExecutionPlan = normalizeEditShotExecutionPlan(
+  const parsedExecutionPlan = parsePersistedEditShotExecutionPlan(
     executionPlan.executionPlanJson,
     editScript.shots,
     editScript.generationSegments,

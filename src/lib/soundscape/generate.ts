@@ -27,6 +27,7 @@ import { renderSoundscapeMix } from './mixer'
 import {
   buildSoundscapePlanFingerprint,
   parseSoundscapePlanStrict,
+  resolveSoundscapePlanReferences,
 } from './plan-contract'
 import { buildSoundscapePlanPrompt } from './prompt'
 import {
@@ -392,7 +393,7 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
             },
             schema: z.unknown(),
             parse: { kind: 'object' },
-            validate: parseSoundscapePlanStrict,
+            validate: (value) => resolveSoundscapePlanReferences(value, clips),
           })
         } finally {
           await streamCallbacks.flush()

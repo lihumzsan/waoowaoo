@@ -16,24 +16,32 @@ function normalizeString(value: string | null | undefined): string {
 
 function buildEditScriptPayload(editScript: FinalRenderEditScriptInput | null): unknown {
   if (!editScript) return null
+  const shotNumberById = new Map(editScript.shots.map((shot) => [shot.shotId, shot.shotNumber]))
   return {
-    id: editScript.id,
     userPrompt: editScript.userPrompt,
     durationSec: editScript.durationSec,
     styleBible: editScript.styleBible ?? null,
     shots: editScript.shots.map((shot) => ({
-      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      scene: shot.scene,
+      scene: { name: shot.scene.name, subScene: shot.scene.subScene },
       action: shot.action,
-      characters: shot.characters,
+      characters: shot.characters.map(({ name, visibility, role, performance }) => ({
+        name,
+        visibility,
+        role,
+        performance,
+      })),
       keyObjects: shot.keyObjects,
       sound: shot.sound,
     })),
     generationSegments: editScript.generationSegments.map((segment, index) => ({
       segmentNumber: index + 1,
-      shotIds: segment.shotIds,
+      shotNumbers: segment.shotIds.map((shotId) => {
+        const shotNumber = shotNumberById.get(shotId)
+        if (!shotNumber) throw new Error(`BGM_SCORE_EDIT_SCRIPT_SHOT_UNKNOWN:${shotId}`)
+        return shotNumber
+      }),
       continuity: segment.continuity,
     })),
   }
@@ -50,10 +58,6 @@ function buildTimelinePayload(clips: readonly FinalRenderClipPlan[]): unknown {
   return clips.map((clip) => ({
     order: clip.order,
     sourceKind: clip.sourceKind,
-    panelId: clip.panelId,
-    groupId: clip.groupId ?? null,
-    shotId: clip.shotId,
-    shotIds: clip.shotIds,
     shotNumber: clip.shotNumber,
     shotNumbers: clip.shotNumbers,
     durationSeconds: clip.durationSeconds,

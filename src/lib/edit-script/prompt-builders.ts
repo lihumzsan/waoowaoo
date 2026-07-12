@@ -49,9 +49,8 @@ function assetKey(name: string): string {
   return name.trim().toLocaleLowerCase()
 }
 
-function blockingCharacter(execution: EditShotExecution, name: string) {
-  const key = assetKey(name)
-  return execution.blocking.characters.find((character) => assetKey(character.name) === key) ?? null
+function blockingCharacter(execution: EditShotExecution, characterId: string) {
+  return execution.blocking.characters.find((character) => character.characterId === characterId) ?? null
 }
 
 function blockingObject(execution: EditShotExecution, object: EditScriptKeyObject) {
@@ -99,7 +98,7 @@ export function buildStoryboardStillPromptFacts(input: {
   readonly styleBible: EditScriptStyleBible
 }): StoryboardPromptBuildResult {
   const characters = input.shot.characters.map((character): StoryboardPromptCharacterFact => {
-    const placement = blockingCharacter(input.execution, character.name)
+    const placement = blockingCharacter(input.execution, character.characterId)
     return {
       name: character.name,
       visibility: character.visibility,

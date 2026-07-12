@@ -345,11 +345,11 @@ function generateEditScriptPromptContract(prompt: string): string | null {
   const characters = Array.isArray(assetMenu?.characters) ? assetMenu.characters : []
   const location = asRecord(locations[0])
   const character = asRecord(characters[0])
-  const locationId = typeof location?.id === 'string' ? location.id : null
-  const characterId = typeof character?.id === 'string' ? character.id : null
-  if (!locationId || !characterId) return null
+  const locationName = typeof location?.name === 'string' ? location.name : null
+  const characterName = typeof character?.name === 'string' ? character.name : null
+  if (!locationName || !characterName) return null
   const presentCharacter = {
-    characterId,
+    characterName,
     visibility: 'visible',
     role: 'focus',
     performance: '拖着受伤的脚谨慎靠近祭坛并观察石碑变化',
@@ -357,11 +357,11 @@ function generateEditScriptPromptContract(prompt: string): string | null {
   return JSON.stringify({
     shots: [
       {
-        shotId: 'shot-001',
+        shotRef: 'shot-001',
         shotNumber: 1,
         shotPurpose: 'establishing',
         durationSec: 4,
-        scene: { locationId, subScene: '暮色荒野中的废弃祭坛全貌' },
+        scene: { locationName, subScene: '暮色荒野中的废弃祭坛全貌' },
         action: '暮色笼罩荒野，废弃祭坛立在唯一小路尽头。',
         characters: [],
         keyObjects: [{ name: '祭坛石碑', role: '建立循环发生的固定地标' }],
@@ -369,11 +369,11 @@ function generateEditScriptPromptContract(prompt: string): string | null {
         sound: '低沉风声与远处空旷回响。',
       },
       {
-        shotId: 'shot-002',
+        shotRef: 'shot-002',
         shotNumber: 2,
         shotPurpose: 'action',
         durationSec: 4,
-        scene: { locationId, subScene: '祭坛前的石碑旁' },
+        scene: { locationName, subScene: '祭坛前的石碑旁' },
         action: '旅人拖着受伤的脚靠近石碑，死字突然闪烁成数字四。',
         characters: [presentCharacter],
         keyObjects: [{ name: '石碑上的数字四', role: '揭示祭坛异常规则' }],
@@ -381,11 +381,11 @@ function generateEditScriptPromptContract(prompt: string): string | null {
         sound: '脚步摩擦地面，石碑发出短促异响。',
       },
       {
-        shotId: 'shot-003',
+        shotRef: 'shot-003',
         shotNumber: 3,
         shotPurpose: 'action',
         durationSec: 4,
-        scene: { locationId, subScene: '祭坛与唯一小路交界处' },
+        scene: { locationName, subScene: '祭坛与唯一小路交界处' },
         action: '旅人沿小路狂奔后再次回到祭坛，看见脚边仍留着自己的血迹。',
         characters: [presentCharacter],
         keyObjects: [{ name: '血迹', role: '证明旅人回到了同一地点' }],
@@ -394,7 +394,7 @@ function generateEditScriptPromptContract(prompt: string): string | null {
       },
     ],
     generationSegments: [{
-      shotIds: ['shot-001', 'shot-002', 'shot-003'],
+      shotRefs: ['shot-001', 'shot-002', 'shot-003'],
       continuity: '三个镜头共享祭坛空间、旅人的连续行动与逐步增强的循环压迫感。',
     }],
   })
@@ -463,16 +463,16 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
   if (coreShots.length === 0 || coreSegments.length === 0) return null
   const shots = coreShots.flatMap((value) => {
     const shot = asRecord(value)
-    if (typeof shot?.shotId !== 'string' || typeof shot.shotNumber !== 'number') return []
+    if (typeof shot?.shotRef !== 'string' || typeof shot.shotNumber !== 'number') return []
     const characters = Array.isArray(shot.characters) ? shot.characters : []
     const keyObjects = Array.isArray(shot.keyObjects) ? shot.keyObjects : []
     const scene = asRecord(shot.scene)
     const blockingCharacters = characters.flatMap((characterValue) => {
       const character = asRecord(characterValue)
-      if (typeof character?.name !== 'string') return []
+      if (typeof character?.characterName !== 'string') return []
       const visibility = typeof character.visibility === 'string' ? character.visibility : 'visible'
       return [{
-        name: character.name,
+        characterName: character.characterName,
         visibility,
         position: '祭坛前方的弯曲小路附近',
         screenPosition: '画面中部',
@@ -490,13 +490,12 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
       }]
     })
     const subjects = [
-      ...blockingCharacters.map((character) => character.name),
+      ...blockingCharacters.map((character) => character.characterName),
       ...blockingObjects.map((object) => object.name),
     ]
     const action = typeof shot.action === 'string' ? shot.action : '保持核心剪辑计划中的镜头动作。'
     return [{
-      shotId: shot.shotId,
-      shotNumber: shot.shotNumber,
+      shotRef: shot.shotRef,
       camera: {
         shotScale: shot.shotNumber === 1 ? '大全景' : '中景',
         lens: '28mm 中广角',
@@ -512,7 +511,7 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
           type: '祭坛与小路之间的行动轴线',
           subjects: subjects.length > 0
             ? subjects
-            : [typeof scene?.name === 'string' ? scene.name : '祭坛空间'],
+            : [typeof scene?.locationName === 'string' ? scene.locationName : '祭坛空间'],
           screenDirection: '主体沿小路向画面中央祭坛移动，左右关系保持稳定',
         },
         characters: blockingCharacters,
@@ -522,24 +521,25 @@ function generateShotExecutionPlanContract(prompt: string): string | null {
       videoPrompt: `${action} 镜头运动与动作同步，使用短促脚步或物体触碰声，不增加对白或连续氛围底噪。`,
     }]
   })
-  const shotById = new Map(shots.map((shot) => [shot.shotId, shot]))
+  const shotByRef = new Map(shots.map((shot) => [shot.shotRef, shot]))
   const generationSegmentExecutions = coreSegments.flatMap((value) => {
     const segment = asRecord(value)
-    const shotIds = Array.isArray(segment?.shotIds)
-      ? segment.shotIds.filter((shotId): shotId is string => typeof shotId === 'string')
+    const shotRefs = Array.isArray(segment?.shotRefs)
+      ? segment.shotRefs.filter((shotRef): shotRef is string => typeof shotRef === 'string')
       : []
-    if (shotIds.length === 0 || shotIds.some((shotId) => !shotById.has(shotId))) return []
+    const segmentRef = typeof segment?.segmentRef === 'string' ? segment.segmentRef : null
+    if (!segmentRef || shotRefs.length === 0 || shotRefs.some((shotRef) => !shotByRef.has(shotRef))) return []
     let elapsed = 0
-    const timedSections = shotIds.map((shotId, index) => {
-      const sourceShot = asRecord(coreShots.find((candidate) => asRecord(candidate)?.shotId === shotId))
+    const timedSections = shotRefs.map((shotRef, index) => {
+      const sourceShot = asRecord(coreShots.find((candidate) => asRecord(candidate)?.shotRef === shotRef))
       const duration = typeof sourceShot?.durationSec === 'number' ? sourceShot.durationSec : 3
       const start = elapsed
       elapsed += duration
-      const execution = shotById.get(shotId)
+      const execution = shotByRef.get(shotRef)
       return `[00:${String(start).padStart(2, '0')}-00:${String(elapsed).padStart(2, '0')}] 镜头${String(index + 1)}：${execution?.videoPrompt ?? ''}`
     })
     return [{
-      shotIds,
+      segmentRef,
       continuousVideoPrompt: `16:9 二维手绘连续片段，低饱和蓝灰与暗红微光，镜头节奏逐步收紧。${timedSections.join(' ')}`,
     }]
   })
@@ -600,23 +600,24 @@ function generateSoundscapePlanContract(prompt: string): string | null {
     || !prompt.includes('Final rendered media timeline JSON:')
   ) return null
   const timelinePrompt = prompt.slice(prompt.indexOf('Final rendered media timeline JSON:'))
-  const shotIds = [...new Set(timelinePrompt.match(/"(shot_[^"]+)"/g)?.map((value) => value.slice(1, -1)) ?? [])]
-  const firstShotId = shotIds[0]
-  const lastShotId = shotIds.at(-1)
-  if (!firstShotId || !lastShotId) return null
+  const clipOrders = [...timelinePrompt.matchAll(/"clipOrder"\s*:\s*(\d+)/g)]
+    .map((match) => Number(match[1]))
+  const firstClipOrder = clipOrders[0]
+  const lastClipOrder = clipOrders.at(-1)
+  if (!firstClipOrder || !lastClipOrder) return null
   return JSON.stringify({
     decision: 'soundscape',
     sources: [{
-      sourceId: 'forbidden_shrine_wind',
+      sourceId: 'source-001',
       environmentFingerprint: 'twilight_forbidden_shrine_dry_wind',
       prompt: 'Seamless loop of dry twilight wind across an abandoned stone shrine, no music, no voices, no dialogue, no footsteps, no impacts.',
       loopDurationSeconds: 12,
       promptInfluence: 0.55,
     }],
     sections: [{
-      sourceId: 'forbidden_shrine_wind',
-      fromShotId: firstShotId,
-      toShotId: lastShotId,
+      sourceId: 'source-001',
+      fromClipOrder: firstClipOrder,
+      toClipOrder: lastClipOrder,
       perspective: 'exterior_near',
       intensity: 'low',
       transitionIn: 'fade',

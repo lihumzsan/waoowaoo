@@ -456,6 +456,8 @@
         "loopDuration": "循环时长",
         "promptInfluence": "提示词权重",
         "sourceId": "声源",
+        "sourceIndex": "声源 {index}",
+        "clipRange": "片段区间",
         "shotRange": "镜头区间",
         "perspective": "视角",
         "intensity": "强度",

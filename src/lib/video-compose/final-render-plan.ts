@@ -441,24 +441,26 @@ function buildProjectContextJson(projectContext: FinalRenderProjectContextInput 
 function buildEditScriptJson(editScript: FinalRenderEditScriptInput | null): string {
   if (!editScript) return safeJsonStringify(null)
   return safeJsonStringify({
-    id: editScript.id,
     userPrompt: editScript.userPrompt,
     durationSec: editScript.durationSec,
     styleBible: editScript.styleBible ?? null,
     shotCount: editScript.shots.length,
     generationSegments: editScript.generationSegments.map((segment, index) => ({
       segmentNumber: index + 1,
-      shotIds: segment.shotIds,
       shotNumbers: shotNumbersForIds(segment.shotIds, editScript),
       continuity: segment.continuity,
     })),
     shots: editScript.shots.map((shot) => ({
-      shotId: shot.shotId,
       shotNumber: shot.shotNumber,
       durationSec: shot.durationSec,
-      scene: shot.scene,
+      scene: { name: shot.scene.name, subScene: shot.scene.subScene },
       action: shot.action,
-      characters: shot.characters,
+      characters: shot.characters.map(({ name, visibility, role, performance }) => ({
+        name,
+        visibility,
+        role,
+        performance,
+      })),
       keyObjects: shot.keyObjects,
       sound: shot.sound,
     })),
@@ -469,12 +471,8 @@ function buildRenderedTimelineJson(clips: readonly FinalRenderClipPlan[]): strin
   return safeJsonStringify(clips.map((clip) => ({
     order: clip.order,
     sourceKind: clip.sourceKind,
-    panelId: clip.panelId,
-    groupId: clip.groupId ?? null,
     shotNumber: clip.shotNumber,
     shotNumbers: clip.shotNumbers,
-    shotId: clip.shotId,
-    shotIds: clip.shotIds,
     durationSeconds: clip.durationSeconds,
     visualSummary: clip.description,
     soundDirection: clip.sound,

@@ -24,7 +24,7 @@ Shot coverage and characters:
 - Cover every shot in the core edit plan. Do not add, remove, or reorder shots.
 - blocking.characters must cover every character of the matching shot, including hidden, occluded, listener, and non-focus characters, and must not add characters that do not exist in that shot.
 - visibility must inherit or refine the matching shot's visibility, and use only `visible`, `partial`, `hidden`, `occluded`, or `offscreen`.
-- Every item in `blocking.characters[]` must output exactly these six fields: `name`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`. Even when visibility is `hidden`, `occluded`, or `offscreen`, `facing` and `eyeline` are required; if they cannot be seen, describe why facing or eyeline is invisible or indeterminate. Never omit them.
+- Every item in `blocking.characters[]` must output exactly these six fields: `characterName`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`. `characterName` must exactly match a character name from the corresponding input shot. Even when visibility is `hidden`, `occluded`, or `offscreen`, `facing` and `eyeline` are required; if they cannot be seen, describe why facing or eyeline is invisible or indeterminate. Never omit them.
 
 Objects:
 - Every keyObjects entry of the matching shot must appear in blocking.objects.
@@ -49,8 +49,8 @@ Single-shot video prompt:
 - videoPrompt must not add plot, characters, props, dialogue, or sound events, and must not mechanically copy an image prompt.
 
 Continuous video prompt:
-- generationSegmentExecutions must follow the order of videoGenerationSegments in the core edit plan, and each shotIds array must match exactly.
-- Each item outputs only two fields: shotIds and continuousVideoPrompt.
+- generationSegmentExecutions must follow the order of videoGenerationSegments in the core edit plan, and each `segmentRef` must exactly match the corresponding input segment.
+- Each item outputs only two fields: `segmentRef` and `continuousVideoPrompt`.
 - The input videoGenerationSegments[].continuityReference value is only source material for writing continuousVideoPrompt; the output field name must be continuousVideoPrompt, and the continuity field name must never be copied into output.
 - Each item must output continuousVideoPrompt as a non-empty string. Do not output continuity, description, summary, or any other field.
 - continuousVideoPrompt is written as one complete continuous video segment, not a mechanical concatenation of single-shot videoPrompt values.
@@ -105,17 +105,16 @@ Spatial Profiles:
 Return JSON only. Do not use markdown or explanations.
 
 Field strictness:
-- `characters[]` may contain only these six fields: `name`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`; all six fields are required and must be non-empty strings.
+- `characters[]` may contain only these six fields: `characterName`, `visibility`, `position`, `screenPosition`, `facing`, `eyeline`; all six fields are required and must be non-empty strings.
 - `objects[]` may contain only these three fields: `name`, `position`, `screenPosition`; all three fields are required and must be non-empty strings.
 - `axis.subjects` must contain at least one non-empty string; empty arrays are forbidden.
-- `generationSegmentExecutions[]` may contain only these two fields: `shotIds`, `continuousVideoPrompt`; `continuity` is forbidden.
+- `generationSegmentExecutions[]` may contain only these two fields: `segmentRef`, `continuousVideoPrompt`; `continuity` is forbidden.
 - Do not output extra fields. Do not omit fields. Do not use null, empty strings, or omission as a substitute for invisible information.
 
 {
   "shots": [
     {
-      "shotId": "shot-001",
-      "shotNumber": 1,
+      "shotRef": "shot-001",
       "camera": {
         "shotScale": "specific shot scale",
         "lens": "specific focal length or range",
@@ -134,7 +133,7 @@ Field strictness:
         },
         "characters": [
           {
-            "name": "character name",
+            "characterName": "character name",
             "visibility": "visible",
             "position": "character real-space position",
             "screenPosition": "character image-frame position",
@@ -156,7 +155,7 @@ Field strictness:
   ],
   "generationSegmentExecutions": [
     {
-      "shotIds": ["shot-001", "shot-002", "shot-003"],
+      "segmentRef": "segment-001",
       "continuousVideoPrompt": "final continuous-video prompt for this generation segment, organized with timed sections and written as one complete continuous segment"
     }
   ]
@@ -166,7 +165,7 @@ Field strictness:
 
 - Does the output cover every shot in the core edit plan?
 - Does every blocking.characters list fully cover the matching shot's characters without adding unknown characters?
-- Does every `blocking.characters[]` item contain exactly `name`, `visibility`, `position`, `screenPosition`, `facing`, and `eyeline` as non-empty string fields?
+- Does every `blocking.characters[]` item contain exactly `characterName`, `visibility`, `position`, `screenPosition`, `facing`, and `eyeline` as non-empty string fields, with `characterName` copied exactly from the input shot?
 - Do hidden / occluded / offscreen characters still include `facing` and `eyeline`, with an explanation when they cannot be seen?
 - Does every keyObjects entry of the matching shot appear in blocking.objects?
 - Does every `blocking.objects[]` item contain only `name`, `position`, and `screenPosition`, with no `facing`, `eyeline`, or other extra fields?
@@ -174,8 +173,8 @@ Field strictness:
 - Does every `blocking.axis.subjects` contain at least one character or key object name, and not an empty array?
 - Does every shot include videoPrompt, describing only the current single-shot video?
 - For every shot with dialogue, does videoPrompt include every line verbatim and state the speaker and fixed voice phrase?
-- Do generationSegmentExecutions cover every generation segment, with exactly matching shotIds?
-- Do generationSegmentExecutions output only shotIds and continuousVideoPrompt, with no continuity?
+- Do generationSegmentExecutions cover every generation segment, with exactly matching segmentRef values?
+- Do generationSegmentExecutions output only segmentRef and continuousVideoPrompt, with no continuity?
 - Is each continuousVideoPrompt a complete continuous segment rather than a single-shot prompt concatenation?
 - Does each continuousVideoPrompt calculate timed sections from cumulative durationSec, and keep action, camera movement, rhythm, and shot connections continuous without continuous ambience beds?
 - Does each continuousVideoPrompt cover every dialogue line inside the segment, with consistent voice phrases for the same character?

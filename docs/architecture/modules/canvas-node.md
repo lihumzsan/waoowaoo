@@ -16,6 +16,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。Task 提交后 Canvas 只投影 `editStyleBible:${ProjectEditBible.id}`：任一候选运行时为运行中，全部成功且未确认时为等待选择，确认后同一 identity 原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
 - **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
+- **CN-03A — Canvas 不解释或展示领域 ID。** Structured preview 只能展示 raw 协议中的名称、短 ref 对应的顺序或 clip order；正式节点只消费服务端已投影的 current-name View。renderer 不得维护资产映射、按名称反查 identity，也不得用 characterId/locationId/shotId/sourceId 等内部标识作为缺失文案 fallback。引用缺失必须由 projector 明确拒绝。
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
@@ -65,6 +66,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write。
 - `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint。
 - 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
+- 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
 
 ## 修改检查表
 

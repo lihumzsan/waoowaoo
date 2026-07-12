@@ -19,9 +19,9 @@ describe('shot execution plan normalization', () => {
     )
 
     expect(normalizedExecution.shots).toHaveLength(2)
-    expect(normalizedExecution.shots[0]?.blocking.characters.map((character) => character.name)).toEqual([
-      'Anna',
-      'Disguised Grandmother',
+    expect(normalizedExecution.shots[0]?.blocking.characters.map((character) => character.characterId)).toEqual([
+      'character-anna',
+      'character-grandmother',
     ])
     expect(normalizedExecution.shots[0]?.blocking.axis.screenDirection).toContain('screen left')
     expect(normalizedExecution.shots[0]?.camera.lighting).toContain('shadow')
@@ -54,7 +54,7 @@ describe('shot execution plan normalization', () => {
       .toThrow(/Unrecognized key[\s\S]*motionFlow/)
   })
 
-  it('normalizes copied input-only continuity and role fields before strict execution validation', () => {
+  it('rejects copied input-only identity and role fields', () => {
     const normalizedCore = normalizeEditScriptCore(corePlan())
     const plan = executionPlan()
     const copiedInputFieldsPlan = {
@@ -73,24 +73,14 @@ describe('shot execution plan normalization', () => {
           })),
         },
       })),
-      generationSegmentExecutions: plan.generationSegmentExecutions.map((segment) => ({
-        shotIds: segment.shotIds,
-        continuity: segment.continuousVideoPrompt,
-      })),
+      generationSegmentExecutions: plan.generationSegmentExecutions,
     }
 
-    const normalizedExecution = normalizeEditShotExecutionPlan(
+    expect(() => normalizeEditShotExecutionPlan(
       copiedInputFieldsPlan,
       normalizedCore.shots,
       normalizedCore.generationSegments,
-    )
-
-    expect(normalizedExecution.generationSegmentExecutions[0]).toEqual({
-      shotIds: ['shot-1', 'shot-2'],
-      continuousVideoPrompt: expect.stringContaining('Cabin reveal continuous segment'),
-    })
-    expect(JSON.stringify(normalizedExecution)).not.toContain('"role":')
-    expect(JSON.stringify(normalizedExecution)).not.toContain('"continuity":')
+    )).toThrow(/Unrecognized key[\s\S]*role/)
   })
 
   it('rejects execution plans that drop in-scene characters or required objects', () => {

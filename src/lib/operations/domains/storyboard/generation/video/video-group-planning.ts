@@ -106,7 +106,8 @@ export function parseEditScriptShots(value: unknown): VideoGroupShot[] {
     sceneName: shot.scene.name,
     characters: shot.characters.map((character) => character.name),
     dialogue: shot.dialogue.map((line) => {
-      const speaker = shot.characters.find((character) => character.characterId === line.characterId)?.name ?? line.characterId
+      const speaker = shot.characters.find((character) => character.characterId === line.characterId)?.name
+      if (!speaker) throw new Error(`EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:${shot.shotNumber}:${line.characterId}`)
       return `${speaker}: ${line.line}`
     }),
     sound: shot.sound,

@@ -11,12 +11,15 @@ export {
 export {
   chapterPlanInputSchema,
   chapterPlanOutputSchema,
+  chapterPlanRawOutputSchema,
+  chapterPlanRawShotSchema,
   buildChapterPlanOutputSchema,
-  enrichChapterPlanOutputWithAssetNames,
+  resolveChapterPlanOutputReferences,
   normalizeChapterPlanOutput,
   type ChapterPlanAssetMenu,
   type ChapterPlanInput,
   type ChapterPlanOutput,
+  type ChapterPlanRawShot,
   type NormalizedChapterPlanOutput,
 } from './schemas'
 export {

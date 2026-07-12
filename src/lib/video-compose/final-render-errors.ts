@@ -45,10 +45,10 @@ function missingVideoLabel(input: MissingFinalRenderVideo, locale: FinalRenderEr
   const shotNumbersText = compressShotNumbers(input.shotNumbers)
   if (locale === 'zh') {
     const target = input.sourceKind === 'videoGroup' ? '分组视频' : '单镜头视频'
-    return shotNumbersText ? `${target}（镜头 ${shotNumbersText}）` : `${target}（${input.groupId ?? input.panelId}）`
+    return shotNumbersText ? `${target}（镜头 ${shotNumbersText}）` : target
   }
   const target = input.sourceKind === 'videoGroup' ? 'group video' : 'single-shot video'
-  return shotNumbersText ? `${target} (shots ${shotNumbersText})` : `${target} (${input.groupId ?? input.panelId})`
+  return shotNumbersText ? `${target} (shots ${shotNumbersText})` : target
 }
 
 function formatMissingVideoMessage(input: {

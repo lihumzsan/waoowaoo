@@ -19,7 +19,7 @@ Write a clean final music prompt that designs one coherent background score from
 
 Reading priority:
 - First understand the core edit plan JSON. generationSegments is the video generation segmentation plan, and it defines musical section structure and continuity.
-- Read generationSegments[].shotIds, shotNumbers, and continuity. Treat each segment as one continuous story/motion section.
+- Read generationSegments[].shotNumbers and continuity. Treat each segment as one continuous story/motion section.
 - Read every shots[] field: durationSec, scene, action, characters[].performance, keyObjects, and sound. Do not rely only on the sound field.
 - Read videoRatio from the project configuration JSON, and read styleBible from the core edit plan JSON. Translate framing plus the visual and sound tendencies of the style rules into musical mood, spatial image, rhythmic density, and instrumentation choices.
 - Use the actual rendered media timeline JSON to keep section lengths aligned to the final renderable media. If the rendered media timeline differs from the core edit plan, follow the rendered media duration while preserving the core edit plan's narrative intent.

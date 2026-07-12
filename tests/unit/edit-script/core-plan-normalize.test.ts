@@ -5,6 +5,7 @@ import {
   it,
   normalizeEditScriptCore,
 } from './normalize.fixture'
+import { projectEditScriptCoreNames } from '@/lib/edit-script/core-view'
 
 describe('edit-first core plan normalization', () => {
   it('normalizes the compact core plan and preserves hidden_subject characters', () => {
@@ -48,6 +49,56 @@ describe('edit-first core plan normalization', () => {
     })
 
     expect(normalized.shots[0]?.characters[0]?.performance).toBe('')
+  })
+
+  it('projects current asset names from canonical ids', () => {
+    const normalized = projectEditScriptCoreNames(corePlan(), [
+      {
+        kind: 'location',
+        id: 'location-cabin',
+        name: 'Renamed Cabin',
+        description: 'Current location',
+        asset: {
+          id: 'location-cabin',
+          previewImageUrl: null,
+          hasOutput: false,
+          taskTargetType: 'LocationImage',
+          taskTargetId: 'location-cabin',
+        },
+      },
+      {
+        kind: 'character',
+        id: 'character-anna',
+        name: 'Renamed Anna',
+        description: 'Current character',
+        asset: {
+          id: 'character-anna',
+          previewImageUrl: null,
+          hasOutput: false,
+          taskTargetType: 'CharacterAppearance',
+          taskTargetId: 'appearance-anna',
+        },
+      },
+      {
+        kind: 'character',
+        id: 'character-grandmother',
+        name: 'Renamed Grandmother',
+        description: 'Current character',
+        asset: {
+          id: 'character-grandmother',
+          previewImageUrl: null,
+          hasOutput: false,
+          taskTargetType: 'CharacterAppearance',
+          taskTargetId: 'appearance-grandmother',
+        },
+      },
+    ])
+
+    expect(normalized.shots[0]?.scene.name).toBe('Renamed Cabin')
+    expect(normalized.shots[0]?.characters.map((character) => character.name)).toEqual([
+      'Renamed Anna',
+      'Renamed Grandmother',
+    ])
   })
 
   it('fails explicitly when dialogue references a speaker outside the same shot', () => {

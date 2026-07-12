@@ -18,10 +18,8 @@ function buildProjectContextPayload(projectContext: FinalRenderProjectContextInp
 
 function buildTimelinePayload(clips: readonly FinalRenderClipPlan[]): unknown {
   return clips.map((clip) => ({
-    order: clip.order,
-    clipId: clip.panelId,
+    clipOrder: clip.order,
     sourceKind: clip.sourceKind,
-    shotIds: clip.shotIds,
     shotNumbers: clip.shotNumbers,
     durationSeconds: clip.durationSeconds,
     visualSummary: clip.description,
@@ -33,7 +31,7 @@ const shapeExample = {
   decision: 'soundscape',
   sources: [
     {
-      sourceId: 'city_rooftop_wind',
+      sourceId: 'source-001',
       environmentFingerprint: 'night_city_rooftop_wind',
       prompt: 'Seamless loop of steady rooftop wind with distant city hum, no music, no voices, no footsteps.',
       loopDurationSeconds: 30,
@@ -42,9 +40,9 @@ const shapeExample = {
   ],
   sections: [
     {
-      sourceId: 'city_rooftop_wind',
-      fromShotId: 'shot_012',
-      toShotId: 'shot_018',
+      sourceId: 'source-001',
+      fromClipOrder: 1,
+      toClipOrder: 3,
       perspective: 'exterior_near',
       intensity: 'medium',
       transitionIn: 'fade',
@@ -68,7 +66,7 @@ export function buildSoundscapePlanPrompt(input: {
       '硬规则：',
       '1. 只返回严格 JSON。不要 markdown、注释或 JSON 外文字。',
       '2. 不要输出 startSec、endSec、毫秒、ffmpeg 参数、滤镜参数、gain 数字、lowpass 数字或自由处理指令。',
-      '3. sections 只能用 fromShotId/toShotId 锚定 shot 区间。系统会从最终剪辑表推导绝对时间。',
+      '3. sections 只能用 fromClipOrder/toClipOrder 锚定输入时间线中的 clipOrder 区间。系统会解析为内部镜头身份并推导绝对时间。',
       '4. perspective 只能是 exterior_near / exterior_far / interior / interior_behind_window。',
       '5. intensity 只能是 low / medium / high。',
       '6. transitionIn/transitionOut 只能是 cut / fade / crossfade。',
@@ -97,7 +95,7 @@ export function buildSoundscapePlanPrompt(input: {
     'Hard rules:',
     '1. Return strict JSON only. No markdown, comments, or prose outside JSON.',
     '2. Do not output startSec, endSec, milliseconds, ffmpeg parameters, filter parameters, gain numbers, lowpass numbers, or free-form audio processing instructions.',
-    '3. sections must anchor only by fromShotId/toShotId. The system derives absolute time from the final clip timeline.',
+    '3. sections must anchor only by fromClipOrder/toClipOrder from the input timeline. The system resolves internal shot identities and derives absolute time.',
     '4. perspective must be one of exterior_near / exterior_far / interior / interior_behind_window.',
     '5. intensity must be one of low / medium / high.',
     '6. transitionIn/transitionOut must be one of cut / fade / crossfade.',

@@ -84,8 +84,7 @@ function executionPlan() {
   return {
     shots: [
       {
-        shotId: 'shot-1',
-        shotNumber: 1,
+        shotRef: 'shot-001',
         camera: {
           shotScale: 'medium',
           lens: '35mm',
@@ -104,7 +103,7 @@ function executionPlan() {
           },
           characters: [
             {
-              name: 'Anna',
+              characterName: 'Anna',
               visibility: 'visible',
               position: 'near the doorway',
               screenPosition: 'left foreground',
@@ -112,7 +111,7 @@ function executionPlan() {
               eyeline: 'chair center',
             },
             {
-              name: 'Disguised Grandmother',
+              characterName: 'Disguised Grandmother',
               visibility: 'hidden',
               position: 'seated inside the high-backed chair',
               screenPosition: 'behind the chair back',
@@ -132,8 +131,7 @@ function executionPlan() {
         videoPrompt: 'Single-shot video prompt: Anna remains near the doorway while the high-backed chair hides the seated subject in shadow.',
       },
       {
-        shotId: 'shot-2',
-        shotNumber: 2,
+        shotRef: 'shot-002',
         camera: {
           shotScale: 'medium close',
           lens: '50mm',
@@ -152,7 +150,7 @@ function executionPlan() {
           },
           characters: [
             {
-              name: 'Anna',
+              characterName: 'Anna',
               visibility: 'partial',
               position: 'beside the chair',
               screenPosition: 'left midground',
@@ -160,7 +158,7 @@ function executionPlan() {
               eyeline: 'chair back',
             },
             {
-              name: 'Disguised Grandmother',
+              characterName: 'Disguised Grandmother',
               visibility: 'hidden',
               position: 'seated inside the high-backed chair',
               screenPosition: 'behind the chair back',
@@ -182,7 +180,7 @@ function executionPlan() {
     ],
     generationSegmentExecutions: [
       {
-        shotIds: ['shot-1', 'shot-2'],
+        segmentRef: 'segment-001',
         continuousVideoPrompt: 'Cabin reveal continuous segment, 16:9, same high-backed chair remains centered. [00:00-00:03] Shot 1: Anna approaches from screen left while the hidden subject remains behind the chair back. <floor creak continues> [00:03-00:06] Shot 2: same-axis slow push as Anna reaches the chair and says "Who is sitting there?", while the hidden subject stays physically present. <chair hinge begins>',
       },
     ],

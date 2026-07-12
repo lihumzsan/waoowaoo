@@ -14,6 +14,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - **AP-02 — 结构化 raw schema 唯一。** 结构化模型输出必须有一个生产 raw schema 作为接受边界。worker parser 与 structured-stream adapter 必须复用同一 raw schema；持久化 final schema 不得倒充 raw stream schema。只有一个当前形状且 parser 不分流时，不得要求模型输出固定 `version/schemaVersion` 装饰字段。
 - **AP-03 — 协议变更整体审计。** 修改结构化输出字段、类型、层级、必填性、枚举或 identity 语义时，必须在同一变更中审计 Prompt、生产 raw schema、parser/normalizer、stream adapter、stable item key、持久化 projector、UI consumer 与外部 provider fixture；不适用项必须说明原因。持久化 JSON 的不兼容变化必须一次性迁移并切换唯一 strict parser，不得通过双 schema、fallback 或默认值兼容。禁止只修改 Prompt 并假定其他层自动适配。
 - **AP-04 — Prompt 不写领域事实 identity。** 模型描述不得成为持久事实、资产、scope、生命周期或关联 identity 的权威；identity 必须来自领域输入、registry 或服务端 projector。禁止 substring、字符重合、历史消息或 UI 文案补认 canonical identity。
+- **AP-04A — 模型只使用有界短引用。** 人物与场景使用输入动态枚举中的精确名称，镜头/分段/时间线使用仅在单次响应内有效的短 ref、序号或 clip order；服务端 resolver 是名称/短引用到 canonical UUID/系统 identity 的唯一解释者。Prompt 不得要求模型抄写数据库 UUID，持久化 final schema 也不得直接作为 raw model schema。关联失败必须拒绝整份输出，禁止猜测、旧协议 fallback 或把内部 ID 作为用户可见文案。
 - **AP-05 — 未知输出显式失败。** 结构化 raw schema 应在协议边界拒绝未知或缺失字段；不得静默删除、补默认、降级成自由文本或让下游消费者各自容错。协议失败与 Task retry/terminal 继续服从异步生命周期模块。
 - **AP-06 — Fixture 只是外部协议替身。** Golden provider fixture 必须通过同一生产 raw schema，但只能证明受控外部边界与内部真实主链兼容，不能证明真实模型必然服从 Prompt。Prompt 或 schema 变化时必须审计 fixture；不得让 fixture 自己定义期望协议。
 - **AP-07 — 流式展示无业务裁决权。** structured stream 只消费已声明 raw item、stable key 与 merge rule，提供可丢弃预览。stream parse rejection 不得写 Task/resource 失败，最终业务状态仍由 durable owner 决定。
@@ -42,6 +43,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - Golden provider 曾因 generic JSON、错误 prompt 路由或旧字段无法通过生产 parser；fixture 修复只能证明协议替身，不能成为 Prompt schema owner。
 - Prompt 根目录曾没有通用架构路由，字段变化依赖人工记住 Schema/stream/fixture；现在所有 Prompt 先命中本模块，再沿实际调用链审计适用消费者。
 - location spatial profile、soundscape plan 与 source script 曾要求模型重复输出固定的版本标记，但系统没有第二协议或任何 reader 分支；这些字段既不能提供迁移能力，又扩大了 Prompt/schema/fixture 漂移面，现只保留真实形状字段。
+- 核心剪辑、摄影执行计划与 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback，使协议抄写错误直接泄漏到 UI。现在三条链统一为 raw 名称/短引用/clip order，服务端解析成 final identity；BGM 与最终配乐的模型输入也只保留镜头号和 clip order。
 
 ## 修改检查表
 

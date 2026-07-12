@@ -59,11 +59,11 @@ function segmentForShot(snapshot: StoryboardConsistencySourceSnapshot, shotId: s
   return segment
 }
 
-function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, shotId: string) {
-  return snapshot.assets.find((asset) => asset.kind === 'location' && asset.shotIds.includes(shotId)) ?? null
+function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, locationId: string) {
+  return snapshot.assets.find((asset) => asset.kind === 'location' && asset.targetId === locationId) ?? null
 }
 
-async function buildCharacterRefsByAssetName(
+async function buildCharacterRefsById(
   assets: readonly StoryboardConsistencyAssetSnapshot[],
 ): Promise<Map<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>> {
   const characterAssets = assets.filter((asset) => asset.kind === 'character')
@@ -93,7 +93,7 @@ async function buildCharacterRefsByAssetName(
     if (!character || !appearance) {
       throw new Error(`EDIT_SCRIPT_STORYBOARD_CHARACTER_ASSET_INVALID:${asset.name}`)
     }
-    output.set(assetKey(asset.name), {
+    output.set(character.id, {
       characterId: character.id,
       name: character.name,
       appearanceId: appearance.id,
@@ -122,7 +122,8 @@ function buildStoryboardTextJson(snapshot: StoryboardConsistencySourceSnapshot):
 function dialogueLinesForShot(shot: StoryboardConsistencySourceSnapshot['shots'][number]): string[] {
   const characterNameById = new Map(shot.characters.map((character) => [character.characterId, character.name]))
   return shot.dialogue.map((line) => {
-    const speaker = characterNameById.get(line.characterId) ?? line.characterId
+    const speaker = characterNameById.get(line.characterId)
+    if (!speaker) throw new Error(`EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:${shot.shotNumber}:${line.characterId}`)
     return `${speaker}: ${line.line}`
   })
 }
@@ -170,24 +171,24 @@ export async function upsertEditScriptStoryboard(input: {
 function buildPanelDrafts(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
-  readonly characterRefsByAssetName: ReadonlyMap<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>
+  readonly characterRefsById: ReadonlyMap<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>
 }): PanelDraft[] {
   const generatedByShotId = new Map(input.generatedPanels.map((panel) => [panel.sourceShotId, panel]))
   let cursor = 0
   return input.snapshot.shots.map((shot, index) => {
     const segment = segmentForShot(input.snapshot, shot.shotId)
     const generated = generatedByShotId.get(shot.shotId)
-    const location = locationForShot(input.snapshot, shot.shotId)
+    const location = locationForShot(input.snapshot, shot.scene.locationId)
     const execution = input.snapshot.shotExecutionPlan.shots.find((candidate) => candidate.shotId === shot.shotId)
     if (!generated || !execution) throw new Error(`EDIT_SCRIPT_STORYBOARD_PANEL_FACTS_MISSING:${shot.shotId}`)
     const srtStart = cursor
     const srtEnd = cursor + shot.durationSec
     cursor = srtEnd
     const characters = shot.characters.map((character): StoryboardCharacterRef | null => {
-      const refBase = input.characterRefsByAssetName.get(assetKey(character.name))
-      const placement = execution.blocking.characters.find((candidate) => assetKey(candidate.name) === assetKey(character.name))
+      const refBase = input.characterRefsById.get(character.characterId)
+      const placement = execution.blocking.characters.find((candidate) => candidate.characterId === character.characterId)
       const characterAsset = input.snapshot.assets.find((asset) =>
-        asset.kind === 'character' && assetKey(asset.name) === assetKey(character.name))
+        asset.kind === 'character' && asset.targetId === character.characterId)
       if (!refBase) return null
       return {
         ...refBase,
@@ -239,11 +240,11 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
 }): Promise<readonly { readonly id: string; readonly panelIndex: number }[]> {
-  const characterRefsByAssetName = await buildCharacterRefsByAssetName(input.snapshot.assets)
+  const characterRefsById = await buildCharacterRefsById(input.snapshot.assets)
   const panelDrafts = buildPanelDrafts({
     snapshot: input.snapshot,
     generatedPanels: input.generatedPanels,
-    characterRefsByAssetName,
+    characterRefsById,
   })
   const storyboard = await prisma.projectStoryboard.update({
     where: { id: input.storyboardId },

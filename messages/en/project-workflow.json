@@ -456,6 +456,8 @@
         "loopDuration": "Loop Duration",
         "promptInfluence": "Prompt Influence",
         "sourceId": "Source",
+        "sourceIndex": "Source {index}",
+        "clipRange": "Clip Range",
         "shotRange": "Shot Range",
         "perspective": "Perspective",
         "intensity": "Intensity",

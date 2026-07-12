@@ -455,7 +455,8 @@ function shotKeyObjects(shot: ProjectEditScriptShot): string[] {
 function shotDialogue(shot: ProjectEditScriptShot): string[] {
   const characterNameById = new Map(shot.characters.map((character) => [character.characterId, character.name]))
   return shot.dialogue.map((line) => {
-    const speaker = characterNameById.get(line.characterId) ?? line.characterId
+    const speaker = characterNameById.get(line.characterId)
+    if (!speaker) throw new Error(`EDIT_SCRIPT_DIALOGUE_CHARACTER_UNKNOWN:${shot.shotNumber}:${line.characterId}`)
     return `${speaker}: ${line.line}`
   })
 }
@@ -567,7 +568,14 @@ function createMediaNode(input: {
   })
 }
 
-function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate): WorkspaceCanvasEditPipelineStepItem[] {
+function executionItems(
+  plan: ProjectEditShotExecutionPlan,
+  editScript: ProjectEditScript,
+  translate: Translate,
+): WorkspaceCanvasEditPipelineStepItem[] {
+  const characterNameById = new Map(editScript.shots.flatMap((shot) => (
+    shot.characters.map((character) => [character.characterId, character.name] as const)
+  )))
   return plan.shots.map((shot) => ({
     title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
     fields: [
@@ -582,7 +590,11 @@ function executionItems(plan: ProjectEditShotExecutionPlan, translate: Translate
     ],
     body: shot.blocking.spatialNote,
     chips: [
-      ...shot.blocking.characters.map((character) => `${character.name} / ${character.visibility}`),
+      ...shot.blocking.characters.map((character) => {
+        const name = characterNameById.get(character.characterId)
+        if (!name) throw new Error(`EDIT_SHOT_EXECUTION_CHARACTER_UNKNOWN:${shot.shotNumber}:${character.characterId}`)
+        return `${name} / ${character.visibility}`
+      }),
       ...shot.blocking.objects.map((object) => object.name),
     ],
   }))
@@ -610,17 +622,50 @@ function bgmScoreDetails(finalVideo: ProjectFinalVideo | null | undefined): Work
   }
 }
 
-function soundscapeDetails(finalVideo: ProjectFinalVideo | null | undefined): WorkspaceCanvasSoundscapeDetails | undefined {
+function soundscapeDetails(
+  finalVideo: ProjectFinalVideo | null | undefined,
+  editScripts: readonly ProjectEditScript[],
+): WorkspaceCanvasSoundscapeDetails | undefined {
   const soundscape = finalVideo?.soundscape
   if (!soundscape) return undefined
+  const sources = soundscape.plan?.sources ?? []
+  const sourceIndexById = new Map(sources.map((source, index) => [source.sourceId, index + 1]))
+  const shotNumberById = new Map(editScripts.flatMap((script) => (
+    script.shots.map((shot) => [shot.shotId, shot.shotNumber] as const)
+  )))
   return {
     status: soundscape.status,
     decision: soundscape.decision ?? null,
     soundEffectModel: soundscape.soundEffectModel ?? null,
     sourceCount: soundscape.sourceCount,
     sectionCount: soundscape.sectionCount,
-    sources: soundscape.plan?.sources ?? [],
-    sections: soundscape.plan?.sections ?? [],
+    sources: sources.map((source, index) => ({
+      key: source.sourceId,
+      sourceIndex: index + 1,
+      prompt: source.prompt,
+      loopDurationSeconds: source.loopDurationSeconds,
+      promptInfluence: source.promptInfluence,
+    })),
+    sections: (soundscape.plan?.sections ?? []).map((section, index) => {
+      const sourceIndex = sourceIndexById.get(section.sourceId)
+      const rangeStart = shotNumberById.get(section.fromShotId)
+      const rangeEnd = shotNumberById.get(section.toShotId)
+      if (!sourceIndex) throw new Error(`SOUNDSCAPE_SECTION_SOURCE_UNKNOWN:${section.sourceId}`)
+      if (!rangeStart || !rangeEnd) {
+        throw new Error(`SOUNDSCAPE_SECTION_SHOT_UNKNOWN:${section.fromShotId}:${section.toShotId}`)
+      }
+      return {
+        key: `${section.sourceId}:${section.fromShotId}:${section.toShotId}:${index}`,
+        sourceIndex,
+        rangeKind: 'shot' as const,
+        rangeStart,
+        rangeEnd,
+        perspective: section.perspective,
+        intensity: section.intensity,
+        transitionIn: section.transitionIn,
+        transitionOut: section.transitionOut,
+      }
+    }),
     mixUrl: soundscape.mix?.url ?? null,
     errorMessage: soundscape.errorMessage ?? null,
   }
@@ -1300,7 +1345,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(editScript.id)),
         actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
         action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: editScript.id },
-        editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, translate) } : undefined,
+        editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, editScript, translate) } : undefined,
         onAction,
       },
     }))
@@ -1505,7 +1550,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   let soundscapeNodeId: string | null = null
   if (editFirstCanvasVisibility.soundscape) {
     soundscapeNodeId = workspaceNodeId.soundscape(episodeId)
-    const details = soundscapeDetails(finalVideo)
+    const details = soundscapeDetails(
+      finalVideo,
+      editScripts.length > 0 ? editScripts : editScript ? [editScript] : [],
+    )
     const soundscapeReadyForGeneration = details?.decision === 'soundscape'
       && details.status !== 'planning'
       && details.status !== 'generating'
@@ -1561,6 +1609,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
 
   let finalNodeId: string | null = null
   if (editFirstCanvasVisibility.finalTimeline) {
+    const finalEditScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
+    const finalShotNumberById = new Map(finalEditScripts.flatMap((script) => (
+      script.shots.map((shot) => [shot.shotId, shot.shotNumber] as const)
+    )))
     finalNodeId = workspaceNodeId.finalTimeline(episodeId)
     const finalPresentation = finalVideo?.outputUrl
       ? workspaceCanvasSucceededResourcePresentation()
@@ -1590,13 +1642,21 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         action: { type: 'render_final_video' },
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
         finalDetails: {
-          totalShots: editScript?.shotCount ?? panelList.length,
+          totalShots: finalEditScripts.length > 0
+            ? finalEditScripts.reduce((sum, script) => sum + script.shotCount, 0)
+            : panelList.length,
           totalImages: panelList.filter((panel) => Boolean(primaryPanelImageUrl(panel))).length,
           totalVideos: panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).length + videoGroups.filter((group) => Boolean(group.videoMedia?.url ?? group.videoUrl)).length,
-          totalDuration: editScript?.durationSec ?? null,
+          totalDuration: finalEditScripts.length > 0
+            ? finalEditScripts.reduce((sum, script) => sum + script.durationSec, 0)
+            : null,
           orderedVideoLabels: [
             ...videoGroups.map((group) => readShotIds(group.shotIds)
-              .map((shotId) => editScript?.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? shotId)
+              .map((shotId) => {
+                const shotNumber = finalShotNumberById.get(shotId)
+                if (!shotNumber) throw new Error(`FINAL_VIDEO_TIMELINE_SHOT_UNKNOWN:${shotId}`)
+                return shotNumber
+              })
               .join(', ')),
             ...panelList.filter((panel) => Boolean(panel.videoMedia?.url ?? panel.videoUrl)).map((panel) => String(resolvePanelShotNumber(panel))),
           ],

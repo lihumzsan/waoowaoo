@@ -424,14 +424,12 @@ function buildCueMusicPrompt(input: {
     ? [
         `只渲染第 ${String(input.cue.index)} / ${String(input.cueCount)} 个 BGM cue。`,
         `本 cue 时长 ${input.cue.durationSeconds.toFixed(3)} 秒，对应整集时间线 ${input.cue.startSeconds.toFixed(3)}-${input.cue.endSeconds.toFixed(3)} 秒。`,
-        `锚定镜头 ID: ${input.cue.shotIds.length > 0 ? input.cue.shotIds.join(', ') : '无'}`,
         `锚定镜头号: ${input.cue.shotNumbers.length > 0 ? input.cue.shotNumbers.join(', ') : '无'}`,
         '必须保持和相邻 cue 可无缝衔接的速度、调性、音色与情绪连续性。',
       ].join('\n')
     : [
         `Render only BGM cue ${String(input.cue.index)} of ${String(input.cueCount)}.`,
         `This cue is ${input.cue.durationSeconds.toFixed(3)} seconds and covers episode timeline ${input.cue.startSeconds.toFixed(3)}-${input.cue.endSeconds.toFixed(3)} seconds.`,
-        `Anchored shot IDs: ${input.cue.shotIds.length > 0 ? input.cue.shotIds.join(', ') : 'none'}`,
         `Anchored shot numbers: ${input.cue.shotNumbers.length > 0 ? input.cue.shotNumbers.join(', ') : 'none'}`,
         'Keep tempo, tonality, instrumentation, and emotional continuity seamless with adjacent cues.',
       ].join('\n')

@@ -29,6 +29,7 @@ import type {
   WorkspaceCanvasStreamPatchData,
   WorkspaceCanvasStreamTarget,
 } from './workspace-structured-stream-runtime-types'
+import { buildSoundscapeStreamView } from './soundscape-stream-view'
 
 type TranslateValues = Readonly<Record<string, string | number>>
 type Translate = (key: string, values?: TranslateValues) => string
@@ -334,8 +335,8 @@ function pipelineItemsFromShotExecutionPlan(
   items: Array<Extract<StructuredStreamParsedItem, { readonly kind: 'shotExecutionPlanShot' }>>,
   translate: Translate,
 ): WorkspaceCanvasEditPipelineStepItem[] {
-  return items.map(({ shot }) => ({
-    title: translate('nodeFields.shotIndex', { index: shot.shotNumber }),
+  return items.map(({ shot }, index) => ({
+    title: translate('nodeFields.shotIndex', { index: index + 1 }),
     fields: [
       { label: translate('nodeFields.shotScale'), value: shot.camera.shotScale },
       { label: translate('nodeFields.lens'), value: shot.camera.lens },
@@ -348,8 +349,7 @@ function pipelineItemsFromShotExecutionPlan(
     ],
     body: shot.blocking.spatialNote,
     chips: [
-      String(shot.shotNumber),
-      ...shot.blocking.characters.map((character) => `${character.name}/${character.visibility}`),
+      ...shot.blocking.characters.map((character) => `${character.characterName}/${character.visibility}`),
       ...shot.blocking.objects.map((object) => object.name),
     ],
   }))
@@ -568,18 +568,15 @@ function buildEditScriptRuntimeEntries(
           shotCount: shotItems.length,
           shots: shotItems
             .map(({ shot }) => ({
-              shotId: shot.shotId,
+              shotId: shot.shotRef,
               shotNumber: shot.shotNumber,
               durationSec: shot.durationSec,
-              sceneName: shot.scene.name,
+              sceneName: shot.scene.locationName,
               action: shot.action,
-              characters: shot.characters.map((character) => `${character.name} / ${character.visibility} / ${character.role}`),
+              characters: shot.characters.map((character) => `${character.characterName} / ${character.visibility} / ${character.role}`),
               keyObjects: shot.keyObjects.map((object) => `${object.name} / ${object.role}`),
               imagePrompt: null,
-              dialogue: shot.dialogue.map((line) => {
-                const speaker = shot.characters.find((character) => character.characterId === line.characterId)?.name ?? line.characterId
-                return `${speaker}: ${line.line}`
-              }),
+              dialogue: shot.dialogue.map((line) => `${line.speakerName}: ${line.line}`),
               sound: shot.sound,
               imageUrl: null,
               videoUrl: null,
@@ -695,6 +692,7 @@ function buildSoundscapeRuntimeEntry(
 ): WorkspaceCanvasStreamRuntimeEntry | null {
   const sources = itemsOfKind(snapshots, 'soundscape.sources', 'soundscapeSource').map((item) => item.source)
   const sections = itemsOfKind(snapshots, 'soundscape.sections', 'soundscapeSection').map((item) => item.section)
+  const soundscapeView = buildSoundscapeStreamView(sources, sections)
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.'))
     .flatMap((snapshot) => snapshot.items)
@@ -720,8 +718,7 @@ function buildSoundscapeRuntimeEntry(
         soundEffectModel: null,
         sourceCount: sources.length,
         sectionCount: sections.length,
-        sources,
-        sections,
+        ...soundscapeView,
         mixUrl: null,
         errorMessage: null,
       },

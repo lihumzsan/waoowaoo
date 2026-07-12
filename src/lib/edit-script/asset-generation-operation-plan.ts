@@ -12,6 +12,7 @@ import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import { getPersistedEditScriptForRevision, mapPersistedEditScriptForRevision } from './asset-revision-persistence'
+import { loadKnownPlanAssets } from '@/lib/edit-chapter/asset-menu'
 import { readProjectEditScripts } from './service'
 import type { EditAssetKind, EditScriptAssetGenerationPayload, EditScriptAssetGenerationTask, EditScriptPayload } from './types'
 
@@ -648,7 +649,10 @@ export async function commitProjectEditScriptAssetsOperation(params: {
           transaction,
         )
         if (!persisted) throw new ApiError('NOT_FOUND')
-        return mapPersistedEditScriptForRevision(persisted)
+        return mapPersistedEditScriptForRevision(
+          persisted,
+          await loadKnownPlanAssets(params.ctx.projectId, transaction),
+        )
       })()
     : undefined
   const remainingRequirementCount = metadata.source === 'edit_requirements'
