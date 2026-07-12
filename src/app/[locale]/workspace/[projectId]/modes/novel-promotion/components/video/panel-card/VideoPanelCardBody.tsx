@@ -206,7 +206,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                     }
                     className="flex-shrink-0 min-w-[120px] py-2 px-3 text-sm font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 bg-[var(--glass-accent-from)] text-white"
                   >
-                    {isFirstLastFrameGenerated ? t('firstLastFrame.generated') : taskStatus.isVideoTaskRunning ? taskStatus.taskRunningVideoLabel : t('firstLastFrame.generate')}
+                    {isFirstLastFrameGenerated ? t('firstLastFrame.regenerateVideo') : taskStatus.isVideoTaskRunning ? taskStatus.taskRunningVideoLabel : t('firstLastFrame.generate')}
                   </button>
                   <div
                     className={`flex-1 min-w-0 ${flPromptActive ? 'pointer-events-none opacity-60' : ''}`}

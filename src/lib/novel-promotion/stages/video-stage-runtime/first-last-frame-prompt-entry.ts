@@ -43,6 +43,23 @@ export function buildFirstLastFrameVideoPrompt(entry: FirstLastFramePromptEntry)
   }
 }
 
+export function markSavedUserPromptReady(
+  entry: FirstLastFramePromptEntry,
+  value: string,
+  currentSourceSignature: string,
+): FirstLastFramePromptEntry {
+  return {
+    ...entry,
+    value,
+    origin: 'user',
+    dirty: false,
+    status: 'idle',
+    ready: true,
+    verifiedSourceSignature: currentSourceSignature,
+    errorMessage: undefined,
+  }
+}
+
 export function markPromptSourceChanged(
   entry: FirstLastFramePromptEntry,
   sourceFingerprint: string,

@@ -116,6 +116,7 @@
     "unknownError": "未知错误"
   },
   "firstLastFrame": {
+    "regenerateVideo": "重新生成首尾帧视频",
     "title": "首尾帧设置",
     "firstFrame": "首帧",
     "lastFrame": "尾帧",

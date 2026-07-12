@@ -30,6 +30,28 @@ describe('first/last-frame prompt entry', () => {
     })
   })
 
+  it('marks a saved manual prompt ready for the current source without queueing regeneration', async () => {
+    const { markSavedUserPromptReady, resolvePromptEntryReadiness } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const saved = markSavedUserPromptReady({
+      value: 'old prompt',
+      origin: 'generated',
+      dirty: true,
+      status: 'saving',
+      ready: false,
+    }, 'new manual prompt', 'source-v2')
+
+    expect(resolvePromptEntryReadiness(saved, 'source-v2')).toMatchObject({
+      value: 'new manual prompt',
+      origin: 'user',
+      dirty: false,
+      status: 'idle',
+      ready: true,
+      verifiedSourceSignature: 'source-v2',
+    })
+  })
+
   it('is pending on the first render until the current source has been verified', async () => {
     const { resolvePromptEntryReadiness } = await import(
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'

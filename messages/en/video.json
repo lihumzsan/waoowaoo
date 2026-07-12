@@ -116,6 +116,7 @@
     "unknownError": "Unknown error"
   },
   "firstLastFrame": {
+    "regenerateVideo": "Regenerate First/Last Frame Video",
     "title": "First/Last Frame Settings",
     "firstFrame": "First Frame",
     "lastFrame": "Last Frame",

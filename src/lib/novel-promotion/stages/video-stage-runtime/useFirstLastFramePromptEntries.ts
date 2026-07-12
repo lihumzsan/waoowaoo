@@ -12,6 +12,7 @@ import {
   clearSupersededPromptOperation,
   createPersistedPromptEntry,
   isPromptResultCurrent,
+  markSavedUserPromptReady,
   projectPromptTaskState,
   resolvePromptEntryReadiness,
   shouldApplyPromptResult,
@@ -415,10 +416,14 @@ export function useFirstLastFramePromptEntries({
       await ensurePrompt(panelKey, 'source_change')
       return
     }
-    setPromptEntries((previous) => new Map(previous).set(panelKey, {
-      ...entry, value: trimmedValue, origin: 'user', dirty: false, status: 'idle',
-    }))
-  }, [buildDerivedEntry, ensurePrompt, getPanelPair, onUpdatePrompt, resolvedPromptEntries])
+    const currentSourceSignature = currentSignaturesRef.current.get(panelKey)
+      || buildSourceSignature(pair.firstPanel, pair.lastPanel)
+    ensuredSignaturesRef.current.set(panelKey, currentSourceSignature)
+    setPromptEntries((previous) => new Map(previous).set(
+      panelKey,
+      markSavedUserPromptReady(entry, trimmedValue, currentSourceSignature),
+    ))
+  }, [buildDerivedEntry, buildSourceSignature, ensurePrompt, getPanelPair, onUpdatePrompt, resolvedPromptEntries])
 
   const unlinkPrompt = useCallback((panelKey: string) => {
     requestRevisionsRef.current.set(panelKey, (requestRevisionsRef.current.get(panelKey) || 0) + 1)

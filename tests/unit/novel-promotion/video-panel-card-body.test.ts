@@ -18,6 +18,7 @@ vi.mock('@/components/ui/icons', () => ({
 
 function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRuntime {
   const translate = (key: string, values?: Record<string, unknown>) => {
+    if (key === 'firstLastFrame.regenerateVideo') return 'regenerate-first-last-video'
     if (key === 'firstLastFrame.asLastFrameFor') {
       return `作为镜头 ${String(values?.number ?? '')} 的尾帧`
     }
@@ -181,6 +182,18 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('作为镜头 4 的首帧')
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
+  })
+
+  it('keeps an existing first-last-frame video eligible for regeneration', () => {
+    const runtime = createRuntime()
+    runtime.panel.videoGenerationMode = 'firstlastframe'
+    runtime.panel.videoUrl = 'https://example.com/existing-first-last.mp4'
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toMatch(/<button(?![^>]*disabled="")[^>]*>regenerate-first-last-video<\/button>/)
   })
   it('shows prompt task state and disables editing and video submission while generation is active', () => {
     const runtime = createRuntime()
