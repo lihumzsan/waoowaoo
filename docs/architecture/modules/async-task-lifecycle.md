@@ -66,6 +66,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - Task → BullMQ 完整 envelope：`src/lib/task/job-envelope.ts`；Task type → queue 的穷尽映射：`src/lib/task/queues.ts`。
 - Queue 四态观察与唯一恢复 cycle：`src/lib/task/reconcile.ts`；`src/instrumentation.ts` 只负责启动，不写 Task。
 - Operation 到 Task 的提交适配：`src/lib/operations/submit-operation-task.ts`。
+- Task 查询 route：`src/app/api/tasks/**` 与 `src/app/api/task-target-states/**` 只投影 Task service/operation 的权威状态，不得从 payload、历史消息或轮询次数重建生命周期。
 - 批准计划到整批 Task 的唯一入口：`src/lib/task/approved-plan-submitter.ts`；初次 Outbox 投递与 queued/absent 恢复都复用 `src/lib/task/enqueue.ts` 的 execution-completed 门禁。
 - Canvas 资源影响声明：`src/lib/workspace-resource/resource-impact.ts`；终态通知与 Query 重新读取：`src/lib/query/workspace-sse-event-sync.ts`、`src/lib/query/resource-change-sync.ts`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。

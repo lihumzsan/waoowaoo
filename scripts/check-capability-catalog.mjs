@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
+// Architecture contract: docs/architecture/modules/provider-gateway.md.
+
  const CATALOG_DIR = path.resolve(process.cwd(), 'standards/capabilities')
 const CAPABILITY_NAMESPACES = new Set(['llm', 'image', 'video', 'music'])
 const CAPABILITY_NAMESPACE_ALLOWED_FIELDS = {

@@ -35,10 +35,12 @@
 - Grant 发放、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
 - API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
+- ApprovalGrant 与充值/支付 route：`src/app/api/operation-approval-grants/**`、`src/app/api/payments/**` 只负责鉴权、参数和调用既有 grant/payment service，不得建立第二审批或账本 writer。
 - 批准计划的唯一 Task 创建入口：`src/lib/task/approved-plan-submitter.ts`；它只消费已经由当前 invocation 绑定的 execution context，不拥有 Grant 消费权。
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
 - 批准 Task 的 durable enqueue：`src/lib/outbox/types.ts` 的 `task.enqueue` → `src/lib/task/enqueue.ts`。
 - TaskType 的 billing policy：`src/lib/task/definition.ts`；`src/lib/billing/task-policy.ts` 只执行 registry 指定的 policy，不维护第二份 TaskType 集合或 switch。
+- `standards/pricing/**` 当前是 `scripts/check-pricing-catalog.mjs` 的校验输入，不是生产运行时计费 writer；生产金额由 `src/lib/ai-registry/pricing-*` 与 provider code catalog 解析。修改 standards pricing 必须同时审计运行时 catalog 与 `BUILTIN_PRICING_VERSION`，在双表示收敛前不得仅凭 JSON 变更宣称生产价格已改变。
 
 调用层不得自行维护媒体类型名单、确认布尔值或报价任务的平行集合。
 
@@ -48,6 +50,7 @@
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
 - `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
+- `npm run check:pricing-catalog` 只验证 standards pricing 的结构及其 capability tier 字段；它不证明运行时代码 catalog 与 standards 值相同。
 ## 状态所有权
 
 | 事实                                                           | 唯一所有者 / 写入者                                                                | 消费者                                        |

@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
+// Architecture contracts: docs/architecture/modules/billing-approval.md and provider-gateway.md.
+
 const CATALOG_DIR = path.resolve(process.cwd(), 'standards/pricing')
 const CAPABILITY_CATALOG_FILE = path.resolve(process.cwd(), 'standards/capabilities/image-video.catalog.json')
 const API_TYPES = new Set(['text', 'image', 'video', 'music'])

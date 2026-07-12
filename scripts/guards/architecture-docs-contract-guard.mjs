@@ -9,6 +9,8 @@ const manifestPath = path.join(root, 'docs', 'architecture', 'modules.json')
 const readmePath = path.join(root, 'docs', 'architecture', 'README.md')
 const requiredSections = ['## 设计理念', '## 不变量', '## 权威入口', '## 验证', '## 历史回归', '## 修改检查表']
 
+// Architecture contract: docs/architecture/modules/test-governance.md (TG-08, TG-09).
+
 function fail(details) {
   process.stderr.write('[architecture-docs-contract] Architecture documentation contract failed.\n')
   for (const detail of details) process.stderr.write(`  - ${detail}\n`)
@@ -22,6 +24,26 @@ function readJson(relativePath) {
   } catch (error) {
     fail([`cannot parse ${relativePath}: ${error instanceof Error ? error.message : String(error)}`])
   }
+}
+
+function isCanonicalRepoPath(value) {
+  if (value !== value.trim()) return false
+  if (path.isAbsolute(value)) return false
+  if (value.includes('\\')) return false
+  if (value.startsWith('./') || value.endsWith('/')) return false
+  const segments = value.split('/')
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) return false
+  return path.posix.normalize(value) === value
+}
+
+function findDuplicates(values) {
+  const seen = new Set()
+  const duplicates = new Set()
+  for (const value of values) {
+    if (seen.has(value)) duplicates.add(value)
+    seen.add(value)
+  }
+  return [...duplicates]
 }
 
 if (!fs.existsSync(manifestPath)) fail(['missing docs/architecture/modules.json'])
@@ -67,14 +89,19 @@ for (const architectureModule of manifest.modules) {
   if (!readme.includes(`modules/${path.basename(document)}`)) {
     errors.push(`${id}: README must link ${document}`)
   }
-  for (const [label, paths] of [['sourcePaths', sourcePaths], ['testPaths', testPaths], ['guardPaths', guardPaths]]) {
-    if (!Array.isArray(paths) || paths.length === 0) {
+  for (const [label, entries] of [['sourcePaths', sourcePaths], ['testPaths', testPaths], ['guardPaths', guardPaths]]) {
+    if (!Array.isArray(entries) || entries.length === 0) {
       errors.push(`${id}: ${label} must be a non-empty array`)
       continue
     }
-    for (const entry of paths) {
+    for (const duplicate of findDuplicates(entries)) {
+      errors.push(`${id}: ${label} contains duplicate path: ${duplicate}`)
+    }
+    for (const entry of entries) {
       if (typeof entry !== 'string' || !entry.trim()) {
         errors.push(`${id}: ${label} contains an invalid path`)
+      } else if (!isCanonicalRepoPath(entry)) {
+        errors.push(`${id}: ${label} path must be canonical and repo-relative: ${entry}`)
       } else if (!fs.existsSync(path.join(root, entry))) {
         errors.push(`${id}: ${label} path does not exist: ${entry}`)
       } else if (label === 'guardPaths') {
@@ -82,6 +109,19 @@ for (const architectureModule of manifest.modules) {
         if (!guardContent.includes('docs/architecture/modules/')) {
           errors.push(`${id}: guard must link an architecture module: ${entry}`)
         }
+      }
+    }
+  }
+  if (Array.isArray(sourcePaths)) {
+    for (const sourcePath of sourcePaths) {
+      if (typeof sourcePath !== 'string') continue
+      const coveringPath = sourcePaths.find((candidate) => (
+        typeof candidate === 'string'
+        && candidate !== sourcePath
+        && sourcePath.startsWith(`${candidate}/`)
+      ))
+      if (coveringPath) {
+        errors.push(`${id}: sourcePath ${sourcePath} is already covered by ${coveringPath}`)
       }
     }
   }

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Architecture contract: docs/architecture/modules/ai-prompt-output-contract.md (AP-01, AP-03).
+
 import fs from 'fs'
 import path from 'path'
 import process from 'process'

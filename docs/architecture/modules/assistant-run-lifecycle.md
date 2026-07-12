@@ -40,6 +40,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 ## 权威入口
 
 - Project-agent runtime：`src/lib/project-agent/`。
+- Project phase 与 Assistant 输入投影：`src/lib/project-projection/**` 只从正式领域资源构造 project View；`src/app/api/assistant/text-attachments/**` 只解析受限附件并交给 project-agent 输入协议，二者都不得成为第二 Run/Workflow 状态机。
 - Task 终态续跑唯一执行入口：`src/lib/workers/outbox.worker.ts` → `runProjectAgentWaitContinuationCommand`。
 - Continuation 唯一交接：`beginProjectAgentWaitContinuationExecution` 建立 running fence；`execution-handoff` 原子结算 terminal 或 `awaiting_*` outcome，并在重放时只调用其 finalize/recovery 入口。
 - Choice Offer 契约、fingerprint 与严格解析：`src/lib/project-agent/choice-offer.ts`。

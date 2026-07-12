@@ -10,10 +10,17 @@
 npm run architecture:impact -- <准备修改的文件或目录>
 ```
 
-命令只负责路由和提示，不能代替验证。实现必须复用文档列出的权威入口，并选择相应的 Golden、Critical、Logic、Conformance 或结构检查；不要求机械新增测试。
+实现完成后再逐文件复核实际工作区变化：
+
+```bash
+npm run architecture:impact -- --changed
+```
+
+`--changed` 包含 tracked modified、staged、untracked、renamed 与 deleted 路径，但只提供只读路由；它不决定 Journey 适用性、当前任务所有权或提交范围。未映射路径正常报告且不失败，执行者必须根据真实语义明确“不适用”或补充模块映射。命令不能代替验证，不能根据 changed files 猜测测试；实现必须复用文档列出的权威入口，并选择相应的 Golden、Critical、Logic、Conformance 或结构检查。
 
 | 改动范围 | 必读模块 | 主要权威入口 |
 | --- | --- | --- |
+| AI Prompt、Prompt registry、结构化模型输出字段或 raw output 协议 | [AI Prompt 与模型输出契约](modules/ai-prompt-output-contract.md) | prompt catalog、生产 raw schema、parser/normalizer、stream adapter |
 | 图片、视频、音乐、音效的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
 | 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md)；[动效 Presence 收敛](canvas-motion-presence-convergence.md) | node id、structured stream adapter、canvas projection、motion presence transition |
 | 章节核心剪辑计划、镜头结构、章节 ledger 事实投影 | [章节核心剪辑规划](modules/chapter-planning.md) | chapter input、strict output schema、ledger facts projector |
