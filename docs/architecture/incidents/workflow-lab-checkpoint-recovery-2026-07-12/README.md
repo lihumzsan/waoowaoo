@@ -36,8 +36,8 @@ and exercises checkpoints through the production Workflow Lab route.
   immutable and may be forked repeatedly.
 - Late source progress: stage-specific manifest entries win over the mutable
   staircase cursor.
-- Future facts: Bible lock, Asset requirement outcome, storyboard images, and
-  videos are projected according to the selected stage; a frozen Asset
+- Future facts: Bible lock, Asset requirement outcome, storyboard images,
+  videos, and chapter-render output are projected according to the selected stage; a frozen Asset
   Approval keeps its stale-value target association while resetting its future
   completion/error outcome.
 - Approval recovery: a durable zero-Task Approval remains forkable because its
@@ -64,6 +64,7 @@ with `scope` only as the initial fallback.
 ## Verification and blind spots
 
 Pre-fix evidence is the 2026-07-12 discovery run at commit `f96109502`: 9
-passed, 5 failed, and 4 dependency-blocked. The focused post-fix run targets
-the five failed scenario identities. Full discovery and failure variants are
-not part of this focused verification and remain explicit blind spots.
+passed, 5 failed, and 4 dependency-blocked. Focused post-fix runs covered the
+five failed scenario identities, the default Mainline, and the zero-Task
+Approval contract. Provider failure and browser-disconnect variants are
+recorded separately because they also exercise Assistant continuation policy.

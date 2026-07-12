@@ -5,7 +5,10 @@ import {
   type WorkflowLabInterruptionSource,
 } from '@/lib/workflow-lab/checkpoints'
 import { addWorkflowLabPlanTargetReplacements } from '@/lib/workflow-lab/clone-json'
-import { shouldWorkflowLabKeepAssetRequirementTarget } from '@/lib/workflow-lab/clone-stage'
+import {
+  shouldWorkflowLabKeepAssetRequirementTarget,
+  shouldWorkflowLabKeepChapterRenderOutcome,
+} from '@/lib/workflow-lab/clone-stage'
 
 function assistantMessage(parts: readonly unknown[]): UIMessage {
   return {
@@ -62,6 +65,12 @@ describe('Workflow Lab checkpoint authority', () => {
   it('preserves existing asset ownership at the frozen asset-generation Approval boundary', () => {
     expect(shouldWorkflowLabKeepAssetRequirementTarget('ready_to_generate_edit_script')).toBe(false)
     expect(shouldWorkflowLabKeepAssetRequirementTarget('ready_to_generate_assets')).toBe(true)
+  })
+
+  it('removes future chapter renders until the audio-stage checkpoint', () => {
+    expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_generate_videos')).toBe(false)
+    expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_render_chapters')).toBe(false)
+    expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_generate_bgm_score')).toBe(true)
   })
 
   it('does not guess an interruption when a historical tool-call identity is duplicated', () => {

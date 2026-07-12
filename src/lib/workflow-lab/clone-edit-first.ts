@@ -20,6 +20,7 @@ import {
   shouldWorkflowLabKeepAssetRequirementTarget,
   shouldWorkflowLabKeepAssetRequirementError,
   shouldWorkflowLabKeepBibleLock,
+  shouldWorkflowLabKeepChapterRenderOutcome,
 } from './clone-stage'
 
 async function cloneWorkflowLabChapters(params: {
@@ -28,6 +29,7 @@ async function cloneWorkflowLabChapters(params: {
   readonly targetEpisodeId: string
   readonly sourceDocumentId: string
   readonly targetSourceDocumentId: string
+  readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
   const chapters = await params.tx.projectEditChapter.findMany({
@@ -43,6 +45,7 @@ async function cloneWorkflowLabChapters(params: {
     const provenanceJson = chapter.provenanceJson === null
       ? Prisma.JsonNull
       : toInputJson(rewriteWorkflowLabValue(chapter.provenanceJson, params.maps.allIds))
+    const keepRenderOutcome = shouldWorkflowLabKeepChapterRenderOutcome(params.stage)
     const data = {
       title: chapter.title,
       summary: chapter.summary,
@@ -55,9 +58,9 @@ async function cloneWorkflowLabChapters(params: {
       planVersion: chapter.planVersion,
       provenanceJson,
       status: chapter.status,
-      renderStatus: chapter.renderStatus,
+      renderStatus: keepRenderOutcome ? chapter.renderStatus : 'pending',
       renderTaskId: null,
-      outputMediaId: chapter.outputMediaId,
+      outputMediaId: keepRenderOutcome ? chapter.outputMediaId : null,
     }
     const targetChapter = await params.tx.projectEditChapter.upsert({
       where: {
@@ -150,6 +153,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       targetEpisodeId: params.targetEpisodeId,
       sourceDocumentId: bible.sourceDocument.id,
       targetSourceDocumentId: targetSourceDocument.id,
+      stage: params.stage,
       maps: params.maps,
     })
 

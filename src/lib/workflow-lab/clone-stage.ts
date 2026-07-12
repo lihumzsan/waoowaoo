@@ -110,3 +110,7 @@ export function shouldWorkflowLabKeepStoryboardImages(stage: EditFirstWorkflowSt
 export function shouldWorkflowLabKeepStoryboardVideos(stage: EditFirstWorkflowStage): boolean {
   return workflowLabStageAtLeast(stage, 'ready_to_render_chapters')
 }
+
+export function shouldWorkflowLabKeepChapterRenderOutcome(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_bgm_score')
+}
