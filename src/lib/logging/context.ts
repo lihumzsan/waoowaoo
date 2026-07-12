@@ -7,23 +7,18 @@ type AsyncStorageLike<T> = {
 
 function createLogContextStorage(): AsyncStorageLike<LogContext> | null {
   if (typeof window !== 'undefined') return null
-  try {
-    const runtime = globalThis as typeof globalThis & {
-      __non_webpack_require__?: (id: string) => unknown
+  const runtimeProcess = (globalThis as typeof globalThis & {
+    process?: {
+      getBuiltinModule?: (id: string) => unknown
     }
-    const fallbackRequire = new Function('return typeof require !== "undefined" ? require : null')() as
-      | ((id: string) => unknown)
-      | null
-    const requireFn = runtime.__non_webpack_require__ || fallbackRequire
-    if (!requireFn) return null
-
-    const asyncHooks = requireFn('async' + '_hooks') as {
-      AsyncLocalStorage: new <T>() => AsyncStorageLike<T>
-    }
-    return new asyncHooks.AsyncLocalStorage<LogContext>()
-  } catch {
-    return null
+  }).process
+  const asyncHooks = runtimeProcess?.getBuiltinModule?.('node:async_hooks') as {
+    AsyncLocalStorage?: new <T>() => AsyncStorageLike<T>
+  } | undefined
+  if (!asyncHooks?.AsyncLocalStorage) {
+    throw new Error('LOG_CONTEXT_ASYNC_LOCAL_STORAGE_REQUIRED')
   }
+  return new asyncHooks.AsyncLocalStorage<LogContext>()
 }
 
 const logContextStorage = createLogContextStorage()
