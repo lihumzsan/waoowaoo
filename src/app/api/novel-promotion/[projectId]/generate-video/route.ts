@@ -470,12 +470,13 @@ function withLtx23WorkflowRoutingPayload(
     next.videoModel = route.selectedModelKey
   }
 
-  if (options?.videoDurationBinding?.mode === 'match_audio' || (
+  const routedDurationBinding = options?.videoDurationBinding
+  if (routedDurationBinding?.mode === 'match_audio' || (
     isRecord(payload.firstLastFrame)
-    && readPositiveFiniteNumber(options?.videoDurationBinding?.targetDurationSeconds) !== null
+    && readPositiveFiniteNumber(routedDurationBinding?.targetDurationSeconds) !== null
   )) {
     next.videoDurationBinding = {
-      ...options.videoDurationBinding,
+      ...routedDurationBinding,
       targetDurationSeconds: Number(route.durationSeconds.toFixed(2)),
     }
   }

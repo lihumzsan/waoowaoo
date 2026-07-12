@@ -230,7 +230,11 @@ export async function handleFirstLastFramePromptTask(
   ].join('\n')
 
   await reportTaskProgress(job, 45, { stage: 'first_last_frame_prompt_generate' })
-  let generated: { prompt: string; warnings: string[] } | null = null
+  let generated: {
+    prompt: string
+    warnings: string[]
+    durationAnalysis: FirstLastFrameDurationAnalysis | null
+  } | null = null
   let fallbackWarning = ''
   try {
     const completion = await executeAiVisionStep({

@@ -282,6 +282,7 @@ export function useVideoFirstLastFrameFlow({
     const currentBinding = getPersistedDurationOverride(panelKey) || firstPanel.videoDurationBinding
     const nextBinding = restoreFirstLastFrameSmartDurationBinding(currentBinding)
     if (!nextBinding || typeof nextBinding.targetDurationSeconds !== 'number') return
+    const targetDurationSeconds = nextBinding.targetDurationSeconds
     beginDurationPersistence(panelKey)
     try {
       await onUpdatePanelVideoDurationBinding(
@@ -296,7 +297,7 @@ export function useVideoFirstLastFrameFlow({
           previous,
           nextBinding,
         ),
-        duration: nextBinding.targetDurationSeconds,
+        duration: targetDurationSeconds,
       }))
       confirmPersistedDuration(panelKey, nextBinding)
       if (shouldEnsurePromptAfterDurationSelection({
