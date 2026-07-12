@@ -9,7 +9,9 @@ vi.mock('@/components/task/TaskStatusInline', () => ({
 }))
 
 vi.mock('@/components/ui/config-modals/ModelCapabilityDropdown', () => ({
-  ModelCapabilityDropdown: () => React.createElement('div', null, 'model-dropdown'),
+  ModelCapabilityDropdown: (props: {
+    capabilityFields: Array<{ field: string; recommendedValue?: unknown }>
+  }) => React.createElement('div', null, `model-dropdown${JSON.stringify(props.capabilityFields)}`),
 }))
 
 vi.mock('@/components/ui/icons', () => ({
@@ -206,6 +208,30 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('generate-normal-video')
     expect(markup).toContain('model-dropdown')
     expect(markup).not.toContain('firstLastFrame.generate')
+  })
+
+  it('passes the recommended duration metadata to the dropdown', () => {
+    const runtime = createRuntime()
+    runtime.layout = {
+      ...runtime.layout,
+      isLinked: false,
+      isLastFrame: false,
+      nextPanel: null,
+    }
+    runtime.videoModel.capabilityFields = [{
+      field: 'duration',
+      label: '视频时长',
+      options: [9, 5, 10],
+      disabledOptions: [],
+      value: 9,
+      recommendedValue: 9,
+    }]
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('&quot;recommendedValue&quot;:9')
   })
 
   it('keeps an existing first-last-frame video eligible for regeneration', () => {

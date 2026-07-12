@@ -400,6 +400,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                         label: renderCapabilityLabel(field),
                         options: field.options,
                         disabledOptions: field.disabledOptions,
+                        recommendedValue: field.recommendedValue,
                       }))}
                       capabilityOverrides={videoModel.generationOptions}
                       onCapabilityChange={(field, rawValue) => {
