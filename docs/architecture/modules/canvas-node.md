@@ -28,7 +28,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-12 — Renderer 本地动效不得驱动渲染或永久合成。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。`data-workspace-canvas-motion-active` 是动画窗口的唯一事实；窗口结算后必须恢复 `animation: none`、`transform: none` 和 `will-change: auto`，不得让 React Flow viewport scale 再放大内部持久 compositor layer。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
 - **CN-13 — ReactFlow 测量单向。** `useWorkspaceNodeCanvasProjection` 只从领域事实和持久 layout 产生节点 View；`ProjectWorkspaceCanvas` 只把明确的用户拖拽写入本地/持久 position layout。ReactFlow 的 `dimensions`、ResizeObserver 或 DOM 尺寸只属于 ReactFlow 内部测量，绝不得回写 `WorkspaceCanvasNodeData.width/height`、projection node 或受控 business node state。streaming 重投影、用户 layout 与 transient measurement 必须是三个单向输入，不能构成 render feedback loop。
 - **CN-15 — 收费 action 只有一个 Canvas surface。** projection 与 detail renderer 只声明 typed `WorkspaceCanvasNodeAction`；`CanvasActionButton` 是收费 action 唯一交互入口，负责展示准确数量/credits、批准当前 plan snapshot 并调用通用 execute。renderer 不得直接创建普通收费按钮，Workspace runtime 不得为图片、视频、配乐、音效或规划资产保留第二 mutation handler。已有媒体事实必须把动作投影为“重新生成”，不得用固定“生成”文案掩盖 overwrite 语义。
-- **CN-14 — Canvas 媒体生成 View 单一。** 图片/视频媒体槽位只能把最终 `lifecycle`、当前正式输出和显式背景 policy 交给 `CanvasMediaGenerationSurface`；其纯 resolver 穷尽 empty、generating、regenerating、ready、failed 与 contract-error。renderer 只能提供媒体内容、画幅和占位图标，不得自行组合 Style Bible 背景、普通占位、loading、失败遮罩或 `showBackground` 分支。首次生成必须隐藏普通占位并只显示 Style Bible 背景与品牌进度；重生成保留当前正式输出并叠加同一进度层；成功但缺少媒体结果必须显式报 contract error。下游项目媒体缺少已确认 Style Bible 图片时必须显式失败，只有生成 Style Bible 自身等声明为 neutral 的能力可不消费该背景。
+- **CN-14 — Canvas 媒体生成 View 单一。** 图片/视频媒体槽位只能把最终 `lifecycle`、当前正式输出和显式背景 policy 交给 `CanvasMediaGenerationSurface`；其纯 resolver 穷尽 empty、generating、regenerating、ready、failed 与 contract-error。renderer 只能提供媒体内容、画幅和占位图标，不得自行组合 Style Bible 背景、普通占位、loading、失败遮罩或 `showBackground` 分支。首次生成必须隐藏普通占位并只显示 Style Bible 背景与品牌进度；重生成保留当前正式输出并叠加同一进度层；成功但缺少媒体结果必须显式报 contract error。下游项目媒体缺少已确认 Style Bible 图片时必须显式失败，只有生成 Style Bible 自身等声明为 neutral 的能力可不消费该背景。品牌 Logo、进度环和百分比的纯展示只能复用全局 `MediaGenerationLoadingView`。
 
 ## 权威入口
 
@@ -50,7 +50,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
 - 本地 Presence transition：`src/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence.ts`；唯一 renderer host：`src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx`。
 - Canvas 收费 action 计划与按钮：`src/features/project-workspace/canvas/hooks/useWorkspaceCanvasBillableAction.ts`、`src/features/project-workspace/canvas/nodes/CanvasActionButton.tsx`；执行 context：`src/features/project-workspace/canvas/WorkspaceCanvasBillingContext.tsx`。
-- Canvas 媒体生成纯 View：`src/features/project-workspace/canvas/nodes/canvas-media-generation-view.ts`；唯一展示入口：`src/features/project-workspace/canvas/nodes/CanvasMediaGenerationSurface.tsx`。
+- Canvas 媒体生成纯 View：`src/features/project-workspace/canvas/nodes/canvas-media-generation-view.ts`；唯一槽位入口：`src/features/project-workspace/canvas/nodes/CanvasMediaGenerationSurface.tsx`；跨业务共享的品牌加载视觉：`src/components/media/MediaGenerationLoading.tsx` 的 `MediaGenerationLoadingView`。
 
 ## 验证
 

@@ -54,10 +54,7 @@ export function CanvasActionButton({
       icon={icon}
       label={label}
       tone={tone}
-      quote={planned.quote ? {
-        ...planned.quote,
-        costLabel: planned.quote.fullLabel,
-      } : null}
+      quote={planned.quote}
       loading={loading || executing || planned.loading}
       disabled={disabled || executing || unavailable}
       title={resolvedTitle}

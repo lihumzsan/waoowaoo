@@ -216,47 +216,6 @@
   }
 }
 
-/* 视觉风格候选图 · 光环呼吸加载（aurora breathing） */
-@keyframes stylePreviewAura {
-  0%,
-  100% {
-    transform: translate(-8%, -6%) scale(1);
-  }
-
-  50% {
-    transform: translate(10%, 8%) scale(1.25);
-  }
-}
-
-.style-preview-aura {
-  background:
-    radial-gradient(40% 50% at 30% 35%, rgba(124, 167, 233, 0.55), transparent 70%),
-    radial-gradient(45% 55% at 70% 65%, rgba(255, 255, 255, 0.32), transparent 70%),
-    radial-gradient(50% 60% at 60% 25%, rgba(92, 168, 255, 0.45), transparent 72%);
-  filter: blur(6px);
-  animation: stylePreviewAura 4.5s ease-in-out infinite;
-}
-
-@keyframes stylePreviewSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.style-preview-spin {
-  animation: stylePreviewSpin 0.9s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .style-preview-aura {
-    animation: none;
-  }
-
-  .style-preview-spin {
-    animation: none;
-  }
-}
-
 @keyframes workspaceNodeStreamSoftEnter {
   0% {
     opacity: 0;

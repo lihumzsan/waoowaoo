@@ -41,6 +41,7 @@ interface MediaGenerationLoadingViewProps {
   readonly size: number
   readonly className?: string
   readonly showBackground?: boolean
+  readonly showPercentLabel?: boolean
 }
 
 function clampPercent(value: number): number {
@@ -55,6 +56,7 @@ export function MediaGenerationLoadingView({
   size,
   className,
   showBackground = true,
+  showPercentLabel = true,
 }: MediaGenerationLoadingViewProps) {
   const t = useTranslations('common')
   const displayStyleUrl = toDisplayImageUrl(styleImageUrl)
@@ -136,7 +138,7 @@ export function MediaGenerationLoadingView({
             />
             <BrandLoading imageSize={Math.round(size * 0.5)} />
           </div>
-          {percent !== null ? (
+          {percent !== null && showPercentLabel ? (
             <span
               className={
                 tone === 'on-dark'
