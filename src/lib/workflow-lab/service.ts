@@ -27,6 +27,7 @@ import {
   createWorkflowLabCloneMaps,
   addWorkflowLabPlanTargetReplacements,
   mapWorkflowLabId,
+  rewriteWorkflowLabValue,
   type WorkflowLabCloneMaps,
 } from './clone-json'
 import {
@@ -38,7 +39,6 @@ import {
 import {
   buildWorkflowLabMessageReplacementMap,
   rewriteWorkflowLabAssistantMessages,
-  rewriteWorkflowLabValue,
 } from './message-rewrite'
 import { parseProjectAgentChoiceOffer } from '@/lib/project-agent/choice-offer'
 import type {

@@ -180,7 +180,9 @@ export const GOLDEN_STAGE_PROBE_SCENARIOS: readonly GoldenScenarioContract[] =
   GOLDEN_CHECKPOINTABLE_STAGES.map((stage) => ({
     id: stageProbeId(stage),
     kind: 'stage_probe',
-    title: `canonical ${stage} checkpoint remains valid and reaches its next declared boundary`,
+    title: stage === 'ready_to_generate_shot_execution_plan'
+      ? 'canonical shot-execution checkpoint projects every running chapter Task as one existing Canvas lifecycle node before and after reload'
+      : `canonical ${stage} checkpoint remains valid and reaches its next declared boundary`,
     startStage: stage,
     expectedTerminal: {
       kind: 'workflow_stage',

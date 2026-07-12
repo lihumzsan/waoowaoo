@@ -11,8 +11,11 @@ import { GOLDEN_EDIT_FIRST_WORKFLOW_STAGES } from '../contracts/stages'
 import { forkGoldenWorkflowCheckpoint } from '../fixtures/workflow-lab'
 import { readGoldenSourceFixtureManifest } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
+import { readGoldenOracleSnapshot } from '../oracle/reader'
 import { readFile } from 'node:fs/promises'
-import { setGoldenForcedTool } from '../providers/control'
+import { setGoldenForcedTool, setGoldenStreamPacing } from '../providers/control'
+import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
+import { TASK_TYPE } from '@/lib/task/types'
 
 interface GoldenStorageState {
   readonly cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0]
@@ -38,13 +41,59 @@ const OPERATION_BY_STAGE: Readonly<Record<string, string>> = {
   ready_to_render_final: 'render_final_video',
 }
 
+async function assertShotExecutionPlanNodesSurviveProcessingReload(input: {
+  readonly page: import('@playwright/test').Page
+  readonly scope: { readonly projectId: string; readonly episodeId: string }
+}): Promise<void> {
+  let runningTargetIds: string[] = []
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(input.scope)
+    runningTargetIds = [...new Set(snapshot.tasks.flatMap((task) => (
+      task.type === TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE
+      && (task.status === 'queued' || task.status === 'processing')
+      && task.targetType === 'ProjectEditScript'
+      && typeof task.targetId === 'string'
+        ? [task.targetId]
+        : []
+    )))]
+    if (runningTargetIds.length === 0) return false
+    const nodes = runningTargetIds.map((targetId) => (
+      input.page.locator(`article[data-node-id="${workspaceNodeId.editShotExecutionPlan(targetId)}"]`)
+    ))
+    const [projectedNodeCount, exactNodeCounts, lifecyclePhases] = await Promise.all([
+      input.page.locator('article[data-node-id^="edit-shot-execution-plan:edit-script:"]').count(),
+      Promise.all(nodes.map(async (node) => await node.count())),
+      Promise.all(nodes.map(async (node) => await node.getAttribute('data-lifecycle-phase'))),
+    ])
+    return projectedNodeCount === runningTargetIds.length
+      && exactNodeCounts.every((count) => count === 1)
+      && lifecyclePhases.every((phase) => phase === 'queued' || phase === 'processing' || phase === 'streaming')
+  }, {
+    timeout: 60_000,
+    message: 'every running shot-execution Task target must project one existing Canvas lifecycle node',
+  }).toBe(true)
+
+  await input.page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(input.page.locator('article[data-node-id^="edit-shot-execution-plan:edit-script:"]'))
+    .toHaveCount(runningTargetIds.length)
+  for (const targetId of runningTargetIds) {
+    await expect(input.page.locator(
+      `article[data-node-id="${workspaceNodeId.editShotExecutionPlan(targetId)}"]`,
+    )).toHaveCount(1)
+  }
+}
+
 for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
   const terminalLabel = scenario.expectedTerminal.kind === 'workflow_stage'
     ? scenario.expectedTerminal.stage
     : scenario.expectedTerminal.kind === 'declared_failure'
       ? scenario.expectedTerminal.code
       : scenario.expectedTerminal.fact
-  test(`[${scenario.id}] canonical checkpoint reaches ${terminalLabel}`, async ({ page, context }, testInfo) => {
+  test(`[${scenario.id}] canonical checkpoint reaches ${terminalLabel}`, async ({
+    page,
+    context,
+    browserObservations,
+  }, testInfo) => {
     test.setTimeout(5 * 60_000)
     const source = await readGoldenSourceFixtureManifest()
     const authState = JSON.parse(await readFile(source.authStatePath, 'utf8')) as GoldenStorageState
@@ -62,6 +111,10 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
     await page.goto(`/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`)
     await expect.poll(async () => await readGoldenWorkflowStage(page, scope), { timeout: 30_000 }).toBe(scenario.startStage)
 
+    const verifiesShotExecutionPlanProjection = scenario.startStage === 'ready_to_generate_shot_execution_plan'
+    if (verifiesShotExecutionPlanProjection) {
+      await setGoldenStreamPacing({ chunkSize: 1, delayMs: 1 })
+    }
     try {
       const boundary = BOUNDARY_BY_STAGE[scenario.startStage]
       await setGoldenForcedTool(scope.checkpointKind === 'approval'
@@ -82,6 +135,10 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
         const composer = page.getByPlaceholder('和 AI 一起创造')
         await composer.fill('继续执行当前工作流的下一步')
         await composer.press('Enter')
+      }
+
+      if (verifiesShotExecutionPlanProjection) {
+        await assertShotExecutionPlanNodesSurviveProcessingReload({ page, scope })
       }
 
       if (scenario.expectedTerminal.kind !== 'workflow_stage') {
@@ -115,9 +172,12 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
         await page.waitForTimeout(250)
       }
       expect(advanced, `${scenario.startStage} must advance through at least ${scenario.expectedTerminal.stage}`).toBe(true)
+      if (verifiesShotExecutionPlanProjection) browserObservations.assertClean()
     } catch (error) {
       await attachGoldenOracleEvidence(testInfo, scope)
       throw error
+    } finally {
+      if (verifiesShotExecutionPlanProjection) await setGoldenStreamPacing(null)
     }
     await attachGoldenOracleEvidence(testInfo, scope)
   })

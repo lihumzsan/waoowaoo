@@ -3,6 +3,7 @@ import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import {
   mapWorkflowLabId,
   readMappedId,
+  rewriteWorkflowLabValue,
   toInputJson,
   type WorkflowLabCloneMaps,
 } from './clone-json'
@@ -43,7 +44,7 @@ export async function cloneWorkflowLabStoryboards(params: {
         ...(targetEditScriptId ? { editScriptId: targetEditScriptId } : {}),
         storyboardImageUrl: keepImages ? storyboard.storyboardImageUrl : null,
         panelCount: storyboard.panelCount,
-        storyboardTextJson: storyboard.storyboardTextJson,
+        storyboardTextJson: rewriteWorkflowLabValue(storyboard.storyboardTextJson, params.maps.allIds),
         lastError: storyboard.lastError,
       },
       select: { id: true },
@@ -65,7 +66,7 @@ export async function cloneWorkflowLabStoryboards(params: {
           cameraMove: panel.cameraMove,
           description: panel.description,
           location: panel.location,
-          characters: panel.characters,
+          characters: rewriteWorkflowLabValue(panel.characters, params.maps.allIds),
           props: panel.props,
           srtSegment: panel.srtSegment,
           srtStart: panel.srtStart,
@@ -86,7 +87,7 @@ export async function cloneWorkflowLabStoryboards(params: {
           sourceGenerationSegmentId: panel.sourceGenerationSegmentId,
           executionSnapshotJson: panel.executionSnapshotJson === null
             ? Prisma.JsonNull
-            : toInputJson(panel.executionSnapshotJson),
+            : toInputJson(rewriteWorkflowLabValue(panel.executionSnapshotJson, params.maps.allIds)),
           renderFactsJson: panel.renderFactsJson === null
             ? Prisma.JsonNull
             : toInputJson(panel.renderFactsJson),
@@ -114,7 +115,7 @@ export async function cloneWorkflowLabStoryboards(params: {
           imagePrompt: supplementaryPanel.imagePrompt,
           imageUrl: keepImages ? supplementaryPanel.imageUrl : null,
           imageMediaId: keepImages ? supplementaryPanel.imageMediaId : null,
-          characters: supplementaryPanel.characters,
+          characters: rewriteWorkflowLabValue(supplementaryPanel.characters, params.maps.allIds),
           location: supplementaryPanel.location,
         },
       })

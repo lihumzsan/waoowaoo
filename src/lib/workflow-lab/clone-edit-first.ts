@@ -3,11 +3,11 @@ import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import {
   mapWorkflowLabId,
   readMappedId,
+  rewriteWorkflowLabValue,
   toInputJson,
   toNullableInputJson,
   type WorkflowLabCloneMaps,
 } from './clone-json'
-import { rewriteWorkflowLabValue } from './message-rewrite'
 import {
   resolveWorkflowLabEditAssetReviewStatus,
   resolveWorkflowLabAssetRequirementStatus,
@@ -210,7 +210,10 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
         projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
         chapterId: targetChapterId,
-        corePlanJson: toNullableInputJson(editScript.corePlanJson),
+        corePlanJson: toNullableInputJson(rewriteWorkflowLabValue(
+          editScript.corePlanJson,
+          params.maps.allIds,
+        )),
         durationSec: editScript.durationSec,
         shotCount: editScript.shotCount,
         status: editScript.status,
@@ -265,7 +268,10 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
           episodeId: params.targetEpisodeId,
           chapterId: targetChapterId,
           editScriptId: createdEditScript.id,
-          executionPlanJson: toInputJson(editScript.shotExecutionPlan.executionPlanJson),
+          executionPlanJson: toInputJson(rewriteWorkflowLabValue(
+            editScript.shotExecutionPlan.executionPlanJson,
+            params.maps.allIds,
+          )),
           status: editScript.shotExecutionPlan.status,
         },
         select: { id: true },
