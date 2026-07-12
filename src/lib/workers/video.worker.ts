@@ -46,6 +46,7 @@ import {
   COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
   COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID,
   getLtx23WorkflowProfile,
+  normalizeLtx23GoonDurationSeconds,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import {
@@ -639,6 +640,14 @@ async function generateVideoForPanel(
   }
 
   let durationBinding = await resolveEffectiveVideoDurationBinding(panel, payload)
+  const payloadDurationBinding = readVideoDurationBindingFromPayload(payload)
+  const firstLastPayloadDurationSeconds = readPositiveFiniteNumber(payloadDurationBinding?.targetDurationSeconds)
+  if (firstLastFramePayload && payloadDurationBinding && firstLastPayloadDurationSeconds !== null) {
+    durationBinding = {
+      ...payloadDurationBinding,
+      targetDurationSeconds: normalizeLtx23GoonDurationSeconds(firstLastPayloadDurationSeconds),
+    }
+  }
   const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
   const linkedAudioDurationSeconds = sumVoiceLineDurationSeconds(linkedVoiceLines)
   const requestedGenerationDurationSeconds = typeof generationOptions.duration === 'number'
@@ -653,13 +662,18 @@ async function generateVideoForPanel(
   const referenceAudioUrls = resolveReferenceAudioUrls(linkedVoiceLines)
   let routedGenerationOptions = generationOptions
   const serializedRouteDurationSeconds = readSerializedLtx23RoutingDurationSeconds(payload, model)
+  const firstLastFrameTargetDurationSeconds = firstLastFramePayload
+    ? readPositiveFiniteNumber(durationBinding.targetDurationSeconds)
+    : null
   const workflowRoute = resolveLtx23WorkflowRoute({
     modelKey: model,
     selectionMode: payload.ltx23WorkflowSelection,
     generationMode,
-    requestedDurationSeconds: serializedRouteDurationSeconds
+    requestedDurationSeconds: firstLastFrameTargetDurationSeconds
+      ?? serializedRouteDurationSeconds
       ?? (typeof generationOptions.duration === 'number' ? generationOptions.duration : null),
-    targetDurationSeconds: readPositiveFiniteNumber(durationBinding.targetDurationSeconds),
+    targetDurationSeconds: firstLastFrameTargetDurationSeconds
+      ?? readPositiveFiniteNumber(durationBinding.targetDurationSeconds),
     audioDurationSeconds: linkedAudioDurationSeconds,
     panel: {
       videoPrompt: basePrompt,

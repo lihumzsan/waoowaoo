@@ -610,6 +610,49 @@ describe('worker video processor behavior', () => {
     })
   })
 
+  it('VIDEO_PANEL: uses first-last duration binding when payload dropdown duration is stale', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 0,
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          targetDurationSeconds: 6,
+          recommendedDurationSeconds: 8,
+          durationSource: 'manual',
+          recommendationFingerprint: 'smart-fp',
+        },
+        generationOptions: {
+          duration: 10,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_FIRST_LAST_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 6,
+          fps: 24,
+          generationMode: 'firstlastframe',
+        }),
+      }),
+    )
+  })
+
   it('VIDEO_PANEL: allows exact audio-driven LTX2.3 duration to bypass enum duration options downstream', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()

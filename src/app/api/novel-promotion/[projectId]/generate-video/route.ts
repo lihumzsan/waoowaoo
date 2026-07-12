@@ -25,6 +25,7 @@ import {
   resolveLtx23WorkflowRoute,
   type Ltx23WorkflowRoutingResult,
 } from '@/lib/providers/comfyui/ltx23-workflow-router'
+import { normalizeLtx23GoonDurationSeconds } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import {
   SEEDANCE2_BERNINI_DEFAULT_FPS,
@@ -340,6 +341,25 @@ function resolveEffectiveVideoDurationBinding(input: {
   return null
 }
 
+function resolveFirstLastFrameTargetDurationBinding(input: {
+  payload?: unknown
+  panel: PanelReadinessInput
+}) {
+  const payloadBinding = isRecord(input.payload)
+    ? parseVideoDurationBinding(input.payload.videoDurationBinding)
+    : null
+  if (readPositiveFiniteNumber(payloadBinding?.targetDurationSeconds) !== null) {
+    return payloadBinding
+  }
+
+  const savedBinding = parseVideoDurationBinding(input.panel.videoDurationBinding)
+  if (readPositiveFiniteNumber(savedBinding.targetDurationSeconds) !== null) {
+    return savedBinding
+  }
+
+  return null
+}
+
 function estimateSelectedAudioDurationSeconds(
   panel: PanelReadinessInput,
   payload: unknown,
@@ -423,6 +443,7 @@ function withLtx23WorkflowRoutingPayload(
   route: Ltx23WorkflowRoutingResult | null,
   options?: {
     videoDurationBinding?: ReturnType<typeof resolveEffectiveVideoDurationBinding>
+      | ReturnType<typeof resolveFirstLastFrameTargetDurationBinding>
   },
 ): Record<string, unknown> {
   if (!route) return payload
@@ -449,7 +470,10 @@ function withLtx23WorkflowRoutingPayload(
     next.videoModel = route.selectedModelKey
   }
 
-  if (options?.videoDurationBinding?.mode === 'match_audio') {
+  if (options?.videoDurationBinding?.mode === 'match_audio' || (
+    isRecord(payload.firstLastFrame)
+    && readPositiveFiniteNumber(options?.videoDurationBinding?.targetDurationSeconds) !== null
+  )) {
     next.videoDurationBinding = {
       ...options.videoDurationBinding,
       targetDurationSeconds: Number(route.durationSeconds.toFixed(2)),
@@ -471,14 +495,28 @@ function resolvePanelLtx23RoutedPayload(
     payload,
     audioDurationSeconds,
   })
-  const videoDurationBinding = resolveEffectiveVideoDurationBinding({ payload, panel })
+  const generationMode = resolveVideoGenerationMode(payload)
+  const videoDurationBinding = generationMode === 'firstlastframe'
+    ? resolveFirstLastFrameTargetDurationBinding({ payload, panel })
+    : resolveEffectiveVideoDurationBinding({ payload, panel })
+  const bindingTargetDurationSeconds = generationMode === 'firstlastframe'
+    ? readPositiveFiniteNumber(videoDurationBinding?.targetDurationSeconds)
+    : null
+  const requestedDurationSeconds = readRequestedDurationSeconds(payload)
+  const firstLastRequestedDurationSeconds = bindingTargetDurationSeconds !== null
+    ? normalizeLtx23GoonDurationSeconds(bindingTargetDurationSeconds)
+    : requestedDurationSeconds
   const route = modelKey
     ? resolveLtx23WorkflowRoute({
         modelKey,
         selectionMode: payload.ltx23WorkflowSelection,
-        generationMode: resolveVideoGenerationMode(payload),
-        requestedDurationSeconds: readRequestedDurationSeconds(payload),
-        targetDurationSeconds: audioTargetDurationSeconds,
+        generationMode,
+        requestedDurationSeconds: generationMode === 'firstlastframe'
+          ? firstLastRequestedDurationSeconds
+          : requestedDurationSeconds,
+        targetDurationSeconds: generationMode === 'firstlastframe'
+          ? firstLastRequestedDurationSeconds
+          : audioTargetDurationSeconds,
         audioDurationSeconds,
         panel: {
           videoPrompt: customPrompt || panel.videoPrompt,

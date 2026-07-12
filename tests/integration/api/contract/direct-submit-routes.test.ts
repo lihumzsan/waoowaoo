@@ -925,6 +925,155 @@ describe('api contract - direct submit routes (behavior)', () => {
     }))
   })
 
+  it('single generate-video uses smart first-last duration binding above stale dropdown duration', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'first frame characters walk toward a glowing terminal',
+      videoPromptEditedByUser: false,
+      description: 'first frame characters walk toward a glowing terminal',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'push in',
+      sceneType: 'action',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'fantasy transition',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 10,
+          resolution: '720p',
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          targetDurationSeconds: 8,
+          recommendedDurationSeconds: 8,
+          durationSource: 'smart',
+          recommendationFingerprint: 'smart-fp',
+        },
+        firstLastFrame: {
+          flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt: 'visible first-last transition prompt',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      generationOptions: expect.objectContaining({
+        duration: 8,
+        resolution: '720p',
+      }),
+      videoDurationBinding: expect.objectContaining({
+        targetDurationSeconds: 8,
+        durationSource: 'smart',
+      }),
+      firstLastFrame: expect.objectContaining({
+        flModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      }),
+    }))
+  })
+
+  it('single generate-video keeps manual first-last duration binding above smart recommendation metadata', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 0,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'manual first-last bridge',
+      videoPromptEditedByUser: false,
+      description: 'manual first-last bridge',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'push in',
+      sceneType: 'action',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'fantasy transition',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        storyboardId: 'storyboard-1',
+        panelIndex: 0,
+        generationOptions: {
+          duration: 8,
+          resolution: '720p',
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          targetDurationSeconds: 6,
+          recommendedDurationSeconds: 8,
+          durationSource: 'manual',
+          recommendationFingerprint: 'smart-fp',
+          recommendationReason: 'smart suggested longer motion',
+        },
+        firstLastFrame: {
+          flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt: 'visible first-last transition prompt',
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      generationOptions: expect.objectContaining({
+        duration: 6,
+        resolution: '720p',
+      }),
+      videoDurationBinding: expect.objectContaining({
+        targetDurationSeconds: 6,
+        durationSource: 'manual',
+        recommendedDurationSeconds: 8,
+      }),
+    }))
+  })
+
   it('single generate-video normalizes the Bernini audio lipsync key and stale fps before submit', async () => {
     prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
       id: 'panel-1',
