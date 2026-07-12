@@ -348,8 +348,7 @@ export function buildDefaultFirstLastFramePrompt(params: {
   lastPanel: PanelContinuityPanelLike
 }): string {
   const firstAction = compactText(
-    readContinuityFirstLastPrompt(params.firstPanel)
-      || pickPanelContinuityActionText(params.firstPanel),
+    pickPanelContinuityActionText(params.firstPanel),
     220,
   )
   const lastAction = compactText(
