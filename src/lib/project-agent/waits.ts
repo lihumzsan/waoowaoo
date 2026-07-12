@@ -576,10 +576,25 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
       canceledTaskIds: parseStringArray(row.canceledTaskIds),
     })
     if (result.terminalTaskIds.length === 0) continue
+    const currentRuns = await tx.$queryRaw<Array<{ id: string; runVersion: number; eventSeq: bigint }>>(Prisma.sql`
+      SELECT id, runVersion, eventSeq
+      FROM project_agent_runs
+      WHERE id = ${row.runId}
+      FOR UPDATE
+    `)
+    const currentRun = currentRuns[0]
+    if (!currentRun) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${row.runId}`)
+    /*
+     * The watermark stored on the Wait is an audit of the last Wait-owned
+     * event, not a future capability. Other legal Run events may advance the
+     * Run before another task in this batch terminates. Task terminal merge
+     * therefore commits against the current locked Run fence while the
+     * pending Wait row remains the exactly-once aggregate owner.
+     */
     const runFence = createProjectAgentRunFence({
-      id: row.runId,
-      runVersion: row.runVersion,
-      eventSeq: row.eventSeq,
+      id: currentRun.id,
+      runVersion: currentRun.runVersion,
+      eventSeq: currentRun.eventSeq,
     })
     const scope = {
       projectId: row.projectId,
