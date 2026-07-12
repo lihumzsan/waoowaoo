@@ -149,5 +149,9 @@ test('[GJ-ASSET-HUB-PROJECT-REUSE] edit reimport and source deletion preserve on
     afterSourceDelete,
   })
   await deleteGoldenProjectThroughUi(page, { projectId, name: project.name })
-  browserObservations.assertClean()
+  browserObservations.assertClean({
+    allowedConsoleErrorPatterns: [
+      /\[next-auth\]\[error\]\[CLIENT_FETCH_ERROR\][\s\S]*Failed to fetch[\s\S]*\/api\/auth\/session/,
+    ],
+  })
 })

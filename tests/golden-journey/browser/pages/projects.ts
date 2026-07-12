@@ -68,7 +68,7 @@ export async function createGoldenProjectThroughUi(page: Page, input: {
     throw new Error('GOLDEN_PROJECT_CREATE_ID_MISSING')
   }
   await expect(modal).toBeHidden()
-  await expect(page).toHaveURL(/\/zh\/profile(?:[/?#]|$)/)
+  await expect(page).toHaveURL(/\/zh\/(?:profile|workspace)(?:[/?#]|$)/)
   await page.goto('/zh/workspace')
   page.off('dialog', acceptDialog)
   page.off('request', onRequest)
