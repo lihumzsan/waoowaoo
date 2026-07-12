@@ -7,7 +7,6 @@ let runningServer: GoldenMediaServer | null = null
 afterEach(async () => {
   await runningServer?.close()
   runningServer = null
-  delete process.env.GOLDEN_MEDIA_SCENARIO
 })
 
 describe('Golden local media provider', () => {
@@ -87,40 +86,4 @@ describe('Golden local media provider', () => {
     })
   })
 
-  it('injects one retryable failure and then returns to the real local protocol', async () => {
-    process.env.GOLDEN_MEDIA_SCENARIO = 'retry-once'
-    runningServer = await startGoldenMediaServer()
-    const first = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })
-    const second = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })
-    expect(first.status).toBe(503)
-    expect(second.status).toBe(200)
-  })
-
-  it('injects a declared terminal provider response without fabricating media', async () => {
-    process.env.GOLDEN_MEDIA_SCENARIO = 'terminal-failure'
-    runningServer = await startGoldenMediaServer()
-    const response = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })
-    expect(response.status).toBe(422)
-    await expect(response.json()).resolves.toEqual({ error: 'GOLDEN_LOCAL_PROVIDER_TERMINAL_FAILURE' })
-  })
-
-  it('switches a running provider at the real external boundary for checkpoint variants', async () => {
-    runningServer = await startGoldenMediaServer()
-    const retryControl = await fetch(`${runningServer.baseUrl}/__golden/media-control`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scenario: 'retry-once' }),
-    })
-    await expect(retryControl.json()).resolves.toEqual({ ok: true, scenario: 'retry-once' })
-    expect((await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })).status).toBe(503)
-    expect((await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })).status).toBe(200)
-
-    const terminalControl = await fetch(`${runningServer.baseUrl}/__golden/media-control`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scenario: 'terminal-failure' }),
-    })
-    await expect(terminalControl.json()).resolves.toEqual({ ok: true, scenario: 'terminal-failure' })
-    expect((await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })).status).toBe(422)
-  })
 })

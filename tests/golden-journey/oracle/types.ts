@@ -30,6 +30,9 @@ export interface GoldenOracleSnapshot {
     readonly bibles: readonly Record<string, unknown>[]
     readonly stylePreviews: readonly Record<string, unknown>[]
     readonly chapters: readonly Record<string, unknown>[]
+    readonly editScripts: readonly Record<string, unknown>[]
+    readonly shotExecutionPlans: readonly Record<string, unknown>[]
+    readonly assetRequirements: readonly Record<string, unknown>[]
     readonly finalOutputs: readonly Record<string, unknown>[]
   }
   readonly identities: GoldenOracleIdentitySummary

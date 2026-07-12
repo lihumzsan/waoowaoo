@@ -26,9 +26,7 @@ export interface ProjectWorkspaceProps {
     readonly attachments: readonly ProjectAssistantTextAttachment[]
   } | null
   assistantAutoStartKey?: string | null
-  workflowLabEnabled?: boolean
   onAssistantAutoStartConsumed?: () => void
-  onWorkflowLabProjectForked?: (params: { projectId: string; episodeId: string }) => void | Promise<void>
   onEpisodeSelect?: (episodeId: string) => void
   onEpisodeCreate?: () => void
   onEpisodeRename?: (episodeId: string, newName: string) => void

@@ -1,9 +1,13 @@
 import { randomInt, randomUUID } from 'node:crypto'
+import path from 'node:path'
 
 export interface GoldenRuntimeIdentity {
   readonly runtimeId: string
   readonly appPort: number
   readonly coordinatorPort: number
+  readonly artifactRoot: string
+  readonly distDir: string
+  readonly uploadDir: string
 }
 
 function readPort(value: string | undefined, name: string): number | null {
@@ -31,7 +35,14 @@ export function resolveGoldenRuntimeIdentity(
   while (coordinatorPort === appPort) coordinatorPort = randomInt(45_001, 60_000)
   const runtimeId = environment.GOLDEN_RUNTIME_ID?.trim()
     || randomUUID().replaceAll('-', '').slice(0, 16)
-  return { runtimeId, appPort, coordinatorPort }
+  return {
+    runtimeId,
+    appPort,
+    coordinatorPort,
+    artifactRoot: `artifacts/golden-journey/runs/${runtimeId}`,
+    distDir: `.next-golden/${runtimeId}`,
+    uploadDir: `artifacts/golden-journey/runs/${runtimeId}/uploads`,
+  }
 }
 
 export function applyGoldenRuntimeIdentity(
@@ -41,4 +52,15 @@ export function applyGoldenRuntimeIdentity(
   environment.GOLDEN_RUNTIME_ID = identity.runtimeId
   environment.GOLDEN_APP_PORT = String(identity.appPort)
   environment.GOLDEN_COORDINATOR_PORT = String(identity.coordinatorPort)
+  environment.GOLDEN_ARTIFACT_ROOT = identity.artifactRoot
+  environment.NEXT_DIST_DIR = identity.distDir
+  environment.UPLOAD_DIR = identity.uploadDir
+}
+
+export function resolveGoldenArtifactRoot(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const artifactRoot = environment.GOLDEN_ARTIFACT_ROOT?.trim()
+  if (!artifactRoot) throw new Error('GOLDEN_ARTIFACT_ROOT_MISSING')
+  return path.resolve(process.cwd(), artifactRoot)
 }

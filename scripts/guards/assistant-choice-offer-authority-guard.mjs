@@ -80,49 +80,6 @@ function findChoiceTypeControlFlow(source) {
   return violations
 }
 
-function findPrivateChoiceStageMaps(choiceRegistry, workflowCheckpoints) {
-  const stages = new Set(
-    [...choiceRegistry.matchAll(/workflowStage\s*:\s*['"]([^'"]+)['"]/g)].map((match) => match[1]),
-  )
-  const registrySource = parseTypeScript(choiceRegistry)
-  const choiceKeys = new Set()
-  visit(registrySource, (node) => {
-    if (
-      !ts.isVariableDeclaration(node)
-      || !ts.isIdentifier(node.name)
-      || node.name.text !== 'EDIT_FIRST_CHOICE_REGISTRY'
-      || !node.initializer
-    ) return
-    const initializer = ts.isSatisfiesExpression(node.initializer) ? node.initializer.expression : node.initializer
-    if (!ts.isObjectLiteralExpression(initializer)) return
-    for (const property of initializer.properties) {
-      if (ts.isPropertyAssignment(property) || ts.isMethodDeclaration(property)) {
-        if (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) choiceKeys.add(property.name.text)
-      }
-    }
-  })
-  if (stages.size === 0 || choiceKeys.size === 0) return []
-  const sourceFile = parseTypeScript(workflowCheckpoints)
-  const lines = []
-  visit(sourceFile, (node) => {
-    if (!ts.isObjectLiteralExpression(node) || node.properties.length === 0) return
-    const mappedStages = node.properties.flatMap((property) => {
-      if (
-        !ts.isPropertyAssignment(property)
-        || !ts.isStringLiteral(property.initializer)
-        || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
-        || !choiceKeys.has(property.name.text)
-      ) return []
-      return [property.initializer.text]
-    })
-    if (mappedStages.some((value) => stages.has(value))) {
-      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      lines.push(line + 1)
-    }
-  })
-  return lines
-}
-
 export function inspectChoiceRegistryAuthority(input) {
   const violations = []
   for (const marker of [
@@ -135,10 +92,6 @@ export function inspectChoiceRegistryAuthority(input) {
     if (!input.choiceRegistry.includes(marker)) {
       violations.push(`Choice registry is missing exhaustive capability ${JSON.stringify(marker)}`)
     }
-  }
-  const privateStageMaps = findPrivateChoiceStageMaps(input.choiceRegistry, input.workflowCheckpoints)
-  if (input.workflowCheckpoints.includes('FIXED_CHOICE_STAGE_BY_TYPE') || privateStageMaps.length > 0) {
-    violations.push('Workflow Lab restores a private Choice-to-stage map outside EDIT_FIRST_CHOICE_REGISTRY')
   }
   for (const line of findChoiceTypeControlFlow(input.assistantRenderers)) {
     violations.push(`Choice renderer restores type-specific control semantics at line ${line}`)
@@ -207,7 +160,6 @@ const control = read('src/lib/project-agent/control.ts')
 const controlRoute = read('src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts')
 const sessionState = read('src/lib/project-agent/session-state.ts')
 const interruptions = read('src/lib/project-agent/interruptions.ts')
-const workflowLab = read('src/lib/workflow-lab/service.ts')
 const choiceTypes = read('src/lib/project-agent/types.ts')
 const choiceRegistry = read('src/lib/project-agent/edit-first-choice-tools.ts')
 const choiceCard = read('src/lib/project-agent/choice-card.ts')
@@ -279,13 +231,6 @@ for (const marker of [
   }
 }
 
-if (workflowLab.includes("params.choiceType === 'style' ? null")) {
-  violations.push('Workflow Lab restores a style choice without a persistent interruption')
-}
-if (!workflowLab.includes('payload: serializeWorkflowLabValue(offer)')) {
-  violations.push('Workflow Lab choice projection does not persist the shared Choice Offer')
-}
-
 for (const [label, source] of [
   ['choice types', choiceTypes],
   ['choice card builder', choiceCard],
@@ -340,7 +285,6 @@ for (const marker of [
 }
 violations.push(...inspectChoiceRegistryAuthority({
   choiceRegistry,
-  workflowCheckpoints: read('src/lib/workflow-lab/checkpoints.ts'),
   assistantRenderers,
 }))
 violations.push(...inspectChoiceSuspensionReceiptAuthority({ operationInvocation }))

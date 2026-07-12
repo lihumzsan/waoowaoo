@@ -55,14 +55,13 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 ## 验证
 
 - `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口、reload divergence 或稳定展开内容仍持有 animation/transform/will-change 都是场景失败。
-- `tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts` 的并行批准场景必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，并证明该节点不再含媒体 loading surface；同场景还验证资产审核只保留整组确认动作。
-- `GJ-CANVAS-STRUCTURED-PREVIEW` 必须让本地 provider 受控分块输出，并在 Task 仍为 processing 时观察制作规划 raw item 卡片；只检查终态正式 Query 不构成 structured preview 覆盖。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，证明它不含媒体 loading surface，并验证资产审核只保留整组确认动作；只检查终态正式 Query 不构成 structured preview 覆盖。
 - `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
 - Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
 - 视觉风格主链必须在真实文本 Task processing 窗口同时观察 Assistant 通用运行卡和单一运行中 Style Bible 占位节点，再在 direct image Task processing 窗口观察同一节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
-- `tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 穷尽最终 lifecycle × 是否已有输出的纯 View；真实 planned-asset 与 storyboard-image processing 窗口必须在 `mainline-downstream-continuation.spec.ts` / `stage-probes.spec.ts` 观察 Style Bible 背景、品牌 progressbar 和隐藏的普通占位。
+- `tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 穷尽最终 lifecycle × 是否已有输出的纯 View；真实 planned-asset 与 storyboard-image processing 窗口必须在唯一主 Journey 观察 Style Bible 背景、品牌 progressbar 和隐藏的普通占位。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
@@ -74,9 +73,10 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
 - 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
 - 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
-- `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但全章节 Canvas 仍把 `editScript=null` 传给只接受单实例的 projector，因此 Assistant 显示整批运行而 Canvas 没有任何对应节点；同时 owner-fenced worker 写入的 `generating + {}` 行被 episode 正式读取当作完整 ready payload 解析，reload 触发 `shots/generationSegmentExecutions` schema 失败。旧 mocked episode 测试把计划列表固定为空，Golden 也只验证终态 stage，没有观察真实 processing + reload。当前防线是正式计划 Query 只暴露 ready materialization、Canvas 从全部 editScripts 穷尽投影稳定节点并只把 Task target 交给统一 lifecycle resolver，纯投影规格反证单实例 gate；镜头 stage-probe 已增加真实 Task target → canonical node、processing、reload 和 browser observation oracle。该组合最后一次执行仍未到达镜头 probe：新的视觉风格 Task 链在更早的 `ready_to_generate_edit_script` checkpoint 建立处失败，因此不得宣称该盲区关闭。
+- `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但全章节 Canvas 仍把 `editScript=null` 传给只接受单实例的 projector，因此 Assistant 显示整批运行而 Canvas 没有对应节点；同时 owner-fenced worker 写入的 `generating + {}` 行被正式 Query 当作 ready payload 解析，reload 触发 schema 失败。旧 mocked episode 测试把计划列表固定为空，旧 Golden 又只验证终态 stage。当前防线是正式 Query 只暴露 ready materialization、Canvas 从全部 editScripts 穷尽投影稳定节点；唯一多章节主 Journey 必须从真实运行 Task 枚举至少两个 target，逐一匹配 canonical node，并在 processing reload 后保持相同身份。
 - 视觉风格方案迁入 `ProjectEditBible` 文本 Task 后，Assistant 已显示通用运行卡，但 Canvas 建节点条件仍只认已落库候选，导致文本生成成功前没有 Style Bible 占位节点。上一版只扩展了图片 processing Golden，没有把新文本 target 纳入同一 projector。当前防线从生产 runtime target registry 订阅方案 Task，并在真实文本 processing 窗口断言同一 canonical Style Bible identity 已出现。
 - 媒体生成 UI 曾以 `MediaGenerationLoading` 统一品牌圆环和估算进度，却把空态背景、普通占位、重生成和失败组合留给各 renderer；镜头卡随后用 `showBackground=false` 保留自己的占位层，导致生成时普通图片图标与品牌 Logo 重叠，而规划资产卡另行隐藏普通图标。旧组件测试只证明共享 overlay 自身 markup，Canvas conformance/Golden 只观察 lifecycle 和节点身份，没有执行真实镜头/资产 processing 的视觉状态组合。当前防线把最终 lifecycle 与媒体事实收敛进唯一 Surface，删除 renderer 的第二解释权，并在真实 processing 窗口断言普通占位已隐藏。
+- 多章节主 Journey 首次完整到达成片时，刷新窗口内项目资产尚未返回，projector 回退到各章节 requirement；同一个 canonical 角色/场景因此出现两次，并被绑定成相同 requirement key，React 持续报错。旧单章节 Journey 未触发该组合。当前 projector 在正式资产和 requirement fallback 两条输入上都按 `kind + persistent asset id` 唯一化，章节 requirement 只负责绑定镜头与运行 target，不再决定资产卡实例数量；主 Journey 的 browser observation 必须保持零 console error。
 
 ## 修改检查表
 

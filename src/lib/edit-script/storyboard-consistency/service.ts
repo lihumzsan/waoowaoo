@@ -34,17 +34,46 @@ async function resolveEditScriptId(input: Pick<SubmitEditScriptStoryboardInput, 
     if (!editScript?.id) throw new ApiError('NOT_FOUND')
     return editScript.id
   }
-  const editScript = await prisma.projectEditScript.findFirst({
+  const missingStoryboard = await prisma.projectEditScript.findFirst({
     where: {
       projectId: input.projectId,
       episodeId: input.episodeId,
       ...(input.chapterId ? { chapterId: input.chapterId } : {}),
+      storyboard: { is: null },
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: [
+      { chapter: { chapterIndex: 'asc' } },
+      { id: 'asc' },
+    ],
     select: { id: true },
   })
-  if (!editScript?.id) throw new ApiError('NOT_FOUND')
-  return editScript.id
+  if (missingStoryboard?.id) return missingStoryboard.id
+
+  const incompleteStoryboard = await prisma.projectEditScript.findFirst({
+    where: {
+      projectId: input.projectId,
+      episodeId: input.episodeId,
+      ...(input.chapterId ? { chapterId: input.chapterId } : {}),
+      storyboard: {
+        is: {
+          OR: [
+            { storyboardTextJson: null },
+            { lastError: { not: null } },
+          ],
+        },
+      },
+    },
+    orderBy: [
+      { chapter: { chapterIndex: 'asc' } },
+      { id: 'asc' },
+    ],
+    select: { id: true },
+  })
+  if (incompleteStoryboard?.id) return incompleteStoryboard.id
+  throw new ApiError('CONFLICT', {
+    code: 'EDIT_SCRIPT_STORYBOARD_SCOPE_COMPLETE',
+    message: 'Every chapter already has a complete storyboard',
+  })
 }
 
 export async function submitEditScriptStoryboardPanels(input: SubmitEditScriptStoryboardInput) {

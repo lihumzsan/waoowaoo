@@ -2,6 +2,7 @@ import mysql, { type RowDataPacket } from 'mysql2/promise'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { GoldenWorkspaceScope } from '../browser/pages/home'
+import { resolveGoldenArtifactRoot } from '../runtime/identity'
 import type {
   GoldenOracleIdentitySummary,
   GoldenOracleSnapshot,
@@ -11,7 +12,7 @@ async function resolveOracleDatabaseUrl(): Promise<string> {
   const explicit = process.env.GOLDEN_ORACLE_DATABASE_URL?.trim()
   if (explicit) return explicit
   const descriptor = JSON.parse(await readFile(
-    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
+    path.join(resolveGoldenArtifactRoot(), 'environment.json'),
     'utf8',
   )) as { readonly oracleDatabaseUrl?: unknown }
   if (typeof descriptor.oracleDatabaseUrl !== 'string' || !descriptor.oracleDatabaseUrl.trim()) {
@@ -323,6 +324,9 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       bibles,
       stylePreviews,
       chapters,
+      editScripts,
+      shotExecutionPlans,
+      assetRequirements,
       finalOutputs,
     ] = await Promise.all([
       queryRows(connection, 'SELECT id, userId, name, videoRatio, createdAt, updatedAt FROM projects WHERE id = ?', projectScope),
@@ -344,6 +348,9 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_bibles WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_style_previews WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_scripts WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
     ])
     const parsedThreads = threads.map((thread) => ({
@@ -373,6 +380,9 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         bibles: sortOracleRows(bibles, 'createdAt', 'id'),
         stylePreviews: sortOracleRows(stylePreviews, 'createdAt', 'id'),
         chapters: sortOracleRows(chapters, 'chapterIndex', 'id'),
+        editScripts: sortOracleRows(editScripts, 'createdAt', 'id'),
+        shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
+        assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
         finalOutputs: sortOracleRows(finalOutputs, 'createdAt', 'id'),
       },
       identities: collectIdentities(parsedThreads),

@@ -31,11 +31,12 @@
 
 - `tests/unit/edit-chapter/persistent-facts.test.ts` 是 Logic Specification：验证 ledger event facts 的确定性顺序、去重和 exact projection。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 验证协议替身输出可被生产 strict schema 消费；它不代替真实模型行为。
-- `tests/golden-journey/journeys/structured-stream-preview.spec.ts` 如覆盖核心剪辑生成，则以其既有 canonical command 证明真实 UI/Task/worker/资源组合；未运行不得声称通过。
-- `tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts` 的并行批准场景验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见，以及最终资产审核没有章节选择语义。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 从空项目生成至少两个章节，验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见、逐章镜头计划稳定投影，以及最终资产审核没有章节选择语义。
 - `scripts/guards/chapter-plan-fact-authority-guard.mjs` 只反证模型事实字段、第二 provenance constructor 或旧自然语言 validator 被重新接回；它不证明用户行为。
 
 ## 历史回归
+
+- 多章节主 Journey 首次运行时，`generate_edit_script_storyboard(chapterId=null)` 每次都按 `updatedAt desc` 选择同一份 edit script；Task dedupe 成功返回第一章旧结果，Workflow 因 `storyboardCount < chapterCount` 永远停在同一阶段。旧单章节 Journey 无法反证。当前默认 scope 只选择最早缺少 storyboard 的章节；全部已存在时只允许选择 prompt 不完整或有错误的章节重试，否则显式失败，禁止再次提交已完成第一章。
 
 - `d14404a5c8` 引入模型事实字段与字符相似度 validator；中文改写与跨 event 合并在真实任务中触发误拒。
 - `0ad107b247` 让错误显式进入 `PLAN_VALIDATION_FAILED`，但显式失败没有消除 ledger 与模型的双 writer。

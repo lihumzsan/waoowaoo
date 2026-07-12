@@ -29,7 +29,6 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - **AR-04A — Operation 调用单入口。** API 与 Assistant Tool 只能把可信来源上下文交给 `invokeProjectAgentOperation`；该入口唯一负责 registry 查找、`channels.api/tool`、prerequisite、输入 schema、direct execute 或 billable Grant invoke、输出 schema 与资源变更投影。adapter 只翻译 API error 或 ToolResult，不得各自重建执行分流。tool-only operation 经 API、api-only operation 经 Tool 必须在解析或执行前显式拒绝。
 - **AR-04C — Operation outcome 穷尽。** `invokeProjectAgentOperation` 与其 Tool adapter 边界必须构造且只返回 `completed`、`noop`、`submitted_tasks`、`wait_choice`、`wait_approval` 或 `failed` 之一。`submitted_tasks` 携带已提交的 durable Wait/Task receipt，`wait_choice` 携带 durable handoff；Tool adapter、stop controller 和 runtime 只能 switch 此 outcome。`effects.longRunning`、`agentFlow.suspendsFor`、Task binding 和 output 字段只能参与 outcome 的构造或契约验证，绝不可由调用方再次从输出形状猜测 lifecycle。旧 `runtime-signal` output parser 不得恢复。
 - **AR-04B — Tool 写入 authority 必须穷尽。** 每个 Tool-visible 写 Operation 必须恰好属于 `billable plan commit`、`executeInTransaction` 或 `transactional_task_submission` 三种 commit authority 之一；未能证明 Run fence 内原子提交的能力必须保留 API-only。Operation domain 禁止通过 HTTP 调用本应用 route，也不得用 fire-and-forget 或吞错把记录创建与 Task 提交拼成第二执行入口。`create_character` 只事务性创建记录；参考图描述提取是独立文本 Task，参考图生图是独立 `billable_media plan/commit` Operation，两者不得再由 `extractOnly` 在同一 Task type 内切换计费和授权语义。
-- **AR-04C — Approval 计划身份可完整迁移。** Operation 在 plan 阶段预留、commit 阶段才物化且不等于 Task target 的 canonical identity，必须显式写入 `OperationPlan.reservedIdentityIds`；禁止把待创建父实体 identity 只藏在 operation-specific metadata。Workflow Lab 克隆 Approval 时以一个 replacement map 同时重写 project/episode、既有领域映射、reserved identity、Task target、plan、quote、payload 与 serialized runState，随后重新计算 hash 和 TTL。待 fork 的 Approval 必须有 pending durable interruption 与 runState；合法零 Task 计划仍是可恢复的 noop Approval，commit 必须保留 operation-specific plan writes 且不得伪造 Task。interruptionId 是主 identity，重复 toolCallId 不得猜测。克隆状态必须保留冻结计划 stale-value fence 所依赖的既有关联，禁止用目标 stage 的概括状态清空合法 association。
 - **AR-05 — 并发与心跳可证明。** 锁、心跳、超时取消和恢复必须由同一运行时状态协调；旧 run 不得覆盖新 run 的结果。
 - **AR-05A — Operation 副作用服从 Run execution fence。** Assistant Tool 调用必须把同一个 abort signal 与 `runId + runVersion + eventSeq` 交给 `invokeProjectAgentOperation`；continuation 还必须携带 `waitId + commandId + claimOwner`。统一入口在执行前拒绝已失效 Run；普通 Task 创建事务、批准计划事务与同步领域写入事务必须在 commit 前锁定 Run 行，并在 continuation 中同时锁定 Wait claim 行后再次校验 fence。同一声明式 Operation group 的成员额外携带相同 `executionSegmentId`，只允许该 segment 内 sibling Event 造成的单调水位前进；必须验证 execution-started identity、Run 仍为 `running` 与水位不回退，不能把这一许可扩展到其他 segment 或终态 Run。心跳、Redis lock 或 continuation claim 失效后，即使 Operation 已经开始，未提交的领域写入也必须整体回滚；只在 execute 返回后检查状态不构成防线。
 
@@ -63,9 +62,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 验证
 
-- `tests/golden-journey/**` 是 Assistant 跨浏览器、UI、Agent SDK、Operation、MySQL、Redis、worker、Outbox、SSE 与刷新恢复的最高组合证据；主线、阶段探针、断流、重复提交、provider failure 和 worker retry 使用同一生产链。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 是 Assistant 跨浏览器、UI、Agent SDK、Operation、MySQL、Redis、worker、Outbox、SSE 与刷新恢复的最高组合证据；它从空项目执行至少两个章节直到最终成片，并在核心 processing 阶段刷新。
 - `tests/integration/task/project-agent-*.integration.test.ts` 中保留的场景使用真实 MySQL/Redis 验证 continuation settlement、dead delivery、execution segment、Interruption 原子性、Task batch Wait、并发 terminal、Thread clear race 与 session broadcast。
-- `tests/golden-journey/journeys/stage-probes.spec.ts` 验证 Workflow Lab 的 11 个稳定 checkpoint 经过生产 list/fork、真实 Session/UI 动作和持久 oracle 后能到达下一边界；Approval 还必须可重复 fork 后消费。目标 stage 是领域克隆的唯一时间边界：Bible lock、Asset requirement outcome、Storyboard image/video 等未来事实必须按该边界清空；冻结 Approval 所需的 target association 必须保留，禁止仅改概括 status 后留下会让 resolver 越级的完成事实。`tests/unit/workflow-lab/checkpoints.test.ts` 只反证 interruption identity、runState admission、reserved identity 与 stage normalization 的纯逻辑边界。
 - `tests/unit/project-agent/{run-state-machine,event-reducer,event-reducer-transitions,execution-segment,suspension,waits,session-state-*}.test.ts` 只验证纯状态机、reducer、identity 和投影输入输出。
 - `tests/contracts/assistant-choice-offer-conformance.test.ts` 从生产 Choice registry 穷尽验证 identity、resource fingerprint、Decision parser 与 suspension capability。
 - `scripts/guards/{single-project-agent-continuation,no-plan-run-runtime,assistant-choice-offer-authority-guard,project-agent-run-state-machine-guard,single-operation-invocation-guard,sse-durable-watermark-guard}.mjs` 只提供结构旁路检查，不替代真实用户旅程。
@@ -139,7 +137,6 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - 视觉风格方案 LLM 曾在媒体 approval preflight 中同步执行并写入 pending 候选，导致同类长文本生成只有它没有 Task/Wait，专用 presentation 又隐藏通用运行卡；图片 processing Golden 仍能通过，因此未覆盖审批前空窗。当前防线把方案生成迁入文本 Task，图片 plan 只读已完成候选，并要求真实 Journey 在批准前观察通用运行卡与持久文本 Task。
 - 资产审核卡曾把每章重复 requirement 渲染为可选 option，但 Decision parser 从不消费该选择，且真实资产是本集共享的一组 canonical 角色/场景；这制造了没有业务语义的临时选中态。现 `asset_review` Offer 只有“资产满意，继续”与整组修改意见，章节 requirement 仅用于 ready 校验和 fingerprint。
 - `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。
-- Workflow Lab 曾只改写克隆记录的关系字段和 Assistant/Approval payload，却原样复制核心剪辑、镜头执行计划与分镜快照中的 canonical asset identity；镜头计划 checkpoint fork 后，正式 Query 因源项目 `locationId` 不属于克隆项目而明确失败。当前防线把通用 replacement walker 收回 `clone-json` 唯一入口，并让所有包含角色、场景、外观或剪辑 identity 的持久 JSON 与其关系字段使用同一映射；禁止在 reader 增加跨项目 fallback。对应镜头 stage-probe 从只读 Oracle 枚举真实运行 Task target，并验证 processing、reload 与终态节点。
 
 ## 修改检查表
 

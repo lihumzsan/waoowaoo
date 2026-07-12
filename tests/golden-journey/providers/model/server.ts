@@ -26,7 +26,6 @@ export interface GoldenModelServer {
 
 export async function startGoldenModelServer(port = 0): Promise<GoldenModelServer> {
   const requestCountByScenario = new Map<string, number>()
-  let forcedToolName: string | null = null
   let streamPacing: { readonly chunkSize: number; readonly delayMs: number } | null = null
   const server = createServer(async (request, response) => {
     try {
@@ -41,11 +40,6 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
         const record = control && typeof control === 'object' && !Array.isArray(control)
           ? control as Record<string, unknown>
           : {}
-        if (Object.prototype.hasOwnProperty.call(record, 'forcedToolName')) {
-          forcedToolName = typeof record.forcedToolName === 'string' && record.forcedToolName.trim()
-            ? record.forcedToolName.trim()
-            : null
-        }
         if (Object.prototype.hasOwnProperty.call(record, 'streamPacing')) {
           const pacing = record.streamPacing && typeof record.streamPacing === 'object' && !Array.isArray(record.streamPacing)
             ? record.streamPacing as Record<string, unknown>
@@ -57,7 +51,7 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
             : null
         }
         response.writeHead(200, { 'content-type': 'application/json' })
-        response.end(JSON.stringify({ ok: true, forcedToolName, streamPacing }))
+        response.end(JSON.stringify({ ok: true, streamPacing }))
         return
       }
       if (request.method !== 'POST' || url.pathname !== '/v1/chat/completions') {
@@ -73,7 +67,6 @@ export async function startGoldenModelServer(port = 0): Promise<GoldenModelServe
         scenarioId,
         request: completionRequest,
         requestOrdinal,
-        forcedToolName,
       })
       if (completionRequest.stream) {
         await writeGoldenStreamingResponse({

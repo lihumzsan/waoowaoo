@@ -10,7 +10,6 @@ import { WorkspaceProvider } from './WorkspaceProvider'
 import WorkspaceAssetLibraryModal from './components/WorkspaceAssetLibraryModal'
 import WorkspaceAssistantPanel from './components/WorkspaceAssistantPanel'
 import WorkspaceHeaderShell from './components/WorkspaceHeaderShell'
-import WorkflowLabPanel from './components/WorkflowLabPanel'
 import ProjectWorkspaceCanvas from './canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantSelectionContext } from './canvas/ProjectWorkspaceCanvas'
 import type { WorkspaceAssistantActiveFocusRequest } from './workspace-assistant-focus'
@@ -146,15 +145,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
             onActiveOperationChange={setActiveAssistantFocusRequest}
             onStyleBibleConfirmed={() => setStyleBibleFocusRequestId((current) => current + 1)}
           />
-          {props.workflowLabEnabled && isEpisodeWorkspace ? (
-            <WorkflowLabPanel
-              projectId={projectId}
-              episodeId={episodeId}
-              enabled={props.workflowLabEnabled}
-              onProjectForked={props.onWorkflowLabProjectForked}
-            />
-          ) : null}
-
           <div className={isEpisodeWorkspace ? 'h-full min-w-0 overflow-hidden' : 'min-w-0'}>
             <WorkspaceRuntimeProvider value={vm.runtime.workspaceRuntime}>
               <ProjectWorkspaceCanvas

@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createGoldenMediaAssets } from './assets'
 
 type GoldenFalRequestKind = 'image' | 'audio'
-type GoldenMediaScenario = 'normal' | 'retry-once' | 'terminal-failure'
 
 interface GoldenFalRequest {
   readonly id: string
@@ -20,11 +19,6 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   if (chunks.length === 0) return null
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-}
-
-function parseMediaScenario(value: unknown): GoldenMediaScenario {
-  if (value === 'normal' || value === 'retry-once' || value === 'terminal-failure') return value
-  throw new Error(`GOLDEN_MEDIA_SCENARIO_INVALID:${String(value)}`)
 }
 
 function requestOrigin(request: IncomingMessage): string {
@@ -75,26 +69,11 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
   const assets = await createGoldenMediaAssets()
   const falRequests = new Map<string, GoldenFalRequest>()
   let requestOrdinal = 0
-  let scenario = parseMediaScenario(process.env.GOLDEN_MEDIA_SCENARIO ?? 'normal')
   let statusDelayMs = 0
-  let retryableFailureInjected = false
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', requestOrigin(request))
     if (request.method === 'GET' && url.pathname === '/health') {
       writeJson(response, 200, { ok: true })
-      return
-    }
-    if (request.method === 'POST' && url.pathname === '/__golden/media-control') {
-      void readJsonBody(request).then((body) => {
-        const record = body && typeof body === 'object' && !Array.isArray(body)
-          ? body as Record<string, unknown>
-          : null
-        scenario = parseMediaScenario(record?.scenario)
-        retryableFailureInjected = false
-        writeJson(response, 200, { ok: true, scenario })
-      }).catch((error: unknown) => {
-        writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
-      })
       return
     }
     if (request.method === 'POST' && url.pathname === '/__golden/media-delay') {
@@ -123,15 +102,6 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
     }
     if (request.method === 'GET' && url.pathname === '/assets/golden.mp3') {
       mediaResponse(response, 'audio/mpeg', assets.mp3)
-      return
-    }
-    if (request.method === 'POST' && scenario === 'terminal-failure') {
-      writeJson(response, 422, { error: 'GOLDEN_LOCAL_PROVIDER_TERMINAL_FAILURE' })
-      return
-    }
-    if (request.method === 'POST' && scenario === 'retry-once' && !retryableFailureInjected) {
-      retryableFailureInjected = true
-      writeJson(response, 503, { error: 'GOLDEN_LOCAL_PROVIDER_RETRYABLE_FAILURE' })
       return
     }
     if (request.method === 'POST' && url.pathname === '/v1/sound-generation') {

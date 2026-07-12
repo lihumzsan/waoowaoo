@@ -5,10 +5,13 @@ import {
   resolveGoldenRuntimeIdentity,
 } from './runtime/identity'
 
-const artifactRoot = path.resolve(process.cwd(), 'artifacts/golden-journey')
 const externalEnvironment = process.env.GOLDEN_EXTERNAL_ENV === '1'
 const runtimeIdentity = resolveGoldenRuntimeIdentity()
 if (!externalEnvironment) applyGoldenRuntimeIdentity(runtimeIdentity)
+const artifactRoot = path.resolve(
+  process.cwd(),
+  process.env.GOLDEN_ARTIFACT_ROOT ?? runtimeIdentity.artifactRoot,
+)
 process.env.NO_PROXY = '127.0.0.1,localhost'
 process.env.no_proxy = '127.0.0.1,localhost'
 

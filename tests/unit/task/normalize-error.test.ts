@@ -21,6 +21,19 @@ describe('normalizeAnyError network termination mapping', () => {
   })
 })
 
+describe('normalizeAnyError database retry mapping', () => {
+  it('treats a Prisma write conflict or deadlock as retryable infrastructure failure', () => {
+    const normalized = normalizeAnyError({
+      code: 'P2034',
+      message: 'Transaction failed due to a write conflict or a deadlock. Please retry your transaction',
+    })
+
+    expect(normalized.code).toBe('EXTERNAL_ERROR')
+    expect(normalized.retryable).toBe(true)
+    expect(normalized.details).toMatchObject({ prismaCode: 'P2034' })
+  })
+})
+
 describe('normalizeAnyError provider-specific mapping', () => {
   it('maps Ark ModelNotOpen payload to MODEL_NOT_OPEN', () => {
     const normalized = normalizeAnyError({

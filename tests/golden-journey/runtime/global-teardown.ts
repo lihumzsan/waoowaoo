@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import { stopTestServices } from '../../setup/test-services'
+import { resolveGoldenArtifactRoot } from './identity'
 
 interface GoldenEnvironmentDescriptor {
   readonly testServiceScope?: unknown
@@ -10,7 +10,7 @@ interface GoldenEnvironmentDescriptor {
 
 export default async function goldenGlobalTeardown(): Promise<void> {
   if (process.env.GOLDEN_EXTERNAL_ENV === '1') return
-  const descriptorPath = path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json')
+  const descriptorPath = `${resolveGoldenArtifactRoot()}/environment.json`
   let descriptor: GoldenEnvironmentDescriptor
   try {
     descriptor = JSON.parse(await readFile(descriptorPath, 'utf8')) as GoldenEnvironmentDescriptor

@@ -1,50 +1,34 @@
-# Golden Journey test architecture
+# Product Journey
 
-This directory is the only home for executable browser-level product Golden
-Journeys, including but not limited to the Assistant workflow.
+This directory contains one repeatable Playwright product Journey and the
+small security boundary that cannot be proved by the creative mainline.
 
-```text
-tests/golden-journey/
-  contracts/   scenario identities, expected outcomes, stage coverage
-  providers/   local protocol-compatible HTTP model/media services
-  fixtures/    source manifest and production Workflow Lab checkpoint forks
-  oracle/      read-only durable-state observations and cross-layer assertions
-  browser/     Playwright fixtures, page objects, and browser observations
-  journeys/    full mainline and registry-derived stage probes
-  runtime/     environment, mount guard, network guard, and report writer
-  self-tests/  tests proving the harness and guards fail closed
+The main Journey starts from an empty project, drives the real UI, API,
+services, database, queue, workers, Outbox, SSE, and projector, and finishes
+with a durable final video. Its deterministic local model produces at least
+two chapters and multiple assets. The Journey reloads every core processing
+stage and checks both the visible browser state and read-only database facts.
+
+Only paid or uncontrollable external model and media providers are replaced.
+The application being tested is never mocked. Playwright uses stable product
+selectors; Browser Use and AI-selected elements are not test evidence.
+
+The harness owns an isolated runtime identity for every run. That identity
+selects dedicated MySQL and Redis scopes, ports, Next.js output, uploads, and
+Playwright artifacts. Missing isolation, provider boundaries, scenario mounts,
+or read-only Oracle permissions fail before product assertions are trusted.
+
+Run the complete evidence set with:
+
+```bash
+npm run test:fast
+npm run test:critical
+npm run test:journey
 ```
 
-Production code may be imported for shared contracts and read-only parsing.
-Golden Journey code must never be imported by production modules.
-
-The browser and oracle cannot write business tables. The mainline creates its
-source project through the real UI. Stage probes fork only through the
-production Workflow Lab API, then all later mutations pass through the real
-UI, API, Operation, queue, worker, Outbox, and SSE paths. The SQL oracle uses
-a database account that is mechanically limited to `SELECT`.
-
-Browser automation uses Playwright. Browser Use and AI-driven visual element
-selection are prohibited.
-
-The default provider gateway rejects paid calls by replacing model and media
-boundaries with local protocol-compatible HTTP services. Browser requests to
-non-loopback hosts are aborted and recorded as failures. Reports are written
-to `artifacts/golden-journey/runs/<run-id>/` and appended to
-`diagnostic-history.json`; a later run never replaces the historical scan.
-
-Primary commands:
-
-- `npm run test:golden:self`: harness self-tests, mandatory mount proof, and two-scope MySQL/Redis isolation proof.
-- `npm run test:golden:mainline`: one real story-to-final-deliverable journey.
-- `npm run test:golden:product`: independent auth/session, project CRUD, ownership, i18n identity, self-hosted capability, and Asset Hub reuse journeys.
-- `npm run test:golden:matrix`: mainline plus all checkpointable stage probes.
-- `npm run test:golden:variant:*`: deterministic model/provider fault variants.
-- `npm run test:golden:report`: latest matrix plus immutable run history.
-
-The product suite does not depend on the Assistant reaching a downstream
-checkpoint. An Assistant lifecycle failure therefore cannot hide failures in
-authentication, project ownership, asset reuse, locale preservation, or
-deployment capability surfaces. It runs self-hosted with the real `user-key` credential
-mode; Assistant media journeys use the local protocol gateway through their
-separate `platform-key` test environment.
+`test:fast` contains pure logic and registry conformance. `test:critical`
+contains real infrastructure failure, transaction, retry, idempotency, and
+concurrency evidence. `test:journey` runs harness self-checks, then the one
+multi-chapter mainline and the unauthenticated, cross-user, and cross-project
+security scenarios. Playwright writes its JSON, HTML, trace, screenshot, and
+video artifacts under `artifacts/golden-journey/runs/<run-id>/`.

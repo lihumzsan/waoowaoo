@@ -36,16 +36,15 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - `npm run check:asset-scope-ownership` 拒绝新的 raw-ID mutation、跨父级 variant 和非原子 copy 旁路。
 - `tests/integration/api/specific/asset-scope-ownership.integration.test.ts` 使用真实 MySQL 验证 global/project、character/location/prop、parent/variant 和 copy atomicity。
 - `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 通过真实浏览器与生产 copy route，证明第二个已登录用户不能覆盖其他项目的资产。
-- `GJ-ASSET-HUB-PROJECT-REUSE` 验证正常 source/target UI 路径以及 durable source identity；最终 Product Golden matrix 为 9/9 通过。
 
-结构检查只证明已知旁路没有恢复；跨用户拒绝和普通复用的最终产品行为以两个 Golden Journey 为权威证据。
+结构检查只证明已知旁路没有恢复；跨用户拒绝由最小安全 Journey 证明，普通 source/target 组合由真实 MySQL integration 证明，不再另建一条浏览器产品线。
 
 ## 历史回归
 
 - `f364bbc9e4` 引入 unified asset service 与 copy route 时，全局 source 查询包含 owner scope，但项目 target 仍使用裸 `findUnique({ id })`。结果是用户 B 可以用自己的项目完成 Route 鉴权，却把项目 A 的 character ID 作为 target，并成功覆盖项目 A 的资产。
 - System Journey 的 `GJ-ASSET-HUB-CROSS-PROJECT-DENIAL` 首次通过真实浏览器、生产 Route、Service 和 MySQL 复现了这个跨用户写入。
 - `af300a4ff` 将 owner、project、kind、parent/variant 与 copy transaction 收敛到共享 resolver，并删除 operation-specific raw-ID 所有权解释。
-- 最终 Product Golden matrix 同时通过 cross-project denial 与普通 project reuse，证明拒绝路径没有破坏合法复制路径。
+- 当前防线由跨项目拒绝 Journey 与 integration 中的合法复用/原子 copy 组合共同构成，避免用第二条产品 Journey 重复覆盖同一 service 契约。
 
 ## 修改检查表
 

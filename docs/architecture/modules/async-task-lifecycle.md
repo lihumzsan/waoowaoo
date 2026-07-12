@@ -98,6 +98,8 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 ## 历史回归
 
+- 多章节主 Journey 并发持久化核心剪辑 requirement 时曾触发 Prisma `P2034` write conflict/deadlock；共享错误规范化遗漏该官方可重试事务错误，worker 因而把一次瞬时冲突写成业务最终失败。当前 `src/lib/prisma-error.ts` 将 `P2034` 归入统一 retryable 数据库错误，仍由 Task attempt owner 和既有 max-attempt/backoff 协议负责重试，业务 service 不增加局部循环或第二 retry owner。
+
 - `95254ae71` 尝试收敛 AI 与 Task 重试，但错误分类没有成为唯一来源时，重试仍会在多层复发。
 - `ba753a204` 去除隐式队列重试后，后续又需要显式任务生命周期与错误分类，说明“删重试”本身不能替代契约。
 - 真实 `GJ-WORKER-RETRY-RECOVERY` 曾证明 durable provider fence 把明确 HTTP 503 统一写成永久 `rejected`，使 Task registry 的 retry 永远不可达；防线必须同时执行“同 attempt 零重提、ambiguous 零重提、明确临时未受理仅由更高 attempt 重取”，不能只断言调用次数。

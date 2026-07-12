@@ -207,8 +207,23 @@ function buildPromptSourceAnchor(prompt: string): {
   }
 }
 
+function buildPromptSourceAnchors(prompt: string): readonly {
+  readonly startBlockId: string
+  readonly startQuote: string
+  readonly endBlockId: string
+  readonly endQuote: string
+}[] {
+  return readPromptSourceBlocks(prompt).map((block) => ({
+    startBlockId: block.blockId,
+    startQuote: uniqueEdgeQuote(block.text, 'start'),
+    endBlockId: block.blockId,
+    endQuote: uniqueEdgeQuote(block.text, 'end'),
+  }))
+}
+
 function generateEditBiblePromptContract(prompt: string): string | null {
   const sourceAnchor = buildPromptSourceAnchor(prompt)
+  const sourceAnchors = buildPromptSourceAnchors(prompt)
   if (prompt.includes('"voiceProfile"') && prompt.includes('"worldRules"')) {
     return JSON.stringify({
       title: '禁坛归途',
@@ -238,41 +253,46 @@ function generateEditBiblePromptContract(prompt: string): string | null {
   }
   if (!sourceAnchor) return null
   if (prompt.includes('"estimatedDurationSec"') && prompt.includes('"beatId"')) {
+    const beatAnchors = sourceAnchors.slice(0, 2)
     return JSON.stringify({
-      beats: [{
-        beatId: 'beat_001',
-        title: '祭坛循环',
-        summary: '旅人试图逃离祭坛，却发现自己再次回到原点。',
-        sourceAnchor,
-        estimatedDurationSec: 45,
-      }],
+      beats: beatAnchors.map((anchor, index) => ({
+        beatId: `beat_${String(index + 1).padStart(3, '0')}`,
+        title: index === 0 ? '祭坛循环' : '镜像逼近',
+        summary: index === 0
+          ? '旅人试图逃离祭坛，却发现自己再次回到原点。'
+          : '旅人遇见另一个循环中的自己，并被迫直面祭坛规则。',
+        sourceAnchor: anchor,
+        estimatedDurationSec: beatAnchors.length > 1 ? 70 : 45,
+      })),
     })
   }
   if (prompt.includes('"persistentFacts"') && prompt.includes('"eventId"')) {
+    const eventCount = Math.max(1, Math.min(sourceAnchors.length, 2))
     return JSON.stringify({
-      events: [{
-        eventId: 'event_001',
-        beatId: 'beat_001',
+      events: Array.from({ length: eventCount }, (_, index) => ({
+        eventId: `event_${String(index + 1).padStart(3, '0')}`,
+        beatId: `beat_${String(index + 1).padStart(3, '0')}`,
         kind: 'rule',
-        summary: '旅人无法离开祭坛所在的循环。',
+        summary: index === 0 ? '旅人无法离开祭坛所在的循环。' : '循环中的另一个旅人会逐次逼近。',
         entities: [
           { entityType: 'character', entityName: '旅人' },
           { entityType: 'location', entityName: '祭坛' },
         ],
-        persistentFacts: ['旅人逃离后仍会回到祭坛。'],
-      }],
+        persistentFacts: [index === 0 ? '旅人逃离后仍会回到祭坛。' : '另一个旅人每次循环都会更靠近祭坛。'],
+      })),
     })
   }
   if (prompt.includes('"musicPolicy"') && prompt.includes('"cueId"')) {
+    const cueAnchors = sourceAnchors.slice(0, 2)
     return JSON.stringify({
-      cues: [{
-        cueId: 'cue_001',
-        mood: '危险逼近',
-        intensity: 0.8,
+      cues: cueAnchors.map((anchor, index) => ({
+        cueId: `cue_${String(index + 1).padStart(3, '0')}`,
+        mood: index === 0 ? '危险逼近' : '镜像压迫',
+        intensity: index === 0 ? 0.7 : 0.9,
         musicPolicy: 'underscore',
-        note: '循环逐步显现并压迫主角。',
-        sourceAnchor,
-      }],
+        note: index === 0 ? '循环逐步显现并压迫主角。' : '另一个旅人的出现让循环升级。',
+        sourceAnchor: anchor,
+      })),
     })
   }
   return null
@@ -664,6 +684,25 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
           title: '循环显形',
           summary: '旅人逃离失败，并意识到自己已被祭坛困在同一时刻。',
         }],
+      }, {
+        episodeIndex: 0,
+        episodeTitle: '禁坛归途',
+        episodeSummary: '旅人触犯荒野祭坛禁忌并陷入无法逃出的循环。',
+        actIndex: 1,
+        actTitle: '镜像逼近',
+        actSummary: '循环中的另一个旅人出现，迫使主角直面祭坛规则。',
+        sceneIndex: 0,
+        title: '祭坛后的另一个人',
+        location: '暮色荒野与废弃祭坛',
+        timeOfDay: '入夜',
+        characters: ['旅人'],
+        summary: '旅人在下一次循环中看见另一个自己正从祭坛背后走来。',
+        body: '夜色吞没小路。旅人这次没有逃跑，而是绕到祭坛背后。石碑上的数字从“4”变成“5”，对面也响起拖着伤脚的脚步声。另一个满身尘土的旅人从黑暗里走出，手里握着同样的路牌碎片。他们同时开口询问对方是谁，祭坛随即震动，远处又亮起第三道相同的身影。旅人终于明白，每次循环都会留下一个更接近祭坛的自己。',
+        beats: [{
+          beatIndex: 0,
+          title: '镜像现身',
+          summary: '另一个旅人出现，揭示循环会不断留下新的自己。',
+        }],
       }],
     })
   }
@@ -684,7 +723,7 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
   return generateEditBiblePromptContract(prompt)
 }
 
-function selectWriteTool(request: GoldenChatCompletionRequest, forcedToolName?: string | null): string | null {
+function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
   const available = availableToolNames(request)
   const alreadyCalled = new Set<string>()
   for (const message of request.messages) {
@@ -694,9 +733,6 @@ function selectWriteTool(request: GoldenChatCompletionRequest, forcedToolName?: 
       const fn = asRecord(record?.function)
       if (typeof fn?.name === 'string') alreadyCalled.add(fn.name)
     }
-  }
-  if (forcedToolName && available.has(forcedToolName) && !alreadyCalled.has(forcedToolName)) {
-    return forcedToolName
   }
   const workflowStage = readWorkflowStage(request)
   const stageTool = workflowStage ? WORKFLOW_STAGE_TOOL[workflowStage] : undefined
@@ -722,10 +758,7 @@ export function decideGoldenModelResponse(input: {
   readonly scenarioId: string
   readonly request: GoldenChatCompletionRequest
   readonly requestOrdinal: number
-  readonly forcedToolName?: string | null
 }): GoldenModelDecision {
-  if (input.scenarioId === 'disconnect-mid-tool-call') return { kind: 'disconnect' }
-
   const structuredText = generateGoldenResponseFormatText(input.request.responseFormat)
     ?? (input.request.tools?.length ? null : generatePromptContractText(input.request))
   if (structuredText) {
@@ -749,17 +782,7 @@ export function decideGoldenModelResponse(input: {
     }
   }
 
-  const toolName = selectWriteTool(input.request, input.forcedToolName)
-  if (
-    input.scenarioId === 'stop-after-successful-confirmation'
-    && readWorkflowStage(input.request) === 'ready_to_generate_style_previews'
-    && hasCompletedToolCall(input.request, 'request_edit_bible_review_choice')
-  ) {
-    return {
-      kind: 'text',
-      text: 'The user confirmation was committed before this model turn. I am stopping without requesting the next operation.',
-    }
-  }
+  const toolName = selectWriteTool(input.request)
   if (!toolName) {
     return {
       kind: 'text',
@@ -767,17 +790,6 @@ export function decideGoldenModelResponse(input: {
     }
   }
   const argumentsValue = buildToolArguments(input.request, toolName)
-  if (input.scenarioId === 'duplicate-tool-call') {
-    const argumentsJson = JSON.stringify(argumentsValue)
-    return {
-      kind: 'tool_calls',
-      calls: [1, 2].map((ordinal) => ({
-        toolCallId: `golden_call_${input.requestOrdinal}_${toolName}_duplicate_${String(ordinal)}`,
-        toolName,
-        argumentsJson,
-      })),
-    }
-  }
   return {
     kind: 'tool_call',
     toolCallId: `golden_call_${input.requestOrdinal}_${toolName}`,

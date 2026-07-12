@@ -1,30 +1,22 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { resolveGoldenArtifactRoot } from '../runtime/identity'
 
 interface GoldenEnvironmentDescriptor {
   readonly providerBaseUrl: string
 }
 
-export async function setGoldenForcedTool(forcedToolName: string | null): Promise<void> {
-  const descriptor = JSON.parse(await readFile(
-    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
+async function readGoldenEnvironmentDescriptor(): Promise<GoldenEnvironmentDescriptor> {
+  return JSON.parse(await readFile(
+    path.join(resolveGoldenArtifactRoot(), 'environment.json'),
     'utf8',
   )) as GoldenEnvironmentDescriptor
-  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/control`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ forcedToolName }),
-  })
-  if (!response.ok) throw new Error(`GOLDEN_PROVIDER_CONTROL_HTTP_${String(response.status)}`)
 }
 
 export async function setGoldenStreamPacing(
   streamPacing: { readonly chunkSize: number; readonly delayMs: number } | null,
 ): Promise<void> {
-  const descriptor = JSON.parse(await readFile(
-    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
-    'utf8',
-  )) as GoldenEnvironmentDescriptor
+  const descriptor = await readGoldenEnvironmentDescriptor()
   const response = await fetch(`${descriptor.providerBaseUrl}/__golden/control`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -33,26 +25,8 @@ export async function setGoldenStreamPacing(
   if (!response.ok) throw new Error(`GOLDEN_PROVIDER_CONTROL_HTTP_${String(response.status)}`)
 }
 
-export async function setGoldenMediaScenario(
-  scenario: 'normal' | 'retry-once' | 'terminal-failure',
-): Promise<void> {
-  const descriptor = JSON.parse(await readFile(
-    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
-    'utf8',
-  )) as GoldenEnvironmentDescriptor
-  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/media-control`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ scenario }),
-  })
-  if (!response.ok) throw new Error(`GOLDEN_MEDIA_CONTROL_HTTP_${String(response.status)}`)
-}
-
 export async function setGoldenMediaStatusDelay(delayMs: number): Promise<void> {
-  const descriptor = JSON.parse(await readFile(
-    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
-    'utf8',
-  )) as GoldenEnvironmentDescriptor
+  const descriptor = await readGoldenEnvironmentDescriptor()
   const response = await fetch(`${descriptor.providerBaseUrl}/__golden/media-delay`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

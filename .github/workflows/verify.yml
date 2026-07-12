@@ -11,7 +11,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
 
@@ -55,3 +55,15 @@ jobs:
 
       - name: Static verification
         run: npm run verify:push
+
+      - name: Fast tests
+        run: npm run test:fast
+
+      - name: Critical infrastructure tests
+        run: npm run test:critical
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Product Journey
+        run: npm run test:journey

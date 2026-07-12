@@ -15,12 +15,12 @@ import {
 import { startGoldenProviderGateway, type GoldenProviderGateway } from '../providers/gateway'
 import { startGoldenMediaServer, type GoldenMediaServer } from '../providers/media/server'
 import { startGoldenModelServer, type GoldenModelServer } from '../providers/model/server'
-import { resolveGoldenRuntimeIdentity } from './identity'
+import { resolveGoldenArtifactRoot, resolveGoldenRuntimeIdentity } from './identity'
 
 const RUNTIME_IDENTITY = resolveGoldenRuntimeIdentity()
 const APP_PORT = RUNTIME_IDENTITY.appPort
 const COORDINATOR_PORT = RUNTIME_IDENTITY.coordinatorPort
-const ARTIFACT_ROOT = path.resolve(process.cwd(), 'artifacts/golden-journey')
+const ARTIFACT_ROOT = resolveGoldenArtifactRoot()
 const ORACLE_DATABASE_USER = 'golden_oracle'
 let startupServiceScope: Required<TestServiceScope> | null = null
 
@@ -62,6 +62,8 @@ function baseEnvironment(
     REDIS_HOST: testServices.redisHost,
     REDIS_PORT: String(testServices.redisPort),
     STORAGE_TYPE: 'local',
+    UPLOAD_DIR: RUNTIME_IDENTITY.uploadDir,
+    NEXT_DIST_DIR: RUNTIME_IDENTITY.distDir,
     NEXTAUTH_URL: `http://127.0.0.1:${APP_PORT}`,
     NEXTAUTH_SECRET: 'golden-journey-nextauth-secret',
     GOOGLE_CLIENT_ID: 'golden-journey-google-client-id',
@@ -86,12 +88,6 @@ function baseEnvironment(
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost',
   }
-}
-
-function requireEnvironmentValue(name: string): string {
-  const value = process.env[name]?.trim()
-  if (!value) throw new Error(`GOLDEN_ENVIRONMENT_VALUE_REQUIRED:${name}`)
-  return value
 }
 
 function runSetup(command: string, args: readonly string[], env: NodeJS.ProcessEnv): void {
@@ -245,10 +241,7 @@ async function startEnvironment(onShutdown: () => void): Promise<GoldenEnvironme
     })
     const env = baseEnvironment(gateway.baseUrl, testServices)
     runSetup(executable('tsx'), ['src/lib/storage/init.ts'], env)
-    const oracleDatabaseUrl = await createReadOnlyOracleUser(
-      requireEnvironmentValue('DATABASE_URL'),
-      randomUUID(),
-    )
+    const oracleDatabaseUrl = await createReadOnlyOracleUser(testServices.databaseUrl, randomUUID())
     children.push(
       spawnLogged({
         name: 'next',

@@ -105,9 +105,7 @@
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
-        "tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts",
-        "tests/golden-journey/journeys/stage-probes.spec.ts",
-        "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-history-state-inference.mjs",
@@ -140,8 +138,7 @@
       "testPaths": [
         "tests/unit/edit-chapter/persistent-facts.test.ts",
         "tests/golden-journey/self-tests/model-provider.test.ts",
-        "tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts",
-        "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/chapter-plan-fact-authority-guard.mjs"
@@ -158,6 +155,8 @@
         "messages/en/progress.json",
         "messages/zh/progress.json",
         "src/lib/errors/codes.ts",
+        "src/lib/errors/normalize.ts",
+        "src/lib/prisma-error.ts",
         "src/lib/redis.ts",
         "src/lib/redis-config.ts",
         "src/lib/runtime-config/positive-integer.ts",
@@ -233,7 +232,7 @@
         "src/lib/project-workflow/edit-first.ts",
         "src/lib/project-workflow/edit-first-operation-ids.ts",
         "src/lib/edit-script/style-preview-operation-plan.ts",
-        "src/lib/workflow-lab",
+        "scripts/guards/assistant-choice-offer-authority-guard.mjs",
         "src/app/api/projects/[projectId]/assistant/chat",
         "src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts",
         "src/app/api/assistant/text-attachments",
@@ -292,7 +291,8 @@
         "tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts",
         "tests/integration/task/project-agent-thread-clear-race.integration.test.ts",
         "tests/integration/task/plan-run-removal-migration.integration.test.ts",
-        "tests/unit/project-agent/execution-segment.test.ts"
+        "tests/unit/project-agent/execution-segment.test.ts",
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-client-agent-control.mjs",
@@ -371,7 +371,7 @@
         "tests/golden-journey/self-tests/model-provider.test.ts",
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
-        "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
+        "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/prompt-i18n-guard.mjs",
@@ -393,11 +393,13 @@
         "src/lib/rate-limit.ts",
         "src/i18n",
         "src/lib/deployment",
-        "src/app/api/deployment"
+        "src/app/api/deployment",
+        "src/app/[locale]/workspace/[projectId]/page.tsx",
+        "messages/en/workspaceDetail.json",
+        "messages/zh/workspaceDetail.json"
       ],
       "testPaths": [
-        "tests/golden-journey/journeys/auth-project-permission.spec.ts",
-        "tests/golden-journey/journeys/i18n-deployment.spec.ts"
+        "tests/golden-journey/journeys/auth-project-permission.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/locale-navigation-guard.mjs"
@@ -419,7 +421,6 @@
         "src/app/api/asset-hub"
       ],
       "testPaths": [
-        "tests/golden-journey/journeys/asset-hub-reuse.spec.ts",
         "tests/golden-journey/journeys/asset-hub-ownership.spec.ts",
         "tests/integration/api/specific/asset-scope-ownership.integration.test.ts"
       ],
@@ -433,6 +434,8 @@
       "title": "测试治理",
       "sourcePaths": [
         "AGENTS.md",
+        ".github/workflows/verify.yml",
+        ".gitignore",
         "package.json",
         "scripts/architecture-impact.mjs",
         "scripts/architecture-impact-lib.mjs",

@@ -12,6 +12,10 @@ import {
   normalizeRawEmotionalCurve,
   normalizeRawLedger,
 } from '@/lib/edit-bible/source-anchor-normalization'
+import {
+  expandedSourceScriptOutputSchema,
+  normalizeExpandedSourceScriptOutput,
+} from '@/lib/edit-bible'
 import { validateEditBibleBundle } from '@/lib/edit-bible/cross-check'
 import { buildEditSourceBlocks, formatEditSourceBlocksForPrompt } from '@/lib/edit-source-document'
 import { editStylePreviewOptionsSchema } from '@/lib/edit-script/types'
@@ -84,8 +88,9 @@ describe('Golden local model provider', () => {
     })
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
-    const parsed = JSON.parse(decision.text) as { segments: unknown[] }
-    expect(parsed.segments).toHaveLength(1)
+    const parsed = expandedSourceScriptOutputSchema.parse(JSON.parse(decision.text) as unknown)
+    expect(parsed.segments).toHaveLength(2)
+    expect(normalizeExpandedSourceScriptOutput(parsed).structure.episodes[0]?.acts).toHaveLength(2)
   })
 
   it('returns one cross-consistent production edit-bible bundle across four prompt-only calls', () => {
@@ -489,44 +494,6 @@ describe('Golden local model provider', () => {
     })
   })
 
-  it('injects the model-stop variant only after the atomic Bible Choice reaches refreshed workflow state', () => {
-    const decision = decideGoldenModelResponse({
-      scenarioId: 'stop-after-successful-confirmation',
-      requestOrdinal: 17,
-      request: {
-        model: 'golden-model',
-        messages: [
-          {
-            role: 'assistant',
-            tool_calls: [{
-              id: 'bible-choice-call',
-              type: 'function',
-              function: { name: 'request_edit_bible_review_choice', arguments: '{}' },
-            }],
-          },
-          {
-            role: 'tool',
-            tool_call_id: 'bible-choice-call',
-            content: '{"ok":true,"decision":"approve","aspectRatio":"16:9"}',
-          },
-          {
-            role: 'system',
-            content: '[project_state_snapshot]\nworkflowStage=ready_to_generate_style_previews\n[/project_state_snapshot]',
-          },
-        ],
-        tools: [{
-          type: 'function',
-          function: { name: 'generate_edit_style_previews', parameters: { type: 'object' } },
-        }],
-      },
-    })
-
-    expect(decision).toMatchObject({
-      kind: 'text',
-      text: expect.stringContaining('confirmation was committed'),
-    })
-  })
-
   it('passes null when production asks AI to let the system resolve chapter scope', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
@@ -586,45 +553,6 @@ describe('Golden local model provider', () => {
         { toolName: 'plan_chapters' },
       ],
     })
-  })
-
-  it('emits two real tool calls for the duplicate-delivery scenario', () => {
-    const decision = decideGoldenModelResponse({
-      scenarioId: 'duplicate-tool-call',
-      requestOrdinal: 1,
-      request: {
-        model: 'golden-model',
-        messages: [{ role: 'user', content: 'Continue' }],
-        tools: [{
-          type: 'function',
-          function: { name: 'request_script_intake_choice', parameters: { type: 'object' } },
-        }],
-      },
-    })
-    expect(decision.kind).toBe('tool_calls')
-    if (decision.kind !== 'tool_calls') return
-    expect(decision.calls).toHaveLength(2)
-    expect(new Set(decision.calls.map((call) => call.toolCallId)).size).toBe(2)
-    expect(decision.calls.every((call) => call.toolName === 'request_script_intake_choice')).toBe(true)
-  })
-
-  it('forces the declared stage-probe operation without changing production tool schemas', () => {
-    const decision = decideGoldenModelResponse({
-      scenarioId: 'normal-stage-probe',
-      requestOrdinal: 1,
-      forcedToolName: 'ingest_script',
-      request: {
-        model: 'golden-model',
-        messages: [{ role: 'user', content: 'Continue' }],
-        tools: [
-          { type: 'function', function: { name: 'request_script_intake_choice', parameters: { type: 'object' } } },
-          { type: 'function', function: { name: 'ingest_script', parameters: { type: 'object' } } },
-        ],
-      },
-    })
-    expect(decision.kind).toBe('tool_call')
-    if (decision.kind !== 'tool_call') return
-    expect(decision.toolName).toBe('ingest_script')
   })
 
   it('rejects requests without an explicit scenario API key', async () => {

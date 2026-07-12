@@ -69,7 +69,9 @@ export async function createGoldenProjectThroughUi(page: Page, input: {
   }
   await expect(modal).toBeHidden()
   await expect(page).toHaveURL(/\/zh\/(?:profile|workspace)(?:[/?#]|$)/)
-  await page.goto('/zh/workspace')
+  if (new URL(page.url()).pathname.endsWith('/profile')) {
+    await page.goto('/zh/workspace')
+  }
   page.off('dialog', acceptDialog)
   page.off('request', onRequest)
   page.off('requestfinished', onRequestSettled)

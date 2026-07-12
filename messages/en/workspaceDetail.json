@@ -36,26 +36,5 @@
     "newEpisodePlaceholder": "Enter episode name...",
     "create": "Create",
     "addEpisode": "Add Episode"
-  },
-  "workflowLab": {
-    "title": "Real Workflow Lab",
-    "badge": "Workflow Lab",
-    "currentStage": "Current stage: {stage}",
-    "currentUnknown": "Current stage is not loaded",
-    "refresh": "Refresh checkpoints",
-    "collapse": "Collapse",
-    "expand": "Expand real workflow lab",
-    "disabled": "Real workflow lab is not enabled in this environment.",
-    "loadFailed": "Failed to load real workflow checkpoints",
-    "forkFailed": "Failed to create real test checkpoint",
-    "invalidResponse": "Real workflow lab API returned an invalid response",
-    "loading": "Loading real workflow checkpoints",
-    "empty": "This episode's assistant history has no restorable checkpoints yet.",
-    "checkpointNumber": "C{number}",
-    "stage": "Stage: {stage}",
-    "kind": "Type: {kind}",
-    "messages": "Assistant messages: {count}",
-    "createProjectAndOpen": "Create LAB and Open",
-    "creatingProject": "Creating"
   }
 }

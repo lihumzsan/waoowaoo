@@ -671,13 +671,6 @@ function soundscapeDetails(
   }
 }
 
-function countEditAssetRequirements(
-  requirements: readonly ProjectEditAssetRequirement[],
-  kind: ProjectEditAssetRequirement['kind'],
-): number {
-  return requirements.filter((requirement) => requirement.kind === kind).length
-}
-
 function countCompletedEditAssetRequirements(requirements: readonly ProjectEditAssetRequirement[]): number {
   return requirements.filter((requirement) => requirement.status === 'completed').length
 }
@@ -1181,7 +1174,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   })
   const plannedCharacterNames = planningEntityNameSet(editBible?.bible, 'characters')
   const plannedLocationNames = planningEntityNameSet(editBible?.bible, 'locations')
-  const plannedAssets = [
+  const plannedAssetCandidates = [
     ...projectCharacters
       .filter((character) => plannedCharacterNames.size === 0 || plannedCharacterNames.has(character.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase()))
       .map((character) => {
@@ -1217,16 +1210,48 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       }
     }),
   ]
-  if (editFirstCanvasVisibility.editAssetGroup && (plannedAssets.length > 0 || allAssetRequirements.length > 0)) {
+  const plannedAssetsByIdentity = new Map<string, (typeof plannedAssetCandidates)[number]>()
+  for (const asset of plannedAssetCandidates) {
+    const identity = `${asset.kind}:${asset.id}`
+    if (!plannedAssetsByIdentity.has(identity)) plannedAssetsByIdentity.set(identity, asset)
+  }
+  const plannedAssets = [...plannedAssetsByIdentity.values()]
+  const fallbackAssetsByIdentity = new Map<string, {
+    readonly id: string
+    readonly kind: 'character' | 'location'
+    readonly name: string
+    readonly description: string
+    readonly previewImageUrl: string | null
+    readonly errorMessage: string | null
+    readonly taskTargetType: 'CharacterAppearance' | 'LocationImage'
+    readonly taskTargetId: string
+  }>()
+  for (const { requirement } of allAssetRequirements) {
+    const assetId = requirement.targetId ?? requirement.id
+    const identity = `${requirement.kind}:${assetId}`
+    if (fallbackAssetsByIdentity.has(identity)) continue
+    fallbackAssetsByIdentity.set(identity, {
+      id: assetId,
+      kind: requirement.kind,
+      name: requirement.name,
+      description: requirement.description,
+      previewImageUrl: assetPreviewUrl(requirement),
+      errorMessage: requirement.errorMessage ?? null,
+      taskTargetType: requirement.taskTargetType ?? (requirement.kind === 'character' ? 'CharacterAppearance' : 'LocationImage'),
+      taskTargetId: requirement.taskTargetId ?? assetId,
+    })
+  }
+  const displayedAssets = plannedAssets.length > 0
+    ? plannedAssets
+    : [...fallbackAssetsByIdentity.values()]
+  if (editFirstCanvasVisibility.editAssetGroup && displayedAssets.length > 0) {
     const nodeId = workspaceNodeId.editAssetGroup(episodeId)
     assetGroupNodeId = nodeId
     const primaryScript = editScript ?? assetGroupScripts[0] ?? null
-    const characterRequirements = plannedAssets.filter((asset) => asset.kind === 'character').length
-      || countEditAssetRequirements(allAssetRequirements.map((item) => item.requirement), 'character')
-    const locationRequirements = plannedAssets.filter((asset) => asset.kind === 'location').length
-      || countEditAssetRequirements(allAssetRequirements.map((item) => item.requirement), 'location')
-    const assetsReady = plannedAssets.length > 0 && plannedAssets.every((asset) => Boolean(asset.previewImageUrl))
-    const assetsFailed = plannedAssets.some((asset) => Boolean(asset.errorMessage))
+    const characterRequirements = displayedAssets.filter((asset) => asset.kind === 'character').length
+    const locationRequirements = displayedAssets.filter((asset) => asset.kind === 'location').length
+    const assetsReady = displayedAssets.every((asset) => Boolean(asset.previewImageUrl))
+    const assetsFailed = displayedAssets.some((asset) => Boolean(asset.errorMessage))
       || allAssetRequirements.some(({ requirement }) => requirement.status === 'failed')
     const assetGroupPresentation = assetsFailed
         ? workspaceCanvasFailedResourcePresentation()
@@ -1251,8 +1276,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         targetId: episodeId,
         title: translate('nodes.editAssetGroup.title'),
         eyebrow: translate('nodes.editAssetGroup.eyebrow'),
-        body: plannedAssets.map((asset) => `${asset.name} / ${asset.kind}`).join('\n')
-          || allAssetRequirements.map(({ requirement }) => `${requirement.name} / ${requirement.kind}`).join('\n')
+        body: displayedAssets.map((asset) => `${asset.name} / ${asset.kind}`).join('\n')
           || translate('empty.editAsset'),
         meta: translate('nodes.editAssetGroup.meta', {
           characters: characterRequirements,
@@ -1263,16 +1287,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         action: !assetsReady && primaryScript ? { type: 'generate_edit_assets', editScriptId: primaryScript.id } : undefined,
         editAssetGroupDetails: {
           editScriptId: primaryScript?.id ?? episodeId,
-          assets: (plannedAssets.length > 0 ? plannedAssets : allAssetRequirements.map(({ requirement }) => ({
-            id: requirement.targetId ?? requirement.id,
-            kind: requirement.kind,
-            name: requirement.name,
-            description: requirement.description,
-            previewImageUrl: assetPreviewUrl(requirement),
-            errorMessage: requirement.errorMessage ?? null,
-            taskTargetType: requirement.taskTargetType ?? (requirement.kind === 'character' ? 'CharacterAppearance' : 'LocationImage'),
-            taskTargetId: requirement.taskTargetId ?? requirement.targetId ?? requirement.id,
-          }))).map((asset) => {
+          assets: displayedAssets.map((asset) => {
             const binding = requirementByAssetId.get(asset.id) ?? null
             const requirement = binding?.requirement ?? null
             const script = binding?.script ?? null

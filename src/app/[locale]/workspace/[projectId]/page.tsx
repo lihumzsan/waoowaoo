@@ -51,7 +51,6 @@ export default function ProjectDetailPage() {
   // 从URL读取参数
   const urlEpisodeId = searchParams.get('episode') ?? null
   const shouldAutoStartAssistant = searchParams.get(HOME_ASSISTANT_AUTOSTART_QUERY) === HOME_ASSISTANT_AUTOSTART_VALUE
-  const workflowLabEnabled = searchParams.get('workflowLab') === '1'
 
   // 🔥 React Query 数据获取
   const queryClient = useQueryClient()
@@ -243,18 +242,6 @@ export default function ProjectDetailPage() {
     updateUrlParams({ episode: episodeId })
   }
 
-  const handleWorkflowLabProjectForked = useCallback(async (params: { projectId: string; episodeId: string }) => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.projectData(params.projectId) })
-    setIsGlobalAssetsView(false)
-    router.push({
-      pathname: `/workspace/${params.projectId}`,
-      query: {
-        episode: params.episodeId,
-        workflowLab: '1',
-      },
-    })
-  }, [queryClient, router])
-
   const pageState = resolveWorkspacePageState({
     projectLoading: loading,
     projectError: error,
@@ -332,9 +319,7 @@ export default function ProjectDetailPage() {
               episodes={episodes}
               assistantAutoStartDraft={assistantAutoStartDraft}
               assistantAutoStartKey={assistantAutoStartKey}
-              workflowLabEnabled={workflowLabEnabled}
               onAssistantAutoStartConsumed={clearAssistantAutoStart}
-              onWorkflowLabProjectForked={handleWorkflowLabProjectForked}
               onEpisodeSelect={handleEpisodeSelect}
               onEpisodeCreate={() => handleCreateEpisode(`${t('episode')} ${episodes.length + 1}`)}
               onEpisodeRename={handleRenameEpisode}
