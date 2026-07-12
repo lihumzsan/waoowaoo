@@ -2,8 +2,8 @@ import { type Job } from 'bullmq'
 import { createScopedLogger } from '@/lib/logging/core'
 import { withLogContext } from '@/lib/logging/context'
 import { generateImage, generateVideo } from '@/lib/ai-exec/engine'
-import { pollAsyncTask } from '@/lib/ai-exec/async-poll'
-import { RETRY_POLICY, withRetry } from '@/lib/retry'
+import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
+import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import { getSignedUrl } from '@/lib/storage'
 import { processMediaResult } from '@/lib/media-process'
 import {
@@ -12,6 +12,7 @@ import {
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { TaskTerminatedError } from '@/lib/task/errors'
+import { markTaskProviderInvocationRetryableByExternalId } from '@/lib/task/provider-invocation'
 import { clearTaskExternalId, isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
 import { type TaskJobData } from '@/lib/task/types'
 import { AppError } from '@/lib/errors/app-error'
@@ -21,10 +22,6 @@ import {
   resolveProviderVideoReferencePayload,
   type VideoReferenceImageInput,
 } from '@/lib/video-generation/reference-images'
-import { getWorkerExternalPollMs, getWorkerExternalTimeoutMs } from './runtime-config'
-
-const DEFAULT_POLL_TIMEOUT_MS = getWorkerExternalTimeoutMs()
-const DEFAULT_POLL_INTERVAL_MS = getWorkerExternalPollMs()
 
 function summarizeImageGenerationOptions(options: Record<string, unknown> | undefined): Record<string, unknown> {
   const value = options || {}
@@ -116,8 +113,6 @@ export async function waitExternalResult(
   userId: string,
   opts?: { timeoutMs?: number; intervalMs?: number; progressStart?: number; progressEnd?: number },
 ) {
-  const timeoutMs = opts?.timeoutMs ?? DEFAULT_POLL_TIMEOUT_MS
-  const intervalMs = opts?.intervalMs ?? DEFAULT_POLL_INTERVAL_MS
   const progressStart = opts?.progressStart ?? 40
   const progressEnd = opts?.progressEnd ?? 90
   const startAt = Date.now()
@@ -127,8 +122,8 @@ export async function waitExternalResult(
     message: 'external poll started',
     details: {
       externalId,
-      timeoutMs,
-      intervalMs,
+      timeoutMs: opts?.timeoutMs ?? null,
+      intervalMs: opts?.intervalMs ?? null,
     },
   })
 
@@ -141,37 +136,33 @@ export async function waitExternalResult(
     },
   })
 
-  while (Date.now() - startAt <= timeoutMs) {
-    await assertTaskActive(job, 'polling_external')
-    const status = await withRetry({
-      scope: `media:poll:${externalId}`,
-      policy: RETRY_POLICY.mediaPoll,
-      run: async () => await pollAsyncTask(externalId, userId),
+  try {
+    const result = await waitForAsyncProviderResult({
+      externalId,
+      userId,
+      timeoutMs: opts?.timeoutMs,
+      intervalMs: opts?.intervalMs,
+      beforePoll: async () => await assertTaskActive(job, 'polling_external'),
+      onPending: async (elapsedRatio) => {
+        const progress = progressStart + Math.floor((progressEnd - progressStart) * elapsedRatio)
+        await reportTaskProgress(job, progress, { stage: 'polling_external', externalId })
+        await assertTaskActive(job, 'polling_external_wait')
+      },
     })
-
-    if (status.status === 'completed') {
-      const url = status.resultUrl || status.imageUrl || status.videoUrl
-      if (!url) {
-        throw new Error(`External task completed but no result URL: ${externalId}`)
-      }
-      logger.info({
-        message: 'external poll completed',
-        durationMs: Date.now() - startAt,
-        details: {
-          externalId,
-        },
+    logger.info({
+      message: 'external poll completed',
+      durationMs: Date.now() - startAt,
+      details: { externalId },
+    })
+    return result
+  } catch (error) {
+    if (error instanceof ProviderTerminalFailureError) {
+      const terminalError = new AppError('EXTERNAL_ERROR', error.message, {
+        details: { externalId, externalStatus: 'failed' },
+        cause: error,
       })
-      return {
-        url,
-        status,
-        ...(typeof status.actualVideoTokens === 'number' ? { actualVideoTokens: status.actualVideoTokens } : {}),
-        ...(status.downloadHeaders ? { downloadHeaders: status.downloadHeaders } : {}),
-      }
-    }
-
-    if (status.status === 'failed') {
       logger.error({
-        message: status.error || 'external task failed',
+        message: terminalError.message,
         errorCode: 'EXTERNAL_ERROR',
         retryable: true,
         durationMs: Date.now() - startAt,
@@ -179,34 +170,23 @@ export async function waitExternalResult(
           externalId,
         },
       })
+      await markTaskProviderInvocationRetryableByExternalId({
+        taskId: job.data.taskId,
+        externalId,
+        error: terminalError,
+      })
       await clearTaskExternalId(job.data.taskId)
-      throw new AppError('EXTERNAL_ERROR', status.error || `External task failed: ${externalId}`, {
-        details: {
-          externalId,
-          externalStatus: status.status,
-        },
+      throw terminalError
+    }
+    if (error instanceof ProviderPermanentFailureError) {
+      await clearTaskExternalId(job.data.taskId)
+      throw new AppError('PROVIDER_SUBMISSION_REJECTED', error.message, {
+        details: { externalId, externalStatus: 'failed' },
+        cause: error,
       })
     }
-
-    const elapsed = Date.now() - startAt
-    const ratio = Math.max(0, Math.min(1, elapsed / timeoutMs))
-    const progress = progressStart + Math.floor((progressEnd - progressStart) * ratio)
-    await reportTaskProgress(job, progress, { stage: 'polling_external', externalId })
-    await assertTaskActive(job, 'polling_external_wait')
-    await sleep(intervalMs)
+    throw error
   }
-
-  logger.error({
-    message: 'external task polling timeout',
-    errorCode: 'GENERATION_TIMEOUT',
-    retryable: true,
-    durationMs: Date.now() - startAt,
-    details: {
-      externalId,
-      timeoutMs,
-    },
-  })
-  throw new Error(`External task polling timeout (${Math.round(timeoutMs / 1000)}s): ${externalId}`)
 }
 
 export async function resolveImageSourceFromGeneration(

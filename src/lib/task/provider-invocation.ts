@@ -20,7 +20,9 @@ type MediaProviderInvocationResult = {
 type TaskDurableInvocationResultPolicy<TResult> = {
   readonly parse: (value: unknown) => TResult
   readonly rejectionMessage?: (result: TResult) => string | null
+  readonly outcomeUnknownMessage?: (result: TResult) => string | null
   readonly isKnownRejectionError?: (error: unknown) => boolean
+  readonly isKnownRetryableFailureError?: (error: unknown) => boolean
 }
 
 type ProviderInvocationDescriptor = {
@@ -43,6 +45,7 @@ type ProviderInvocationOutput = ProviderInvocationDescriptor & {
 
 type ProviderCheckpoint = {
   readonly id: string
+  readonly stepKey: string
   readonly inputFingerprint: string
   readonly state: string
   readonly output: unknown
@@ -172,6 +175,15 @@ function isRetryableSubmissionStatus(status: number): boolean {
     || status === 504
 }
 
+function readExplicitHttpStatus(error: unknown): number | null {
+  if (error instanceof FetchStatusError) return error.status
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null
+  const status = (error as { readonly status?: unknown }).status
+  return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+    ? status
+    : null
+}
+
 function requireTaskAttempt(taskId: string): number {
   const context = getLogContext()
   if (context.taskId !== taskId) {
@@ -186,7 +198,7 @@ function requireTaskAttempt(taskId: string): number {
 async function loadCheckpoint(taskId: string, stepKey: string): Promise<ProviderCheckpoint | null> {
   return await prisma.taskExecutionCheckpoint.findUnique({
     where: { taskId_stepKey: { taskId, stepKey } },
-    select: { id: true, inputFingerprint: true, state: true, output: true },
+    select: { id: true, stepKey: true, inputFingerprint: true, state: true, output: true },
   })
 }
 
@@ -210,7 +222,7 @@ async function claimCheckpoint(params: {
         state: 'submitting',
         output: toJson(output),
       },
-      select: { id: true, inputFingerprint: true, state: true, output: true },
+      select: { id: true, stepKey: true, inputFingerprint: true, state: true, output: true },
     })
     return { checkpoint, claimed: true }
   } catch (error) {
@@ -294,6 +306,108 @@ function readErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function toStoredError(error: unknown): NonNullable<ProviderInvocationOutput['error']> {
+  return error instanceof Error
+    ? { name: error.name || 'Error', message: error.message.slice(0, 2_000) }
+    : { name: typeof error, message: String(error).slice(0, 2_000) }
+}
+
+async function markCheckpointRetryable(params: {
+  readonly checkpoint: ProviderCheckpoint
+  readonly taskAttempt: number
+  readonly error: unknown
+}): Promise<void> {
+  const output = parseOutput(params.checkpoint.output)
+  const storedAttempt = output.taskAttempt
+  if (!Number.isInteger(storedAttempt) || (storedAttempt ?? 0) < 1) {
+    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${output.taskId}:${output.invocationKey}`)
+  }
+  if (params.taskAttempt < storedAttempt!) {
+    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_STALE:${output.taskId}:${output.invocationKey}`)
+  }
+  if (params.checkpoint.state === 'retryable_rejected' && storedAttempt === params.taskAttempt) return
+  if (params.checkpoint.state !== 'submitted') {
+    throw new Error(`PROVIDER_INVOCATION_RETRY_STATE_INVALID:${output.taskId}:${output.invocationKey}:${params.checkpoint.state}`)
+  }
+
+  const nextOutput: ProviderInvocationOutput = {
+    ...output,
+    taskAttempt: params.taskAttempt,
+    error: toStoredError(params.error),
+  }
+  const updated = await prisma.taskExecutionCheckpoint.updateMany({
+    where: {
+      id: params.checkpoint.id,
+      state: 'submitted',
+    },
+    data: {
+      state: 'retryable_rejected',
+      output: toJson(nextOutput),
+      completedAt: new Date(),
+    },
+  })
+  if (updated.count === 1) return
+
+  const current = await loadCheckpoint(output.taskId, params.checkpoint.stepKey)
+  if (!current) {
+    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${output.taskId}:${output.invocationKey}`)
+  }
+  const currentOutput = parseOutput(current.output)
+  if (current.state === 'retryable_rejected' && currentOutput.taskAttempt === params.taskAttempt) return
+  throw new Error(`PROVIDER_INVOCATION_RETRY_TRANSITION_FAILED:${output.taskId}:${output.invocationKey}`)
+}
+
+export async function markTaskProviderInvocationRetryable(params: {
+  readonly taskId: string
+  readonly invocation: TaskProviderInvocation
+  readonly error: unknown
+}): Promise<void> {
+  const invocationKey = params.invocation.key.trim()
+  if (!invocationKey) throw new Error('PROVIDER_INVOCATION_KEY_REQUIRED')
+  const taskAttempt = requireTaskAttempt(params.taskId)
+  const checkpoint = await loadCheckpoint(params.taskId, buildStepKey(invocationKey))
+  if (!checkpoint) {
+    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${params.taskId}:${invocationKey}`)
+  }
+  const output = parseOutput(checkpoint.output)
+  if (output.taskId !== params.taskId || output.invocationKey !== invocationKey) {
+    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_CONFLICT:${params.taskId}:${invocationKey}`)
+  }
+  await markCheckpointRetryable({ checkpoint, taskAttempt, error: params.error })
+}
+
+function readExternalId(result: unknown): string | null {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
+  const externalId = (result as Record<string, unknown>).externalId
+  return typeof externalId === 'string' && externalId.trim() ? externalId.trim() : null
+}
+
+export async function markTaskProviderInvocationRetryableByExternalId(params: {
+  readonly taskId: string
+  readonly externalId: string
+  readonly error: unknown
+}): Promise<void> {
+  const externalId = params.externalId.trim()
+  if (!externalId) throw new Error('PROVIDER_EXTERNAL_ID_REQUIRED')
+  const taskAttempt = requireTaskAttempt(params.taskId)
+  const candidates = await prisma.taskExecutionCheckpoint.findMany({
+    where: {
+      taskId: params.taskId,
+      state: { in: ['submitted', 'retryable_rejected'] },
+      stepKey: { startsWith: STEP_PREFIX },
+    },
+    select: { id: true, stepKey: true, inputFingerprint: true, state: true, output: true },
+  })
+  const matches = candidates.filter((checkpoint) => {
+    const output = parseOutput(checkpoint.output)
+    return readExternalId(output.result) === externalId
+  })
+  if (matches.length !== 1) {
+    throw new Error(`PROVIDER_EXTERNAL_ID_CHECKPOINT_${matches.length === 0 ? 'MISSING' : 'CONFLICT'}:${params.taskId}:${externalId}`)
+  }
+  await markCheckpointRetryable({ checkpoint: matches[0]!, taskAttempt, error: params.error })
+}
+
 export async function executeTaskDurableInvocation<TResult>(params: {
   readonly taskId: string
   readonly invocation: TaskProviderInvocation
@@ -353,7 +467,11 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   try {
     result = await params.execute()
   } catch (error) {
-    if (error instanceof FetchStatusError && isRetryableSubmissionStatus(error.status)) {
+    const explicitHttpStatus = readExplicitHttpStatus(error)
+    if (
+      (explicitHttpStatus !== null && isRetryableSubmissionStatus(explicitHttpStatus))
+      || params.resultPolicy.isKnownRetryableFailureError?.(error) === true
+    ) {
       try {
         await transitionCheckpoint({
           checkpointId: checkpoint.id,
@@ -368,7 +486,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
       throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
     }
     if (
-      error instanceof FetchStatusError
+      explicitHttpStatus !== null
       || params.resultPolicy.isKnownRejectionError?.(error) === true
     ) {
       try {
@@ -392,6 +510,17 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         taskAttempt,
         error,
       })
+    } catch (transitionError) {
+      throw outcomeUnknown(descriptor, transitionError)
+    }
+    throw outcomeUnknown(descriptor, error)
+  }
+
+  const unknownOutcomeMessage = params.resultPolicy.outcomeUnknownMessage?.(result) ?? null
+  if (unknownOutcomeMessage) {
+    const error = new Error(unknownOutcomeMessage)
+    try {
+      await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'outcome_unknown', taskAttempt, result })
     } catch (transitionError) {
       throw outcomeUnknown(descriptor, transitionError)
     }
@@ -429,9 +558,10 @@ export async function executeTaskProviderInvocation<TResult extends MediaProvide
     ...params,
     resultPolicy: {
       parse: parseMediaProviderResult<TResult>,
-      rejectionMessage: (result) => result.success
+      outcomeUnknownMessage: (result) => result.success
         ? null
-        : result.error || 'Provider rejected the generation request',
+        : result.error || 'Provider returned success:false without a typed acceptance outcome',
+      isKnownRejectionError: (error) => error instanceof AppError && !error.retryable,
     },
   })
 }

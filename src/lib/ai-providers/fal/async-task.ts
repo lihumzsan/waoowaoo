@@ -3,12 +3,13 @@ import type {
   FormatAsyncExternalIdInput,
   ParsedAsyncExternalId,
 } from '@/lib/ai-providers/async-task-types'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { queryFalStatus } from './queue'
 
 function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
   const parts = externalId.split(':')
   const type = parts[1]
-  if (type === 'VIDEO' || type === 'IMAGE') {
+  if (type === 'VIDEO' || type === 'IMAGE' || type === 'MUSIC') {
     if (parts.length < 4) {
       throw new Error(`无效 FAL externalId: "${externalId}"，应为 FAL:TYPE:endpoint:requestId`)
     }
@@ -24,7 +25,7 @@ function parseFalExternalId(externalId: string): ParsedAsyncExternalId {
       requestId,
     }
   }
-  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE`)
+  throw new Error(`无效 FAL externalId: "${externalId}"，TYPE 仅支持 VIDEO/IMAGE/MUSIC`)
 }
 
 function formatFalExternalId(input: FormatAsyncExternalIdInput): string {
@@ -43,12 +44,13 @@ export const falAsyncTaskProvider: AsyncTaskProviderRegistration = {
     if (!parsed.endpoint) throw new Error('FAL_ENDPOINT_MISSING')
     const { apiKey } = await context.getProviderConfig(context.userId, 'fal')
     const result = await queryFalStatus(parsed.endpoint, parsed.requestId, apiKey)
-    return {
+    return normalizeAsyncPollResult({
       status: result.failed ? 'failed' : result.completed ? 'completed' : 'pending',
+      failureDisposition: result.failureDisposition,
       resultUrl: result.resultUrl,
       imageUrl: result.resultUrl,
       videoUrl: result.resultUrl,
       error: result.error,
-    }
+    })
   },
 }

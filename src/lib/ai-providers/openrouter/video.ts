@@ -55,6 +55,7 @@ type OpenRouterStatusResponse = {
 
 export type OpenRouterVideoPollResult = {
   status: 'pending' | 'completed' | 'failed'
+  failureDisposition?: 'retryable' | 'permanent'
   videoUrl?: string
   resultUrl?: string
   downloadHeaders?: Record<string, string>
@@ -337,6 +338,7 @@ export async function queryOpenRouterVideoStatus(input: {
     if (!videoUrl) {
       return {
         status: 'failed',
+        failureDisposition: 'retryable',
         error: 'OPENROUTER_VIDEO_COMPLETED_WITHOUT_URL',
       }
     }
@@ -355,14 +357,12 @@ export async function queryOpenRouterVideoStatus(input: {
   if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'expired') {
     return {
       status: 'failed',
+      failureDisposition: 'retryable',
       error: readProviderError(data) || `OpenRouter video generation ${status}`,
     }
   }
 
-  return {
-    status: 'failed',
-    error: `OPENROUTER_VIDEO_STATUS_UNKNOWN: ${status || 'missing'}`,
-  }
+  throw new Error(`OPENROUTER_VIDEO_STATUS_UNKNOWN:${status || 'missing'}`)
 }
 
 export async function executeOpenRouterVideoGeneration(input: AiProviderVideoExecutionContext): Promise<GenerateResult> {

@@ -275,7 +275,13 @@ export function getErrorSpec(code: UnifiedErrorCode) {
 }
 
 export function getErrorFailureClass(code: UnifiedErrorCode): ErrorFailureClass {
-  if (code === 'PLAN_VALIDATION_FAILED') {
+  if (
+    code === 'EMPTY_RESPONSE'
+    || code === 'MODEL_OUTPUT_TRUNCATED'
+    || code === 'PARSE_ERROR'
+    || code === 'MODEL_OUTPUT_SCHEMA_INVALID'
+    || code === 'PLAN_VALIDATION_FAILED'
+  ) {
     return ERROR_FAILURE_CLASS.OUTPUT_VALIDATION
   }
   return ERROR_CATALOG[code].retryable

@@ -382,8 +382,8 @@ export async function submitGeminiBatch(
   apiKey: string,
   prompt: string,
   options?: { referenceImages?: string[]; aspectRatio?: string; resolution?: string },
-): Promise<{ success: boolean; batchName?: string; error?: string }> {
-  if (!apiKey) return { success: false, error: '请配置 Google AI API Key' }
+): Promise<{ batchName: string }> {
+  if (!apiKey) throw new Error('GOOGLE_API_KEY_REQUIRED')
 
   try {
     const ai = new GoogleGenAI({ apiKey })
@@ -452,14 +452,14 @@ export async function submitGeminiBatch(
 
     const batchRecord = asUnknownObject(batchJob)
     const batchName = batchRecord && typeof batchRecord.name === 'string' ? batchRecord.name : ''
-    if (!batchName) return { success: false, error: '未返回 batch name' }
+    if (!batchName) throw new Error('GEMINI_BATCH_NAME_MISSING')
 
     logInternal('GeminiBatch', 'INFO', `✅ 任务已提交: ${batchName}`)
-    return { success: true, batchName }
+    return { batchName }
   } catch (error: unknown) {
     const message = getErrorMessage(error)
     logInternal('GeminiBatch', 'ERROR', '提交异常', { error: message })
-    return { success: false, error: `提交异常: ${message}` }
+    throw error
   }
 }
 

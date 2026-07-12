@@ -2,10 +2,12 @@ import type { ZodIssue, ZodType } from 'zod'
 import type { Locale } from '@/i18n/routing'
 import { AppError } from '@/lib/errors/app-error'
 import { toAppError } from '@/lib/errors/app-error'
+import { ERROR_FAILURE_CLASS } from '@/lib/errors/codes'
 import { getLogContext } from '@/lib/logging/context'
 import {
   executeAiTextStep,
   executeAiVisionStep,
+  markTaskAiInvocationRetryable,
 } from './engine'
 import type {
   AiStepExecutionInput,
@@ -40,6 +42,23 @@ type ParsedJsonResult =
 type ValidationResult<TData> =
   | { readonly ok: true; readonly data: TData }
   | { readonly ok: false; readonly error: AppError }
+
+async function markTaskStructuredOutputRetryable(
+  modality: 'llm' | 'vision',
+  input: {
+    readonly action?: string
+    readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
+  },
+  error: AppError,
+): Promise<void> {
+  if (!getLogContext().taskId || error.failureClass !== ERROR_FAILURE_CLASS.OUTPUT_VALIDATION) return
+  await markTaskAiInvocationRetryable({
+    modality,
+    action: input.action,
+    meta: input.meta,
+    error,
+  })
+}
 
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value
@@ -162,9 +181,15 @@ export async function executeAiStructuredTextStep<TParsed, TData = TParsed>(
     try {
       const result = await executeAiTextStep(input)
       const parsed = parseJsonByMode(result.text, input.parse)
-      if (!parsed.ok) throw parsed.error
+      if (!parsed.ok) {
+        await markTaskStructuredOutputRetryable('llm', input, parsed.error)
+        throw parsed.error
+      }
       const validated = validateParsed(parsed.value, input)
-      if (!validated.ok) throw validated.error
+      if (!validated.ok) {
+        await markTaskStructuredOutputRetryable('llm', input, validated.error)
+        throw validated.error
+      }
       return { ...result, data: validated.data }
     } catch (error: unknown) {
       const appError = toAppError(error)
@@ -182,9 +207,15 @@ export async function executeAiStructuredVisionStep<TParsed, TData = TParsed>(
     try {
       const result = await executeAiVisionStep(input)
       const parsed = parseJsonByMode(result.text, input.parse)
-      if (!parsed.ok) throw parsed.error
+      if (!parsed.ok) {
+        await markTaskStructuredOutputRetryable('vision', input, parsed.error)
+        throw parsed.error
+      }
       const validated = validateParsed(parsed.value, input)
-      if (!validated.ok) throw validated.error
+      if (!validated.ok) {
+        await markTaskStructuredOutputRetryable('vision', input, validated.error)
+        throw validated.error
+      }
       return { ...result, data: validated.data }
     } catch (error: unknown) {
       const appError = toAppError(error)

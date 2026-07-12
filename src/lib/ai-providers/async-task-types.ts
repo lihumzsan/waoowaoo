@@ -7,20 +7,42 @@ export type AsyncExternalIdProvider =
   | 'GOOGLE'
   | 'OPENROUTER'
 
-export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'BATCH'
+export type AsyncExternalIdType = 'VIDEO' | 'IMAGE' | 'MUSIC' | 'BATCH'
 
 export interface AsyncDownloadHeaders {
   [name: string]: string
 }
 
-export interface AsyncPollResult {
-  status: 'pending' | 'completed' | 'failed'
+type AsyncPollResultFields = {
   resultUrl?: string
   imageUrl?: string
   videoUrl?: string
   actualVideoTokens?: number
   downloadHeaders?: AsyncDownloadHeaders
   error?: string
+}
+
+export type AsyncPollResult = AsyncPollResultFields & (
+  | {
+    status: 'pending' | 'completed'
+    failureDisposition?: never
+  }
+  | {
+    status: 'failed'
+    failureDisposition: 'retryable' | 'permanent'
+  }
+)
+
+export function normalizeAsyncPollResult(input: AsyncPollResultFields & {
+  readonly status: 'pending' | 'completed' | 'failed'
+  readonly failureDisposition?: 'retryable' | 'permanent'
+}): AsyncPollResult {
+  if (input.status === 'failed') {
+    if (!input.failureDisposition) throw new Error('ASYNC_PROVIDER_FAILURE_DISPOSITION_REQUIRED')
+    return input as AsyncPollResult
+  }
+  if (input.failureDisposition) throw new Error('ASYNC_PROVIDER_NON_FAILURE_DISPOSITION_FORBIDDEN')
+  return input as AsyncPollResult
 }
 
 export interface ParsedAsyncExternalId {

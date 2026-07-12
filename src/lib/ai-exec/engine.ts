@@ -21,11 +21,14 @@ import {
   runChatCompletionWithVisionStream,
 } from '@/lib/ai-exec/llm/vision-runner'
 import { getCompletionContent, getCompletionParts } from '@/lib/ai-exec/llm-helpers'
-import { toAppError } from '@/lib/errors/app-error'
+import { AppError, toAppError } from '@/lib/errors/app-error'
 import { getLogContext } from '@/lib/logging/context'
+import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
+import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
 import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
+  markTaskProviderInvocationRetryable,
   type TaskProviderInvocation,
 } from '@/lib/task/provider-invocation'
 
@@ -212,17 +215,55 @@ export async function executeMediaGeneration(
     }
   }
   const taskId = getLogContext().taskId
-  if (!taskId) return await execute()
-  if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
-  return await executeTaskProviderInvocation({
-    taskId,
-    invocation,
-    modality: input.modality,
-    provider: selection.provider,
-    modelKey: selection.modelKey,
-    request: input,
-    execute,
-  })
+  let result: GenerateResult
+  if (!taskId) {
+    result = await execute()
+  } else {
+    if (!invocation) throw new Error(`TASK_PROVIDER_INVOCATION_KEY_REQUIRED:${taskId}:${input.modality}`)
+    result = await executeTaskProviderInvocation({
+      taskId,
+      invocation,
+      modality: input.modality,
+      provider: selection.provider,
+      modelKey: selection.modelKey,
+      request: input,
+      execute,
+    })
+  }
+
+  if (input.modality !== 'music' || !result.async) return result
+  const externalId = result.externalId?.trim()
+  if (!externalId) throw new Error('ASYNC_MUSIC_EXTERNAL_ID_MISSING')
+  try {
+    const completed = await waitForAsyncProviderResult({
+      externalId,
+      userId: input.userId,
+    })
+    return {
+      ...result,
+      async: false,
+      audioUrl: completed.url,
+    }
+  } catch (error) {
+    if (error instanceof ProviderTerminalFailureError) {
+      if (taskId && invocation) {
+        await markTaskProviderInvocationRetryable({ taskId, invocation, error })
+      }
+      throw new AppError('EXTERNAL_ERROR', error.message, {
+        provider: selection.provider,
+        details: { externalId },
+        cause: error,
+      })
+    }
+    if (error instanceof ProviderPermanentFailureError) {
+      throw new AppError('PROVIDER_SUBMISSION_REJECTED', error.message, {
+        provider: selection.provider,
+        details: { externalId },
+        cause: error,
+      })
+    }
+    throw error
+  }
 }
 
 export async function executeLlmCompletion(input: AiLlmExecutionInput): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -416,6 +457,21 @@ export function taskAiInvocationKey(input: {
   // identity. Including it here would let a replay submit the same external
   // request under a fresh durable fence.
   return `ai:${input.modality}:${action}:${stepId}:${input.meta.stepIndex}`
+}
+
+export async function markTaskAiInvocationRetryable(input: {
+  readonly modality: 'llm' | 'vision'
+  readonly action?: string
+  readonly meta?: { readonly stepId: string; readonly stepAttempt?: number; readonly stepIndex: number }
+  readonly error: unknown
+}): Promise<void> {
+  const taskId = getLogContext().taskId
+  if (!taskId) return
+  await markTaskProviderInvocationRetryable({
+    taskId,
+    invocation: { key: taskAiInvocationKey(input) },
+    error: input.error,
+  })
 }
 
 async function executeTaskAwareLlmCompletion(input: {

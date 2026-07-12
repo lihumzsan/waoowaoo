@@ -1,4 +1,5 @@
 import type { AsyncTaskProviderRegistration, ParsedAsyncExternalId } from '@/lib/ai-providers/async-task-types'
+import { normalizeAsyncPollResult } from '@/lib/ai-providers/async-task-types'
 import { querySeedanceVideoStatus } from './poll'
 
 function parseArkExternalId(externalId: string): ParsedAsyncExternalId {
@@ -23,13 +24,13 @@ export const arkAsyncTaskProvider: AsyncTaskProviderRegistration = {
   poll: async ({ parsed, context }) => {
     const { apiKey } = await context.getProviderConfig(context.userId, 'ark')
     const result = await querySeedanceVideoStatus(parsed.requestId, apiKey)
-    return {
+    return normalizeAsyncPollResult({
       status: result.status,
+      failureDisposition: result.failureDisposition,
       videoUrl: result.videoUrl,
       resultUrl: result.videoUrl,
       ...(typeof result.actualVideoTokens === 'number' ? { actualVideoTokens: result.actualVideoTokens } : {}),
       error: result.error,
-    }
+    })
   },
 }
-

@@ -81,15 +81,20 @@ export async function querySeedanceVideoStatus(taskId: string, apiKey: string): 
         }
       }
 
-      return { status: 'failed', error: 'No video URL in response' }
+      return { status: 'failed', failureDisposition: 'retryable', error: 'No video URL in response' }
     }
 
     if (status === 'failed') {
       const errorMessage = typeof queryData.error?.message === 'string' ? queryData.error.message : 'Unknown error'
-      return { status: 'failed', error: errorMessage }
+      return { status: 'failed', failureDisposition: 'retryable', error: errorMessage }
     }
 
-    return { status: 'pending' }
+    if (status === 'cancelled' || status === 'canceled') {
+      return { status: 'failed', failureDisposition: 'retryable', error: `Ark task ${status}` }
+    }
+
+    if (status === 'queued' || status === 'running') return { status: 'pending' }
+    throw new Error(`ARK_VIDEO_STATUS_UNKNOWN:${String(status)}`)
   } catch (error: unknown) {
     logInternal('Seedance', 'ERROR', 'Query error', { error: getErrorMessage(error) })
     throw error

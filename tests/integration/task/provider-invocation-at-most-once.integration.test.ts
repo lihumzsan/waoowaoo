@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
+  markTaskProviderInvocationRetryable,
+  markTaskProviderInvocationRetryableByExternalId,
 } from '@/lib/task/provider-invocation'
 import { withLogContext } from '@/lib/logging/context'
 import { FetchStatusError } from '@/lib/retry'
@@ -30,12 +32,13 @@ async function seedTask(taskId: string) {
 
 function invoke(
   taskId: string,
-  execute: () => Promise<{ success: boolean; audioUrl?: string }>,
+  execute: () => Promise<{ success: boolean; audioUrl?: string; async?: boolean; externalId?: string }>,
   taskAttempt = 1,
+  invocationKey = 'media:music:primary',
 ) {
   return withLogContext({ taskId, taskAttempt }, async () => await executeTaskProviderInvocation({
     taskId,
-    invocation: { key: 'media:music:primary' },
+    invocation: { key: invocationKey },
     modality: 'music',
     provider: 'google',
     modelKey: 'google::lyria-3-pro-preview',
@@ -61,6 +64,72 @@ describe('provider invocation at-most-once DB integration', () => {
       where: { taskId: 'provider-replay-task' },
       select: { state: true },
     })).resolves.toEqual({ state: 'submitted' })
+  })
+
+  it('re-submits only the explicitly failed invocation on a higher Task attempt', async () => {
+    await seedTask('provider-selective-retry-task')
+    const firstCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-1.mp3' }))
+    const secondCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-2-invalid.mp3' }))
+
+    await expect(invoke('provider-selective-retry-task', firstCue, 1, 'media:music:cue:1')).resolves.toMatchObject({ success: true })
+    await expect(invoke('provider-selective-retry-task', secondCue, 1, 'media:music:cue:2')).resolves.toMatchObject({ success: true })
+    await withLogContext({ taskId: 'provider-selective-retry-task', taskAttempt: 1 }, async () => {
+      await markTaskProviderInvocationRetryable({
+        taskId: 'provider-selective-retry-task',
+        invocation: { key: 'media:music:cue:2' },
+        error: new Error('generated cue failed validation'),
+      })
+    })
+
+    const sameAttemptRetry = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
+    await expect(invoke('provider-selective-retry-task', sameAttemptRetry, 1, 'media:music:cue:2')).rejects.toMatchObject({
+      code: 'PROVIDER_SUBMIT_FAILED',
+    })
+
+    const replayFirstCue = vi.fn(async () => ({ success: true, audioUrl: 'must-not-run' }))
+    const regenerateSecondCue = vi.fn(async () => ({ success: true, audioUrl: 'https://provider/cue-2-recovered.mp3' }))
+    await expect(invoke('provider-selective-retry-task', replayFirstCue, 2, 'media:music:cue:1')).resolves.toMatchObject({
+      audioUrl: 'https://provider/cue-1.mp3',
+    })
+    await expect(invoke('provider-selective-retry-task', regenerateSecondCue, 2, 'media:music:cue:2')).resolves.toMatchObject({
+      audioUrl: 'https://provider/cue-2-recovered.mp3',
+    })
+
+    expect(firstCue).toHaveBeenCalledTimes(1)
+    expect(secondCue).toHaveBeenCalledTimes(1)
+    expect(sameAttemptRetry).not.toHaveBeenCalled()
+    expect(replayFirstCue).not.toHaveBeenCalled()
+    expect(regenerateSecondCue).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-opens an accepted async invocation only after its external job reaches failed', async () => {
+    await seedTask('provider-external-terminal-retry-task')
+    const firstSubmission = vi.fn(async () => ({
+      success: true,
+      async: true,
+      externalId: 'FAL:IMAGE:model:first-request',
+    }))
+    await expect(invoke('provider-external-terminal-retry-task', firstSubmission, 1)).resolves.toMatchObject({
+      externalId: 'FAL:IMAGE:model:first-request',
+    })
+    await withLogContext({ taskId: 'provider-external-terminal-retry-task', taskAttempt: 1 }, async () => {
+      await markTaskProviderInvocationRetryableByExternalId({
+        taskId: 'provider-external-terminal-retry-task',
+        externalId: 'FAL:IMAGE:model:first-request',
+        error: new Error('external job failed'),
+      })
+    })
+
+    const secondSubmission = vi.fn(async () => ({
+      success: true,
+      async: true,
+      externalId: 'FAL:IMAGE:model:second-request',
+    }))
+    await expect(invoke('provider-external-terminal-retry-task', secondSubmission, 2)).resolves.toMatchObject({
+      externalId: 'FAL:IMAGE:model:second-request',
+    })
+    expect(firstSubmission).toHaveBeenCalledTimes(1)
+    expect(secondSubmission).toHaveBeenCalledTimes(1)
   })
 
   it('keeps independently requested image candidates in one Task behind distinct durable fences', async () => {

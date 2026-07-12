@@ -7,6 +7,7 @@ export interface FalQueueStatus {
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
   completed: boolean
   failed: boolean
+  failureDisposition?: 'retryable' | 'permanent'
   resultUrl?: string
   error?: string
 }
@@ -101,6 +102,7 @@ function parseFalResultFetchError(status: number, errorText: string): FalQueueSt
       status: 'COMPLETED',
       completed: true,
       failed: true,
+      failureDisposition: 'permanent',
       error: errorMessage,
     }
   }
@@ -179,6 +181,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
           status: 'COMPLETED',
           completed: true,
           failed: true,
+          failureDisposition: 'retryable',
           error: 'FAL任务完成但未返回媒体URL',
         }
       }
@@ -207,6 +210,7 @@ export async function queryFalStatus(endpoint: string, requestId: string, apiKey
       status: 'FAILED',
       completed: false,
       failed: true,
+      failureDisposition: 'retryable',
       error: typeof data.error === 'string' && data.error.trim() ? data.error : '任务失败',
     }
   }

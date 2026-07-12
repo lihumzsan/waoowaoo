@@ -127,6 +127,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         status: 'COMPLETED', completed: true, failed: false, resultUrl: testCase.expected,
       } : {
         status: 'COMPLETED', completed: true, failed: true,
+        failureDisposition: 'retryable',
         error: 'FAL任务完成但未返回媒体URL',
       })
     }
@@ -174,6 +175,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         status: 'COMPLETED',
         completed: true,
         failed: true,
+        failureDisposition: 'permanent',
         error: testCase.error,
       })
     }
@@ -223,6 +225,7 @@ describe('provider contract - fal queue result and failure boundaries', () => {
         status: 'FAILED',
         completed: false,
         failed: true,
+        failureDisposition: 'retryable',
         error: '任务失败',
       })
     }

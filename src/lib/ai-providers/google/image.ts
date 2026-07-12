@@ -44,10 +44,6 @@ async function executeGoogleImageGenerationInternal(input: AiProviderImageExecut
       }),
     })
 
-    if (!result.success || !result.batchName) {
-      return { success: false, error: result.error || 'Gemini Batch 提交失败' }
-    }
-
     return {
       success: true,
       async: true,

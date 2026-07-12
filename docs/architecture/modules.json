@@ -146,6 +146,7 @@
       "sourcePaths": [
         "src/lib/task",
         "src/lib/workers",
+        "src/lib/errors/codes.ts",
         "src/lib/redis.ts",
         "src/lib/redis-config.ts",
         "src/lib/runtime-config/positive-integer.ts",
