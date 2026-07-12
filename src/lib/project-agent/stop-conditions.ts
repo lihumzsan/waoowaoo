@@ -1,7 +1,4 @@
-import {
-  normalizeOperationRuntimeSignal,
-  type OperationRuntimeSignal,
-} from './runtime-signal'
+import type { ProjectAgentOperationOutcome } from '@/lib/operations/types'
 import type { ProjectAgentStopPartData } from './types'
 
 export const PROJECT_AGENT_MAX_TURNS = 12
@@ -23,10 +20,9 @@ const FATAL_TOOL_ERROR_CODES: ReadonlySet<string> = new Set([
   'OPERATION_OUTPUT_INVALID',
 ])
 
-export interface ProjectAgentToolOutputSignalInput {
+export interface ProjectAgentToolOutcomeInput {
   toolName: string
-  output: unknown
-  suspendsFor?: 'choice' | null
+  outcome: ProjectAgentOperationOutcome
 }
 
 type RuntimeSignalDescriptor =
@@ -47,31 +43,36 @@ type RuntimeSignalDescriptor =
     fatal?: boolean
   }
 
-function signalToDescriptor(signal: OperationRuntimeSignal): RuntimeSignalDescriptor | null {
-  if (signal.kind === 'await_task') {
-    return {
-      reason: 'awaiting_external_task',
-      operationId: signal.operationId,
-      taskIds: signal.taskIds,
-      phases: signal.phases,
-    }
+function outcomeToDescriptor(input: ProjectAgentToolOutcomeInput): RuntimeSignalDescriptor | null {
+  const { outcome } = input
+  switch (outcome.kind) {
+    case 'submitted_tasks':
+      return {
+        reason: 'awaiting_external_task',
+        operationId: outcome.suspension.operationId,
+        taskIds: [...outcome.suspension.taskIds],
+        phases: [],
+      }
+    case 'wait_choice':
+      return {
+        reason: 'awaiting_user_confirmation',
+        operationId: outcome.choiceHandoff.operationId,
+      }
+    case 'wait_approval':
+      return {
+        reason: 'awaiting_user_confirmation',
+        operationId: input.toolName,
+      }
+    case 'failed':
+      return {
+        reason: 'tool_error',
+        operationId: outcome.error.operationId ?? input.toolName,
+        code: outcome.error.code,
+      }
+    case 'completed':
+    case 'noop':
+      return null
   }
-  if (signal.kind === 'active_status') return null
-  if (signal.kind === 'await_user_confirmation') {
-    return {
-      reason: 'awaiting_user_confirmation',
-      operationId: signal.operationId,
-    }
-  }
-  if (signal.kind === 'tool_error') {
-    return {
-      reason: 'tool_error',
-      operationId: signal.operationId,
-      ...(signal.code ? { code: signal.code } : {}),
-      ...(signal.fatal ? { fatal: true } : {}),
-    }
-  }
-  return null
 }
 
 function mergeAwaitDescriptors(
@@ -110,7 +111,7 @@ function mergeAwaitDescriptors(
 }
 
 export interface ProjectAgentStopController {
-  evaluateStep(toolOutputs: ProjectAgentToolOutputSignalInput[]): ProjectAgentStopPartData | null
+  evaluateStep(outcomes: ProjectAgentToolOutcomeInput[]): ProjectAgentStopPartData | null
 }
 
 export function createProjectAgentStopController(): ProjectAgentStopController {
@@ -119,15 +120,10 @@ export function createProjectAgentStopController(): ProjectAgentStopController {
   let totalStepOutputCount = 0
 
   return {
-    evaluateStep(toolOutputs) {
-      totalStepOutputCount += toolOutputs.length
-      const descriptors = toolOutputs.flatMap((result) => {
-        const signal = normalizeOperationRuntimeSignal({
-          toolName: result.toolName,
-          output: result.output,
-          suspendsFor: result.suspendsFor,
-        })
-        const descriptor = signalToDescriptor(signal)
+    evaluateStep(outcomes) {
+      totalStepOutputCount += outcomes.length
+      const descriptors = outcomes.flatMap((outcome) => {
+        const descriptor = outcomeToDescriptor(outcome)
         return descriptor ? [descriptor] : []
       })
 

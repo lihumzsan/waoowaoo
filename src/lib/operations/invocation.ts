@@ -6,10 +6,10 @@ import {
   requireProjectAgentChoiceHandoffReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
-import type { ProjectAgentSuspensionReceipt } from '@/lib/project-agent/suspension'
 import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
+import { normalizeProjectAgentToolInput } from './tool-input-schema'
 import {
   invokeApprovedOperationPlan,
   splitPlannedOperationInvocation,
@@ -18,6 +18,7 @@ import {
 import type {
   ProjectAgentOperationContext,
   ProjectAgentOperationDefinition,
+  ProjectAgentOperationOutcome,
   ProjectAgentOperationRegistry,
 } from './types'
 import { assertAssistantToolWriteAuthority } from './write-authority'
@@ -33,12 +34,12 @@ export type ProjectAgentOperationInvocationResult =
       kind: 'executed'
       data: unknown
       operation: ProjectAgentOperationDefinition
-      suspension: ProjectAgentSuspensionReceipt | null
-      choiceHandoff: ProjectAgentChoiceHandoffReceipt | null
+      outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }>
     }
   | {
       kind: 'approval_required'
       operation: ProjectAgentOperationDefinition
+      outcome: Extract<ProjectAgentOperationOutcome, { kind: 'wait_approval' }>
     }
 
 function requireOperation(
@@ -121,6 +122,22 @@ function assertPrerequisites(params: {
   return effectiveEpisode.episodeId
 }
 
+function operationMayCompleteWithoutTasks(operation: ProjectAgentOperationDefinition): boolean {
+  // An approved plan is allowed to contain zero Tasks: that is the registry
+  // declared Noop case. A direct transactional-task operation, by contrast,
+  // declares that its successful tool execution has atomically submitted a
+  // Task batch; it must fail closed if no committed receipt exists.
+  return operation.confirmation.kind === 'billable_media'
+}
+
+function operationRequiresTaskBatchBinding(operation: ProjectAgentOperationDefinition): boolean {
+  return operation.effects.writes
+    && (
+      operation.confirmation.kind === 'billable_media'
+      || operation.assistantWriteAuthority?.kind === 'transactional_task_submission'
+    )
+}
+
 /**
  * The sole runtime authority for invoking a registered Assistant operation.
  * Adapters may provide source context and translate the result/error shape, but
@@ -152,6 +169,9 @@ export async function invokeProjectAgentOperation(params: {
       operation.id,
       operation as unknown as Record<string, unknown>,
     )
+    if (operationRequiresTaskBatchBinding(operation) && !params.context.taskBatchBinding) {
+      throw new Error(`PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED:${operation.id}`)
+    }
   }
   const normalized = normalizeInvocationInput({
     channel: params.channel,
@@ -160,12 +180,19 @@ export async function invokeProjectAgentOperation(params: {
     input: params.input,
     approvedInvocation: params.approvedInvocation,
   })
+  const normalizedBusinessInput = params.channel === 'tool'
+    ? normalizeProjectAgentToolInput({
+        input: normalized.businessInput,
+        inputSchema: operation.inputSchema,
+        toolInputSchema: operation.toolInputSchema,
+      })
+    : normalized.businessInput
   const effectiveEpisodeId = assertPrerequisites({
     operation,
-    input: normalized.businessInput,
+    input: normalizedBusinessInput,
     context: params.context.context,
   })
-  const parsedInput = operation.inputSchema.safeParse(normalized.businessInput)
+  const parsedInput = operation.inputSchema.safeParse(normalizedBusinessInput)
   if (!parsedInput.success) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'OPERATION_INPUT_INVALID',
@@ -179,7 +206,7 @@ export async function invokeProjectAgentOperation(params: {
   if (operation.confirmation.kind === 'billable_media') {
     if (!normalized.invocation) {
       if (params.returnApprovalRequired) {
-        return { kind: 'approval_required', operation }
+        return { kind: 'approval_required', operation, outcome: { kind: 'wait_approval' } }
       }
       throw new ApiError('INVALID_PARAMS', {
         code: 'OPERATION_APPROVAL_GRANT_REQUIRED',
@@ -218,14 +245,6 @@ export async function invokeProjectAgentOperation(params: {
       if (!execute) {
         throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
       }
-      if (
-        params.channel === 'tool'
-        && operation.effects.writes
-        && operation.assistantWriteAuthority?.kind === 'transactional_task_submission'
-        && !params.context.taskBatchBinding
-      ) {
-        throw new Error(`PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED:${operation.id}`)
-      }
       result = await execute(params.context, parsedInput.data)
       if (
         params.channel === 'tool'
@@ -253,7 +272,14 @@ export async function invokeProjectAgentOperation(params: {
         operationId: operation.id,
       })
     : null
-  const suspension: ProjectAgentSuspensionReceipt | null = null
+  const taskSuspension = params.context.taskBatchBinding?.getCommittedSuspension() ?? null
+  const outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }> = choiceHandoff
+    ? { kind: 'wait_choice', data: parsedOutput.data, choiceHandoff }
+    : taskSuspension
+      ? { kind: 'submitted_tasks', data: parsedOutput.data, suspension: taskSuspension }
+      : params.channel === 'tool' && operationMayCompleteWithoutTasks(operation)
+        ? { kind: 'noop', data: parsedOutput.data }
+        : { kind: 'completed', data: parsedOutput.data }
   await publishWorkspaceResourceChangedEventsFromWriteResult({
     result: parsedOutput.data,
     fallbackProjectId: params.context.projectId,
@@ -264,8 +290,7 @@ export async function invokeProjectAgentOperation(params: {
     kind: 'executed',
     data: parsedOutput.data,
     operation,
-    suspension,
-    choiceHandoff,
+    outcome,
   }
   }
 

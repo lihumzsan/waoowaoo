@@ -18,7 +18,10 @@ import type { Prisma } from '@prisma/client'
 import { aisdk } from '@openai/agents-extensions/ai-sdk'
 import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
-import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
+import type {
+  ProjectAgentOperationOutcome,
+  ProjectAgentOperationRegistry,
+} from '@/lib/operations/types'
 import { getRequestId } from '@/lib/api-errors'
 import { createScopedLogger } from '@/lib/logging/core'
 import type {
@@ -38,7 +41,7 @@ import {
 import { buildProjectAgentSystemPrompt } from './system-prompt'
 import { normalizeProjectAgentLocale } from './locale'
 import type { AssistantPermissionMode } from './permission-mode'
-import { stableArgsHash } from './runtime-signal'
+import { stableArgsHash } from './stable-args-hash'
 import { compressMessages } from './message-compression'
 import {
   resolveProjectAgentAssistantModelKey,
@@ -502,14 +505,23 @@ function createDebugTextChunks(text: string): ProjectAgentUiChunk[] {
 
 function collectFunctionToolOutputs(
   toolResults: FunctionToolResult[],
-  registry: ProjectAgentOperationRegistry,
-): Array<{ toolName: string; output: unknown; suspendsFor?: 'choice' | null }> {
+  outcomesByToolCall: Map<string, ProjectAgentOperationOutcome>,
+): Array<{ toolName: string; outcome: ProjectAgentOperationOutcome }> {
   return toolResults.flatMap((result) => {
     if (result.type !== 'function_output') return []
+    const toolCallId = readApprovalString(result.runItem.rawItem, 'callId')
+      ?? readApprovalString(result.runItem.rawItem, 'id')
+    if (!toolCallId) {
+      throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_CALL_ID_MISSING:${result.tool.name}`)
+    }
+    const outcome = outcomesByToolCall.get(toolCallId)
+    if (!outcome) {
+      throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_MISSING:${result.tool.name}:${toolCallId}`)
+    }
+    outcomesByToolCall.delete(toolCallId)
     return [{
       toolName: result.tool.name,
-      output: result.output,
-      suspendsFor: registry[result.tool.name]?.agentFlow?.suspendsFor,
+      outcome,
     }]
   })
 }
@@ -863,7 +875,7 @@ export async function createProjectAgentChatResponse(input: {
         if (!runAbortController.signal.aborted) runAbortController.abort(error)
       },
     })
-    if (control.kind !== 'task_follow_up') {
+    if (control.kind === 'user_turn') {
       await appendProjectAgentEvents({
         scope: {
           projectId: input.projectId,
@@ -1062,6 +1074,7 @@ export async function createProjectAgentChatResponse(input: {
   const transactionallyBoundTaskBatches = new Map<string, readonly string[]>()
   const committedSuspensions = new Map<string, ProjectAgentSuspensionReceipt>()
   const preparedChoiceHandoffs = new Map<string, ProjectAgentChoiceHandoffReceipt>()
+  const outcomesByToolCall = new Map<string, ProjectAgentOperationOutcome>()
   const stopController = createProjectAgentStopController()
   const sideChannelChunks: ProjectAgentUiChunk[] = []
   const drainSideChannelChunks = () => sideChannelChunks.splice(0, sideChannelChunks.length)
@@ -1093,8 +1106,16 @@ export async function createProjectAgentChatResponse(input: {
           operationId: item.operation.id,
         }),
       }),
-      onExecutionSettled: ({ choiceHandoff }) => {
-        if (choiceHandoff) {
+      onExecutionSettled: ({ toolCallId, outcome }) => {
+        if (!toolCallId) {
+          throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_CALL_ID_MISSING:${item.operation.id}`)
+        }
+        if (outcomesByToolCall.has(toolCallId)) {
+          throw new Error(`PROJECT_AGENT_TOOL_OUTCOME_DUPLICATE:${item.operation.id}:${toolCallId}`)
+        }
+        outcomesByToolCall.set(toolCallId, outcome)
+        if (outcome.kind === 'wait_choice') {
+          const choiceHandoff = outcome.choiceHandoff
           const existing = preparedChoiceHandoffs.get(choiceHandoff.operationId)
           if (
             existing
@@ -1139,8 +1160,8 @@ export async function createProjectAgentChatResponse(input: {
     },
     tools,
     toolUseBehavior: (_runContext, toolResults) => {
-      const toolOutputs = collectFunctionToolOutputs(toolResults, operations)
-      const stopPart = stopController.evaluateStep(toolOutputs)
+      const outcomes = collectFunctionToolOutputs(toolResults, outcomesByToolCall)
+      const stopPart = stopController.evaluateStep(outcomes)
       if (!stopPart) {
         return {
           isFinalOutput: false,
@@ -1375,14 +1396,14 @@ export async function createProjectAgentChatResponse(input: {
           ? (await liveWorkflow.get()).nextAction
           : null
         if (unresolvedWorkflowAction) {
-          const errorMessage = `Assistant run stopped before reaching a stable workflow boundary: ${unresolvedWorkflowAction.operationId}`
+          const errorMessage = `Assistant turn ended after a completed operation while a constrained AI action remained available: ${unresolvedWorkflowAction.operationId}`
           pendingRunSettlement = {
             status: 'failed',
-            stopReason: 'workflow_continuation_missing',
-            errorCode: 'PROJECT_AGENT_WORKFLOW_CONTINUATION_MISSING',
+            stopReason: 'ai_turn_protocol_required',
+            errorCode: 'PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED',
             errorMessage,
           }
-          chunks.push(createRuntimeStatusChunk('failed', 'workflow_continuation_missing'))
+          chunks.push(createRuntimeStatusChunk('failed', 'ai_turn_protocol_required'))
           runStatusFinalized = true
           return chunks
         }

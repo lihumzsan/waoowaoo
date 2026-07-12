@@ -31,5 +31,6 @@
     "CONFLICT": "Resource state conflict",
     "VIDEO_API_FORMAT_UNSUPPORTED": "This video API format is not supported",
     "WATCHDOG_TIMEOUT": "Task execution timed out and was stopped",
-    "WORKER_EXECUTION_ERROR": "Task execution failed. Please retry later"
+    "WORKER_EXECUTION_ERROR": "Task execution failed. Please retry later",
+    "PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED": "The assistant stopped after completing work while another AI-guided step remained available. Send a new instruction to continue; the server will not perform that next action automatically."
 }

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import {
   type ProjectAgentOperationTaskBatchBinding,
+  type ProjectAgentOperationOutcome,
   type ProjectAgentToolResult,
 } from '@/lib/operations/types'
 import { type AssistantPermissionMode } from '@/lib/project-agent/permission-mode'
@@ -11,6 +12,18 @@ import { buildToolError, normalizeOperationExecutionToolError, withOperationErro
 import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import { ApiError } from '@/lib/api-errors'
 import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
+
+export interface ProjectAgentToolExecutionResult {
+  outcome: ProjectAgentOperationOutcome
+  result: ProjectAgentToolResult<unknown>
+}
+
+function failedToolExecution(error: Extract<ProjectAgentToolResult<never>, { ok: false }>['error']): ProjectAgentToolExecutionResult {
+  return {
+    outcome: { kind: 'failed', error },
+    result: { ok: false, error },
+  }
+}
 
 export async function executeProjectAgentOperationFromTool(params: {
   request: NextRequest
@@ -25,7 +38,7 @@ export async function executeProjectAgentOperationFromTool(params: {
   toolCallId?: string | null
   executionFence: ProjectAgentOperationExecutionFence
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
-}): Promise<ProjectAgentToolResult<unknown>> {
+}): Promise<ProjectAgentToolExecutionResult> {
   const registry = createProjectAgentOperationRegistry()
   const operation = registry[params.operationId]
   const approvedInvocation = params.context.approvedInvocationByOperationId?.[params.operationId] ?? null
@@ -51,7 +64,7 @@ export async function executeProjectAgentOperationFromTool(params: {
       returnApprovalRequired: true,
     })
     if (result.kind === 'approval_required') {
-      return {
+      const toolResult: ProjectAgentToolResult<unknown> = {
         ok: false,
         confirmationRequired: true,
         error: buildToolError({
@@ -63,8 +76,9 @@ export async function executeProjectAgentOperationFromTool(params: {
           }),
         }),
       }
+      return { outcome: result.outcome, result: toolResult }
     }
-    return { ok: true, data: result.data }
+    return { outcome: result.outcome, result: { ok: true, data: result.data } }
   } catch (error) {
     if (error instanceof ApiError) {
       const reasonCode = typeof error.details?.code === 'string' ? error.details.code : null
@@ -83,25 +97,19 @@ export async function executeProjectAgentOperationFromTool(params: {
                 ? 'OPERATION_OUTPUT_INVALID'
                 : null
       if (mappedCode) {
-        return {
-          ok: false,
-          error: buildToolError({
+        return failedToolExecution(buildToolError({
             code: mappedCode,
             message: error.message,
             operationId: params.operationId,
             details: operation ? withOperationErrorDetails(operation, error.details ?? null) : error.details ?? null,
             ...(error.details?.issues !== undefined ? { issues: error.details.issues } : {}),
-          }),
-        }
+        }))
       }
     }
-    return {
-      ok: false,
-      error: normalizeOperationExecutionToolError({
+    return failedToolExecution(normalizeOperationExecutionToolError({
         error,
         operation: operation ?? {},
         operationId: params.operationId,
-      }),
-    }
+    }))
   }
 }

@@ -1,9 +1,12 @@
 import {
   PROJECT_AGENT_MAX_TURNS,
+  completedOutput,
   createProjectAgentStopController,
   describe,
   expect,
   it,
+  noopOutput,
+  submittedTasksOutput,
 } from './stop-conditions.fixture'
 
 describe('project agent business stop signals', () => {
@@ -11,19 +14,11 @@ describe('project agent business stop signals', () => {
     expect(PROJECT_AGENT_MAX_TURNS).toBe(12)
   })
 
-  it('[async task submitted] -> emits external task wait stop data', () => {
+  it('[SubmittedTasks] -> emits external task wait stop data', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'generate_edit_script',
-      output: {
-        ok: true,
-        data: {
-          async: true,
-          taskId: 'task-1',
-          status: 'processing',
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([
+      submittedTasksOutput('generate_edit_script', ['task-1']),
+    ])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_external_task',
@@ -35,19 +30,11 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('[data task submitted part] -> emits external task wait stop data', () => {
+  it('[SubmittedTasks batch] -> carries the durable task identities', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'generate_episode_videos',
-      output: {
-        type: 'data-task-submitted',
-        data: {
-          operationId: 'generate_episode_videos',
-          taskId: 'task-video-1',
-          status: 'queued',
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([
+      submittedTasksOutput('generate_episode_videos', ['task-video-1']),
+    ])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_external_task',
@@ -62,91 +49,42 @@ describe('project agent business stop signals', () => {
   it('rejects multiple long-running Operations in one model step instead of creating parallel Wait state machines', () => {
     const controller = createProjectAgentStopController()
     expect(() => controller.evaluateStep([
-      {
-        toolName: 'generate_edit_script',
-        output: { ok: true, data: { async: true, taskId: 'task-script-1' } },
-      },
-      {
-        toolName: 'generate_episode_videos',
-        output: { ok: true, data: { async: true, taskIds: ['task-video-1', 'task-video-2'] } },
-      },
+      submittedTasksOutput('generate_edit_script', ['task-script-1']),
+      submittedTasksOutput('generate_episode_videos', ['task-video-1', 'task-video-2']),
     ])).toThrow('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:generate_edit_script,generate_episode_videos')
   })
 
-  it('[task status active] -> remains an observation so the agent can answer without creating a wait', () => {
+  it('[Completed status query] -> remains an observation without creating a wait', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'get_task_status',
-      output: {
-        ok: true,
-        data: {
-          states: [{
-            targetType: 'ProjectEpisode',
-            targetId: 'episode-1',
-            phase: 'processing',
-            runningTaskId: 'task-1',
-          }],
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([completedOutput('get_task_status')])
 
     expect(stopPart).toBeNull()
   })
 
-  it('[project context active tasks] -> does not bind observed tasks as the current run wait', () => {
+  it('[Completed project context] -> does not bind observed tasks as the current run wait', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'get_project_context',
-      output: {
-        ok: true,
-        data: {
-          context: {
-            activeOperationTasks: [{
-              operationId: 'generate_edit_script_storyboard_images',
-              taskId: 'task-1',
-              status: 'processing',
-            }],
-          },
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([completedOutput('get_project_context')])
 
     expect(stopPart).toBeNull()
   })
 
-  it('[running command status] -> does not bind status-query results as an external task wait', () => {
+  it('[Completed command status] -> does not bind a status query as an external task wait', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'list_recent_commands',
-      output: {
-        ok: true,
-        data: [{
-          operationId: 'generate_edit_script_storyboard_images',
-          status: 'approved',
-          taskId: 'task-1',
-        }],
-      },
-    }])
+    const stopPart = controller.evaluateStep([completedOutput('list_recent_commands')])
 
     expect(stopPart).toBeNull()
   })
 
-  it('[task status terminal] -> returns null so the agent can summarize completed results', () => {
+  it('[Completed task status] -> returns null so the agent can summarize results', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'get_task_status',
-      output: {
-        ok: true,
-        data: {
-          states: [{
-            targetType: 'ProjectEpisode',
-            targetId: 'episode-1',
-            phase: 'completed',
-            runningTaskId: null,
-          }],
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([completedOutput('get_task_status')])
+
+    expect(stopPart).toBeNull()
+  })
+
+  it('[Noop approved plan] -> does not invent a Task wait from output fields', () => {
+    const controller = createProjectAgentStopController()
+    const stopPart = controller.evaluateStep([noopOutput('generate_edit_script_assets')])
 
     expect(stopPart).toBeNull()
   })

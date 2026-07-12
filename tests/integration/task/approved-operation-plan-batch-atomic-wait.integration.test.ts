@@ -14,6 +14,7 @@ import { appendProjectAgentEvents } from '@/lib/project-agent/event'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
 import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
 import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
+import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 function billingInfo(id: string): TaskBillingInfo {
   return {
     billable: true,
@@ -286,6 +287,7 @@ describe('approved operation plan Task batch integration', () => {
     })
     let bound = false
     let committed = false
+    let committedSuspension: ProjectAgentTaskSuspensionReceipt | null = null
     const taskBatchBinding: ProjectAgentOperationTaskBatchBinding = {
       async bindInTransaction(transaction, batch) {
         const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, {
@@ -301,11 +303,13 @@ describe('approved operation plan Task batch integration', () => {
         })
         if (!suspension) throw new Error('EXPECTED_ASSISTANT_WAIT')
         bound = true
+        committedSuspension = suspension
         return suspension
       },
       isBound: () => bound,
       markCommitted: () => { committed = bound },
       isCommitted: () => committed,
+      getCommittedSuspension: () => committed ? committedSuspension : null,
     }
     const output = await invokeApprovedOperationPlan({
       operation: createApprovedBatchOperation(seeded.plan),

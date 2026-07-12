@@ -8,37 +8,96 @@ import {
 } from '@/lib/project-agent/stop-conditions'
 
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import type {
+  ProjectAgentOperationOutcome,
+  ProjectAgentToolErrorCode,
+} from '@/lib/operations/types'
 
-function toolErrorOutput(operationId: string, code: string) {
+function toolErrorOutput(operationId: string, code: ProjectAgentToolErrorCode) {
   return {
     toolName: operationId,
-    output: {
-      ok: false,
+    outcome: {
+      kind: 'failed' as const,
       error: {
         operationId,
         code,
+        message: code,
       },
     },
   }
 }
 
-function interruptBoundaryToolErrorOutput(operationId: string, code: string) {
+function submittedTasksOutput(operationId: string, taskIds: readonly string[]) {
   return {
     toolName: operationId,
-    output: {
-      ok: false,
-      error: {
+    outcome: {
+      kind: 'submitted_tasks' as const,
+      data: {},
+      suspension: {
+        kind: 'task' as const,
+        runId: 'run-1',
         operationId,
-        code,
-        details: {
-          suspendsFor: 'choice',
-        },
+        activityId: `activity:${operationId}`,
+        waitId: `wait:${operationId}`,
+        taskIds,
+        followUpMode: 'resume_agent' as const,
       },
     },
   }
+}
+
+function completedOutput(operationId: string) {
+  return {
+    toolName: operationId,
+    outcome: { kind: 'completed' as const, data: {} },
+  }
+}
+
+function noopOutput(operationId: string) {
+  return {
+    toolName: operationId,
+    outcome: { kind: 'noop' as const, data: {} },
+  }
+}
+
+function waitChoiceOutput(operationId: string) {
+  return {
+    toolName: operationId,
+    outcome: {
+      kind: 'wait_choice' as const,
+      data: {},
+      choiceHandoff: {
+        kind: 'choice' as const,
+        handoffId: `handoff:${operationId}`,
+        executionSegmentId: 'segment-1',
+        runId: 'run-1',
+        operationId,
+        toolCallId: `call:${operationId}`,
+      },
+    },
+  }
+}
+
+function waitApprovalOutput(operationId: string) {
+  return {
+    toolName: operationId,
+    outcome: { kind: 'wait_approval' as const },
+  }
+}
+
+function typedOutcome(output: { toolName: string; outcome: ProjectAgentOperationOutcome }) {
+  return output
 }
 
 export { describe, expect, it } from 'vitest'
 export { PROJECT_AGENT_MAX_TOOL_ERRORS_PER_OPERATION, PROJECT_AGENT_MAX_TOOL_ERRORS_PER_RUN, PROJECT_AGENT_MAX_TURNS, createProjectAgentStopController } from '@/lib/project-agent/stop-conditions'
 export { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
-export { interruptBoundaryToolErrorOutput, toolErrorOutput }
+export {
+  completedOutput,
+  noopOutput,
+  submittedTasksOutput,
+  toolErrorOutput,
+  typedOutcome,
+  waitApprovalOutput,
+  waitChoiceOutput,
+}

@@ -8,10 +8,12 @@ import type { NextRequest } from 'next/server'
 import { buildToolError } from '@/lib/adapters/operation-error-normalizer'
 import { executeProjectAgentOperationFromTool } from '@/lib/adapters/tools/execute-project-agent-operation'
 import { writeOperationDataPart } from '@/lib/operations/types'
+import { normalizeProjectAgentToolInput } from '@/lib/operations/tool-input-schema'
 import type {
   OperationAgentFlow,
   ProjectAgentOperationTaskBatchBinding,
   ProjectAgentOperationDefinition,
+  ProjectAgentOperationOutcome,
   ProjectAgentToolResult,
 } from '@/lib/operations/types'
 import {
@@ -23,7 +25,6 @@ import {
   type ProjectAgentApprovalPreflightStore,
 } from './approval-preflight'
 import { appendProjectAgentEvents, type ProjectAgentActivitySnapshot } from './event'
-import { normalizeOperationRuntimeSignal } from './runtime-signal'
 import {
   buildProjectAgentOperationTargetKey,
   enforceProjectAgentOperationRunBudget,
@@ -35,26 +36,12 @@ import {
   type ProjectAgentOperationExecutionFence,
 } from './operation-execution-fence'
 import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
-import type { ProjectAgentChoiceHandoffReceipt } from './execution-handoff'
 import { bindProjectAgentWaitToTasksInTransaction } from './waits'
 
 type UnknownObject = { [key: string]: unknown }
 
 function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function normalizeToolInputForExecution(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizeToolInputForExecution)
-  }
-  if (!isRecord(value)) return value
-  const out: UnknownObject = {}
-  for (const [key, child] of Object.entries(value)) {
-    if (child === null) continue
-    out[key] = normalizeToolInputForExecution(child)
-  }
-  return out
 }
 
 function readToolCallId(details: unknown): string | null {
@@ -87,34 +74,6 @@ function isSuspendingOperation(agentFlow: OperationAgentFlow | undefined): boole
   return agentFlow?.suspendsFor === 'choice'
 }
 
-function isNoopToolResult(result: ProjectAgentToolResult<unknown>): boolean {
-  return result.ok && isRecord(result.data) && result.data.noop === true
-}
-
-function enforceLongRunningTaskSignal(
-  operation: ProjectAgentOperationDefinition,
-  result: ProjectAgentToolResult<unknown>,
-): ProjectAgentToolResult<unknown> {
-  if (!result.ok || !operation.effects.longRunning) return result
-  const signal = normalizeOperationRuntimeSignal({
-    toolName: operation.id,
-    output: result,
-  })
-  if (signal.kind === 'await_task' || isNoopToolResult(result)) return result
-  return {
-    ok: false,
-    error: buildToolError({
-      code: 'OPERATION_OUTPUT_INVALID',
-      message: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
-      operationId: operation.id,
-      details: {
-        expected: 'async_task_signal',
-        reasonCode: 'PROJECT_AGENT_ASYNC_TASK_SIGNAL_MISSING',
-      },
-    }),
-  }
-}
-
 export interface CreateProjectAgentOperationToolParams {
   request: NextRequest
   operation: ProjectAgentOperationDefinition
@@ -132,10 +91,10 @@ export interface CreateProjectAgentOperationToolParams {
    * model turn. Omit for tools that are always available.
    */
   isEnabled?: () => Promise<boolean>
-  /** Called exactly once after an execution attempt with its real outcome. */
-  onExecutionSettled?: (outcome: {
-    ok: boolean
-    choiceHandoff: ProjectAgentChoiceHandoffReceipt | null
+  /** Called exactly once after an execution attempt with its typed outcome. */
+  onExecutionSettled?: (settlement: {
+    toolCallId: string | null
+    outcome: ProjectAgentOperationOutcome
   }) => void
   onTaskBatchBound?: (batch: {
     operationId: string
@@ -162,7 +121,11 @@ export function createProjectAgentOperationTool(
       userId: params.userId,
       context: params.context,
       source: 'assistant-panel',
-      input: normalizeToolInputForExecution(toolInput),
+      input: normalizeProjectAgentToolInput({
+        input: toolInput,
+        inputSchema: params.operation.inputSchema,
+        toolInputSchema: params.operation.toolInputSchema,
+      }),
       toolCallId,
       store: params.approvalPreflightStore,
     })
@@ -177,25 +140,29 @@ export function createProjectAgentOperationTool(
     ...(params.isEnabled ? { isEnabled: params.isEnabled } : {}),
     execute: async (toolInput: unknown, _runContext: unknown, details: unknown): Promise<ProjectAgentToolResult<unknown>> => {
       let executionSettlementReported = false
-      const reportExecutionSettled = (
-        ok: boolean,
-        choiceHandoff: ProjectAgentChoiceHandoffReceipt | null = null,
-      ): void => {
+      const reportExecutionSettled = (outcome: ProjectAgentOperationOutcome): void => {
         if (executionSettlementReported) return
         executionSettlementReported = true
-        params.onExecutionSettled?.({ ok, choiceHandoff })
+        params.onExecutionSettled?.({ toolCallId, outcome })
       }
       const toolCallId = readToolCallId(details)
       const runId = params.context.runId?.trim() || null
       if (!runId) throw new Error('PROJECT_AGENT_OPERATION_RUN_ID_REQUIRED')
-      const normalizedInput = normalizeToolInputForExecution(toolInput)
+      const normalizedInput = normalizeProjectAgentToolInput({
+        input: toolInput,
+        inputSchema: params.operation.inputSchema,
+        toolInputSchema: params.operation.toolInputSchema,
+      })
       const approvalPreflightFailure = params.approvalPreflightStore?.consumeFailed({
         operationId: params.operation.id,
         toolCallId,
-        input: normalizeToolInputForExecution(toolInput),
+        input: normalizedInput,
       }) ?? null
       if (approvalPreflightFailure) {
-        reportExecutionSettled(false)
+        if (approvalPreflightFailure.ok) {
+          throw new Error(`PROJECT_AGENT_APPROVAL_PREFLIGHT_FAILURE_INVALID:${params.operation.id}`)
+        }
+        reportExecutionSettled({ kind: 'failed', error: approvalPreflightFailure.error })
         return approvalPreflightFailure
       }
       const operationTargetKey = buildProjectAgentOperationTargetKey({
@@ -213,7 +180,10 @@ export function createProjectAgentOperationTool(
           targetKey: operationTargetKey,
         })
         if (budgetFailure) {
-          reportExecutionSettled(false)
+          if (budgetFailure.ok) {
+            throw new Error(`PROJECT_AGENT_OPERATION_BUDGET_FAILURE_INVALID:${params.operation.id}`)
+          }
+          reportExecutionSettled({ kind: 'failed', error: budgetFailure.error })
           return budgetFailure
         }
       }
@@ -264,6 +234,9 @@ export function createProjectAgentOperationTool(
           isCommitted() {
             return committed
           },
+          getCommittedSuspension() {
+            return committed ? boundBatch?.suspension ?? null : null
+          },
         }
       }
       if (isSuspendingOperation(params.operation.agentFlow)) {
@@ -275,7 +248,7 @@ export function createProjectAgentOperationTool(
           taskBatchBinding,
         }
         try {
-          const result = await executeProjectAgentOperationFromTool({
+          const execution = await executeProjectAgentOperationFromTool({
             request: params.request,
             operationId: params.operation.id,
             projectId: params.projectId,
@@ -289,11 +262,17 @@ export function createProjectAgentOperationTool(
             executionFence,
             taskBatchBinding,
           })
-          const enforcedResult = enforceLongRunningTaskSignal(params.operation, result)
-          reportExecutionSettled(enforcedResult.ok, executionFence.choiceHandoffReceipt ?? null)
-          return enforcedResult
+          reportExecutionSettled(execution.outcome)
+          return execution.result
         } catch (error) {
-          reportExecutionSettled(false)
+          reportExecutionSettled({
+            kind: 'failed',
+            error: buildToolError({
+              code: 'OPERATION_EXECUTION_FAILED',
+              message: error instanceof Error ? error.message : String(error),
+              operationId: params.operation.id,
+            }),
+          })
           throw error
         }
       }
@@ -337,7 +316,7 @@ export function createProjectAgentOperationTool(
         })
       }
       try {
-        const rawResult = await executeProjectAgentOperationFromTool({
+        const execution = await executeProjectAgentOperationFromTool({
           request: params.request,
           operationId: params.operation.id,
           projectId: params.projectId,
@@ -351,7 +330,7 @@ export function createProjectAgentOperationTool(
           executionFence,
           taskBatchBinding,
         })
-        const result = enforceLongRunningTaskSignal(params.operation, rawResult)
+        const result = execution.result
         const settledActivity = taskBatchBinding.isCommitted() ? null : await appendProjectAgentEvents({
           scope: {
             projectId: params.projectId,
@@ -361,10 +340,10 @@ export function createProjectAgentOperationTool(
           },
           events: [{
             runFence: params.runFence,
-            idempotencyKey: result.ok
+            idempotencyKey: execution.outcome.kind !== 'failed'
               ? `activity-completed:${operationActivityId}`
-              : `activity-failed:${operationActivityId}:${result.error.code}`,
-            event: result.ok
+              : `activity-failed:${operationActivityId}:${execution.outcome.error.code}`,
+            event: execution.outcome.kind !== 'failed'
               ? {
                   kind: 'activity.completed',
                   runId,
@@ -374,13 +353,13 @@ export function createProjectAgentOperationTool(
                   kind: 'activity.failed',
                   runId,
                   activityId: operationActivityId,
-                  errorCode: result.error.code,
-                  errorMessage: result.error.message,
+                  errorCode: execution.outcome.error.code,
+                  errorMessage: execution.outcome.error.message,
                 },
           }],
         })
         if (settledActivity) writeActivityDataPart(params.writer, settledActivity)
-        reportExecutionSettled(result.ok)
+        reportExecutionSettled(execution.outcome)
         return result
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
@@ -404,7 +383,14 @@ export function createProjectAgentOperationTool(
           }],
         })
         if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
-        reportExecutionSettled(false)
+        reportExecutionSettled({
+          kind: 'failed',
+          error: buildToolError({
+            code: 'OPERATION_EXECUTION_FAILED',
+            message: errorMessage,
+            operationId: params.operation.id,
+          }),
+        })
         throw error
       }
     },

@@ -10,6 +10,7 @@ import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/wa
 import { runWithProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
 import { submitOperationTaskBatch } from '@/lib/operations/submit-operation-task'
 import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
+import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 import { TASK_TYPE } from '@/lib/task/types'
 
 describe('Project Agent non-billable Task batch to Wait DB integration', () => {
@@ -60,6 +61,7 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
     })
     let bound = false
     let committed = false
+    let committedSuspension: ProjectAgentTaskSuspensionReceipt | null = null
     const binding: ProjectAgentOperationTaskBatchBinding = {
       async bindInTransaction(tx, batch) {
         const suspension = await bindProjectAgentWaitToTasksInTransaction(tx, {
@@ -75,11 +77,13 @@ describe('Project Agent non-billable Task batch to Wait DB integration', () => {
         })
         if (!suspension) throw new Error('EXPECTED_WAIT')
         bound = true
+        committedSuspension = suspension
         return suspension
       },
       isBound: () => bound,
       markCommitted: () => { committed = bound },
       isCommitted: () => committed,
+      getCommittedSuspension: () => committed ? committedSuspension : null,
     }
     const request = new Request('http://localhost', {
       headers: { 'x-request-id': 'assistant-nonbillable-batch-request' },

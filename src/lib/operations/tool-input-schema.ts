@@ -92,6 +92,58 @@ function schemaAllowsNull(schema: JsonValue): boolean {
   return Array.isArray(oneOf) && oneOf.some(schemaAllowsNull)
 }
 
+const OMIT_NULLISH_MODEL_VALUE = Symbol('omit-nullish-model-value')
+
+function normalizeNullableModelValue(value: unknown, schema: JsonValue): unknown | typeof OMIT_NULLISH_MODEL_VALUE {
+  if (value === null) {
+    return schemaAllowsNull(schema) ? OMIT_NULLISH_MODEL_VALUE : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (!isRecord(schema) || schema.items === undefined) return item
+      const normalized = normalizeNullableModelValue(item, toJsonValue(schema.items))
+      return normalized === OMIT_NULLISH_MODEL_VALUE ? item : normalized
+    })
+  }
+  if (!isRecord(value) || !isRecord(schema)) return value
+  const properties = readProperties(schema)
+  const normalized: UnknownRecord = {}
+  for (const [key, child] of Object.entries(value)) {
+    const propertySchema = properties[key]
+    if (propertySchema === undefined) {
+      normalized[key] = child
+      continue
+    }
+    const next = normalizeNullableModelValue(child, propertySchema)
+    if (next !== OMIT_NULLISH_MODEL_VALUE) normalized[key] = next
+  }
+  return normalized
+}
+
+/**
+ * Strict tool schemas must list every property. Optional runtime fields are
+ * therefore exposed to the model as nullable, but the canonical Zod runtime
+ * schema still models absence as undefined. Preserve real null values when
+ * Zod accepts them; otherwise, and only for a tool-schema property that
+ * explicitly permits null, normalize null to absence before the same Zod
+ * parser validates the request.
+ */
+export function normalizeProjectAgentToolInput(params: {
+  input: unknown
+  inputSchema: RuntimeSchema<unknown>
+  toolInputSchema: ProjectAgentToolInputSchema
+}): unknown {
+  if (params.inputSchema.safeParse(params.input).success) return params.input
+  const normalized = normalizeNullableModelValue(params.input, {
+    type: params.toolInputSchema.type,
+    properties: params.toolInputSchema.properties,
+    required: params.toolInputSchema.required,
+    additionalProperties: params.toolInputSchema.additionalProperties,
+  })
+  if (normalized === OMIT_NULLISH_MODEL_VALUE) return params.input
+  return params.inputSchema.safeParse(normalized).success ? normalized : params.input
+}
+
 function addNullable(schema: JsonValue): JsonValue {
   if (schemaAllowsNull(schema)) return schema
   if (!isRecord(schema)) {

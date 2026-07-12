@@ -31,5 +31,6 @@
     "CONFLICT": "资源状态冲突",
     "VIDEO_API_FORMAT_UNSUPPORTED": "当前视频接口格式暂不支持",
     "WATCHDOG_TIMEOUT": "任务执行超时，系统已终止该任务",
-    "WORKER_EXECUTION_ERROR": "任务执行失败，请稍后重试"
+    "WORKER_EXECUTION_ERROR": "任务执行失败，请稍后重试",
+    "PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED": "助手已完成前一步工作，但在仍有可用的 AI 引导步骤时停止。请发送一条新指令继续；服务端不会自动执行下一步。"
 }

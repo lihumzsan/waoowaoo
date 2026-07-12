@@ -5,25 +5,17 @@ import {
   createProjectAgentStopController,
   describe,
   expect,
-  interruptBoundaryToolErrorOutput,
   it,
+  submittedTasksOutput,
   toolErrorOutput,
+  waitApprovalOutput,
+  waitChoiceOutput,
 } from './stop-conditions.fixture'
 
 describe('project agent business stop signals', () => {
-  it('[confirmation required] -> keeps a business confirmation stop signal for legacy operation errors', () => {
+  it('[WaitApproval] -> keeps a business confirmation stop signal', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'generate_edit_script',
-      output: {
-        ok: false,
-        confirmationRequired: true,
-        error: {
-          operationId: 'generate_edit_script',
-          code: 'CONFIRMATION_REQUIRED',
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([waitApprovalOutput('generate_edit_script')])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
@@ -32,21 +24,9 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('[choice card emitted] -> stops so the agent waits for the user choice', () => {
+  it('[WaitChoice] -> stops so the agent waits for the user choice', () => {
     const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([{
-      toolName: EDIT_FIRST_CHOICE_TOOL_IDS.bible_review,
-      suspendsFor: 'choice',
-      output: {
-        ok: true,
-        data: {
-          emitted: true,
-          choiceType: 'bible_review',
-          cardId: 'edit-first-duration-aspect-ratio',
-          workflowStage: 'ready_to_ingest_script',
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([waitChoiceOutput(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review)])
 
     expect(stopPart).toEqual({
       reason: 'awaiting_user_confirmation',
@@ -107,36 +87,14 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('[interrupt boundary error] -> stops immediately so the model cannot mask a failed choice setup', () => {
-    const controller = createProjectAgentStopController()
-    const stopPart = controller.evaluateStep([
-      interruptBoundaryToolErrorOutput(EDIT_FIRST_CHOICE_TOOL_IDS.bible_review, 'OPERATION_EXECUTION_FAILED'),
-    ])
-
-    expect(stopPart).toEqual({
-      reason: 'tool_error',
-      stepCount: 1,
-      operationIds: [EDIT_FIRST_CHOICE_TOOL_IDS.bible_review],
-      codes: ['OPERATION_EXECUTION_FAILED'],
-    })
-  })
-
-  it('[error after recovery] -> a successful await signal still wins over earlier errors', () => {
+  it('[error after recovery] -> SubmittedTasks still wins over earlier failures', () => {
     const controller = createProjectAgentStopController()
     expect(controller.evaluateStep([
       toolErrorOutput('generate_edit_script', 'OPERATION_EXECUTION_FAILED'),
     ])).toBeNull()
-    const stopPart = controller.evaluateStep([{
-      toolName: 'generate_edit_shot_execution_plan',
-      output: {
-        ok: true,
-        data: {
-          async: true,
-          taskId: 'task-9',
-          status: 'queued',
-        },
-      },
-    }])
+    const stopPart = controller.evaluateStep([
+      submittedTasksOutput('generate_edit_shot_execution_plan', ['task-9']),
+    ])
     expect(stopPart).toEqual(expect.objectContaining({
       reason: 'awaiting_external_task',
       taskIds: ['task-9'],

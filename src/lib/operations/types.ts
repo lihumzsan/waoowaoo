@@ -7,6 +7,7 @@ import type { OperationExecutionAuthorization } from './planned-operation-invoca
 import type { Prisma } from '@prisma/client'
 import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
 import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
+import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 
 export type ProjectAgentOperationId = string
 
@@ -36,7 +37,16 @@ export interface ProjectAgentOperationTaskBatchBinding {
   isBound(): boolean
   markCommitted(): void
   isCommitted(): boolean
+  getCommittedSuspension(): ProjectAgentTaskSuspensionReceipt | null
 }
+
+export type ProjectAgentOperationOutcome =
+  | { kind: 'completed'; data: unknown }
+  | { kind: 'noop'; data: unknown }
+  | { kind: 'submitted_tasks'; data: unknown; suspension: ProjectAgentTaskSuspensionReceipt }
+  | { kind: 'wait_choice'; data: unknown; choiceHandoff: ProjectAgentChoiceHandoffReceipt }
+  | { kind: 'wait_approval' }
+  | { kind: 'failed'; error: ProjectAgentToolError }
 
 type BivariantOperationExecute<Input, Output> = {
   bivarianceHack(context: ProjectAgentOperationContext, input: Input): Promise<Output>
