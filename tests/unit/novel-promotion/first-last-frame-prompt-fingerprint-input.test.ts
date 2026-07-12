@@ -44,8 +44,34 @@ describe('first/last-frame prompt fingerprint input', () => {
       srtSegment: 'dialogue',
       sceneType: 'interior',
     })
-    expect(input.durationSeconds).toBe(8)
-    expect(input.durationSource).toBe('manual')
-    expect(input.smartDurationAlgorithmVersion).toBe('v1')
+    expect(input).not.toHaveProperty('durationSeconds')
+    expect(input).not.toHaveProperty('durationSource')
+    expect(input).not.toHaveProperty('smartDurationAlgorithmVersion')
+    expect(fingerprint.buildFirstLastFramePromptFingerprintInput({
+      firstPanel: {
+        id: 'panel-1',
+        imageMedia: { publicId: 'public-1', storageKey: 'one.png', sha256: 'sha-1' },
+        description: 'description',
+        imagePrompt: 'image prompt',
+        videoPrompt: 'video prompt',
+        shotType: 'wide',
+        cameraMove: 'pan',
+        location: 'room',
+        characters: '["A"]',
+        props: 'book',
+        srtSegment: 'dialogue',
+        sceneType: 'interior',
+        videoDurationBinding: JSON.stringify({
+          targetDurationSeconds: 12,
+          durationSource: 'manual',
+          recommendedDurationSeconds: 8,
+          recommendationFingerprint: 'smart-fp',
+        }),
+      },
+      lastPanel: {
+        id: 'panel-2',
+        imageMedia: { publicId: 'public-2', storageKey: 'two.png', sha256: 'sha-2' },
+      },
+    })).toEqual(input)
   })
 })

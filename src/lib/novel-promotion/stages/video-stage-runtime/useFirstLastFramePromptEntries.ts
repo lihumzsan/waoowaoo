@@ -11,6 +11,7 @@ import {
   buildFirstLastFramePromptSourceSignature,
   canStartPromptOperation,
   clearSupersededPromptOperation,
+  confirmDurationPersistenceForPromptEntry,
   createPersistedPromptEntry,
   isPromptResultCurrent,
   markSavedUserPromptReady,
@@ -353,13 +354,13 @@ export function useFirstLastFramePromptEntries({
     const signature = buildSourceSignature(pair.firstPanel, pair.lastPanel)
     currentSignaturesRef.current.set(panelKey, signature)
     ensuredSignaturesRef.current.delete(panelKey)
-    setPromptEntries((previous) => new Map(previous).set(panelKey, {
-      ...(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)),
-      status: 'idle',
-      ready: false,
-      verifiedSourceSignature: undefined,
-      errorMessage: undefined,
-    }))
+    setPromptEntries((previous) => {
+      const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
+      return new Map(previous).set(panelKey, confirmDurationPersistenceForPromptEntry({
+        entry: current,
+        currentSourceSignature: signature,
+      }))
+    })
     setDurationRevision((revision) => revision + 1)
   }, [buildDerivedEntry, buildSourceSignature, getPanelPair])
 

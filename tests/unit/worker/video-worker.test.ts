@@ -653,6 +653,61 @@ describe('worker video processor behavior', () => {
     )
   })
 
+  it('VIDEO_PANEL: uses saved first-last duration binding when payload omits binding', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoDurationBinding: JSON.stringify({
+        mode: 'manual',
+        targetDurationSeconds: 7,
+        recommendedDurationSeconds: 9,
+        durationSource: 'smart',
+        recommendationFingerprint: 'saved-smart-fp',
+      }),
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-auto',
+        speaker: 'Doctor',
+        content: 'This automatically matched audio should not override first-last duration binding.',
+        audioUrl: 'cos/line-auto.mp3',
+        audioDuration: 11_200,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 0,
+        },
+        generationOptions: {
+          duration: 10,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_FIRST_LAST_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 7,
+          fps: 24,
+          generationMode: 'firstlastframe',
+        }),
+      }),
+    )
+  })
+
   it('VIDEO_PANEL: allows exact audio-driven LTX2.3 duration to bypass enum duration options downstream', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()

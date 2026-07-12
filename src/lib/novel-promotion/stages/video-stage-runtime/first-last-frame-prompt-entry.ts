@@ -199,21 +199,26 @@ export function restoreFirstLastFrameSmartDurationBinding(
   }
 }
 
-function durationBindingPromptKey(value: VideoDurationBinding | null | undefined): string {
-  const binding = normalizeVideoDurationBinding(value)
-  return JSON.stringify({
-    durationSource: binding.durationSource ?? null,
-    targetDurationSeconds: binding.targetDurationSeconds ?? null,
-    recommendedDurationSeconds: binding.recommendedDurationSeconds ?? null,
-    recommendationFingerprint: binding.recommendationFingerprint ?? null,
-  })
-}
-
 export function shouldEnsurePromptAfterDurationSelection(params: {
   previousBinding?: VideoDurationBinding | null
   nextBinding: VideoDurationBinding
 }) {
-  return durationBindingPromptKey(params.previousBinding) !== durationBindingPromptKey(params.nextBinding)
+  void params
+  return false
+}
+
+export function confirmDurationPersistenceForPromptEntry(params: {
+  entry: FirstLastFramePromptEntry
+  currentSourceSignature: string
+}): FirstLastFramePromptEntry {
+  const isStillVerified = params.entry.verifiedSourceSignature === params.currentSourceSignature
+  return {
+    ...params.entry,
+    status: 'idle',
+    ready: isStillVerified,
+    verifiedSourceSignature: isStillVerified ? params.currentSourceSignature : undefined,
+    errorMessage: undefined,
+  }
 }
 
 export function buildFirstLastFrameSmartDurationBinding(

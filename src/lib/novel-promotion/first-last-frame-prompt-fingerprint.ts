@@ -1,11 +1,7 @@
 import {
   COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
   COMFYUI_LTX23_GOON_FPS,
-  normalizeLtx23GoonDurationSeconds,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
-import {
-  FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION,
-} from './first-last-frame-smart-duration-constants'
 
 export const FIRST_LAST_FRAME_PROMPT_TEMPLATE_VERSION = 'v1'
 
@@ -43,37 +39,6 @@ function stableImageIdentity(panel: FirstLastFrameFingerprintPanel) {
   return raw ? raw.split('#')[0]?.split('?')[0] || '' : ''
 }
 
-function effectiveDuration(panel: FirstLastFrameFingerprintPanel) {
-  let candidate: unknown = panel.duration
-  if (panel.videoDurationBinding) {
-    try {
-      const parsed = typeof panel.videoDurationBinding === 'string'
-        ? JSON.parse(panel.videoDurationBinding) as Record<string, unknown>
-        : panel.videoDurationBinding as Record<string, unknown>
-      candidate = parsed.targetDurationSeconds ?? parsed.durationSeconds ?? candidate
-    } catch {
-      // Invalid legacy bindings fall back to the canonical Goon duration.
-    }
-  }
-  return normalizeLtx23GoonDurationSeconds(candidate)
-}
-
-function effectiveDurationSource(panel: FirstLastFrameFingerprintPanel): 'manual' | 'smart' | null {
-  if (!panel.videoDurationBinding) return null
-  try {
-    const parsed = typeof panel.videoDurationBinding === 'string'
-      ? JSON.parse(panel.videoDurationBinding) as Record<string, unknown>
-      : panel.videoDurationBinding as Record<string, unknown>
-    if (parsed.durationSource === 'manual' || parsed.durationSource === 'smart') return parsed.durationSource
-    if (typeof parsed.targetDurationSeconds === 'number' && Number.isFinite(parsed.targetDurationSeconds)) {
-      return 'manual'
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
 function promptContext(panel: FirstLastFrameFingerprintPanel) {
   return {
     description: panel.description || null,
@@ -97,9 +62,6 @@ export function buildFirstLastFramePromptFingerprintInput(params: {
     promptTemplateVersion: FIRST_LAST_FRAME_PROMPT_TEMPLATE_VERSION,
     workflowKey: COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
     fps: COMFYUI_LTX23_GOON_FPS,
-    durationSeconds: effectiveDuration(params.firstPanel),
-    durationSource: effectiveDurationSource(params.firstPanel),
-    smartDurationAlgorithmVersion: FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION,
     first: {
       panelId: params.firstPanel.id,
       image: stableImageIdentity(params.firstPanel),
@@ -114,8 +76,8 @@ export function buildFirstLastFramePromptFingerprintInput(params: {
 }
 
 export function getFirstLastFramePromptTimingInput(firstPanel: FirstLastFrameFingerprintPanel) {
+  void firstPanel
   return {
-    durationSeconds: effectiveDuration(firstPanel),
     fps: COMFYUI_LTX23_GOON_FPS,
     workflowKey: COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
   }

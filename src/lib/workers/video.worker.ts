@@ -311,6 +311,31 @@ async function resolveEffectiveVideoDurationBinding(
     : savedBinding
 }
 
+function resolveFirstLastFrameTargetDurationBinding(
+  panel: PanelRecord,
+  payload: AnyObj,
+): VideoDurationBinding | null {
+  const payloadBinding = readVideoDurationBindingFromPayload(payload)
+  const payloadTargetDurationSeconds = readPositiveFiniteNumber(payloadBinding?.targetDurationSeconds)
+  if (payloadBinding && payloadTargetDurationSeconds !== null) {
+    return {
+      ...payloadBinding,
+      targetDurationSeconds: normalizeLtx23GoonDurationSeconds(payloadTargetDurationSeconds),
+    }
+  }
+
+  const savedBinding = parseVideoDurationBinding(panel.videoDurationBinding)
+  const savedTargetDurationSeconds = readPositiveFiniteNumber(savedBinding.targetDurationSeconds)
+  if (savedTargetDurationSeconds !== null) {
+    return {
+      ...savedBinding,
+      targetDurationSeconds: normalizeLtx23GoonDurationSeconds(savedTargetDurationSeconds),
+    }
+  }
+
+  return null
+}
+
 async function loadAudioDrivenVoiceLines(
   panel: PanelRecord,
   binding: VideoDurationBinding,
@@ -639,15 +664,11 @@ async function generateVideoForPanel(
     throw new Error(`Panel ${panel.id} has no video prompt`)
   }
 
-  let durationBinding = await resolveEffectiveVideoDurationBinding(panel, payload)
-  const payloadDurationBinding = readVideoDurationBindingFromPayload(payload)
-  const firstLastPayloadDurationSeconds = readPositiveFiniteNumber(payloadDurationBinding?.targetDurationSeconds)
-  if (firstLastFramePayload && payloadDurationBinding && firstLastPayloadDurationSeconds !== null) {
-    durationBinding = {
-      ...payloadDurationBinding,
-      targetDurationSeconds: normalizeLtx23GoonDurationSeconds(firstLastPayloadDurationSeconds),
-    }
-  }
+  const firstLastTargetDurationBinding = firstLastFramePayload
+    ? resolveFirstLastFrameTargetDurationBinding(panel, payload)
+    : null
+  let durationBinding = firstLastTargetDurationBinding
+    || await resolveEffectiveVideoDurationBinding(panel, payload)
   const linkedVoiceLines = await loadAudioDrivenVoiceLines(panel, durationBinding)
   const linkedAudioDurationSeconds = sumVoiceLineDurationSeconds(linkedVoiceLines)
   const requestedGenerationDurationSeconds = typeof generationOptions.duration === 'number'

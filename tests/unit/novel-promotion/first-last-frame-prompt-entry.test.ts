@@ -270,7 +270,7 @@ describe('first/last-frame prompt entry', () => {
     })).toBeNull()
   })
 
-  it('only re-ensures the first-last prompt when duration source meaning changes', async () => {
+  it('does not re-ensure the first-last prompt for duration-only binding changes', async () => {
     const { shouldEnsurePromptAfterDurationSelection } = await import(
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
     )
@@ -289,7 +289,7 @@ describe('first/last-frame prompt entry', () => {
         recommendedDurationSeconds: 8,
         recommendationFingerprint: 'smart-fp',
       },
-    })).toBe(true)
+    })).toBe(false)
     expect(shouldEnsurePromptAfterDurationSelection({
       previousBinding: {
         mode: 'manual',
@@ -306,6 +306,46 @@ describe('first/last-frame prompt entry', () => {
         recommendationFingerprint: 'smart-fp',
       },
     })).toBe(false)
+  })
+
+  it('keeps a verified first-last prompt ready after duration-only persistence', async () => {
+    const { confirmDurationPersistenceForPromptEntry } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(confirmDurationPersistenceForPromptEntry({
+      entry: {
+        value: 'generated first-last prompt',
+        origin: 'generated',
+        dirty: false,
+        status: 'saving',
+        ready: false,
+        verifiedSourceSignature: 'source-v1',
+      },
+      currentSourceSignature: 'source-v1',
+    })).toMatchObject({
+      status: 'idle',
+      ready: true,
+      verifiedSourceSignature: 'source-v1',
+      errorMessage: undefined,
+    })
+
+    expect(confirmDurationPersistenceForPromptEntry({
+      entry: {
+        value: 'generated first-last prompt',
+        origin: 'generated',
+        dirty: false,
+        status: 'saving',
+        ready: false,
+        verifiedSourceSignature: 'source-v1',
+      },
+      currentSourceSignature: 'source-v2',
+    })).toMatchObject({
+      status: 'idle',
+      ready: false,
+      verifiedSourceSignature: undefined,
+      errorMessage: undefined,
+    })
   })
 
   it('builds a local smart binding from prompt-task smart duration unless manual already owns the panel', async () => {
