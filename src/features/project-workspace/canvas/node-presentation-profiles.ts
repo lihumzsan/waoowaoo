@@ -292,10 +292,3 @@ export function resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds(input:
   return Array.from(input.previousStreamingNodeIds)
     .filter((nodeId) => !input.currentStreamingNodeIds.has(nodeId))
 }
-
-export function resolveWorkspaceCanvasMeasuredNodeHeight(input: {
-  readonly kind: WorkspaceCanvasNodeKind
-  readonly measuredHeight: number
-}): number {
-  return Math.ceil(input.measuredHeight)
-}

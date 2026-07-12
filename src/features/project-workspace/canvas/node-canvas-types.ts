@@ -452,7 +452,6 @@ export interface WorkspaceCanvasNodeData {
   readonly expandedLayout?: 'stack' | 'wide'
   readonly defaultExpanded?: boolean
   readonly onToggleExpanded?: (nodeId: string) => void
-  readonly onMeasureNodeSize?: (nodeId: string, size: { readonly width: number; readonly height: number }) => void
   readonly indexLabel?: string
   readonly previewImageUrl?: string | null
   readonly previewAspectRatio?: number | null

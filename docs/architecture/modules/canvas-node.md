@@ -23,6 +23,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
 - **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
 - **CN-12 — Renderer 本地动效不得驱动渲染。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
+- **CN-13 — ReactFlow 测量单向。** `useWorkspaceNodeCanvasProjection` 只从领域事实和持久 layout 产生节点 View；`ProjectWorkspaceCanvas` 只把明确的用户拖拽写入本地/持久 position layout。ReactFlow 的 `dimensions`、ResizeObserver 或 DOM 尺寸只属于 ReactFlow 内部测量，绝不得回写 `WorkspaceCanvasNodeData.width/height`、projection node 或受控 business node state。streaming 重投影、用户 layout 与 transient measurement 必须是三个单向输入，不能构成 render feedback loop。
 
 ## 权威入口
 
@@ -38,6 +39,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
 - 展开态与布局 profile：`src/features/project-workspace/canvas/node-presentation-profiles.ts`。
+- Canvas composition 与用户 position overlay：`src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx`；它不得订阅或写回 ReactFlow measurement。
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
 - 本地 Presence transition：`src/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence.ts`；唯一 renderer host：`src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx`。
 

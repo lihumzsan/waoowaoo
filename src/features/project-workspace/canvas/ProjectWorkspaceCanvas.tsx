@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WheelEvent } from 'react'
 import {
-  applyNodeChanges,
   Background,
   BackgroundVariant,
   MiniMap,
@@ -12,7 +11,6 @@ import {
   ReactFlowProvider,
   type NodeMouseHandler,
   type OnNodeDrag,
-  type NodeChange,
   type Viewport,
   useReactFlow,
 } from '@xyflow/react'
@@ -44,7 +42,6 @@ import {
   workspaceCanvasActionBillingPreviewKey,
 } from './hooks/useWorkspaceCanvasActionBillingPreviews'
 import {
-  buildWorkspaceNodeCanvasProjection,
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
@@ -74,11 +71,9 @@ import type {
 import {
   getWorkspaceCanvasNodePresentationProfile,
   resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds,
-  resolveWorkspaceCanvasMeasuredNodeHeight,
   resolveWorkspaceCanvasNodeDisclosure,
   resolveWorkspaceCanvasNodeSize,
 } from './node-presentation-profiles'
-import { captureLayoutBasePositions } from './layout/workspace-layout-composer'
 import {
   collectWorkspaceNodeRuntimeTargets,
   resolveWorkspaceCanvasNodeData,
@@ -89,7 +84,6 @@ const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
 const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
-const MEASURED_NODE_SIZE_EPSILON = 1
 
 export interface WorkspaceAssistantSelectionContext {
   selectedScopeRef?: string | null
@@ -123,8 +117,27 @@ interface WorkspaceCanvasNodeDisclosureOverride {
   readonly expanded: boolean
 }
 
-function numericStyleDimension(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+interface WorkspaceCanvasUserPosition {
+  readonly x: number
+  readonly y: number
+}
+
+function applyWorkspaceCanvasUserPositions(params: {
+  readonly nodes: readonly WorkspaceCanvasFlowNode[]
+  readonly positions: ReadonlyMap<string, WorkspaceCanvasUserPosition>
+}): WorkspaceCanvasFlowNode[] {
+  return params.nodes.map((node) => {
+    const position = params.positions.get(node.id)
+    if (!position) return node
+    return {
+      ...node,
+      position,
+      data: {
+        ...node.data,
+        layoutBasePosition: position,
+      },
+    }
+  })
 }
 
 function CanvasViewportControls({
@@ -290,17 +303,17 @@ function ProjectWorkspaceCanvasContent({
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
-  const [sourceNodes, setSourceNodes] = useState<WorkspaceCanvasFlowNode[]>([])
+  const [userNodePositions, setUserNodePositions] = useState<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(() => new Map())
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [handledStyleBibleFocusRequestId, setHandledStyleBibleFocusRequestId] = useState(0)
   const [submittingNodeIds, setSubmittingNodeIds] = useState<ReadonlySet<string>>(() => new Set())
   const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
+  const [focusHighlightRevision, setFocusHighlightRevision] = useState(0)
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
-  const appliedProjectionNodeSignatureRef = useRef<string | null>(null)
   const stableEdgesRef = useRef<{
     signature: string
     edges: WorkspaceCanvasFlowEdge[]
@@ -371,15 +384,7 @@ function ProjectWorkspaceCanvasContent({
     const nextIds = new Set(focusHighlightedNodeIdsRef.current)
     nextIds.delete(nodeId)
     focusHighlightedNodeIdsRef.current = nextIds
-    setSourceNodes((currentNodes) => currentNodes.map((node) => node.id === nodeId && node.data.focusHighlighted === true
-      ? {
-          ...node,
-          data: {
-            ...node.data,
-            focusHighlighted: false,
-          },
-        }
-      : node))
+    setFocusHighlightRevision((current) => current + 1)
   }, [])
   const markNodesFocusHighlighted = useCallback((nodeIds: readonly string[]) => {
     if (nodeIds.length === 0) return
@@ -390,16 +395,7 @@ function ProjectWorkspaceCanvasContent({
       nextIds.add(nodeId)
     })
     focusHighlightedNodeIdsRef.current = nextIds
-    const nodeIdSet = new Set(nodeIds)
-    setSourceNodes((currentNodes) => currentNodes.map((node) => nodeIdSet.has(node.id)
-      ? {
-          ...node,
-          data: {
-            ...node.data,
-            focusHighlighted: true,
-          },
-        }
-      : node))
+    setFocusHighlightRevision((current) => current + 1)
     nodeIds.forEach((nodeId) => {
       const timer = window.setTimeout(() => clearFocusHighlightedNode(nodeId), FOCUS_HIGHLIGHT_TIMEOUT_MS)
       focusHighlightClearTimersRef.current.set(nodeId, timer)
@@ -447,47 +443,6 @@ function ProjectWorkspaceCanvasContent({
       return next
     })
   }, [reactFlow, updateNodeDisclosureOverrides])
-  const handleMeasuredNodeSize = useCallback((
-    nodeId: string,
-    size: { readonly width: number; readonly height: number },
-  ) => {
-    setSourceNodes((currentNodes) => {
-      let changed = false
-      const measuredNodes = currentNodes.map((node) => {
-        if (node.id !== nodeId) return node
-
-        const profile = getWorkspaceCanvasNodePresentationProfile(node.data.kind)
-        const expanded = node.data.disclosure?.effectiveExpanded ?? (node.data.expanded === true)
-        if (expanded && profile.expanded) return node
-
-        const nextHeight = resolveWorkspaceCanvasMeasuredNodeHeight({
-          kind: node.data.kind,
-          measuredHeight: size.height,
-        })
-        const currentStyleHeight = numericStyleDimension(node.style?.height) ?? node.data.height
-        if (
-          Math.abs(nextHeight - node.data.height) <= MEASURED_NODE_SIZE_EPSILON &&
-          Math.abs(nextHeight - currentStyleHeight) <= MEASURED_NODE_SIZE_EPSILON
-        ) {
-          return node
-        }
-
-        changed = true
-        return {
-          ...node,
-          style: {
-            ...node.style,
-            height: nextHeight,
-          },
-          data: {
-            ...node.data,
-            height: nextHeight,
-          },
-        }
-      })
-      return changed ? measuredNodes : currentNodes
-    })
-  }, [])
   const structuredStreamRuntime = useWorkspaceStructuredStreamRuntime({
     episodeId: episodeId ?? 'pending-episode',
     translate: t,
@@ -611,12 +566,11 @@ function ProjectWorkspaceCanvasContent({
           expanded,
           expandedLayout: expanded ? profile.expandedLayout : undefined,
           onToggleExpanded: toggleNodeExpanded,
-          onMeasureNodeSize: handleMeasuredNodeSize,
         },
       }
     })
   }, [
-    handleMeasuredNodeSize,
+    focusHighlightRevision,
     nodeDisclosureOverrides,
     selectedNodeId,
     streamPatchByNodeId,
@@ -628,6 +582,10 @@ function ProjectWorkspaceCanvasContent({
     () => attachNodeUiState(projectedNodesWithBilling),
     [attachNodeUiState, projectedNodesWithBilling],
   )
+  const flowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
+    nodes: resolvedProjectedNodes,
+    positions: userNodePositions,
+  }), [resolvedProjectedNodes, userNodePositions])
 
   const projectionNodeSignature = useMemo(
     () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
@@ -645,17 +603,17 @@ function ProjectWorkspaceCanvasContent({
   }
   const flowEdges = stableEdgesRef.current.edges
   const operationFocusNodeIds = useMemo(
-    () => resolveWorkspaceCanvasFocusNodeIds(sourceNodes, activeAssistantOperationId),
-    [activeAssistantOperationId, sourceNodes],
+    () => resolveWorkspaceCanvasFocusNodeIds(flowNodes, activeAssistantOperationId),
+    [activeAssistantOperationId, flowNodes],
   )
   const hasUnhandledStyleBibleFocusRequest = styleBibleFocusRequestId > handledStyleBibleFocusRequestId
   const styleBibleFocusNodeIds = useMemo(
     () => (
       hasUnhandledStyleBibleFocusRequest
-        ? resolveWorkspaceCanvasStyleBibleFocusNodeIds(sourceNodes)
+        ? resolveWorkspaceCanvasStyleBibleFocusNodeIds(flowNodes)
         : []
     ),
-    [hasUnhandledStyleBibleFocusRequest, sourceNodes],
+    [flowNodes, hasUnhandledStyleBibleFocusRequest],
   )
   const styleBibleFocusRequestKey = styleBibleFocusNodeIds.length > 0
     ? `style-bible-confirmed:${String(styleBibleFocusRequestId)}`
@@ -684,12 +642,6 @@ function ProjectWorkspaceCanvasContent({
     onFocusComplete: handleFocusComplete,
   })
 
-  useEffect(() => {
-    if (appliedProjectionNodeSignatureRef.current === projectionNodeSignature) return
-    appliedProjectionNodeSignatureRef.current = projectionNodeSignature
-    setSourceNodes(resolvedProjectedNodes)
-  }, [projectionNodeSignature, resolvedProjectedNodes])
-
   useEffect(() => () => {
     focusHighlightClearTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     focusHighlightClearTimersRef.current.clear()
@@ -697,7 +649,7 @@ function ProjectWorkspaceCanvasContent({
 
   useEffect(() => {
     const currentStreamingNodeIds = new Set<string>()
-    sourceNodes.forEach((node) => {
+    flowNodes.forEach((node) => {
       const disclosure = node.data.disclosure
       if (disclosure?.isStreamingExpanded === true && disclosure.collapseWhenStreamCompletes) {
         currentStreamingNodeIds.add(node.id)
@@ -718,7 +670,7 @@ function ProjectWorkspaceCanvasContent({
       })
       return changed ? next : current
     })
-  }, [sourceNodes, updateNodeDisclosureOverrides])
+  }, [flowNodes, updateNodeDisclosureOverrides])
 
   useEffect(() => {
     const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))
@@ -728,6 +680,18 @@ function ProjectWorkspaceCanvasContent({
       current.forEach((override, nodeId) => {
         if (projectedNodeIds.has(nodeId)) {
           next.set(nodeId, override)
+        } else {
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
+    setUserNodePositions((current) => {
+      let changed = false
+      const next = new Map<string, WorkspaceCanvasUserPosition>()
+      current.forEach((position, nodeId) => {
+        if (projectedNodeIds.has(nodeId)) {
+          next.set(nodeId, position)
         } else {
           changed = true
         }
@@ -753,29 +717,38 @@ function ProjectWorkspaceCanvasContent({
     })
   }, [persistCurrentLayout])
 
-  const handleNodesChange = useCallback((changes: NodeChange<WorkspaceCanvasFlowNode>[]) => {
-    setSourceNodes((currentNodes) => applyNodeChanges(changes, currentNodes))
-  }, [])
-
   const handleNodeDragStart = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>(() => {
     notifyCanvasUserInteraction()
   }, [notifyCanvasUserInteraction])
 
+  const applyUserNodePositions = useCallback((nodes: readonly WorkspaceCanvasFlowNode[]) => {
+    setUserNodePositions((current) => {
+      const next = new Map(current)
+      nodes.forEach((node) => {
+        next.set(node.id, { x: node.position.x, y: node.position.y })
+      })
+      return next
+    })
+  }, [])
+
+  const handleNodeDrag = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
+    applyUserNodePositions([node, ...draggedNodes])
+  }, [applyUserNodePositions])
+
   const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
     notifyCanvasUserInteraction()
-    const movedNodesById = new Map<string, WorkspaceCanvasFlowNode>(
-      [node, ...draggedNodes].map((movedNode) => [movedNode.id, movedNode]),
-    )
-    const movedNodeIds = new Set(movedNodesById.keys())
-    const currentNodes = reactFlow.getNodes().map((currentNode) => movedNodesById.get(currentNode.id) ?? currentNode)
-    const nextLayoutNodes = captureLayoutBasePositions({
-      nodes: currentNodes,
-      nodeIds: movedNodeIds,
+    const movedNodes = [node, ...draggedNodes]
+    const nextPositions = new Map(userNodePositions)
+    movedNodes.forEach((movedNode) => {
+      nextPositions.set(movedNode.id, { x: movedNode.position.x, y: movedNode.position.y })
     })
-    const nextNodes = attachNodeUiState(nextLayoutNodes)
-    setSourceNodes(nextNodes)
+    applyUserNodePositions(movedNodes)
+    const nextNodes = applyWorkspaceCanvasUserPositions({
+      nodes: resolvedProjectedNodes,
+      positions: nextPositions,
+    })
     persistCurrentLayoutSafely(nextNodes)
-  }, [attachNodeUiState, notifyCanvasUserInteraction, persistCurrentLayoutSafely, reactFlow])
+  }, [applyUserNodePositions, notifyCanvasUserInteraction, persistCurrentLayoutSafely, resolvedProjectedNodes, userNodePositions])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     setSelectedNodeId(node.id)
@@ -808,31 +781,11 @@ function ProjectWorkspaceCanvasContent({
 
   const resetLayout = useCallback(() => {
     if (!episodeId) return
-    const defaultProjection = buildWorkspaceNodeCanvasProjection({
-      projectId,
-      episodeId,
-      episodeName,
-      storyboards: scopedStoryboards,
-      editFirstWorkflow,
-      editBible,
-      editScript: projectedEditScript,
-      editScripts: projectedEditScripts,
-      editShotExecutionPlan: scopedEditShotExecutionPlan,
-      activeTaskTargets: activeAssistantTaskTargets,
-      editScriptPending: effectiveEditScriptPending,
-      finalVideo,
-      videoGroups: scopedVideoGroups,
-      defaultVideoModel: runtime.singleShotVideoModel ?? runtime.videoModel ?? null,
-      defaultSequenceVideoModel: runtime.sequenceVideoModel ?? null,
-      savedLayouts: EMPTY_SAVED_NODE_LAYOUTS,
-      translate: t,
-      onAction: onNodeAction,
-    })
-    setSourceNodes(attachNodeUiState(defaultProjection.nodes))
+    setUserNodePositions(new Map())
     void resetSavedLayout().catch((error: unknown) => {
       _ulogWarn('[ProjectWorkspaceCanvas] canvas layout reset failed', error)
     })
-  }, [activeAssistantOperationId, activeAssistantTaskTargets, attachNodeUiState, editFirstWorkflow, editBible, effectiveEditScriptPending, episodeId, episodeName, finalVideo, onNodeAction, projectId, projectedEditScript, projectedEditScripts, resetSavedLayout, runtime.sequenceVideoModel, runtime.singleShotVideoModel, runtime.videoModel, scopedEditShotExecutionPlan, scopedStoryboards, scopedVideoGroups, t])
+  }, [episodeId, resetSavedLayout])
 
   const fitView = useCallback(() => {
     notifyCanvasUserInteraction()
@@ -850,8 +803,8 @@ function ProjectWorkspaceCanvasContent({
     setAutoFollowEnabled((current) => !current)
   }, [])
   const selectedNode = useMemo(
-    () => sourceNodes.find((node) => node.id === selectedNodeId) ?? null,
-    [sourceNodes, selectedNodeId],
+    () => flowNodes.find((node) => node.id === selectedNodeId) ?? null,
+    [flowNodes, selectedNodeId],
   )
   const assistantSelection = useMemo<WorkspaceAssistantSelectionContext>(() => {
     if (!selectedNode) return {}
@@ -874,13 +827,13 @@ function ProjectWorkspaceCanvasContent({
     <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
-          nodes={sourceNodes}
+          nodes={flowNodes}
           edges={flowEdges}
           nodeTypes={workspaceNodeTypes}
-          onNodesChange={handleNodesChange}
           onNodeClick={handleNodeClick}
           onPaneClick={() => setSelectedNodeId(null)}
           onNodeDragStart={handleNodeDragStart}
+          onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
           onMoveStart={(event) => {
             if (event) notifyCanvasUserInteraction()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
 import BillingActionButton from '@/components/billing/BillingActionButton'
@@ -13,10 +13,6 @@ import {
 } from '../lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { getWorkspaceCanvasNodePresentationProfile } from '../node-presentation-profiles'
-import {
-  WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS,
-  WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR,
-} from './workspace-node-motion'
 import {
   LoadingSpinner,
   SELECTABLE_TEXT_CLASS,
@@ -35,8 +31,6 @@ function nodeUsesInlineTaskProgress(kind: WorkspaceCanvasFlowNode['data']['kind'
 export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNode>) {
   const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const statusLabels = useTranslations('projectWorkflow.canvas.workspace.status')
-  const measuredContentRef = useRef<HTMLDivElement | null>(null)
-  const deferredMeasureTimeoutRef = useRef<number | null>(null)
   const expanded = data.disclosure?.effectiveExpanded ?? (data.expanded === true)
   const hasSource = data.kind !== 'finalTimeline'
   const action = data.action
@@ -49,8 +43,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   const tertiaryActionIcon: AppIconName = tertiaryAction
     ? nodeActionIconName(tertiaryAction)
     : 'externalLink'
-  const nodeId = data.nodeId
-  const onMeasureNodeSize = data.onMeasureNodeSize
   const showDetailsToggle = data.disclosure?.canToggle === true && Boolean(data.onToggleExpanded)
   const showHeaderAction = Boolean(action && data.actionLabel && data.kind === 'editRequiredAsset')
   const showLargeTitle = data.kind !== 'shot'
@@ -73,54 +65,6 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
   )
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
-  useEffect(() => {
-    const measuredNodeId = nodeId
-    if (typeof measuredNodeId !== 'string') return undefined
-    const measureNodeSize = onMeasureNodeSize
-    if (!measureNodeSize) return undefined
-    const measuredElement = measuredContentRef.current
-    if (!measuredElement) return undefined
-    const measurementTarget = {
-      nodeId: measuredNodeId,
-      measureNodeSize,
-      element: measuredElement,
-    }
-
-    function clearDeferredMeasure() {
-      if (deferredMeasureTimeoutRef.current === null) return
-      window.clearTimeout(deferredMeasureTimeoutRef.current)
-      deferredMeasureTimeoutRef.current = null
-    }
-
-    function scheduleDeferredMeasure() {
-      if (deferredMeasureTimeoutRef.current !== null) return
-      deferredMeasureTimeoutRef.current = window.setTimeout(() => {
-        deferredMeasureTimeoutRef.current = null
-        measure()
-      }, WORKSPACE_CANVAS_MEASURE_AFTER_MOTION_DELAY_MS)
-    }
-
-    function measure() {
-      if (measurementTarget.element.querySelector(WORKSPACE_CANVAS_MOTION_ACTIVE_SELECTOR)) {
-        scheduleDeferredMeasure()
-        return
-      }
-      const rect = measurementTarget.element.getBoundingClientRect()
-      measurementTarget.measureNodeSize(measurementTarget.nodeId, {
-        width: Math.ceil(rect.width),
-        height: Math.ceil(measurementTarget.element.scrollHeight + 2),
-      })
-    }
-
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(measurementTarget.element)
-    return () => {
-      observer.disconnect()
-      clearDeferredMeasure()
-    }
-  }, [data.kind, data.expanded, data.lifecycle, data.bgmScoreDetails, data.soundscapeDetails, data.sourceScriptDetails, data.editBibleDetails, data.styleBibleDetails, data.editScriptDetails, data.editPipelineStepDetails, data.editProcessGroupDetails, data.editAssetGroupDetails, nodeId, onMeasureNodeSize])
-
   return (
     <WorkspaceNodeImagePreviewContext.Provider value={setPreviewImageUrl}>
       <div className={`relative overflow-visible ${usesGridAutoHeightShell ? 'h-auto' : 'h-full'}`}>
@@ -131,7 +75,7 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
           className={`workspace-canvas-node-shell relative ${shellLayoutClass} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isVisuallyEmphasized ? 'workspace-node-running-breathing border-sky-300' : 'border-slate-200'}`}
           data-expanded={expanded ? 'true' : 'false'}
         >
-          <div ref={measuredContentRef}>
+          <div>
             <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--glass-text-tertiary)]">
