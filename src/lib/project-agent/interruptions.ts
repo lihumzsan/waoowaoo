@@ -19,6 +19,10 @@ import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
+import {
+  createProjectAgentExecutionSegment,
+  projectAgentExecutionStartedIdempotencyKey,
+} from './execution-segment'
 import type { ProjectAgentEventInput, ProjectAgentEventScopeRef } from './event/types'
 
 export type ProjectAgentInterruptionType = 'approval' | 'choice' | 'task_wait'
@@ -85,6 +89,41 @@ function buildScope(scope: ProjectAgentInterruptionScope): {
       episodeId: scope.episodeId ?? null,
     }),
   }
+}
+
+async function lockCurrentInterruptionConsumeRunFence(
+  tx: Prisma.TransactionClient,
+  params: ProjectAgentInterruptionScope & {
+    runId: string
+    interruptionId: string
+    assistantId: ProjectAssistantId
+    scopeRef: string
+    type: 'approval' | 'choice'
+  },
+): Promise<ProjectAgentRunFence | null> {
+  const runs = await tx.$queryRaw<Array<{ id: string; runVersion: number; eventSeq: bigint }>>(Prisma.sql`
+    SELECT id, runVersion, eventSeq
+    FROM project_agent_runs
+    WHERE id = ${params.runId}
+    FOR UPDATE
+  `)
+  const run = runs[0]
+  if (!run) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${params.runId}`)
+  const interruptions = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM project_agent_interruptions
+    WHERE id = ${params.interruptionId}
+      AND runId = ${params.runId}
+      AND projectId = ${params.projectId}
+      AND userId = ${params.userId}
+      AND assistantId = ${params.assistantId}
+      AND scopeRef = ${params.scopeRef}
+      AND type = ${params.type}
+      AND status = 'pending'
+    FOR UPDATE
+  `)
+  if (interruptions.length !== 1) return null
+  return createProjectAgentRunFence(run)
 }
 
 interface PendingProjectAgentInterruptionForReplacement {
@@ -218,6 +257,13 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
   const { assistantId, scopeRef } = buildScope(params)
   try {
     return await prisma.$transaction(async (tx) => {
+      const runFence = await lockCurrentInterruptionConsumeRunFence(tx, {
+        ...params,
+        assistantId,
+        scopeRef,
+        type: 'approval',
+      })
+      if (!runFence) return null
       const record = await tx.projectAgentInterruption.findFirst({
         where: {
           id: params.interruptionId,
@@ -230,6 +276,10 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
         },
       })
       if (!record || record.status !== 'pending' || !record.runState) return null
+      const executionSegment = createProjectAgentExecutionSegment({
+        kind: 'approval_response',
+        interruptionId: record.id,
+      })
       await appendProjectAgentEventsInTransaction(tx, {
         scope: {
           projectId: params.projectId,
@@ -238,21 +288,29 @@ export async function consumeProjectAgentApprovalInterruption(params: ProjectAge
           assistantId,
           scopeRef,
         },
-        events: [{
-          runFence: createProjectAgentRunFence({
-            id: params.runId,
-            runVersion: record.runVersion,
-            eventSeq: record.eventSeq,
-          }),
-          event: {
-            kind: 'interruption.resolved',
-            runId: params.runId,
-            activityId: record.activityId,
-            interruptionId: record.id,
-            outcome: 'consumed',
-            response: params.response,
+        events: [
+          {
+            runFence,
+            event: {
+              kind: 'interruption.resolved',
+              runId: params.runId,
+              activityId: record.activityId,
+              interruptionId: record.id,
+              outcome: 'consumed',
+              response: params.response,
+            },
           },
-        }],
+          {
+            runFence,
+            idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+            event: {
+              kind: 'run.execution_started',
+              runId: params.runId,
+              executionSegmentId: executionSegment.id,
+              controlKind: executionSegment.controlKind,
+            },
+          },
+        ],
       })
       if (params.visibleMessages?.length) {
         await appendProjectAssistantThreadMessagesInTransaction(tx, {
@@ -438,6 +496,13 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
   const { assistantId, scopeRef } = buildScope(params)
   try {
     return await prisma.$transaction(async (tx) => {
+      const runFence = await lockCurrentInterruptionConsumeRunFence(tx, {
+        ...params,
+        assistantId,
+        scopeRef,
+        type: 'choice',
+      })
+      if (!runFence) return null
       const record = await tx.projectAgentInterruption.findFirst({
         where: {
           id: params.interruptionId,
@@ -472,6 +537,10 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
         response: params.response,
         latestUserText: params.latestUserText,
       })
+      const executionSegment = createProjectAgentExecutionSegment({
+        kind: 'choice_response',
+        interruptionId: record.id,
+      })
       await appendProjectAgentEventsInTransaction(tx, {
         scope: {
           projectId: params.projectId,
@@ -480,21 +549,29 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
           assistantId,
           scopeRef,
         },
-        events: [{
-          runFence: createProjectAgentRunFence({
-            id: params.runId,
-            runVersion: record.runVersion,
-            eventSeq: record.eventSeq,
-          }),
-          event: {
-            kind: 'interruption.resolved',
-            runId: params.runId,
-            activityId: record.activityId,
-            interruptionId: record.id,
-            outcome: 'consumed',
-            response: JSON.parse(JSON.stringify(parsedResponse)) as Prisma.InputJsonValue,
+        events: [
+          {
+            runFence,
+            event: {
+              kind: 'interruption.resolved',
+              runId: params.runId,
+              activityId: record.activityId,
+              interruptionId: record.id,
+              outcome: 'consumed',
+              response: JSON.parse(JSON.stringify(parsedResponse)) as Prisma.InputJsonValue,
+            },
           },
-        }],
+          {
+            runFence,
+            idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+            event: {
+              kind: 'run.execution_started',
+              runId: params.runId,
+              executionSegmentId: executionSegment.id,
+              controlKind: executionSegment.controlKind,
+            },
+          },
+        ],
       })
       if (params.visibleMessages?.length) {
         await appendProjectAssistantThreadMessagesInTransaction(tx, {

@@ -49,7 +49,14 @@ export function startProjectAgentRunHeartbeat(input: {
   const beat = async (): Promise<void> => {
     if (stopped || ownershipLost) return
     const touched = await touchProjectAgentRunHeartbeat({ runId: input.runId })
-    if (!touched) {
+    /*
+     * `running` is a business status. A durable handoff can legitimately move
+     * the Run to a waiting status before this stream has observed its final
+     * settlement. The Redis lease, not that status, is this execution
+     * segment's ownership claim; a waiting status must therefore never revoke
+     * a still-owned segment.
+     */
+    if (!touched && !input.runLock) {
       throw new ProjectAgentRunOwnershipLostError({
         runId: input.runId,
         reason: 'run_not_running',

@@ -42,7 +42,7 @@ describe('project agent run state machine', () => {
     expect(isProjectAgentRunTerminalStatus('awaiting_task')).toBe(false)
     for (const terminal of terminalStatuses) {
       expect(isProjectAgentRunTerminalStatus(terminal)).toBe(true)
-      expect(canTransitionProjectAgentRun({ from: terminal, to: terminal })).toBe(true)
+      expect(canTransitionProjectAgentRun({ from: terminal, to: terminal })).toBe(false)
       expect(canTransitionProjectAgentRun({ from: terminal, to: 'running' })).toBe(false)
       expect(canTransitionProjectAgentRun({ from: terminal, to: 'awaiting_task' })).toBe(false)
     }

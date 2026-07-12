@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback(prismaMock)),
-  $queryRaw: vi.fn(async () => [{ id: 'run-1' }]),
+  $queryRaw: vi.fn(async () => [{ id: 'run-1', runVersion: 3, eventSeq: BigInt(11) }]),
   projectAgentInterruption: {
     findFirst: vi.fn(),
     findMany: vi.fn(async (): Promise<Array<{
@@ -109,12 +109,21 @@ describe('project agent interruption consumption', () => {
       prismaMock,
       expect.objectContaining({
       events: expect.arrayContaining([expect.objectContaining({
-        runFence: { runId: 'run-1', runVersion: 2, eventSeq: '10' },
+        runFence: { runId: 'run-1', runVersion: 3, eventSeq: '11' },
         event: expect.objectContaining({
           kind: 'interruption.resolved',
           interruptionId: 'interruption-1',
           outcome: 'consumed',
         }),
+      }), expect.objectContaining({
+        runFence: { runId: 'run-1', runVersion: 3, eventSeq: '11' },
+        idempotencyKey: 'run-execution-started:decision:interruption-1',
+        event: {
+          kind: 'run.execution_started',
+          runId: 'run-1',
+          executionSegmentId: 'decision:interruption-1',
+          controlKind: 'approval_response',
+        },
       })]),
     }))
   })
@@ -190,7 +199,7 @@ describe('project agent interruption consumption', () => {
     expect(eventMock.appendProjectAgentEventsInTransaction).toHaveBeenCalledWith(
       prismaMock,
       expect.objectContaining({
-        events: [expect.objectContaining({
+        events: expect.arrayContaining([expect.objectContaining({
           event: expect.objectContaining({
             response: {
               choiceType: 'script_intake',
@@ -198,7 +207,7 @@ describe('project agent interruption consumption', () => {
               normalizedBrief: 'canonical brief',
             },
           }),
-        })],
+        })]),
       }),
     )
   })

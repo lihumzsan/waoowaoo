@@ -1,5 +1,12 @@
 import type { ProjectAgentRunStatus } from './runs'
 
+export const PROJECT_AGENT_RUN_NON_TERMINAL_STATUSES = [
+  'running',
+  'awaiting_approval',
+  'awaiting_choice',
+  'awaiting_task',
+] as const satisfies readonly ProjectAgentRunStatus[]
+
 const RUN_TRANSITIONS = {
   running: [
     'running',
@@ -20,9 +27,9 @@ const RUN_TRANSITIONS = {
     'failed',
     'cancelled',
   ],
-  completed: ['completed'],
-  failed: ['failed'],
-  cancelled: ['cancelled'],
+  completed: [],
+  failed: [],
+  cancelled: [],
 } as const satisfies Record<ProjectAgentRunStatus, readonly ProjectAgentRunStatus[]>
 
 export function normalizeProjectAgentRunStatus(value: string): ProjectAgentRunStatus {

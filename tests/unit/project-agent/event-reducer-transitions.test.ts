@@ -129,6 +129,26 @@ describe('project agent event reducer transitions', () => {
     expect(tx.projectAgentRun.updateMany).not.toHaveBeenCalled()
   })
 
+  it('keeps the first terminal failure and accepts a later run.failed only as a diagnostic event', async () => {
+    tx.projectAgentRun.findUnique.mockResolvedValueOnce({
+      status: 'failed', runVersion: 4, eventSeq: BigInt(19), terminalEventSeq: BigInt(18),
+    })
+
+    await expect(reduceProjectAgentEvent({
+      tx: asReducerTx(tx),
+      scope,
+      event: {
+        kind: 'run.failed',
+        runId: 'run-1',
+        stopReason: 'continuation_delivery_exhausted',
+        errorCode: 'PROJECT_AGENT_CONTINUATION_DELIVERY_EXHAUSTED',
+        errorMessage: 'later delivery failure',
+      },
+    })).resolves.toBeNull()
+
+    expect(tx.projectAgentRun.updateMany).not.toHaveBeenCalled()
+  })
+
   it('never reopens a terminal Activity when activity.started reuses its identity', async () => {
     tx.projectAgentActivity.create.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('duplicate activity identity', {

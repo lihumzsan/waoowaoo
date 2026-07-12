@@ -10,6 +10,7 @@ import {
   type ProjectAgentRunFence,
 } from '../run-fence'
 import { readProjectAgentDecisionInterruptionId } from '../execution-segment'
+import { PROJECT_AGENT_RUN_NON_TERMINAL_STATUSES } from '../run-state-machine'
 import { isEditFirstChoiceType } from '../edit-first-choice-tools'
 import {
   type ProjectAgentActivitySnapshot,
@@ -706,6 +707,20 @@ export async function reduceProjectAgentEvent(params: {
     await applyRunStarted(tx, scope, event, eventId, expectedFence)
     return null
   }
+  /*
+   * projectAgentEvent has already durably recorded this payload. Once a Run
+   * has a terminal watermark, a late failure is therefore a secondary
+   * diagnostic, never a second terminal transition that can replace the
+   * primary failure code/message. This intentionally accepts an old fence for
+   * this one diagnostic-only event; all state-changing late events still fail
+   * the fence check below.
+   */
+  if (event.kind === 'run.failed') {
+    const current = await loadProjectAgentRunForUpdate(tx, event.runId)
+    if (current?.terminalEventSeq !== null && current?.terminalEventSeq !== undefined) {
+      return null
+    }
+  }
   await assertProjectAgentRunEventFence(tx, expectedFence)
   const nextFence = advanceProjectAgentRunFence(expectedFence, eventId)
   let activity: ProjectAgentActivitySnapshot | null = null
@@ -757,6 +772,7 @@ export async function reduceProjectAgentEvent(params: {
         runId: event.runId,
         expectedFence,
         status: 'failed',
+        expectedStatuses: PROJECT_AGENT_RUN_NON_TERMINAL_STATUSES,
         stopReason: event.stopReason ?? 'failed',
         errorCode: event.errorCode,
         errorMessage: event.errorMessage,
