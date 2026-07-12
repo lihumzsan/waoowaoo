@@ -22,6 +22,7 @@
 - **TG-10 — 执行时机独立。** 本模块定义测试证据和命令，不定义 commit、push、PR、nightly 或 release 的运行时机。Git hooks 保持由独立策略决定。
 - **TG-11 — 关键 Journey 契约同步。** 已承担权威证据职责的 Golden/Critical Journey 所覆盖的用户流程、阶段、生产入口、生命周期、终态、失败语义或禁止副作用发生变化时，同一变更必须审计并同步 canonical scenario contract、真实驱动路径与独立 oracle，并实际运行该场景的 canonical command。若 observable 不变，必须记录“不适用 + 原因”并证明原场景仍通过。禁止保留旧语义、删除场景、放宽断言或以 skip/todo 逃避同步；未执行或基础设施不可用只能报告未验证。
 - **TG-12 — 架构影响逐文件路由。** 修改前必须用显式目标路径读取适用模块，修改后必须用 `architecture:impact --changed` 逐文件复核 Git 工作区实际变化。router 只按 manifest 展示 path → module → verification 关系，不得根据 changed files 决定测试适用性、接管任务文件或让未映射路径失败；Journey 仍只由模块语义与 TG-11 裁决。
+- **TG-13 — 过程文档不持久化。** C/D 前置治理和历史矩阵只存在于当前任务计划或 Git 忽略的临时文件；交付前把长期有效的不变量、根因、旧防线失效原因与盲区压缩进所属模块并删除临时材料。禁止维护 incident 文档库、执行日志、生产 identity 清单或第二份当前契约。
 
 ## 准入类别
 
@@ -38,8 +39,7 @@
 ## 权威入口
 
 - 浏览器完整旅程、场景 identity、故障变体、只读 oracle 与 harness：`tests/golden-journey/**`。
-- Golden 架构与历史矩阵：`docs/architecture/incidents/assistant-golden-journey/**`。
-- 本次测试体系收敛证据：`docs/architecture/incidents/test-system-reset/**`。
+- Golden 场景 identity 与预期终态：`tests/golden-journey/contracts/scenarios.ts`；真实驱动路径：`tests/golden-journey/journeys/**`。
 - 关键 Task/Assistant/Outbox 并发与事务：`tests/integration/task/**`。
 - 外部 provider 协议：`tests/integration/provider/**`。
 - 计费事务与并发：`tests/integration/billing/**`、`tests/concurrency/billing/**`。
@@ -49,6 +49,7 @@
 - Required Vitest suite 的发现/执行/skip 核对：`scripts/test-verification/run-required-suite.mjs` 与 `verify-vitest-report.mjs`。
 - 架构影响路由：`scripts/architecture-impact.mjs`；Git status 解析与 path/module 纯匹配：`scripts/architecture-impact-lib.mjs`。
 - 架构结构检查集合：`npm run check:architecture`。
+- `scripts/guards/architecture-docs-contract-guard.mjs` 除模块结构外还拒绝 `docs/architecture/incidents/**` 文件和根目录过程性 Markdown，防止临时治理材料重新成为第二文档库。
 - `tests/unit/test-verification/architecture-impact.test.ts` 验证 router 对 modified/staged/untracked/rename/copy/delete 的同一 Git snapshot 解析、逐文件模块匹配与未映射结果；它不证明 manifest 的语义覆盖完整。
 - 测试命令：`test:logic`、`test:conformance`、`test:critical:*`、`test:golden:*`。这些命令不隐含运行时机。
 
@@ -65,7 +66,7 @@
 - `test:all`、`test:regression` 等以跑遍旧目录定义完整性的聚合命令；
 - API-only long-form runner 作为第二条 Golden Journey。
 
-历史根因和症状写入 `docs/architecture/incidents/**`。需要 executable protection 时，链接到真实 Golden 或 Critical scenario；文档记录本身不伪装成测试。
+历史根因、旧防线失效原因和当前防线只在所属模块的「历史回归」中精简保留。需要 executable protection 时，链接到真实 Golden 或 Critical scenario；文档记录本身不伪装成测试。
 
 ## 验证与失败语义
 
@@ -77,12 +78,14 @@ Critical Infrastructure 测试只开放一个受控故障 seam，并验证真实
 
 ## 历史回归
 
-- 旧体系累计数百个 Unit、mocked Integration、System、Regression 和元测试文件，却未能发现真实 Assistant 组合链缺陷；详见 `docs/architecture/incidents/test-system-reset/history-matrix.md`。
+- 旧体系累计数百个 Unit、mocked Integration、System、Regression 和元测试文件，却未能发现真实 Assistant 组合链缺陷。
 - Route catalog 在 mock 鉴权和内部依赖后把“返回一个拒绝 Response”当成场景执行，不能证明 route 业务语义。
 - Synthetic history registry 把手工错误常量传给同一断言充当 fail-before，没有执行历史生产路径。
 - 全仓 mutation、coverage、test-size、requirements matrix 与 changed-file guard 提高了维护成本，但没有提高真实组合错误的发现率。
 - Golden Journey 首次通过真实 Chromium、MySQL、Redis、worker、Outbox、SSE 和刷新组合独立复现了此前绿色测试遗漏的问题，因此成为浏览器完整产品证据的唯一 owner。
-- 原 `architecture:impact` 把多个输入路径聚合成一份模块列表，未映射文件会被其他命中路径掩盖；现改为逐文件路由，`--changed` 只复用该 router 复核实际 Git 变化，不恢复 changed-file 测试选择器。详见 `architecture-impact-prompt-contract-governance-2026-07-12`。
+- 原 `architecture:impact` 把多个输入路径聚合成一份模块列表，未映射文件会被其他命中路径掩盖；现改为逐文件路由，`--changed` 只复用该 router 复核实际 Git 变化，不恢复 changed-file 测试选择器。
+- Golden 环境曾因共享 Compose identity、固定端口和全局 teardown 删除其他工作区服务；现在每次运行拥有独立 scope、动态 loopback endpoint，并在删除数据 scope 前终止自己的进程组。基础设施自测必须证明停止一个 scope 不影响另一个。
+- Workflow Lab 曾投影出正确 stage 却丢失 durable interruption、chapter、plan 或未来事实清理，导致 fork 不能执行下一合法动作。checkpoint 只有在 `list → fork → list → fork → consume` 可重复且能通过真实 UI 执行下一边界时才可登记；内部瞬时 enum 不得冒充 checkpoint。
 
 ## 修改检查表
 
@@ -96,3 +99,4 @@ Critical Infrastructure 测试只开放一个受控故障 seam，并验证真实
 8. 删除旧测试时，它是无效证据，还是需要先由真实场景接管？
 9. 本次是否改变了既有 Golden/Critical 所覆盖的流程、入口、生命周期、终态、失败或禁止副作用？若改变，scenario contract、真实驱动路径、独立 oracle 与 canonical command 是否已同步；若未改变，是否记录了“不适用 + 原因”并证明原场景仍通过？
 10. 修改前显式目标与修改后 `--changed` 是否均已逐文件路由；未映射路径是否完成不适用/补映射判断，且没有据 changed files 猜测 Journey？
+11. 是否把任务计划、临时矩阵、执行日志或生产 identity 提交成永久文档；长期结论是否已压缩到唯一模块契约？

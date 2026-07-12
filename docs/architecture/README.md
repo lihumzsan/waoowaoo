@@ -22,7 +22,7 @@ npm run architecture:impact -- --changed
 | --- | --- | --- |
 | AI Prompt、Prompt registry、结构化模型输出字段或 raw output 协议 | [AI Prompt 与模型输出契约](modules/ai-prompt-output-contract.md) | prompt catalog、生产 raw schema、parser/normalizer、stream adapter |
 | 图片、视频、音乐、音效的报价、确认、提交、扣费 | [计费与审批](modules/billing-approval.md) | billing policy、operation plan、task submitter |
-| 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md)；[动效 Presence 收敛](canvas-motion-presence-convergence.md) | node id、structured stream adapter、canvas projection、motion presence transition |
+| 新增或修改 Canvas 节点、节点身份、流式事件、展开态、重放 | [Canvas 节点与流式状态](modules/canvas-node.md) | node id、structured stream adapter、canvas projection、motion presence transition |
 | 章节核心剪辑计划、镜头结构、章节 ledger 事实投影 | [章节核心剪辑规划](modules/chapter-planning.md) | chapter input、strict output schema、ledger facts projector |
 | route → queue → worker → DB 的任务提交、状态、重试、补偿 | [异步任务生命周期](modules/async-task-lifecycle.md) | task types、submitter、task service |
 | Agent run、工具调度、确认、心跳、恢复、任务完成后的继续执行 | [Assistant Run 生命周期](modules/assistant-run-lifecycle.md) | project-agent runtime、operation registry |
@@ -39,11 +39,10 @@ npm run architecture:impact -- --changed
 
 文档与代码冲突时，不允许在调用方加兼容分支。必须先确认产品决策，再同步收敛文档、权威入口和适用验证证据。
 
-Assistant 的暂停协议（Choice、Approval、Task）发生架构性调整时，还必须阅读 [Assistant Suspension 收敛设计](assistant-suspension-convergence.md) 与 [Assistant 执行段交接收敛](assistant-execution-segment-convergence.md)：执行资格与等待结果是两个事实，不能用 Run status 互相推导；message、卡片、Wait 和 Run 必须作为同一可恢复交接提交。
-
 ## 维护规则
 
 - 新增或变更一个模块的语义不变量时，必须同步更新该模块文档、`modules.json`、权威代码和验证。
 - 纯局部实现变更不要求机械修改文档；但不得改变文档所述语义。
 - 每条不变量应有稳定编号；只有满足测试准入时才要求 executable evidence，并尽可能保留真实历史反例。
+- C/D 前置治理分析属于当前任务过程，可存在于任务计划或 Git 忽略的临时文件；完成后只把长期有效的不变量、权威入口、历史根因与盲区压缩进所属模块，禁止建立永久 process/incident 文档库。
 - `npm run check:architecture-docs` 校验目录、模块文档、权威入口、已声明测试和结构检查的引用完整性；它不证明产品行为正确。

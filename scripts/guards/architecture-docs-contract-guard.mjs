@@ -7,6 +7,7 @@ import process from 'node:process'
 const root = process.cwd()
 const manifestPath = path.join(root, 'docs', 'architecture', 'modules.json')
 const readmePath = path.join(root, 'docs', 'architecture', 'README.md')
+const architectureRoot = path.join(root, 'docs', 'architecture')
 const requiredSections = ['## 设计理念', '## 不变量', '## 权威入口', '## 验证', '## 历史回归', '## 修改检查表']
 
 // Architecture contract: docs/architecture/modules/test-governance.md (TG-08, TG-09).
@@ -46,6 +47,17 @@ function findDuplicates(values) {
   return [...duplicates]
 }
 
+function collectFiles(directory) {
+  if (!fs.existsSync(directory)) return []
+  const files = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...collectFiles(entryPath))
+    else if (entry.isFile()) files.push(entryPath)
+  }
+  return files
+}
+
 if (!fs.existsSync(manifestPath)) fail(['missing docs/architecture/modules.json'])
 if (!fs.existsSync(readmePath)) fail(['missing docs/architecture/README.md'])
 
@@ -57,6 +69,14 @@ if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) fail(['ma
 const readme = fs.readFileSync(readmePath, 'utf8')
 const ids = new Set()
 const errors = []
+
+for (const filePath of collectFiles(path.join(architectureRoot, 'incidents'))) {
+  errors.push(`permanent incident/process document is forbidden: ${path.relative(root, filePath)}`)
+}
+for (const entry of fs.readdirSync(architectureRoot, { withFileTypes: true })) {
+  if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name === 'README.md') continue
+  errors.push(`architecture root process document must be migrated into a module: docs/architecture/${entry.name}`)
+}
 
 for (const architectureModule of manifest.modules) {
   if (!architectureModule || typeof architectureModule !== 'object' || Array.isArray(architectureModule)) {

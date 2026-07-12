@@ -47,16 +47,16 @@
 - 任何 fix、recover、restore、prevent、harden、修复、恢复、回归类改动，实施前必须完成历史分诊。
 - 先运行 `npm run architecture:impact -- <目标文件或目录>`，阅读命中模块；未匹配关键生产路径时必须检查并补充模块映射，禁止凭经验继续。
 - 对目标文件运行 `git log --follow -- <file>`，使用 `git show` 阅读相关提交正文和关键 diff，必要时用 `git blame` 确认当前逻辑来源；禁止只看标题。
-- 检索 `docs/architecture/incidents/**`、目标模块文档和 Git 历史中的同一模块或 invariant 历史缺陷。
+- 阅读目标模块文档的「历史回归」，并检索 Git 历史中的同一模块或 invariant 历史缺陷；禁止扫描或维护第二套过程性事故文档库。
 - 明确本次是首次局部错误、同根因复发、换形式复发、新实例漏接契约，还是测试/CI 防线失效。
 - 复发时必须解释上一版为什么没有覆盖真实路径，禁止在原启发式上继续叠加例外。
 - 未完成历史分诊前，只允许只读调查。
-- P0/P1、同一不变量第二次复发、曾逃过现有防线的缺陷，必须登记到 `docs/architecture/incidents/**`；满足测试准入时链接真实 Golden/Critical scenario，否则明确未验证盲区。
+- P0/P1、同一不变量第二次复发、曾逃过现有防线的缺陷，必须把仍有效的症状、根因、旧防线失效原因、当前防线和未验证盲区压缩进所属模块的「历史回归」；满足测试准入时链接真实 Golden/Critical scenario。禁止永久提交包含任务过程、临时边界、执行日志或生产 identity 的事故档案。
 - Git 检索只负责提供候选，不是根因权威；关键经验不得只存在于 commit message、测试名称或对话。
 
 ## 5. 架构变更前置证据
 
-- C/D 类任务写实现前必须产出临时治理文档，至少包括：
+- C/D 类任务写实现前必须在当前任务计划或 Git 忽略的临时文件中完成前置治理分析，至少包括：
   - 目标、非目标、禁止范围及并行任务边界；
   - 全部执行、持久化、异步处理、恢复、投影、用户和调试入口；
   - 状态/实体所有权：事实、canonical identity、scope、唯一 owner、唯一 writer、消费者和 projector；
@@ -65,7 +65,7 @@
   - 要删除的旧入口、旧 writer、旧状态解释、fallback、timer 和特殊分支；
   - 修改前后 writer、执行入口和竞争状态解释源数量；
   - 测试计划及未验证盲区。
-- D 类额外提交历史回归矩阵：历史症状、根因、修复方式、当前防线、复发形式和防线失效原因。
+- D 类额外完成临时历史回归矩阵：历史症状、根因、修复方式、当前防线、复发形式和防线失效原因。交付前必须把长期有效结论收敛进所属模块文档，并删除临时文件；禁止默认提交过程性治理文档。
 - 同一事实仍有两个 writer 的方案不得实施。
 - 没有删除旧逻辑、没有减少多轨或没有让错误更显式的方案，默认不合格。
 
@@ -129,7 +129,7 @@
 - Critical Infrastructure 测试必须使用真实基础设施和生产 owner，只开放一个明确故障 seam，并验证事务、幂等、并发、retry、terminal、late/replay、补偿或恢复中的适用事实。
 - Registry Conformance 必须从生产 registry 穷尽枚举 identity/capability/policy，禁止维护第二份文件清单；B 类新实例优先登记既有 registry，只有新 observable/failure semantic 才扩展场景。
 - 纠正性测试可与实现同一变更提交，但必须证明同一断言在 pre-fix 代码或真实受控语义故障下失败；把错误常量直接传入断言不算 fail-before。
-- 历史症状和根因归档在 `docs/architecture/incidents/**`，不再建立 synthetic history test registry。需要 executable protection 时链接真实 Golden 或 Critical scenario。
+- 历史症状、根因和旧防线失效原因只在所属模块文档的「历史回归」中精简保留，不建立 incident 文档库或 synthetic history test registry。需要 executable protection 时链接真实 Golden 或 Critical scenario。
 - 场景未挂载、required case 被 skip/todo、依赖不可用、浏览器异常、付费外部调用或只读 oracle 写入必须显式失败；未运行只能报告未验证，禁止暗示通过。
 - `npm run check:architecture` 是结构检查集合；结构 guard 不等于用户行为证明。新增 guard 也必须论证可反证的结构不变量，禁止为了每条规则机械配 guard 自测。
 - `test:logic`、`test:conformance`、`test:critical:*`、`test:golden:*` 只定义可执行入口。本文件暂不规定它们在 commit、push、PR、nightly 或 release 的运行时机，也不得修改 Git hooks 来隐式挂载。

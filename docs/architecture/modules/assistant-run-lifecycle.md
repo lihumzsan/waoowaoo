@@ -128,10 +128,10 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
 - 制作规划 choice 曾通过局部副作用提交视觉风格 Task，导致模型文案、候选记录、run/Wait 三套状态分离；Choice 只负责落用户决定，异步执行必须回到 registry 与 runtime。
-- `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED` 曾把“Workflow 仍有可用 `nextAction`”解释为 Run 失败。真实复发证明 capability 不是 obligation；该 writer 已删除，详见 [Assistant nextAction 停止误判复发治理](../incidents/assistant-next-action-stop-recurrence-2026-07-12/README.md)。
-- 删除硬失败后，真实制作规划确认与视觉风格确认仍分别停在新 `nextAction` 之前，证明结构化确认不是 AI 应再次决定的意图。确认命令现与 Choice 消费原子提交，AI 从正式新状态继续，详见 [Assistant Choice 确认命令原子化](../incidents/assistant-choice-command-atomicity-2026-07-12/README.md)。
-- 视觉风格生成卡曾在删除客户端第二 writer 时被连同只读 presentation 一起删除，而 Golden 只观察 Task 终态与 Choice，未观察 processing UI；恢复只读 View 后仍由 Choice/Operation 独占写入，详见 [视觉风格投影回归](../incidents/style-preview-projection-regression-2026-07-12/README.md)。
-- `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。详见 [Assistant Suspension 收敛设计](../assistant-suspension-convergence.md)。
+- `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED` 曾把“Workflow 仍有可用 `nextAction`”解释为 Run 失败。真实复发证明 capability 不是 obligation；该 writer 已删除，Run 可以在仍有后续能力时合法 completed。
+- 删除硬失败后，真实制作规划确认与视觉风格确认仍分别停在新 `nextAction` 之前，证明结构化确认不是 AI 应再次决定的意图。确认命令现与 Choice 消费原子提交，AI 只从正式新状态继续。
+- 视觉风格生成卡曾在删除客户端第二 writer 时被连同只读 presentation 一起删除，而 Golden 只观察 Task 终态与 Choice，未观察 processing UI；恢复只读 View 后仍由 Choice/Operation 独占写入。
+- `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。
 
 ## 修改检查表
 

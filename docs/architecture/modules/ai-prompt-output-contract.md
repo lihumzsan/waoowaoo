@@ -37,10 +37,10 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 
 ## 历史回归
 
-- 制作规划 Prompt 的 raw beat/ledger/emotional cue 与 Canvas final-schema adapter 漂移，真实 Task processing 时预览失败，而终态 Journey 曾通过；详见 `canvas-structured-stream-preview-2026-07-12`。
-- 核心剪辑 Prompt 曾让模型重复输出 ledger persistent facts，再用字符重合率校验，形成第二事实 writer；详见 `chapter-plan-persistent-fact-authority-2026-07-12`。
+- 制作规划 Prompt 的 raw beat/ledger/emotional cue 与 Canvas final-schema adapter 漂移，真实 Task processing 时预览失败，而终态 Journey 曾通过；现在 browser adapter 与 worker 复用生产 raw schema。
+- 核心剪辑 Prompt 曾让模型重复输出 ledger persistent facts，再用字符重合率校验，形成第二事实 writer；现在模型只写镜头结构，事实由 ledger projector 独占。
 - Golden provider 曾因 generic JSON、错误 prompt 路由或旧字段无法通过生产 parser；fixture 修复只能证明协议替身，不能成为 Prompt schema owner。
-- 本模块的治理来源、路由改造与历史矩阵见 `architecture-impact-prompt-contract-governance-2026-07-12`。
+- Prompt 根目录曾没有通用架构路由，字段变化依赖人工记住 Schema/stream/fixture；现在所有 Prompt 先命中本模块，再沿实际调用链审计适用消费者。
 
 ## 修改检查表
 

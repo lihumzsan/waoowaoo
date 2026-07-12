@@ -46,8 +46,6 @@ Route body 中的 ID、UI card identity、Operation context、最近记录或裸
 - `af300a4ff` 将 owner、project、kind、parent/variant 与 copy transaction 收敛到共享 resolver，并删除 operation-specific raw-ID 所有权解释。
 - 最终 Product Golden matrix 同时通过 cross-project denial 与普通 project reuse，证明拒绝路径没有破坏合法复制路径。
 
-详细事故证据、入口清单和事务边界见 `docs/architecture/incidents/system-journey-coverage/asset-scope-ownership-repair.md`。
-
 ## 修改检查表
 
 - 是否把完整的 scope、owner、project、kind、asset 和 variant identity 传给共享 resolver，而不是只传裸 ID？

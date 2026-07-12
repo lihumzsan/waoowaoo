@@ -218,7 +218,6 @@
         "src/app/api/sse/route.ts",
         "src/lib/query/hooks/useSSE.ts",
         "src/lib/query/workspace-sse-event-sequence.ts",
-        "docs/architecture/incidents/assistant-choice-command-atomicity-2026-07-12",
         "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql",
         "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql"
       ],
@@ -313,8 +312,7 @@
         "src/lib/ai-prompts",
         "standards/prompt-canary",
         "scripts/guards/prompt-i18n-guard.mjs",
-        "scripts/guards/prompt-semantic-regression.mjs",
-        "docs/architecture/incidents/architecture-impact-prompt-contract-governance-2026-07-12"
+        "scripts/guards/prompt-semantic-regression.mjs"
       ],
       "testPaths": [
         "tests/golden-journey/self-tests/model-provider.test.ts",
@@ -398,12 +396,7 @@
         "tests/integration/api/specific",
         "tests/concurrency/billing",
         "docs/architecture/README.md",
-        "docs/architecture/modules.json",
-        "docs/architecture/incidents/assistant-golden-journey",
-        "docs/architecture/incidents/architecture-impact-prompt-contract-governance-2026-07-12",
-        "docs/architecture/incidents/journey-contract-drift-governance-2026-07-12",
-        "docs/architecture/incidents/test-system-reset",
-        "docs/architecture/incidents/system-journey-coverage"
+        "docs/architecture/modules.json"
       ],
       "testPaths": [
         "tests/golden-journey/self-tests/scenario-contracts.test.ts",

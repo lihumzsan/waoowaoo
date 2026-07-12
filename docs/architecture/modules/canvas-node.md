@@ -60,10 +60,10 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
 - `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后暴露生命周期与内容读取竞争。本阶段选择明确的最终一致性语义：终态立即清 runtime，内容只从正式 Query 重新读取；不得恢复 timer 或 terminal payload Cache writer。
-- `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle；详见 [2026-07-12 structured-stream preview 事故](../incidents/canvas-structured-stream-preview-2026-07-12/README.md)。
-- `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write，详见 [动效 Presence 收敛](../canvas-motion-presence-convergence.md)。
-- `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint，详见 [Canvas 展开内容缩放模糊事故](../incidents/canvas-motion-rasterization-2026-07-12/README.md)。
-- 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，详见 [视觉风格投影回归](../incidents/style-preview-projection-regression-2026-07-12/README.md)。
+- `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle。
+- `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write。
+- `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint。
+- 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
 
 ## 修改检查表
 

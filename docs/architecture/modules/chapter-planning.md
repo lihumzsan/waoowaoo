@@ -33,7 +33,6 @@
 
 - `d14404a5c8` 引入模型事实字段与字符相似度 validator；中文改写与跨 event 合并在真实任务中触发误拒。
 - `0ad107b247` 让错误显式进入 `PLAN_VALIDATION_FAILED`，但显式失败没有消除 ledger 与模型的双 writer。
-- 详见 `docs/architecture/incidents/chapter-plan-persistent-fact-authority-2026-07-12/`。
 
 ## 修改检查表
 
