@@ -42,6 +42,16 @@ describe('video model options partition', () => {
       value: 'p::custom-no-capability',
       label: 'custom-no-capability',
     },
+    {
+      value: 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
+      label: 'Bernini Audio LipSync',
+      capabilities: {
+        video: {
+          generationModeOptions: ['normal'],
+          firstlastframe: false,
+        },
+      },
+    },
   ]
 
   it('detects firstlastframe support and firstlastframe-only capability', () => {
@@ -49,11 +59,13 @@ describe('video model options partition', () => {
     expect(supportsFirstLastFrame(models[1])).toBe(true)
     expect(supportsFirstLastFrame(models[2])).toBe(true)
     expect(supportsFirstLastFrame(models[3])).toBe(false)
+    expect(supportsFirstLastFrame(models[4])).toBe(false)
 
     expect(isFirstLastFrameOnlyModel(models[0])).toBe(false)
     expect(isFirstLastFrameOnlyModel(models[1])).toBe(true)
     expect(isFirstLastFrameOnlyModel(models[2])).toBe(false)
     expect(isFirstLastFrameOnlyModel(models[3])).toBe(false)
+    expect(isFirstLastFrameOnlyModel(models[4])).toBe(false)
   })
 
   it('filters out firstlastframe-only models from normal video model list', () => {
