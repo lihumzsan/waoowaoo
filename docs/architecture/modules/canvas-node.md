@@ -13,7 +13,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-01 — 稳定身份与范围。** 节点 ID 必须由持久业务资源和明确 scope 派生；禁止用名称、数组下标、渲染顺序或临时 stream id 作为身份。
 - **CN-02 — 业务状态单一。** DB/Task 的终态与明确 runtime 状态才是节点业务状态来源；不得从历史消息、DOM 或文案反推流程是否运行。
 - **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格方案、视觉风格候选图必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditBible/EDIT_STYLE_PREVIEW_OPTIONS_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。方案文本 Task 原子创建 pending 候选并保留来源 taskId；媒体批准事务再把每个候选一一切换到 direct image Task，不存在父媒体 Task 或以 Bible id 伪造图片运行目标。Canvas 可把这些明确 target 聚合进同一个业务节点，但不得丢失任一 target 的失败、重试或终态。
-- **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。Task 提交后 Canvas 只投影 `editStyleBible:${ProjectEditBible.id}`：任一候选运行时为运行中，全部成功且未确认时为等待选择，确认后同一 identity 原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
+- **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。方案文本 Task 提交后 Canvas 必须立即投影 `editStyleBible:${ProjectEditBible.id}`，不得等待候选行落库；同一节点继续聚合候选图片 Task，全部成功且未确认时为等待选择，确认后原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
 - **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
 - **CN-03A — Canvas 不解释或展示领域 ID。** Structured preview 只能展示 raw 协议中的名称、短 ref 对应的顺序或 clip order；正式节点只消费服务端已投影的 current-name View。renderer 不得维护资产映射、按名称反查 identity，也不得用 characterId/locationId/shotId/sourceId 等内部标识作为缺失文案 fallback。引用缺失必须由 projector 明确拒绝。
@@ -57,7 +57,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
 - Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
-- 视觉风格主链必须先在真实文本 Task processing 窗口观察 Assistant 通用运行卡，再在 direct image Task processing 窗口观察单一运行中 Style Bible 节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
+- 视觉风格主链必须在真实文本 Task processing 窗口同时观察 Assistant 通用运行卡和单一运行中 Style Bible 占位节点，再在 direct image Task processing 窗口观察同一节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
@@ -70,6 +70,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
 - 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
 - `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但全章节 Canvas 仍把 `editScript=null` 传给只接受单实例的 projector，因此 Assistant 显示整批运行而 Canvas 没有任何对应节点；同时 owner-fenced worker 写入的 `generating + {}` 行被 episode 正式读取当作完整 ready payload 解析，reload 触发 `shots/generationSegmentExecutions` schema 失败。旧 mocked episode 测试把计划列表固定为空，Golden 也只验证终态 stage，没有观察真实 processing + reload。当前防线是正式计划 Query 只暴露 ready materialization、Canvas 从全部 editScripts 穷尽投影稳定节点并只把 Task target 交给统一 lifecycle resolver，纯投影规格反证单实例 gate；镜头 stage-probe 已增加真实 Task target → canonical node、processing、reload 和 browser observation oracle。该组合最后一次执行仍未到达镜头 probe：新的视觉风格 Task 链在更早的 `ready_to_generate_edit_script` checkpoint 建立处失败，因此不得宣称该盲区关闭。
+- 视觉风格方案迁入 `ProjectEditBible` 文本 Task 后，Assistant 已显示通用运行卡，但 Canvas 建节点条件仍只认已落库候选，导致文本生成成功前没有 Style Bible 占位节点。上一版只扩展了图片 processing Golden，没有把新文本 target 纳入同一 projector。当前防线从生产 runtime target registry 订阅方案 Task，并在真实文本 processing 窗口断言同一 canonical Style Bible identity 已出现。
 
 ## 修改检查表
 

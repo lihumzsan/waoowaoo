@@ -361,6 +361,14 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       }).toBe(true)
       await expect(page.getByText('进行中 · 1 个任务', { exact: true })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByText('生成视觉风格方案', { exact: true })).toBeVisible()
+      const bibleId = await readGoldenEditBibleId(scope)
+      const generatingStyleBibleNode = page.locator(`article[data-node-id="${workspaceNodeId.editStyleBible(bibleId)}"]`)
+      await expect(generatingStyleBibleNode).toHaveCount(1)
+      await expect(generatingStyleBibleNode).toContainText('Style Bible 生成中')
+      await expect.poll(async () => generatingStyleBibleNode.getAttribute('data-lifecycle-phase'), {
+        timeout: 30_000,
+        message: 'the style-direction text Task must immediately project the stable Style Bible placeholder',
+      }).toMatch(/^(queued|processing)$/)
       await expect.poll(async () => await readGoldenMainlineBoundary(page), {
         timeout: 60_000,
         message: 'the completed style-direction Task must continue into paid image Approval',

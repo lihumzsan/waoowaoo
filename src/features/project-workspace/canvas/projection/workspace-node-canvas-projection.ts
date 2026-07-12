@@ -790,6 +790,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     'ProjectEditBible',
     TASK_TYPE.EDIT_BIBLE_GENERATE,
   )
+  const activeStylePreviewOptionsTaskTarget = findActiveTaskTarget(
+    activeTaskTargets,
+    'ProjectEditBible',
+    TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+  )
   const editSourceScriptStreamTarget = findStreamTarget(streamTargets, 'editSourceScript', episodeId)
   const editBibleStreamTarget = findStreamTarget(streamTargets, 'editBible', episodeId)
   const sourceScriptRuntimeTargetId = editBible?.id ?? activeSourceScriptTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
@@ -925,13 +930,16 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96
     : STAGE_START_Y) + ROW_GAP_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height
   let styleBibleNodeId: string | null = null
-  if (editBible && (styleBibleDetails || stylePreviewSetView)) {
+  const stylePreviewOptionsRunning = Boolean(activeStylePreviewOptionsTaskTarget)
+    || (editFirstWorkflow.stage === 'style_preview_generating' && !stylePreviewSetView)
+  if (editBible && (styleBibleDetails || stylePreviewSetView || stylePreviewOptionsRunning)) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     const stylePreviewRuntimeTargets = stylePreviewSetView?.allCandidates.flatMap((candidate) => {
       const target = TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(candidate.id)
       return target ? [target] : []
     }) ?? []
-    const hasGeneratingPreview = stylePreviewSetView?.hasGeneratingPreview ?? false
+    const hasGeneratingPreview = stylePreviewOptionsRunning
+      || (stylePreviewSetView?.hasGeneratingPreview ?? false)
     const hasFailedPreview = stylePreviewSetView?.hasFailedPreview ?? false
     nodes.push(createMediaNode({
       id: styleBibleNodeId,
@@ -970,7 +978,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             : workspaceCanvasPendingResourcePresentation()),
         previewImageUrl: stylePreviewImageUrl,
         styleBibleDetails: styleBibleDetails ?? undefined,
-        runtimeTargets: stylePreviewRuntimeTargets,
+        runtimeTargets: runtimeTargets(
+          TASK_RUNTIME_TARGETS.projectEditStylePreviewOptions(editBible.id),
+          ...stylePreviewRuntimeTargets,
+        ),
         onAction,
       },
     }))
