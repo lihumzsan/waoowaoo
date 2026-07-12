@@ -479,21 +479,24 @@ async function buildProjectAgentSessionState(
 export async function getProjectAgentSessionSnapshot(
   input: ProjectAgentSessionScopeInput,
 ): Promise<ProjectAgentSessionSnapshot> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const before = await readProjectAgentSessionEventWatermark({
-      ...input,
-      assistantId: input.assistantId ?? 'workspace-command',
-    })
-    const sessionState = await buildProjectAgentSessionState(input)
-    const after = await readProjectAgentSessionEventWatermark({
-      ...input,
-      assistantId: input.assistantId ?? 'workspace-command',
-    })
-    if (before === after) {
-      return { sessionState, eventWatermark: after }
-    }
+  const scope = {
+    ...input,
+    assistantId: input.assistantId ?? 'workspace-command',
   }
-  throw new Error('PROJECT_AGENT_SESSION_SNAPSHOT_UNSTABLE')
+  const before = await readProjectAgentSessionEventWatermark(scope)
+  const sessionState = await buildProjectAgentSessionState(input)
+  const after = await readProjectAgentSessionEventWatermark(scope)
+  return {
+    sessionState,
+    /*
+     * Every state read starts after `before`, so it includes all projections
+     * committed through that event. If later events raced the read, publish
+     * the conservative lower watermark; SSE replay from that cursor is the
+     * level-triggered convergence path. Normal event traffic must not require
+     * an artificial quiet window or turn a valid snapshot into HTTP 500.
+     */
+    eventWatermark: before === after ? after : before,
+  }
 }
 
 export async function getProjectAgentSessionState(

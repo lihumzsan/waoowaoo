@@ -13,11 +13,11 @@ export interface ProjectAssistantThreadWatermarkedSnapshot {
 export async function getProjectAssistantThreadWatermarkedSnapshot(
   input: ProjectAssistantThreadIdentity,
 ): Promise<ProjectAssistantThreadWatermarkedSnapshot> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const before = await readProjectAgentSessionEventWatermark(input)
-    const thread = await loadProjectAssistantThread(input)
-    const after = await readProjectAgentSessionEventWatermark(input)
-    if (before === after) return { thread, eventWatermark: after }
+  const before = await readProjectAgentSessionEventWatermark(input)
+  const thread = await loadProjectAssistantThread(input)
+  const after = await readProjectAgentSessionEventWatermark(input)
+  return {
+    thread,
+    eventWatermark: before === after ? after : before,
   }
-  throw new Error('PROJECT_ASSISTANT_THREAD_SNAPSHOT_UNSTABLE')
 }
