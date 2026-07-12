@@ -175,7 +175,7 @@ export default function VideoPanelCardHeader({ runtime }: VideoPanelCardHeaderPr
         </button>
       ) : null}
 
-      {!layout.isLinked && !layout.isLastFrame && (hasVisibleBaseVideo || taskStatus.isVideoTaskRunning) && (
+      {!layout.isLinked && (hasVisibleBaseVideo || taskStatus.isVideoTaskRunning) && (
         <button
           onClick={(event) => {
             event.stopPropagation()

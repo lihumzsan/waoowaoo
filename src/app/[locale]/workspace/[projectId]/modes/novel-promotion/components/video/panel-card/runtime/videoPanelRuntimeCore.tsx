@@ -83,7 +83,6 @@ export function useVideoPanelActions({
   const isFirstLastFrameOutput = panel.videoGenerationMode === 'firstlastframe' && !!panel.videoUrl
   const visibleBaseVideoUrl = (() => {
     if (isLinked) return isFirstLastFrameOutput ? panel.videoUrl : undefined
-    if (isLastFrame) return undefined
     return panel.videoUrl
   })()
   const hasVisibleBaseVideo = !!visibleBaseVideoUrl
