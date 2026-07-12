@@ -92,6 +92,7 @@ import {
   isProjectAgentOperationEnabled,
   resolveProjectAgentToolset,
 } from './toolset'
+import { resolveProjectAgentTaskFollowUpTurnPolicy } from './task-follow-up-turn-policy'
 import {
   resolveEditFirstWorkflowChoice,
   resolveEditFirstWorkflowState,
@@ -895,6 +896,9 @@ export async function createProjectAgentChatResponse(input: {
     initial: phase.editFirstWorkflow,
   })
   const approvalPreflightStore = createProjectAgentApprovalPreflightStore()
+  const taskFollowUpTurnPolicy = control.kind === 'task_follow_up'
+    ? resolveProjectAgentTaskFollowUpTurnPolicy(control.followUp.terminalStatus)
+    : null
   const toolset = resolveProjectAgentToolset({
     registry: operations,
     context,
@@ -902,11 +906,16 @@ export async function createProjectAgentChatResponse(input: {
     disabledOperationIds: control.kind === 'choice' ? [EDIT_FIRST_CHOICE_TOOL_IDS[control.choiceType]] : [],
   })
   const operationIds = toolset.operationIds
-  const initialEnabledOperationIds = operationIds.filter((operationId) => isProjectAgentOperationEnabled({
-    toolset,
-    workflow: phase.editFirstWorkflow,
-    operationId,
-  }))
+  const initialEnabledOperationIds = operationIds.filter((operationId) => {
+    const operation = operations[operationId]
+    if (!operation) return false
+    return (taskFollowUpTurnPolicy?.allowOperationIntent(operation.intent) ?? true)
+      && isProjectAgentOperationEnabled({
+        toolset,
+        workflow: phase.editFirstWorkflow,
+        operationId,
+      })
+  })
   const initialChoiceContinuationOperationId = control.kind === 'choice'
     ? phase.editFirstWorkflow.nextAction?.operationId ?? null
     : null
@@ -1080,11 +1089,14 @@ export async function createProjectAgentChatResponse(input: {
         onError: (error) => (error instanceof Error ? error.message : String(error)),
       },
       ...(isProjectAgentOperationAlwaysEnabled(toolset, item.operation.id) ? {} : {
-        isEnabled: async () => isProjectAgentOperationEnabled({
-          toolset,
-          workflow: await liveWorkflow.get(),
-          operationId: item.operation.id,
-        }),
+        isEnabled: async () => (
+          (taskFollowUpTurnPolicy?.allowOperationIntent(item.operation.intent) ?? true)
+          && isProjectAgentOperationEnabled({
+            toolset,
+            workflow: await liveWorkflow.get(),
+            operationId: item.operation.id,
+          })
+        ),
       }),
       onExecutionSettled: ({ toolCallId, outcome }) => {
         if (!toolCallId) {
@@ -1378,7 +1390,9 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
           throw completionError
         }
-        const unresolvedWorkflowAction = !shouldPersistApprovalInterruption && !latestStopPart
+        const unresolvedWorkflowAction = !shouldPersistApprovalInterruption
+          && !latestStopPart
+          && (taskFollowUpTurnPolicy?.workflowNextActionIsObligation ?? true)
           ? (await liveWorkflow.get()).nextAction
           : null
         if (unresolvedWorkflowAction) {
@@ -1570,7 +1584,9 @@ export async function createProjectAgentChatResponse(input: {
             chunks.push(createRuntimeStatusChunk('failed', 'tool_error'))
             runStatusFinalized = true
           } else {
-            if (input.settleTaskFollowUp) taskFollowUpSettlement = 'completed'
+            if (input.settleTaskFollowUp) {
+              taskFollowUpSettlement = taskFollowUpTurnPolicy?.explanationSettlement ?? 'completed'
+            }
             else pendingRunSettlement = {
                 status: 'completed',
                 stopReason: 'completed',
