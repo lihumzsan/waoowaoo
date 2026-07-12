@@ -145,7 +145,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM approval_grants WHERE projectId = ? AND episodeId = ? ORDER BY createdAt', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM operation_executions WHERE projectId = ? AND episodeId = ? ORDER BY createdAt', [scope.projectId, scope.episodeId]),
       queryRows(connection, "SELECT * FROM outbox_commands WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.projectId')) = ? ORDER BY createdAt", [scope.projectId]),
-      queryRows(connection, 'SELECT * FROM project_assistant_threads WHERE projectId = ? AND episodeId = ? ORDER BY createdAt', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_assistant_threads WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT id, episodeId, sourceKind, version, normalizedText, createdAt FROM project_episode_source_documents WHERE episodeId = ? ORDER BY version', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_bibles WHERE episodeId = ? ORDER BY createdAt', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_style_previews WHERE projectId = ? AND episodeId = ? ORDER BY createdAt', [scope.projectId, scope.episodeId]),

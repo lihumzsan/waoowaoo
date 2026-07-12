@@ -133,7 +133,11 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
       requestOrdinal += 1
       const id = `golden_fal_${requestOrdinal}`
       falRequests.set(id, { id, kind: falRequestKind(url.pathname) })
-      writeJson(response, 200, { request_id: id })
+      writeJson(response, 200, {
+        request_id: id,
+        response_url: `${requestOrigin(request)}/requests/${id}`,
+        status_url: `${requestOrigin(request)}/requests/${id}/status`,
+      })
       return
     }
     writeJson(response, 404, { error: 'GOLDEN_MEDIA_ROUTE_NOT_FOUND' })

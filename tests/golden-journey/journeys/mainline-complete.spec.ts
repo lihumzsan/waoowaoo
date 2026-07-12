@@ -48,11 +48,20 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE][GJ-RELOAD-EACH-SUSPENSION] real brows
   const visitedBoundaries: GoldenMainlineBoundary[] = []
   const visitedStages: EditFirstWorkflowStage[] = []
   const reloadedTaskStages = new Set<EditFirstWorkflowStage>()
+  let reloadedCompletedStage = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
   const deadline = Date.now() + 25 * 60_000
 
   while (Date.now() < deadline) {
     const workflowStage = await readGoldenWorkflowStage(page, scope)
+    if (workflowStage === 'completed' && !reloadedCompletedStage) {
+      reloadedCompletedStage = true
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await expect.poll(async () => await readGoldenMainlineBoundary(page), {
+        timeout: 30_000,
+        message: 'Final output must survive reload',
+      }).toBe('final_output')
+    }
     if (visitedStages.at(-1) !== workflowStage) {
       visitedStages.push(workflowStage)
       await testInfo.attach(`stage-${String(visitedStages.length)}-${workflowStage}`, {

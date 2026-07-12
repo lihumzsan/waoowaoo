@@ -32,9 +32,9 @@ export async function createGoldenMediaAssets(): Promise<GoldenMediaAssets> {
     await runFfmpeg([
       '-hide_banner', '-loglevel', 'error',
       '-f', 'lavfi', '-i', 'color=c=black:s=64x64:r=12:d=0.5',
-      '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+      '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=44100:duration=0.5',
       '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-movflags', '+faststart', '-y', mp4Path,
+      '-c:a', 'aac', '-ac', '2', '-movflags', '+faststart', '-y', mp4Path,
     ])
     await runFfmpeg([
       '-hide_banner', '-loglevel', 'error',
@@ -51,4 +51,3 @@ export async function createGoldenMediaAssets(): Promise<GoldenMediaAssets> {
     await rm(directory, { recursive: true, force: true })
   }
 }
-

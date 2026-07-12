@@ -67,7 +67,11 @@ function selectSchemaBranch(schema: Record<string, unknown>): unknown {
     : Array.isArray(schema.oneOf)
       ? schema.oneOf
       : null
-  if (branches?.length) return generateGoldenStructuredValue(branches[0])
+  if (branches?.length) {
+    const nullableBranch = branches.find((branch) => asRecord(branch)?.type === 'null')
+    if (nullableBranch) return null
+    return generateGoldenStructuredValue(branches[0])
+  }
   return undefined
 }
 
