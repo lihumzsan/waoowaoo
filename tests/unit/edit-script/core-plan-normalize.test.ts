@@ -31,6 +31,25 @@ describe('edit-first core plan normalization', () => {
     expect(normalized.shots.map((shot) => shot.shotPurpose)).toEqual(['establishing', 'action'])
   })
 
+  it('accepts and normalizes an empty character performance', () => {
+    const plan = corePlan()
+    const character = plan.shots[0]?.characters[0]
+    expect(character).toBeDefined()
+
+    const normalized = normalizeEditScriptCore({
+      ...plan,
+      shots: [
+        {
+          ...plan.shots[0],
+          characters: [{ ...character!, performance: '   ' }],
+        },
+        plan.shots[1],
+      ],
+    })
+
+    expect(normalized.shots[0]?.characters[0]?.performance).toBe('')
+  })
+
   it('fails explicitly when dialogue references a speaker outside the same shot', () => {
     const plan = corePlan()
     const invalid = {

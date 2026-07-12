@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { AppError } from '@/lib/errors/app-error'
-import { editScriptCoreSchema } from '@/lib/edit-script/types'
+import {
+  EDIT_CHARACTER_ROLES,
+  EDIT_CHARACTER_VISIBILITIES,
+  EDIT_SHOT_PURPOSES,
+  editScriptCoreSchema,
+  editScriptPerformanceSchema,
+} from '@/lib/edit-script/types'
 import { ledgerEventSchema, ledgerSnapshotSchema } from '@/lib/edit-ledger/schemas'
 import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
-import { EDIT_CHARACTER_ROLES, EDIT_CHARACTER_VISIBILITIES, EDIT_SHOT_PURPOSES } from '@/lib/edit-script/types'
 
 const assetMenuItemSchema = z.object({
   id: z.string().trim().min(1),
@@ -76,7 +81,7 @@ export function buildChapterPlanOutputSchema(assetMenu: ChapterPlanAssetMenu) {
       characterId: z.enum(characterIds),
       visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
       role: z.enum(EDIT_CHARACTER_ROLES),
-      performance: z.string().trim().min(1),
+      performance: editScriptPerformanceSchema,
     }).strict()).min(0).max(20),
     keyObjects: z.array(z.object({
       name: z.string().trim().min(1),

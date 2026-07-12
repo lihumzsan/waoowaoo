@@ -11,7 +11,7 @@
 - **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。`persistentFactsIntroduced` 等 provenance 投影必须由服务端直接从本章 events 构造，模型输出不得包含事实台账字段。
 - **CP-02 — 模型只写镜头结构。** structure prompt/schema 只允许 `shots` 与 `generationSegments`；额外字段必须由 strict schema 显式拒绝，不得静默删除。
 - **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、字符/token overlap、embedding 或其他语义相似度把模型文本解释为 canonical fact。
-- **CP-04 — 资产 identity 显式。** locationId 与 characterId 只能来自已确认 asset menu 的动态枚举；subScene、performance、keyObjects 等描述无权创建新资产 identity。
+- **CP-04 — 资产 identity 显式。** locationId 与 characterId 只能来自已确认 asset menu 的动态枚举；subScene、performance、keyObjects 等描述无权创建新资产 identity。`performance` 字段必须存在，但允许规范化为空字符串，不能因缺少表演描述阻断整章计划。
 - **CP-05 — 成功写入受 Task owner 约束。** EditScript 正式资源与 provenance 在同一 owner-fenced 成功事务提交；失败 attempt 不得写最终章节事实或计划。
 
 ## 权威入口

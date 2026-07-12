@@ -81,6 +81,8 @@ export type EditCharacterRole = (typeof EDIT_CHARACTER_ROLES)[number]
 export const EDIT_SHOT_PURPOSES = ['establishing', 'action', 'reaction', 'insert', 'atmosphere', 'transition'] as const
 export type EditShotPurpose = (typeof EDIT_SHOT_PURPOSES)[number]
 
+export const editScriptPerformanceSchema = z.string().trim()
+
 export interface EditScriptCharacter {
   readonly characterId: string
   readonly name: string
@@ -290,7 +292,7 @@ export const editScriptCharacterSchema = z
     name: z.string().trim().min(1),
     visibility: z.enum(EDIT_CHARACTER_VISIBILITIES),
     role: z.enum(EDIT_CHARACTER_ROLES),
-    performance: z.string().trim().min(1),
+    performance: editScriptPerformanceSchema,
   })
   .strict()
 

@@ -55,4 +55,34 @@ describe('projectChapterPersistentFacts', () => {
 
     expect(result.success).toBe(false)
   })
+
+  it('accepts an empty performance in the asset-scoped chapter output', () => {
+    const schema = buildChapterPlanOutputSchema({
+      locations: [{ id: 'location-1', name: '密室', description: '章节场景' }],
+      characters: [{ id: 'character-1', name: '阿杰', description: '主角' }],
+    })
+
+    const result = schema.safeParse({
+      shots: [{
+        shotId: 'shot-001',
+        shotNumber: 1,
+        shotPurpose: 'action',
+        durationSec: 3,
+        scene: { locationId: 'location-1', subScene: '铁门内侧' },
+        action: '阿杰推门进入。',
+        characters: [{
+          characterId: 'character-1',
+          visibility: 'visible',
+          role: 'focus',
+          performance: '',
+        }],
+        keyObjects: [],
+        dialogue: [],
+        sound: '铁门摩擦声',
+      }],
+      generationSegments: [{ shotIds: ['shot-001'], continuity: '同一进入动作' }],
+    })
+
+    expect(result.success).toBe(true)
+  })
 })
