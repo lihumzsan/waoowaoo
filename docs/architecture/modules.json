@@ -66,6 +66,7 @@
       "title": "Canvas 节点与流式状态",
       "sourcePaths": [
         "src/features/project-workspace/canvas",
+        "src/styles/animations.css",
         "src/lib/workspace-resource/resource-impact.ts",
         "src/lib/query/resource-change-sync.ts",
         "src/lib/query/workspace-sse-event-sync.ts",
@@ -85,7 +86,8 @@
         "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/edit-bible/source-script-segments.test.ts",
-        "tests/integration/provider/source-script-scene-stream.contract.test.ts"
+        "tests/integration/provider/source-script-scene-stream.contract.test.ts",
+        "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
       ],
       "guardPaths": [
         "scripts/guards/no-history-state-inference.mjs",

@@ -22,7 +22,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ version, title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。不得恢复重复的 `scriptText + structure` 输出。
 - **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
-- **CN-12 — Renderer 本地动效不得驱动渲染。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
+- **CN-12 — Renderer 本地动效不得驱动渲染或永久合成。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。`data-workspace-canvas-motion-active` 是动画窗口的唯一事实；窗口结算后必须恢复 `animation: none`、`transform: none` 和 `will-change: auto`，不得让 React Flow viewport scale 再放大内部持久 compositor layer。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
 - **CN-13 — ReactFlow 测量单向。** `useWorkspaceNodeCanvasProjection` 只从领域事实和持久 layout 产生节点 View；`ProjectWorkspaceCanvas` 只把明确的用户拖拽写入本地/持久 position layout。ReactFlow 的 `dimensions`、ResizeObserver 或 DOM 尺寸只属于 ReactFlow 内部测量，绝不得回写 `WorkspaceCanvasNodeData.width/height`、projection node 或受控 business node state。streaming 重投影、用户 layout 与 transient measurement 必须是三个单向输入，不能构成 render feedback loop。
 
 ## 权威入口
@@ -45,7 +45,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 ## 验证
 
-- `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口或 reload divergence 都是场景失败。
+- `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口、reload divergence 或稳定展开内容仍持有 animation/transform/will-change 都是场景失败。
 - `GJ-CANVAS-STRUCTURED-PREVIEW` 必须让本地 provider 受控分块输出，并在 Task 仍为 processing 时观察制作规划 raw item 卡片；只检查终态正式 Query 不构成 structured preview 覆盖。
 - `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
@@ -58,6 +58,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后暴露生命周期与内容读取竞争。本阶段选择明确的最终一致性语义：终态立即清 runtime，内容只从正式 Query 重新读取；不得恢复 timer 或 terminal payload Cache writer。
 - `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle；详见 [2026-07-12 structured-stream preview 事故](../incidents/canvas-structured-stream-preview-2026-07-12/README.md)。
 - `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write，详见 [动效 Presence 收敛](../canvas-motion-presence-convergence.md)。
+- `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint，详见 [Canvas 展开内容缩放模糊事故](../incidents/canvas-motion-rasterization-2026-07-12/README.md)。
 
 ## 修改检查表
 

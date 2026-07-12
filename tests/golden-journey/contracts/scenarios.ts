@@ -238,7 +238,7 @@ export const GOLDEN_INFRASTRUCTURE_VARIANT_SCENARIOS = [
   {
     id: 'GJ-CANVAS-STRUCTURED-PREVIEW',
     kind: 'infrastructure_variant',
-    title: 'a paced production-plan stream renders valid cards without overriding the processing Task lifecycle',
+    title: 'a paced production-plan stream renders valid cards with a settled non-composited expansion after Canvas zoom without overriding the processing Task lifecycle',
     startStage: 'script_ready_for_review',
     expectedTerminal: {
       kind: 'workflow_stage',

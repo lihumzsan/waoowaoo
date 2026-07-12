@@ -15,6 +15,30 @@ interface GoldenStorageState {
   readonly cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0]
 }
 
+interface SettledMotionStyle {
+  readonly active: string | null
+  readonly animationName: string
+  readonly opacity: string
+  readonly transform: string
+  readonly willChange: string
+}
+
+async function readSettledMotionStyle(
+  presence: import('@playwright/test').Locator,
+): Promise<SettledMotionStyle | null> {
+  if (await presence.count() !== 1) return null
+  return await presence.evaluate((element) => {
+    const style = window.getComputedStyle(element)
+    return {
+      active: element.getAttribute('data-workspace-canvas-motion-active'),
+      animationName: style.animationName,
+      opacity: style.opacity,
+      transform: style.transform,
+      willChange: style.willChange,
+    }
+  })
+}
+
 test('[GJ-CANVAS-STRUCTURED-PREVIEW] paced model output remains a processing card and reveals valid items', async ({
   page,
   context,
@@ -64,6 +88,30 @@ test('[GJ-CANVAS-STRUCTURED-PREVIEW] paced model output remains a processing car
   await expect(node).toHaveAttribute('data-lifecycle-phase', 'succeeded')
   const finalExpandButton = node.getByRole('button', { name: '展开', exact: true })
   if (await finalExpandButton.count() > 0) await finalExpandButton.click()
+  const canvasViewport = page.locator('.react-flow__viewport')
+  await expect(canvasViewport).toHaveCount(1)
+  const viewportTransformBeforeZoom = await canvasViewport.evaluate((element) => window.getComputedStyle(element).transform)
+  const zoomInButton = page.getByRole('button', { name: '放大', exact: true })
+  await expect(zoomInButton).toHaveCount(1)
+  await zoomInButton.click()
+  await expect.poll(
+    async () => await canvasViewport.evaluate((element) => window.getComputedStyle(element).transform),
+    { message: 'The real Canvas zoom control must change the React Flow viewport transform' },
+  ).not.toBe(viewportTransformBeforeZoom)
+  const settledExpandedPresence = node.locator('.workspace-canvas-motion-presence[data-motion-state="entered"]:has(nav)')
+  await expect.poll(
+    async () => await readSettledMotionStyle(settledExpandedPresence),
+    {
+      timeout: 5_000,
+      message: 'Expanded Canvas text must leave its temporary compositor layer after reveal motion settles',
+    },
+  ).toEqual({
+    active: 'false',
+    animationName: 'none',
+    opacity: '1',
+    transform: 'none',
+    willChange: 'auto',
+  })
   await node.getByRole('button', { name: /事件台账/ }).click()
   await expect(node.getByText('旅人无法离开祭坛所在的循环。', { exact: true })).toBeVisible()
   await node.getByRole('button', { name: /情绪曲线/ }).click()

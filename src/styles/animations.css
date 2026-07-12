@@ -333,15 +333,15 @@
 }
 
 .workspace-node-stream-soft-enter {
-  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .workspace-node-stream-soft-detail {
-  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: workspaceNodeStreamSoftEnter 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .workspace-node-stream-soft-detail [data-stream-field="true"] {
-  animation: workspaceNodeStreamSoftField 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: workspaceNodeStreamSoftField 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .workspace-node-stream-soft-detail [data-stream-field="true"]:nth-child(2) {
@@ -373,13 +373,20 @@
 }
 
 .workspace-canvas-soft-reveal {
-  animation: workspaceCanvasGlideReveal 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: workspaceCanvasGlideReveal 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .workspace-canvas-motion-presence {
   display: grid;
   grid-template-rows: 1fr;
   overflow: hidden;
+  animation: none;
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+.workspace-canvas-motion-presence[data-workspace-canvas-motion-active="true"] {
   will-change: grid-template-rows, opacity, transform;
 }
 
@@ -388,11 +395,11 @@
   overflow: hidden;
 }
 
-.workspace-canvas-motion-presence[data-motion-state="entered"] {
+.workspace-canvas-motion-presence[data-motion-state="entered"][data-workspace-canvas-motion-active="true"] {
   animation: workspaceCanvasGlideReveal 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.workspace-canvas-motion-presence[data-motion-state="exiting"] {
+.workspace-canvas-motion-presence[data-motion-state="exiting"][data-workspace-canvas-motion-active="true"] {
   pointer-events: none;
   animation: workspaceCanvasGlideHide 130ms cubic-bezier(0.4, 0, 1, 1) both;
 }
