@@ -84,6 +84,7 @@ const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
 const CANVAS_FLOATING_PANEL_BOTTOM_OFFSET_PX = 56
 const FOCUS_HIGHLIGHT_TIMEOUT_MS = 3200
+const WORKSPACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true } as const
 
 export interface WorkspaceAssistantSelectionContext {
   selectedScopeRef?: string | null
@@ -318,6 +319,12 @@ function ProjectWorkspaceCanvasContent({
     signature: string
     edges: WorkspaceCanvasFlowEdge[]
   } | null>(null)
+  const stableNodesRef = useRef<{
+    signature: string
+    nodes: WorkspaceCanvasFlowNode[]
+  } | null>(null)
+  const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
+  const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
   const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
   const activeAssistantTaskTargets = activeAssistantFocusRequest?.taskTargets ?? EMPTY_ACTIVE_TASK_TARGETS
 
@@ -582,10 +589,23 @@ function ProjectWorkspaceCanvasContent({
     () => attachNodeUiState(projectedNodesWithBilling),
     [attachNodeUiState, projectedNodesWithBilling],
   )
-  const flowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
+  resolvedProjectedNodesRef.current = resolvedProjectedNodes
+  userNodePositionsRef.current = userNodePositions
+  const candidateFlowNodes = useMemo(() => applyWorkspaceCanvasUserPositions({
     nodes: resolvedProjectedNodes,
     positions: userNodePositions,
   }), [resolvedProjectedNodes, userNodePositions])
+  const flowNodeSignature = useMemo(
+    () => buildWorkspaceCanvasNodeSignature(candidateFlowNodes),
+    [candidateFlowNodes],
+  )
+  if (stableNodesRef.current?.signature !== flowNodeSignature) {
+    stableNodesRef.current = {
+      signature: flowNodeSignature,
+      nodes: candidateFlowNodes,
+    }
+  }
+  const flowNodes = stableNodesRef.current.nodes
 
   const projectionNodeSignature = useMemo(
     () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
@@ -738,21 +758,30 @@ function ProjectWorkspaceCanvasContent({
   const handleNodeDragStop = useCallback<OnNodeDrag<WorkspaceCanvasFlowNode>>((_event, node, draggedNodes) => {
     notifyCanvasUserInteraction()
     const movedNodes = [node, ...draggedNodes]
-    const nextPositions = new Map(userNodePositions)
+    const nextPositions = new Map(userNodePositionsRef.current)
     movedNodes.forEach((movedNode) => {
       nextPositions.set(movedNode.id, { x: movedNode.position.x, y: movedNode.position.y })
     })
     applyUserNodePositions(movedNodes)
     const nextNodes = applyWorkspaceCanvasUserPositions({
-      nodes: resolvedProjectedNodes,
+      nodes: resolvedProjectedNodesRef.current,
       positions: nextPositions,
     })
     persistCurrentLayoutSafely(nextNodes)
-  }, [applyUserNodePositions, notifyCanvasUserInteraction, persistCurrentLayoutSafely, resolvedProjectedNodes, userNodePositions])
+  }, [applyUserNodePositions, notifyCanvasUserInteraction, persistCurrentLayoutSafely])
 
   const handleNodeClick = useCallback<NodeMouseHandler<WorkspaceCanvasFlowNode>>((_event, node) => {
     setSelectedNodeId(node.id)
   }, [])
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null)
+  }, [])
+  const handleMoveStart = useCallback((event: MouseEvent | TouchEvent | null) => {
+    if (event) notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
+  const handleMoveEnd = useCallback((event: MouseEvent | TouchEvent | null) => {
+    if (event) notifyCanvasUserInteraction()
+  }, [notifyCanvasUserInteraction])
 
   const applyWheelZoom = useCallback((event: WheelEvent<HTMLDivElement>) => {
     if (isWorkspaceCanvasWheelLockedTarget(event.target)) return
@@ -831,16 +860,12 @@ function ProjectWorkspaceCanvasContent({
           edges={flowEdges}
           nodeTypes={workspaceNodeTypes}
           onNodeClick={handleNodeClick}
-          onPaneClick={() => setSelectedNodeId(null)}
+          onPaneClick={handlePaneClick}
           onNodeDragStart={handleNodeDragStart}
           onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
-          onMoveStart={(event) => {
-            if (event) notifyCanvasUserInteraction()
-          }}
-          onMoveEnd={(event) => {
-            if (event) notifyCanvasUserInteraction()
-          }}
+          onMoveStart={handleMoveStart}
+          onMoveEnd={handleMoveEnd}
           nodesDraggable
           nodesConnectable={false}
           elementsSelectable
@@ -848,7 +873,7 @@ function ProjectWorkspaceCanvasContent({
           maxZoom={WORKSPACE_CANVAS_MAX_ZOOM}
           zoomOnScroll={false}
           defaultViewport={DEFAULT_WORKSPACE_CANVAS_VIEWPORT}
-          proOptions={{ hideAttribution: true }}
+          proOptions={WORKSPACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <MiniMap
