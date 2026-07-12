@@ -27,6 +27,40 @@ export interface GoldenBrowserObservationSnapshot {
   readonly blockedExternalRequests: readonly GoldenHttpObservation[]
 }
 
+export interface GoldenBrowserObservationAllowances {
+  readonly allowedHttpStatuses?: ReadonlySet<number>
+  readonly allowedConsoleErrorPatterns?: readonly RegExp[]
+  readonly allowedFailedRequestPatterns?: readonly {
+    readonly method: string
+    readonly url: RegExp
+  }[]
+}
+
+export function collectGoldenBrowserObservationViolations(
+  snapshot: GoldenBrowserObservationSnapshot,
+  input: GoldenBrowserObservationAllowances = {},
+): string[] {
+  const allowedStatuses = input.allowedHttpStatuses ?? new Set<number>()
+  const allowedConsoleErrorPatterns = input.allowedConsoleErrorPatterns ?? []
+  const allowedFailedRequestPatterns = input.allowedFailedRequestPatterns ?? []
+  const unexpectedResponses = snapshot.errorResponses.filter((response) => (
+    response.status === null || !allowedStatuses.has(response.status)
+  ))
+  return [
+    ...snapshot.consoleErrors
+      .filter((item) => !allowedConsoleErrorPatterns.some((pattern) => pattern.test(item.text)))
+      .map((item) => `console:${item.text}`),
+    ...snapshot.pageErrors.map((item) => `page:${item.name}:${item.message}`),
+    ...snapshot.failedRequests
+      .filter((item) => !allowedFailedRequestPatterns.some((pattern) => (
+        pattern.method === item.method && pattern.url.test(item.url)
+      )))
+      .map((item) => `request:${item.method}:${item.url}:${item.failure}`),
+    ...unexpectedResponses.map((item) => `response:${item.status}:${item.method}:${item.url}`),
+    ...snapshot.blockedExternalRequests.map((item) => `external-network:${item.method}:${item.url}`),
+  ]
+}
+
 function requestObservation(request: Request, status: number | null, failure: string | null): GoldenHttpObservation {
   return {
     method: request.method(),
@@ -103,21 +137,9 @@ export class GoldenBrowserObservations {
     })
   }
 
-  assertClean(input?: {
-    readonly allowedHttpStatuses?: ReadonlySet<number>
-  }): void {
-    const allowedStatuses = input?.allowedHttpStatuses ?? new Set<number>()
+  assertClean(input?: GoldenBrowserObservationAllowances): void {
     const snapshot = this.snapshot()
-    const unexpectedResponses = snapshot.errorResponses.filter((response) => (
-      response.status === null || !allowedStatuses.has(response.status)
-    ))
-    const violations = [
-      ...snapshot.consoleErrors.map((item) => `console:${item.text}`),
-      ...snapshot.pageErrors.map((item) => `page:${item.name}:${item.message}`),
-      ...snapshot.failedRequests.map((item) => `request:${item.method}:${item.url}:${item.failure}`),
-      ...unexpectedResponses.map((item) => `response:${item.status}:${item.method}:${item.url}`),
-      ...snapshot.blockedExternalRequests.map((item) => `external-network:${item.method}:${item.url}`),
-    ]
+    const violations = collectGoldenBrowserObservationViolations(snapshot, input)
     if (violations.length > 0) {
       throw new Error(`GOLDEN_BROWSER_OBSERVATION_FAILED\n${violations.join('\n')}`)
     }

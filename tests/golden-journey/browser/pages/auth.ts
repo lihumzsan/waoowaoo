@@ -1,6 +1,15 @@
 import type { Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
+export async function expectGoldenAuthenticatedUser(
+  page: Page,
+  username: string,
+): Promise<void> {
+  await expect(page.locator('button[aria-haspopup="menu"]', { hasText: username })).toBeVisible({
+    timeout: 30_000,
+  })
+}
+
 export async function registerGoldenUser(page: Page, input: {
   readonly username: string
   readonly password: string
@@ -11,6 +20,7 @@ export async function registerGoldenUser(page: Page, input: {
   await page.getByLabel('确认密码').fill(input.password)
   await page.getByRole('button', { name: '注册', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/home(?:[/?#]|$)/, { timeout: 30_000 })
+  await expectGoldenAuthenticatedUser(page, input.username)
 }
 
 export async function signInGoldenUser(page: Page, input: {
@@ -22,4 +32,22 @@ export async function signInGoldenUser(page: Page, input: {
   await page.locator('#password').fill(input.password)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/home(?:[/?#]|$)/, { timeout: 30_000 })
+  await expectGoldenAuthenticatedUser(page, input.username)
+}
+
+export async function signOutGoldenUser(page: Page): Promise<void> {
+  await page.goto('/zh/profile')
+  const [signOutResponse] = await Promise.all([
+    page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/auth/signout'
+    )),
+    page.getByRole('button', { name: '退出登录', exact: true }).click(),
+  ])
+  expect(signOutResponse.status()).toBe(200)
+  await expect(page).toHaveURL(/\/zh(?:[/?#]|$)/, { timeout: 30_000 })
+  await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible({ timeout: 30_000 })
+  const sessionResponse = await page.request.get('/api/auth/session')
+  expect(sessionResponse.status()).toBe(200)
+  expect(await sessionResponse.json()).toEqual({})
 }
