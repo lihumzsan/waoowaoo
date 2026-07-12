@@ -46,7 +46,7 @@ function panelContext(panel: Record<string, unknown>) {
 const NON_ENGLISH_SCRIPT_PATTERN = /[\u0400-\u052f\u0600-\u06ff\u3400-\u9fff]/u
 const CUT_OR_SCENE_TRANSITION_PATTERN = /\b(?:(?:(?:hard|smash|jump|match|abrupt|sudden)\s+)?cut(?:s|ting)?|(?:dissolv(?:e|es|ed|ing)|fade(?:s|d|ing)?|transition(?:s|ed|ing)?)\s+(?:to|into)|scene\s+(?:changes?|shifts?|transitions?)\s+(?:to|into))\b/i
 const NEW_ENTITY_PATTERN = /\b(?:another|new|second)\s+(?:stranger|person|character|man|woman|child|boy|girl|figure|animal|dog|cat|horse|vehicle|car)\b/i
-const ENTITY_ARRIVAL_PATTERN = /\b(?:enters?|appears?|emerges?|arrives?)\b/i
+const ENTITY_ARRIVAL_PATTERN = /\b(?:(a|an|the|another|new|second)\s+)?(stranger|person|people|character|man|woman|child|boy|girl|figure|animal|dog|cat|horse|vehicle|car)\s+(?:enters?|appears?|emerges?|arrives?)\b/gi
 const ENTITY_REVEAL_PATTERN = /\b(?:reveals?|introduces?)\s+(?:(?:a|an|the)\s+)?(?:(?:another|new|second)\s+)?(?:stranger|person|character|man|woman|child|boy|girl|figure|animal|dog|cat|horse)\b/i
 const ANOTHER_LOCATION_PATTERN = /\b(?:shot|scene|camera|view|image)\s+(?:switches|moves|shifts|changes)\s+to\s+(?:(?:a|an|the)\s+)?(?:another|new|second|different)\s+(?:room|location|place|setting|space|area|scene)\b/i
 const INVENTED_PROP_PATTERN = /\b(?:(?:carrying|holding|wielding)\s+(?:a|an)\s+)?(?:new|newly\s+introduced)\s+(?:prop|object|sword|weapon|knife|gun|bag|tool)\b/i
@@ -95,6 +95,18 @@ function introducesContextAbsentProp(prompt: string, sourceContext: string) {
   return false
 }
 
+function introducesContextAbsentArrivingEntity(prompt: string, sourceContext: string) {
+  const sourceTokens = new Set(wordTokens(sourceContext))
+  for (const match of prompt.matchAll(ENTITY_ARRIVAL_PATTERN)) {
+    const qualifier = match[1]?.toLowerCase()
+    const entity = match[2]?.toLowerCase()
+    if ((qualifier && ['another', 'new', 'second'].includes(qualifier)) || (entity && !sourceTokens.has(entity))) {
+      return true
+    }
+  }
+  return false
+}
+
 function parseModelOutput(text: string, sourceContext: string): { prompt: string; warnings: string[] } | null {
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   if (!unfenced) return null
@@ -107,7 +119,7 @@ function parseModelOutput(text: string, sourceContext: string): { prompt: string
     if (
       CUT_OR_SCENE_TRANSITION_PATTERN.test(prompt)
       || NEW_ENTITY_PATTERN.test(prompt)
-      || ENTITY_ARRIVAL_PATTERN.test(prompt)
+      || introducesContextAbsentArrivingEntity(prompt, sourceContext)
       || ENTITY_REVEAL_PATTERN.test(prompt)
       || ANOTHER_LOCATION_PATTERN.test(prompt)
       || INVENTED_PROP_PATTERN.test(prompt)

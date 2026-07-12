@@ -203,6 +203,23 @@ describe('first-last-frame prompt worker', () => {
     expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['non-entity reflections', 'Reflections appear gradually across the glass.'],
+    ['non-entity details', 'Fine details emerge as the camera advances.'],
+    ['camera motion', 'The camera arrives at the final framing.'],
+  ])('accepts valid arrival wording for %s', async (_label, sentence) => {
+    const transitionPrompt = `${validPrompt} ${sentence}`
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({ transition_prompt: transitionPrompt }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(result.fallbackUsed).toBe(false)
+    expect(result.prompt).toBe(transitionPrompt)
+    expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+  })
+
   it('allows a picked-up prop when the prop is present in the structured panel context', async () => {
     loadPanelsMock.mockResolvedValue(context(framePanel('panel-1', 0, {
       props: '[{"name":"sword"}]',
