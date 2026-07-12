@@ -63,7 +63,6 @@ function streamFact(patch: WorkspaceCanvasStreamPatch | null) {
     taskId: patch.taskId,
     taskType: patch.taskType,
     presentation: patch.presentation,
-    error: patch.error,
   } : null
 }
 
@@ -120,7 +119,6 @@ export function resolveWorkspaceCanvasNodeData(input: {
     submitting: input.submitting,
   })
   const acceptsStreamContent = lifecycle.phase === 'streaming'
-    || (lifecycle.phase === 'failed' && input.streamPatch?.error !== null)
   const editAssetGroupDetails = resolveEditAssetGroupRuntimeDetails(input)
 
   return {

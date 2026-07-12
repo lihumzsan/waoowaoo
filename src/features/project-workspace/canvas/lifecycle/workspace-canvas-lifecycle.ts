@@ -34,7 +34,6 @@ export interface WorkspaceCanvasLifecycleFacts {
     readonly taskId: string
     readonly taskType: string | null
     readonly presentation: WorkspaceCanvasStreamPresentation
-    readonly error: WorkspaceCanvasLifecycleError | null
   } | null
   readonly submitting: boolean
   readonly contractError?: WorkspaceCanvasLifecycleError | null
@@ -121,11 +120,11 @@ export function resolveWorkspaceCanvasLifecycle(
   if (facts.task?.phase === 'processing' && taskId) {
     if (streamMatchesTask && facts.stream) {
       return lifecycle({
-        phase: facts.stream.error ? 'failed' : 'streaming',
+        phase: 'streaming',
         taskId,
         taskType: taskType ?? facts.stream.taskType,
         progress: readTaskProgress(facts.task),
-        error: facts.stream.error,
+        error: null,
         stream: facts.stream.presentation,
       })
     }
@@ -144,7 +143,7 @@ export function resolveWorkspaceCanvasLifecycle(
       taskId,
       taskType,
       progress: readTaskProgress(facts.task),
-      error: readTaskError(facts.task) ?? facts.stream?.error ?? {
+      error: readTaskError(facts.task) ?? {
         code: 'TASK_FAILED',
         message: 'Task failed',
       },
@@ -173,11 +172,11 @@ export function resolveWorkspaceCanvasLifecycle(
 
   if (facts.stream) {
     return lifecycle({
-      phase: facts.stream.error ? 'failed' : 'streaming',
+      phase: 'streaming',
       taskId: facts.stream.taskId,
       taskType: facts.stream.taskType,
       progress: readTaskProgress(facts.task),
-      error: facts.stream.error,
+      error: null,
       stream: facts.stream.presentation,
     })
   }

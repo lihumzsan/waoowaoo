@@ -26,10 +26,6 @@ export interface WorkspaceCanvasStreamPatch {
   readonly taskId: string
   readonly taskType: string | null
   readonly presentation: NonNullable<WorkspaceCanvasNodeData['lifecycle']['stream']>
-  readonly error: {
-    readonly code: string
-    readonly message: string
-  } | null
   readonly data: WorkspaceCanvasStreamPatchData
 }
 

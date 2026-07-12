@@ -4,6 +4,7 @@ import {
   buildStreamRuntimeEntries,
   isTerminalStructuredStreamLifecycle,
   processStructuredStreamEvent,
+  snapshotsFromAccumulators,
   type StructuredStreamSnapshot,
 } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
@@ -64,7 +65,6 @@ function streamPatch(): WorkspaceCanvasStreamPatch {
       pinnedItemKeys: [],
       revealedFieldCountByKey: {},
     },
-    error: null,
     data: {
       body: 'streamed scene',
       sourceScriptDetails: {
@@ -103,6 +103,25 @@ describe('workspace structured stream runtime', () => {
           seq: params.seq,
           delta: params.delta ?? '{"segments":[',
         },
+      },
+    }
+  }
+
+  function productionPlanningChunk(params: {
+    stepId: string
+    streamRunId: string
+    delta: string
+  }): TaskSSEEvent {
+    return {
+      ...chunk({ seq: 1, streamRunId: params.streamRunId, delta: params.delta }),
+      id: `stream-${params.streamRunId}-1`,
+      taskType: TASK_TYPE.EDIT_BIBLE_GENERATE,
+      targetType: 'ProjectEditBible',
+      payload: {
+        stepId: params.stepId,
+        stepAttempt: 1,
+        streamRunId: params.streamRunId,
+        stream: { kind: 'text', lane: 'main', seq: 1, delta: params.delta },
       },
     }
   }
@@ -202,6 +221,69 @@ describe('workspace structured stream runtime', () => {
       },
     })
     expect(entries[0]?.patch.presentation.displayedItemKeys).toEqual(['0:0:0'])
+  })
+
+  it('projects the production raw beat, ledger, and emotional schemas while the task is processing', () => {
+    const anchor = {
+      startBlockId: 'p0001', startQuote: 'start', endBlockId: 'p0001', endQuote: 'end',
+    }
+    let accumulators = processStructuredStreamEvent(new Map(), productionPlanningChunk({
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
+      streamRunId: 'beat-run',
+      delta: JSON.stringify({ beats: [{
+        beatId: 'beat-1', title: 'Opening', summary: 'The story opens.',
+        estimatedDurationSec: 12, sourceAnchor: anchor,
+      }] }),
+    }))
+    accumulators = processStructuredStreamEvent(accumulators, productionPlanningChunk({
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_LEDGER,
+      streamRunId: 'ledger-run',
+      delta: JSON.stringify({ events: [{
+        eventId: 'event-1', kind: 'plot', summary: 'A discovery.', entities: [],
+        persistentFacts: ['The clue exists.'], beatId: 'beat-1',
+      }] }),
+    }))
+    accumulators = processStructuredStreamEvent(accumulators, productionPlanningChunk({
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_EMOTIONAL_CURVE,
+      streamRunId: 'curve-run',
+      delta: JSON.stringify({ cues: [{
+        cueId: 'cue-1', mood: 'tense', intensity: 0.8, musicPolicy: 'underscore',
+        sourceAnchor: anchor,
+      }] }),
+    }))
+
+    const entries = buildStreamRuntimeEntries(snapshotsFromAccumulators(accumulators), 'episode-1', (key) => key)
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.patch.data.editBibleDetails).toMatchObject({
+      beatSheet: { beats: [{ beatId: 'beat-1', sourceAnchor: anchor }] },
+      ledger: { events: [{ eventId: 'event-1', beatId: 'beat-1' }] },
+      emotionalCurve: { cues: [{ cueId: 'cue-1', sourceAnchor: anchor }] },
+    })
+    expect(entries[0]?.patch).not.toHaveProperty('error')
+  })
+
+  it('skips an invalid preview item without hiding later valid content or creating a failure patch', () => {
+    const anchor = {
+      startBlockId: 'p0001', startQuote: 'start', endBlockId: 'p0001', endQuote: 'end',
+    }
+    const accumulators = processStructuredStreamEvent(new Map(), productionPlanningChunk({
+      stepId: AI_PROMPT_IDS.EDIT_BIBLE_BEAT_SHEET,
+      streamRunId: 'mixed-beat-run',
+      delta: JSON.stringify({ beats: [
+        { beatId: 'invalid-without-anchor', title: 'Invalid', summary: 'Invalid.', estimatedDurationSec: 4 },
+        { beatId: 'beat-2', title: 'Valid', summary: 'Valid.', estimatedDurationSec: 5, sourceAnchor: anchor },
+      ] }),
+    }))
+
+    const snapshots = snapshotsFromAccumulators(accumulators)
+    const entries = buildStreamRuntimeEntries(snapshots, 'episode-1', (key) => key)
+
+    expect(snapshots[0]?.errorMessage).toBeTruthy()
+    expect(entries[0]?.patch.data.editBibleDetails).toMatchObject({
+      beatSheet: { beats: [{ beatId: 'beat-2' }] },
+    })
+    expect(entries[0]?.patch).not.toHaveProperty('error')
   })
 
   it('merges stream content only for the matching active task', () => {

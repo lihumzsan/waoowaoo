@@ -1,19 +1,17 @@
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
 import { z } from 'zod'
 import {
-  editBibleBeatSchema,
-  editBibleEmotionalCueSchema,
   editBibleSchema,
+  rawEditBibleBeatSchema,
+  rawEditBibleEmotionalCueSchema,
+  rawEditBibleLedgerEventSchema,
   sourceScriptSceneSegmentSchema,
   type EditBible,
-  type EditBibleBeat,
-  type EditBibleEmotionalCue,
+  type RawEditBibleBeatSheet,
+  type RawEditBibleEmotionalCurve,
+  type RawEditBibleLedger,
   type SourceScriptSceneSegment,
 } from '@/lib/edit-bible/schemas'
-import {
-  ledgerEventSchema,
-  type LedgerEvent,
-} from '@/lib/edit-ledger/schemas'
 import {
   editShotExecutionPlanSchema,
   EDIT_CHARACTER_ROLES,
@@ -118,15 +116,15 @@ export type StructuredStreamParsedItem =
   }
   | {
     readonly kind: 'productionPlanningBeat'
-    readonly beat: EditBibleBeat
+    readonly beat: RawEditBibleBeatSheet['beats'][number]
   }
   | {
     readonly kind: 'productionPlanningLedgerEvent'
-    readonly event: LedgerEvent
+    readonly event: RawEditBibleLedger['events'][number]
   }
   | {
     readonly kind: 'productionPlanningEmotionalCue'
-    readonly cue: EditBibleEmotionalCue
+    readonly cue: RawEditBibleEmotionalCurve['cues'][number]
   }
   | {
     readonly kind: 'editScriptShot'
@@ -221,7 +219,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['beats'],
     parseItem: (value) => ({
       kind: 'productionPlanningBeat',
-      beat: editBibleBeatSchema.parse(value),
+      beat: rawEditBibleBeatSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningBeat'
       ? item.beat.beatId
@@ -235,7 +233,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['events'],
     parseItem: (value) => ({
       kind: 'productionPlanningLedgerEvent',
-      event: ledgerEventSchema.parse(value),
+      event: rawEditBibleLedgerEventSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningLedgerEvent'
       ? item.event.eventId
@@ -249,7 +247,7 @@ export const STRUCTURED_STREAM_ADAPTERS: readonly StructuredStreamAdapter[] = [
     path: ['cues'],
     parseItem: (value) => ({
       kind: 'productionPlanningEmotionalCue',
-      cue: editBibleEmotionalCueSchema.parse(value),
+      cue: rawEditBibleEmotionalCueSchema.parse(value),
     }),
     itemKey: (item, fallbackIndex) => item.kind === 'productionPlanningEmotionalCue'
       ? item.cue.cueId

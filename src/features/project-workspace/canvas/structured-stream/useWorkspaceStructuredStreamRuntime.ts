@@ -133,13 +133,20 @@ function normalizeItems(
   adapter: StructuredStreamAdapter,
   previousItems: readonly StructuredStreamItem[],
   values: readonly unknown[],
-): readonly StructuredStreamItem[] {
-  if (values.length === 0) return previousItems
+): { readonly items: readonly StructuredStreamItem[]; readonly errorMessage: string | null } {
+  if (values.length === 0) return { items: previousItems, errorMessage: null }
   const byKey = new Map(previousItems.map((item) => [item.itemKey, item]))
   const nextItems = [...previousItems]
+  let errorMessage: string | null = null
 
   values.forEach((value) => {
-    const parsed = adapter.parseItem(value)
+    let parsed: StructuredStreamParsedItem
+    try {
+      parsed = adapter.parseItem(value)
+    } catch (error) {
+      errorMessage ??= error instanceof Error ? error.message : String(error)
+      return
+    }
     const fallbackIndex = nextItems.length
     const itemKey = adapter.itemKey(parsed, fallbackIndex)
     const item: StructuredStreamItem = {
@@ -158,7 +165,7 @@ function normalizeItems(
     }
   })
 
-  return nextItems
+  return { items: nextItems, errorMessage }
 }
 
 export function processStructuredStreamEvent(
@@ -209,7 +216,6 @@ export function processStructuredStreamEvent(
     if (stepAttempt > highestAttempt) {
       logicalAccumulators.forEach(([accumulatorKey]) => next.delete(accumulatorKey))
     }
-    if (previous?.errorMessage) return
     if (previous && seq <= previous.lastSeq) return
     if (previous && seq !== previous.lastSeq + 1) return
     if (!previous && seq !== 1) return
@@ -220,6 +226,7 @@ export function processStructuredStreamEvent(
     )
     try {
       const result = appendStructuredJsonChunk(parseState, delta)
+      const normalized = normalizeItems(adapter, previous?.items ?? [], result.items)
       next.set(key, {
         taskId: event.taskId,
         taskType: event.taskType ?? null,
@@ -232,8 +239,8 @@ export function processStructuredStreamEvent(
         lane,
         adapter,
         parseState: result.state,
-        items: normalizeItems(adapter, previous?.items ?? [], result.items),
-        errorMessage: null,
+        items: normalized.items,
+        errorMessage: normalized.errorMessage ?? previous?.errorMessage ?? null,
         lastSeq: seq,
       })
     } catch (error) {
@@ -266,7 +273,7 @@ export function snapshotsFromAccumulators(
   accumulators: ReadonlyMap<string, StreamAccumulator>,
 ): readonly StructuredStreamSnapshot[] {
   return [...accumulators.values()]
-    .filter((accumulator) => accumulator.items.length > 0 || accumulator.errorMessage)
+    .filter((accumulator) => accumulator.items.length > 0)
     .map((accumulator) => ({
       taskId: accumulator.taskId,
       taskType: accumulator.taskType,
@@ -362,7 +369,6 @@ function createStreamRuntimeEntry(input: {
   readonly targetId: string
   readonly episodeId: string | null
   readonly presentation: WorkspaceCanvasStreamPresentation
-  readonly error: string | null
   readonly data: WorkspaceCanvasStreamPatchData
 }): WorkspaceCanvasStreamRuntimeEntry {
   return {
@@ -381,10 +387,6 @@ function createStreamRuntimeEntry(input: {
       taskId: input.taskId,
       taskType: input.taskType,
       presentation: input.presentation,
-      error: input.error ? {
-        code: 'STRUCTURED_STREAM_INVALID',
-        message: input.error,
-      } : null,
       data: input.data,
     },
   }
@@ -433,7 +435,6 @@ function buildSourceScriptRuntimeEntries(
     const firstSegment = segmentItems[0]?.segment ?? null
     let structure: EditSourceScriptStructure | null = null
     let sourceText = ''
-    let normalizationError: string | null = null
     if (firstSegment) {
       try {
         const normalized = normalizeSourceScriptSegments({
@@ -444,12 +445,9 @@ function buildSourceScriptRuntimeEntries(
         })
         structure = normalized.structure
         sourceText = normalized.normalizedText
-      } catch (error: unknown) {
-        normalizationError = error instanceof Error ? error.message : String(error)
-      }
+      } catch {}
     }
-    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? normalizationError
-    if (!structure && !error) return []
+    if (!structure) return []
     const rawItems = group.flatMap((snapshot) => snapshot.items)
     const nodeId = workspaceNodeId.editSourceScript(firstSnapshot.episodeId ?? firstSnapshot.targetId)
     return [createStreamRuntimeEntry({
@@ -461,10 +459,9 @@ function buildSourceScriptRuntimeEntries(
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
       presentation: streamPresentation(rawItems),
-      error,
       data: {
-        body: error ?? structure?.summary ?? translate('nodes.editSourceScript.pendingBody'),
-        meta: error ?? translate('nodes.editSourceScript.pendingMeta'),
+        body: structure.summary ?? translate('nodes.editSourceScript.pendingBody'),
+        meta: translate('nodes.editSourceScript.pendingMeta'),
         sourceScriptDetails: {
           sourceText,
           scriptStructure: structure,
@@ -492,11 +489,10 @@ function buildProductionPlanningRuntimeEntries(
     const beatItems = itemsOfKind(group, 'productionPlanning.beats', 'productionPlanningBeat')
     const ledgerItems = itemsOfKind(group, 'productionPlanning.ledgerEvents', 'productionPlanningLedgerEvent')
     const emotionalCueItems = itemsOfKind(group, 'productionPlanning.emotionalCues', 'productionPlanningEmotionalCue')
-    const error = group.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
-    if (!globalBible && beatItems.length === 0 && ledgerItems.length === 0 && emotionalCueItems.length === 0 && !error) return []
+    if (!globalBible && beatItems.length === 0 && ledgerItems.length === 0 && emotionalCueItems.length === 0) return []
     const rawItems = group.flatMap((snapshot) => snapshot.items)
     const nodeId = workspaceNodeId.editBible(firstSnapshot.episodeId ?? firstSnapshot.targetId)
-    const body = error ?? productionPlanningBody({
+    const body = productionPlanningBody({
       bible: globalBible,
       beatCount: beatItems.length,
       eventCount: ledgerItems.length,
@@ -512,10 +508,9 @@ function buildProductionPlanningRuntimeEntries(
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
       presentation: streamPresentation(rawItems),
-      error,
       data: {
         body,
-        meta: error ?? translate('nodes.editBible.pendingMeta'),
+        meta: translate('nodes.editBible.pendingMeta'),
         editBibleDetails: {
           bibleText: body,
           bible: globalBible?.bible ?? null,
@@ -546,8 +541,7 @@ function buildEditScriptRuntimeEntries(
       snapshot.taskId === taskId && snapshot.targetId === targetId
     ))
     const shotItems = itemsOfKind(scopedSnapshots, 'editScript.shots', 'editScriptShot')
-    const error = scopedSnapshots.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
-    if (shotItems.length === 0 && !error) return []
+    if (shotItems.length === 0) return []
     const firstSnapshot = scopedSnapshots[0] ?? null
     if (!firstSnapshot) return []
     const durationSec = shotItems.reduce((total, item) => total + item.shot.durationSec, 0)
@@ -562,17 +556,14 @@ function buildEditScriptRuntimeEntries(
       targetId,
       episodeId: firstSnapshot.episodeId ?? episodeId,
       presentation: streamPresentation(rawItems),
-      error,
       data: {
-        body: error ?? translate('nodes.editScript.pendingBody'),
-        meta: error
-          ? error
-          : translate('nodes.editScript.meta', {
-              shots: shotItems.length,
-              duration: durationSec,
-              assets: 0,
-              completed: 0,
-            }),
+        body: translate('nodes.editScript.pendingBody'),
+        meta: translate('nodes.editScript.meta', {
+          shots: shotItems.length,
+          duration: durationSec,
+          assets: 0,
+          completed: 0,
+        }),
         editScriptDetails: shotItems.length > 0 ? {
           durationSec,
           shotCount: shotItems.length,
@@ -606,8 +597,7 @@ function buildShotExecutionRuntimeEntry(
 ): WorkspaceCanvasStreamRuntimeEntry | null {
   const matchingSnapshots = snapshots.filter((snapshot) => snapshot.adapterKey === 'shotExecutionPlan.shots')
   const shotItems = itemsOfKind(matchingSnapshots, 'shotExecutionPlan.shots', 'shotExecutionPlanShot')
-  const error = matchingSnapshots.find((snapshot) => snapshot.errorMessage)?.errorMessage ?? null
-  if (shotItems.length === 0 && !error) return null
+  if (shotItems.length === 0) return null
   const rawItems = matchingSnapshots.flatMap((snapshot) => snapshot.items)
   const firstSnapshot = matchingSnapshots[0] ?? null
   if (!firstSnapshot) return null
@@ -623,10 +613,9 @@ function buildShotExecutionRuntimeEntry(
     targetId: editScriptId,
     episodeId: firstSnapshot.episodeId,
     presentation: streamPresentation(rawItems),
-    error,
     data: {
-      body: error ?? translate('nodes.editShotExecutionPlan.pendingBody'),
-      meta: error ?? translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
+      body: translate('nodes.editShotExecutionPlan.pendingBody'),
+      meta: translate('nodes.editShotExecutionPlan.meta', { shots: shotItems.length }),
       editPipelineStepDetails: shotItems.length > 0 ? {
         items: pipelineItemsFromShotExecutionPlan(shotItems, translate),
       } : undefined,
@@ -645,8 +634,7 @@ function buildBgmRuntimeEntry(
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey.startsWith('bgm.'))
     .flatMap((snapshot) => snapshot.items)
-  const error = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.') && snapshot.errorMessage)?.errorMessage ?? null
-  if (designSections.length === 0 && promptSections.length === 0 && virtualLayers.length === 0 && !error) return null
+  if (designSections.length === 0 && promptSections.length === 0 && virtualLayers.length === 0) return null
   const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('bgm.')) ?? null
   if (!firstSnapshot) return null
   const nodeId = workspaceNodeId.bgmScore(episodeId)
@@ -659,12 +647,11 @@ function buildBgmRuntimeEntry(
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     presentation: streamPresentation(rawItems),
-    error,
     data: {
-      body: error ?? translate('nodes.bgmScore.body', { videos: 0 }),
-      meta: error ? error : translate('nodes.bgmScore.ready', { count: promptSections.length }),
+      body: translate('nodes.bgmScore.body', { videos: 0 }),
+      meta: translate('nodes.bgmScore.ready', { count: promptSections.length }),
       bgmScoreDetails: {
-        status: error ? 'failed' : 'generating',
+        status: 'generating',
         durationSeconds: null,
         musicModel: null,
         hasPromptDesign: rawItems.length > 0,
@@ -673,7 +660,7 @@ function buildBgmRuntimeEntry(
         promptSectionCount: promptSections.length,
         virtualLayerCount: virtualLayers.length,
         mixUrl: null,
-        errorMessage: error,
+        errorMessage: null,
         scoreOverview: null,
         designSections: designSections.map((section) => ({
           category: section.category,
@@ -712,8 +699,7 @@ function buildSoundscapeRuntimeEntry(
   const rawItems = snapshots
     .filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.'))
     .flatMap((snapshot) => snapshot.items)
-  const error = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('soundscape.') && snapshot.errorMessage)?.errorMessage ?? null
-  if (sources.length === 0 && sections.length === 0 && !error) return null
+  if (sources.length === 0 && sections.length === 0) return null
   const firstSnapshot = snapshots.find((snapshot) => snapshot.adapterKey.startsWith('soundscape.')) ?? null
   if (!firstSnapshot) return null
   const nodeId = workspaceNodeId.soundscape(episodeId)
@@ -726,12 +712,11 @@ function buildSoundscapeRuntimeEntry(
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
     presentation: streamPresentation(rawItems),
-    error,
     data: {
-      body: error ?? translate('nodes.soundscape.body', { videos: 0 }),
-      meta: error ? error : translate('nodes.soundscape.ready', { sources: sources.length, sections: sections.length }),
+      body: translate('nodes.soundscape.body', { videos: 0 }),
+      meta: translate('nodes.soundscape.ready', { sources: sources.length, sections: sections.length }),
       soundscapeDetails: {
-        status: error ? 'failed' : 'planning',
+        status: 'planning',
         decision: null,
         soundEffectModel: null,
         sourceCount: sources.length,
@@ -739,7 +724,7 @@ function buildSoundscapeRuntimeEntry(
         sources,
         sections,
         mixUrl: null,
-        errorMessage: error,
+        errorMessage: null,
       },
     },
   })

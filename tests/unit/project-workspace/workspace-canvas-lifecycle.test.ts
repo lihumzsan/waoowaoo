@@ -71,7 +71,7 @@ describe('workspace Canvas lifecycle resolver', () => {
 
   it('makes contract errors authoritative while retaining the best available identity', () => {
     const contractError = { code: 'CANVAS_CONTRACT_INVALID', message: 'Missing capability' }
-    const stream = { taskId: 'stream-task', taskType: 'stream-type', presentation, error: null }
+    const stream = { taskId: 'stream-task', taskType: 'stream-type', presentation }
 
     expect(resolveWorkspaceCanvasLifecycle(facts({
       contractError,
@@ -95,7 +95,7 @@ describe('workspace Canvas lifecycle resolver', () => {
   })
 
   it('uses stream facts only when they belong to the active processing task', () => {
-    const matchingStream = { taskId: 'task-1', taskType: 'stream-type', presentation, error: null }
+    const matchingStream = { taskId: 'task-1', taskType: 'stream-type', presentation }
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'processing', taskId: 'task-1', runningTaskType: null, progress: 25 },
       stream: matchingStream,
@@ -110,12 +110,6 @@ describe('workspace Canvas lifecycle resolver', () => {
       phase: 'processing', taskId: 'task-1', taskType: 'task-type', progress: 25,
       error: null, stream: null,
     })
-
-    const streamError = { code: 'STREAM_FAILED', message: 'Stream failed' }
-    expect(resolveWorkspaceCanvasLifecycle(facts({
-      task: { phase: 'processing', taskId: 'task-1' },
-      stream: { ...matchingStream, error: streamError },
-    }))).toMatchObject({ phase: 'failed', error: streamError, stream: presentation })
   })
 
   it('normalizes final task errors and uses explicit fallbacks in priority order', () => {
@@ -141,11 +135,10 @@ describe('workspace Canvas lifecycle resolver', () => {
       },
     }))).toMatchObject({ error: { code: 'TASK_FAILED', message: 'Task failed' } })
 
-    const streamError = { code: 'STREAM_FINAL', message: 'Stream final failure' }
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'failed', taskId: 'task-3', lastError: { code: 5 as unknown as string, message: ' ' } },
-      stream: { taskId: 'task-3', taskType: null, presentation, error: streamError },
-    }))).toMatchObject({ error: streamError })
+      stream: { taskId: 'task-3', taskType: null, presentation },
+    }))).toMatchObject({ error: { code: 'TASK_FAILED', message: 'Task failed' } })
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'failed', taskId: 'task-4', lastError: null },
     }))).toMatchObject({ error: { code: 'TASK_FAILED', message: 'Task failed' } })
@@ -170,17 +163,13 @@ describe('workspace Canvas lifecycle resolver', () => {
   })
 
   it('orders standalone stream, submission, and persisted facts without merging them', () => {
-    const streamError = { code: 'STREAM_REJECTED', message: 'Rejected' }
     expect(resolveWorkspaceCanvasLifecycle(facts({
-      stream: { taskId: 'stream-only', taskType: 'text_stream', presentation, error: null },
+      stream: { taskId: 'stream-only', taskType: 'text_stream', presentation },
       submitting: true,
     }))).toEqual({
       phase: 'streaming', taskId: 'stream-only', taskType: 'text_stream', progress: null,
       error: null, stream: presentation,
     })
-    expect(resolveWorkspaceCanvasLifecycle(facts({
-      stream: { taskId: 'stream-error', taskType: null, presentation, error: streamError },
-    }))).toMatchObject({ phase: 'failed', taskId: 'stream-error', error: streamError, stream: presentation })
     expect(resolveWorkspaceCanvasLifecycle(facts({ submitting: true }))).toEqual({
       phase: 'submitting', taskId: null, taskType: null, progress: null, error: null, stream: null,
     })
