@@ -78,6 +78,7 @@ only durable Task/resource facts. Late chunks after terminal remain rejected.
 - Preserve existing terminal clearing, current-attempt, duplicate and late
   stream defenses.
 - Run focused stream/lifecycle tests, typecheck, Canvas guards and full
-  architecture checks. The paid-provider pacing window remains a manual/cloud
-  browser observation unless a deterministic delayed Golden provider scenario
-  is admitted later.
+  architecture checks. `GJ-CANVAS-STRUCTURED-PREVIEW` uses a deterministic
+  paced local provider and the real browser/worker/SSE path to observe a raw
+  beat card while its Task is still processing, then verifies the durable
+  ledger and emotional-curve cards after completion.

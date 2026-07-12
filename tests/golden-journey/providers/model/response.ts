@@ -21,7 +21,23 @@ export function writeGoldenStreamingResponse(input: {
   readonly response: ServerResponse
   readonly request: GoldenChatCompletionRequest
   readonly decision: GoldenModelDecision
-}): void {
+  readonly pacing?: {
+    readonly chunkSize: number
+    readonly delayMs: number
+  } | null
+}): Promise<void> {
+  return writeGoldenStreamingResponseAsync(input)
+}
+
+async function writeGoldenStreamingResponseAsync(input: {
+  readonly response: ServerResponse
+  readonly request: GoldenChatCompletionRequest
+  readonly decision: GoldenModelDecision
+  readonly pacing?: {
+    readonly chunkSize: number
+    readonly delayMs: number
+  } | null
+}): Promise<void> {
   input.response.writeHead(200, {
     'content-type': 'text/event-stream; charset=utf-8',
     'cache-control': 'no-cache',
@@ -37,10 +53,20 @@ export function writeGoldenStreamingResponse(input: {
     choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
   })
   if (input.decision.kind === 'text') {
-    writeSse(input.response, {
-      ...baseChunk(input.request),
-      choices: [{ index: 0, delta: { content: input.decision.text }, finish_reason: null }],
-    })
+    const chunkSize = input.pacing?.chunkSize ?? input.decision.text.length
+    for (let offset = 0; offset < input.decision.text.length; offset += chunkSize) {
+      writeSse(input.response, {
+        ...baseChunk(input.request),
+        choices: [{
+          index: 0,
+          delta: { content: input.decision.text.slice(offset, offset + chunkSize) },
+          finish_reason: null,
+        }],
+      })
+      if (input.pacing && offset + chunkSize < input.decision.text.length) {
+        await new Promise<void>((resolve) => setTimeout(resolve, input.pacing?.delayMs ?? 0))
+      }
+    }
     writeSse(input.response, {
       ...baseChunk(input.request),
       choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],

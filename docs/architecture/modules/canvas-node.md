@@ -46,6 +46,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 ## 验证
 
 - `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口或 reload divergence 都是场景失败。
+- `GJ-CANVAS-STRUCTURED-PREVIEW` 必须让本地 provider 受控分块输出，并在 Task 仍为 processing 时观察制作规划 raw item 卡片；只检查终态正式 Query 不构成 structured preview 覆盖。
 - `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
