@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors/app-error'
+import { getLogContext } from '@/lib/logging/context'
 import { prisma } from '@/lib/prisma'
 import { FetchStatusError } from '@/lib/retry'
 import { loadTaskExecutionFingerprint } from './execution-checkpoint'
@@ -34,6 +35,7 @@ type ProviderInvocationDescriptor = {
 
 type ProviderInvocationOutput = ProviderInvocationDescriptor & {
   readonly contractVersion: typeof CONTRACT_VERSION
+  readonly taskAttempt?: number
   readonly result?: unknown
   readonly error?: {
     readonly name: string
@@ -142,6 +144,48 @@ function rejected(
   )
 }
 
+function retryableSubmissionFailure(
+  descriptor: ProviderInvocationDescriptor,
+  message: string,
+  cause?: unknown,
+): AppError {
+  return new AppError(
+    'PROVIDER_SUBMIT_FAILED',
+    message || 'Provider temporarily declined the generation request',
+    {
+      provider: descriptor.provider,
+      details: {
+        taskId: descriptor.taskId,
+        invocationKey: descriptor.invocationKey,
+        modality: descriptor.modality,
+        modelKey: descriptor.modelKey,
+      },
+      cause,
+    },
+  )
+}
+
+function isRetryableSubmissionStatus(status: number): boolean {
+  return status === 408
+    || status === 425
+    || status === 429
+    || status === 500
+    || status === 502
+    || status === 503
+    || status === 504
+}
+
+function requireTaskAttempt(taskId: string): number {
+  const context = getLogContext()
+  if (context.taskId !== taskId) {
+    throw new Error(`TASK_PROVIDER_INVOCATION_CONTEXT_CONFLICT:${taskId}:${context.taskId || 'missing'}`)
+  }
+  if (!Number.isInteger(context.taskAttempt) || (context.taskAttempt ?? 0) < 1) {
+    throw new Error(`TASK_PROVIDER_INVOCATION_ATTEMPT_REQUIRED:${taskId}`)
+  }
+  return context.taskAttempt!
+}
+
 async function loadCheckpoint(taskId: string, stepKey: string): Promise<ProviderCheckpoint | null> {
   return await prisma.taskExecutionCheckpoint.findUnique({
     where: { taskId_stepKey: { taskId, stepKey } },
@@ -153,10 +197,12 @@ async function claimCheckpoint(params: {
   readonly descriptor: ProviderInvocationDescriptor
   readonly inputFingerprint: string
   readonly stepKey: string
+  readonly taskAttempt: number
 }): Promise<{ readonly checkpoint: ProviderCheckpoint; readonly claimed: boolean }> {
   const output: ProviderInvocationOutput = {
     contractVersion: CONTRACT_VERSION,
     ...params.descriptor,
+    taskAttempt: params.taskAttempt,
   }
   try {
     const checkpoint = await prisma.taskExecutionCheckpoint.create({
@@ -179,10 +225,45 @@ async function claimCheckpoint(params: {
   }
 }
 
+async function reclaimRetryableCheckpoint(params: {
+  readonly checkpoint: ProviderCheckpoint
+  readonly descriptor: ProviderInvocationDescriptor
+  readonly taskAttempt: number
+}): Promise<{ readonly checkpoint: ProviderCheckpoint; readonly claimed: boolean }> {
+  const output = parseOutput(params.checkpoint.output)
+  const previousAttempt = output.taskAttempt
+  if (!Number.isInteger(previousAttempt) || (previousAttempt ?? 0) < 1) {
+    throw new Error(`PROVIDER_INVOCATION_RETRY_ATTEMPT_INVALID:${params.descriptor.taskId}:${params.descriptor.invocationKey}`)
+  }
+  if (params.taskAttempt <= previousAttempt!) {
+    throw retryableSubmissionFailure(params.descriptor, readStoredError(output))
+  }
+
+  const nextOutput: ProviderInvocationOutput = {
+    contractVersion: CONTRACT_VERSION,
+    ...params.descriptor,
+    taskAttempt: params.taskAttempt,
+  }
+  const updated = await prisma.taskExecutionCheckpoint.updateMany({
+    where: { id: params.checkpoint.id, state: 'retryable_rejected' },
+    data: {
+      state: 'submitting',
+      output: toJson(nextOutput),
+      completedAt: null,
+    },
+  })
+  const checkpoint = await loadCheckpoint(params.descriptor.taskId, buildStepKey(params.descriptor.invocationKey))
+  if (!checkpoint) {
+    throw new Error(`PROVIDER_INVOCATION_CHECKPOINT_MISSING:${params.descriptor.taskId}:${params.descriptor.invocationKey}`)
+  }
+  return { checkpoint, claimed: updated.count === 1 }
+}
+
 async function transitionCheckpoint(params: {
   readonly checkpointId: string
   readonly descriptor: ProviderInvocationDescriptor
-  readonly state: 'submitted' | 'rejected' | 'outcome_unknown'
+  readonly state: 'submitted' | 'rejected' | 'retryable_rejected' | 'outcome_unknown'
+  readonly taskAttempt: number
   readonly result?: unknown
   readonly error?: unknown
 }): Promise<void> {
@@ -194,6 +275,7 @@ async function transitionCheckpoint(params: {
   const output: ProviderInvocationOutput = {
     contractVersion: CONTRACT_VERSION,
     ...params.descriptor,
+    taskAttempt: params.taskAttempt,
     ...(params.result !== undefined ? { result: params.result } : {}),
     ...(error ? { error } : {}),
   }
@@ -245,9 +327,10 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   }
   const inputFingerprint = await loadTaskExecutionFingerprint(params.taskId)
   const stepKey = buildStepKey(invocationKey)
-  const claim = await claimCheckpoint({ descriptor, inputFingerprint, stepKey })
-  const checkpoint = claim.checkpoint
-  const output = parseOutput(checkpoint.output)
+  const taskAttempt = requireTaskAttempt(params.taskId)
+  let claim = await claimCheckpoint({ descriptor, inputFingerprint, stepKey, taskAttempt })
+  let checkpoint = claim.checkpoint
+  let output = parseOutput(checkpoint.output)
   assertDescriptor(output, descriptor)
   if (checkpoint.inputFingerprint !== inputFingerprint) {
     throw new Error(`PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`)
@@ -255,6 +338,20 @@ export async function executeTaskDurableInvocation<TResult>(params: {
 
   if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
   if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
+  if (checkpoint.state === 'retryable_rejected') {
+    claim = await reclaimRetryableCheckpoint({ checkpoint, descriptor, taskAttempt })
+    checkpoint = claim.checkpoint
+    output = parseOutput(checkpoint.output)
+    assertDescriptor(output, descriptor)
+    if (checkpoint.inputFingerprint !== inputFingerprint) {
+      throw new Error(`PROVIDER_INVOCATION_INPUT_FINGERPRINT_CONFLICT:${params.taskId}:${invocationKey}`)
+    }
+    if (checkpoint.state === 'submitted') return params.resultPolicy.parse(output.result)
+    if (checkpoint.state === 'rejected') throw rejected(descriptor, readStoredError(output))
+    if (checkpoint.state === 'retryable_rejected') {
+      throw retryableSubmissionFailure(descriptor, readStoredError(output))
+    }
+  }
   if (!claim.claimed) throw outcomeUnknown(descriptor)
   if (checkpoint.state !== 'submitting') throw outcomeUnknown(descriptor)
 
@@ -262,6 +359,20 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   try {
     result = await params.execute()
   } catch (error) {
+    if (error instanceof FetchStatusError && isRetryableSubmissionStatus(error.status)) {
+      try {
+        await transitionCheckpoint({
+          checkpointId: checkpoint.id,
+          descriptor,
+          state: 'retryable_rejected',
+          taskAttempt,
+          error,
+        })
+      } catch (transitionError) {
+        throw outcomeUnknown(descriptor, transitionError)
+      }
+      throw retryableSubmissionFailure(descriptor, readErrorMessage(error), error)
+    }
     if (
       error instanceof FetchStatusError
       || params.resultPolicy.isKnownRejectionError?.(error) === true
@@ -271,6 +382,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
           checkpointId: checkpoint.id,
           descriptor,
           state: 'rejected',
+          taskAttempt,
           error,
         })
       } catch (transitionError) {
@@ -283,6 +395,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
         checkpointId: checkpoint.id,
         descriptor,
         state: 'outcome_unknown',
+        taskAttempt,
         error,
       })
     } catch (transitionError) {
@@ -294,7 +407,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   const rejectionMessage = params.resultPolicy.rejectionMessage?.(result) ?? null
   if (rejectionMessage) {
     try {
-      await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'rejected', result })
+      await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'rejected', taskAttempt, result })
     } catch (error) {
       throw outcomeUnknown(descriptor, error)
     }
@@ -302,7 +415,7 @@ export async function executeTaskDurableInvocation<TResult>(params: {
   }
 
   try {
-    await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'submitted', result })
+    await transitionCheckpoint({ checkpointId: checkpoint.id, descriptor, state: 'submitted', taskAttempt, result })
   } catch (error) {
     throw outcomeUnknown(descriptor, error)
   }
