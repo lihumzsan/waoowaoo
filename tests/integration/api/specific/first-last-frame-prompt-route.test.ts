@@ -168,6 +168,34 @@ describe('POST first-last-frame-prompt', () => {
     expect(maybeSubmitLLMTaskMock).toHaveBeenCalledOnce()
   })
 
+  it('submits relink generation even when the persisted fingerprint matches', async () => {
+    validateMock.mockResolvedValueOnce({
+      firstPanel: {
+        id: 'panel-1',
+        firstLastFramePrompt: 'Old manual transition',
+        firstLastFramePromptSourceFingerprint: 'fingerprint-current',
+      },
+      lastPanel: { id: 'panel-2' },
+      episodeId: 'episode-1',
+    })
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'link',
+    }, { params: { projectId: 'project-1' } })
+
+    expect(response.status).toBe(200)
+    expect(maybeSubmitLLMTaskMock).toHaveBeenCalledWith(expect.objectContaining({
+      body: {
+        firstPanelId: 'panel-1',
+        lastPanelId: 'panel-2',
+        reason: 'link',
+      },
+      dedupeKey: 'generate_first_last_frame_prompt:panel-1:panel-2:fingerprint-current',
+    }))
+  })
+
   it('does not return the persisted shortcut after the link was removed', async () => {
     validateMock.mockRejectedValueOnce(new validationErrorMock.ErrorClass('First/last frame link was removed'))
 

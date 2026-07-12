@@ -44,7 +44,7 @@ export const POST = apiHandler(async (
       panels.lastPanel as unknown as Record<string, unknown>,
     )
     if (
-      reason !== 'manual'
+      reason === 'source_change'
       && panels.firstPanel.firstLastFramePrompt
       && panels.firstPanel.firstLastFramePromptSourceFingerprint === sourceFingerprint
     ) {
