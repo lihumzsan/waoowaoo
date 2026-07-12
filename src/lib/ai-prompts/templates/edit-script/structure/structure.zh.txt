@@ -53,7 +53,7 @@
 - generationSegments 必须按 shotNumber 顺序覆盖所有 shots，每个 segment 只能包含连续的 shotId。
 - 每个 generationSegment 的总时长按其包含 shots 的 durationSec 累加计算，不得超过 {{generation_segment_max_duration_seconds}} 秒；连续动作超过上限时，拆成相邻的多个 generationSegments。
 - generationSegments[].continuity 只写这些镜头为什么属于同一段：共享的动作、空间、情绪或声音连续性；不写成片描述，也不写转场模板。
-- persistentFactsIntroduced 列出本章声明为长期成立的新事实；只能来自“本章内的事件记录”中的 persistentFacts，或复述“本章开始前已成立的事实”。本章没有新增长期事实时输出空数组。
+- 持久事实由系统直接从“本章内的事件记录”投影，不属于你的输出。禁止输出 persistentFactsIntroduced 或任何其他事实台账字段。
 - 只输出 Schema 列出的字段，不要输出任何其他内容。
 
 # 输入
@@ -129,9 +129,6 @@ Style Bible：
       "shotIds": ["shot-001", "shot-002", "shot-003"],
       "continuity": "这些连续镜头共享的动作、空间、情绪或声音连续性"
     }
-  ],
-  "persistentFactsIntroduced": [
-    "本章中长期成立的新事实；若没有则输出空数组"
   ]
 }
 
@@ -174,5 +171,5 @@ Style Bible：
 - 每条 dialogue[].characterId 是否属于同一镜头 characters，且 line 是否来自本章剧本文本。
 - generationSegments 是否顺序覆盖所有 shots，且只包含 shotIds 和 continuity。
 - 是否逐段累加 durationSec，并确认每个 generationSegment 总时长不得超过 {{generation_segment_max_duration_seconds}} 秒。
-- persistentFactsIntroduced 是否只包含入章事实或本章事件记录允许的事实。
+- 是否没有输出 persistentFactsIntroduced 或任何其他事实台账字段。
 - 是否严格只输出 Schema 中列出的字段。

@@ -397,7 +397,6 @@ function generateEditScriptPromptContract(prompt: string): string | null {
       shotIds: ['shot-001', 'shot-002', 'shot-003'],
       continuity: '三个镜头共享祭坛空间、旅人的连续行动与逐步增强的循环压迫感。',
     }],
-    persistentFactsIntroduced: [],
   })
 }
 

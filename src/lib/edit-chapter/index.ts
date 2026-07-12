@@ -20,10 +20,8 @@ export {
   type NormalizedChapterPlanOutput,
 } from './schemas'
 export {
-  validateChapterPlan,
-  type ChapterPlanValidationInput,
-  type ChapterPlanValidationResult,
-} from './plan-validator'
+  projectChapterPersistentFacts,
+} from './persistent-facts'
 export {
   assertChapterPlanAssetMenuReady,
   buildChapterPlanAssetMenu,

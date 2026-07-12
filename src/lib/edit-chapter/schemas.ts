@@ -46,16 +46,12 @@ export const chapterPlanInputSchema = z.object({
   }
 })
 
-export const chapterPlanOutputSchema = editScriptCoreSchema.extend({
-  persistentFactsIntroduced: z.array(z.string().trim().min(1)).max(200),
-}).strict()
+export const chapterPlanOutputSchema = editScriptCoreSchema.strict()
 
 export type ChapterPlanInput = z.infer<typeof chapterPlanInputSchema>
 export type ChapterPlanAssetMenu = z.infer<typeof chapterPlanAssetMenuSchema>
 export type ChapterPlanOutput = z.infer<typeof chapterPlanOutputSchema>
-export type NormalizedChapterPlanOutput = ReturnType<typeof normalizeEditScriptStructure> & {
-  readonly persistentFactsIntroduced: readonly string[]
-}
+export type NormalizedChapterPlanOutput = ReturnType<typeof normalizeEditScriptStructure>
 
 function nonEmptyEnum(values: readonly string[], label: string): [string, ...string[]] {
   const unique = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
@@ -98,7 +94,6 @@ export function buildChapterPlanOutputSchema(assetMenu: ChapterPlanAssetMenu) {
       shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
       continuity: z.string().trim().min(1),
     }).strict()).min(1).max(60),
-    persistentFactsIntroduced: z.array(z.string().trim().min(1)).max(200),
   }).strict()
 }
 
@@ -142,7 +137,6 @@ export function enrichChapterPlanOutputWithAssetNames(raw: unknown, assetMenu: C
       }
     }),
     generationSegments: parsed.generationSegments,
-    persistentFactsIntroduced: parsed.persistentFactsIntroduced,
   }
 }
 
@@ -158,6 +152,5 @@ export function normalizeChapterPlanOutput(raw: unknown, assetMenu?: ChapterPlan
     ...normalizedCore,
     shots: normalizedCore.shots,
     generationSegments: normalizedCore.generationSegments,
-    persistentFactsIntroduced: parsed.persistentFactsIntroduced.map((fact) => fact.trim()),
   }
 }

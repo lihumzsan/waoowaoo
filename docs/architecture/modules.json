@@ -98,6 +98,24 @@
       ]
     },
     {
+      "id": "chapter-planning",
+      "document": "docs/architecture/modules/chapter-planning.md",
+      "title": "章节核心剪辑规划",
+      "sourcePaths": [
+        "src/lib/edit-chapter",
+        "src/lib/edit-script/service.ts",
+        "src/lib/ai-prompts/templates/edit-script/structure"
+      ],
+      "testPaths": [
+        "tests/unit/edit-chapter/persistent-facts.test.ts",
+        "tests/golden-journey/self-tests/model-provider.test.ts",
+        "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/chapter-plan-fact-authority-guard.mjs"
+      ]
+    },
+    {
       "id": "async-task-lifecycle",
       "document": "docs/architecture/modules/async-task-lifecycle.md",
       "title": "异步任务生命周期",

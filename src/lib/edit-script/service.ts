@@ -19,8 +19,8 @@ import {
   assembleChapterPlanInput,
   buildChapterPlanOutputSchema,
   normalizeChapterPlanOutput,
+  projectChapterPersistentFacts,
   resolveDefaultEditChapter,
-  validateChapterPlan,
   type AssembledChapterPlanInput,
   type NormalizedChapterPlanOutput,
 } from '@/lib/edit-chapter'
@@ -1618,14 +1618,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
       stepTotal: 1,
       validate: (raw) => {
         const normalized = normalizeChapterPlanOutput(raw, scriptSource.assetMenu)
-        const withShotIds = rewriteStructureWithSystemShotIds(normalized)
-        validateChapterPlan({
-          chapterId,
-          output: withShotIds,
-          entrySnapshot: scriptSource.entrySnapshot,
-          events: scriptSource.events,
-        })
-        return withShotIds
+        return rewriteStructureWithSystemShotIds(normalized)
       },
     })
     const requirements = buildProjectedAssetRequirements({
@@ -1686,7 +1679,7 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
             styleBibleChecksum: scriptSource.styleBibleChecksum,
             chapterIndex: scriptSource.chapterIndex,
             promptId: AI_PROMPT_IDS.EDIT_SCRIPT_STRUCTURE,
-            persistentFactsIntroduced: [...core.persistentFactsIntroduced],
+            persistentFactsIntroduced: projectChapterPersistentFacts(scriptSource.events),
           } as unknown as Prisma.InputJsonValue,
           planVersion: { increment: 1 },
           status: 'planned',
