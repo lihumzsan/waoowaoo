@@ -46,6 +46,7 @@ export interface OperationPlan {
   projectId: string
   userId: string
   tasks: PlannedTask[]
+  reservedIdentityIds?: string[]
   summary?: string | null
   metadata?: Record<string, unknown>
 }

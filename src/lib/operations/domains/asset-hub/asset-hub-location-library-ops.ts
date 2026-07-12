@@ -5,6 +5,7 @@ import { attachMediaFieldsToGlobalLocation } from '@/lib/media/attach'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -188,12 +189,11 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         const locationId = normalizeString(body.locationId)
         if (!locationId) throw new ApiError('INVALID_PARAMS')
 
-        const location = await prisma.globalLocation.findUnique({
-          where: { id: locationId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'location',
+          assetId: locationId,
         })
-        if (!location) throw new ApiError('NOT_FOUND')
-        if (location.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         const updateData: Record<string, unknown> = {}
         if (body.name !== undefined) {
@@ -248,12 +248,11 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const location = await prisma.globalLocation.findUnique({
-          where: { id: input.locationId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'location',
+          assetId: input.locationId,
         })
-        if (!location) throw new ApiError('NOT_FOUND')
-        if (location.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         await prisma.globalLocation.delete({ where: { id: input.locationId } })
         return { success: true }

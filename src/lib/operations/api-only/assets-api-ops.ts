@@ -376,7 +376,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         kind: kindSchema,
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         return await copyAssetFromGlobal({
           kind: input.kind,
           targetId: input.assetId,
@@ -385,7 +385,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
             userId: ctx.userId,
             projectId: input.projectId,
           },
-        })
+        }, transaction)
       },
     }),
 

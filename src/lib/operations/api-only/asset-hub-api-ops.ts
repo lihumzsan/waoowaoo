@@ -11,6 +11,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { getUserModelConfig } from '@/lib/config-service'
 import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { analyzeAndPersistGlobalLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
+import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
 type UploadFileLike = {
   name: string
@@ -121,11 +122,15 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
         const description = normalizeString((input as unknown as Record<string, unknown>).description)
         assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
 
-        const character = await prisma.globalCharacter.findFirst({
-          where: { id: input.characterId, userId: ctx.userId },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
+        })
+        const character = await prisma.globalCharacter.findUniqueOrThrow({
+          where: { id: input.characterId },
           select: { id: true, appearances: { select: { appearanceIndex: true } } },
         })
-        if (!character) throw new ApiError('NOT_FOUND')
 
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const nextIndex = maxIndex + 1
@@ -168,11 +173,11 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       execute: async (ctx, input) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
-        const character = await prisma.globalCharacter.findFirst({
-          where: { id: input.characterId, userId: ctx.userId },
-          select: { id: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
         })
-        if (!character) throw new ApiError('NOT_FOUND')
 
         const appearance = await prisma.globalCharacterAppearance.findFirst({
           where: { characterId: input.characterId, appearanceIndex: input.appearanceIndex },
@@ -223,11 +228,11 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const character = await prisma.globalCharacter.findFirst({
-          where: { id: input.characterId, userId: ctx.userId },
-          select: { id: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
         })
-        if (!character) throw new ApiError('NOT_FOUND')
 
         if (input.appearanceIndex === PRIMARY_APPEARANCE_INDEX) {
           throw new ApiError('INVALID_PARAMS')
@@ -280,6 +285,13 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
 
         const appearanceIndex = parseAppearanceIndex(appearanceIndexRaw)
         const imageIndex = parseAppearanceIndex(imageIndexRaw)
+
+        if (type !== 'character' && type !== 'location') throw new ApiError('INVALID_PARAMS')
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: type,
+          assetId: id,
+        })
 
         const buffer = Buffer.from(await file.arrayBuffer())
         const processed = await sharp(buffer)

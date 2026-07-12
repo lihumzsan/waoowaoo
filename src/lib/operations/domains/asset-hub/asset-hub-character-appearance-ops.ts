@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -63,11 +64,11 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         const characterId = normalizeString(body.characterId)
         const appearanceIndex = parseAppearanceIndex(body.appearanceIndex)
 
-        const character = await prisma.globalCharacter.findUnique({
-          where: { id: characterId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: characterId,
         })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         const appearance = await prisma.globalCharacterAppearance.findFirst({
           where: { characterId, appearanceIndex },
@@ -134,11 +135,15 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         const description = normalizeString(body.description)
         if (!characterId || !description) throw new ApiError('INVALID_PARAMS')
 
-        const character = await prisma.globalCharacter.findUnique({
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: characterId,
+        })
+        const character = await prisma.globalCharacter.findUniqueOrThrow({
           where: { id: characterId },
           include: { appearances: true },
         })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const newIndex = maxIndex + 1
@@ -184,11 +189,15 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       execute: async (ctx, input) => {
         const appearanceIndex = parseAppearanceIndex(input.appearanceIndex)
 
-        const character = await prisma.globalCharacter.findUnique({
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
+        })
+        const character = await prisma.globalCharacter.findUniqueOrThrow({
           where: { id: input.characterId },
           include: { appearances: true },
         })
-        if (!character || character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         if (character.appearances.length <= 1) throw new ApiError('INVALID_PARAMS')
 

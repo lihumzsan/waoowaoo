@@ -7,6 +7,10 @@ import { analyzeAndPersistProjectLocationImageSpatialProfile } from '@/lib/locat
 import { generateUniqueKey, uploadObject } from '@/lib/storage'
 import type { AssetKind } from '@/lib/assets/contracts'
 import type { Locale } from '@/i18n/routing'
+import {
+  requireOwnedAssetTarget,
+  requireOwnedAssetVariant,
+} from '@/lib/assets/services/asset-scope-ownership'
 
 type ProjectUploadRenderKind = Extract<AssetKind, 'character' | 'location'>
 
@@ -28,6 +32,27 @@ type UploadProjectAssetRenderResult = {
 }
 
 export async function uploadProjectAssetRender(input: UploadProjectAssetRenderInput): Promise<UploadProjectAssetRenderResult> {
+  const access = {
+    scope: 'project' as const,
+    userId: input.userId,
+    projectId: input.projectId,
+  }
+  if (input.kind === 'character') {
+    if (!input.appearanceId) throw new ApiError('INVALID_PARAMS')
+    await requireOwnedAssetVariant({
+      access,
+      kind: input.kind,
+      assetId: input.assetId,
+      variantId: input.appearanceId,
+    })
+  } else {
+    await requireOwnedAssetTarget({
+      access,
+      kind: input.kind,
+      assetId: input.assetId,
+    })
+  }
+
   const processed = await sharp(input.imageBuffer)
     .jpeg({ quality: 90, mozjpeg: true })
     .toBuffer()

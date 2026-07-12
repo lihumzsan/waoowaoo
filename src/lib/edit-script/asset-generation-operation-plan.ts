@@ -356,6 +356,9 @@ export async function planProjectEditScriptAssetsOperation(
     projectId: ctx.projectId,
     userId: ctx.userId,
     tasks: [...tasksByAssetKey.values()],
+    reservedIdentityIds: [...new Set(plannedRequirements.flatMap((requirement) => (
+      requirement.createAsset ? [requirement.assetId, requirement.targetId] : []
+    )))],
     metadata: {
       projectId: ctx.projectId,
       episodeId: input.episodeId,
@@ -387,8 +390,15 @@ async function applyPlanWrites(
       actual.targetId !== item.previousTargetId ||
       actual.errorMessage !== item.previousErrorMessage
     ) {
+      const expected = JSON.stringify({
+        status: item.previousStatus,
+        targetId: item.previousTargetId,
+        errorMessage: item.previousErrorMessage,
+      })
+      const observed = JSON.stringify(actual ?? null)
       throw new ApiError('CONFLICT', {
         code: 'OPERATION_PLAN_STALE',
+        message: `OPERATION_PLAN_STALE:${item.requirementId}:expected=${expected}:observed=${observed}`,
         operationId: 'generate_edit_script_assets',
         requirementId: item.requirementId,
       })

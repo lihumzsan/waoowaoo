@@ -14,6 +14,10 @@ import {
   referenceCharacterGenerationInputSchema,
   submitReferenceCharacterExtraction,
 } from '@/lib/operations/domains/reference-character-operations'
+import {
+  requireOwnedAssetTarget,
+  requireOwnedAssetVariant,
+} from '@/lib/assets/services/asset-scope-ownership'
 
 const EFFECTS_BILLABLE_LONG_RUNNING = {
   writes: true,
@@ -132,13 +136,11 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const character = await prisma.globalCharacter.findUnique({
-          where: { id: input.characterId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
         })
-        if (!character || character.userId !== ctx.userId) {
-          throw new ApiError('NOT_FOUND')
-        }
 
         const userConfig = await getUserModelConfig(ctx.userId)
         if (!userConfig.analysisModel) {
@@ -181,13 +183,11 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
       }).passthrough(),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const location = await prisma.globalLocation.findUnique({
-          where: { id: input.locationId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'location',
+          assetId: input.locationId,
         })
-        if (!location || location.userId !== ctx.userId) {
-          throw new ApiError('NOT_FOUND')
-        }
 
         const userConfig = await getUserModelConfig(ctx.userId)
         if (!userConfig.analysisModel) {
@@ -236,21 +236,21 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const prop = await prisma.globalLocation.findFirst({
-          where: {
-            id: propId,
-            userId: ctx.userId,
-            assetKind: 'prop',
-          },
-          select: {
-            id: true,
-            userId: true,
-            name: true,
-          },
-        })
-        if (!prop) {
-          throw new ApiError('NOT_FOUND')
+        const access = { scope: 'global' as const, userId: ctx.userId }
+        if (variantId) {
+          await requireOwnedAssetVariant({
+            access,
+            kind: 'prop',
+            assetId: propId,
+            variantId,
+          })
+        } else {
+          await requireOwnedAssetTarget({ access, kind: 'prop', assetId: propId })
         }
+        const prop = await prisma.globalLocation.findUniqueOrThrow({
+          where: { id: propId },
+          select: { name: true },
+        })
 
         const userConfig = await getUserModelConfig(ctx.userId)
         if (!userConfig.analysisModel) {

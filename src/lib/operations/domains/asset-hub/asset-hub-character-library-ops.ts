@@ -7,6 +7,7 @@ import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
+import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -220,11 +221,11 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         const characterId = normalizeString(body.characterId)
         if (!characterId) throw new ApiError('INVALID_PARAMS')
 
-        const character = await prisma.globalCharacter.findUnique({
-          where: { id: characterId },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: characterId,
         })
-        if (!character) throw new ApiError('NOT_FOUND')
-        if (character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         const updateData: Record<string, unknown> = {}
 
@@ -281,12 +282,11 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        const character = await prisma.globalCharacter.findUnique({
-          where: { id: input.characterId },
-          select: { id: true, userId: true },
+        await requireOwnedAssetTarget({
+          access: { scope: 'global', userId: ctx.userId },
+          kind: 'character',
+          assetId: input.characterId,
         })
-        if (!character) throw new ApiError('NOT_FOUND')
-        if (character.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         await prisma.globalCharacter.delete({ where: { id: input.characterId } })
         return { success: true }

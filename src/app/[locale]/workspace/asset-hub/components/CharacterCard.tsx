@@ -210,7 +210,10 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
     // 多图选择模式
     if (hasMultipleImages) {
         return (
-            <div className="col-span-3 glass-surface p-4 relative">
+            <div
+                className="col-span-3 glass-surface p-4 relative"
+                data-testid={`global-character-${character.id}`}
+            >
                 {/* 隐藏输入 */}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
 
@@ -255,7 +258,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
                                 <AppIcon name="sparkles" className="w-4 h-4 text-[var(--glass-tone-warning-fg)]" />
                             </button>
                         )}
-                        <button onClick={(e) => {
+                        <button data-testid={`global-character-delete-${character.id}`} onClick={(e) => {
                             e.stopPropagation()
                             _ulogInfo('[CharacterCard] 多图模式 - 删除按钮点击, characterId:', character.id, 'appearanceCount:', appearanceCount, 'showDeleteMenu:', showDeleteMenu)
                             if (appearanceCount <= 1) {
@@ -353,7 +356,10 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
 
     // 单图模式
     return (
-        <div className="glass-surface overflow-hidden relative group">
+        <div
+            className="glass-surface overflow-hidden relative group"
+            data-testid={`global-character-${character.id}`}
+        >
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
 
             {/* 图片区域 */}
@@ -426,6 +432,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
                     <div className="flex items-center gap-1">
                         {/* 编辑按钮 */}
                         <button
+                            data-testid={`global-character-edit-${character.id}`}
                             onClick={() => onEdit?.(character, appearance)}
                             className="glass-btn-base glass-btn-soft h-6 w-6 rounded-md opacity-0 group-hover:opacity-100"
                             title={tAssets('video.panelCard.editPrompt')}
@@ -433,7 +440,7 @@ export function CharacterCard({ character, onImageClick, onEdit }: CharacterCard
                             <AppIcon name="edit" className="w-4 h-4 text-[var(--glass-text-secondary)]" />
                         </button>
                         {/* 删除按钮 */}
-                        <button onClick={() => appearanceCount <= 1 ? setShowDeleteConfirm(true) : setShowDeleteMenu(!showDeleteMenu)} className="glass-btn-base glass-btn-soft h-6 w-6 rounded-md text-[var(--glass-tone-danger-fg)] opacity-0 group-hover:opacity-100">
+                        <button data-testid={`global-character-delete-${character.id}`} onClick={() => appearanceCount <= 1 ? setShowDeleteConfirm(true) : setShowDeleteMenu(!showDeleteMenu)} className="glass-btn-base glass-btn-soft h-6 w-6 rounded-md text-[var(--glass-tone-danger-fg)] opacity-0 group-hover:opacity-100">
                             <AppIcon name="trash" className="w-4 h-4" />
                         </button>
                     </div>

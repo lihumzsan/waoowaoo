@@ -33,6 +33,16 @@ function readRecord(value: unknown, field: string): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+function readStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:${field}`)
+  return value.map((item, index) => {
+    if (typeof item !== 'string' || !item.trim()) {
+      throw new Error(`OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:${field}.${String(index)}`)
+    }
+    return item
+  })
+}
+
 function parsePlannedTask(value: unknown): PlannedTask {
   const record = readRecord(value, 'tasks[]')
   const target = readRecord(record.target, 'tasks[].target')
@@ -69,12 +79,16 @@ function parseOperationPlan(value: unknown): OperationPlan {
   }
   const summary = readNullableString(record, 'summary')
   const metadata = record.metadata === null || record.metadata === undefined ? undefined : readRecord(record.metadata, 'metadata')
+  const reservedIdentityIds = record.reservedIdentityIds === null || record.reservedIdentityIds === undefined
+    ? undefined
+    : readStringArray(record.reservedIdentityIds, 'reservedIdentityIds')
   return {
     kind: 'task_submission',
     operationId: readString(record, 'operationId'),
     projectId: readString(record, 'projectId'),
     userId: readString(record, 'userId'),
     tasks: record.tasks.map(parsePlannedTask),
+    ...(reservedIdentityIds ? { reservedIdentityIds } : {}),
     ...(summary !== null ? { summary } : {}),
     ...(metadata ? { metadata } : {}),
   }

@@ -36,7 +36,7 @@ import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-ur
 import { deleteObject } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { resolveEditScriptStyleBibleSignatureForTask } from '@/lib/edit-script/style-bible-prompt'
-import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
+import type { AssetKind } from '@/lib/assets/contracts'
 import { createPlannedTask, requirePlannedTaskBillingInfo, type PlannedTask } from '@/lib/operations/planning'
 import {
   createGlobalLocationBackedAsset,
@@ -47,12 +47,15 @@ import {
 } from '@/lib/assets/services/location-backed-assets'
 import { resolvePropVisualDescription } from '@/lib/assets/prop-description'
 import { confirmProjectLocationBackedSelection } from '@/lib/assets/services/project-location-backed-selection'
-
-type AssetWriteAccess = {
-  scope: AssetScope
-  userId: string
-  projectId?: string
-}
+import {
+  requireAssetBodyVariantOwnership,
+  requireAssetProjectId,
+  requireOwnedAssetProject,
+  requireOwnedAssetTarget,
+  requireOwnedAssetVariant,
+  type AssetOwnershipClient,
+  type AssetWriteAccess,
+} from '@/lib/assets/services/asset-scope-ownership'
 
 type AssetActionTarget = {
   kind: Extract<AssetKind, 'character' | 'location' | 'prop'>
@@ -200,6 +203,7 @@ async function submitAssetPlannedTask(input: PlannedAssetTask, request: NextRequ
 }
 
 export async function planAssetGenerateTask(input: AssetGenerateInput): Promise<PlannedAssetTask> {
+  await requireAssetBodyVariantOwnership(input)
   return input.access.scope === 'global' ? planGlobalAssetGenerateTask(input) : planProjectAssetGenerateTask(input)
 }
 
@@ -211,8 +215,9 @@ export async function submitAssetGenerateTask(input: AssetGenerateInput) {
 
 export async function ensureAssetGenerateCommitReady(
   input: AssetGenerateInput,
-  client: Pick<Prisma.TransactionClient, 'globalLocation' | 'projectLocation' | 'locationImage' | 'globalLocationImage'> = prisma,
+  client: AssetOwnershipClient = prisma,
 ): Promise<void> {
+  await requireAssetBodyVariantOwnership(input, client)
   const normalizedKind = normalizeLocationBackedKind(input.kind)
   if (normalizedKind !== 'location') return
 
@@ -255,7 +260,7 @@ export async function ensureAssetGenerateCommitReady(
     return
   }
 
-  const projectId = requireProjectId(input.access)
+  const projectId = requireAssetProjectId(input.access)
   const location = await client.projectLocation.findFirst({
     where: {
       id: input.assetId,
@@ -406,7 +411,7 @@ async function planGlobalAssetGenerateTask(input: AssetGenerateInput): Promise<P
 
 async function planProjectAssetGenerateTask(input: AssetGenerateInput): Promise<PlannedAssetTask> {
   assertNoLegacyArtStyle(input.body)
-  const projectId = requireProjectId(input.access)
+  const projectId = requireAssetProjectId(input.access)
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const normalizedKind = normalizeLocationBackedKind(input.kind)
   const appearanceId = normalizeString(input.body.appearanceId)
@@ -495,6 +500,7 @@ export async function submitAssetModifyTask(input: AssetModifyInput) {
 }
 
 export async function planAssetModifyTask(input: AssetModifyInput): Promise<PlannedAssetTask> {
+  await requireAssetBodyVariantOwnership(input)
   return input.access.scope === 'global' ? planGlobalAssetModifyTask(input) : planProjectAssetModifyTask(input)
 }
 
@@ -580,7 +586,7 @@ async function planGlobalAssetModifyTask(input: AssetModifyInput): Promise<Plann
 }
 
 async function planProjectAssetModifyTask(input: AssetModifyInput): Promise<PlannedAssetTask> {
-  const projectId = requireProjectId(input.access)
+  const projectId = requireAssetProjectId(input.access)
   const locale = resolveRequiredTaskLocale(input.request, input.body)
   const modifyPrompt = normalizeString(input.body.modifyPrompt)
   if (!modifyPrompt) {
@@ -668,17 +674,21 @@ export async function selectAssetRender(
   input: AssetSelectInput,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
+  await requireAssetBodyVariantOwnership(input, client)
   return input.access.scope === 'global'
-    ? selectGlobalAssetRender(input)
+    ? selectGlobalAssetRender(input, client)
     : selectProjectAssetRender(input, client)
 }
 
-async function selectGlobalAssetRender(input: AssetSelectInput) {
+async function selectGlobalAssetRender(
+  input: AssetSelectInput,
+  client: Prisma.TransactionClient | typeof prisma,
+) {
   if (input.kind === 'character') {
     const appearanceIndex = toNumber(input.body.appearanceIndex) ?? PRIMARY_APPEARANCE_INDEX
     const imageIndex = toNumber(input.body.imageIndex)
     const confirm = input.body.confirm === true
-    const appearance = await prisma.globalCharacterAppearance.findFirst({
+    const appearance = await client.globalCharacterAppearance.findFirst({
       where: {
         characterId: input.assetId,
         appearanceIndex,
@@ -709,7 +719,7 @@ async function selectGlobalAssetRender(input: AssetSelectInput) {
         }
       }
       const selectedDescription = descriptions[appearance.selectedIndex] || appearance.description || ''
-      await prisma.globalCharacterAppearance.update({
+      await client.globalCharacterAppearance.update({
         where: { id: appearance.id },
         data: {
           imageUrl: selectedUrl,
@@ -720,7 +730,7 @@ async function selectGlobalAssetRender(input: AssetSelectInput) {
         },
       })
     } else {
-      await prisma.globalCharacterAppearance.update({
+      await client.globalCharacterAppearance.update({
         where: { id: appearance.id },
         data: { selectedIndex: imageIndex },
       })
@@ -730,7 +740,7 @@ async function selectGlobalAssetRender(input: AssetSelectInput) {
 
   const imageIndex = toNumber(input.body.imageIndex)
   const confirm = input.body.confirm === true
-  const location = await prisma.globalLocation.findFirst({
+  const location = await client.globalLocation.findFirst({
     where: { id: input.assetId, userId: input.access.userId },
     include: { images: { orderBy: { imageIndex: 'asc' } } },
   })
@@ -752,24 +762,22 @@ async function selectGlobalAssetRender(input: AssetSelectInput) {
         }
       }
     }
-    await prisma.$transaction(async (tx) => {
-      await tx.globalLocationImage.deleteMany({
+    await client.globalLocationImage.deleteMany({
         where: { locationId: input.assetId, id: { not: targetImage.id } },
-      })
-      await tx.globalLocationImage.update({
+    })
+    await client.globalLocationImage.update({
         where: { id: targetImage.id },
         data: { imageIndex: 0, isSelected: true },
-      })
     })
   } else {
-    await prisma.globalLocationImage.updateMany({
+    await client.globalLocationImage.updateMany({
       where: { locationId: input.assetId },
       data: { isSelected: false },
     })
     if (imageIndex !== null) {
       const targetImage = images.find((image) => image.imageIndex === imageIndex)
       if (targetImage) {
-        await prisma.globalLocationImage.update({
+        await client.globalLocationImage.update({
           where: { id: targetImage.id },
           data: { isSelected: true },
         })
@@ -848,6 +856,7 @@ async function selectProjectAssetRender(
 }
 
 export async function revertAssetRender(input: AssetRevertInput) {
+  await requireAssetBodyVariantOwnership(input)
   return input.access.scope === 'global' ? revertGlobalAssetRender(input) : revertProjectAssetRender(input)
 }
 
@@ -977,6 +986,20 @@ export async function copyAssetFromGlobal(
   input: AssetCopyInput,
   client: Prisma.TransactionClient | typeof prisma = prisma,
 ) {
+  await requireOwnedAssetTarget({
+    access: { scope: 'global', userId: input.access.userId },
+    kind: input.kind,
+    assetId: input.globalAssetId,
+  }, client)
+  await requireOwnedAssetTarget({
+    access: {
+      scope: 'project',
+      userId: input.access.userId,
+      projectId: input.access.projectId,
+    },
+    kind: input.kind,
+    assetId: input.targetId,
+  }, client)
   if (input.kind === 'character') {
     return copyCharacterFromGlobal(input, client)
   }
@@ -1094,6 +1117,7 @@ async function copyLocationFromGlobal(
 }
 
 export async function updateAsset(input: AssetUpdateInput) {
+  await requireOwnedAssetTarget(input)
   if (input.access.scope === 'global') {
     return updateGlobalAsset(input)
   }
@@ -1175,6 +1199,7 @@ async function updateProjectAsset(input: AssetUpdateInput) {
 }
 
 export async function updateAssetVariant(input: AssetVariantUpdateInput) {
+  await requireOwnedAssetVariant(input)
   if (input.access.scope === 'global') {
     return updateGlobalAssetVariant(input)
   }
@@ -1295,7 +1320,7 @@ export async function createAsset(input: AssetCreateInput) {
   }
 
   const created = await createProjectLocationBackedAsset({
-    projectId: requireProjectId(input.access),
+    projectId: await requireOwnedAssetProject(input.access),
     name,
     summary,
     initialDescription: description,
@@ -1306,18 +1331,11 @@ export async function createAsset(input: AssetCreateInput) {
 
 export async function removeAsset(input: AssetRemoveInput) {
   requireLocationBackedKind(input.kind)
+  await requireOwnedAssetTarget(input)
   if (input.access.scope === 'global') {
     await deleteGlobalLocationBackedAsset(input.assetId)
     return { success: true }
   }
-  requireProjectId(input.access)
   await deleteProjectLocationBackedAsset(input.assetId)
   return { success: true }
-}
-
-function requireProjectId(access: AssetWriteAccess): string {
-  if (!access.projectId) {
-    throw new ApiError('INVALID_PARAMS', { details: 'projectId is required' })
-  }
-  return access.projectId
 }
