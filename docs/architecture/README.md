@@ -19,6 +19,8 @@ npm run architecture:impact -- <准备修改的文件或目录>
 | route → queue → worker → DB 的任务提交、状态、重试、补偿 | [异步任务生命周期](modules/async-task-lifecycle.md) | task types、submitter、task service |
 | Agent run、工具调度、确认、心跳、恢复、任务完成后的继续执行 | [Assistant Run 生命周期](modules/assistant-run-lifecycle.md) | project-agent runtime、operation registry |
 | provider、模型选择、异步轮询、外部失败与降级 | [Provider Gateway](modules/provider-gateway.md) | ai-providers、ai-exec、ai-registry |
+| 注册/登录、顶层导航、语言切换、deployment capability 投影 | [产品外壳、身份与本地化](modules/product-shell.md) | auth/session、i18n navigation、deployment features、Navbar |
+| 全局/项目资产的 owner、scope、kind、variant 与复制边界 | [资产 Scope 所有权](modules/asset-scope-ownership.md) | asset scope resolver、asset actions、unified asset operations |
 | Golden Journey、关键基础设施场景、纯逻辑规格、registry conformance 与 harness | [测试治理](modules/test-governance.md) | Golden scenario registry、read-only oracle、critical scenarios、admission contract |
 
 ## 权威层级

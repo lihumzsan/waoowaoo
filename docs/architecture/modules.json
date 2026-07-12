@@ -208,8 +208,6 @@
         "tests/unit/sse/server-session.test.ts",
         "tests/unit/sse/protocol.test.ts",
         "tests/contracts/assistant-choice-offer-conformance.test.ts",
-        "tests/integration/api/specific/workflow-lab-service.integration.test.ts",
-        "tests/integration/api/specific/workflow-lab-style-choice.integration.test.ts",
         "tests/unit/operations/registry.test.ts",
         "tests/unit/operations/write-authority-registry.test.ts",
         "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
@@ -269,6 +267,55 @@
       ]
     },
     {
+      "id": "product-shell",
+      "document": "docs/architecture/modules/product-shell.md",
+      "title": "产品外壳、身份与本地化",
+      "sourcePaths": [
+        "src/components/LanguageSwitcher.tsx",
+        "src/components/Navbar.tsx",
+        "src/app/[locale]/profile/page.tsx",
+        "src/app/[locale]/workspace/page.tsx",
+        "src/app/[locale]/auth",
+        "src/app/api/auth",
+        "src/lib/auth",
+        "src/lib/rate-limit.ts",
+        "src/i18n",
+        "src/lib/deployment",
+        "src/app/api/deployment"
+      ],
+      "testPaths": [
+        "tests/golden-journey/journeys/auth-project-permission.spec.ts",
+        "tests/golden-journey/journeys/i18n-deployment.spec.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/locale-navigation-guard.mjs"
+      ]
+    },
+    {
+      "id": "asset-scope-ownership",
+      "document": "docs/architecture/modules/asset-scope-ownership.md",
+      "title": "资产 Scope 所有权",
+      "sourcePaths": [
+        "src/lib/assets/services/asset-scope-ownership.ts",
+        "src/lib/assets/services/asset-actions.ts",
+        "src/lib/assets/services/location-backed-assets.ts",
+        "src/lib/assets/services/project-upload-render.ts",
+        "src/lib/assets/services/read-assets.ts",
+        "src/lib/operations/api-only/assets-api-ops.ts",
+        "src/lib/operations/domains/project/project-data-ops.ts",
+        "src/app/api/assets",
+        "src/app/api/asset-hub"
+      ],
+      "testPaths": [
+        "tests/golden-journey/journeys/asset-hub-reuse.spec.ts",
+        "tests/golden-journey/journeys/asset-hub-ownership.spec.ts",
+        "tests/integration/api/specific/asset-scope-ownership.integration.test.ts"
+      ],
+      "guardPaths": [
+        "scripts/guards/asset-scope-ownership-guard.mjs"
+      ]
+    },
+    {
       "id": "test-governance",
       "document": "docs/architecture/modules/test-governance.md",
       "title": "测试治理",
@@ -287,7 +334,8 @@
         "tests/integration/api/specific",
         "tests/concurrency/billing",
         "docs/architecture/incidents/assistant-golden-journey",
-        "docs/architecture/incidents/test-system-reset"
+        "docs/architecture/incidents/test-system-reset",
+        "docs/architecture/incidents/system-journey-coverage"
       ],
       "testPaths": [
         "tests/golden-journey/self-tests/scenario-contracts.test.ts",

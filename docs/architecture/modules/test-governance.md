@@ -41,7 +41,7 @@
 - 关键 Task/Assistant/Outbox 并发与事务：`tests/integration/task/**`。
 - 外部 provider 协议：`tests/integration/provider/**`。
 - 计费事务与并发：`tests/integration/billing/**`、`tests/concurrency/billing/**`。
-- Workflow Lab checkpoint 真实性：`tests/integration/api/specific/workflow-lab-*.integration.test.ts`。
+- Workflow Lab checkpoint 真实性：`tests/golden-journey/journeys/stage-probes.spec.ts` 通过真实浏览器、生产 Route、克隆事务、目标 Session 与后续 UI 动作验证。只有可持久恢复、可重复 fork 且能执行下一真实边界的阶段可进入 checkpoint registry；内部瞬时 workflow enum 只由最长 Journey 覆盖，不得为追求枚举数量伪装成 checkpoint。连续 fork 必须保留最早真实 source，Approval 必须验证 `list → fork → list → fork → consume`，调试项目名必须遵守共享 Project 名称上限。
 - 纯逻辑规格：经本模块准入后保留在 `tests/unit/**`；目录名是现有物理位置，不代表恢复“每层都要 Unit”的旧制度。
 - 穷尽 registry conformance：`tests/contracts/**`。
 - Required Vitest suite 的发现/执行/skip 核对：`scripts/test-verification/run-required-suite.mjs` 与 `verify-vitest-report.mjs`。
