@@ -5,7 +5,7 @@ import {
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import {
   FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION,
-} from './first-last-frame-smart-duration'
+} from './first-last-frame-smart-duration-constants'
 
 export const FIRST_LAST_FRAME_PROMPT_TEMPLATE_VERSION = 'v1'
 

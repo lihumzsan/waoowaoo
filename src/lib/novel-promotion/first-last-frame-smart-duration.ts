@@ -6,8 +6,9 @@ import {
   resolveLtx23GoonFrameCount,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import type { VideoDurationBinding } from '@/lib/video-duration/audio-binding'
+import { FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION } from './first-last-frame-smart-duration-constants'
 
-export const FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION = 'v1'
+export { FIRST_LAST_FRAME_SMART_DURATION_ALGORITHM_VERSION }
 export const FIRST_LAST_FRAME_SMART_DURATION_CONFIDENCE_THRESHOLD = 0.6
 export const FIRST_LAST_FRAME_SMART_DURATION_MIN_SECONDS = 4
 export const FIRST_LAST_FRAME_SMART_DURATION_MAX_SECONDS = 15
