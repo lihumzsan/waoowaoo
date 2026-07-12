@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { VideoDurationBinding, VideoPanel } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { buildDefaultFirstLastFramePrompt } from '@/lib/novel-promotion/panel-continuity'
 import type { FirstLastFramePromptReason } from '@/lib/novel-promotion/first-last-frame-prompt'
-import { buildFirstLastFramePromptFingerprintInput } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
 import { useGenerateFirstLastFramePrompt } from '@/lib/query/mutations/useVideoMutations'
 import {
   applyPromptResult,
+  buildFirstLastFramePromptSourceSignature,
   canStartPromptOperation,
   clearSupersededPromptOperation,
   createPersistedPromptEntry,
@@ -34,7 +34,6 @@ interface UseFirstLastFramePromptEntriesParams {
   episodeId: string
   allPanels: VideoPanel[]
   linkedPanels: Map<string, boolean>
-  flModel: string
   promptTaskStates: PromptTaskStates
   onUpdatePrompt: (
     storyboardId: string,
@@ -49,7 +48,6 @@ export function useFirstLastFramePromptEntries({
   episodeId,
   allPanels,
   linkedPanels,
-  flModel,
   promptTaskStates,
   onUpdatePrompt,
 }: UseFirstLastFramePromptEntriesParams) {
@@ -91,10 +89,9 @@ export function useFirstLastFramePromptEntries({
         videoDurationBinding: durationOverride || firstPanel.videoDurationBinding,
         duration: firstPanel.textPanel?.duration,
       }
-    return JSON.stringify({
-      canonical: buildFirstLastFramePromptFingerprintInput({
-      firstPanel: firstSource,
-      lastPanel: lastPanel.firstLastFramePromptFingerprintSource || {
+    return buildFirstLastFramePromptSourceSignature(
+      firstSource,
+      lastPanel.firstLastFramePromptFingerprintSource || {
         id: lastPanel.panelId,
         imageUrl: lastPanel.imageUrl,
         description: lastPanel.textPanel?.description,
@@ -104,10 +101,8 @@ export function useFirstLastFramePromptEntries({
         cameraMove: lastPanel.textPanel?.camera_move,
         location: lastPanel.textPanel?.location,
       },
-      }),
-      selectedModel: flModel,
-    })
-  }, [flModel])
+    )
+  }, [])
 
   const buildDerivedEntry = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel): FirstLastFramePromptEntry => ({
     value: buildDefaultFirstLastFramePrompt({

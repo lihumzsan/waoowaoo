@@ -218,7 +218,6 @@ export function useVideoFirstLastFrameFlow({
     episodeId,
     allPanels,
     linkedPanels,
-    flModel,
     promptTaskStates,
     onUpdatePrompt,
   })

@@ -1,3 +1,8 @@
+import {
+  buildFirstLastFramePromptFingerprintInput,
+  type FirstLastFrameFingerprintPanel,
+} from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
+
 export type FirstLastFramePromptEntry = {
   value: string
   origin: 'derived' | 'generated' | 'user'
@@ -16,6 +21,15 @@ export type FirstLastFramePromptResult = {
   applied: boolean
   fallbackUsed: boolean
   warnings: string[]
+}
+
+export function buildFirstLastFramePromptSourceSignature(
+  firstPanel: FirstLastFrameFingerprintPanel,
+  lastPanel: FirstLastFrameFingerprintPanel,
+) {
+  return JSON.stringify({
+    canonical: buildFirstLastFramePromptFingerprintInput({ firstPanel, lastPanel }),
+  })
 }
 
 export function createPersistedPromptEntry(params: {

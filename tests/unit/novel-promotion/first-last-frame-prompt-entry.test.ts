@@ -12,6 +12,34 @@ describe('first/last-frame prompt entry', () => {
     })).toBeUndefined()
   })
 
+  it('builds readiness from canonical panel sources without UI model state', async () => {
+    const { buildFirstLastFramePromptSourceSignature } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const { buildFirstLastFramePromptFingerprintInput } = await import(
+      '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
+    )
+    const firstPanel = {
+      id: 'first',
+      imageUrl: 'first.png',
+      videoPrompt: 'walk forward',
+      duration: 6,
+    }
+    const lastPanel = {
+      id: 'last',
+      imageUrl: 'last.png',
+      videoPrompt: 'stop by the door',
+    }
+
+    expect(buildFirstLastFramePromptSourceSignature(firstPanel, lastPanel)).toBe(JSON.stringify({
+      canonical: buildFirstLastFramePromptFingerprintInput({ firstPanel, lastPanel }),
+    }))
+    expect(buildFirstLastFramePromptSourceSignature(
+      { ...firstPanel, videoPrompt: 'turn around' },
+      lastPanel,
+    )).not.toBe(buildFirstLastFramePromptSourceSignature(firstPanel, lastPanel))
+  })
+
   it('uses the same displayed entry value and edited flag in the video request', async () => {
     const { buildFirstLastFrameVideoPrompt } = await import(
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
