@@ -462,14 +462,13 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
     expectedProjectId: 'project-1',
     expectedSubmitEpisodeId: 'episode-1',
     expectedPayloadSubset: {
-      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
       generationOptions: {
         resolution: '720p',
         duration: 5,
-        fps: 24,
       },
       firstLastFrame: {
-        flModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        flModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
       },
     },
   },
@@ -1107,13 +1106,16 @@ describe('api contract - direct submit routes (behavior)', () => {
     expect(res.status).toBe(200)
     const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
     expect(submitArg?.payload).toEqual(expect.objectContaining({
-      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       generationOptions: expect.objectContaining({
         duration: 6,
         resolution: '720p',
       }),
+      ltx23WorkflowRouting: expect.objectContaining({
+        selectedModelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        reasons: expect.arrayContaining(['first_last_frame_model_in_normal_mode']),
+      }),
     }))
-    expect(submitArg?.payload).not.toHaveProperty('ltx23WorkflowRouting')
     expect(submitArg?.payload).not.toHaveProperty('firstLastFrame')
   })
 

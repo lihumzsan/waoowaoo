@@ -156,6 +156,7 @@ export const PRESET_MODELS: PresetModel[] = [
     // 视频模型
     { modelId: 'basevideo/seedance2/bernini-480p-i2v', name: 'ComfyUI · Seedance2.0 Bernini 480p I2V', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync', name: 'ComfyUI · Seedance2.0 Bernini 480p I2V Audio LipSync', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage', name: 'ComfyUI · LTX2.3 Goon First/Last Frame', type: 'video', provider: 'comfyui' },
     { modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', name: 'ComfyUI · LTX2.3 Smart VBVR I2V Audio', type: 'video', provider: 'comfyui' },
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },

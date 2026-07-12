@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
+import {
+  normalizeVideoGenerationSelections,
+  resolveEffectiveVideoCapabilityDefinitions,
+} from '@/lib/model-capabilities/video-effective'
 
 describe('comfyui video capabilities catalog', () => {
+  it('registers Goon as the only selectable ComfyUI first-last-frame model', () => {
+    const capabilities = findBuiltinCapabilities(
+      'video',
+      'comfyui',
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    )
+
+    expect(capabilities?.video?.generationModeOptions).toEqual(['firstlastframe'])
+    expect(capabilities?.video?.durationOptions).toEqual([10, 4, 5, 6, 8, 12])
+    expect(capabilities?.video?.fpsOptions).toEqual([24])
+    expect(capabilities?.video?.resolutionOptions).toEqual(['720p'])
+    expect(capabilities?.video?.firstlastframe).toBe(true)
+    expect(capabilities?.video?.supportGenerateAudio).toBe(false)
+
+    const definitions = resolveEffectiveVideoCapabilityDefinitions({
+      videoCapabilities: capabilities?.video,
+    })
+    const defaultSelection = normalizeVideoGenerationSelections({ definitions })
+    expect(defaultSelection.duration).toBe(10)
+  })
+
   it('registers the current Smart VBVR LTX 2.3 workflow as a selectable video model', () => {
     const capabilities = findBuiltinCapabilities(
       'video',

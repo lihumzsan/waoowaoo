@@ -280,7 +280,7 @@ basevideo/ltx23-profiles
   t8-smart-vbvr-390k-v2
   t8-sulphur2-promptrelay-micro
   t8-single-image-large-motion-4stage
-  t8-smooth-first-last-frame
+  goon-first-last-frame-2stage
   damaicha-image-to-30s-long-video
   damaicha-long-video-promptrelay
   damaicha-aio-v2-no-subtitles

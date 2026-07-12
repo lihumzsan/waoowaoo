@@ -40,8 +40,13 @@ import {
 import {
   DEFAULT_VIDEO_MODEL_KEY,
   isBerniniAudioLipsyncVideoModelKey,
+  normalizeVideoModelKey,
 } from '@/lib/novel-promotion/video-model-defaults'
-import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import {
+  COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
+  COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID,
+  getLtx23WorkflowProfile,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import {
   SEEDANCE2_BERNINI_DEFAULT_DURATION_SECONDS,
@@ -67,6 +72,13 @@ function readNonEmptyString(value: unknown): string | null {
 function normalizeWorkerVideoModelKey(raw: string | null | undefined): string {
   const trimmed = typeof raw === 'string' ? raw.trim().replace(/\\/g, '/') : ''
   if (!trimmed) return ''
+  const normalized = normalizeVideoModelKey(trimmed)
+  if (
+    normalized === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY
+    || normalized === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID
+  ) {
+    return normalized
+  }
   return isBerniniAudioLipsyncVideoModelKey(trimmed)
     ? DEFAULT_VIDEO_MODEL_KEY
     : trimmed

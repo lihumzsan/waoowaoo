@@ -28,7 +28,7 @@ describe('ltx23 workflow profiles', () => {
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
       COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2,
@@ -42,18 +42,32 @@ describe('ltx23 workflow profiles', () => {
     )).toEqual(['first.png', 'first.png', 'first.png', 'first.png'])
   })
 
-  it('keeps first and last images distinct for smooth first-last-frame slots', () => {
+  it('registers Goon as the fixed 24 fps first-last-frame profile', () => {
+    expect(getLtx23WorkflowProfile(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)).toMatchObject({
+      workflowKey: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      category: 'first_last_frame',
+      promptPolicy: 'first_last_frame',
+      imageSlotPolicy: 'first_last',
+      maxDurationSeconds: 12,
+      defaultDurationSeconds: 10,
+      durationOptions: [4, 5, 6, 8, 10, 12],
+      fps: 24,
+      selectableInPanel: true,
+    })
+  })
+
+  it('keeps exactly the first and last images for Goon slots', () => {
     expect(expandLtx23WorkflowImageFilenames(
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       ['first.png', 'last.png'],
-    )).toEqual(['first.png', 'last.png', 'last.png'])
+    )).toEqual(['first.png', 'last.png'])
   })
 
   it('uses the final uploaded image as the last frame when references sit between first and last', () => {
     expect(expandLtx23WorkflowImageFilenames(
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       ['first.png', 'reference.png', 'last.png'],
-    )).toEqual(['first.png', 'last.png', 'last.png'])
+    )).toEqual(['first.png', 'last.png'])
   })
 
   it('marks long-video workflows separately', () => {

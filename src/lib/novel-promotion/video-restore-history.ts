@@ -1,3 +1,5 @@
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
+
 export type VideoGenerationMode = 'normal' | 'firstlastframe' | 'split'
 
 type PanelVideoSnapshot = {
@@ -26,17 +28,18 @@ export function readTaskVideoUrl(result: unknown): string | null {
 export function readTaskVideoModel(payload: unknown, result?: unknown): string | null {
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     const modelFromResult = asNonEmptyString((result as Record<string, unknown>).videoModel)
-    if (modelFromResult) return modelFromResult
+    if (modelFromResult) return normalizeVideoModelKey(modelFromResult)
   }
 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
   const payloadRecord = payload as Record<string, unknown>
   const modelFromPayload = asNonEmptyString(payloadRecord.videoModel)
-  if (modelFromPayload) return modelFromPayload
+  if (modelFromPayload) return normalizeVideoModelKey(modelFromPayload)
 
   const firstLastFrame = payloadRecord.firstLastFrame
   if (firstLastFrame && typeof firstLastFrame === 'object' && !Array.isArray(firstLastFrame)) {
-    return asNonEmptyString((firstLastFrame as Record<string, unknown>).flModel)
+    const firstLastModel = asNonEmptyString((firstLastFrame as Record<string, unknown>).flModel)
+    return firstLastModel ? normalizeVideoModelKey(firstLastModel) : null
   }
 
   return null

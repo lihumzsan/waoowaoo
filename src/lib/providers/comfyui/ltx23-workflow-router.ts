@@ -2,6 +2,8 @@ import {
   COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
   COMFYUI_LTX23_WORKFLOW_KEYS,
   getLtx23WorkflowProfile,
+  isComfyUiLtx23GoonFirstLastFrameWorkflow,
+  normalizeLtx23GoonDurationSeconds,
   normalizeLtx23WorkflowKey,
   type Ltx23WorkflowProfile,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
@@ -257,9 +259,11 @@ function buildResult(params: {
   requestedDurationSeconds: number | null
 }): Ltx23WorkflowRoutingResult {
   const profile = pickProfile(params.workflowKey)
-  const durationSeconds = params.requestedDurationSeconds !== null
-    ? params.requestedDurationSeconds
-    : profile.defaultDurationSeconds
+  const durationSeconds = isComfyUiLtx23GoonFirstLastFrameWorkflow(profile.workflowKey)
+    ? normalizeLtx23GoonDurationSeconds(params.requestedDurationSeconds)
+    : params.requestedDurationSeconds !== null
+      ? params.requestedDurationSeconds
+      : profile.defaultDurationSeconds
 
   return {
     selectedWorkflowKey: profile.workflowKey,
@@ -297,6 +301,17 @@ export function resolveLtx23WorkflowRoute(
     ? ['first_last_frame_model_in_normal_mode']
     : []
 
+  if (generationMode === 'firstlastframe') {
+    return buildResult({
+      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
+      previousWorkflowKey: normalizedWorkflowKey,
+      selectionMode,
+      confidence: 1,
+      reasons: [...routingReasonPrefix, 'first_last_frame_generation'],
+      requestedDurationSeconds: targetDurationSeconds,
+    })
+  }
+
   if (selectionMode === 'manual') {
     return buildResult({
       workflowKey: routingProfile.workflowKey,
@@ -304,17 +319,6 @@ export function resolveLtx23WorkflowRoute(
       selectionMode,
       confidence: 1,
       reasons: [...routingReasonPrefix, 'manual_selection'],
-      requestedDurationSeconds: targetDurationSeconds,
-    })
-  }
-
-  if (generationMode === 'firstlastframe') {
-    return buildResult({
-      workflowKey: COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
-      previousWorkflowKey: normalizedWorkflowKey,
-      selectionMode,
-      confidence: 1,
-      reasons: [...routingReasonPrefix, 'first_last_frame_generation'],
       requestedDurationSeconds: targetDurationSeconds,
     })
   }
