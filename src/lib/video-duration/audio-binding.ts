@@ -7,6 +7,7 @@ export type VideoDurationBinding = {
   mode?: VideoDurationMode
   voiceLineIds?: string[]
   targetDurationSeconds?: number | null
+  recommendedDurationSeconds?: number
   durationSource?: VideoDurationSource
   recommendationConfidence?: number
   recommendationReason?: string
@@ -102,6 +103,7 @@ export function normalizeVideoDurationBinding(value: unknown): VideoDurationBind
   if (!isRecord(value)) return { mode: 'manual', voiceLineIds: [] }
   const mode = value.mode === 'match_audio' ? 'match_audio' : 'manual'
   const targetDurationSeconds = normalizeTargetDurationSeconds(value.targetDurationSeconds)
+  const recommendedDurationSeconds = normalizeTargetDurationSeconds(value.recommendedDurationSeconds)
   const durationSource = normalizeDurationSource(value.durationSource)
     ?? (mode === 'manual' && targetDurationSeconds !== null ? 'manual' : undefined)
   const recommendationConfidence = normalizeConfidence(value.recommendationConfidence)
@@ -112,6 +114,7 @@ export function normalizeVideoDurationBinding(value: unknown): VideoDurationBind
     mode,
     voiceLineIds: normalizeVoiceLineIds(value.voiceLineIds),
     ...(targetDurationSeconds !== null ? { targetDurationSeconds } : {}),
+    ...(recommendedDurationSeconds !== null ? { recommendedDurationSeconds } : {}),
     ...(durationSource ? { durationSource } : {}),
     ...(recommendationConfidence !== undefined ? { recommendationConfidence } : {}),
     ...(recommendationReason ? { recommendationReason } : {}),

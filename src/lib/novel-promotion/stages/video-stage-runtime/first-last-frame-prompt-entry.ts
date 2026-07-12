@@ -26,6 +26,22 @@ export type FirstLastFramePromptResult = {
   applied: boolean
   fallbackUsed: boolean
   warnings: string[]
+  smartDuration?: {
+    durationSeconds: number
+    confidence: number
+    reason: string
+    fingerprint: string
+    algorithmVersion: string
+  }
+}
+
+export type FirstLastFrameSmartDurationResult = NonNullable<FirstLastFramePromptResult['smartDuration']>
+
+export type FirstLastFrameDurationStatus = {
+  source: 'smart' | 'manual' | 'default' | 'analyzing'
+  durationSeconds: number
+  reason?: string
+  canRestoreSmart: boolean
 }
 
 export function buildFirstLastFramePromptSourceSignature(
@@ -112,23 +128,158 @@ export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 
 
 const GOON_DURATIONS = new Set<number>(COMFYUI_LTX23_GOON_DURATION_OPTIONS)
 
+function readSmartRecommendedDuration(binding: VideoDurationBinding): number | null {
+  const candidate = binding.durationSource === 'smart'
+    ? binding.targetDurationSeconds
+    : binding.recommendedDurationSeconds
+  if (typeof candidate !== 'number') return null
+  const normalized = normalizeLtx23GoonDurationSeconds(candidate)
+  return normalized === candidate ? normalized : null
+}
+
+function withPreservedSmartRecommendation(
+  nextBinding: VideoDurationBinding,
+  previousBinding?: VideoDurationBinding | null,
+): VideoDurationBinding {
+  const previous = normalizeVideoDurationBinding(previousBinding)
+  const recommendedDurationSeconds = readSmartRecommendedDuration(previous)
+  if (recommendedDurationSeconds === null || !previous.recommendationFingerprint) return nextBinding
+  return {
+    ...nextBinding,
+    recommendedDurationSeconds,
+    ...(typeof previous.recommendationConfidence === 'number'
+      ? { recommendationConfidence: previous.recommendationConfidence }
+      : {}),
+    ...(previous.recommendationReason ? { recommendationReason: previous.recommendationReason } : {}),
+    recommendationFingerprint: previous.recommendationFingerprint,
+    ...(previous.recommendationAlgorithmVersion
+      ? { recommendationAlgorithmVersion: previous.recommendationAlgorithmVersion }
+      : {}),
+  }
+}
+
 export function resolveFirstLastFrameDurationSelection(
   field: string,
   rawValue: string,
   currentOptions: Record<string, string | number | boolean>,
+  previousBinding?: VideoDurationBinding | null,
 ) {
   if (field !== 'duration') return null
   const duration = Number(rawValue)
   if (!GOON_DURATIONS.has(duration)) return null
   return {
-    binding: {
+    binding: withPreservedSmartRecommendation({
       mode: 'manual' as const,
       voiceLineIds: [],
       targetDurationSeconds: duration,
       durationSource: 'manual' as const,
-    },
+    }, previousBinding),
     generationOptions: { ...currentOptions, duration },
   }
+}
+
+export function restoreFirstLastFrameSmartDurationBinding(
+  value: VideoDurationBinding | null | undefined,
+): VideoDurationBinding | null {
+  const binding = normalizeVideoDurationBinding(value)
+  const recommendedDurationSeconds = readSmartRecommendedDuration(binding)
+  if (recommendedDurationSeconds === null || !binding.recommendationFingerprint) return null
+  return {
+    mode: 'manual',
+    voiceLineIds: [],
+    targetDurationSeconds: recommendedDurationSeconds,
+    durationSource: 'smart',
+    recommendedDurationSeconds,
+    ...(typeof binding.recommendationConfidence === 'number'
+      ? { recommendationConfidence: binding.recommendationConfidence }
+      : {}),
+    ...(binding.recommendationReason ? { recommendationReason: binding.recommendationReason } : {}),
+    recommendationFingerprint: binding.recommendationFingerprint,
+    ...(binding.recommendationAlgorithmVersion ? { recommendationAlgorithmVersion: binding.recommendationAlgorithmVersion } : {}),
+  }
+}
+
+function durationBindingPromptKey(value: VideoDurationBinding | null | undefined): string {
+  const binding = normalizeVideoDurationBinding(value)
+  return JSON.stringify({
+    durationSource: binding.durationSource ?? null,
+    targetDurationSeconds: binding.targetDurationSeconds ?? null,
+    recommendedDurationSeconds: binding.recommendedDurationSeconds ?? null,
+    recommendationFingerprint: binding.recommendationFingerprint ?? null,
+  })
+}
+
+export function shouldEnsurePromptAfterDurationSelection(params: {
+  previousBinding?: VideoDurationBinding | null
+  nextBinding: VideoDurationBinding
+}) {
+  return durationBindingPromptKey(params.previousBinding) !== durationBindingPromptKey(params.nextBinding)
+}
+
+export function buildFirstLastFrameSmartDurationBinding(
+  smartDuration: FirstLastFrameSmartDurationResult,
+): VideoDurationBinding {
+  return {
+    mode: 'manual',
+    voiceLineIds: [],
+    targetDurationSeconds: smartDuration.durationSeconds,
+    recommendedDurationSeconds: smartDuration.durationSeconds,
+    durationSource: 'smart',
+    recommendationConfidence: smartDuration.confidence,
+    recommendationReason: smartDuration.reason,
+    recommendationFingerprint: smartDuration.fingerprint,
+    recommendationAlgorithmVersion: smartDuration.algorithmVersion,
+  }
+}
+
+export function shouldApplyFirstLastFrameSmartDurationBinding(
+  currentBinding: VideoDurationBinding | null | undefined,
+) {
+  const normalized = normalizeVideoDurationBinding(currentBinding)
+  return normalized.durationSource !== 'manual'
+}
+
+export function resolveFirstLastFrameDurationStatus(params: {
+  binding?: VideoDurationBinding | null
+  durationSeconds?: unknown
+  promptStatus?: FirstLastFramePromptEntry['status']
+}): FirstLastFrameDurationStatus | null {
+  const binding = normalizeVideoDurationBinding(params.binding)
+  const selectedDuration = typeof params.durationSeconds === 'number'
+    && Number.isFinite(params.durationSeconds)
+    ? normalizeLtx23GoonDurationSeconds(params.durationSeconds)
+    : null
+  const bindingDuration = typeof binding.targetDurationSeconds === 'number'
+    ? normalizeLtx23GoonDurationSeconds(binding.targetDurationSeconds)
+    : null
+  const durationSeconds = selectedDuration ?? bindingDuration
+  if (durationSeconds === null) return null
+  const canRestoreSmart = binding.durationSource === 'manual'
+    && restoreFirstLastFrameSmartDurationBinding(binding) !== null
+  if (
+    (params.promptStatus === 'queued' || params.promptStatus === 'processing')
+    && binding.durationSource !== 'smart'
+    && binding.durationSource !== 'manual'
+  ) {
+    return { source: 'analyzing', durationSeconds, canRestoreSmart: false }
+  }
+  if (binding.durationSource === 'smart') {
+    return {
+      source: 'smart',
+      durationSeconds,
+      ...(binding.recommendationReason ? { reason: binding.recommendationReason } : {}),
+      canRestoreSmart: false,
+    }
+  }
+  if (binding.durationSource === 'manual') {
+    return {
+      source: 'manual',
+      durationSeconds,
+      ...(binding.recommendationReason ? { reason: binding.recommendationReason } : {}),
+      canRestoreSmart,
+    }
+  }
+  return { source: 'default', durationSeconds, canRestoreSmart: false }
 }
 
 function readPersistedTargetDuration(value: VideoDurationBinding | number | null | undefined): number | null {

@@ -410,6 +410,8 @@ export function useVideoStageRuntime({
     promptEntries,
     setFlModel,
     setFlCapabilityValue,
+    restoreSmartDuration,
+    getFirstLastFrameDurationStatus,
     setPromptValue,
     savePromptValue,
     ensurePrompt,
@@ -602,6 +604,7 @@ export function useVideoStageRuntime({
         onToggleLink={handleToggleLinkAndEnsure}
         onFlModelChange={setFlModel}
         onFlCapabilityChange={setFlCapabilityValue}
+        onRestoreFlSmartDuration={restoreSmartDuration}
         onFlPromptChange={setPromptValue}
         onSaveFlPrompt={savePromptValue}
         onRegenerateFlPrompt={(panelKey) => ensurePrompt(panelKey, 'manual')}
@@ -610,6 +613,7 @@ export function useVideoStageRuntime({
         onToggleLipSyncVideo={toggleLipSyncVideo}
         getNextPanel={getNextPanel}
         isLinkedAsLastFrame={isLinkedAsLastFrame}
+        getFirstLastFrameDurationStatus={getFirstLastFrameDurationStatus}
         getLocalPrompt={getLocalPrompt}
         updateLocalPrompt={updateLocalPrompt}
         savePrompt={savePrompt}

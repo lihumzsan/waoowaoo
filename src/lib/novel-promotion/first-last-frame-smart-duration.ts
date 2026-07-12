@@ -262,6 +262,7 @@ export function resolveFirstLastFrameSmartDurationBinding(
     mode: 'manual',
     voiceLineIds: [],
     targetDurationSeconds: recommendation.durationSeconds,
+    recommendedDurationSeconds: recommendation.durationSeconds,
     durationSource: 'smart',
     recommendationConfidence: recommendation.confidence,
     recommendationReason: recommendation.reason,

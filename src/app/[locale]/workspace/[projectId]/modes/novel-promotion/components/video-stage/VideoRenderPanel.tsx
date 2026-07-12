@@ -3,7 +3,10 @@ import type { MutableRefObject } from 'react'
 import type { CapabilitySelections, CapabilityValue } from '@/lib/model-config-contract'
 import { VideoPanelCard, type VideoPanel, type VideoModelOption, type MatchedVoiceLine, type FirstLastFrameParams, type VideoDurationBinding, type VideoGenerationOptions } from '../video'
 import type { PromptField } from '@/lib/novel-promotion/stages/video-stage-runtime/useVideoPromptState'
-import type { FirstLastFramePromptEntry } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+import type {
+  FirstLastFrameDurationStatus,
+  FirstLastFramePromptEntry,
+} from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
 import { resolvePanelFirstLastFrameGenerationOptions } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
 
 interface VideoRenderPanelProps {
@@ -53,6 +56,7 @@ interface VideoRenderPanelProps {
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => Promise<void>
   onFlModelChange: (model: string) => void
   onFlCapabilityChange: (panelKey: string, field: string, rawValue: string) => Promise<void>
+  onRestoreFlSmartDuration: (panelKey: string) => Promise<void>
   onFlPromptChange: (key: string, value: string) => void
   onSaveFlPrompt: (key: string, value: string) => Promise<void>
   onRegenerateFlPrompt: (key: string) => Promise<void>
@@ -69,6 +73,7 @@ interface VideoRenderPanelProps {
   onToggleLipSyncVideo: (key: string, value: boolean) => void
   getNextPanel: (currentIndex: number) => VideoPanel | null
   isLinkedAsLastFrame: (currentIndex: number) => boolean
+  getFirstLastFrameDurationStatus: (panelKey: string) => FirstLastFrameDurationStatus | null
   getLocalPrompt: (panelKey: string, externalPrompt?: string, field?: PromptField) => string
   updateLocalPrompt: (panelKey: string, value: string, field?: PromptField) => void
   savePrompt: (
@@ -111,6 +116,7 @@ export default function VideoRenderPanel({
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
+  onRestoreFlSmartDuration,
   onFlPromptChange,
   onSaveFlPrompt,
   onRegenerateFlPrompt,
@@ -119,6 +125,7 @@ export default function VideoRenderPanel({
   onToggleLipSyncVideo,
   getNextPanel,
   isLinkedAsLastFrame,
+  getFirstLastFrameDurationStatus,
   getLocalPrompt,
   updateLocalPrompt,
   savePrompt,
@@ -147,6 +154,9 @@ export default function VideoRenderPanel({
           const panelFlCapabilityFields = flCapabilityFields.map((field) => field.field === 'duration'
             ? { ...field, value: panelFlGenerationOptions.duration ?? field.value }
             : field)
+          const flDurationStatus = isLinked
+            ? getFirstLastFrameDurationStatus(panelKey)
+            : null
           const localPrompt = isLinked
             ? (flPromptEntry?.value || '')
             : getLocalPrompt(panelKey, panel.textPanel?.video_prompt, promptField)
@@ -195,6 +205,7 @@ export default function VideoRenderPanel({
                 flCapabilityFields={panelFlCapabilityFields}
                 flMissingCapabilityFields={flMissingCapabilityFields}
                 flPromptEntry={flPromptEntry}
+                flDurationStatus={flDurationStatus}
                 localPrompt={localPrompt}
                 isSavingPrompt={isSavingPrompt}
                 onUpdateLocalPrompt={(value) => {
@@ -211,6 +222,7 @@ export default function VideoRenderPanel({
                 onToggleLink={onToggleLink}
                 onFlModelChange={onFlModelChange}
                 onFlCapabilityChange={(field, rawValue) => onFlCapabilityChange(panelKey, field, rawValue)}
+                onRestoreFlSmartDuration={onRestoreFlSmartDuration}
                 onFlPromptChange={onFlPromptChange}
                 onRegenerateFlPrompt={onRegenerateFlPrompt}
                 onGenerateFirstLastFrame={onGenerateFirstLastFrame}

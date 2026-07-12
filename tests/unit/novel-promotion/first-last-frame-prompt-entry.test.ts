@@ -206,6 +206,182 @@ describe('first/last-frame prompt entry', () => {
     )).toEqual({ duration: 6, fps: 24 })
   })
 
+  it('preserves smart recommendation metadata when the user manually overrides duration', async () => {
+    const { resolveFirstLastFrameDurationSelection } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(resolveFirstLastFrameDurationSelection('duration', '12', { fps: 24 }, {
+      mode: 'manual',
+      targetDurationSeconds: 8,
+      durationSource: 'smart',
+      recommendationConfidence: 0.86,
+      recommendationReason: 'motion beat recommendation',
+      recommendationFingerprint: 'smart-fp',
+      recommendationAlgorithmVersion: 'v1',
+    })).toEqual({
+      binding: {
+        mode: 'manual',
+        voiceLineIds: [],
+        targetDurationSeconds: 12,
+        durationSource: 'manual',
+        recommendedDurationSeconds: 8,
+        recommendationConfidence: 0.86,
+        recommendationReason: 'motion beat recommendation',
+        recommendationFingerprint: 'smart-fp',
+        recommendationAlgorithmVersion: 'v1',
+      },
+      generationOptions: { duration: 12, fps: 24 },
+    })
+  })
+
+  it('restores a manual override back to the stored smart recommendation', async () => {
+    const { restoreFirstLastFrameSmartDurationBinding } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(restoreFirstLastFrameSmartDurationBinding({
+      mode: 'manual',
+      voiceLineIds: [],
+      targetDurationSeconds: 12,
+      durationSource: 'manual',
+      recommendedDurationSeconds: 8,
+      recommendationConfidence: 0.86,
+      recommendationReason: 'motion beat recommendation',
+      recommendationFingerprint: 'smart-fp',
+      recommendationAlgorithmVersion: 'v1',
+    })).toEqual({
+      mode: 'manual',
+      voiceLineIds: [],
+      targetDurationSeconds: 8,
+      durationSource: 'smart',
+      recommendedDurationSeconds: 8,
+      recommendationConfidence: 0.86,
+      recommendationReason: 'motion beat recommendation',
+      recommendationFingerprint: 'smart-fp',
+      recommendationAlgorithmVersion: 'v1',
+    })
+
+    expect(restoreFirstLastFrameSmartDurationBinding({
+      mode: 'manual',
+      voiceLineIds: [],
+      targetDurationSeconds: 12,
+      durationSource: 'manual',
+    })).toBeNull()
+  })
+
+  it('only re-ensures the first-last prompt when duration source meaning changes', async () => {
+    const { shouldEnsurePromptAfterDurationSelection } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(shouldEnsurePromptAfterDurationSelection({
+      previousBinding: {
+        mode: 'manual',
+        targetDurationSeconds: 8,
+        durationSource: 'smart',
+        recommendationFingerprint: 'smart-fp',
+      },
+      nextBinding: {
+        mode: 'manual',
+        targetDurationSeconds: 12,
+        durationSource: 'manual',
+        recommendedDurationSeconds: 8,
+        recommendationFingerprint: 'smart-fp',
+      },
+    })).toBe(true)
+    expect(shouldEnsurePromptAfterDurationSelection({
+      previousBinding: {
+        mode: 'manual',
+        targetDurationSeconds: 12,
+        durationSource: 'manual',
+        recommendedDurationSeconds: 8,
+        recommendationFingerprint: 'smart-fp',
+      },
+      nextBinding: {
+        mode: 'manual',
+        targetDurationSeconds: 12,
+        durationSource: 'manual',
+        recommendedDurationSeconds: 8,
+        recommendationFingerprint: 'smart-fp',
+      },
+    })).toBe(false)
+  })
+
+  it('builds a local smart binding from prompt-task smart duration unless manual already owns the panel', async () => {
+    const {
+      buildFirstLastFrameSmartDurationBinding,
+      shouldApplyFirstLastFrameSmartDurationBinding,
+    } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    const smartBinding = buildFirstLastFrameSmartDurationBinding({
+      durationSeconds: 9,
+      confidence: 0.82,
+      reason: 'camera and character motion need pacing',
+      fingerprint: 'smart-fp',
+      algorithmVersion: 'v1',
+    })
+
+    expect(smartBinding).toEqual({
+      mode: 'manual',
+      voiceLineIds: [],
+      targetDurationSeconds: 9,
+      recommendedDurationSeconds: 9,
+      durationSource: 'smart',
+      recommendationConfidence: 0.82,
+      recommendationReason: 'camera and character motion need pacing',
+      recommendationFingerprint: 'smart-fp',
+      recommendationAlgorithmVersion: 'v1',
+    })
+    expect(shouldApplyFirstLastFrameSmartDurationBinding(null)).toBe(true)
+    expect(shouldApplyFirstLastFrameSmartDurationBinding({ durationSource: 'smart', targetDurationSeconds: 8 })).toBe(true)
+    expect(shouldApplyFirstLastFrameSmartDurationBinding({ durationSource: 'manual', targetDurationSeconds: 6 })).toBe(false)
+  })
+
+  it('describes the first-last duration source for UI status and restore affordance', async () => {
+    const { resolveFirstLastFrameDurationStatus } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(resolveFirstLastFrameDurationStatus({
+      binding: {
+        durationSource: 'smart',
+        targetDurationSeconds: 9,
+        recommendationReason: 'motion requires a slower bridge',
+      },
+      durationSeconds: 9,
+    })).toEqual({
+      source: 'smart',
+      durationSeconds: 9,
+      reason: 'motion requires a slower bridge',
+      canRestoreSmart: false,
+    })
+    expect(resolveFirstLastFrameDurationStatus({
+      binding: {
+        durationSource: 'manual',
+        targetDurationSeconds: 6,
+        recommendedDurationSeconds: 9,
+        recommendationFingerprint: 'smart-fp',
+      },
+      durationSeconds: 6,
+    })).toEqual({
+      source: 'manual',
+      durationSeconds: 6,
+      canRestoreSmart: true,
+    })
+    expect(resolveFirstLastFrameDurationStatus({
+      binding: null,
+      durationSeconds: 10,
+      promptStatus: 'processing',
+    })).toEqual({
+      source: 'analyzing',
+      durationSeconds: 10,
+      canRestoreSmart: false,
+    })
+  })
+
   it('replaces user text when the source signature changes', async () => {
     const { markPromptSourceChanged } = await import(
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'

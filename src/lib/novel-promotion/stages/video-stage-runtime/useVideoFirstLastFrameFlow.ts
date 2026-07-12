@@ -16,8 +16,12 @@ import { supportsFirstLastFrame } from '@/lib/model-capabilities/video-model-opt
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
 import {
   buildFirstLastFrameVideoPrompt,
+  restoreFirstLastFrameSmartDurationBinding,
+  resolveFirstLastFrameDurationStatus,
   resolveFirstLastFrameDurationSelection,
   resolvePanelFirstLastFrameGenerationOptions,
+  shouldEnsurePromptAfterDurationSelection,
+  type FirstLastFrameDurationStatus,
 } from './first-last-frame-prompt-entry'
 import { useFirstLastFramePromptEntries } from './useFirstLastFramePromptEntries'
 
@@ -231,19 +235,21 @@ export function useVideoFirstLastFrameFlow({
       panelKey,
       flGenerationOptions,
       flGenerationOptionsByPanel,
-      allPanels.find((panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey)
-        ?.videoDurationBinding?.targetDurationSeconds,
+      getPersistedDurationOverride(panelKey)
+        || allPanels.find((panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey)
+          ?.videoDurationBinding,
     )
     const nextOptions = normalizeFlCapabilityValue(field, rawValue, currentOptions)
     if (!nextOptions) return
-    const durationSelection = resolveFirstLastFrameDurationSelection(field, rawValue, nextOptions)
+    const firstPanel = allPanels.find(
+      (panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey,
+    )
+    const currentBinding = getPersistedDurationOverride(panelKey) || firstPanel?.videoDurationBinding
+    const durationSelection = resolveFirstLastFrameDurationSelection(field, rawValue, nextOptions, currentBinding)
     if (!durationSelection) {
       setFlGenerationOptions(nextOptions)
       return
     }
-    const firstPanel = allPanels.find(
-      (panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey,
-    )
     if (!firstPanel) return
     beginDurationPersistence(panelKey)
     try {
@@ -257,11 +263,86 @@ export function useVideoFirstLastFrameFlow({
         durationSelection.generationOptions,
       ))
       confirmPersistedDuration(panelKey, durationSelection.binding)
-      await ensurePrompt(panelKey, 'source_change')
+      if (shouldEnsurePromptAfterDurationSelection({
+        previousBinding: currentBinding,
+        nextBinding: durationSelection.binding,
+      })) {
+        await ensurePrompt(panelKey, 'source_change')
+      }
     } catch (error) {
       failDurationPersistence(panelKey, error)
     }
-  }, [allPanels, beginDurationPersistence, confirmPersistedDuration, ensurePrompt, failDurationPersistence, flGenerationOptions, flGenerationOptionsByPanel, normalizeFlCapabilityValue, onUpdatePanelVideoDurationBinding])
+  }, [allPanels, beginDurationPersistence, confirmPersistedDuration, ensurePrompt, failDurationPersistence, flGenerationOptions, flGenerationOptionsByPanel, getPersistedDurationOverride, normalizeFlCapabilityValue, onUpdatePanelVideoDurationBinding])
+
+  const restoreSmartDuration = useCallback(async (panelKey: string) => {
+    const firstPanel = allPanels.find(
+      (panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey,
+    )
+    if (!firstPanel) return
+    const currentBinding = getPersistedDurationOverride(panelKey) || firstPanel.videoDurationBinding
+    const nextBinding = restoreFirstLastFrameSmartDurationBinding(currentBinding)
+    if (!nextBinding || typeof nextBinding.targetDurationSeconds !== 'number') return
+    beginDurationPersistence(panelKey)
+    try {
+      await onUpdatePanelVideoDurationBinding(
+        firstPanel.storyboardId,
+        firstPanel.panelIndex,
+        nextBinding,
+      )
+      setFlGenerationOptionsByPanel((previous) => new Map(previous).set(panelKey, {
+        ...resolvePanelFirstLastFrameGenerationOptions(
+          panelKey,
+          flGenerationOptions,
+          previous,
+          nextBinding,
+        ),
+        duration: nextBinding.targetDurationSeconds,
+      }))
+      confirmPersistedDuration(panelKey, nextBinding)
+      if (shouldEnsurePromptAfterDurationSelection({
+        previousBinding: currentBinding,
+        nextBinding,
+      })) {
+        await ensurePrompt(panelKey, 'source_change')
+      }
+    } catch (error) {
+      failDurationPersistence(panelKey, error)
+    }
+  }, [
+    allPanels,
+    beginDurationPersistence,
+    confirmPersistedDuration,
+    ensurePrompt,
+    failDurationPersistence,
+    flGenerationOptions,
+    getPersistedDurationOverride,
+    onUpdatePanelVideoDurationBinding,
+  ])
+
+  const getFirstLastFrameDurationStatus = useCallback((panelKey: string): FirstLastFrameDurationStatus | null => {
+    const firstPanel = allPanels.find(
+      (panel) => `${panel.storyboardId}-${panel.panelIndex}` === panelKey,
+    )
+    if (!firstPanel) return null
+    const binding = getPersistedDurationOverride(panelKey) || firstPanel.videoDurationBinding
+    const options = resolvePanelFirstLastFrameGenerationOptions(
+      panelKey,
+      flGenerationOptions,
+      flGenerationOptionsByPanel,
+      binding,
+    )
+    return resolveFirstLastFrameDurationStatus({
+      binding,
+      durationSeconds: options.duration,
+      promptStatus: getPromptEntry(panelKey)?.status,
+    })
+  }, [
+    allPanels,
+    flGenerationOptions,
+    flGenerationOptionsByPanel,
+    getPersistedDurationOverride,
+    getPromptEntry,
+  ])
 
   const handleGenerateFirstLastFrame = useCallback(async (
     firstStoryboardId: string,
@@ -321,6 +402,8 @@ export function useVideoFirstLastFrameFlow({
     promptEntries,
     setFlModel,
     setFlCapabilityValue,
+    restoreSmartDuration,
+    getFirstLastFrameDurationStatus,
     setPromptValue,
     savePromptValue,
     ensurePrompt,

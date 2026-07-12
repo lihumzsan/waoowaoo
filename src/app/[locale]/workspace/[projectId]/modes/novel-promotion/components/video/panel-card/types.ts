@@ -1,6 +1,9 @@
 import type { VideoPanel, MatchedVoiceLine, VideoModelOption, FirstLastFrameParams, VideoDurationBinding, VideoGenerationOptions } from '../types'
 import type { CapabilitySelections, CapabilityValue } from '@/lib/model-config-contract'
-import type { FirstLastFramePromptEntry } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+import type {
+  FirstLastFrameDurationStatus,
+  FirstLastFramePromptEntry,
+} from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
 
 export interface VideoPanelCardShellProps {
   panel: VideoPanel
@@ -34,6 +37,7 @@ export interface VideoPanelCardShellProps {
   }>
   flMissingCapabilityFields: string[]
   flPromptEntry?: FirstLastFramePromptEntry
+  flDurationStatus?: FirstLastFrameDurationStatus | null
   localPrompt: string
   isSavingPrompt: boolean
   onUpdateLocalPrompt: (value: string) => void
@@ -55,6 +59,7 @@ export interface VideoPanelCardShellProps {
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => void
   onFlModelChange: (model: string) => void
   onFlCapabilityChange: (field: string, rawValue: string) => void
+  onRestoreFlSmartDuration: (panelKey: string) => Promise<void>
   onFlPromptChange: (panelKey: string, value: string) => void
   onRegenerateFlPrompt: (panelKey: string) => Promise<void>
   onGenerateFirstLastFrame: (

@@ -7,6 +7,7 @@ import type { FirstLastFramePromptReason } from '@/lib/novel-promotion/first-las
 import { useGenerateFirstLastFramePrompt } from '@/lib/query/mutations/useVideoMutations'
 import {
   applyPromptResult,
+  buildFirstLastFrameSmartDurationBinding,
   buildFirstLastFramePromptSourceSignature,
   canStartPromptOperation,
   clearSupersededPromptOperation,
@@ -15,6 +16,7 @@ import {
   markSavedUserPromptReady,
   projectPromptTaskState,
   resolvePromptEntryReadiness,
+  shouldApplyFirstLastFrameSmartDurationBinding,
   shouldApplyPromptResult,
   shouldAutoEnsurePrompt,
   shouldProjectPromptTaskSnapshot,
@@ -228,9 +230,21 @@ export function useFirstLastFramePromptEntries({
         return
       }
       if (!result.applied) ensuredSignaturesRef.current.delete(panelKey)
+      let verifiedSourceSignature = signature
+      if (result.applied && result.smartDuration) {
+        const currentBinding = persistedDurationOverridesRef.current.get(panelKey)
+          || pair.firstPanel.videoDurationBinding
+        if (shouldApplyFirstLastFrameSmartDurationBinding(currentBinding)) {
+          const nextBinding = buildFirstLastFrameSmartDurationBinding(result.smartDuration)
+          persistedDurationOverridesRef.current.set(panelKey, nextBinding)
+          verifiedSourceSignature = buildSourceSignature(pair.firstPanel, pair.lastPanel)
+          currentSignaturesRef.current.set(panelKey, verifiedSourceSignature)
+          setDurationRevision((revision) => revision + 1)
+        }
+      }
       setPromptEntries((previous) => new Map(previous).set(panelKey, {
         ...applyPromptResult(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel), result),
-        ...(result.applied ? { verifiedSourceSignature: signature, ready: true } : {}),
+        ...(result.applied ? { verifiedSourceSignature, ready: true } : {}),
       }))
     } catch (error) {
       const shouldApply = shouldApplyPromptResult({

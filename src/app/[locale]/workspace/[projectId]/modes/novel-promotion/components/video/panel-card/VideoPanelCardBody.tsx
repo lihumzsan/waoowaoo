@@ -182,52 +182,75 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
             {showsFirstLastFrameActions ? (() => {
               const linkedNextPanel = layout.nextPanel!
               return (
-                <div className="mt-2 flex items-center gap-2">
-                  <button
-                    onClick={() => actions.onGenerateFirstLastFrame(
-                      panel.storyboardId,
-                      panel.panelIndex,
-                      linkedNextPanel.storyboardId,
-                      linkedNextPanel.panelIndex,
-                      panelKey,
-                      layout.flGenerationOptions,
-                      panel.panelId,
-                    )}
-                    disabled={
-                      taskStatus.isVideoTaskRunning
-                      || flPromptActive
-                      || layout.flPromptEntry?.ready === false
-                      || !panel.imageUrl
-                      || !linkedNextPanel.imageUrl
-                      || !layout.flModel
-                      || layout.flMissingCapabilityFields.length > 0
-                    }
-                    className="flex-shrink-0 min-w-[120px] py-2 px-3 text-sm font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 bg-[var(--glass-accent-from)] text-white"
-                  >
-                    {isFirstLastFrameGenerated ? t('firstLastFrame.regenerateVideo') : taskStatus.isVideoTaskRunning ? taskStatus.taskRunningVideoLabel : t('firstLastFrame.generate')}
-                  </button>
-                  <div
-                    className={`flex-1 min-w-0 ${flPromptActive ? 'pointer-events-none opacity-60' : ''}`}
-                    data-prompt-config-disabled={flPromptActive ? 'true' : 'false'}
-                    aria-disabled={flPromptActive}
-                  >
-                    <ModelCapabilityDropdown
-                      compact
-                      models={layout.flModelOptions}
-                      value={layout.flModel || undefined}
-                      onModelChange={actions.onFlModelChange}
-                      capabilityFields={layout.flCapabilityFields.map((field) => ({
-                        field: field.field,
-                        label: field.label,
-                        options: field.options,
-                        disabledOptions: field.disabledOptions,
-                      }))}
-                      capabilityOverrides={layout.flGenerationOptions}
-                      onCapabilityChange={(field, rawValue) => actions.onFlCapabilityChange(field, rawValue)}
-                      placeholder={t('panelCard.selectModel')}
-                    />
+                <>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => actions.onGenerateFirstLastFrame(
+                        panel.storyboardId,
+                        panel.panelIndex,
+                        linkedNextPanel.storyboardId,
+                        linkedNextPanel.panelIndex,
+                        panelKey,
+                        layout.flGenerationOptions,
+                        panel.panelId,
+                      )}
+                      disabled={
+                        taskStatus.isVideoTaskRunning
+                        || flPromptActive
+                        || layout.flPromptEntry?.ready === false
+                        || !panel.imageUrl
+                        || !linkedNextPanel.imageUrl
+                        || !layout.flModel
+                        || layout.flMissingCapabilityFields.length > 0
+                      }
+                      className="flex-shrink-0 min-w-[120px] py-2 px-3 text-sm font-medium rounded-lg shadow-sm transition-all disabled:opacity-50 bg-[var(--glass-accent-from)] text-white"
+                    >
+                      {isFirstLastFrameGenerated ? t('firstLastFrame.regenerateVideo') : taskStatus.isVideoTaskRunning ? taskStatus.taskRunningVideoLabel : t('firstLastFrame.generate')}
+                    </button>
+                    <div
+                      className={`flex-1 min-w-0 ${flPromptActive ? 'pointer-events-none opacity-60' : ''}`}
+                      data-prompt-config-disabled={flPromptActive ? 'true' : 'false'}
+                      aria-disabled={flPromptActive}
+                    >
+                      <ModelCapabilityDropdown
+                        compact
+                        models={layout.flModelOptions}
+                        value={layout.flModel || undefined}
+                        onModelChange={actions.onFlModelChange}
+                        capabilityFields={layout.flCapabilityFields.map((field) => ({
+                          field: field.field,
+                          label: field.label,
+                          options: field.options,
+                          disabledOptions: field.disabledOptions,
+                        }))}
+                        capabilityOverrides={layout.flGenerationOptions}
+                        onCapabilityChange={(field, rawValue) => actions.onFlCapabilityChange(field, rawValue)}
+                        placeholder={t('panelCard.selectModel')}
+                      />
+                    </div>
                   </div>
-                </div>
+                  {layout.flDurationStatus ? (
+                    <div className="mt-1 rounded-lg bg-[var(--glass-bg-muted)] px-2 py-1.5 text-[10px] text-[var(--glass-text-tertiary)]">
+                      <span>
+                        {layout.flDurationStatus.source === 'smart' && `时长来源：智能推荐 ${layout.flDurationStatus.durationSeconds}s`}
+                        {layout.flDurationStatus.source === 'manual' && `时长来源：手动 ${layout.flDurationStatus.durationSeconds}s`}
+                        {layout.flDurationStatus.source === 'default' && `时长来源：默认 ${layout.flDurationStatus.durationSeconds}s`}
+                        {layout.flDurationStatus.source === 'analyzing' && `时长来源：智能分析中，当前 ${layout.flDurationStatus.durationSeconds}s`}
+                        {layout.flDurationStatus.reason ? `，${layout.flDurationStatus.reason}` : ''}
+                      </span>
+                      {layout.flDurationStatus.canRestoreSmart && (
+                        <button
+                          type="button"
+                          onClick={() => { void actions.onRestoreFlSmartDuration(panelKey) }}
+                          disabled={flPromptActive}
+                          className="ml-2 text-[var(--glass-tone-info-fg)] underline disabled:opacity-50"
+                        >
+                          恢复智能推荐
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </>
               )
             })() : (
               <>
