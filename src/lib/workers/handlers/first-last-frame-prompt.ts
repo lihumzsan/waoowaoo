@@ -258,8 +258,6 @@ export async function handleFirstLastFramePromptTask(
       const versionsMatch = panelVersion(latest.firstPanel.updatedAt) === startFirstVersion
         && panelVersion(latest.lastPanel.updatedAt) === startLastVersion
       if (latestFingerprint !== sourceFingerprint || !versionsMatch) return false
-      if (reason === 'link' && latest.firstPanel.firstLastFramePromptEditedByUser) return false
-
       const write = await tx.novelPromotionPanel.updateMany({
         where: {
           id: firstPanelId,

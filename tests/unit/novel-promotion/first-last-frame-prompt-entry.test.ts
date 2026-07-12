@@ -21,12 +21,90 @@ describe('first/last-frame prompt entry', () => {
       origin: 'user' as const,
       dirty: false,
       status: 'idle' as const,
+      ready: true,
     }
 
     expect(buildFirstLastFrameVideoPrompt(entry)).toEqual({
       customPrompt: 'Visible transition prompt',
       customPromptEditedByUser: true,
     })
+  })
+
+  it('is pending on the first render until the current source has been verified', async () => {
+    const { resolvePromptEntryReadiness } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const persisted = {
+      value: 'Persisted prompt',
+      origin: 'generated' as const,
+      dirty: false,
+      status: 'idle' as const,
+      sourceFingerprint: 'server-fingerprint',
+      ready: false,
+    }
+
+    expect(resolvePromptEntryReadiness(persisted, 'source-v2')).toMatchObject({
+      status: 'queued',
+      ready: false,
+    })
+    expect(resolvePromptEntryReadiness({
+      ...persisted,
+      ready: true,
+      verifiedSourceSignature: 'source-v2',
+    }, 'source-v2')).toMatchObject({ status: 'idle', ready: true })
+  })
+
+  it('keeps the operation gate startable while the derived view is pending', async () => {
+    const { canStartPromptOperation, resolvePromptEntryReadiness } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const operationEntry = {
+      value: 'Persisted prompt',
+      origin: 'generated' as const,
+      dirty: false,
+      status: 'idle' as const,
+      ready: false,
+    }
+
+    expect(resolvePromptEntryReadiness(operationEntry, 'source-v2').status).toBe('queued')
+    expect(canStartPromptOperation(operationEntry)).toBe(true)
+  })
+
+  it('persists supported duration before using it for prompt and video generation', async () => {
+    const { resolveFirstLastFrameDurationSelection } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(resolveFirstLastFrameDurationSelection('duration', '6', { fps: 24 })).toEqual({
+      binding: { mode: 'manual', voiceLineIds: [], targetDurationSeconds: 6 },
+      generationOptions: { duration: 6, fps: 24 },
+    })
+    expect(resolveFirstLastFrameDurationSelection('duration', '7', {})).toBeNull()
+  })
+
+  it('isolates persisted duration selections between linked panels', async () => {
+    const { resolvePanelFirstLastFrameGenerationOptions } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const defaults = { duration: 10, fps: 24 }
+    const overrides = new Map([['panel-a', { duration: 4, fps: 24 }]])
+
+    expect(resolvePanelFirstLastFrameGenerationOptions('panel-a', defaults, overrides).duration).toBe(4)
+    expect(resolvePanelFirstLastFrameGenerationOptions('panel-b', defaults, overrides).duration).toBe(10)
+  })
+
+  it('restores each panel duration from its persisted binding after reload', async () => {
+    const { resolvePanelFirstLastFrameGenerationOptions } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const defaults = { duration: 10, fps: 24 }
+    const emptyOverrides = new Map<string, typeof defaults>()
+
+    expect(resolvePanelFirstLastFrameGenerationOptions('panel-a', defaults, emptyOverrides, 4)).toEqual({
+      duration: 4,
+      fps: 24,
+    })
+    expect(resolvePanelFirstLastFrameGenerationOptions('panel-b', defaults, emptyOverrides)).toEqual(defaults)
   })
 
   it('replaces user text when the source signature changes', async () => {

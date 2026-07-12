@@ -404,6 +404,7 @@ export function useVideoStageRuntime({
     flModel,
     flModelOptions,
     flGenerationOptions,
+    flGenerationOptionsByPanel,
     flCapabilityFields,
     flMissingCapabilityFields,
     promptEntries,
@@ -425,6 +426,7 @@ export function useVideoStageRuntime({
     onGenerateVideo: handleGenerateVideoWithImmediateLock,
     promptTaskStates: firstLastFramePromptStates,
     onUpdatePrompt: onUpdateVideoPrompt,
+    onUpdatePanelVideoDurationBinding,
   })
 
   const handleToggleLinkAndEnsure = useCallback(async (
@@ -588,6 +590,7 @@ export function useVideoStageRuntime({
         flModel={flModel}
         flModelOptions={flModelOptions}
         flGenerationOptions={flGenerationOptions}
+        flGenerationOptionsByPanel={flGenerationOptionsByPanel}
         flCapabilityFields={flCapabilityFields}
         flMissingCapabilityFields={flMissingCapabilityFields}
         promptEntries={promptEntries}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { VideoGenerationOptions, VideoPanel } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
+import type { VideoDurationBinding, VideoPanel } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { buildDefaultFirstLastFramePrompt } from '@/lib/novel-promotion/panel-continuity'
 import type { FirstLastFramePromptReason } from '@/lib/novel-promotion/first-last-frame-prompt'
 import { buildFirstLastFramePromptFingerprintInput } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
@@ -13,6 +13,7 @@ import {
   createPersistedPromptEntry,
   isPromptResultCurrent,
   projectPromptTaskState,
+  resolvePromptEntryReadiness,
   shouldApplyPromptResult,
   shouldAutoEnsurePrompt,
   shouldProjectPromptTaskSnapshot,
@@ -33,7 +34,6 @@ interface UseFirstLastFramePromptEntriesParams {
   allPanels: VideoPanel[]
   linkedPanels: Map<string, boolean>
   flModel: string
-  flGenerationOptions: VideoGenerationOptions
   promptTaskStates: PromptTaskStates
   onUpdatePrompt: (
     storyboardId: string,
@@ -49,16 +49,17 @@ export function useFirstLastFramePromptEntries({
   allPanels,
   linkedPanels,
   flModel,
-  flGenerationOptions,
   promptTaskStates,
   onUpdatePrompt,
 }: UseFirstLastFramePromptEntriesParams) {
   const [promptEntries, setPromptEntries] = useState<Map<string, FirstLastFramePromptEntry>>(new Map())
+  const [durationRevision, setDurationRevision] = useState(0)
   const ensureMutation = useGenerateFirstLastFramePrompt(projectId)
   const ensuredSignaturesRef = useRef(new Map<string, string>())
   const requestRevisionsRef = useRef(new Map<string, number>())
   const activeOperationsRef = useRef(new Set<string>())
   const locallySettledPanelsRef = useRef(new Set<string>())
+  const persistedDurationOverridesRef = useRef(new Map<string, VideoDurationBinding>())
   const promptEntriesRef = useRef(promptEntries)
   promptEntriesRef.current = promptEntries
   const linkedPanelsRef = useRef(linkedPanels)
@@ -72,9 +73,12 @@ export function useFirstLastFramePromptEntries({
     return { firstPanel: allPanels[index], lastPanel: allPanels[index + 1] }
   }, [allPanels])
 
-  const buildSourceSignature = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel) => JSON.stringify({
-    canonical: buildFirstLastFramePromptFingerprintInput({
-      firstPanel: firstPanel.firstLastFramePromptFingerprintSource || {
+  const buildSourceSignature = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel) => {
+    const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
+    const durationOverride = persistedDurationOverridesRef.current.get(panelKey)
+    const firstSource = firstPanel.firstLastFramePromptFingerprintSource
+      ? { ...firstPanel.firstLastFramePromptFingerprintSource, ...(durationOverride ? { videoDurationBinding: durationOverride } : {}) }
+      : {
         id: firstPanel.panelId,
         imageUrl: firstPanel.imageUrl,
         description: firstPanel.textPanel?.description,
@@ -83,9 +87,12 @@ export function useFirstLastFramePromptEntries({
         shotType: firstPanel.textPanel?.shot_type,
         cameraMove: firstPanel.textPanel?.camera_move,
         location: firstPanel.textPanel?.location,
-        videoDurationBinding: firstPanel.videoDurationBinding,
+        videoDurationBinding: durationOverride || firstPanel.videoDurationBinding,
         duration: firstPanel.textPanel?.duration,
-      },
+      }
+    return JSON.stringify({
+      canonical: buildFirstLastFramePromptFingerprintInput({
+      firstPanel: firstSource,
       lastPanel: lastPanel.firstLastFramePromptFingerprintSource || {
         id: lastPanel.panelId,
         imageUrl: lastPanel.imageUrl,
@@ -96,10 +103,10 @@ export function useFirstLastFramePromptEntries({
         cameraMove: lastPanel.textPanel?.camera_move,
         location: lastPanel.textPanel?.location,
       },
-    }),
-    selectedModel: flModel,
-    generationOptions: flGenerationOptions,
-  }), [flGenerationOptions, flModel])
+      }),
+      selectedModel: flModel,
+    })
+  }, [flModel])
 
   const buildDerivedEntry = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel): FirstLastFramePromptEntry => ({
     value: buildDefaultFirstLastFramePrompt({
@@ -133,12 +140,17 @@ export function useFirstLastFramePromptEntries({
   }), [buildSourceSignature])
 
   const currentSignaturesRef = useRef(new Map<string, string>())
-  const currentSignatures = new Map<string, string>()
-  for (let index = 0; index < allPanels.length - 1; index += 1) {
-    const firstPanel = allPanels[index]
-    const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
-    currentSignatures.set(panelKey, buildSourceSignature(firstPanel, allPanels[index + 1]))
-  }
+  const currentSignatures = useMemo(() => {
+    void durationRevision
+    const signatures = new Map<string, string>()
+    for (let index = 0; index < allPanels.length - 1; index += 1) {
+      const firstPanel = allPanels[index]
+      const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
+      signatures.set(panelKey, buildSourceSignature(firstPanel, allPanels[index + 1]))
+    }
+    return signatures
+  // The override map is intentionally held in a ref; a successful persistence bumps this revision.
+  }, [allPanels, buildSourceSignature, durationRevision])
   currentSignaturesRef.current = currentSignatures
 
   useEffect(() => {
@@ -220,10 +232,10 @@ export function useFirstLastFramePromptEntries({
         return
       }
       if (!result.applied) ensuredSignaturesRef.current.delete(panelKey)
-      setPromptEntries((previous) => new Map(previous).set(panelKey, applyPromptResult(
-        previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel),
-        result,
-      )))
+      setPromptEntries((previous) => new Map(previous).set(panelKey, {
+        ...applyPromptResult(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel), result),
+        ...(result.applied ? { verifiedSourceSignature: signature, ready: true } : {}),
+      }))
     } catch (error) {
       const shouldApply = shouldApplyPromptResult({
         linked: reason === 'link' || linkedPanelsRef.current.get(panelKey) === true,
@@ -305,11 +317,54 @@ export function useFirstLastFramePromptEntries({
     for (let index = 0; index < allPanels.length - 1; index += 1) {
       const firstPanel = allPanels[index]
       const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
-      if (!linkedPanels.get(panelKey) || next.has(panelKey)) continue
-      next.set(panelKey, buildDerivedEntry(firstPanel, allPanels[index + 1]))
+      if (!linkedPanels.get(panelKey)) continue
+      const current = next.get(panelKey) || buildDerivedEntry(firstPanel, allPanels[index + 1])
+      next.set(panelKey, resolvePromptEntryReadiness(
+        current,
+        currentSignatures.get(panelKey) || '',
+      ))
     }
     return next
-  }, [allPanels, buildDerivedEntry, linkedPanels, promptEntries])
+  }, [allPanels, buildDerivedEntry, currentSignatures, linkedPanels, promptEntries])
+
+  const beginDurationPersistence = useCallback((panelKey: string) => {
+    const pair = getPanelPair(panelKey)
+    if (!pair) return
+    setPromptEntries((previous) => {
+      const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
+      return new Map(previous).set(panelKey, { ...current, status: 'saving', ready: false, errorMessage: undefined })
+    })
+  }, [buildDerivedEntry, getPanelPair])
+
+  const confirmPersistedDuration = useCallback((panelKey: string, binding: VideoDurationBinding) => {
+    persistedDurationOverridesRef.current.set(panelKey, binding)
+    const pair = getPanelPair(panelKey)
+    if (!pair) return
+    const signature = buildSourceSignature(pair.firstPanel, pair.lastPanel)
+    currentSignaturesRef.current.set(panelKey, signature)
+    ensuredSignaturesRef.current.delete(panelKey)
+    setPromptEntries((previous) => new Map(previous).set(panelKey, {
+      ...(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)),
+      status: 'idle',
+      ready: false,
+      verifiedSourceSignature: undefined,
+      errorMessage: undefined,
+    }))
+    setDurationRevision((revision) => revision + 1)
+  }, [buildDerivedEntry, buildSourceSignature, getPanelPair])
+
+  const failDurationPersistence = useCallback((panelKey: string, error: unknown) => {
+    setPromptEntries((previous) => {
+      const current = previous.get(panelKey)
+      if (!current) return previous
+      return new Map(previous).set(panelKey, {
+        ...current,
+        status: 'error',
+        ready: false,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }, [])
 
   const setPromptValue = useCallback((panelKey: string, value: string) => {
     const pair = getPanelPair(panelKey)
@@ -383,5 +438,9 @@ export function useFirstLastFramePromptEntries({
     savePromptValue,
     ensurePrompt,
     unlinkPrompt,
+    beginDurationPersistence,
+    confirmPersistedDuration,
+    failDurationPersistence,
+    getPersistedDurationOverride: (panelKey: string) => persistedDurationOverridesRef.current.get(panelKey),
   }
 }

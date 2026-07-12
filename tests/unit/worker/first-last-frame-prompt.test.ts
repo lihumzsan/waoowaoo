@@ -312,4 +312,19 @@ describe('first-last-frame prompt worker', () => {
     expect(result.applied).toBe(true)
     expect(transactionPanelMock.updateMany).toHaveBeenCalled()
   })
+
+  it('relink with a new source replaces an old user prompt while preserving in-flight edit CAS', async () => {
+    loadPanelsMock.mockResolvedValue(context(framePanel('panel-1', 0, {
+      firstLastFramePrompt: 'old manual prompt from the previous link',
+      firstLastFramePromptEditedByUser: true,
+      firstLastFramePromptSourceFingerprint: 'old-source-fingerprint',
+    })))
+
+    const result = await handleFirstLastFramePromptTask(job('link'))
+
+    expect(result.applied).toBe(true)
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ firstLastFramePromptEditedByUser: false }),
+    }))
+  })
 })

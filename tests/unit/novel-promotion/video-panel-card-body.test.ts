@@ -139,6 +139,7 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
         origin: 'generated',
         dirty: false,
         status: 'idle',
+        ready: true,
       },
       videoRatio: '9:16',
     },
@@ -207,6 +208,7 @@ describe('VideoPanelCardBody', () => {
       dirty: false,
       status: 'idle',
       fallbackUsed: true,
+      ready: true,
     }
 
     const markup = renderToStaticMarkup(
@@ -216,6 +218,24 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('firstLastFrame.promptFallbackWarning')
     expect(markup).toContain('firstLastFrame.retryPrompt')
     expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>生成首尾帧视频<\/button>/)
+  })
+
+  it('blocks video submission for a hard prompt error that is not ready', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Stale prompt',
+      origin: 'generated',
+      dirty: false,
+      status: 'error',
+      ready: false,
+      errorMessage: 'Prompt generation failed',
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toMatch(/<button disabled="" class="flex-shrink-0/)
   })
 
   it('drives linked editing from the prompt entry and disables edit actions while active', () => {

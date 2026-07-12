@@ -6,6 +6,8 @@ export type FirstLastFramePromptEntry = {
   sourceFingerprint?: string
   fallbackUsed?: boolean
   errorMessage?: string
+  ready?: boolean
+  verifiedSourceSignature?: string
 }
 
 export type FirstLastFramePromptResult = {
@@ -28,11 +30,13 @@ export function createPersistedPromptEntry(params: {
     origin: params.editedByUser ? 'user' : 'generated',
     dirty: false,
     status: 'idle',
+    ready: false,
     ...(params.sourceFingerprint ? { sourceFingerprint: params.sourceFingerprint } : {}),
   }
 }
 
 export function buildFirstLastFrameVideoPrompt(entry: FirstLastFramePromptEntry) {
+  if (entry.ready === false) throw new Error('FIRST_LAST_FRAME_PROMPT_NOT_READY')
   return {
     customPrompt: entry.value,
     customPromptEditedByUser: entry.origin === 'user',
@@ -49,6 +53,7 @@ export function markPromptSourceChanged(
     origin: 'derived',
     dirty: false,
     status: 'queued',
+    ready: false,
     sourceFingerprint,
   }
 }
@@ -67,6 +72,49 @@ export function isPromptResultCurrent(requestSignature: string, currentSignature
 
 export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 'status'>) {
   return !entry || entry.status === 'idle' || entry.status === 'error'
+}
+
+const GOON_DURATIONS = new Set([4, 5, 6, 8, 10, 12])
+
+export function resolveFirstLastFrameDurationSelection(
+  field: string,
+  rawValue: string,
+  currentOptions: Record<string, string | number | boolean>,
+) {
+  if (field !== 'duration') return null
+  const duration = Number(rawValue)
+  if (!GOON_DURATIONS.has(duration)) return null
+  return {
+    binding: { mode: 'manual' as const, voiceLineIds: [], targetDurationSeconds: duration },
+    generationOptions: { ...currentOptions, duration },
+  }
+}
+
+export function resolvePanelFirstLastFrameGenerationOptions<T extends Record<string, unknown>>(
+  panelKey: string,
+  defaults: T,
+  overrides: ReadonlyMap<string, T>,
+  persistedTargetDuration?: number | null,
+): T {
+  const override = overrides.get(panelKey)
+  if (override) return override
+  if (typeof persistedTargetDuration === 'number' && Number.isFinite(persistedTargetDuration)) {
+    return { ...defaults, duration: persistedTargetDuration }
+  }
+  return defaults
+}
+
+export function resolvePromptEntryReadiness(
+  entry: FirstLastFramePromptEntry,
+  currentSourceSignature: string,
+): FirstLastFramePromptEntry {
+  if (entry.ready && entry.verifiedSourceSignature === currentSourceSignature) return entry
+  if (entry.status === 'error' || entry.status === 'saving') return { ...entry, ready: false }
+  return {
+    ...entry,
+    status: 'queued',
+    ready: false,
+  }
 }
 
 export function clearSupersededPromptOperation(
@@ -133,6 +181,7 @@ export function applyPromptResult(
     return {
       ...entry,
       status: 'error',
+      ready: false,
       errorMessage: 'Generated prompt was not applied because the linked source changed.',
     }
   }
@@ -141,6 +190,7 @@ export function applyPromptResult(
     origin: 'generated',
     dirty: false,
     status: 'idle',
+    ready: true,
     sourceFingerprint: result.sourceFingerprint,
     fallbackUsed: result.fallbackUsed,
     errorMessage: undefined,
