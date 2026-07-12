@@ -3,7 +3,6 @@ import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaul
 import { isComfyUiWorkflowLlmApiRequired, runComfyUiVideoWorkflow } from '@/lib/providers/comfyui/client'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import { resolveComfyUiLlmApiConfig } from '@/lib/providers/comfyui/llm-api-config'
-import { COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import {
   COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID,
