@@ -143,7 +143,6 @@ export async function writeSoundscapeProjectData(input: {
       sourcesJson,
       mixJson,
       diagnosticsJson,
-      version: 1,
       status: input.soundscape.status,
       taskId: input.soundscape.taskId,
       timelineSignature: input.soundscape.timelineSignature,

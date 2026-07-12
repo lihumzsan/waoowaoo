@@ -44,7 +44,6 @@ export const soundscapePlanSectionSchema = z.object({
 }).strict()
 
 export const soundscapePlanSchema = z.object({
-  schemaVersion: z.literal(1),
   decision: z.enum(['soundscape', 'none_needed']),
   sources: z.array(soundscapePlanSourceSchema).max(SOUNDSCAPE_MAX_SOURCE_COUNT),
   sections: z.array(soundscapePlanSectionSchema).max(96),
@@ -145,7 +144,6 @@ export interface SoundscapeMix {
 }
 
 export interface SoundscapeProjectData {
-  readonly schemaVersion: 1
   readonly status: SoundscapeStatus
   readonly taskId: string
   readonly timelineSignature: string

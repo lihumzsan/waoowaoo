@@ -13,7 +13,6 @@ Hard rules:
 
 The JSON structure must exactly match:
 {
-  "schemaVersion": 1,
   "sceneSummary": "Summary of the real spatial structure in the final scene image",
   "anchors": [
     {

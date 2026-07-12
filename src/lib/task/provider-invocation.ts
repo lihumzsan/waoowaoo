@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma'
 import { FetchStatusError } from '@/lib/retry'
 import { loadTaskExecutionFingerprint } from './execution-checkpoint'
 
-const CONTRACT_VERSION = 1
 const STEP_PREFIX = 'provider:'
 
 export type TaskProviderInvocation = {
@@ -34,7 +33,6 @@ type ProviderInvocationDescriptor = {
 }
 
 type ProviderInvocationOutput = ProviderInvocationDescriptor & {
-  readonly contractVersion: typeof CONTRACT_VERSION
   readonly taskAttempt?: number
   readonly result?: unknown
   readonly error?: {
@@ -75,8 +73,7 @@ function parseOutput(value: unknown): ProviderInvocationOutput {
   }
   const output = value as Record<string, unknown>
   if (
-    output.contractVersion !== CONTRACT_VERSION
-    || typeof output.taskId !== 'string'
+    typeof output.taskId !== 'string'
     || typeof output.invocationKey !== 'string'
     || typeof output.invocationHash !== 'string'
     || typeof output.modality !== 'string'
@@ -200,7 +197,6 @@ async function claimCheckpoint(params: {
   readonly taskAttempt: number
 }): Promise<{ readonly checkpoint: ProviderCheckpoint; readonly claimed: boolean }> {
   const output: ProviderInvocationOutput = {
-    contractVersion: CONTRACT_VERSION,
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
   }
@@ -240,7 +236,6 @@ async function reclaimRetryableCheckpoint(params: {
   }
 
   const nextOutput: ProviderInvocationOutput = {
-    contractVersion: CONTRACT_VERSION,
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
   }
@@ -273,7 +268,6 @@ async function transitionCheckpoint(params: {
       ? undefined
       : { name: typeof params.error, message: String(params.error).slice(0, 2_000) }
   const output: ProviderInvocationOutput = {
-    contractVersion: CONTRACT_VERSION,
     ...params.descriptor,
     taskAttempt: params.taskAttempt,
     ...(params.result !== undefined ? { result: params.result } : {}),

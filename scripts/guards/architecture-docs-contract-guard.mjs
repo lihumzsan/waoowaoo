@@ -63,7 +63,6 @@ if (!fs.existsSync(readmePath)) fail(['missing docs/architecture/README.md'])
 
 const manifest = readJson('docs/architecture/modules.json')
 if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) fail(['manifest must be an object'])
-if (manifest.schemaVersion !== 1) fail(['manifest schemaVersion must be 1'])
 if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) fail(['manifest must declare at least one module'])
 
 const readme = fs.readFileSync(readmePath, 'utf8')

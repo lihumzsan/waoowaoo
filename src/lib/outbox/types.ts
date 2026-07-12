@@ -9,21 +9,18 @@ export type OutboxCommandKind = (typeof OUTBOX_COMMAND_KIND)[keyof typeof OUTBOX
 
 export type TaskLifecycleBroadcastCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST
-  version: 1
   eventId: number
   taskId: string
 }
 
 export type TaskEnqueueCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.TASK_ENQUEUE
-  version: 1
   taskId: string
   operationExecutionId: string | null
 }
 
 export type ProjectAgentContinueWaitCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT
-  version: 1
   waitId: string
   runId: string
   expectedRunVersion: number
@@ -32,7 +29,6 @@ export type ProjectAgentContinueWaitCommand = {
 
 export type ProjectAgentSessionBroadcastCommand = {
   kind: typeof OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST
-  version: 1
   projectAgentEventId: string
 }
 
@@ -109,28 +105,23 @@ function readCanonicalBigIntString(record: Record<string, unknown>, key: string)
 export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload {
   const record = readRecord(value)
   const kind = readRequiredString(record, 'kind')
-  const version = readRequiredInteger(record, 'version')
-  if (version !== 1) throw new Error(`OUTBOX_COMMAND_VERSION_UNSUPPORTED:${String(version)}`)
 
   switch (kind) {
     case OUTBOX_COMMAND_KIND.TASK_ENQUEUE:
       return {
         kind,
-        version,
         taskId: readRequiredString(record, 'taskId'),
         operationExecutionId: readNullableString(record, 'operationExecutionId'),
       }
     case OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST:
       return {
         kind,
-        version,
         eventId: readPositiveInteger(record, 'eventId'),
         taskId: readRequiredString(record, 'taskId'),
       }
     case OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT:
       return {
         kind,
-        version,
         waitId: readRequiredString(record, 'waitId'),
         runId: readRequiredString(record, 'runId'),
         expectedRunVersion: readNonNegativeInteger(record, 'expectedRunVersion'),
@@ -139,7 +130,6 @@ export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload 
     case OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST:
       return {
         kind,
-        version,
         projectAgentEventId: readCanonicalBigIntString(record, 'projectAgentEventId'),
       }
     default:

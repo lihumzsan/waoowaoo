@@ -164,7 +164,6 @@ export const editSourceScriptEpisodeSchema = z.object({
 }).strict()
 
 export const editSourceScriptStructureSchema = z.object({
-  version: z.literal(1),
   title: scriptStructureText.max(160),
   summary: scriptStructureText.max(1200),
   episodes: z.array(editSourceScriptEpisodeSchema).min(1).max(12),
@@ -189,7 +188,6 @@ export const sourceScriptSceneSegmentSchema = editSourceScriptSceneSchema.omit({
 }).strict()
 
 export const expandedSourceScriptOutputSchema = z.object({
-  version: z.literal(1),
   title: scriptStructureText.max(160),
   summary: scriptStructureText.max(1200),
   segments: z.array(sourceScriptSceneSegmentSchema).min(1).max(480),

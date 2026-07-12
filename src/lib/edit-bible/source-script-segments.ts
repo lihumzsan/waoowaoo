@@ -116,7 +116,6 @@ function appendSegment(
 }
 
 export function normalizeSourceScriptSegments(input: {
-  readonly version: 1
   readonly title: string
   readonly summary: string
   readonly segments: readonly SourceScriptSceneSegment[]
@@ -140,7 +139,6 @@ export function normalizeSourceScriptSegments(input: {
   return {
     normalizedText: parsedSegments.map((segment) => segment.body.trim()).join('\n\n'),
     structure: {
-      version: input.version,
       title: input.title.trim(),
       summary: input.summary.trim(),
       episodes,

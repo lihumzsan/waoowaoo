@@ -270,7 +270,6 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
         aggregateId: task.id,
         payload: {
           kind: OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST,
-          version: 1,
           eventId: event.id,
           taskId: task.id,
         },

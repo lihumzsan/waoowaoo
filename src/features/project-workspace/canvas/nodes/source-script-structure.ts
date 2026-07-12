@@ -30,7 +30,6 @@ export interface SourceScriptEpisode {
 }
 
 export interface SourceScriptStructure {
-  readonly version: 1
   readonly title: string
   readonly summary: string
   readonly episodes: readonly SourceScriptEpisode[]
@@ -139,7 +138,7 @@ function readSourceScriptEpisode(value: unknown): SourceScriptEpisode | null {
 }
 
 export function readSourceScriptStructure(value: unknown): SourceScriptStructure | null {
-  if (!isRecord(value) || value.version !== 1) return null
+  if (!isRecord(value)) return null
   const title = readStructureString(value, 'title')
   const summary = readStructureString(value, 'summary')
   const episodes = readStructureArray(value, 'episodes')
@@ -147,7 +146,6 @@ export function readSourceScriptStructure(value: unknown): SourceScriptStructure
     .filter((episode): episode is SourceScriptEpisode => Boolean(episode))
   if (!title || !summary || episodes.length === 0) return null
   return {
-    version: 1,
     title,
     summary,
     episodes,

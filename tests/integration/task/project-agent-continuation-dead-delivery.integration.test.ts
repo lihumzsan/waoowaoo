@@ -19,7 +19,6 @@ const SOURCE_ACTIVITY_ID = 'dead-delivery-source-activity-1'
 
 const continuationCommand = {
   kind: 'project_agent.continue_wait' as const,
-  version: 1 as const,
   waitId: WAIT_ID,
   runId: RUN_ID,
   expectedRunVersion: 1,

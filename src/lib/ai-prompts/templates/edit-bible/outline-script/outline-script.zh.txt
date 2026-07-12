@@ -7,7 +7,6 @@
 只输出一个 JSON 对象，不要 Markdown、解释或额外文本。字段顺序必须与下方完全一致：
 
 {
-  "version": 1,
   "title": "剧本标题",
   "summary": "整部剧本的简短预览",
   "segments": [

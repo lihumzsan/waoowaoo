@@ -62,7 +62,7 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         error instanceof Error ? error.message : `OUTBOX_COMMAND_PAYLOAD_INVALID:${String(error)}`,
       )
     }
-    if (row.kind !== payload.kind || row.version !== payload.version) {
+    if (row.kind !== payload.kind) {
       throw new OutboxPermanentError(`OUTBOX_ROW_CONTRACT_MISMATCH:${outboxId}`)
     }
     switch (payload.kind) {

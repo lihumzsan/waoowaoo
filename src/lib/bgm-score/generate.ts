@@ -290,7 +290,6 @@ async function writeBgmScoreProjectData(input: {
       cuesJson,
       mixJson,
       diagnosticsJson,
-      version: 1,
       status: input.bgmScore.status,
       taskId: input.bgmScore.taskId,
       timelineSignature: input.bgmScore.timelineSignature,
@@ -512,7 +511,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     await writeBgmScoreProjectData({
       episodeId,
       bgmScore: {
-        schemaVersion: 2,
         status: BGM_SCORE_STATUS.GENERATING,
         taskId: job.data.taskId,
         editScriptId,
@@ -631,7 +629,6 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     const audio = await concatCueAudioBuffers({ cues: cueAudios })
     const mix = await uploadGeneratedBgmMix({ audio, durationSeconds, taskId: job.data.taskId })
     const bgmScore: BgmScoreProjectData = {
-      schemaVersion: 2,
       status: BGM_SCORE_STATUS.COMPLETED,
       taskId: job.data.taskId,
       editScriptId,

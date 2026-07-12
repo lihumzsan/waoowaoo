@@ -409,7 +409,6 @@ export interface ProjectMusicScorePlan {
 export interface ProjectMusicScore {
   id?: string | null
   status: ProjectMusicScoreStatus
-  version?: number | null
   taskId?: string | null
   timelineSignature?: string | null
   durationSeconds?: number | null
@@ -455,7 +454,6 @@ export interface ProjectSoundscapePlanSection {
 }
 
 export interface ProjectSoundscapePlan {
-  schemaVersion: 1
   decision: 'soundscape' | 'none_needed'
   sources: ProjectSoundscapePlanSource[]
   sections: ProjectSoundscapePlanSection[]
@@ -464,7 +462,6 @@ export interface ProjectSoundscapePlan {
 export interface ProjectSoundscape {
   id?: string | null
   status: ProjectSoundscapeStatus
-  version?: number | null
   taskId?: string | null
   timelineSignature?: string | null
   soundEffectModel?: string | null

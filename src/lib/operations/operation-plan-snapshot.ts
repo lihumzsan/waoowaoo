@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import type { BillingQuoteView, OperationPlan, OperationPlanView, PlannedTask } from './planning'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 
-const PLAN_CONTRACT_VERSION = 1
 const DEFAULT_PLAN_TTL_MS = 15 * 60 * 1000
 
 function toInputJson(value: unknown): Prisma.InputJsonValue {
@@ -96,7 +95,6 @@ function parseOperationPlan(value: unknown): OperationPlan {
 
 export interface PersistedOperationPlanSnapshot {
   id: string
-  contractVersion: number
   userId: string
   scopeKind: string
   scopeId: string
@@ -131,7 +129,6 @@ export async function persistOperationPlanSnapshot(params: {
   const created = await prisma.operationPlanSnapshot.create({
     data: {
       id: randomUUID(),
-      contractVersion: PLAN_CONTRACT_VERSION,
       userId: params.plan.userId,
       scopeKind,
       scopeId,
@@ -149,7 +146,6 @@ export async function persistOperationPlanSnapshot(params: {
   })
   return {
     id: created.id,
-    contractVersion: created.contractVersion,
     userId: created.userId,
     scopeKind: created.scopeKind,
     scopeId: created.scopeId,
@@ -189,7 +185,6 @@ export async function loadOperationPlanSnapshot(
   }
   return {
     id: record.id,
-    contractVersion: record.contractVersion,
     userId: record.userId,
     scopeKind: record.scopeKind,
     scopeId: record.scopeId,

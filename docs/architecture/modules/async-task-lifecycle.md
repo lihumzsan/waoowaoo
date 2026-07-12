@@ -30,6 +30,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-11 — Task 契约必须在一个 registry 穷尽。** 每个 TaskDefinition 必须声明 queue、worker handler、billing policy、retry、success handoff、submission target ownership、failure projector 与 cancel projector；不得用 helper 默认 `none` 掩盖缺失。四个 worker、Billing、submission ownership 与 Terminal Service 只按 registry 的 capability key 分派，不得各自按 TaskType 维护 switch。Terminal Service 在同一事务内按 registry 调用 projector。取消只撤销当前 Task 的目标所有权并回到可重试的 pending，不得复用 failure projector 或写成 `failed`。
 - **TL-12 — EditBible 成功事务持锁。** `persistGeneratedEditBibleBundle` 必须从事务第一步 `FOR UPDATE` 锁定 Bible，并校验 id、episode、sourceDocument、generationTaskId 与 generating。source read、bundle validation、chapter/style/Bible 全部写入在同一持锁事务，最终以完整 owner fence CAS；旧 Task 成功、失败或取消不得覆盖新 owner。
 - **TL-13 — 外部执行至多一次。** Task 中每一个媒体、LLM 与 vision provider 调用必须在发出请求前以 `taskId + executionFingerprint + invocationKey + requestHash` 持久化 invocation fence，并以 DB `Task.attempt` 作为提交资格版本；attempt 不是新的外部 invocation identity。provider POST 内部不得自动重试。明确成功结果必须持久化并可重放；明确永久 HTTP/业务拒绝持久化为 `rejected`；只有明确证明 provider 未受理的临时 HTTP 响应才可写为 `retryable_rejected`，并由更高的 DB attempt 原子重取一次提交权，同 attempt 与旧 attempt 禁止重提。断连、超时或 provider 成功后本地持久化失败一律进入 `outcome_unknown`，任何 attempt 都禁止再提交。Task 最终失败并由 Terminal Service 退回用户额度，平台承担外部可能已产生的成本。poll/download 可以重试，但不得重建 provider job。provider 结果之后的对象存储产物必须由 `taskId + artifact identity` 生成稳定 key，使 worker crash/retry 复用同一对象与 MediaObject，而不是制造随机孤儿。
+- **TL-14 — Durable command、checkpoint 与 resource row 只存有裁决力的事实。** Outbox command 由 `id + kind + payload identity` 裁决幂等与分派，provider checkpoint 由 `taskId + stepKey + invocation identity/hash/status` 裁决提交与重放；MusicScore/Soundscape 当前资源由 row identity、Task owner、status 与 timeline signature 裁决。不得在 DB 行和 JSON payload 中重复持久化永远固定、没有 writer/reader 分支的 `version/contractVersion`。真实并发 fence（`Task.attempt`、`runVersion`、`eventSeq`、CAS/entity version）必须保留。不兼容形状变更必须通过维护窗口排空、一次性数据迁移和唯一严格 parser 切换，禁止双轨解析。
 
 ## 状态所有权
 
@@ -80,19 +81,20 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`task-target-terminal-{ownership,projectors}.integration.test.ts` 验证并发 attempt owner、queue unavailable、late terminal 和唯一业务 projector。
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证并发终态通过锁定 Wait aggregate 收敛且 continuation command 唯一。
 - `tests/integration/task/worker-log-context-concurrency.integration.test.ts` 在真实 tsx worker 启动方式下交错两个 Task，验证 `taskId + taskAttempt` 不会退化为共享进程变量。
-- `tests/integration/task/{provider-invocation-at-most-once,async-migration-preflight,edit-script-ownership-migration}.integration.test.ts` 验证 provider POST fence 的成功重放、永久拒绝、结果未知零重提、临时明确未受理只能由更高 attempt 重取，以及维护窗口 fail-closed 和真实 schema 安装。
+- `tests/integration/task/{provider-invocation-at-most-once,async-migration-preflight,edit-script-ownership-migration,redundant-contract-version-migration}.integration.test.ts` 验证 provider POST fence 的成功重放、永久拒绝、结果未知零重提、临时明确未受理只能由更高 attempt 重取，以及维护窗口 fail-closed、真实 schema 安装和固定标记迁移不改写其余业务/CAS 字段。
 - `tests/unit/task/{job-envelope,retry-policy,target-ownership,normalize-error,operation-result-normalizer}.test.ts` 与 `tests/unit/sse/{protocol,server-session}.test.ts` 只验证纯协议和 resolver 边界。
 - `tests/contracts/task-definition-conformance.test.ts` 从生产 Task registry 穷尽验证 queue、handler、billing、retry、execution 和 terminal projector 声明。
 - Task 相关静态 guards 只阻止已知第二 writer/入口重新出现，不作为 route → worker → DB 行为证明。
 ## 本批 migration 发布门禁（必须人工执行，当前未应用）
 
-`20260711020000` 至 `20260711070000` 只能在维护窗口整体切换，禁止旧/新协议双轨运行：
+`20260711020000` 至 `20260711070000` 以及 `20260712233000` 只能在维护窗口整体切换，禁止旧/新协议双轨运行：
 
 1. 暂停新 Task/Operation/Assistant Run 提交并停止 worker 消费；等待 BullMQ 与 DB 中所有 active Task 排空。
 2. 运行 `npm run db:async-migration-preflight`，用只读查询证明 active Task、`edit_style_previews_generate` 旧父任务、待交付 Outbox、非终态 Assistant Run/Wait 五类计数全部为 `0`。任一计数非零立即中止发布；禁止手工忽略结果。
 3. 不得从已被 progress 合并污染的 `Task.payload` 回填 `executionFingerprint`，也不得猜测 `ProjectEditBible.generationTaskId`。本批对这些不可靠身份采用“排空后切换”；早期 `20260711010000` 的确定性 `runVersion/eventSeq` 历史回填是单独、显式的 migration 步骤，不得被描述为不存在。
 4. 在应用 migration（或可重建环境使用 `npm run db:push`）、部署新代码、启动 dispatcher/worker 后，验证 guards、schema 与只读健康检查，最后恢复提交流量。
 5. `20260711030000` 会删除 `operationConfirmed`；因此 migration 与新应用必须作为同一维护窗口切换，禁止旧应用实例继续写入。
+6. `20260712233000` 会删除 Outbox、provider checkpoint、审批链和持久 JSON 中没有分流语义的固定标记；旧代码仍会写这些字段，新代码会 strict-reject 旧 JSON，因此必须在同一维护窗口先排空、迁移，再一次性切换全部应用与 worker。
 
 ## 历史回归
 
@@ -100,6 +102,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `ba753a204` 去除隐式队列重试后，后续又需要显式任务生命周期与错误分类，说明“删重试”本身不能替代契约。
 - 真实 `GJ-WORKER-RETRY-RECOVERY` 曾证明 durable provider fence 把明确 HTTP 503 统一写成永久 `rejected`，使 Task registry 的 retry 永远不可达；防线必须同时执行“同 attempt 零重提、ambiguous 零重提、明确临时未受理仅由更高 attempt 重取”，不能只断言调用次数。
 - Git 历史严格口径下已有 8 次直接 queue/retry/reconcile 修复；扩展到终态 SSE 与业务目标生命周期则为 10 次。反复出现的共同根因不是 BullMQ 本身，而是 retry、watchdog、worker handler 和启动恢复曾同时解释 Task/target 状态。
+- Outbox 行与 payload、provider checkpoint、MusicScore/Soundscape resource row 曾各自写入固定为 `1` 的版本标记，但所有 reader 只有一个实现且从不按该值分流；这制造了重复字段和伪版本治理。本模块只保留真正参与并发、重放、修订或 CAS 裁决的版本事实。
 
 ## 修改检查表
 

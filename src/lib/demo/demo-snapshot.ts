@@ -10,10 +10,7 @@ import type {
   ProjectCanvasLayoutSnapshot,
 } from '@/lib/project-canvas/layout/canvas-layout-contract'
 
-export const DEMO_SNAPSHOT_SCHEMA_VERSION = 1
-
 export interface DemoProjectSnapshot {
-  readonly schemaVersion: typeof DEMO_SNAPSHOT_SCHEMA_VERSION
   readonly slug: string
   readonly project: {
     readonly id: string

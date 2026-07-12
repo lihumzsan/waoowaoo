@@ -13,7 +13,6 @@
 
 JSON 结构必须严格如下：
 {
-  "schemaVersion": 1,
   "sceneSummary": "最终场景图里的真实空间结构总结",
   "anchors": [
     {

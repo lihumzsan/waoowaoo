@@ -81,7 +81,6 @@ async function seedExecution(balance: number) {
   const execution = await prisma.operationExecution.create({
     data: {
       id: 'approved-execution-1',
-      contractVersion: 1,
       userId: user.id,
       scopeKind: 'project',
       scopeId: project.id,

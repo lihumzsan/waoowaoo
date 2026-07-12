@@ -30,7 +30,7 @@ describe('source script provider scene stream contract', () => {
 
     let result = appendStructuredJsonChunk(
       state,
-      `{"version":1,"title":"Script","summary":"Summary","segments":[${firstJson},`,
+      `{"title":"Script","summary":"Summary","segments":[${firstJson},`,
     )
     expect(result.items.map((item) => sourceScriptSceneSegmentSchema.parse(item))).toEqual([first])
     expect(result.state.complete).toBe(false)

@@ -119,7 +119,6 @@ export interface BgmScoreCue {
 }
 
 export interface BgmScoreProjectData {
-  readonly schemaVersion: 2
   readonly status: BgmScoreStatus
   readonly taskId: string
   readonly editScriptId: string

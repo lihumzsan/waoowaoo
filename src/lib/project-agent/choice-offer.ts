@@ -74,7 +74,6 @@ const choiceReviewedResourceSchema = z.object({
 }).strict()
 
 const projectAgentChoiceOfferSchema = z.object({
-  schemaVersion: z.literal(1),
   card: projectAgentChoiceCardSchema,
   reviewedResource: choiceReviewedResourceSchema,
 }).strict()
@@ -85,7 +84,6 @@ export interface ProjectAgentChoiceReviewedResource {
 }
 
 export interface ProjectAgentChoiceOffer {
-  schemaVersion: 1
   card: ProjectAgentChoiceCardPartData
   reviewedResource: ProjectAgentChoiceReviewedResource
 }
@@ -128,7 +126,6 @@ export function buildProjectAgentChoiceOffer(params: {
   reviewedResource: ProjectAgentChoiceReviewedResource
 }): ProjectAgentChoiceOffer {
   const offer: ProjectAgentChoiceOffer = {
-    schemaVersion: 1,
     card: {
       ...params.card,
       runId: params.runId,
