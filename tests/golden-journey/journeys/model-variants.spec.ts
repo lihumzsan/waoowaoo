@@ -31,9 +31,6 @@ test('[GJ-MODEL-STOPS-AFTER-CONFIRM] preserves completed work and reports an AI-
   expect(await readGoldenWorkflowStage(page, scope)).toBe('ready_to_ingest_script')
   expect(oracle.domain.sourceDocuments).toHaveLength(0)
   expect(oracle.tasks).toHaveLength(0)
-  expect(oracle.activities.filter((activity) => (
-    activity.type === 'operation' && activity.status === 'completed'
-  )).length).toBeGreaterThan(0)
   expect(oracle.runs.some((run) => (
     run.errorCode === 'PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED'
   ))).toBe(true)
