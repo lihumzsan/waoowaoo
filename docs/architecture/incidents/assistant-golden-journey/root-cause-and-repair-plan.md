@@ -213,6 +213,115 @@ unrelated Run failure.
 | RC-2 | implemented | current Run/interruption locks and atomic decision execution segment; focused unit contract passes, but MySQL/browser double-submit is unavailable in this environment |
 | RC-3 | implemented | exhaustive lower-case outcome union is produced at invocation/adapter boundary and consumed by an outcome switch; direct Task operations fail closed without a committed receipt |
 | RC-4 | partially implemented | central nullable-input normalizer passes focused tests; approval snapshot defenses were verified in the existing path; no media-fingerprint change because semantic transport experiment is not executable here |
+
+## 2026-07-12 recurrence — approval planning bypassed canonical invocation input
+
+The default empty-project Golden mainline on `3866437c5` reproduced
+`OPERATION_PLAN_INPUT_CHANGED` while resuming the approved
+`generate_edit_style_previews` call. The approved Grant remained unconsumed,
+no OperationExecution existed, and the already planned preview rows remained
+pending. This invalidates the earlier RC-4 conclusion that the shared nullable
+normalizer alone made planning and execution the same contract.
+
+The recurrence crosses the Agents SDK approval callback, Operation planning,
+snapshot hashing, RunState resume, and approved commit, so it remains a D-class
+incident. The plan callback parsed and persisted the model input directly,
+while approved execution first passed through `invocation.ts`, which also
+injects the authoritative episode scope. The snapshot therefore hashed input
+without `episodeId`; execution hashed the same business request with the
+context-owned `episodeId`.
+
+### Authority and transition
+
+| Concern | Before | After |
+| --- | --- | --- |
+| Tool business-input preparation | approval preflight parse plus invocation parse | one preparation contract owned by `invocation.ts` |
+| Environment/scope injection | approved execution only | planning and execution both resolve scope before parsing |
+| Immutable snapshot input | preflight-local parsed value | canonical invocation-prepared value |
+| Approval display hash | raw SDK arguments | persisted OperationPlanSnapshot input hash when a plan exists |
+| Commit validation | canonical execution input versus preflight-local input | canonical execution input versus the same canonical planned input |
+
+The repair must not weaken or bypass `inputHash`. It must delete the preflight
+parser as an independent business authority and make the existing immutable
+hash reject only a genuinely changed canonical request. The original
+empty-project Mainline remains the fail-before and acceptance scenario.
+
+### Failure and concurrency boundaries
+
+- Invalid model input fails before a plan, Grant, preview write, Task, or
+  OperationExecution is created.
+- Approval rejection leaves the immutable plan unexecuted.
+- Duplicate or late approval delivery remains serialized by the Grant row and
+  OperationExecution identity; input normalization is not an idempotency
+  mechanism.
+- A process failure before the approved transaction commits leaves Grant,
+  Execution, business projection, Tasks, billing freeze, and enqueue
+  responsibility rolled back together.
+- The repair does not authorize server-selected workflow continuation: it only
+  executes the exact AI-requested, user-approved frozen call.
+
+### Long-run wake-up budget false terminal
+
+After the input and locale repairs moved the same default Mainline through BGM
+generation, the Run failed with `PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED`
+despite every observed Wait, Operation, Approval and Task completing normally.
+The guard counted every `wait.followed` event for the entire user Run and
+failed at ten. A valid story-to-final workflow has more than ten distinct Task
+boundaries, so total workflow length was incorrectly used as evidence of a
+loop.
+
+The coarse Run wake-up counter is removed. Loop and retry protection remains
+owned by durable identities: unresolved attempts for the same
+`operationId + targetKey`, consecutive operation failures, one-time Wait
+claims, execution segments, Grant/OperationExecution identity, and Task retry
+policy. These contracts reject repetition of the same work without imposing a
+maximum number of different successful workflow stages.
+
+### Mainline recurrences after the original blocker
+
+The same empty-project browser journey then exposed four additional lifecycle
+contract errors that the previous simulated suites had not reached:
+
+- Operation-owned Tasks treated locale as optional and guessed it from request
+  payloads. Locale is now a required value from the canonical Operation
+  context for every Task submission.
+- Soundscape planning and generation shared one active-task count and one
+  `audio_layers_generating` stage. They now have distinct planning, ready, and
+  generation stages so durable reloads cannot appear to move backwards.
+- Approval resume appended the same SDK tool-call identity to a second
+  Assistant message. Thread persistence now advances the existing dynamic-tool
+  part for that identity instead of creating a duplicate identity.
+- Source-script expansion briefly created a Bible placeholder before its source
+  relation was visible. Workflow projection now uses the durable Task type to
+  distinguish source expansion from Bible generation instead of inferring a
+  later stage from a partially materialized artifact.
+
+### Canvas recurrence and one-way ReactFlow ownership
+
+The real journey reproduced `Maximum update depth exceeded` only while active
+Task stages were being reloaded. Two feedback mechanisms were present: the
+Assistant focus effect cleared and immediately re-emitted the same parent
+state on every dependency cleanup, and ReactFlow received dynamic controlled
+node/edge props while also accepting imperative projection writes.
+
+The repair makes parent focus notification semantic and separates ReactFlow
+ownership. `defaultNodes/defaultEdges` are a frozen, mount-only bootstrap for
+the official uncontrolled mode. All later business View and user-position
+changes enter ReactFlow through one signature-gated instance writer. Measured
+dimensions remain internal to ReactFlow and never enter the business
+projection signature. The empty-project Mainline now reloads every processing
+stage and the completed final output without a React update loop or an empty
+post-reload Canvas.
+
+### Real acceptance evidence
+
+On 2026-07-12, after the recurrences above were repaired:
+
+- `npm run typecheck` passed.
+- `npm run test:golden:mainline` passed from a new empty project in 136.6s.
+- The passing journey reached a durable final video, reloaded every observed
+  Task suspension, reloaded the completed result, found no duplicate Message
+  or tool-call identities, and reported no browser observation failures.
 | RC-5 | implemented | terminal statuses no longer self-transition; a late `run.failed` is retained only as a persisted secondary diagnostic and cannot overwrite the primary failure |
 | RC-6 | implementation complete, journey unverified | projection/user-layout/ReactFlow-measurement writers are separated; focused Canvas contract suite passes, but browser streaming-resize cannot start in this sandbox |
 | RC-7 | scenario/oracle revised, journey unverified | model-stop scenario now rejects server `nextAction` execution and requires `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED`; Playwright/local-provider servers cannot bind in this sandbox |
