@@ -149,7 +149,8 @@ export async function readGoldenMainlineBoundary(page: Page): Promise<GoldenMain
   if (await visible(page, '确认制作规划')) return 'bible_review'
   if (
     await visible(page, '选择视觉风格')
-    && await page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true }).count() > 0
+    && await page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true }).count() === 1
+    && await page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true }).count() === 0
   ) return 'style_choice'
   if (await visible(page, '审核分镜资产')) return 'asset_review'
   if (await visible(page, '需要确认')) return 'approval'
@@ -190,8 +191,7 @@ export async function submitGoldenBoundary(page: Page, boundary: GoldenMainlineB
     return
   }
   if (boundary === 'style_choice') {
-    await page.getByRole('button', { name: /候选 1/ }).filter({ visible: true }).last().click()
-    await page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true }).last().click()
+    await page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true }).click()
     return
   }
   if (boundary === 'asset_review') {

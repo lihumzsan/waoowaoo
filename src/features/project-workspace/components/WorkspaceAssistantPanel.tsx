@@ -136,24 +136,32 @@ export default function WorkspaceAssistantPanel({
   const activeOperationPresentation = resolveWorkspaceAssistantActiveOperationPresentation(
     activeExternalTaskOperationId,
   )
-  const stylePreviewGenerationView = useWorkspaceStylePreviewGenerationView({
-    projectId,
-    episodeId,
-    enabled: activeOperationPresentation === 'stylePreviewGeneration',
-  })
-  const stylePreviewDockCardKey = stylePreviewGenerationView
-    ? stylePreviewGenerationView.allCandidates.map((candidate) => candidate.id).join(':')
-    : null
-  useEffect(() => {
-    setStylePreviewDockCollapsed(false)
-  }, [stylePreviewDockCardKey])
-
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
     ? { key: pendingInteraction.interruptionId, data: pendingInteraction.choiceCard }
     : null
-  const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
+  const stylePreviewChoiceCard = activeChoiceCard?.data.choiceType === 'style'
+    ? activeChoiceCard
+    : null
+  const stylePreviewGenerationView = useWorkspaceStylePreviewGenerationView({
+    projectId,
+    episodeId,
+    enabled: activeOperationPresentation === 'stylePreviewGeneration' || Boolean(stylePreviewChoiceCard),
+  })
+  const stylePreviewDockCardKey = stylePreviewGenerationView
+    ? [
+        stylePreviewChoiceCard?.data.cardId ?? 'generation',
+        ...stylePreviewGenerationView.allCandidates.map((candidate) => candidate.id),
+      ].join(':')
+    : null
+  useEffect(() => {
+    setStylePreviewDockCollapsed(false)
+  }, [stylePreviewDockCardKey])
+
+  const displayedActiveChoiceCard = serverPendingApproval || activeChoiceCard?.data.choiceType === 'style'
+    ? null
+    : activeChoiceCard
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     hideChoiceCards: true,
     onSubmitChoiceResponse: assistantRuntime.submitChoiceResponse,
@@ -271,6 +279,8 @@ export default function WorkspaceAssistantPanel({
                       ) : (
                         <EditStylePreviewGenerationDataCard
                           view={stylePreviewGenerationView}
+                          choiceCard={stylePreviewChoiceCard?.data ?? null}
+                          onSubmitChoiceResponse={assistantRuntime.submitChoiceResponse}
                           onPreviewImage={setPreviewImageUrl}
                         />
                       )

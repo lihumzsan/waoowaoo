@@ -203,6 +203,7 @@
         "src/app/api/assistant/text-attachments",
         "src/features/project-workspace/components/WorkspaceAssistantPanel.tsx",
         "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx",
+        "src/features/project-workspace/components/workspace-assistant/choice-card-actions.ts",
         "src/features/project-workspace/components/workspace-assistant/EditStylePreviewGenerationDataCard.tsx",
         "src/features/project-workspace/components/workspace-assistant/useWorkspaceStylePreviewGenerationView.ts",
         "src/features/project-workspace/components/workspace-assistant/workspace-assistant-panel-state.ts",

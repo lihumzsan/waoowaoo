@@ -403,6 +403,8 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
     await expect(styleBibleNode).toHaveCount(1)
     await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'pending')
     await expect(styleBibleNode).toContainText('等待选择视觉风格')
+    await expect(page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true })).toHaveCount(0)
 
     await submitGoldenCheckpointBoundary({
       page,

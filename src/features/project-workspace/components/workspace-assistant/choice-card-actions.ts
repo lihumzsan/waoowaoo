@@ -56,6 +56,23 @@ export function resolveChoiceCardSelectionLabels(
   return labels
 }
 
+export function buildSingleOptionChoiceCardSelections(
+  card: Pick<ProjectAgentChoiceCardPartData, 'groups'>,
+  optionValue: string,
+): ChoiceCardSelections {
+  const matchingGroups = card.groups.filter((group) => (
+    group.options.some((option) => option.value === optionValue)
+  ))
+  if (matchingGroups.length !== 1) {
+    throw new Error(`ASSISTANT_CHOICE_OPTION_IDENTITY_INVALID:${optionValue}:${String(matchingGroups.length)}`)
+  }
+  const selections = { [matchingGroups[0].key]: optionValue }
+  if (!isChoiceCardSubmitReady(card.groups, selections)) {
+    throw new Error(`ASSISTANT_CHOICE_OPTION_INCOMPLETE:${optionValue}`)
+  }
+  return selections
+}
+
 export function shouldShowChoiceCardManualSubmit(
   card: Pick<ProjectAgentChoiceCardPartData, 'autoSubmitOnReady' | 'variant'>,
 ): boolean {

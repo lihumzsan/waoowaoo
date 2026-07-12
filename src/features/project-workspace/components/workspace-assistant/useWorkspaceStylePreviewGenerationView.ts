@@ -40,8 +40,7 @@ export function useWorkspaceStylePreviewGenerationView(params: {
     return states
   }, [taskStateQuery.data])
 
-  return useMemo(() => buildEditStylePreviewSetView({
-    previews,
-    taskStatesByTargetId,
-  }), [previews, taskStatesByTargetId])
+  return useMemo(() => params.enabled
+    ? buildEditStylePreviewSetView({ previews, taskStatesByTargetId })
+    : null, [params.enabled, previews, taskStatesByTargetId])
 }

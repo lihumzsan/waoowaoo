@@ -6,8 +6,11 @@ import { useTranslations } from 'next-intl'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon } from '@/components/ui/icons'
 import type { EditStylePreviewSetView } from '@/lib/edit-script/style-preview-set-view'
+import type { ProjectAgentChoiceCardPartData } from '@/lib/project-agent/types'
 import { useEstimatedTaskProgress } from '@/lib/query/hooks/useEstimatedTaskProgress'
 import type { TaskRuntimeStateLike } from '@/lib/task/runtime-targets'
+import { buildSingleOptionChoiceCardSelections } from './choice-card-actions'
+import { buildWorkspaceAssistantChoiceSelectionOutput } from './WorkspaceAssistantRenderers'
 
 function truncateStylePreviewErrorMessage(message: string | null | undefined): string | null {
   const normalized = message?.trim()
@@ -108,11 +111,20 @@ function StylePreviewLoadingSurface() {
 
 export function EditStylePreviewGenerationDataCard(props: {
   readonly view: EditStylePreviewSetView
+  readonly choiceCard?: ProjectAgentChoiceCardPartData | null
+  readonly onSubmitChoiceResponse: (params: {
+    runId: string
+    interruptionId: string
+    toolCallId: string
+    output: Record<string, unknown>
+  }) => Promise<void>
   readonly onPreviewImage?: (imageUrl: string) => void
 }) {
   const t = useTranslations('assistantAgent')
   const [localPreviewImageUrl, setLocalPreviewImageUrl] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [selectingId, setSelectingId] = useState<string | null>(null)
+  const [selectionError, setSelectionError] = useState<string | null>(null)
   const displayedItems = props.view.candidates
   const openPreviewImage = (imageUrl: string) => {
     if (props.onPreviewImage) {
@@ -124,6 +136,29 @@ export function EditStylePreviewGenerationDataCard(props: {
   const effectiveFocusId = focusId && displayedItems.some((item) => item.id === focusId)
     ? focusId
     : displayedItems[0]?.id ?? null
+  const selectStylePreview = async (stylePreviewId: string) => {
+    const card = props.choiceCard
+    if (!card || selectingId) return
+    setSelectingId(stylePreviewId)
+    setSelectionError(null)
+    try {
+      const selections = buildSingleOptionChoiceCardSelections(card, stylePreviewId)
+      await props.onSubmitChoiceResponse({
+        runId: card.runId,
+        interruptionId: card.interruptionId,
+        toolCallId: card.toolCallId,
+        output: buildWorkspaceAssistantChoiceSelectionOutput({
+          card,
+          groups: card.groups,
+          selections,
+        }),
+      })
+    } catch (error) {
+      setSelectionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setSelectingId(null)
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 p-3 text-xs text-[var(--glass-text-secondary)] shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
@@ -150,6 +185,14 @@ export function EditStylePreviewGenerationDataCard(props: {
           const failed = item.status === 'failed'
           const inProgress = item.status === 'generating' || item.status === 'loading'
           const errorMessage = truncateStylePreviewErrorMessage(item.errorMessage)
+          const selectable = Boolean(
+            props.choiceCard
+            && item.status === 'completed'
+            && item.imageUrl
+            && props.choiceCard.groups.some((group) => (
+              group.options.some((option) => option.value === item.id)
+            )),
+          )
 
           if (item.id !== effectiveFocusId) {
             return (
@@ -222,6 +265,16 @@ export function EditStylePreviewGenerationDataCard(props: {
                     <AppIcon name="badgeCheck" className="h-3.5 w-3.5 text-[var(--glass-accent-from)]" />
                     {t('cards.stylePreviewConfirmed')}
                   </div>
+                ) : selectable ? (
+                  <button
+                    type="button"
+                    disabled={selectingId !== null}
+                    onClick={() => void selectStylePreview(item.id)}
+                    className="group/btn absolute bottom-3 right-3 z-30 inline-flex items-center gap-1 rounded-full bg-white/92 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--glass-text-primary)] shadow-[0_4px_14px_rgba(15,23,42,0.28)] backdrop-blur-md transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {selectingId === item.id ? t('cards.choiceSubmitting') : t('cards.stylePreviewSelect')}
+                    <AppIcon name="chevronRight" className="h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+                  </button>
                 ) : null}
               </div>
               <div className="p-3">
@@ -237,6 +290,11 @@ export function EditStylePreviewGenerationDataCard(props: {
           )
         })}
       </div>
+      {selectionError ? (
+        <div className="mt-3 text-[11px] leading-5 text-[var(--glass-tone-warn-fg)]">
+          {t('cards.choiceSubmitFailed', { error: selectionError })}
+        </div>
+      ) : null}
       {localPreviewImageUrl ? (
         <ImagePreviewModal imageUrl={localPreviewImageUrl} onClose={() => setLocalPreviewImageUrl(null)} />
       ) : null}
