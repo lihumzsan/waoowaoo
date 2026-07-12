@@ -41,12 +41,18 @@ not counted as failed product behavior and is never counted as passed.
 | Plan identity and active Approval verification | 9 selected cases, then 6 asset-focused cases | 8/9 then 6/6 | Repeated storyboard-image and video Approval checkpoints passed in 7.1s and 6.5s after pending-interruption authority and plan target identity repair. Exact asset red showed expected non-null requirement target versus clone-cleared target; preserving the mapped association made the unchanged probe pass in 6.4s. All runs used isolated MySQL/Redis, real app/worker, real browser UI and production Workflow Lab. TEMP external-owner Assistant/Canvas diagnostics mean these are downstream reachability evidence, not formal default-path green. |
 | Approval plan atomicity after reserved identity contract | 3 files / 11 cases | 11 passed | Real scoped MySQL verifies batch commit, atomic Wait binding, Grant expiry and replay after `OperationPlan.reservedIdentityIds` was added; the scoped MySQL/Redis environment was removed cleanly. |
 | Registry conformance after Journey expansion | 3 files / 97 cases | 97 passed | Production Assistant Choice, Canvas node and Task definition registries remain exhaustive; this is structure/capability evidence, not a browser product pass. |
+| Final integrated empty-project Mainline | 1 case | 1 passed in 136.6s | Real Chromium, app, MySQL, Redis, workers and local protocol providers reached durable final video; every observed Task boundary survived reload, with no duplicate message/tool identity or browser error. |
+| Exact Workflow Lab recovery focus | 1 Mainline + 2 staircase steps + 4 formerly failing probes | all passed across focused reruns | Exact Bible, Asset, Storyboard Image and chapter-render facts are projected from the selected historical stage; the legal zero-Task Asset Approval commits as noop. |
+| Final provider terminal-failure variant | 7 selected cases | 7 passed in 2.2m | One failed attempt-one `video_group` Task, no automatic recovery Approval, no fabricated output; the failed Task follow-up is explanation-only until a new user turn. |
+| Final task-disconnect + stale replay variant | 7 selected cases | 7 passed in 1.9m | While no page was connected, one video Task completed and AI initiated exactly one chapter-render Task. Reconnect observed the later audio Approval; stale replay changed no stage, count or identity set. |
+| Final product matrix after preference-race repair | 5 files / 9 cases | 9 passed in 2.3m | Auth/session, CRUD, cross-user isolation, Asset Hub reuse/denial, self-hosted capability, i18n and response-loss recovery all passed with clean browser observations. |
 
 Static validation after the product-family expansion: TypeScript passed,
 targeted ESLint passed, the 8 product tests are collected by Chromium, and
 multiple real runs fully started isolated MySQL, Redis, app and worker scopes.
-Full `verify:push` has not run because the diff is still in discovery and
-contains explicitly prohibited TEMP diagnostics.
+Full `verify:push` is not used as the Journey acceptance oracle. Targeted
+typecheck, lint, contract/integration checks and the real browser matrices above
+ran on the final integrated changes without diagnostic bypasses.
 
 ## Counting rules
 

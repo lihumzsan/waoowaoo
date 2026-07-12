@@ -3,6 +3,20 @@
 This ledger records observed failures, not speculative defects. A row remains
 open until the original production or harness path is re-executed successfully.
 
+## Final integrated closure (2026-07-12)
+
+The final unchanged real-browser acceptance paths supersede the earlier
+discovery-time status cells below:
+
+| IDs | Final evidence | Status |
+| --- | --- | --- |
+| BUG-ASST-EXT-001 through BUG-ASST-EXT-007, BUG-CHOICE-001 | Empty-project Mainline reached durable final video; downstream checkpoints, provider failure, worker retry, Approval double-submit, browser disconnect and stale SSE replay all passed without diagnostic bypasses | closed |
+| BUG-ASSET-001, the later BUG-PROD-005 cleanup race | Final five-file Product matrix passed 9/9 with durable cross-user denial/reuse oracles and clean browser observations | closed |
+| Workflow Lab checkpoint recurrences | Exact-stage recovery focus and zero-Task Approval contract passed; chapter-render rewind is verified by the final disconnect oracle | closed |
+
+The per-row status cells retain the state recorded at discovery time so the
+chronology is not rewritten; this closure table is the current status authority.
+
 | ID | Journey / checkpoint | Observed failure | Evidence | Classification | Downstream impact | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | BUG-GH-001 | Golden environment startup before `GJ-MAIN-STORY-TO-FINAL-DELIVERABLE` | Starting Golden from a second worktree ran global `docker compose ... down -v --remove-orphans`, removed the development `waoowaoo-mysql`, `waoowaoo-redis`, and `waoowaoo-minio` containers, then failed because fixed `waoowaoo-test-mysql` already belonged to another run. After initial isolation, a failed Playwright run left its scoped containers alive because webServer termination did not reliably execute signal cleanup; Vitest also had a second direct global teardown bypass. | Red: initial `npm run test:golden:mainline` and first critical Workflow Lab run. Green: `npm run test:golden:self` started two independent MySQL/Redis scopes, stopped A, and proved B healthy; a failing real browser mainline used dynamic database port `55008` and removed only its Golden scope; a real Task integration ran 10/10 on dynamic port `55021` and removed only `waoowaoo-test-7803ab0656`. Docker before/after retained the same development and pre-existing test container IDs | Harness ownership / isolation, P0 for concurrent Goals | Removed: each worktree/run now owns its Compose project, dynamic endpoints, scoped cleanup, Playwright global teardown, and the Vitest teardown bypass | closed |
