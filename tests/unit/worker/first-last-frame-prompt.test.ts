@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASK_TYPE, type TaskJobData } from '@/lib/task/types'
 
 const loadPanelsMock = vi.hoisted(() => vi.fn())
+const transactionPanelMock = vi.hoisted(() => ({
+  updateMany: vi.fn(async () => ({ count: 1 })),
+}))
 const prismaMock = vi.hoisted(() => ({
   novelPromotionPanel: { update: vi.fn(async () => ({})) },
+  $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback({
+    novelPromotionPanel: transactionPanelMock,
+  })),
 }))
 const storageMock = vi.hoisted(() => ({
   extractStorageKey: vi.fn((value: string | null) => value?.replace(/^https?:\/\/[^/]+\//, '').split('?')[0] || null),
@@ -52,6 +58,7 @@ function framePanel(id: string, index: number, overrides: Record<string, unknown
     storyboardId: 'storyboard-1',
     panelIndex: index,
     linkedToNextPanel: id === 'panel-1',
+    updatedAt: new Date('2026-07-12T00:00:00.000Z'),
     imageUrl: `images/${id}.png`,
     imageMediaId: `media-${id}`,
     imageMedia: {
@@ -123,8 +130,12 @@ describe('first-last-frame prompt worker', () => {
       ],
       action: 'first_last_frame_transition_prompt',
     }))
-    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
-      where: { id: 'panel-1' },
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'panel-1',
+        linkedToNextPanel: true,
+        updatedAt: new Date('2026-07-12T00:00:00.000Z'),
+      },
       data: {
         firstLastFramePrompt: validPrompt,
         firstLastFramePromptEditedByUser: false,
@@ -152,6 +163,29 @@ describe('first-last-frame prompt worker', () => {
     expect(result.warnings.length).toBeGreaterThan(0)
   })
 
+  it.each([
+    ['Arabic output', Array.from({ length: 75 }, () => 'تتحرك').join(' ')],
+    ['Cyrillic output', Array.from({ length: 75 }, () => 'движение').join(' ')],
+    ['CJK output', Array.from({ length: 75 }, () => '镜头移动').join(' ')],
+    ['low Latin-English signal', Array.from({ length: 75 }, () => '1234-!?').join(' ')],
+    ['hard cut', `${validPrompt} A hard cut reveals another hallway.`],
+    ['scene transition', `${validPrompt} The scene transitions into a distant courtyard.`],
+    ['dissolve transition', `${validPrompt} The image dissolves to a new location.`],
+    ['new stranger', `${validPrompt} A stranger enters from the doorway.`],
+    ['new person', `${validPrompt} A new person appears behind her.`],
+    ['new prop', `${validPrompt} She is carrying a newly introduced sword.`],
+  ])('uses fallback for forbidden or non-English prompt: %s', async (_label, transitionPrompt) => {
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({ transition_prompt: transitionPrompt }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(result.fallbackUsed).toBe(true)
+    expect(result.prompt).toContain('Bridge naturally into the last frame')
+    expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+  })
+
   it('returns applied=false when prompt context changes during generation', async () => {
     loadPanelsMock
       .mockResolvedValueOnce(context())
@@ -160,7 +194,41 @@ describe('first-last-frame prompt worker', () => {
     const result = await handleFirstLastFramePromptTask(job())
 
     expect(result.applied).toBe(false)
-    expect(prismaMock.novelPromotionPanel.update).not.toHaveBeenCalled()
+    expect(transactionPanelMock.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('returns applied=false when a user edit changes the panel version during generation', async () => {
+    loadPanelsMock
+      .mockResolvedValueOnce(context())
+      .mockResolvedValueOnce(context(framePanel('panel-1', 0, {
+        firstLastFramePrompt: 'new user edit during generation',
+        firstLastFramePromptEditedByUser: true,
+        updatedAt: new Date('2026-07-12T00:00:01.000Z'),
+      })))
+
+    const result = await handleFirstLastFramePromptTask(job('source_change'))
+
+    expect(result.applied).toBe(false)
+    expect(transactionPanelMock.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('uses a serializable transaction and returns applied=false on an optimistic write conflict', async () => {
+    transactionPanelMock.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    const result = await handleFirstLastFramePromptTask(job('manual'))
+
+    expect(result.applied).toBe(false)
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      { isolationLevel: 'Serializable' },
+    )
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'panel-1',
+        linkedToNextPanel: true,
+        updatedAt: new Date('2026-07-12T00:00:00.000Z'),
+      }),
+    }))
   })
 
   it('rejects persistence when the link is removed during generation', async () => {
@@ -169,7 +237,7 @@ describe('first-last-frame prompt worker', () => {
       .mockRejectedValueOnce(new Error('First/last frame link was removed'))
 
     await expect(handleFirstLastFramePromptTask(job())).rejects.toThrow('First/last frame link was removed')
-    expect(prismaMock.novelPromotionPanel.update).not.toHaveBeenCalled()
+    expect(transactionPanelMock.updateMany).not.toHaveBeenCalled()
   })
 
   it('fails explicitly when either stored image is missing', async () => {
@@ -192,6 +260,6 @@ describe('first-last-frame prompt worker', () => {
     const result = await handleFirstLastFramePromptTask(job('source_change'))
 
     expect(result.applied).toBe(true)
-    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalled()
+    expect(transactionPanelMock.updateMany).toHaveBeenCalled()
   })
 })

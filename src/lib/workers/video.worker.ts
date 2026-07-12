@@ -547,6 +547,7 @@ async function generateVideoForPanel(
   generationMode: VideoGenerationMode
   actualVideoTokens?: number
   firstLastFramePromptToPersist?: string
+  firstLastFramePromptEditedByUserToPersist?: boolean
 }> {
   if (!panel.imageUrl) {
     throw new Error(`Panel ${panel.id} has no imageUrl`)
@@ -792,7 +793,10 @@ async function generateVideoForPanel(
     cosKey,
     generationMode,
     ...(firstLastFramePayload && (firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt)
-      ? { firstLastFramePromptToPersist: firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt || undefined }
+      ? {
+          firstLastFramePromptToPersist: firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt || undefined,
+          firstLastFramePromptEditedByUserToPersist: promptEditedByUser,
+        }
       : {}),
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
@@ -817,7 +821,13 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     panelId: panel.id,
   })
 
-  const { cosKey, generationMode, actualVideoTokens, firstLastFramePromptToPersist } = await generateVideoForPanel(
+  const {
+    cosKey,
+    generationMode,
+    actualVideoTokens,
+    firstLastFramePromptToPersist,
+    firstLastFramePromptEditedByUserToPersist,
+  } = await generateVideoForPanel(
     job,
     panel,
     payload,
@@ -834,7 +844,10 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
       videoUrl: cosKey,
       videoModel: modelId,
       videoGenerationMode: generationMode,
-      ...(firstLastFramePromptToPersist ? { firstLastFramePrompt: firstLastFramePromptToPersist } : {}),
+      ...(firstLastFramePromptToPersist ? {
+        firstLastFramePrompt: firstLastFramePromptToPersist,
+        firstLastFramePromptEditedByUser: firstLastFramePromptEditedByUserToPersist === true,
+      } : {}),
     },
   })
 

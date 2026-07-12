@@ -20,6 +20,9 @@ const validateMock = vi.hoisted(() => vi.fn(async () => ({
   lastPanel: { id: 'panel-2' },
   episodeId: 'episode-1',
 })))
+const validationErrorMock = vi.hoisted(() => ({
+  ErrorClass: class FirstLastFramePromptValidationError extends Error {},
+}))
 
 vi.mock('@/lib/api-auth', () => ({
   isErrorResponse: (value: unknown) => value instanceof Response,
@@ -38,6 +41,7 @@ vi.mock('@/lib/llm-observe/route-task', () => ({
 }))
 vi.mock('@/lib/novel-promotion/first-last-frame-prompt', () => ({
   loadAdjacentFirstLastFramePanels: validateMock,
+  FirstLastFramePromptValidationError: validationErrorMock.ErrorClass,
 }))
 
 import { POST } from '@/app/api/novel-promotion/[projectId]/first-last-frame-prompt/route'
@@ -118,7 +122,7 @@ describe('POST first-last-frame-prompt', () => {
   })
 
   it('rejects non-adjacent panels without submitting a task', async () => {
-    validateMock.mockRejectedValueOnce(new Error('Panels are not adjacent'))
+    validateMock.mockRejectedValueOnce(new validationErrorMock.ErrorClass('Panels are not adjacent'))
 
     const response = await callRoute(POST, 'POST', {
       firstPanelId: 'panel-1',
@@ -127,6 +131,19 @@ describe('POST first-last-frame-prompt', () => {
     }, { params: { projectId: 'project-1' } })
 
     expect(response.status).toBeGreaterThanOrEqual(400)
+    expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves infrastructure failures as a server error', async () => {
+    validateMock.mockRejectedValueOnce(new Error('database connection lost'))
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'manual',
+    }, { params: { projectId: 'project-1' } })
+
+    expect(response.status).toBe(500)
     expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
   })
 })

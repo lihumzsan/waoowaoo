@@ -43,6 +43,19 @@ function panelContext(panel: Record<string, unknown>) {
   }, null, 2)
 }
 
+const NON_ENGLISH_SCRIPT_PATTERN = /[\u0400-\u052f\u0600-\u06ff\u3400-\u9fff]/u
+const CUT_OR_SCENE_TRANSITION_PATTERN = /\b(?:(?:(?:hard|smash|jump|match|abrupt|sudden)\s+)?cut(?:s|ting)?|(?:dissolv(?:e|es|ed|ing)|fade(?:s|d|ing)?|transition(?:s|ed|ing)?)\s+(?:to|into)|scene\s+(?:changes?|shifts?|transitions?)\s+(?:to|into))\b/i
+const INVENTED_SUBJECT_PATTERN = /\b(?:a|an|another)\s+(?:new\s+)?(?:stranger|person|character|man|woman|child|figure)\s+(?:enters?|appears?|emerges?|arrives?)\b/i
+const INVENTED_PROP_PATTERN = /\b(?:(?:carrying|holding|wielding)\s+(?:a|an)\s+)?(?:new|newly\s+introduced)\s+(?:prop|object|sword|weapon|knife|gun|bag|tool)\b/i
+
+function hasEnglishSignal(prompt: string) {
+  const latinLetterCount = (prompt.match(/[A-Za-z]/g) || []).length
+  const nonWhitespaceCount = (prompt.match(/\S/g) || []).length
+  return latinLetterCount >= 140
+    && nonWhitespaceCount > 0
+    && latinLetterCount / nonWhitespaceCount >= 0.45
+}
+
 function parseModelOutput(text: string): { prompt: string; warnings: string[] } | null {
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   if (!unfenced) return null
@@ -50,8 +63,13 @@ function parseModelOutput(text: string): { prompt: string; warnings: string[] } 
     const parsed = JSON.parse(jsonrepair(unfenced)) as Record<string, unknown>
     const prompt = stringValue(parsed.transition_prompt)
     const wordCount = prompt.split(/\s+/u).filter(Boolean).length
-    if (!prompt || wordCount < 70 || wordCount > 160 || /[\u3400-\u9fff]/u.test(prompt)) return null
-    if (/\b(?:cut to|scene changes? to|introduce(?:s|d)? (?:a )?new (?:person|character|prop))\b/i.test(prompt)) return null
+    if (!prompt || wordCount < 70 || wordCount > 160) return null
+    if (NON_ENGLISH_SCRIPT_PATTERN.test(prompt) || !hasEnglishSignal(prompt)) return null
+    if (
+      CUT_OR_SCENE_TRANSITION_PATTERN.test(prompt)
+      || INVENTED_SUBJECT_PATTERN.test(prompt)
+      || INVENTED_PROP_PATTERN.test(prompt)
+    ) return null
     const warnings = Array.isArray(parsed.warnings)
       ? parsed.warnings.map(stringValue).filter(Boolean)
       : []
@@ -63,6 +81,22 @@ function parseModelOutput(text: string): { prompt: string; warnings: string[] } 
 
 function resolveStoredImageKey(panel: { imageUrl?: string | null; imageMedia?: { storageKey?: string | null } | null }) {
   return stringValue(panel.imageMedia?.storageKey) || extractStorageKey(panel.imageUrl) || ''
+}
+
+function panelVersion(value: unknown): number | null {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === 'string') {
+    const timestamp = Date.parse(value)
+    return Number.isFinite(timestamp) ? timestamp : null
+  }
+  return null
+}
+
+function isSerializableConflict(error: unknown) {
+  return !!error
+    && typeof error === 'object'
+    && 'code' in error
+    && (error as { code?: unknown }).code === 'P2034'
 }
 
 export async function handleFirstLastFramePromptTask(
@@ -96,6 +130,8 @@ export async function handleFirstLastFramePromptTask(
     start.firstPanel as unknown as Record<string, unknown>,
     start.lastPanel as unknown as Record<string, unknown>,
   )
+  const startFirstVersion = panelVersion(start.firstPanel.updatedAt)
+  const startLastVersion = panelVersion(start.lastPanel.updatedAt)
   const timing = getFirstLastFramePromptTiming(start.firstPanel as unknown as Record<string, unknown>)
   const modelConfig = await getProjectModelConfig(job.data.projectId, job.data.userId)
   if (!modelConfig.analysisModel) throw new Error('Analysis model not configured')
@@ -144,33 +180,44 @@ export async function handleFirstLastFramePromptTask(
   const warnings = generated?.warnings || [fallbackWarning]
 
   await reportTaskProgress(job, 80, { stage: 'first_last_frame_prompt_persist' })
-  const latest = await loadAdjacentFirstLastFramePanels({
-    projectId: job.data.projectId,
-    firstPanelId,
-    lastPanelId,
-    episodeId: job.data.episodeId,
-    requireLinked: true,
-  })
-  const latestFingerprint = buildFirstLastFramePromptFingerprint(
-    latest.firstPanel as unknown as Record<string, unknown>,
-    latest.lastPanel as unknown as Record<string, unknown>,
-  )
-  if (latestFingerprint !== sourceFingerprint) {
-    return { prompt: resultPrompt, sourceFingerprint, applied: false, fallbackUsed, warnings }
-  }
-  if (reason === 'link' && latest.firstPanel.firstLastFramePromptEditedByUser) {
-    return { prompt: resultPrompt, sourceFingerprint, applied: false, fallbackUsed, warnings }
-  }
-
   await assertTaskActive(job, 'first_last_frame_prompt_persist')
-  await prisma.novelPromotionPanel.update({
-    where: { id: firstPanelId },
-    data: {
-      firstLastFramePrompt: resultPrompt,
-      firstLastFramePromptEditedByUser: false,
-      firstLastFramePromptSourceFingerprint: sourceFingerprint,
-    },
-  })
+  let applied = false
+  try {
+    applied = await prisma.$transaction(async (tx) => {
+      const latest = await loadAdjacentFirstLastFramePanels({
+        projectId: job.data.projectId,
+        firstPanelId,
+        lastPanelId,
+        episodeId: job.data.episodeId,
+        requireLinked: true,
+        db: tx,
+      })
+      const latestFingerprint = buildFirstLastFramePromptFingerprint(
+        latest.firstPanel as unknown as Record<string, unknown>,
+        latest.lastPanel as unknown as Record<string, unknown>,
+      )
+      const versionsMatch = panelVersion(latest.firstPanel.updatedAt) === startFirstVersion
+        && panelVersion(latest.lastPanel.updatedAt) === startLastVersion
+      if (latestFingerprint !== sourceFingerprint || !versionsMatch) return false
+      if (reason === 'link' && latest.firstPanel.firstLastFramePromptEditedByUser) return false
 
-  return { prompt: resultPrompt, sourceFingerprint, applied: true, fallbackUsed, warnings }
+      const write = await tx.novelPromotionPanel.updateMany({
+        where: {
+          id: firstPanelId,
+          linkedToNextPanel: true,
+          updatedAt: start.firstPanel.updatedAt,
+        },
+        data: {
+          firstLastFramePrompt: resultPrompt,
+          firstLastFramePromptEditedByUser: false,
+          firstLastFramePromptSourceFingerprint: sourceFingerprint,
+        },
+      })
+      return write.count === 1
+    }, { isolationLevel: 'Serializable' })
+  } catch (error) {
+    if (!isSerializableConflict(error)) throw error
+  }
+
+  return { prompt: resultPrompt, sourceFingerprint, applied, fallbackUsed, warnings }
 }

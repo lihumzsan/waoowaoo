@@ -1057,6 +1057,7 @@ describe('worker video processor behavior', () => {
       where: { id: 'panel-1' },
       data: expect.objectContaining({
         firstLastFramePrompt: expect.stringContaining('Bridge naturally into the last frame'),
+        firstLastFramePromptEditedByUser: false,
         videoGenerationMode: 'firstlastframe',
       }),
     })
@@ -1099,6 +1100,13 @@ describe('worker video processor behavior', () => {
         options: expect.objectContaining({ prompt: customPrompt }),
       }),
     )
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        firstLastFramePrompt: customPrompt,
+        firstLastFramePromptEditedByUser: true,
+      }),
+    })
   })
 
   it('LIP_SYNC: fails explicitly when panel is missing', async () => {

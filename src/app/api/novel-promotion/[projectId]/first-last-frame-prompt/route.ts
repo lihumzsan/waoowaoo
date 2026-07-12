@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { maybeSubmitLLMTask } from '@/lib/llm-observe/route-task'
-import { loadAdjacentFirstLastFramePanels, type FirstLastFramePromptReason } from '@/lib/novel-promotion/first-last-frame-prompt'
+import {
+  FirstLastFramePromptValidationError,
+  loadAdjacentFirstLastFramePanels,
+  type FirstLastFramePromptReason,
+} from '@/lib/novel-promotion/first-last-frame-prompt'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const REASONS = new Set<FirstLastFramePromptReason>(['link', 'source_change', 'manual'])
@@ -28,8 +32,11 @@ export const POST = apiHandler(async (
 
   try {
     await loadAdjacentFirstLastFramePanels({ projectId, firstPanelId, lastPanelId, episodeId })
-  } catch {
-    throw new ApiError('INVALID_PARAMS')
+  } catch (error) {
+    if (error instanceof FirstLastFramePromptValidationError) {
+      throw new ApiError('INVALID_PARAMS')
+    }
+    throw error
   }
 
   const body = {

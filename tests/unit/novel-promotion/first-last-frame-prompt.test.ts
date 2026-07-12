@@ -13,6 +13,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 import {
   buildFirstLastFramePromptFingerprint,
+  FirstLastFramePromptValidationError,
   loadAdjacentFirstLastFramePanels,
 } from '@/lib/novel-promotion/first-last-frame-prompt'
 
@@ -94,11 +95,13 @@ describe('loadAdjacentFirstLastFramePanels', () => {
       ] } }],
     })
 
-    await expect(loadAdjacentFirstLastFramePanels({
+    const result = loadAdjacentFirstLastFramePanels({
       projectId: 'project-1',
       firstPanelId: 'panel-1',
       lastPanelId: 'panel-2',
-    })).rejects.toThrow('Panels are not adjacent')
+    })
+    await expect(result).rejects.toBeInstanceOf(FirstLastFramePromptValidationError)
+    await expect(result).rejects.toThrow('Panels are not adjacent')
   })
 
   it('rejects a removed link when link validation is requested', async () => {
