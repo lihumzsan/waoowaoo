@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
@@ -44,6 +45,18 @@ const MODEL_FIELDS = new Set([
   'soundEffectModel',
 ])
 
+async function lockUserPreferenceOwner(
+  transaction: Prisma.TransactionClient,
+  userId: string,
+): Promise<void> {
+  const owners = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id FROM user WHERE id = ${userId} FOR UPDATE
+  `)
+  if (owners.length !== 1) {
+    throw new ApiError('NOT_FOUND', { code: 'USER_PREFERENCE_OWNER_NOT_FOUND' })
+  }
+}
+
 export function createUserPreferenceOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_user_preference: defineOperation({
@@ -63,6 +76,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, _input, transaction) => {
         const deployment = getDeploymentConfig()
+        await lockUserPreferenceOwner(transaction, ctx.userId)
         const preference = await transaction.userPreference.upsert({
           where: { userId: ctx.userId },
           update: {},
@@ -109,6 +123,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       outputSchema: z.unknown(),
       executeInTransaction: async (ctx, input, transaction) => {
         const deployment = getDeploymentConfig()
+        await lockUserPreferenceOwner(transaction, ctx.userId)
         const body = isRecord(input) ? input : {}
         if (isPlatformProviderCredentialMode(deployment)) {
           const attemptedModelField = Object.keys(body).find((field) => MODEL_FIELDS.has(field))
