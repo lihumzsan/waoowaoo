@@ -305,7 +305,7 @@ export async function buildBibleReviewChoiceCard(params: {
     },
   })
   if (!editBible) throw new Error('EDIT_FIRST_CHOICE_BIBLE_NOT_FOUND')
-  if (editBible.status !== 'bible_ready_for_review') {
+  if (editBible.status !== 'ready_for_review') {
     throw new Error(`EDIT_FIRST_BIBLE_REVIEW_NOT_READY:${editBible.status}`)
   }
   const isEnglish = params.locale === 'en'

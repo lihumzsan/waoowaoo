@@ -26,7 +26,7 @@ describe('edit-first assistant choice cards', () => {
   it('builds a bible review card after bible generation', async () => {
     prismaState.bibleFindFirst.mockResolvedValueOnce({
       id: 'bible-1',
-      status: 'bible_ready_for_review',
+      status: 'ready_for_review',
       version: 2,
       bibleJson: { logline: 'story' },
       beatSheetJson: { beats: [] },
