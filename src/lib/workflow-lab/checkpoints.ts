@@ -4,12 +4,21 @@ import {
   EDIT_FIRST_CHOICE_TOOL_IDS,
   getEditFirstChoiceDefinition,
 } from '@/lib/project-agent/edit-first-choice-tools'
-import type {
-  ProjectAgentChoiceCardPartData,
-  ProjectAgentInterruptionPartData,
-} from '@/lib/project-agent/types'
-import { projectAgentChoiceCardSchema } from '@/lib/project-agent/choice-offer'
+import { parseProjectAgentChoiceOffer } from '@/lib/project-agent/choice-offer'
+import type { ProjectAgentInterruptionPartData } from '@/lib/project-agent/types'
 import type { WorkflowLabCheckpointSummary } from './types'
+
+export interface WorkflowLabInterruptionSource {
+  readonly id: string
+  readonly runId: string | null
+  readonly type: 'choice' | 'approval'
+  readonly status: string
+  readonly operationId: string
+  readonly approvalId: string
+  readonly toolCallId: string | null
+  readonly payload: unknown
+  readonly runState: string | null
+}
 
 const OPERATION_STAGE_BY_ID: Readonly<Record<string, EditFirstWorkflowStage>> = {
   ingest_script: 'ready_to_ingest_script',
@@ -34,16 +43,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function readChoiceWorkflowStage(choiceCard: ProjectAgentChoiceCardPartData): EditFirstWorkflowStage | null {
-  return getEditFirstChoiceDefinition(choiceCard.choiceType).workflowStage
-}
-
-function readChoiceCard(part: unknown): ProjectAgentChoiceCardPartData | null {
-  if (!isRecord(part) || part.type !== 'data-assistant-choice-card') return null
-  const parsed = projectAgentChoiceCardSchema.safeParse(part.data)
-  return parsed.success ? parsed.data : null
 }
 
 function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartData | null {
@@ -76,6 +75,11 @@ function readApprovalInterruption(part: unknown): ProjectAgentInterruptionPartDa
   }
 }
 
+function readDynamicToolCallId(part: unknown): string | null {
+  if (!isRecord(part) || part.type !== 'dynamic-tool') return null
+  return readString(part.toolCallId)
+}
+
 function buildCheckpointId(params: {
   readonly kind: 'choice' | 'approval' | 'stage'
   readonly messageIndex: number
@@ -97,50 +101,135 @@ function readOperationBoundaryId(part: unknown): string | null {
   return readString(data?.operationId)
 }
 
+function indexInterruptionsByToolCallId(
+  interruptions: readonly WorkflowLabInterruptionSource[],
+): ReadonlyMap<string, readonly WorkflowLabInterruptionSource[]> {
+  const indexed = new Map<string, WorkflowLabInterruptionSource[]>()
+  for (const interruption of interruptions) {
+    if (!interruption.toolCallId) continue
+    const current = indexed.get(interruption.toolCallId) ?? []
+    current.push(interruption)
+    indexed.set(interruption.toolCallId, current)
+  }
+  return indexed
+}
+
+function readUniqueToolCallInterruption(
+  indexed: ReadonlyMap<string, readonly WorkflowLabInterruptionSource[]>,
+  toolCallId: string | null | undefined,
+): WorkflowLabInterruptionSource | null {
+  if (!toolCallId) return null
+  const candidates = indexed.get(toolCallId) ?? []
+  return candidates.length === 1 ? candidates[0] ?? null : null
+}
+
+function isForkableApproval(
+  interruption: WorkflowLabInterruptionSource | null | undefined,
+): interruption is WorkflowLabInterruptionSource & { readonly type: 'approval'; readonly runState: string } {
+  return interruption?.type === 'approval'
+    && typeof interruption.runState === 'string'
+    && interruption.runState.trim().length > 0
+}
+
 export function listWorkflowLabCheckpointsFromMessages(params: {
   readonly sourceEpisodeId: string
   readonly messages: readonly UIMessage[]
+  readonly interruptions: readonly WorkflowLabInterruptionSource[]
 }): readonly WorkflowLabCheckpointSummary[] {
   const checkpoints: WorkflowLabCheckpointSummary[] = []
   const seenStageCheckpointKeys = new Set<string>()
+  const referencedInterruptionIds = new Set<string>()
+  const interruptionById = new Map(params.interruptions.map((interruption) => [interruption.id, interruption]))
+  const interruptionsByToolCallId = indexInterruptionsByToolCallId(params.interruptions)
+  const approvalInterruptionIdsWithMessagePart = new Set(
+    params.messages.flatMap((message) => message.parts.flatMap((part) => {
+      const interruption = readApprovalInterruption(part)
+      const durableApproval = interruption
+        ? interruptionById.get(interruption.interruptionId)
+          ?? readUniqueToolCallInterruption(interruptionsByToolCallId, interruption.toolCallId)
+        : null
+      return durableApproval?.type === 'approval' ? [durableApproval.id] : []
+    })),
+  )
 
   params.messages.forEach((message, messageIndex) => {
     if (message.role !== 'assistant') return
     message.parts.forEach((part, partIndex) => {
-      const choiceCard = readChoiceCard(part)
-      if (choiceCard) {
-        const stage = readChoiceWorkflowStage(choiceCard)
-        if (!stage) return
+      const dynamicToolCallId = readDynamicToolCallId(part)
+      const durableChoice = dynamicToolCallId
+        ? readUniqueToolCallInterruption(interruptionsByToolCallId, dynamicToolCallId)
+        : null
+      if (durableChoice?.type === 'choice') {
+        referencedInterruptionIds.add(durableChoice.id)
+        const offer = parseProjectAgentChoiceOffer(durableChoice.payload)
+        const stage = getEditFirstChoiceDefinition(offer.card.choiceType).workflowStage
         checkpoints.push({
           id: buildCheckpointId({
             kind: 'choice',
             messageIndex,
             partIndex,
-            stableId: choiceCard.cardId,
+            stableId: durableChoice.id,
           }),
           sourceEpisodeId: params.sourceEpisodeId,
           kind: 'choice',
           workflowStage: stage,
-          title: choiceCard.title,
-          detail: choiceCard.description ?? null,
-          choiceType: choiceCard.choiceType,
-          operationId: EDIT_FIRST_CHOICE_TOOL_IDS[choiceCard.choiceType],
+          title: offer.card.title,
+          detail: offer.card.description ?? null,
+          choiceType: offer.card.choiceType,
+          operationId: EDIT_FIRST_CHOICE_TOOL_IDS[offer.card.choiceType],
+          sourceInterruptionId: durableChoice.id,
           messageIndex,
           partIndex,
           assistantMessageCount: messageIndex + 1,
         })
         return
       }
+      if (isForkableApproval(durableChoice) && !approvalInterruptionIdsWithMessagePart.has(durableChoice.id)) {
+        referencedInterruptionIds.add(durableChoice.id)
+        const stage = OPERATION_STAGE_BY_ID[durableChoice.operationId] ?? null
+        if (stage) {
+          checkpoints.push({
+            id: buildCheckpointId({
+              kind: 'approval',
+              messageIndex,
+              partIndex,
+              stableId: durableChoice.id,
+            }),
+            sourceEpisodeId: params.sourceEpisodeId,
+            kind: 'approval',
+            workflowStage: stage,
+            title: durableChoice.operationId,
+            detail: null,
+            choiceType: null,
+            operationId: durableChoice.operationId,
+            sourceInterruptionId: durableChoice.id,
+            messageIndex,
+            partIndex,
+            assistantMessageCount: messageIndex + 1,
+          })
+          return
+        }
+      }
 
       const interruption = readApprovalInterruption(part)
-      const stage = interruption ? OPERATION_STAGE_BY_ID[interruption.operationId] ?? null : null
-      if (interruption && stage) {
+      const durableApproval = interruption
+        ? interruptionById.get(interruption.interruptionId)
+          ?? readUniqueToolCallInterruption(interruptionsByToolCallId, interruption.toolCallId)
+        : null
+      const stage = isForkableApproval(durableApproval)
+        ? OPERATION_STAGE_BY_ID[durableApproval.operationId] ?? null
+        : null
+      if (interruption && isForkableApproval(durableApproval) && stage) {
+        referencedInterruptionIds.add(durableApproval.id)
+        if (durableApproval.operationId !== interruption.operationId) {
+          throw new Error(`WORKFLOW_LAB_APPROVAL_OPERATION_MISMATCH:${durableApproval.id}`)
+        }
         checkpoints.push({
           id: buildCheckpointId({
             kind: 'approval',
             messageIndex,
             partIndex,
-            stableId: interruption.operationId,
+            stableId: durableApproval.id,
           }),
           sourceEpisodeId: params.sourceEpisodeId,
           kind: 'approval',
@@ -149,6 +238,7 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
           detail: interruption.display.description,
           choiceType: null,
           operationId: interruption.operationId,
+          sourceInterruptionId: durableApproval.id,
           messageIndex,
           partIndex,
           assistantMessageCount: messageIndex + 1,
@@ -176,6 +266,7 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
         detail: null,
         choiceType: null,
         operationId: boundaryOperationId,
+        sourceInterruptionId: null,
         messageIndex,
         partIndex,
         assistantMessageCount: messageIndex + 1,
@@ -183,17 +274,73 @@ export function listWorkflowLabCheckpointsFromMessages(params: {
     })
   })
 
+  const finalMessageIndex = params.messages.length - 1
+  const finalMessage = params.messages[finalMessageIndex]
+  if (!finalMessage) return checkpoints
+  const finalPartIndex = finalMessage.parts.length
+  for (const interruption of params.interruptions) {
+    if (interruption.status !== 'pending' || referencedInterruptionIds.has(interruption.id)) continue
+    if (interruption.type === 'choice') {
+      const offer = parseProjectAgentChoiceOffer(interruption.payload)
+      const stage = getEditFirstChoiceDefinition(offer.card.choiceType).workflowStage
+      checkpoints.push({
+        id: buildCheckpointId({
+          kind: 'choice',
+          messageIndex: finalMessageIndex,
+          partIndex: finalPartIndex,
+          stableId: interruption.id,
+        }),
+        sourceEpisodeId: params.sourceEpisodeId,
+        kind: 'choice',
+        workflowStage: stage,
+        title: offer.card.title,
+        detail: offer.card.description ?? null,
+        choiceType: offer.card.choiceType,
+        operationId: EDIT_FIRST_CHOICE_TOOL_IDS[offer.card.choiceType],
+        sourceInterruptionId: interruption.id,
+        messageIndex: finalMessageIndex,
+        partIndex: finalPartIndex,
+        assistantMessageCount: params.messages.length,
+      })
+      continue
+    }
+    if (!isForkableApproval(interruption)) continue
+    const stage = OPERATION_STAGE_BY_ID[interruption.operationId] ?? null
+    if (!stage) continue
+    checkpoints.push({
+      id: buildCheckpointId({
+        kind: 'approval',
+        messageIndex: finalMessageIndex,
+        partIndex: finalPartIndex,
+        stableId: interruption.id,
+      }),
+      sourceEpisodeId: params.sourceEpisodeId,
+      kind: 'approval',
+      workflowStage: stage,
+      title: interruption.operationId,
+      detail: null,
+      choiceType: null,
+      operationId: interruption.operationId,
+      sourceInterruptionId: interruption.id,
+      messageIndex: finalMessageIndex,
+      partIndex: finalPartIndex,
+      assistantMessageCount: params.messages.length,
+    })
+  }
+
   return checkpoints
 }
 
 export function findWorkflowLabCheckpoint(params: {
   readonly sourceEpisodeId: string
   readonly messages: readonly UIMessage[]
+  readonly interruptions: readonly WorkflowLabInterruptionSource[]
   readonly checkpointId: string
 }): WorkflowLabCheckpointSummary | null {
   return listWorkflowLabCheckpointsFromMessages({
     sourceEpisodeId: params.sourceEpisodeId,
     messages: params.messages,
+    interruptions: params.interruptions,
   }).find((checkpoint) => checkpoint.id === params.checkpointId) ?? null
 }
 

@@ -40,7 +40,7 @@ export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold
 }
 
 export function shouldWorkflowLabCloneBible(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'bible_ready_for_review')
+  return workflowLabStageAtLeast(stage, 'script_ready_for_review')
 }
 
 export function shouldWorkflowLabCloneStylePreviews(stage: EditFirstWorkflowStage): boolean {
@@ -65,7 +65,10 @@ export function shouldWorkflowLabCloneVideos(stage: EditFirstWorkflowStage): boo
 
 export function resolveWorkflowLabBibleStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
   if (!shouldWorkflowLabCloneBible(stage)) return sourceStatus
-  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_style_previews')) return 'ready_for_review'
+  if (stage === 'script_ready_for_review') return 'script_ready_for_review'
+  if (stage === 'ready_to_generate_bible') return 'script_approved'
+  if (stage === 'bible_ready_for_review') return 'ready_for_review'
+  if (!workflowLabStageAtLeast(stage, 'ready_to_generate_style_previews')) return sourceStatus
   return 'confirmed'
 }
 
@@ -80,5 +83,5 @@ export function resolveWorkflowLabEditAssetReviewStatus(stage: EditFirstWorkflow
 }
 
 export function shouldWorkflowLabKeepAssetRequirementTarget(stage: EditFirstWorkflowStage): boolean {
-  return workflowLabStageAtLeast(stage, 'assets_ready_for_review')
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_assets')
 }

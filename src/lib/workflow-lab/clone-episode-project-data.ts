@@ -1,7 +1,11 @@
 import { Prisma } from '@prisma/client'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import { DEFAULT_EDIT_CHAPTER_INDEX } from '@/lib/edit-chapter'
-import { mapWorkflowLabId, toInputJson, type WorkflowLabCloneMaps } from './clone-json'
+import {
+  mapWorkflowLabId,
+  readMappedId,
+  toInputJson,
+  type WorkflowLabCloneMaps,
+} from './clone-json'
 import { cloneWorkflowLabEditFirstArtifacts } from './clone-edit-first'
 import { cloneWorkflowLabStoryboards } from './clone-storyboards'
 import {
@@ -18,15 +22,6 @@ export async function cloneEpisodeProjectData(params: {
   readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
-  if (shouldWorkflowLabCloneStoryboards(params.stage)) {
-    await cloneWorkflowLabStoryboards({
-      tx: params.tx,
-      sourceEpisodeId: params.sourceEpisodeId,
-      targetEpisodeId: params.targetEpisodeId,
-      maps: params.maps,
-    })
-  }
-
   await cloneWorkflowLabEditFirstArtifacts({
     tx: params.tx,
     targetProjectId: params.targetProjectId,
@@ -36,12 +31,16 @@ export async function cloneEpisodeProjectData(params: {
     maps: params.maps,
   })
 
-  if (shouldWorkflowLabCloneVideos(params.stage)) {
-    const targetChapter = await params.tx.projectEditChapter.findUnique({
-      where: { episodeId_chapterIndex: { episodeId: params.targetEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
-      select: { id: true },
+  if (shouldWorkflowLabCloneStoryboards(params.stage)) {
+    await cloneWorkflowLabStoryboards({
+      tx: params.tx,
+      sourceEpisodeId: params.sourceEpisodeId,
+      targetEpisodeId: params.targetEpisodeId,
+      maps: params.maps,
     })
-    if (!targetChapter) throw new Error('WORKFLOW_LAB_TARGET_DEFAULT_EDIT_CHAPTER_REQUIRED')
+  }
+
+  if (shouldWorkflowLabCloneVideos(params.stage)) {
     const finalOutput = await params.tx.projectEpisodeFinalOutput.findUnique({
       where: { episodeId: params.sourceEpisodeId },
     })
@@ -99,11 +98,12 @@ export async function cloneEpisodeProjectData(params: {
       orderBy: { createdAt: 'asc' },
     })
     for (const group of videoGroups) {
+      const targetChapterId = readMappedId(params.maps.chapterIds, group.chapterId)
       const createdGroup = await params.tx.projectVideoGroup.create({
         data: {
           projectId: params.targetProjectId,
           episodeId: params.targetEpisodeId,
-          chapterId: targetChapter.id,
+          chapterId: targetChapterId,
           gridMode: group.gridMode,
           shotIds: toInputJson(group.shotIds),
           shotNumbers: toInputJson(group.shotNumbers),

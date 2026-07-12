@@ -1,7 +1,13 @@
 import { Prisma } from '@prisma/client'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
-import { DEFAULT_EDIT_CHAPTER_INDEX } from '@/lib/edit-chapter'
-import { toInputJson, toNullableInputJson, mapWorkflowLabId, type WorkflowLabCloneMaps } from './clone-json'
+import {
+  mapWorkflowLabId,
+  readMappedId,
+  toInputJson,
+  toNullableInputJson,
+  type WorkflowLabCloneMaps,
+} from './clone-json'
+import { rewriteWorkflowLabValue } from './message-rewrite'
 import {
   resolveWorkflowLabEditAssetReviewStatus,
   resolveWorkflowLabBibleStatus,
@@ -12,6 +18,67 @@ import {
   shouldWorkflowLabCloneStylePreviews,
   shouldWorkflowLabKeepAssetRequirementTarget,
 } from './clone-stage'
+
+async function cloneWorkflowLabChapters(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly sourceEpisodeId: string
+  readonly targetEpisodeId: string
+  readonly sourceDocumentId: string
+  readonly targetSourceDocumentId: string
+  readonly maps: WorkflowLabCloneMaps
+}) {
+  const chapters = await params.tx.projectEditChapter.findMany({
+    where: { episodeId: params.sourceEpisodeId },
+    orderBy: { chapterIndex: 'asc' },
+  })
+
+  for (const chapter of chapters) {
+    if (chapter.sourceDocumentId && chapter.sourceDocumentId !== params.sourceDocumentId) {
+      throw new Error(`WORKFLOW_LAB_CHAPTER_SOURCE_DOCUMENT_UNMAPPED:${chapter.id}`)
+    }
+    const sourceDocumentId = chapter.sourceDocumentId ? params.targetSourceDocumentId : null
+    const provenanceJson = chapter.provenanceJson === null
+      ? Prisma.JsonNull
+      : toInputJson(rewriteWorkflowLabValue(chapter.provenanceJson, params.maps.allIds))
+    const data = {
+      title: chapter.title,
+      summary: chapter.summary,
+      sourceDocumentId,
+      sourceStart: chapter.sourceStart,
+      sourceEnd: chapter.sourceEnd,
+      targetDurationSec: chapter.targetDurationSec,
+      entrySnapshotJson: toNullableInputJson(chapter.entrySnapshotJson),
+      eventsJson: toNullableInputJson(chapter.eventsJson),
+      planVersion: chapter.planVersion,
+      provenanceJson,
+      status: chapter.status,
+      renderStatus: chapter.renderStatus,
+      renderTaskId: null,
+      outputMediaId: chapter.outputMediaId,
+    }
+    const targetChapter = await params.tx.projectEditChapter.upsert({
+      where: {
+        episodeId_chapterIndex: {
+          episodeId: params.targetEpisodeId,
+          chapterIndex: chapter.chapterIndex,
+        },
+      },
+      create: {
+        episodeId: params.targetEpisodeId,
+        chapterIndex: chapter.chapterIndex,
+        ...data,
+      },
+      update: data,
+      select: { id: true },
+    })
+    mapWorkflowLabId({
+      maps: params.maps,
+      scopedMap: params.maps.chapterIds,
+      sourceId: chapter.id,
+      targetId: targetChapter.id,
+    })
+  }
+}
 
 export async function cloneWorkflowLabEditFirstArtifacts(params: {
   readonly tx: Prisma.TransactionClient
@@ -45,6 +112,12 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       },
       select: { id: true },
     })
+    mapWorkflowLabId({
+      maps: params.maps,
+      scopedMap: params.maps.allIds,
+      sourceId: bible.sourceDocument.id,
+      targetId: targetSourceDocument.id,
+    })
     const createdBible = await params.tx.projectEditBible.create({
       data: {
         episodeId: params.targetEpisodeId,
@@ -66,6 +139,15 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
       scopedMap: params.maps.bibleIds,
       sourceId: bible.id,
       targetId: createdBible.id,
+    })
+
+    await cloneWorkflowLabChapters({
+      tx: params.tx,
+      sourceEpisodeId: params.sourceEpisodeId,
+      targetEpisodeId: params.targetEpisodeId,
+      sourceDocumentId: bible.sourceDocument.id,
+      targetSourceDocumentId: targetSourceDocument.id,
+      maps: params.maps,
     })
 
     if (shouldWorkflowLabCloneStylePreviews(params.stage)) {
@@ -100,20 +182,9 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
   }
 
   if (!shouldWorkflowLabCloneEditScript(params.stage)) return
-  const [sourceChapter, targetChapter] = await Promise.all([
-    params.tx.projectEditChapter.findUnique({
-      where: { episodeId_chapterIndex: { episodeId: params.sourceEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
-      select: { id: true },
-    }),
-    params.tx.projectEditChapter.findUnique({
-      where: { episodeId_chapterIndex: { episodeId: params.targetEpisodeId, chapterIndex: DEFAULT_EDIT_CHAPTER_INDEX } },
-      select: { id: true },
-    }),
-  ])
-  if (!sourceChapter || !targetChapter) throw new Error('WORKFLOW_LAB_DEFAULT_EDIT_CHAPTER_REQUIRED')
-
-  const editScript = await params.tx.projectEditScript.findUnique({
-    where: { chapterId: sourceChapter.id },
+  const editScripts = await params.tx.projectEditScript.findMany({
+    where: { episodeId: params.sourceEpisodeId },
+    orderBy: { createdAt: 'asc' },
     include: {
       requirements: {
         orderBy: { createdAt: 'asc' },
@@ -122,76 +193,77 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
     },
   })
 
-  if (!editScript) return
-
-  const createdEditScript = await params.tx.projectEditScript.create({
-    data: {
-      projectId: params.targetProjectId,
-      episodeId: params.targetEpisodeId,
-      chapterId: targetChapter.id,
-      corePlanJson: toNullableInputJson(editScript.corePlanJson),
-      durationSec: editScript.durationSec,
-      shotCount: editScript.shotCount,
-      status: editScript.status,
-      assetReviewStatus: resolveWorkflowLabEditAssetReviewStatus(params.stage, editScript.assetReviewStatus),
-    },
-    select: { id: true },
-  })
-  mapWorkflowLabId({
-    maps: params.maps,
-    scopedMap: params.maps.editScriptIds,
-    sourceId: editScript.id,
-    targetId: createdEditScript.id,
-  })
-
-  for (const requirement of editScript.requirements) {
-    const keepTarget = shouldWorkflowLabKeepAssetRequirementTarget(params.stage)
-    const mappedTargetId = keepTarget && requirement.targetId
-      ? params.maps.characterIds.get(requirement.targetId)
-        ?? params.maps.locationIds.get(requirement.targetId)
-        ?? requirement.targetId
-      : null
-    const createdRequirement = await params.tx.projectEditAssetRequirement.create({
+  for (const editScript of editScripts) {
+    const targetChapterId = readMappedId(params.maps.chapterIds, editScript.chapterId)
+    const createdEditScript = await params.tx.projectEditScript.create({
       data: {
-        editScriptId: createdEditScript.id,
         projectId: params.targetProjectId,
         episodeId: params.targetEpisodeId,
-        chapterId: targetChapter.id,
-        kind: requirement.kind,
-        name: requirement.name,
-        description: requirement.description,
-        requiredForShotIds: toInputJson(requirement.requiredForShotIds),
-        status: keepTarget ? requirement.status : 'pending',
-        targetId: mappedTargetId,
-        errorMessage: keepTarget ? requirement.errorMessage : null,
+        chapterId: targetChapterId,
+        corePlanJson: toNullableInputJson(editScript.corePlanJson),
+        durationSec: editScript.durationSec,
+        shotCount: editScript.shotCount,
+        status: editScript.status,
+        assetReviewStatus: resolveWorkflowLabEditAssetReviewStatus(params.stage, editScript.assetReviewStatus),
       },
       select: { id: true },
     })
     mapWorkflowLabId({
       maps: params.maps,
-      scopedMap: params.maps.assetRequirementIds,
-      sourceId: requirement.id,
-      targetId: createdRequirement.id,
+      scopedMap: params.maps.editScriptIds,
+      sourceId: editScript.id,
+      targetId: createdEditScript.id,
     })
-  }
 
-  if (editScript.shotExecutionPlan && shouldWorkflowLabCloneShotExecutionPlan(params.stage)) {
-    const createdShotPlan = await params.tx.projectEditShotExecutionPlan.create({
-      data: {
-        projectId: params.targetProjectId,
-        episodeId: params.targetEpisodeId,
-        chapterId: targetChapter.id,
-        editScriptId: createdEditScript.id,
-        executionPlanJson: toInputJson(editScript.shotExecutionPlan.executionPlanJson),
-        status: editScript.shotExecutionPlan.status,
-      },
-      select: { id: true },
-    })
-    mapWorkflowLabId({
-      maps: params.maps,
-      scopedMap: params.maps.shotExecutionPlanIds,
-      sourceId: editScript.shotExecutionPlan.id,
-      targetId: createdShotPlan.id,
-    })
+    for (const requirement of editScript.requirements) {
+      const keepTarget = shouldWorkflowLabKeepAssetRequirementTarget(params.stage)
+      const mappedTargetId = keepTarget && requirement.targetId
+        ? params.maps.characterIds.get(requirement.targetId)
+          ?? params.maps.locationIds.get(requirement.targetId)
+          ?? requirement.targetId
+        : null
+      const createdRequirement = await params.tx.projectEditAssetRequirement.create({
+        data: {
+          editScriptId: createdEditScript.id,
+          projectId: params.targetProjectId,
+          episodeId: params.targetEpisodeId,
+          chapterId: targetChapterId,
+          kind: requirement.kind,
+          name: requirement.name,
+          description: requirement.description,
+          requiredForShotIds: toInputJson(requirement.requiredForShotIds),
+          status: keepTarget ? requirement.status : 'pending',
+          targetId: mappedTargetId,
+          errorMessage: keepTarget ? requirement.errorMessage : null,
+        },
+        select: { id: true },
+      })
+      mapWorkflowLabId({
+        maps: params.maps,
+        scopedMap: params.maps.assetRequirementIds,
+        sourceId: requirement.id,
+        targetId: createdRequirement.id,
+      })
+    }
+
+    if (editScript.shotExecutionPlan && shouldWorkflowLabCloneShotExecutionPlan(params.stage)) {
+      const createdShotPlan = await params.tx.projectEditShotExecutionPlan.create({
+        data: {
+          projectId: params.targetProjectId,
+          episodeId: params.targetEpisodeId,
+          chapterId: targetChapterId,
+          editScriptId: createdEditScript.id,
+          executionPlanJson: toInputJson(editScript.shotExecutionPlan.executionPlanJson),
+          status: editScript.shotExecutionPlan.status,
+        },
+        select: { id: true },
+      })
+      mapWorkflowLabId({
+        maps: params.maps,
+        scopedMap: params.maps.shotExecutionPlanIds,
+        sourceId: editScript.shotExecutionPlan.id,
+        targetId: createdShotPlan.id,
+      })
+    }
   }
 }

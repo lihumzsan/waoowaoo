@@ -10,6 +10,7 @@ export interface WorkflowLabCloneMaps {
   readonly characterAppearanceIds: WorkflowLabIdMap
   readonly storyboardIds: WorkflowLabIdMap
   readonly panelIds: WorkflowLabIdMap
+  readonly chapterIds: WorkflowLabIdMap
   readonly bibleIds: WorkflowLabIdMap
   readonly stylePreviewIds: WorkflowLabIdMap
   readonly editScriptIds: WorkflowLabIdMap
@@ -27,6 +28,7 @@ export function createWorkflowLabCloneMaps(): WorkflowLabCloneMaps {
     characterAppearanceIds: new Map(),
     storyboardIds: new Map(),
     panelIds: new Map(),
+    chapterIds: new Map(),
     bibleIds: new Map(),
     stylePreviewIds: new Map(),
     editScriptIds: new Map(),
@@ -58,4 +60,31 @@ export function readMappedId(idMap: WorkflowLabIdMap, sourceId: string): string 
   const mappedId = idMap.get(sourceId)
   if (!mappedId) throw new Error(`WORKFLOW_LAB_ID_MAP_MISSING:${sourceId}`)
   return mappedId
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function addWorkflowLabPlanTargetReplacements(params: {
+  readonly planSnapshot: unknown
+  readonly replacements: Map<string, string>
+  readonly createId?: () => string
+}): void {
+  if (!isRecord(params.planSnapshot) || !Array.isArray(params.planSnapshot.tasks)) return
+  const createId = params.createId ?? (() => crypto.randomUUID())
+  const reservedIdentityIds = Array.isArray(params.planSnapshot.reservedIdentityIds)
+    ? params.planSnapshot.reservedIdentityIds
+    : []
+  for (const value of reservedIdentityIds) {
+    const identityId = typeof value === 'string' ? value.trim() : ''
+    if (!identityId || params.replacements.has(identityId)) continue
+    params.replacements.set(identityId, createId())
+  }
+  for (const task of params.planSnapshot.tasks) {
+    if (!isRecord(task) || !isRecord(task.target)) continue
+    const targetId = typeof task.target.targetId === 'string' ? task.target.targetId.trim() : ''
+    if (!targetId || params.replacements.has(targetId)) continue
+    params.replacements.set(targetId, createId())
+  }
 }

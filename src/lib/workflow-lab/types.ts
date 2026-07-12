@@ -23,6 +23,7 @@ export interface WorkflowLabCheckpointSummary {
   readonly detail: string | null
   readonly choiceType: EditFirstChoiceType | null
   readonly operationId: string | null
+  readonly sourceInterruptionId: string | null
   readonly messageIndex: number
   readonly partIndex: number
   readonly assistantMessageCount: number

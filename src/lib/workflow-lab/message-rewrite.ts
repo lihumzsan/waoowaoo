@@ -24,11 +24,18 @@ function rewriteValue(value: unknown, replacements: ReadonlyMap<string, string>)
   return rewritten
 }
 
+export function rewriteWorkflowLabValue<T>(
+  value: T,
+  replacements: ReadonlyMap<string, string>,
+): T {
+  return rewriteValue(value, replacements) as T
+}
+
 export function rewriteWorkflowLabAssistantMessages(params: {
   readonly messages: readonly UIMessage[]
   readonly replacements: ReadonlyMap<string, string>
 }): UIMessage[] {
-  return rewriteValue(params.messages, params.replacements) as UIMessage[]
+  return [...rewriteWorkflowLabValue(params.messages, params.replacements)]
 }
 
 export function buildWorkflowLabMessageReplacementMap(params: {

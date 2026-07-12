@@ -103,6 +103,7 @@ function readCheckpoint(value: unknown): WorkflowLabCheckpointSummary | null {
     detail: readString(record.detail),
     choiceType: choiceType as WorkflowLabCheckpointSummary['choiceType'],
     operationId: readString(record.operationId),
+    sourceInterruptionId: readString(record.sourceInterruptionId),
     messageIndex,
     partIndex,
     assistantMessageCount,

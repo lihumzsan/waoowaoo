@@ -25,6 +25,7 @@ import { cloneEpisodeProjectData } from './clone-episode-project-data'
 import { cloneWorkflowLabProjectAssets } from './clone-project-assets'
 import {
   createWorkflowLabCloneMaps,
+  addWorkflowLabPlanTargetReplacements,
   mapWorkflowLabId,
   type WorkflowLabCloneMaps,
 } from './clone-json'
@@ -32,11 +33,14 @@ import {
   findWorkflowLabCheckpoint,
   listWorkflowLabCheckpointsFromMessages,
   sliceWorkflowLabMessagesAtCheckpoint,
+  type WorkflowLabInterruptionSource,
 } from './checkpoints'
 import {
   buildWorkflowLabMessageReplacementMap,
   rewriteWorkflowLabAssistantMessages,
+  rewriteWorkflowLabValue,
 } from './message-rewrite'
+import { parseProjectAgentChoiceOffer } from '@/lib/project-agent/choice-offer'
 import type {
   WorkflowLabCheckpointListResult,
   WorkflowLabCheckpointSummary,
@@ -44,9 +48,12 @@ import type {
   WorkflowLabForkResult,
   WorkflowLabProjectSummary,
 } from './types'
+import { buildWorkflowLabProjectName } from './naming'
+import { validateProjectDraft } from '@/lib/projects/validation'
+import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 
-const WORKFLOW_LAB_NAME_PREFIX = '[LAB]'
 const WORKFLOW_LAB_TRANSACTION_TIMEOUT_MS = 30_000
+const WORKFLOW_LAB_APPROVAL_PLAN_TTL_MS = 15 * 60 * 1000
 
 function isWorkflowLabExplicitlyEnabled(): boolean {
   const value = process.env.WORKFLOW_LAB_ENABLED?.trim().toLowerCase() ?? ''
@@ -88,14 +95,6 @@ function summarizeProject(project: { readonly id: string; readonly name: string 
   }
 }
 
-function buildLabProjectName(params: {
-  readonly sourceName: string
-  readonly stage: string
-}): string {
-  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19)
-  return `${WORKFLOW_LAB_NAME_PREFIX} ${params.stage} - ${params.sourceName} - ${timestamp}`
-}
-
 async function loadSourceThread(params: {
   readonly projectId: string
   readonly userId: string
@@ -109,6 +108,53 @@ async function loadSourceThread(params: {
   })
 }
 
+async function loadSourceInterruptions(params: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}): Promise<WorkflowLabInterruptionSource[]> {
+  const records = await prisma.projectAgentInterruption.findMany({
+    where: {
+      projectId: params.projectId,
+      userId: params.userId,
+      assistantId: 'workspace-command',
+      scopeRef: buildProjectAssistantScopeRef({
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+      }),
+      type: { in: ['choice', 'approval'] },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      runId: true,
+      type: true,
+      status: true,
+      operationId: true,
+      approvalId: true,
+      toolCallId: true,
+      payload: true,
+      runState: true,
+    },
+  })
+  return records.map((record) => {
+    if (record.type !== 'choice' && record.type !== 'approval') {
+      throw new Error(`WORKFLOW_LAB_INTERRUPTION_TYPE_INVALID:${record.type}`)
+    }
+    return {
+      id: record.id,
+      runId: record.runId,
+      type: record.type,
+      status: record.status,
+      operationId: record.operationId,
+      approvalId: record.approvalId,
+      toolCallId: record.toolCallId,
+      payload: record.payload,
+      runState: record.runState,
+    }
+  })
+}
+
 async function validateWorkflowLabMessages(messages: readonly UIMessage[]): Promise<UIMessage[]> {
   const validation = await safeValidateUIMessages({ messages })
   if (!validation.success) {
@@ -119,6 +165,111 @@ async function validateWorkflowLabMessages(messages: readonly UIMessage[]): Prom
 
 function serializeWorkflowLabValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
+
+function readWorkflowLabRecord(value: unknown, code: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(code)
+  return value as Record<string, unknown>
+}
+
+async function cloneWorkflowLabApprovalPlan(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly source: WorkflowLabInterruptionSource
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly replacements: ReadonlyMap<string, string>
+}): Promise<{
+  readonly payload: Prisma.InputJsonValue
+  readonly replacements: ReadonlyMap<string, string>
+}> {
+  const sourcePayload = readWorkflowLabRecord(
+    params.source.payload,
+    'WORKFLOW_LAB_APPROVAL_PAYLOAD_INVALID',
+  )
+  const sourceOperationPlan = readWorkflowLabRecord(
+    sourcePayload.operationPlan,
+    'WORKFLOW_LAB_APPROVAL_OPERATION_PLAN_INVALID',
+  )
+  const sourceSnapshotId = typeof sourceOperationPlan.planSnapshotId === 'string'
+    ? sourceOperationPlan.planSnapshotId.trim()
+    : ''
+  if (!sourceSnapshotId) throw new Error('WORKFLOW_LAB_APPROVAL_PLAN_SNAPSHOT_ID_MISSING')
+  const sourceSnapshot = await params.tx.operationPlanSnapshot.findUnique({
+    where: { id: sourceSnapshotId },
+  })
+  if (!sourceSnapshot) throw new Error('WORKFLOW_LAB_APPROVAL_PLAN_SNAPSHOT_MISSING')
+  if (
+    sourceSnapshot.userId !== params.userId
+    || sourceSnapshot.scopeKind !== 'project'
+    || sourceSnapshot.operationId !== params.source.operationId
+  ) {
+    throw new Error('WORKFLOW_LAB_APPROVAL_PLAN_SCOPE_INVALID')
+  }
+
+  const targetSnapshotId = crypto.randomUUID()
+  const replacements = new Map(params.replacements)
+  replacements.set(sourceSnapshotId, targetSnapshotId)
+  addWorkflowLabPlanTargetReplacements({
+    planSnapshot: sourceSnapshot.planSnapshot,
+    replacements,
+  })
+  const normalizedInput = serializeWorkflowLabValue(
+    rewriteWorkflowLabValue(sourceSnapshot.normalizedInput, replacements),
+  )
+  const planSnapshot = serializeWorkflowLabValue(
+    rewriteWorkflowLabValue(sourceSnapshot.planSnapshot, replacements),
+  )
+  const quoteSnapshot = serializeWorkflowLabValue(
+    rewriteWorkflowLabValue(sourceSnapshot.quoteSnapshot, replacements),
+  )
+  const inputHash = hashCanonicalJson(normalizedInput)
+  const planHash = hashCanonicalJson(planSnapshot)
+  const quoteHash = hashCanonicalJson(quoteSnapshot)
+  const expiresAt = new Date(Date.now() + WORKFLOW_LAB_APPROVAL_PLAN_TTL_MS)
+  await params.tx.operationPlanSnapshot.create({
+    data: {
+      id: targetSnapshotId,
+      contractVersion: sourceSnapshot.contractVersion,
+      userId: params.userId,
+      scopeKind: 'project',
+      scopeId: params.projectId,
+      projectId: params.projectId,
+      episodeId: sourceSnapshot.episodeId ? params.episodeId : null,
+      operationId: sourceSnapshot.operationId,
+      normalizedInput,
+      inputHash,
+      planSnapshot,
+      planHash,
+      quoteSnapshot,
+      quoteHash,
+      expiresAt,
+    },
+  })
+
+  const rewrittenPayload = readWorkflowLabRecord(
+    rewriteWorkflowLabValue(sourcePayload, replacements),
+    'WORKFLOW_LAB_APPROVAL_PAYLOAD_REWRITE_INVALID',
+  )
+  const rewrittenOperationPlan = readWorkflowLabRecord(
+    rewrittenPayload.operationPlan,
+    'WORKFLOW_LAB_APPROVAL_OPERATION_PLAN_REWRITE_INVALID',
+  )
+  return {
+    replacements,
+    payload: serializeWorkflowLabValue({
+      ...rewrittenPayload,
+      inputHash,
+      operationPlan: {
+        ...rewrittenOperationPlan,
+        planSnapshotId: targetSnapshotId,
+        inputHash,
+        planHash,
+        quoteHash,
+        expiresAt: expiresAt.toISOString(),
+      },
+    }),
+  }
 }
 
 async function findSourceEpisode(params: {
@@ -171,19 +322,27 @@ export async function listWorkflowLabCheckpoints(params: {
     userId: params.userId,
     episodeId: sourceEpisode.id,
   })
-  const sourceThread = await loadSourceThread({
-    projectId: params.projectId,
-    userId: params.userId,
-    episodeId: sourceEpisode.id,
-  })
+  const [sourceThread, sourceInterruptions] = await Promise.all([
+    loadSourceThread({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: sourceEpisode.id,
+    }),
+    loadSourceInterruptions({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: sourceEpisode.id,
+    }),
+  ])
 
   return {
     sourceEpisode: summarizeEpisode(sourceEpisode, sourceWorkflow),
     checkpoints: sourceThread
       ? listWorkflowLabCheckpointsFromMessages({
-        sourceEpisodeId: sourceEpisode.id,
-        messages: sourceThread.messages,
-      })
+          sourceEpisodeId: sourceEpisode.id,
+          messages: sourceThread.messages,
+          interruptions: sourceInterruptions,
+        })
       : [],
   }
 }
@@ -208,36 +367,19 @@ async function createLabChoiceCheckpointState(params: {
   readonly episodeId: string
   readonly checkpoint: WorkflowLabCheckpointSummary
   readonly messages: readonly UIMessage[]
+  readonly sourceCard: ProjectAgentChoiceCardPartData | null
 }): Promise<UIMessage[]> {
   if (params.checkpoint.kind !== 'choice' || !params.checkpoint.choiceType) {
     return [...params.messages]
   }
-  const checkpointMessage = params.messages[params.checkpoint.messageIndex]
-  const checkpointPart = checkpointMessage?.parts[params.checkpoint.partIndex]
-  if (!checkpointPart || checkpointPart.type !== 'data-assistant-choice-card') {
-    throw new Error('WORKFLOW_LAB_CHOICE_CARD_NOT_FOUND')
-  }
-  const card = await createLabChoiceState({
+  if (!params.sourceCard) throw new Error('WORKFLOW_LAB_CHOICE_CARD_NOT_FOUND')
+  await createLabChoiceState({
     ...params,
     choiceType: params.checkpoint.choiceType,
     operationId: EDIT_FIRST_CHOICE_TOOL_IDS[params.checkpoint.choiceType],
-    card: checkpointPart.data as ProjectAgentChoiceCardPartData,
+    card: params.sourceCard,
   })
-  return params.messages.map((message, messageIndex) => (
-    messageIndex !== params.checkpoint.messageIndex
-      ? message
-      : {
-          ...message,
-          parts: message.parts.map((part, partIndex) => (
-            partIndex !== params.checkpoint.partIndex
-              ? part
-              : {
-                  ...checkpointPart,
-                  data: card,
-                }
-          )),
-        }
-  ))
+  return [...params.messages]
 }
 
 async function createLabChoiceState(params: {
@@ -319,6 +461,74 @@ async function createLabChoiceState(params: {
   return card
 }
 
+async function createLabApprovalCheckpointState(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+  readonly sourceInterruption: WorkflowLabInterruptionSource
+  readonly replacements: ReadonlyMap<string, string>
+}): Promise<void> {
+  const source = params.sourceInterruption
+  if (source.type !== 'approval') throw new Error('WORKFLOW_LAB_APPROVAL_INTERRUPTION_INVALID')
+  if (!source.runState) throw new Error('WORKFLOW_LAB_APPROVAL_RUN_STATE_MISSING')
+
+  const runId = crypto.randomUUID()
+  const activityId = crypto.randomUUID()
+  const interruptionId = crypto.randomUUID()
+  const requestId = crypto.randomUUID()
+  const scopeRef = buildProjectAssistantScopeRef({
+    projectId: params.projectId,
+    episodeId: params.episodeId,
+  })
+  const clonedPlan = await cloneWorkflowLabApprovalPlan({
+    tx: params.tx,
+    source,
+    projectId: params.projectId,
+    userId: params.userId,
+    episodeId: params.episodeId,
+    replacements: params.replacements,
+  })
+  const runStateReplacements = new Map(clonedPlan.replacements)
+  if (source.runId) runStateReplacements.set(source.runId, runId)
+  const runState = rewriteWorkflowLabValue(source.runState, runStateReplacements)
+  const runFence = createInitialProjectAgentRunFence(runId)
+  await appendProjectAgentEventsInTransaction(params.tx, {
+    scope: {
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      assistantId: 'workspace-command',
+      scopeRef,
+    },
+    events: [{
+      runFence,
+      idempotencyKey: `workflow-lab:run-started:${runId}`,
+      event: {
+        kind: 'run.started',
+        runId,
+        requestId,
+        controlKind: 'user_turn',
+      },
+    }, {
+      runFence,
+      idempotencyKey: `workflow-lab:interruption-raised:${interruptionId}`,
+      event: {
+        kind: 'interruption.raised',
+        runId,
+        activityId,
+        interruptionId,
+        interruptionKind: 'approval',
+        operationId: source.operationId,
+        approvalId: source.approvalId,
+        toolCallId: source.toolCallId,
+        payload: clonedPlan.payload,
+        runState,
+      },
+    }],
+  })
+}
+
 async function createLabCheckpointAgentState(params: {
   readonly tx: Prisma.TransactionClient
   readonly projectId: string
@@ -326,9 +536,23 @@ async function createLabCheckpointAgentState(params: {
   readonly episodeId: string
   readonly checkpoint: WorkflowLabCheckpointSummary
   readonly messages: readonly UIMessage[]
+  readonly sourceCard: ProjectAgentChoiceCardPartData | null
+  readonly sourceInterruption: WorkflowLabInterruptionSource | null
+  readonly replacements: ReadonlyMap<string, string>
 }): Promise<UIMessage[]> {
   if (params.checkpoint.kind === 'choice') {
     return await createLabChoiceCheckpointState(params)
+  }
+  if (params.checkpoint.kind === 'approval') {
+    if (!params.sourceInterruption) throw new Error('WORKFLOW_LAB_APPROVAL_INTERRUPTION_NOT_FOUND')
+    await createLabApprovalCheckpointState({
+      tx: params.tx,
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      sourceInterruption: params.sourceInterruption,
+      replacements: params.replacements,
+    })
   }
   return [...params.messages]
 }
@@ -342,7 +566,7 @@ export async function forkWorkflowLabCheckpointProject(params: {
 }): Promise<WorkflowLabForkResult> {
   assertWorkflowLabEnabled()
 
-  const [sourceProject, sourceEpisode, sourceThread] = await Promise.all([
+  const [sourceProject, sourceEpisode, sourceThread, sourceInterruptions] = await Promise.all([
     prisma.project.findFirst({
       where: {
         id: params.projectId,
@@ -355,6 +579,11 @@ export async function forkWorkflowLabCheckpointProject(params: {
       episodeId: params.sourceEpisodeId,
     }),
     loadSourceThread({
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.sourceEpisodeId,
+    }),
+    loadSourceInterruptions({
       projectId: params.projectId,
       userId: params.userId,
       episodeId: params.sourceEpisodeId,
@@ -377,6 +606,7 @@ export async function forkWorkflowLabCheckpointProject(params: {
   const checkpoint = findWorkflowLabCheckpoint({
     sourceEpisodeId: sourceEpisode.id,
     messages: sourceThread.messages,
+    interruptions: sourceInterruptions,
     checkpointId: params.checkpointId,
   })
   if (!checkpoint) {
@@ -386,7 +616,18 @@ export async function forkWorkflowLabCheckpointProject(params: {
     })
   }
 
-  const forkName = params.name?.trim() || buildLabProjectName({
+  const requestedName = params.name?.trim() || null
+  if (requestedName) {
+    const issue = validateProjectDraft({ name: requestedName })
+    if (issue) {
+      throw new ApiError('INVALID_PARAMS', {
+        code: issue.code,
+        field: issue.field,
+        message: 'workflow lab project name is invalid',
+      })
+    }
+  }
+  const forkName = requestedName ?? buildWorkflowLabProjectName({
     sourceName: sourceProject.name,
     stage: checkpoint.workflowStage,
   })
@@ -478,6 +719,22 @@ export async function forkWorkflowLabCheckpointProject(params: {
         idMap: maps.allIds,
       }),
     })
+    const replacements = buildWorkflowLabMessageReplacementMap({
+      sourceProjectId: sourceProject.id,
+      targetProjectId: labProject.id,
+      sourceEpisodeId: sourceEpisode.id,
+      targetEpisodeId: labEpisode.id,
+      idMap: maps.allIds,
+    })
+    const sourceInterruption = checkpoint.sourceInterruptionId
+      ? sourceInterruptions.find((candidate) => candidate.id === checkpoint.sourceInterruptionId) ?? null
+      : null
+    const sourceCard = checkpoint.kind === 'choice'
+      ? rewriteWorkflowLabValue(
+          parseProjectAgentChoiceOffer(sourceInterruption?.payload).card,
+          replacements,
+        )
+      : null
     const validatedMessages = await validateWorkflowLabMessages(rewrittenMessages)
     const messages = await createLabCheckpointAgentState({
       tx,
@@ -486,6 +743,9 @@ export async function forkWorkflowLabCheckpointProject(params: {
       episodeId: labEpisode.id,
       checkpoint,
       messages: validatedMessages,
+      sourceCard,
+      sourceInterruption,
+      replacements,
     })
     await appendProjectAssistantThreadMessagesInTransaction(tx, {
       projectId: labProject.id,
