@@ -1,0 +1,91 @@
+export type FirstLastFramePromptEntry = {
+  value: string
+  origin: 'derived' | 'generated' | 'user'
+  dirty: boolean
+  status: 'idle' | 'queued' | 'processing' | 'saving' | 'error'
+  sourceFingerprint?: string
+  fallbackUsed?: boolean
+  errorMessage?: string
+}
+
+export type FirstLastFramePromptResult = {
+  prompt: string
+  sourceFingerprint: string
+  applied: boolean
+  fallbackUsed: boolean
+  warnings: string[]
+}
+
+export function createPersistedPromptEntry(params: {
+  prompt?: string | null
+  editedByUser?: boolean | null
+  sourceFingerprint?: string | null
+}): FirstLastFramePromptEntry | undefined {
+  const value = params.prompt?.trim() || ''
+  if (!value) return undefined
+  return {
+    value,
+    origin: params.editedByUser ? 'user' : 'generated',
+    dirty: false,
+    status: 'idle',
+    ...(params.sourceFingerprint ? { sourceFingerprint: params.sourceFingerprint } : {}),
+  }
+}
+
+export function buildFirstLastFrameVideoPrompt(entry: FirstLastFramePromptEntry) {
+  return {
+    customPrompt: entry.value,
+    customPromptEditedByUser: entry.origin === 'user',
+  }
+}
+
+export function markPromptSourceChanged(
+  entry: FirstLastFramePromptEntry,
+  sourceFingerprint: string,
+): FirstLastFramePromptEntry {
+  if (entry.sourceFingerprint === sourceFingerprint) return entry
+  return {
+    value: '',
+    origin: 'derived',
+    dirty: false,
+    status: 'queued',
+    sourceFingerprint,
+  }
+}
+
+export function shouldApplyPromptResult(params: {
+  linked: boolean
+  requestRevision: number
+  currentRevision: number
+}) {
+  return params.linked && params.requestRevision === params.currentRevision
+}
+
+export function projectPromptTaskState(
+  entry: FirstLastFramePromptEntry,
+  task: { phase?: string | null; errorMessage?: string | null },
+): FirstLastFramePromptEntry {
+  if (task.phase === 'queued' || task.phase === 'processing') {
+    return { ...entry, status: task.phase, errorMessage: undefined }
+  }
+  if (task.phase === 'failed') {
+    return { ...entry, status: 'error', errorMessage: task.errorMessage || undefined }
+  }
+  return entry
+}
+
+export function applyPromptResult(
+  entry: FirstLastFramePromptEntry,
+  result: FirstLastFramePromptResult,
+): FirstLastFramePromptEntry {
+  if (!result.applied) return { ...entry, status: 'idle' }
+  return {
+    value: result.prompt,
+    origin: 'generated',
+    dirty: false,
+    status: 'idle',
+    sourceFingerprint: result.sourceFingerprint,
+    fallbackUsed: result.fallbackUsed,
+    errorMessage: undefined,
+  }
+}

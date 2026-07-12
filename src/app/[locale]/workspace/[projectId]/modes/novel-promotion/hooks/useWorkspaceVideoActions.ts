@@ -126,7 +126,7 @@ export function useWorkspaceVideoActions({
     value: string,
     field: 'videoPrompt' | 'firstLastFramePrompt' = 'videoPrompt',
   ) => {
-    await updateProjectPanelVideoPromptMutation.mutateAsync({ storyboardId, panelIndex, value, field })
+    await updateProjectPanelVideoPromptMutation.mutateAsync({ storyboardId, panelIndex, value, field, episodeId })
   }
 
   const handleUpdatePanelVideoModel = async (storyboardId: string, panelIndex: number, model: string) => {

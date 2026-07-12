@@ -134,8 +134,12 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       flGenerationOptions: {},
       flCapabilityFields: [],
       flMissingCapabilityFields: [],
-      flCustomPrompt: '',
-      defaultFlPrompt: '',
+      flPromptEntry: {
+        value: 'Visible transition prompt',
+        origin: 'generated',
+        dirty: false,
+        status: 'idle',
+      },
       videoRatio: '9:16',
     },
     actions: {
@@ -147,8 +151,8 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       onToggleLink: () => undefined,
       onFlModelChange: () => undefined,
       onFlCapabilityChange: () => undefined,
-      onFlCustomPromptChange: () => undefined,
-      onResetFlPrompt: () => undefined,
+      onFlPromptChange: () => undefined,
+      onRegenerateFlPrompt: async () => undefined,
       onGenerateFirstLastFrame: () => undefined,
     },
     computed: {
@@ -177,6 +181,42 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
   })
+  it('shows prompt task state and disables editing and video submission while generation is active', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Keep visible text',
+      origin: 'generated',
+      dirty: false,
+      status: 'processing',
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('firstLastFrame.promptProcessing')
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>edit<\/span><\/button>/)
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>生成首尾帧视频<\/button>/)
+  })
+
+  it('shows fallback warning and retry without blocking video submission', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Fallback transition',
+      origin: 'generated',
+      dirty: false,
+      status: 'idle',
+      fallbackUsed: true,
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('firstLastFrame.promptFallbackWarning')
+    expect(markup).toContain('firstLastFrame.retryPrompt')
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>生成首尾帧视频<\/button>/)
+  })
   it('shows long-video guidance and disables generation when linked audio is too long for the selected workflow', () => {
     const markup = renderToStaticMarkup(
       React.createElement(VideoPanelCardBody, {
@@ -192,8 +232,7 @@ describe('VideoPanelCardBody', () => {
             flGenerationOptions: {},
             flCapabilityFields: [],
             flMissingCapabilityFields: [],
-            flCustomPrompt: '',
-            defaultFlPrompt: '',
+            flPromptEntry: undefined,
             videoRatio: '9:16',
           },
           durationBinding: {

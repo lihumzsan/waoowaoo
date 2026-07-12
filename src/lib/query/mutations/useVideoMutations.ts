@@ -1,7 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { invalidateEpisodeQueries } from '../episode-cache'
-import { invalidateQueryTemplates, requestJsonWithError } from './mutation-shared'
+import { invalidateQueryTemplates, requestJsonWithError, requestTaskResponseWithError } from './mutation-shared'
+import { resolveTaskResponse } from '@/lib/task/client'
+import type { FirstLastFramePromptReason } from '@/lib/novel-promotion/first-last-frame-prompt'
+import type { FirstLastFramePromptResult } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
 import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 
 /**
@@ -22,6 +25,47 @@ export function useListProjectEpisodeVideoUrls(projectId: string) {
         },
         '获取视频列表失败',
       ),
+  })
+}
+
+export async function invalidateFirstLastFramePromptCaches(
+  queryClient: QueryClient,
+  projectId: string,
+  episodeId: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.episodeDataPrefix(projectId, episodeId), exact: false }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.storyboards.all(episodeId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.videos.all(episodeId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.videos.panels(episodeId) }),
+  ])
+}
+
+export function useGenerateFirstLastFramePrompt(projectId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: {
+      firstPanelId: string
+      lastPanelId: string
+      episodeId: string
+      reason: FirstLastFramePromptReason
+    }) => {
+      const response = await requestTaskResponseWithError(
+        `/api/novel-promotion/${projectId}/first-last-frame-prompt`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'generate first/last frame prompt failed',
+      )
+      return await resolveTaskResponse<FirstLastFramePromptResult>(response)
+    },
+    onSettled: (_data, _error, variables) => {
+      void invalidateFirstLastFramePromptCaches(queryClient, projectId, variables.episodeId)
+    },
   })
 }
 
@@ -64,6 +108,7 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string) {
       panelIndex: number
       value: string
       field?: 'videoPrompt' | 'firstLastFramePrompt'
+      episodeId?: string
     }) =>
       await requestJsonWithError(
         `/api/novel-promotion/${projectId}/panel`,
@@ -80,8 +125,12 @@ export function useUpdateProjectPanelVideoPrompt(projectId: string) {
         },
         'update failed',
       ),
-    onSettled: () => {
-      invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
+    onSettled: (_data, _error, variables) => {
+      if (variables.field === 'firstLastFramePrompt' && variables.episodeId) {
+        void invalidateFirstLastFramePromptCaches(queryClient, projectId, variables.episodeId)
+        return
+      }
+      void invalidateQueryTemplates(queryClient, [queryKeys.projectData(projectId)])
     },
   })
 }

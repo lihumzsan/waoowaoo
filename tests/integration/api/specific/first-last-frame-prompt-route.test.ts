@@ -15,11 +15,20 @@ const maybeSubmitLLMTaskMock = vi.hoisted(() => vi.fn(
     })
   },
 ))
-const validateMock = vi.hoisted(() => vi.fn(async () => ({
-  firstPanel: { id: 'panel-1' },
+const validateMock = vi.hoisted(() => vi.fn(async (): Promise<{
+  firstPanel: {
+    id: string
+    firstLastFramePrompt: string | null
+    firstLastFramePromptSourceFingerprint: string | null
+  }
+  lastPanel: { id: string }
+  episodeId: string
+}> => ({
+  firstPanel: { id: 'panel-1', firstLastFramePrompt: null, firstLastFramePromptSourceFingerprint: null },
   lastPanel: { id: 'panel-2' },
   episodeId: 'episode-1',
 })))
+const fingerprintMock = vi.hoisted(() => vi.fn(() => 'fingerprint-current'))
 const validationErrorMock = vi.hoisted(() => ({
   ErrorClass: class FirstLastFramePromptValidationError extends Error {},
 }))
@@ -41,6 +50,7 @@ vi.mock('@/lib/llm-observe/route-task', () => ({
 }))
 vi.mock('@/lib/novel-promotion/first-last-frame-prompt', () => ({
   loadAdjacentFirstLastFramePanels: validateMock,
+  buildFirstLastFramePromptFingerprint: fingerprintMock,
   FirstLastFramePromptValidationError: validationErrorMock.ErrorClass,
 }))
 
@@ -51,7 +61,7 @@ describe('POST first-last-frame-prompt', () => {
     vi.clearAllMocks()
     authState.authorized = true
     validateMock.mockResolvedValue({
-      firstPanel: { id: 'panel-1' },
+      firstPanel: { id: 'panel-1', firstLastFramePrompt: null, firstLastFramePromptSourceFingerprint: null },
       lastPanel: { id: 'panel-2' },
       episodeId: 'episode-1',
     })
@@ -101,11 +111,60 @@ describe('POST first-last-frame-prompt', () => {
         episodeId: 'episode-1',
         reason: 'source_change',
       },
-      dedupeKey: 'generate_first_last_frame_prompt:panel-1:panel-2',
+      dedupeKey: 'generate_first_last_frame_prompt:panel-1:panel-2:fingerprint-current',
     }))
     const submitted = maybeSubmitLLMTaskMock.mock.calls[0]?.[0]
     expect(submitted?.body).not.toHaveProperty('firstImageUrl')
     expect(submitted?.body).not.toHaveProperty('lastImageUrl')
+  })
+
+  it('returns the matching persisted prompt without submitting an automatic ensure task', async () => {
+    validateMock.mockResolvedValueOnce({
+      firstPanel: {
+        id: 'panel-1',
+        firstLastFramePrompt: 'Persisted transition',
+        firstLastFramePromptSourceFingerprint: 'fingerprint-current',
+      },
+      lastPanel: { id: 'panel-2' },
+      episodeId: 'episode-1',
+    })
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'source_change',
+    }, { params: { projectId: 'project-1' } })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      prompt: 'Persisted transition',
+      sourceFingerprint: 'fingerprint-current',
+      applied: true,
+      fallbackUsed: false,
+      warnings: [],
+    })
+    expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('always submits manual regeneration even when the persisted fingerprint matches', async () => {
+    validateMock.mockResolvedValueOnce({
+      firstPanel: {
+        id: 'panel-1',
+        firstLastFramePrompt: 'Persisted transition',
+        firstLastFramePromptSourceFingerprint: 'fingerprint-current',
+      },
+      lastPanel: { id: 'panel-2' },
+      episodeId: 'episode-1',
+    })
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'manual',
+    }, { params: { projectId: 'project-1' } })
+
+    expect(response.status).toBe(200)
+    expect(maybeSubmitLLMTaskMock).toHaveBeenCalledOnce()
   })
 
   it.each([

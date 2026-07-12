@@ -54,6 +54,7 @@ export interface Panel {
   videoPromptEditedByUser?: boolean | null
   firstLastFramePrompt?: string | null
   firstLastFramePromptEditedByUser?: boolean | null
+  firstLastFramePromptSourceFingerprint?: string | null
   videoDurationBinding?: VideoDurationBinding | string | null
   videoUrl?: string | null
   videoGenerationMode?: VideoGenerationMode | null
@@ -97,6 +98,7 @@ export interface VideoPanel {
   firstLastFramePrompt?: string
   videoPromptEditedByUser?: boolean
   firstLastFramePromptEditedByUser?: boolean
+  firstLastFramePromptSourceFingerprint?: string
   videoDurationBinding?: VideoDurationBinding
   imageUrl?: string
   videoUrl?: string

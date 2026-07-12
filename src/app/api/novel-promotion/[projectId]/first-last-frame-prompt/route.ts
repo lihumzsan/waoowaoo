@@ -1,9 +1,10 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireProjectAuthLight, isErrorResponse } from '@/lib/api-auth'
 import { apiHandler, ApiError } from '@/lib/api-errors'
 import { maybeSubmitLLMTask } from '@/lib/llm-observe/route-task'
 import {
   FirstLastFramePromptValidationError,
+  buildFirstLastFramePromptFingerprint,
   loadAdjacentFirstLastFramePanels,
   type FirstLastFramePromptReason,
 } from '@/lib/novel-promotion/first-last-frame-prompt'
@@ -31,33 +32,50 @@ export const POST = apiHandler(async (
   }
 
   try {
-    await loadAdjacentFirstLastFramePanels({ projectId, firstPanelId, lastPanelId, episodeId })
+    const panels = await loadAdjacentFirstLastFramePanels({ projectId, firstPanelId, lastPanelId, episodeId })
+    const sourceFingerprint = buildFirstLastFramePromptFingerprint(
+      panels.firstPanel as unknown as Record<string, unknown>,
+      panels.lastPanel as unknown as Record<string, unknown>,
+    )
+    if (
+      reason !== 'manual'
+      && panels.firstPanel.firstLastFramePrompt
+      && panels.firstPanel.firstLastFramePromptSourceFingerprint === sourceFingerprint
+    ) {
+      return NextResponse.json({
+        prompt: panels.firstPanel.firstLastFramePrompt,
+        sourceFingerprint,
+        applied: true,
+        fallbackUsed: false,
+        warnings: [],
+      })
+    }
+
+    const body = {
+      firstPanelId,
+      lastPanelId,
+      ...(episodeId ? { episodeId } : {}),
+      reason,
+    }
+    const asyncTaskResponse = await maybeSubmitLLMTask({
+      request,
+      userId: authResult.session.user.id,
+      projectId,
+      episodeId: episodeId || null,
+      type: TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT,
+      targetType: 'NovelPromotionPanel',
+      targetId: firstPanelId,
+      routePath: `/api/novel-promotion/${projectId}/first-last-frame-prompt`,
+      body,
+      dedupeKey: `${TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT}:${firstPanelId}:${lastPanelId}:${sourceFingerprint}`,
+    })
+    if (asyncTaskResponse) return asyncTaskResponse
   } catch (error) {
     if (error instanceof FirstLastFramePromptValidationError) {
       throw new ApiError('INVALID_PARAMS')
     }
     throw error
   }
-
-  const body = {
-    firstPanelId,
-    lastPanelId,
-    ...(episodeId ? { episodeId } : {}),
-    reason,
-  }
-  const asyncTaskResponse = await maybeSubmitLLMTask({
-    request,
-    userId: authResult.session.user.id,
-    projectId,
-    episodeId: episodeId || null,
-    type: TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT,
-    targetType: 'NovelPromotionPanel',
-    targetId: firstPanelId,
-    routePath: `/api/novel-promotion/${projectId}/first-last-frame-prompt`,
-    body,
-    dedupeKey: `${TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT}:${firstPanelId}:${lastPanelId}`,
-  })
-  if (asyncTaskResponse) return asyncTaskResponse
 
   // sync mode is disabled for this route; prompt generation only runs in the text worker.
   throw new ApiError('INVALID_PARAMS')

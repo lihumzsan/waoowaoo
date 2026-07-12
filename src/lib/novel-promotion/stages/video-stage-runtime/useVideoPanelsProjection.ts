@@ -96,6 +96,7 @@ export function useVideoPanelsProjection({
           firstLastFramePrompt: panel.firstLastFramePrompt || undefined,
           videoPromptEditedByUser: panel.videoPromptEditedByUser === true,
           firstLastFramePromptEditedByUser: panel.firstLastFramePromptEditedByUser === true,
+          firstLastFramePromptSourceFingerprint: panel.firstLastFramePromptSourceFingerprint || undefined,
           videoDurationBinding: parseVideoDurationBinding(panel.videoDurationBinding),
           videoUrl: panel.videoUrl || undefined,
           videoGenerationMode: panel.videoGenerationMode || undefined,

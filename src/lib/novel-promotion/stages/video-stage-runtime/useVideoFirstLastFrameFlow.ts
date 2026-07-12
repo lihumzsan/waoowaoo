@@ -14,6 +14,8 @@ import {
 } from '@/lib/model-capabilities/video-effective'
 import { supportsFirstLastFrame } from '@/lib/model-capabilities/video-model-options'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
+import { buildFirstLastFrameVideoPrompt } from './first-last-frame-prompt-entry'
+import { useFirstLastFramePromptEntries } from './useFirstLastFramePromptEntries'
 
 interface FirstLastFrameCapabilityField {
   field: string
@@ -39,6 +41,8 @@ function toFieldLabel(field: string): string {
 }
 
 interface UseVideoFirstLastFrameFlowParams {
+  projectId: string
+  episodeId: string
   allPanels: VideoPanel[]
   linkedPanels: Map<string, boolean>
   videoModelOptions: VideoModelOption[]
@@ -51,21 +55,36 @@ interface UseVideoFirstLastFrameFlowParams {
       lastFramePanelIndex: number
       flModel: string
       customPrompt?: string
+      customPromptEditedByUser?: boolean
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
     customPrompt?: string,
   ) => Promise<void>
-  t: (key: string) => string
+  promptTaskStates: {
+    getTaskState: (key: string) => {
+      phase?: string | null
+      lastError?: { message?: string | null } | null
+    } | null
+  }
+  onUpdatePrompt: (
+    storyboardId: string,
+    panelIndex: number,
+    value: string,
+    field: 'firstLastFramePrompt',
+  ) => Promise<void>
 }
 
 export function useVideoFirstLastFrameFlow({
+  projectId,
+  episodeId,
   allPanels,
   linkedPanels,
   videoModelOptions,
   onGenerateVideo,
-  t,
+  promptTaskStates,
+  onUpdatePrompt,
 }: UseVideoFirstLastFrameFlowParams) {
   const firstLastFrameModelOptions = useMemo(
     () => videoModelOptions.filter((option) => supportsFirstLastFrame(option)),
@@ -73,28 +92,6 @@ export function useVideoFirstLastFrameFlow({
   )
   const [flModel, setFlModel] = useState(firstLastFrameModelOptions[0]?.value || '')
   const [flGenerationOptions, setFlGenerationOptions] = useState<VideoGenerationOptions>({})
-  const [flCustomPrompts, setFlCustomPrompts] = useState<Map<string, string>>(new Map())
-
-  useEffect(() => {
-    setFlCustomPrompts((previous) => {
-      const next = new Map(previous)
-      const existingPanelKeys = new Set<string>()
-
-      for (const panel of allPanels) {
-        const panelKey = `${panel.storyboardId}-${panel.panelIndex}`
-        existingPanelKeys.add(panelKey)
-        if (!next.has(panelKey) && panel.firstLastFramePrompt) {
-          next.set(panelKey, panel.firstLastFramePrompt)
-        }
-      }
-
-      for (const key of next.keys()) {
-        if (!existingPanelKeys.has(key)) next.delete(key)
-      }
-
-      return next
-    })
-  }, [allPanels])
 
   useEffect(() => {
     if (!flModel && firstLastFrameModelOptions.length > 0) {
@@ -194,26 +191,23 @@ export function useVideoFirstLastFrameFlow({
     }))
   }, [flCapabilityDefinitions, flDefinitionFieldMap, flPricingTiers])
 
-  const setFlCustomPrompt = useCallback((panelKey: string, value: string) => {
-    setFlCustomPrompts((previous) => new Map(previous).set(panelKey, value))
-  }, [])
-
-  const resetFlCustomPrompt = useCallback((panelKey: string) => {
-    setFlCustomPrompts((previous) => {
-      const next = new Map(previous)
-      next.delete(panelKey)
-      return next
-    })
-  }, [])
-
-  const getDefaultFlPrompt = useCallback((firstPrompt?: string, lastPrompt?: string): string => {
-    const first = firstPrompt || ''
-    const last = lastPrompt || ''
-    if (last) {
-      return `${first} ${t('firstLastFrame.thenTransitionTo')}: ${last}`
-    }
-    return first
-  }, [t])
+  const {
+    promptEntries,
+    getPromptEntry,
+    setPromptValue,
+    savePromptValue,
+    ensurePrompt,
+    unlinkPrompt,
+  } = useFirstLastFramePromptEntries({
+    projectId,
+    episodeId,
+    allPanels,
+    linkedPanels,
+    flModel,
+    flGenerationOptions,
+    promptTaskStates,
+    onUpdatePrompt,
+  })
 
   const handleGenerateFirstLastFrame = useCallback(async (
     firstStoryboardId: string,
@@ -224,11 +218,6 @@ export function useVideoFirstLastFrameFlow({
     generationOptions?: VideoGenerationOptions,
     firstPanelId?: string,
   ) => {
-    const persistedCustomPrompt = allPanels.find(
-      (panel) =>
-        panel.storyboardId === firstStoryboardId
-        && panel.panelIndex === firstPanelIndex,
-    )?.firstLastFramePrompt
     const firstPanel = allPanels.find(
       (panel) =>
         panel.storyboardId === firstStoryboardId
@@ -239,17 +228,17 @@ export function useVideoFirstLastFrameFlow({
         panel.storyboardId === lastStoryboardId
         && panel.panelIndex === lastPanelIndex,
     )
-    const customPrompt = (flCustomPrompts.get(panelKey) || persistedCustomPrompt || getDefaultFlPrompt(
-      firstPanel?.textPanel?.video_prompt || firstPanel?.textPanel?.description,
-      lastPanel?.textPanel?.video_prompt || lastPanel?.textPanel?.description,
-    )).trim()
+    if (!firstPanel || !lastPanel) return
+    const entry = getPromptEntry(panelKey)
+    if (!entry) return
+    const requestPrompt = buildFirstLastFrameVideoPrompt(entry)
     await onGenerateVideo(firstStoryboardId, firstPanelIndex, flModel, {
       lastFrameStoryboardId: lastStoryboardId,
       lastFramePanelIndex: lastPanelIndex,
       flModel,
-      customPrompt,
+      ...requestPrompt,
     }, generationOptions ?? flGenerationOptions, firstPanelId, firstPanel?.videoDurationBinding)
-  }, [allPanels, flCustomPrompts, flGenerationOptions, flModel, getDefaultFlPrompt, onGenerateVideo])
+  }, [allPanels, flGenerationOptions, flModel, getPromptEntry, onGenerateVideo])
 
   const getNextPanel = useCallback((currentIndex: number): VideoPanel | null => {
     if (currentIndex >= allPanels.length - 1) return null
@@ -269,13 +258,14 @@ export function useVideoFirstLastFrameFlow({
     flGenerationOptions,
     flCapabilityFields,
     flMissingCapabilityFields,
-    flCustomPrompts,
+    promptEntries,
     setFlModel,
     setFlCapabilityValue,
-    setFlCustomPrompt,
-    resetFlCustomPrompt,
+    setPromptValue,
+    savePromptValue,
+    ensurePrompt,
+    unlinkPrompt,
     handleGenerateFirstLastFrame,
-    getDefaultFlPrompt,
     getNextPanel,
     isLinkedAsLastFrame,
   }
