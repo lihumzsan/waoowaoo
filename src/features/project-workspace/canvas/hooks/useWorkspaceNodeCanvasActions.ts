@@ -47,16 +47,6 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'select_candidate') {
-      await runtime.onSelectPanelCandidate(action.panelId, action.imageUrl)
-      return
-    }
-
-    if (action.type === 'cancel_candidate') {
-      await runtime.onCancelPanelCandidate(action.panelId)
-      return
-    }
-
     if (action.type === 'generate_video') {
       await runtime.onGenerateVideo(
         action.storyboardId,

@@ -37,8 +37,6 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
   handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
-  handleSelectPanelCandidate: (panelId: string, imageUrl: string) => Promise<void>
-  handleCancelPanelCandidate: (panelId: string) => Promise<void>
   handleGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
@@ -82,8 +80,6 @@ export function useWorkspaceRuntime({
   handleGenerateEditScript,
   openAssetLibrary,
   handleGeneratePanelImage,
-  handleSelectPanelCandidate,
-  handleCancelPanelCandidate,
   handleGenerateVideo,
   handleGenerateAllVideos,
   handleGenerateBgmScore,
@@ -121,8 +117,6 @@ export function useWorkspaceRuntime({
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
     onGeneratePanelImage: handleGeneratePanelImage,
-    onSelectPanelCandidate: handleSelectPanelCandidate,
-    onCancelPanelCandidate: handleCancelPanelCandidate,
     onGenerateVideo: handleGenerateVideo,
     onGenerateAllVideos: handleGenerateAllVideos,
     onGenerateBgmScore: handleGenerateBgmScore,
@@ -149,8 +143,6 @@ export function useWorkspaceRuntime({
     handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleGeneratePanelImage,
-    handleSelectPanelCandidate,
-    handleCancelPanelCandidate,
     handleGenerateVideo,
     handleUpdateConfig,
     handleUpdateEpisode,

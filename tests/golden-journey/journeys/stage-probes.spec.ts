@@ -13,7 +13,7 @@ import { readGoldenSourceFixtureManifest } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import { readFile } from 'node:fs/promises'
-import { setGoldenForcedTool, setGoldenStreamPacing } from '../providers/control'
+import { setGoldenForcedTool, setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { TASK_TYPE } from '@/lib/task/types'
 
@@ -83,6 +83,25 @@ async function assertShotExecutionPlanNodesSurviveProcessingReload(input: {
   }
 }
 
+async function assertRunningShotMediaSurfaces(input: {
+  readonly page: import('@playwright/test').Page
+}): Promise<void> {
+  const surfaces = input.page.locator('article[data-node-id^="shot:"] [data-canvas-media-surface="true"]')
+  await expect.poll(async () => {
+    const count = await surfaces.count()
+    if (count === 0) return false
+    return await surfaces.evaluateAll((items) => items.every((surface) => (
+      surface.getAttribute('data-canvas-media-phase') === 'generating'
+      && surface.getAttribute('data-canvas-media-background') === 'style-bible'
+      && surface.getAttribute('data-canvas-media-placeholder-visible') === 'false'
+      && surface.querySelector('[role="progressbar"]') !== null
+    )))
+  }, {
+    timeout: 60_000,
+    message: 'running shot media must show the shared Style Bible progress surface without the empty placeholder',
+  }).toBe(true)
+}
+
 for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
   const terminalLabel = scenario.expectedTerminal.kind === 'workflow_stage'
     ? scenario.expectedTerminal.stage
@@ -112,8 +131,12 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
     await expect.poll(async () => await readGoldenWorkflowStage(page, scope), { timeout: 30_000 }).toBe(scenario.startStage)
 
     const verifiesShotExecutionPlanProjection = scenario.startStage === 'ready_to_generate_shot_execution_plan'
+    const verifiesShotMediaSurface = scenario.startStage === 'ready_to_generate_storyboard_images'
     if (verifiesShotExecutionPlanProjection) {
       await setGoldenStreamPacing({ chunkSize: 1, delayMs: 1 })
+    }
+    if (verifiesShotMediaSurface) {
+      await setGoldenMediaStatusDelay(15_000)
     }
     try {
       const boundary = BOUNDARY_BY_STAGE[scenario.startStage]
@@ -139,6 +162,9 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
 
       if (verifiesShotExecutionPlanProjection) {
         await assertShotExecutionPlanNodesSurviveProcessingReload({ page, scope })
+      }
+      if (verifiesShotMediaSurface) {
+        await assertRunningShotMediaSurfaces({ page })
       }
 
       if (scenario.expectedTerminal.kind !== 'workflow_stage') {
@@ -172,12 +198,13 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
         await page.waitForTimeout(250)
       }
       expect(advanced, `${scenario.startStage} must advance through at least ${scenario.expectedTerminal.stage}`).toBe(true)
-      if (verifiesShotExecutionPlanProjection) browserObservations.assertClean()
+      if (verifiesShotExecutionPlanProjection || verifiesShotMediaSurface) browserObservations.assertClean()
     } catch (error) {
       await attachGoldenOracleEvidence(testInfo, scope)
       throw error
     } finally {
       if (verifiesShotExecutionPlanProjection) await setGoldenStreamPacing(null)
+      if (verifiesShotMediaSurface) await setGoldenMediaStatusDelay(0)
     }
     await attachGoldenOracleEvidence(testInfo, scope)
   })

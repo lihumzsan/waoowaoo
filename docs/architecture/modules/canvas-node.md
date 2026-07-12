@@ -27,6 +27,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
 - **CN-12 — Renderer 本地动效不得驱动渲染或永久合成。** `WorkspaceCanvasMotionPresence` 只可通过 `visible + exit + rendered` 的共享 transition authority 结算自身的短暂存在状态；稳定可见的 React children identity 不是生命周期事实，绝不复制为 React state 或触发 state setter。`data-workspace-canvas-motion-active` 是动画窗口的唯一事实；窗口结算后必须恢复 `animation: none`、`transform: none` 和 `will-change: auto`，不得让 React Flow viewport scale 再放大内部持久 compositor layer。退出内容只能保存在不会 render 的 ref；所有节点 renderer 必须复用这一入口，不得按 kind 建立第二个 Presence 状态机。
 - **CN-13 — ReactFlow 测量单向。** `useWorkspaceNodeCanvasProjection` 只从领域事实和持久 layout 产生节点 View；`ProjectWorkspaceCanvas` 只把明确的用户拖拽写入本地/持久 position layout。ReactFlow 的 `dimensions`、ResizeObserver 或 DOM 尺寸只属于 ReactFlow 内部测量，绝不得回写 `WorkspaceCanvasNodeData.width/height`、projection node 或受控 business node state。streaming 重投影、用户 layout 与 transient measurement 必须是三个单向输入，不能构成 render feedback loop。
+- **CN-14 — Canvas 媒体生成 View 单一。** 图片/视频媒体槽位只能把最终 `lifecycle`、当前正式输出和显式背景 policy 交给 `CanvasMediaGenerationSurface`；其纯 resolver 穷尽 empty、generating、regenerating、ready、failed 与 contract-error。renderer 只能提供媒体内容、画幅和占位图标，不得自行组合 Style Bible 背景、普通占位、loading、失败遮罩或 `showBackground` 分支。首次生成必须隐藏普通占位并只显示 Style Bible 背景与品牌进度；重生成保留当前正式输出并叠加同一进度层；成功但缺少媒体结果必须显式报 contract error。下游项目媒体缺少已确认 Style Bible 图片时必须显式失败，只有生成 Style Bible 自身等声明为 neutral 的能力可不消费该背景。
 
 ## 权威入口
 
@@ -47,6 +48,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - Canvas composition 与用户 position overlay：`src/features/project-workspace/canvas/ProjectWorkspaceCanvas.tsx`；它不得订阅或写回 ReactFlow measurement。
 - 共享节点 shell：`src/features/project-workspace/canvas/nodes/WorkspaceNode.tsx`；穷尽 renderer registry：`src/features/project-workspace/canvas/nodes/workspace-node-renderer-registry.tsx`；kind renderer：`src/features/project-workspace/canvas/nodes/renderers/`。renderer 只消费最终 View，不参与生命周期判定。
 - 本地 Presence transition：`src/features/project-workspace/canvas/nodes/workspace-canvas-motion-presence.ts`；唯一 renderer host：`src/features/project-workspace/canvas/nodes/workspace-node-motion.tsx`。
+- Canvas 媒体生成纯 View：`src/features/project-workspace/canvas/nodes/canvas-media-generation-view.ts`；唯一展示入口：`src/features/project-workspace/canvas/nodes/CanvasMediaGenerationSurface.tsx`。
 
 ## 验证
 
@@ -58,6 +60,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
 - Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
 - 视觉风格主链必须在真实文本 Task processing 窗口同时观察 Assistant 通用运行卡和单一运行中 Style Bible 占位节点，再在 direct image Task processing 窗口观察同一节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
+- `tests/unit/project-workspace/canvas-media-generation-surface.test.ts` 穷尽最终 lifecycle × 是否已有输出的纯 View；真实 planned-asset 与 storyboard-image processing 窗口必须在 `mainline-downstream-continuation.spec.ts` / `stage-probes.spec.ts` 观察 Style Bible 背景、品牌 progressbar 和隐藏的普通占位。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
@@ -71,6 +74,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
 - `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但全章节 Canvas 仍把 `editScript=null` 传给只接受单实例的 projector，因此 Assistant 显示整批运行而 Canvas 没有任何对应节点；同时 owner-fenced worker 写入的 `generating + {}` 行被 episode 正式读取当作完整 ready payload 解析，reload 触发 `shots/generationSegmentExecutions` schema 失败。旧 mocked episode 测试把计划列表固定为空，Golden 也只验证终态 stage，没有观察真实 processing + reload。当前防线是正式计划 Query 只暴露 ready materialization、Canvas 从全部 editScripts 穷尽投影稳定节点并只把 Task target 交给统一 lifecycle resolver，纯投影规格反证单实例 gate；镜头 stage-probe 已增加真实 Task target → canonical node、processing、reload 和 browser observation oracle。该组合最后一次执行仍未到达镜头 probe：新的视觉风格 Task 链在更早的 `ready_to_generate_edit_script` checkpoint 建立处失败，因此不得宣称该盲区关闭。
 - 视觉风格方案迁入 `ProjectEditBible` 文本 Task 后，Assistant 已显示通用运行卡，但 Canvas 建节点条件仍只认已落库候选，导致文本生成成功前没有 Style Bible 占位节点。上一版只扩展了图片 processing Golden，没有把新文本 target 纳入同一 projector。当前防线从生产 runtime target registry 订阅方案 Task，并在真实文本 processing 窗口断言同一 canonical Style Bible identity 已出现。
+- 媒体生成 UI 曾以 `MediaGenerationLoading` 统一品牌圆环和估算进度，却把空态背景、普通占位、重生成和失败组合留给各 renderer；镜头卡随后用 `showBackground=false` 保留自己的占位层，导致生成时普通图片图标与品牌 Logo 重叠，而规划资产卡另行隐藏普通图标。旧组件测试只证明共享 overlay 自身 markup，Canvas conformance/Golden 只观察 lifecycle 和节点身份，没有执行真实镜头/资产 processing 的视觉状态组合。当前防线把最终 lifecycle 与媒体事实收敛进唯一 Surface，删除 renderer 的第二解释权，并在真实 processing 窗口断言普通占位已隐藏。
 
 ## 修改检查表
 

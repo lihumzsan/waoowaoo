@@ -188,8 +188,6 @@ export function useProjectWorkspaceController({
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
     handleGeneratePanelImage: imageActions.handleGeneratePanelImage,
-    handleSelectPanelCandidate: imageActions.handleSelectPanelCandidate,
-    handleCancelPanelCandidate: imageActions.handleCancelPanelCandidate,
     handleGenerateVideo: videoActions.handleGenerateVideo,
     handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleGenerateBgmScore: videoActions.handleGenerateBgmScore,

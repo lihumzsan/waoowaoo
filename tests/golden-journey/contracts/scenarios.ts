@@ -32,7 +32,7 @@ export const GOLDEN_MAINLINE_SCENARIO = {
 export const GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO = {
   id: 'GJ-DOWNSTREAM-CHECKPOINT-TO-FINAL-DELIVERABLE',
   kind: 'mainline',
-  title: 'a production Workflow Lab checkpoint shows one durable style-direction Task and stable Canvas Style Bible placeholder before image approval, then the original Assistant candidates through processing confirmation reload and final delivery',
+  title: 'a production Workflow Lab checkpoint shows one durable style-direction Task and stable Canvas Style Bible placeholder before image approval, then shared Style Bible progress surfaces for planned assets, the original Assistant candidates through processing confirmation reload, and final delivery',
   startStage: 'script_ready_for_review',
   expectedTerminal: {
     kind: 'workflow_stage',
@@ -182,7 +182,9 @@ export const GOLDEN_STAGE_PROBE_SCENARIOS: readonly GoldenScenarioContract[] =
     kind: 'stage_probe',
     title: stage === 'ready_to_generate_shot_execution_plan'
       ? 'canonical shot-execution checkpoint projects every running chapter Task as one existing Canvas lifecycle node before and after reload'
-      : `canonical ${stage} checkpoint remains valid and reaches its next declared boundary`,
+      : stage === 'ready_to_generate_storyboard_images'
+        ? 'canonical storyboard-image checkpoint shows the shared Style Bible progress surface without the empty placeholder'
+        : `canonical ${stage} checkpoint remains valid and reaches its next declared boundary`,
     startStage: stage,
     expectedTerminal: {
       kind: 'workflow_stage',

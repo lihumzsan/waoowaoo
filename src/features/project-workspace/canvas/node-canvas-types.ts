@@ -60,8 +60,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'delete_panel'; readonly storyboardId: string; readonly panelId: string }
   | { readonly type: 'copy_panel'; readonly panelId: string }
   | { readonly type: 'generate_image'; readonly panelId: string }
-  | { readonly type: 'select_candidate'; readonly panelId: string; readonly imageUrl: string }
-  | { readonly type: 'cancel_candidate'; readonly panelId: string }
   | {
       readonly type: 'generate_video'
       readonly storyboardId: string

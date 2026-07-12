@@ -67,6 +67,10 @@
       "title": "Canvas 节点与流式状态",
       "sourcePaths": [
         "src/features/project-workspace/ProjectWorkspace.tsx",
+        "src/features/project-workspace/WorkspaceRuntimeContext.tsx",
+        "src/features/project-workspace/hooks/useProjectWorkspaceController.ts",
+        "src/features/project-workspace/hooks/useWorkspaceImageActions.ts",
+        "src/features/project-workspace/hooks/useWorkspaceRuntime.ts",
         "src/features/project-workspace/canvas",
         "messages/en/project-workflow.json",
         "messages/zh/project-workflow.json",
@@ -96,11 +100,13 @@
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/unit/project-workspace/workspace-canvas-motion-presence.test.ts",
         "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
+        "tests/unit/project-workspace/canvas-media-generation-surface.test.ts",
         "tests/unit/edit-script/style-preview-set-view.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
         "tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts",
+        "tests/golden-journey/journeys/stage-probes.spec.ts",
         "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
       ],
       "guardPaths": [

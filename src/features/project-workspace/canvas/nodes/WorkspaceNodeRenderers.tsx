@@ -3,7 +3,6 @@
 import React, { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
-import MediaGenerationLoading from '@/components/media/MediaGenerationLoading'
 import { MediaImageWithLoading } from '@/components/media/MediaImageWithLoading'
 import { toDisplayImageUrl } from '@/lib/media/image-url'
 import EditScriptPreviewDetail from '../details/EditScriptPreviewDetail'
@@ -11,9 +10,9 @@ import { workspaceCanvasScrollableRegionProps } from '../canvas-scroll-lock'
 import {
   isWorkspaceCanvasLifecycleRunning,
   workspaceCanvasLifecycleStatusKey,
-  workspaceCanvasLifecycleTaskState,
 } from '../lifecycle/workspace-canvas-lifecycle'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
+import { CanvasMediaGenerationSurface } from './CanvasMediaGenerationSurface'
 import { FieldGlyph } from './field-glyphs'
 import { ShotGrid, shotDetailIconGrid, type ShotField, type ShotGridCard } from './shot-grid'
 import { ProductionPlanningView } from './ProductionPlanningView'
@@ -451,11 +450,6 @@ function editAssetPlaceholderIconName(kind: WorkspaceCanvasEditAssetGroupItem['k
   return kind === 'character' ? 'user' : 'mapPin'
 }
 
-function validCandidateImages(data: WorkspaceCanvasFlowNode['data']): string[] {
-  if (data.kind !== 'shot') return []
-  return (data.imageDetails?.candidateImages ?? []).filter((url) => !url.startsWith('PENDING:'))
-}
-
 function renderChips(label: string, values: readonly string[]) {
   if (values.length === 0) return null
   return renderSection(label, (
@@ -499,8 +493,6 @@ function mediaLoadingStyleImageUrl(data: WorkspaceCanvasFlowNode['data']): strin
 function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
   const displayImageUrl = toDisplayImageUrl(data.previewImageUrl)
   const styleImageUrl = mediaLoadingStyleImageUrl(data)
-  const displayStyleImageUrl = toDisplayImageUrl(styleImageUrl)
-  const running = nodeIsRunning(data)
   const frameStyle: React.CSSProperties = { aspectRatio: String(shotPreviewAspectRatio(data)) }
 
   return (
@@ -513,33 +505,20 @@ function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['da
           buttonClassName="block h-full w-full cursor-zoom-in overflow-hidden"
           imageClassName="block h-full w-full object-cover"
         />
-      ) : (
-        <>
-          {displayStyleImageUrl ? (
-            <>
-              <div
-                className="absolute inset-0 scale-110"
-                style={{
-                  backgroundImage: `url("${displayStyleImageUrl}")`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  filter: 'blur(18px)',
-                }}
-              />
-              <div className="absolute inset-0 bg-white/45 backdrop-blur-xl" />
-            </>
-          ) : (
-            <div className="absolute inset-0 bg-[linear-gradient(135deg,#f8fafc_0%,#e2e8f0_48%,#cbd5e1_100%)]" />
-          )}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="inline-flex h-16 w-16 items-center justify-center rounded-[18px] bg-white/72 shadow-sm ring-1 ring-slate-200 backdrop-blur">
-              <AppIcon name="image" className="h-8 w-8 text-slate-400" />
-            </span>
-          </div>
-        </>
-      )}
-      <MediaGenerationLoading taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)} styleImageUrl={styleImageUrl} size={72} showBackground={false} />
-      {running && displayImageUrl ? <div className="pointer-events-none absolute inset-0 bg-white/10" /> : null}
+      ) : null}
+      <CanvasMediaGenerationSurface
+        lifecycle={data.lifecycle}
+        hasOutput={Boolean(displayImageUrl)}
+        outputImageUrl={data.previewImageUrl}
+        styleImageUrl={styleImageUrl}
+        backgroundPolicy="required-style-bible"
+        ringSize={72}
+        placeholder={(
+          <span className="inline-flex h-16 w-16 items-center justify-center rounded-[18px] bg-white/72 shadow-sm ring-1 ring-slate-200 backdrop-blur">
+            <AppIcon name="image" className="h-8 w-8 text-slate-400" />
+          </span>
+        )}
+      />
     </div>
   )
 }
@@ -662,14 +641,9 @@ export function ShotContent({
 }
 
 export function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode['data'] }) {
-  const labels = useTranslations('projectWorkflow.canvas.workspace.nodeFields')
   const displayVideoUrl = data.kind === 'videoClip' ? toDisplayImageUrl(data.videoDetails?.videoUrl) : null
   const displayImageUrl = toDisplayImageUrl(data.previewImageUrl)
   const isEditAsset = data.kind === 'editRequiredAsset'
-  const isShotPreview = data.kind === 'shot'
-  const candidateUrls = validCandidateImages(data)
-  const panelId = data.kind === 'shot' && data.targetType === 'panel' ? data.targetId : null
-  const canUseCandidateActions = Boolean(data.onAction) && data.readOnly !== true
   const aspectRatio = typeof data.previewAspectRatio === 'number' && Number.isFinite(data.previewAspectRatio) && data.previewAspectRatio > 0
     ? data.previewAspectRatio
     : null
@@ -678,95 +652,13 @@ export function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode[
     : typeof data.previewDisplayHeight === 'number' && Number.isFinite(data.previewDisplayHeight) && data.previewDisplayHeight > 0
       ? data.previewDisplayHeight
       : 118
-  const running = nodeIsRunning(data)
   const loadingRingSize = Math.max(48, Math.min(96, Math.round(previewHeight * 0.5)))
-  if (running && !displayVideoUrl && !displayImageUrl) {
-    return (
-      <div className="relative" style={{ height: previewHeight }}>
-        <MediaGenerationLoading
-          taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)}
-          styleImageUrl={mediaLoadingStyleImageUrl(data)}
-          size={loadingRingSize}
-        />
-      </div>
-    )
-  }
-  if (isShotPreview && displayImageUrl) {
-    return (
-      <div className="space-y-2">
-        <div className={`relative overflow-hidden bg-transparent ${running ? 'workspace-node-loading-surface' : ''}`}>
-          <PreviewableImage
-            sourceImageUrl={data.previewImageUrl ?? displayImageUrl}
-            displayImageUrl={displayImageUrl}
-            alt={data.title}
-            buttonClassName="block w-full cursor-zoom-in overflow-hidden"
-            imageClassName="block h-auto w-full object-contain"
-          />
-          <MediaGenerationLoading
-            taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)}
-            styleImageUrl={mediaLoadingStyleImageUrl(data)}
-            size={loadingRingSize}
-          />
-        </div>
-        {!running && panelId && candidateUrls.length > 0 && canUseCandidateActions ? (
-          <div className="nodrag nowheel rounded-[16px] border border-sky-100 bg-sky-50/80 p-2">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold uppercase text-sky-700`}>
-                {labels('candidateImages')}
-              </p>
-              <button
-                type="button"
-                className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-50"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void dispatchNodeAction(data, { type: 'cancel_candidate', panelId })
-                }}
-              >
-                {labels('cancelCandidate')}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {candidateUrls.slice(0, 4).map((url, index) => {
-                const candidateImageUrl = toDisplayImageUrl(url) ?? url
-                return (
-                  <div key={url} className="overflow-hidden rounded-[12px] bg-white ring-1 ring-slate-200">
-                    <PreviewableImage
-                      sourceImageUrl={url}
-                      displayImageUrl={candidateImageUrl}
-                      alt={labels('candidateImageAlt', { index: index + 1 })}
-                      buttonClassName="block w-full cursor-zoom-in overflow-hidden"
-                      imageClassName="h-24 w-full object-cover"
-                    />
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5">
-                      <span className={`${SELECTABLE_TEXT_CLASS} text-[10px] font-semibold text-[var(--glass-text-tertiary)]`}>
-                        {labels('candidateImageAlt', { index: index + 1 })}
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-slate-800"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void dispatchNodeAction(data, { type: 'select_candidate', panelId, imageUrl: url })
-                        }}
-                      >
-                        {labels('selectCandidate')}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    )
-  }
-  const mediaStyle = aspectRatio && !isShotPreview ? { aspectRatio: String(aspectRatio) } : undefined
+  const mediaStyle = aspectRatio ? { aspectRatio: String(aspectRatio) } : undefined
   const mediaClassName = aspectRatio
     ? 'h-full max-w-full rounded-[16px] object-contain'
     : 'h-full w-full object-contain'
   const mediaInteractionClass = displayVideoUrl ? 'nodrag nowheel ' : ''
-  const frameClassName = `${mediaInteractionClass}relative flex items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100 ${running ? 'workspace-node-loading-surface' : ''}`
+  const frameClassName = `${mediaInteractionClass}relative flex items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-slate-100`
   return (
     <div
       className={frameClassName}
@@ -790,21 +682,21 @@ export function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode[
           buttonClassName="flex h-full w-full cursor-zoom-in items-center justify-center overflow-hidden"
           imageClassName={isEditAsset ? 'h-full w-full object-contain' : mediaClassName}
         />
-      ) : isEditAsset ? (
-        <div className="flex h-full w-full items-center justify-center text-slate-300">
-          <AppIcon name="imageAlt" className="h-8 w-8" />
-        </div>
-      ) : (
-        <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#f8fafc_0%,#e2e8f0_48%,#cbd5e1_100%)]">
+      ) : null}
+      <CanvasMediaGenerationSurface
+        lifecycle={data.lifecycle}
+        hasOutput={Boolean(displayVideoUrl || displayImageUrl)}
+        outputImageUrl={data.previewImageUrl ?? displayVideoUrl}
+        styleImageUrl={mediaLoadingStyleImageUrl(data)}
+        backgroundPolicy="required-style-bible"
+        ringSize={loadingRingSize}
+        placeholder={isEditAsset ? (
+          <AppIcon name="imageAlt" className="h-8 w-8 text-slate-300" />
+        ) : (
           <span className={`${SELECTABLE_TEXT_CLASS} rounded-full border border-white/80 bg-white/80 px-3 py-1 text-xs font-semibold text-[var(--glass-text-secondary)] shadow-sm`}>
             {data.body}
           </span>
-        </div>
-      )}
-      <MediaGenerationLoading
-        taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)}
-        styleImageUrl={mediaLoadingStyleImageUrl(data)}
-        size={loadingRingSize}
+        )}
       />
     </div>
   )
@@ -1560,7 +1452,6 @@ function EditAssetGroupHeroCard({
   const showStatus = shouldShowEditAssetStatus(asset, previewSourceImageUrl)
   const statusIconName = editAssetStatusIconName(asset)
   const isRunning = isWorkspaceCanvasLifecycleRunning(asset.lifecycle)
-  const taskState = workspaceCanvasLifecycleTaskState(asset.lifecycle)
   const statusLabel = statusLabels(workspaceCanvasLifecycleStatusKey(asset.lifecycle))
   const expandLabel = isOpen ? labels('collapseDetails') : labels('expandDetails')
 
@@ -1593,13 +1484,15 @@ function EditAssetGroupHeroCard({
                 className="h-full w-full object-contain"
                 onLoad={onImageLoad}
               />
-            ) : isRunning ? null : (
-              <AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-9 w-9 text-slate-300" />
-            )}
-            <MediaGenerationLoading
-              taskState={taskState}
+            ) : null}
+            <CanvasMediaGenerationSurface
+              lifecycle={asset.lifecycle}
+              hasOutput={Boolean(imageUrl)}
+              outputImageUrl={previewSourceImageUrl}
               styleImageUrl={styleImageUrl}
-              size={loadingSize}
+              backgroundPolicy="required-style-bible"
+              ringSize={loadingSize}
+              placeholder={<AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-9 w-9 text-slate-300" />}
             />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-3/5 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
             {showStatus ? (
@@ -1747,10 +1640,14 @@ function StyleBiblePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['d
             imageClassName="h-full w-full object-contain"
             onImageLoad={onImageLoad}
           />
-          <MediaGenerationLoading
-            taskState={workspaceCanvasLifecycleTaskState(data.lifecycle)}
+          <CanvasMediaGenerationSurface
+            lifecycle={data.lifecycle}
+            hasOutput={Boolean(displayImageUrl)}
+            outputImageUrl={sourceImageUrl}
             styleImageUrl={mediaLoadingStyleImageUrl(data)}
-            size={64}
+            backgroundPolicy="neutral"
+            ringSize={64}
+            placeholder={<AppIcon name="image" className="h-8 w-8 text-slate-400" />}
           />
         </>
       )}

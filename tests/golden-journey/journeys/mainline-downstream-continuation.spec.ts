@@ -472,28 +472,48 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       { waitUntil: 'domcontentloaded' },
     )
     await reloadGoldenBoundary(page, 'approval')
-    await submitGoldenBoundary(page, 'approval')
+    await setGoldenMediaStatusDelay(15_000)
+    try {
+      await submitGoldenBoundary(page, 'approval')
 
-    await expect.poll(async () => {
-      const snapshot = await readGoldenOracleSnapshot(scope)
-      const groupedTasks = snapshot.tasks.filter((task) => (
-        task.operationId === 'plan_chapters' || task.operationId === 'generate_edit_script_assets'
-      ))
-      const operationIds = new Set(groupedTasks.map((task) => task.operationId))
-      const taskIds = new Set(groupedTasks.flatMap((task) => typeof task.id === 'string' ? [task.id] : []))
-      const matchingWaits = snapshot.waits.filter((wait) => {
-        const rawTaskIds = typeof wait.taskIds === 'string' ? JSON.parse(wait.taskIds) as unknown : wait.taskIds
-        return Array.isArray(rawTaskIds)
-          && rawTaskIds.length === taskIds.size
-          && rawTaskIds.every((taskId) => typeof taskId === 'string' && taskIds.has(taskId))
-      })
-      return operationIds.has('plan_chapters')
-        && operationIds.has('generate_edit_script_assets')
-        && matchingWaits.length === 1
-    }, {
-      timeout: 90_000,
-      message: 'approved core and planned-asset Operations must submit independently and share exactly one durable Wait',
-    }).toBe(true)
+      await expect.poll(async () => {
+        const snapshot = await readGoldenOracleSnapshot(scope)
+        const groupedTasks = snapshot.tasks.filter((task) => (
+          task.operationId === 'plan_chapters' || task.operationId === 'generate_edit_script_assets'
+        ))
+        const operationIds = new Set(groupedTasks.map((task) => task.operationId))
+        const taskIds = new Set(groupedTasks.flatMap((task) => typeof task.id === 'string' ? [task.id] : []))
+        const matchingWaits = snapshot.waits.filter((wait) => {
+          const rawTaskIds = typeof wait.taskIds === 'string' ? JSON.parse(wait.taskIds) as unknown : wait.taskIds
+          return Array.isArray(rawTaskIds)
+            && rawTaskIds.length === taskIds.size
+            && rawTaskIds.every((taskId) => typeof taskId === 'string' && taskIds.has(taskId))
+        })
+        return operationIds.has('plan_chapters')
+          && operationIds.has('generate_edit_script_assets')
+          && matchingWaits.length === 1
+      }, {
+        timeout: 90_000,
+        message: 'approved core and planned-asset Operations must submit independently and share exactly one durable Wait',
+      }).toBe(true)
+
+      const assetMediaSurfaces = page.locator('article[data-node-id^="edit-asset-group:"] [data-canvas-media-surface="true"]')
+      await expect.poll(async () => {
+        const count = await assetMediaSurfaces.count()
+        if (count === 0) return false
+        return await assetMediaSurfaces.evaluateAll((surfaces) => surfaces.some((surface) => (
+          surface.getAttribute('data-canvas-media-phase') === 'generating'
+          && surface.getAttribute('data-canvas-media-background') === 'style-bible'
+          && surface.getAttribute('data-canvas-media-placeholder-visible') === 'false'
+          && surface.querySelector('[role="progressbar"]') !== null
+        )))
+      }, {
+        timeout: 60_000,
+        message: 'running planned assets must use the shared Style Bible progress surface without the empty placeholder',
+      }).toBe(true)
+    } finally {
+      await setGoldenMediaStatusDelay(0)
+    }
 
     const editScriptNodes = page.locator('article[data-node-id^="edit-script:"]')
     await expect.poll(async () => await editScriptNodes.evaluateAll((nodes) => nodes.some((node) => (
