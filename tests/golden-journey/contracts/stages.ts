@@ -28,6 +28,8 @@ export const GOLDEN_EDIT_FIRST_WORKFLOW_STAGES = [
   'ready_to_generate_bgm_score',
   'bgm_score_generating',
   'ready_to_generate_audio_layers',
+  'soundscape_planning',
+  'ready_to_generate_soundscape',
   'audio_layers_generating',
   'ready_to_render_final',
   'final_rendering',

@@ -56,10 +56,12 @@ const EDIT_FIRST_STAGE_RANK = {
   ready_to_generate_bgm_score: 24,
   bgm_score_generating: 25,
   ready_to_generate_audio_layers: 26,
-  audio_layers_generating: 27,
-  ready_to_render_final: 28,
-  final_rendering: 29,
-  completed: 30,
+  soundscape_planning: 27,
+  ready_to_generate_soundscape: 28,
+  audio_layers_generating: 29,
+  ready_to_render_final: 30,
+  final_rendering: 31,
+  completed: 32,
 } as const satisfies Record<OrderedEditFirstWorkflowStage, number>
 
 function stageRank(stage: EditFirstWorkflowStage): number {

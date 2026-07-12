@@ -45,6 +45,8 @@ export type EditFirstWorkflowStage =
   | 'ready_to_generate_bgm_score'
   | 'bgm_score_generating'
   | 'ready_to_generate_audio_layers'
+  | 'soundscape_planning'
+  | 'ready_to_generate_soundscape'
   | 'audio_layers_generating'
   | 'ready_to_render_final'
   | 'final_rendering'
@@ -87,6 +89,8 @@ export interface EditFirstWorkflowSnapshot {
   hasBible: boolean
   bibleStatus: string | null
   sourceDocumentKind: string | null
+  activeSourceScriptTaskCount: number
+  activeBibleTaskCount: number
   stylePreviewCount: number
   completedStylePreviewCount: number
   confirmedStylePreviewCount: number
@@ -129,7 +133,8 @@ export interface EditFirstWorkflowSnapshot {
   soundscapeStatus: string | null
   soundscapeHasMix: boolean
   soundscapeDecision: 'soundscape' | 'none_needed' | null
-  activeSoundscapeTaskCount: number
+  activeSoundscapePlanTaskCount: number
+  activeSoundscapeGenerationTaskCount: number
   finalRenderStatus: string | null
   finalRenderHasOutput: boolean
   activeFinalRenderTaskCount: number
@@ -335,7 +340,13 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (snapshot.bibleStatus === 'pending' || snapshot.bibleStatus === 'generating') {
-    if (snapshot.sourceDocumentKind === 'prompt_generated_outline') {
+    if (snapshot.activeSourceScriptTaskCount > 0) {
+      return state({
+        stage: 'script_generating',
+        blocking: { kind: 'processing', reason: 'source script expansion is still running' },
+      })
+    }
+    if (snapshot.activeBibleTaskCount === 0 && snapshot.sourceDocumentKind === 'prompt_generated_outline') {
       return state({
         stage: 'script_generating',
         blocking: { kind: 'processing', reason: 'source script expansion is still running' },
@@ -597,8 +608,9 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   const soundscapeOperationId: EditFirstWorkflowOperationId = soundscapeReadyForGeneration
     ? 'generate_episode_soundscape'
     : 'plan_episode_soundscape'
-  const soundscapeRunning = snapshot.activeSoundscapeTaskCount > 0
+  const soundscapePlanning = snapshot.activeSoundscapePlanTaskCount > 0
     || snapshot.soundscapeStatus === 'planning'
+  const soundscapeGenerating = snapshot.activeSoundscapeGenerationTaskCount > 0
     || snapshot.soundscapeStatus === 'generating'
   const soundscapeFailed = snapshot.soundscapeStatus === 'failed'
   const finalRendering = snapshot.activeFinalRenderTaskCount > 0 || isActiveWorkflowStatus(snapshot.finalRenderStatus)
@@ -691,7 +703,15 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (soundscapeRunning) {
+  if (soundscapePlanning) {
+    return state({
+      stage: 'soundscape_planning',
+      blocking: { kind: 'processing', reason: 'soundscape planning is still running' },
+      allowedOperationIds: bgmReady ? [] : ['generate_episode_bgm_score'],
+    })
+  }
+
+  if (soundscapeGenerating) {
     return state({
       stage: 'audio_layers_generating',
       blocking: { kind: 'processing', reason: 'soundscape generation is still running' },
@@ -721,6 +741,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
       blocking: { kind: 'failed', reason: 'soundscape generation failed' },
       nextAction,
       allowedOperationIds: [nextAction.operationId],
+    })
+  }
+
+  if (bgmReady && soundscapeReadyForGeneration) {
+    return state({
+      stage: 'ready_to_generate_soundscape',
+      nextAction: workflowAction('generate_episode_soundscape', 'Generate soundscape audio'),
+      allowedOperationIds: ['generate_episode_soundscape'],
     })
   }
 
@@ -782,10 +810,13 @@ export async function resolveEditFirstWorkflowState(params: {
     finalOutput,
     musicScore,
     soundscape,
+    activeSourceScriptTaskCount,
+    activeBibleTaskCount,
     activeEditScriptTaskCount,
     activeShotExecutionPlanTaskCount,
     activeBgmScoreTaskCount,
-    activeSoundscapeTaskCount,
+    activeSoundscapePlanTaskCount,
+    activeSoundscapeGenerationTaskCount,
     activeChapterRenderTaskCount,
     activeFinalRenderTaskCount,
   ] = await Promise.all([
@@ -934,6 +965,22 @@ export async function resolveEditFirstWorkflowState(params: {
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
+        type: TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        type: TASK_TYPE.EDIT_BIBLE_GENERATE,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
         type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
@@ -962,7 +1009,17 @@ export async function resolveEditFirstWorkflowState(params: {
         episodeId: params.episodeId,
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
-        type: { in: [TASK_TYPE.SOUNDSCAPE_PLAN, TASK_TYPE.SOUNDSCAPE_GENERATE] },
+        type: TASK_TYPE.SOUNDSCAPE_PLAN,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEpisode',
+        targetId: params.episodeId,
+        type: TASK_TYPE.SOUNDSCAPE_GENERATE,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -1130,6 +1187,8 @@ export async function resolveEditFirstWorkflowState(params: {
     hasBible: Boolean(editBible),
     bibleStatus: editBible?.status ?? null,
     sourceDocumentKind: editBible?.sourceDocument?.sourceKind ?? null,
+    activeSourceScriptTaskCount,
+    activeBibleTaskCount,
     stylePreviewCount: editBible?.stylePreviews.length ?? 0,
     completedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'completed').length ?? 0,
     confirmedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
@@ -1172,7 +1231,8 @@ export async function resolveEditFirstWorkflowState(params: {
     soundscapeStatus,
     soundscapeHasMix: Boolean(readCompletedSoundscapeMix(soundscape)),
     soundscapeDecision: readSoundscapeDecision(soundscape),
-    activeSoundscapeTaskCount,
+    activeSoundscapePlanTaskCount,
+    activeSoundscapeGenerationTaskCount,
     finalRenderStatus: finalOutput?.renderStatus ?? null,
     finalRenderHasOutput: Boolean(
       hasOutputReference(finalOutput?.outputUrl ?? null)

@@ -81,6 +81,8 @@
     "ready_to_generate_bgm_score": "Ready To Generate Music",
     "bgm_score_generating": "Generating Music",
     "ready_to_generate_audio_layers": "Ready To Generate Audio Layers",
+    "soundscape_planning": "Planning Soundscape",
+    "ready_to_generate_soundscape": "Ready To Generate Soundscape",
     "audio_layers_generating": "Generating Audio Layers",
     "ready_to_render_final": "Ready To Render Final",
     "final_rendering": "Rendering Final",

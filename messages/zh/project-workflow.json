@@ -81,6 +81,8 @@
     "ready_to_generate_bgm_score": "等待生成配乐",
     "bgm_score_generating": "配乐生成中",
     "ready_to_generate_audio_layers": "等待生成音频层",
+    "soundscape_planning": "声景规划中",
+    "ready_to_generate_soundscape": "等待生成声景",
     "audio_layers_generating": "音频层生成中",
     "ready_to_render_final": "等待最终合成",
     "final_rendering": "最终合成中",

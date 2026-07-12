@@ -28,6 +28,7 @@ const TASK_STAGES = new Set<EditFirstWorkflowStage>([
   'videos_generating',
   'chapters_rendering',
   'bgm_score_generating',
+  'soundscape_planning',
   'audio_layers_generating',
   'final_rendering',
 ])

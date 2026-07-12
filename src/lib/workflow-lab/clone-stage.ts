@@ -26,13 +26,15 @@ const WORKFLOW_LAB_STAGE_ORDER: Record<EditFirstWorkflowStage, number> = {
   ready_to_render_chapters: 22,
   chapters_rendering: 23,
   ready_to_generate_bgm_score: 24,
-  ready_to_generate_audio_layers: 25,
-  bgm_score_generating: 26,
-  audio_layers_generating: 27,
-  ready_to_render_final: 28,
-  final_rendering: 29,
-  completed: 30,
-  failed: 31,
+  bgm_score_generating: 25,
+  ready_to_generate_audio_layers: 26,
+  soundscape_planning: 27,
+  ready_to_generate_soundscape: 28,
+  audio_layers_generating: 29,
+  ready_to_render_final: 30,
+  final_rendering: 31,
+  completed: 32,
+  failed: 33,
 }
 
 export function workflowLabStageAtLeast(stage: EditFirstWorkflowStage, threshold: EditFirstWorkflowStage): boolean {
