@@ -121,15 +121,15 @@ describe('ltx23 workflow router', () => {
     expect(result?.reasons).toContain('first_last_frame_generation')
   })
 
-  it('rejects unsupported Goon durations back to its exact default', () => {
+  it.each([7, 15])('routes supported %s-second first-last-frame requests to Goon without fallback', (duration) => {
     const result = resolveLtx23WorkflowRoute({
       modelKey: DEFAULT_MODEL,
       generationMode: 'firstlastframe',
-      requestedDurationSeconds: 7,
+      requestedDurationSeconds: duration,
     })
 
     expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)
-    expect(result?.durationSeconds).toBe(10)
+    expect(result?.durationSeconds).toBe(duration)
     expect(result?.fps).toBe(24)
   })
 

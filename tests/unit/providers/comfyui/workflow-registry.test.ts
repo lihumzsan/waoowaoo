@@ -73,6 +73,7 @@ describe('comfyui workflow registry prompt injection', () => {
     { durationSeconds: 4, finalFrameIndex: 96 },
     { durationSeconds: 8, finalFrameIndex: 192 },
     { durationSeconds: 12, finalFrameIndex: 288 },
+    { durationSeconds: 15, finalFrameIndex: 360 },
   ])('writes the explicit final pixel-frame index for a $durationSeconds-second Goon workflow', ({
     durationSeconds,
     finalFrameIndex,

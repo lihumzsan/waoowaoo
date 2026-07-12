@@ -2,7 +2,9 @@ export const COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID =
   'basevideo/ltx23-profiles/goon-first-last-frame-2stage'
 export const COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY =
   `comfyui::${COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID}`
-export const COMFYUI_LTX23_GOON_DURATION_OPTIONS = [4, 5, 6, 8, 10, 12] as const
+export const COMFYUI_LTX23_GOON_DURATION_OPTIONS = [
+  4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+] as const
 export const COMFYUI_LTX23_GOON_DEFAULT_DURATION_SECONDS = 10
 export const COMFYUI_LTX23_GOON_FPS = 24
 
@@ -96,7 +98,7 @@ const LTX23_WORKFLOW_PROFILES: Record<string, Ltx23WorkflowProfile> = {
     category: 'first_last_frame',
     promptPolicy: 'first_last_frame',
     imageSlotPolicy: 'first_last',
-    maxDurationSeconds: 12,
+    maxDurationSeconds: 15,
     defaultDurationSeconds: COMFYUI_LTX23_GOON_DEFAULT_DURATION_SECONDS,
     durationOptions: [...COMFYUI_LTX23_GOON_DURATION_OPTIONS],
     fps: COMFYUI_LTX23_GOON_FPS,
@@ -172,7 +174,7 @@ export function isComfyUiLtx23GoonFirstLastFrameWorkflow(
 }
 
 export function normalizeLtx23GoonDurationSeconds(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || !Number.isInteger(raw)) {
     return COMFYUI_LTX23_GOON_DEFAULT_DURATION_SECONDS
   }
   return COMFYUI_LTX23_GOON_DURATION_OPTIONS.includes(
@@ -180,6 +182,17 @@ export function normalizeLtx23GoonDurationSeconds(raw: unknown): number {
   )
     ? raw
     : COMFYUI_LTX23_GOON_DEFAULT_DURATION_SECONDS
+}
+
+export function resolveLtx23GoonFrameCount(durationSeconds: number): number {
+  const normalizedDurationSeconds = normalizeLtx23GoonDurationSeconds(durationSeconds)
+  return 1 + 8 * Math.round(
+    (normalizedDurationSeconds * COMFYUI_LTX23_GOON_FPS) / 8,
+  )
+}
+
+export function resolveLtx23GoonFinalFrameIndex(durationSeconds: number): number {
+  return resolveLtx23GoonFrameCount(durationSeconds) - 1
 }
 
 export function expandLtx23WorkflowImageFilenames(

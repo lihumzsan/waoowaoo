@@ -8,6 +8,7 @@ import {
   isComfyUiLtx23GoonFirstLastFrameWorkflow,
   normalizeLtx23GoonDurationSeconds,
   normalizeLtx23WorkflowKey,
+  resolveLtx23GoonFinalFrameIndex,
 } from './ltx23-workflow-profiles'
 import {
   COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID,
@@ -2757,9 +2758,7 @@ function applyGoonFirstLastFrameWorkflowControls(
   setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration, durationSeconds)
   setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
 
-  const finalPixelFrameIndex = 8 * Math.round(
-    (durationSeconds * COMFYUI_LTX23_GOON_FPS) / 8,
-  )
+  const finalPixelFrameIndex = resolveLtx23GoonFinalFrameIndex(durationSeconds)
   for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
     const conditioningNode = graph[nodeId]
     if (conditioningNode && isRecord(conditioningNode.inputs)) {

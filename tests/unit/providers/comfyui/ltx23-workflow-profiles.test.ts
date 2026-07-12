@@ -6,6 +6,9 @@ import {
   getLtx23WorkflowProfile,
   getLtx23WorkflowProfiles,
   isComfyUiLtx23LongVideoWorkflow,
+  normalizeLtx23GoonDurationSeconds,
+  resolveLtx23GoonFinalFrameIndex,
+  resolveLtx23GoonFrameCount,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 describe('ltx23 workflow profiles', () => {
@@ -48,12 +51,39 @@ describe('ltx23 workflow profiles', () => {
       category: 'first_last_frame',
       promptPolicy: 'first_last_frame',
       imageSlotPolicy: 'first_last',
-      maxDurationSeconds: 12,
+      maxDurationSeconds: 15,
       defaultDurationSeconds: 10,
-      durationOptions: [4, 5, 6, 8, 10, 12],
+      durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
       fps: 24,
       selectableInPanel: true,
     })
+  })
+
+  it.each([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])(
+    'accepts %s seconds for Goon first-last-frame normalization',
+    (duration) => {
+      expect(normalizeLtx23GoonDurationSeconds(duration)).toBe(duration)
+    },
+  )
+
+  it.each([
+    [3, 10],
+    [15.5, 10],
+    [16, 10],
+    ['8', 10],
+    [Number.NaN, 10],
+  ])('falls invalid Goon duration %j back to default %s', (input, expected) => {
+    expect(normalizeLtx23GoonDurationSeconds(input)).toBe(expected)
+  })
+
+  it.each([
+    [4, 97],
+    [8, 193],
+    [10, 241],
+    [15, 361],
+  ])('computes the Goon 8n+1 frame count for %ss', (duration, frameCount) => {
+    expect(resolveLtx23GoonFrameCount(duration)).toBe(frameCount)
+    expect(resolveLtx23GoonFinalFrameIndex(duration)).toBe(frameCount - 1)
   })
 
   it('keeps exactly the first and last images for Goon slots', () => {
