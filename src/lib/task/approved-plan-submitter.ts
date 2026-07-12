@@ -87,7 +87,7 @@ export async function submitApprovedOperationPlanTasks(params: {
   const snapshot = await loadOperationPlanSnapshot(execution.planSnapshotId, tx)
   if (!snapshot) throw new Error(`OPERATION_PLAN_SNAPSHOT_NOT_FOUND:${execution.planSnapshotId}`)
   const planTaskIds = snapshot.plan.tasks.map((task) => task.id)
-  if (planTaskIds.length === 0 || new Set(planTaskIds).size !== planTaskIds.length) {
+  if (new Set(planTaskIds).size !== planTaskIds.length) {
     throw new Error(`OPERATION_PLAN_TASK_IDENTITIES_INVALID:${snapshot.id}`)
   }
   const planned = snapshot.plan.tasks.map((task) =>
@@ -116,6 +116,8 @@ export async function submitApprovedOperationPlanTasks(params: {
   ) {
     throw new Error(`APPROVAL_GRANT_NOT_USABLE:${params.approvalGrantId}`)
   }
+
+  if (planned.length === 0) return new Map()
 
   const persisted = await persistSubmittedTaskBatchInTransaction({
     tx,

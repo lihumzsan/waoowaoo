@@ -187,6 +187,67 @@ describe('approved operation plan Task batch integration', () => {
     expect(enqueueCommands).toHaveLength(2)
     expect(enqueueCommands.every((command) => command.availableAt <= new Date())).toBe(true)
   })
+  it('returns an empty Task batch for an authorized zero-Task noop plan', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const plan: OperationPlan = {
+      kind: 'task_submission',
+      operationId: 'generate_edit_script_assets',
+      projectId: project.id,
+      userId: user.id,
+      tasks: [],
+    }
+    const quote: BillingQuoteView = {
+      showCredits: false,
+      billingMode: 'OFF',
+      billable: false,
+      taskCount: 0,
+      mediaTaskCount: 0,
+      totalMaxFrozenCost: 0,
+      currency: 'credits',
+      items: [],
+    }
+    const snapshot = await persistOperationPlanSnapshot({
+      plan,
+      normalizedInput: { episodeId: null },
+      quote,
+    })
+    const issued = await issueApprovalGrant({
+      userId: user.id,
+      planSnapshotId: snapshot.id,
+      requestId: 'approved-zero-task-request',
+    })
+    const execution = await prisma.operationExecution.create({
+      data: {
+        contractVersion: 1,
+        userId: user.id,
+        scopeKind: 'project',
+        scopeId: project.id,
+        projectId: project.id,
+        operationId: plan.operationId,
+        planSnapshotId: snapshot.id,
+        approvalGrantId: issued.approvalGrantId,
+        requestId: issued.operationRequestId,
+        status: 'committing',
+      },
+    })
+    await prisma.approvalGrant.update({
+      where: { id: issued.approvalGrantId },
+      data: { consumedAt: new Date(), consumedExecutionId: execution.id, version: 1 },
+    })
+
+    const results = await prisma.$transaction(async (transaction) =>
+      await submitApprovedOperationPlanTasks({
+        approvalGrantId: issued.approvalGrantId,
+        operationExecutionId: execution.id,
+        transaction,
+        operationSource: 'assistant-panel',
+      }),
+    )
+
+    expect([...results]).toEqual([])
+    await expect(prisma.task.count({ where: { operationExecutionId: execution.id } })).resolves.toBe(0)
+  })
   it('rolls back the Task batch without mutating the already-consumed Grant when any freeze fails', async () => {
     const seeded = await seedExecution(1)
     await prisma.approvalGrant.update({
