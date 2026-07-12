@@ -119,6 +119,10 @@ export function useVideoPanelActions({
     localPrompt,
     onUpdateLocalPrompt,
     onSavePrompt,
+    ...(isLinked ? {
+      controlledValue: flPromptEntry?.value || '',
+      onControlledValueChange: (value: string) => onFlPromptChange(panelKey, value),
+    } : {}),
   })
 
   const voiceManager = usePanelVoiceManager({

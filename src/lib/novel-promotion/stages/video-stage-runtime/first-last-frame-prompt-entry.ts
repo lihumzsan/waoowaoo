@@ -61,6 +61,24 @@ export function shouldApplyPromptResult(params: {
   return params.linked && params.requestRevision === params.currentRevision
 }
 
+export function isPromptResultCurrent(requestSignature: string, currentSignature?: string) {
+  return !!currentSignature && requestSignature === currentSignature
+}
+
+export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 'status'>) {
+  return !entry || entry.status === 'idle' || entry.status === 'error'
+}
+
+export function shouldAutoEnsurePrompt(params: {
+  taskHydrated: boolean
+  taskPhase?: string | null
+}) {
+  if (!params.taskHydrated) return false
+  return params.taskPhase !== 'failed'
+    && params.taskPhase !== 'queued'
+    && params.taskPhase !== 'processing'
+}
+
 export function projectPromptTaskState(
   entry: FirstLastFramePromptEntry,
   task: { phase?: string | null; errorMessage?: string | null },
@@ -78,7 +96,13 @@ export function applyPromptResult(
   entry: FirstLastFramePromptEntry,
   result: FirstLastFramePromptResult,
 ): FirstLastFramePromptEntry {
-  if (!result.applied) return { ...entry, status: 'idle' }
+  if (!result.applied) {
+    return {
+      ...entry,
+      status: 'error',
+      errorMessage: 'Generated prompt was not applied because the linked source changed.',
+    }
+  }
   return {
     value: result.prompt,
     origin: 'generated',

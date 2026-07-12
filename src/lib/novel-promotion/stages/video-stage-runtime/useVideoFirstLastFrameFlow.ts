@@ -63,6 +63,7 @@ interface UseVideoFirstLastFrameFlowParams {
     customPrompt?: string,
   ) => Promise<void>
   promptTaskStates: {
+    isFetching: boolean
     getTaskState: (key: string) => {
       phase?: string | null
       lastError?: { message?: string | null } | null

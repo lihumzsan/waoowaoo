@@ -141,7 +141,8 @@
     "promptSaving": "Saving transition prompt...",
     "promptError": "Transition prompt generation failed.",
     "promptFallbackWarning": "A deterministic fallback prompt is shown. You can retry generation or continue to video generation.",
-    "retryPrompt": "Retry transition prompt"
+    "retryPrompt": "Retry transition prompt",
+    "regeneratePrompt": "Regenerate transition prompt"
   },
   "editor": {
     "alert": {

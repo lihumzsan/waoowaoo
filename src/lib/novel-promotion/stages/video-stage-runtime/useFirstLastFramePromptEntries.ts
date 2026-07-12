@@ -4,16 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { VideoGenerationOptions, VideoPanel } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { buildDefaultFirstLastFramePrompt } from '@/lib/novel-promotion/panel-continuity'
 import type { FirstLastFramePromptReason } from '@/lib/novel-promotion/first-last-frame-prompt'
+import { buildFirstLastFramePromptFingerprintInput } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
 import { useGenerateFirstLastFramePrompt } from '@/lib/query/mutations/useVideoMutations'
 import {
   applyPromptResult,
+  canStartPromptOperation,
   createPersistedPromptEntry,
+  isPromptResultCurrent,
   projectPromptTaskState,
   shouldApplyPromptResult,
+  shouldAutoEnsurePrompt,
   type FirstLastFramePromptEntry,
 } from './first-last-frame-prompt-entry'
 
 interface PromptTaskStates {
+  isFetching: boolean
   getTaskState: (key: string) => {
     phase?: string | null
     lastError?: { message?: string | null } | null
@@ -50,6 +55,9 @@ export function useFirstLastFramePromptEntries({
   const ensureMutation = useGenerateFirstLastFramePrompt(projectId)
   const ensuredSignaturesRef = useRef(new Map<string, string>())
   const requestRevisionsRef = useRef(new Map<string, number>())
+  const activeOperationsRef = useRef(new Set<string>())
+  const promptEntriesRef = useRef(promptEntries)
+  promptEntriesRef.current = promptEntries
   const linkedPanelsRef = useRef(linkedPanels)
   linkedPanelsRef.current = linkedPanels
 
@@ -62,15 +70,32 @@ export function useFirstLastFramePromptEntries({
   }, [allPanels])
 
   const buildSourceSignature = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel) => JSON.stringify({
-    firstPanelId: firstPanel.panelId,
-    lastPanelId: lastPanel.panelId,
-    firstImageUrl: firstPanel.imageUrl,
-    lastImageUrl: lastPanel.imageUrl,
-    firstContext: firstPanel.textPanel,
-    lastContext: lastPanel.textPanel,
-    duration: firstPanel.videoDurationBinding,
-    flModel,
-    flGenerationOptions,
+    canonical: buildFirstLastFramePromptFingerprintInput({
+      firstPanel: firstPanel.firstLastFramePromptFingerprintSource || {
+        id: firstPanel.panelId,
+        imageUrl: firstPanel.imageUrl,
+        description: firstPanel.textPanel?.description,
+        imagePrompt: firstPanel.textPanel?.imagePrompt,
+        videoPrompt: firstPanel.textPanel?.video_prompt,
+        shotType: firstPanel.textPanel?.shot_type,
+        cameraMove: firstPanel.textPanel?.camera_move,
+        location: firstPanel.textPanel?.location,
+        videoDurationBinding: firstPanel.videoDurationBinding,
+        duration: firstPanel.textPanel?.duration,
+      },
+      lastPanel: lastPanel.firstLastFramePromptFingerprintSource || {
+        id: lastPanel.panelId,
+        imageUrl: lastPanel.imageUrl,
+        description: lastPanel.textPanel?.description,
+        imagePrompt: lastPanel.textPanel?.imagePrompt,
+        videoPrompt: lastPanel.textPanel?.video_prompt,
+        shotType: lastPanel.textPanel?.shot_type,
+        cameraMove: lastPanel.textPanel?.camera_move,
+        location: lastPanel.textPanel?.location,
+      },
+    }),
+    selectedModel: flModel,
+    generationOptions: flGenerationOptions,
   }), [flGenerationOptions, flModel])
 
   const buildDerivedEntry = useCallback((firstPanel: VideoPanel, lastPanel: VideoPanel): FirstLastFramePromptEntry => ({
@@ -103,6 +128,15 @@ export function useFirstLastFramePromptEntries({
     status: 'idle',
     sourceFingerprint: buildSourceSignature(firstPanel, lastPanel),
   }), [buildSourceSignature])
+
+  const currentSignaturesRef = useRef(new Map<string, string>())
+  const currentSignatures = new Map<string, string>()
+  for (let index = 0; index < allPanels.length - 1; index += 1) {
+    const firstPanel = allPanels[index]
+    const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
+    currentSignatures.set(panelKey, buildSourceSignature(firstPanel, allPanels[index + 1]))
+  }
+  currentSignaturesRef.current = currentSignatures
 
   useEffect(() => {
     setPromptEntries((previous) => {
@@ -139,12 +173,14 @@ export function useFirstLastFramePromptEntries({
       || !pair.lastPanel.imageUrl
       || (!linkedPanelsRef.current.get(panelKey) && reason !== 'link')
     ) return
+    if (activeOperationsRef.current.has(panelKey) || !canStartPromptOperation(promptEntriesRef.current.get(panelKey))) return
 
     const signature = buildSourceSignature(pair.firstPanel, pair.lastPanel)
     if (reason === 'source_change' && ensuredSignaturesRef.current.get(panelKey) === signature) return
     ensuredSignaturesRef.current.set(panelKey, signature)
     const requestRevision = (requestRevisionsRef.current.get(panelKey) || 0) + 1
     requestRevisionsRef.current.set(panelKey, requestRevision)
+    activeOperationsRef.current.add(panelKey)
     setPromptEntries((previous) => new Map(previous).set(panelKey, {
       ...(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)),
       status: 'queued',
@@ -158,11 +194,20 @@ export function useFirstLastFramePromptEntries({
         episodeId,
         reason,
       })
+      if (!isPromptResultCurrent(signature, currentSignaturesRef.current.get(panelKey))) {
+        ensuredSignaturesRef.current.delete(panelKey)
+        setPromptEntries((previous) => {
+          const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
+          return new Map(previous).set(panelKey, { ...current, status: 'idle' })
+        })
+        return
+      }
       if (!shouldApplyPromptResult({
         linked: reason === 'link' || linkedPanelsRef.current.get(panelKey) === true,
         requestRevision,
         currentRevision: requestRevisionsRef.current.get(panelKey) || 0,
       })) return
+      if (!result.applied) ensuredSignaturesRef.current.delete(panelKey)
       setPromptEntries((previous) => new Map(previous).set(panelKey, applyPromptResult(
         previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel),
         result,
@@ -178,18 +223,10 @@ export function useFirstLastFramePromptEntries({
         status: 'error',
         errorMessage: error instanceof Error ? error.message : String(error),
       }))
+    } finally {
+      activeOperationsRef.current.delete(panelKey)
     }
   }, [buildDerivedEntry, buildSourceSignature, ensureMutation, episodeId, getPanelPair])
-
-  useEffect(() => {
-    for (let index = 0; index < allPanels.length - 1; index += 1) {
-      const firstPanel = allPanels[index]
-      const lastPanel = allPanels[index + 1]
-      const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
-      if (!linkedPanels.get(panelKey) || !firstPanel.imageUrl || !lastPanel.imageUrl) continue
-      void ensurePrompt(panelKey, 'source_change')
-    }
-  }, [allPanels, ensurePrompt, linkedPanels])
 
   useEffect(() => {
     setPromptEntries((previous) => {
@@ -198,8 +235,9 @@ export function useFirstLastFramePromptEntries({
       for (const panel of allPanels) {
         if (!panel.panelId) continue
         const panelKey = `${panel.storyboardId}-${panel.panelIndex}`
-        const current = next.get(panelKey)
-        if (!current) continue
+        const pair = getPanelPair(panelKey)
+        if (!pair) continue
+        const current = next.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
         const task = promptTaskStates.getTaskState(`panel-first-last-prompt:${panel.panelId}`)
         if (!task) continue
         const projected = projectPromptTaskState(current, {
@@ -213,7 +251,29 @@ export function useFirstLastFramePromptEntries({
       }
       return changed ? next : previous
     })
-  }, [allPanels, promptTaskStates])
+  }, [allPanels, buildDerivedEntry, getPanelPair, promptTaskStates])
+
+  useEffect(() => {
+    for (let index = 0; index < allPanels.length - 1; index += 1) {
+      const firstPanel = allPanels[index]
+      const lastPanel = allPanels[index + 1]
+      const panelKey = `${firstPanel.storyboardId}-${firstPanel.panelIndex}`
+      const task = firstPanel.panelId
+        ? promptTaskStates.getTaskState(`panel-first-last-prompt:${firstPanel.panelId}`)
+        : null
+      if (
+        !linkedPanels.get(panelKey)
+        || !firstPanel.imageUrl
+        || !lastPanel.imageUrl
+        || promptEntriesRef.current.get(panelKey)?.status === 'error'
+        || !shouldAutoEnsurePrompt({
+          taskHydrated: !promptTaskStates.isFetching,
+          taskPhase: task?.phase,
+        })
+      ) continue
+      void ensurePrompt(panelKey, 'source_change')
+    }
+  }, [allPanels, ensurePrompt, linkedPanels, promptEntries, promptTaskStates])
 
   const resolvedPromptEntries = useMemo(() => {
     const next = new Map(promptEntries)
@@ -243,6 +303,8 @@ export function useFirstLastFramePromptEntries({
     const pair = getPanelPair(panelKey)
     const entry = resolvedPromptEntries.get(panelKey)
     if (!pair || !entry) return
+    if (activeOperationsRef.current.has(panelKey) || !canStartPromptOperation(promptEntriesRef.current.get(panelKey))) return
+    activeOperationsRef.current.add(panelKey)
     const trimmedValue = value.trim()
     setPromptEntries((previous) => new Map(previous).set(panelKey, {
       ...entry, value, origin: 'user', dirty: true, status: 'saving',
@@ -259,8 +321,16 @@ export function useFirstLastFramePromptEntries({
         errorMessage: error instanceof Error ? error.message : String(error),
       }))
       throw error
+    } finally {
+      activeOperationsRef.current.delete(panelKey)
     }
     if (!trimmedValue) {
+      const resetEntry = {
+        ...buildDerivedEntry(pair.firstPanel, pair.lastPanel),
+        status: 'idle' as const,
+      }
+      promptEntriesRef.current = new Map(promptEntriesRef.current).set(panelKey, resetEntry)
+      setPromptEntries((previous) => new Map(previous).set(panelKey, resetEntry))
       ensuredSignaturesRef.current.delete(panelKey)
       await ensurePrompt(panelKey, 'source_change')
       return
@@ -268,7 +338,7 @@ export function useFirstLastFramePromptEntries({
     setPromptEntries((previous) => new Map(previous).set(panelKey, {
       ...entry, value: trimmedValue, origin: 'user', dirty: false, status: 'idle',
     }))
-  }, [ensurePrompt, getPanelPair, onUpdatePrompt, resolvedPromptEntries])
+  }, [buildDerivedEntry, ensurePrompt, getPanelPair, onUpdatePrompt, resolvedPromptEntries])
 
   const unlinkPrompt = useCallback((panelKey: string) => {
     requestRevisionsRef.current.set(panelKey, (requestRevisionsRef.current.get(panelKey) || 0) + 1)

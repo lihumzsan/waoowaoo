@@ -4,15 +4,20 @@ interface UsePanelPromptEditorParams {
   localPrompt: string
   onUpdateLocalPrompt: (value: string) => void
   onSavePrompt: (value: string) => Promise<void>
+  controlledValue?: string
+  onControlledValueChange?: (value: string) => void
 }
 
 export function usePanelPromptEditor({
   localPrompt,
   onUpdateLocalPrompt,
   onSavePrompt,
+  controlledValue,
+  onControlledValueChange,
 }: UsePanelPromptEditorParams) {
   const [isEditing, setIsEditing] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState(localPrompt)
+  const effectiveEditingPrompt = controlledValue ?? editingPrompt
 
   const handleStartEdit = useCallback(() => {
     setEditingPrompt(localPrompt)
@@ -20,10 +25,10 @@ export function usePanelPromptEditor({
   }, [localPrompt])
 
   const handleSave = useCallback(async () => {
-    onUpdateLocalPrompt(editingPrompt)
+    if (controlledValue === undefined) onUpdateLocalPrompt(editingPrompt)
     setIsEditing(false)
-    await onSavePrompt(editingPrompt)
-  }, [editingPrompt, onSavePrompt, onUpdateLocalPrompt])
+    await onSavePrompt(effectiveEditingPrompt)
+  }, [controlledValue, editingPrompt, effectiveEditingPrompt, onSavePrompt, onUpdateLocalPrompt])
 
   const handleCancelEdit = useCallback(() => {
     setEditingPrompt(localPrompt)
@@ -32,8 +37,8 @@ export function usePanelPromptEditor({
 
   return {
     isEditing,
-    editingPrompt,
-    setEditingPrompt,
+    editingPrompt: effectiveEditingPrompt,
+    setEditingPrompt: onControlledValueChange || setEditingPrompt,
     handleStartEdit,
     handleSave,
     handleCancelEdit,

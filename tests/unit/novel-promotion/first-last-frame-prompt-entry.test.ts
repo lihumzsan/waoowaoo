@@ -86,4 +86,75 @@ describe('first/last-frame prompt entry', () => {
       fallbackUsed: true,
     })
   })
+
+  it('blocks ensure and save while another prompt operation is active', async () => {
+    const promptState = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    ) as Record<string, unknown>
+
+    expect(typeof promptState.canStartPromptOperation).toBe('function')
+    if (typeof promptState.canStartPromptOperation !== 'function') return
+    const canStart = promptState.canStartPromptOperation as (entry: { status: string } | undefined) => boolean
+    expect(canStart({ status: 'queued' })).toBe(false)
+    expect(canStart({ status: 'processing' })).toBe(false)
+    expect(canStart({ status: 'saving' })).toBe(false)
+    expect(canStart({ status: 'idle' })).toBe(true)
+    expect(canStart({ status: 'error' })).toBe(true)
+  })
+
+  it('does not auto ensure before task hydration or after a recovered failure', async () => {
+    const promptState = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    ) as Record<string, unknown>
+
+    expect(typeof promptState.shouldAutoEnsurePrompt).toBe('function')
+    if (typeof promptState.shouldAutoEnsurePrompt !== 'function') return
+    const shouldEnsure = promptState.shouldAutoEnsurePrompt as (params: {
+      taskHydrated: boolean
+      taskPhase?: string | null
+    }) => boolean
+    expect(shouldEnsure({ taskHydrated: false })).toBe(false)
+    expect(shouldEnsure({ taskHydrated: true, taskPhase: 'failed' })).toBe(false)
+    expect(shouldEnsure({ taskHydrated: true, taskPhase: 'queued' })).toBe(false)
+    expect(shouldEnsure({ taskHydrated: true, taskPhase: 'processing' })).toBe(false)
+    expect(shouldEnsure({ taskHydrated: true, taskPhase: 'idle' })).toBe(true)
+  })
+
+  it('turns an unapplied result into a retryable error instead of a permanent idle skip', async () => {
+    const { applyPromptResult } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const entry = {
+      value: 'Current text',
+      origin: 'generated' as const,
+      dirty: false,
+      status: 'queued' as const,
+    }
+
+    expect(applyPromptResult(entry, {
+      prompt: 'Stale result',
+      sourceFingerprint: 'fingerprint-stale',
+      applied: false,
+      fallbackUsed: false,
+      warnings: [],
+    })).toMatchObject({
+      value: 'Current text',
+      status: 'error',
+    })
+  })
+
+  it('rejects a completed result when the canonical source changed while it was active', async () => {
+    const promptState = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    ) as Record<string, unknown>
+
+    expect(typeof promptState.isPromptResultCurrent).toBe('function')
+    if (typeof promptState.isPromptResultCurrent !== 'function') return
+    const isCurrent = promptState.isPromptResultCurrent as (
+      requestSignature: string,
+      currentSignature: string | undefined,
+    ) => boolean
+    expect(isCurrent('source-a', 'source-b')).toBe(false)
+    expect(isCurrent('source-b', 'source-b')).toBe(true)
+  })
 })

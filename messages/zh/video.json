@@ -141,7 +141,8 @@
     "promptSaving": "正在保存转场提示词...",
     "promptError": "转场提示词生成失败。",
     "promptFallbackWarning": "当前显示确定性回退提示词，可重试生成或继续生成视频。",
-    "retryPrompt": "重试转场提示词"
+    "retryPrompt": "重试转场提示词",
+    "regeneratePrompt": "重新生成转场提示词"
   },
   "editor": {
     "alert": {

@@ -97,6 +97,7 @@ describe('POST first-last-frame-prompt', () => {
       firstPanelId: 'panel-1',
       lastPanelId: 'panel-2',
       episodeId: 'episode-1',
+      requireLinked: true,
     })
     expect(maybeSubmitLLMTaskMock).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
@@ -165,6 +166,19 @@ describe('POST first-last-frame-prompt', () => {
 
     expect(response.status).toBe(200)
     expect(maybeSubmitLLMTaskMock).toHaveBeenCalledOnce()
+  })
+
+  it('does not return the persisted shortcut after the link was removed', async () => {
+    validateMock.mockRejectedValueOnce(new validationErrorMock.ErrorClass('First/last frame link was removed'))
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'source_change',
+    }, { params: { projectId: 'project-1' } })
+
+    expect(response.status).toBe(400)
+    expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
   })
 
   it.each([

@@ -32,7 +32,13 @@ export const POST = apiHandler(async (
   }
 
   try {
-    const panels = await loadAdjacentFirstLastFramePanels({ projectId, firstPanelId, lastPanelId, episodeId })
+    const panels = await loadAdjacentFirstLastFramePanels({
+      projectId,
+      firstPanelId,
+      lastPanelId,
+      episodeId,
+      requireLinked: true,
+    })
     const sourceFingerprint = buildFirstLastFramePromptFingerprint(
       panels.firstPanel as unknown as Record<string, unknown>,
       panels.lastPanel as unknown as Record<string, unknown>,
