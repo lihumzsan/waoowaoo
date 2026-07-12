@@ -7,14 +7,13 @@ x-logging: &default-logging
 services:
   mysql:
     image: mysql:8.0
-    container_name: waoowaoo-test-mysql
     logging: *default-logging
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: waoowaoo_test
       MYSQL_ROOT_HOST: "%"
     ports:
-      - "3307:3306"
+      - "127.0.0.1:${TEST_MYSQL_PORT:-0}:3306"
     command:
       - "--default-authentication-plugin=mysql_native_password"
       - "--sql_mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"
@@ -27,10 +26,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: waoowaoo-test-redis
     logging: *default-logging
     ports:
-      - "6380:6379"
+      - "127.0.0.1:${TEST_REDIS_PORT:-0}:6379"
     command: ["redis-server", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

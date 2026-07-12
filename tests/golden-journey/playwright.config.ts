@@ -1,12 +1,20 @@
 import path from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
+import {
+  applyGoldenRuntimeIdentity,
+  resolveGoldenRuntimeIdentity,
+} from './runtime/identity'
 
 const artifactRoot = path.resolve(process.cwd(), 'artifacts/golden-journey')
+const externalEnvironment = process.env.GOLDEN_EXTERNAL_ENV === '1'
+const runtimeIdentity = resolveGoldenRuntimeIdentity()
+if (!externalEnvironment) applyGoldenRuntimeIdentity(runtimeIdentity)
 process.env.NO_PROXY = '127.0.0.1,localhost'
 process.env.no_proxy = '127.0.0.1,localhost'
 
 export default defineConfig({
   testDir: path.resolve(process.cwd(), 'tests/golden-journey/journeys'),
+  globalTeardown: path.resolve(process.cwd(), 'tests/golden-journey/runtime/global-teardown.ts'),
   outputDir: path.join(artifactRoot, 'test-output'),
   fullyParallel: false,
   forbidOnly: true,
@@ -21,19 +29,22 @@ export default defineConfig({
     ['json', { outputFile: path.join(artifactRoot, 'playwright-results.json') }],
     ['html', { outputFolder: path.join(artifactRoot, 'html'), open: 'never' }],
   ],
-  webServer: process.env.GOLDEN_EXTERNAL_ENV === '1'
+  webServer: externalEnvironment
     ? undefined
     : {
-      command: 'tsx tests/golden-journey/runtime/start-environment.ts',
+      command: 'exec node --import=tsx tests/golden-journey/runtime/start-environment.ts',
       cwd: process.cwd(),
-      url: 'http://127.0.0.1:3199/health',
+      url: `http://127.0.0.1:${String(runtimeIdentity.coordinatorPort)}/health`,
       timeout: 180_000,
       reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
     },
   use: {
-    baseURL: process.env.GOLDEN_BASE_URL ?? 'http://127.0.0.1:3100',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
+    baseURL: process.env.GOLDEN_BASE_URL
+      ?? `http://127.0.0.1:${String(runtimeIdentity.appPort)}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
