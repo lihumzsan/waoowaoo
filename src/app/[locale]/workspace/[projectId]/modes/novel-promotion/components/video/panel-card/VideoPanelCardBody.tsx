@@ -51,7 +51,6 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
   const isFirstLastFrameGenerated = panel.videoGenerationMode === 'firstlastframe' && !!panel.videoUrl
   const showsIncomingLinkBadge = layout.isLastFrame && !!layout.prevPanel
   const showsOutgoingLinkBadge = layout.isLinked && !!layout.nextPanel
-  const showsPromptEditor = !layout.isLastFrame || layout.isLinked
   const showsFirstLastFrameActions = layout.isLinked && !!layout.nextPanel
   const flPromptActive = layout.flPromptEntry?.status === 'queued'
     || layout.flPromptEntry?.status === 'processing'
@@ -114,8 +113,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
           </div>
         )}
 
-        {showsPromptEditor && (
-          <>
+        <>
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('promptModal.promptLabel')}</span>
               {!promptEditor.isEditing && (
@@ -498,8 +496,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                 )}
               </>
             )}
-          </>
-        )}
+        </>
       </div>
     </div>
   )

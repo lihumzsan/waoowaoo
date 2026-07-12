@@ -184,6 +184,30 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('生成首尾帧视频')
   })
 
+  it('keeps normal-video controls visible for an incoming-only last frame', () => {
+    const runtime = createRuntime()
+    runtime.layout = {
+      ...runtime.layout,
+      isLinked: false,
+      isLastFrame: true,
+      nextPanel: null,
+      flPromptEntry: undefined,
+    }
+    runtime.promptEditor.localPrompt = 'own-normal-video-prompt'
+    runtime.t = ((key: string) => key === 'panelCard.generateVideo'
+      ? 'generate-normal-video'
+      : key) as typeof runtime.t
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('own-normal-video-prompt')
+    expect(markup).toContain('generate-normal-video')
+    expect(markup).toContain('model-dropdown')
+    expect(markup).not.toContain('firstLastFrame.generate')
+  })
+
   it('keeps an existing first-last-frame video eligible for regeneration', () => {
     const runtime = createRuntime()
     runtime.panel.videoGenerationMode = 'firstlastframe'
