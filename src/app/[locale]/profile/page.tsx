@@ -1,6 +1,6 @@
 'use client'
-import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Navbar from '@/components/Navbar'
@@ -129,9 +129,22 @@ export default function ProfilePage() {
   const [rechargeStatus, setRechargeStatus] = useState<string | null>(null)
   const [recharging, setRecharging] = useState(false)
   const [creditsModalOpen, setCreditsModalOpen] = useState(false)
+  const isSigningOutRef = useRef(false)
+
+  const handleSignOut = useCallback(async () => {
+    isSigningOutRef.current = true
+    try {
+      await signOut({ redirect: false, callbackUrl: '/' })
+      router.replace({ pathname: '/' })
+      router.refresh()
+    } catch (error) {
+      isSigningOutRef.current = false
+      throw error
+    }
+  }, [router])
 
   useEffect(() => {
-    if (status === 'loading') return
+    if (status === 'loading' || isSigningOutRef.current) return
     if (!session) { router.push({ pathname: '/auth/signin' }); return }
   }, [router, session, status])
 
@@ -319,7 +332,7 @@ export default function ProfilePage() {
               {/* 退出登录 */}
               <button
                 type="button"
-                onClick={() => signOut({ callbackUrl: '/' })}
+                onClick={() => { void handleSignOut() }}
                 className="mt-auto flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--glass-tone-danger-fg)] transition hover:bg-[var(--glass-tone-danger-bg)]"
               >
                 <AppIcon name="logout" className="h-4 w-4" />

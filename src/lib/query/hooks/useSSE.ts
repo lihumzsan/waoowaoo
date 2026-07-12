@@ -30,6 +30,7 @@ function cursorStorageKey(projectId: string, episodeId: string | null | undefine
 }
 
 function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
+  if (typeof window === 'undefined') return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   const storage = window.sessionStorage
   if (!storage) return { ...EMPTY_WORKSPACE_SSE_CURSOR }
   try {

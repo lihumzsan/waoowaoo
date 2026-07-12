@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// Architecture contract: docs/architecture/modules/product-shell.md (PS-04)
+
 import fs from 'fs'
 import path from 'path'
 import process from 'process'

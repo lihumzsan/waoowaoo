@@ -94,7 +94,7 @@ export default function LanguageSwitcher() {
                 <button
                     type="button"
                     onClick={() => setIsMenuOpen((prev) => !prev)}
-                    aria-label={SWITCH_CONFIRM_COPY[targetLocale].triggerLabel}
+                    aria-label={SWITCH_CONFIRM_COPY[currentLocale].triggerLabel}
                     aria-expanded={isMenuOpen}
                     className="glass-selection-control inline-flex items-center gap-2 rounded-full px-2.5 py-1.5 text-sm font-medium"
                 >

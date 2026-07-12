@@ -205,7 +205,9 @@ export default function WorkspacePage() {
         setSearchQuery('')
         setSearchInput('')
         setPagination(prev => ({ ...prev, page: 1 }))
-        void fetchProjects(1, '')
+        if (!shouldOpenModelSetup) {
+          void fetchProjects(1, '')
+        }
         setShowCreateModal(false)
         setModelSetupCheckFailed(false)
         setFormData({ name: '', description: '' })
@@ -295,7 +297,7 @@ export default function WorkspacePage() {
 
       if (response.ok) {
         // 删除成功后重新获取当前页
-        fetchProjects(pagination.page, searchQuery)
+        await fetchProjects(pagination.page, searchQuery)
       } else {
         alert(t('deleteFailed'))
       }

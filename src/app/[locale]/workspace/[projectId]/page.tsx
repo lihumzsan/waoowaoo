@@ -134,7 +134,7 @@ export default function ProjectDetailPage() {
   }, [assistantAutoStartDraft, clearAssistantAutoStart, selectedEpisodeId, shouldAutoStartAssistant])
 
   // 零状态：无剧集时自动创建第一集
-  const shouldAutoCreateEpisode = episodes.length === 0
+  const shouldAutoCreateEpisode = Boolean(project) && !projectError && episodes.length === 0
   const autoCreateTriggered = useRef(false)
 
   useEffect(() => {
