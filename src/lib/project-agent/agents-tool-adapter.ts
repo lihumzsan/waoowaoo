@@ -36,7 +36,11 @@ import {
   type ProjectAgentOperationExecutionFence,
 } from './operation-execution-fence'
 import type { ProjectAgentTaskSuspensionReceipt } from './suspension'
-import { bindProjectAgentWaitToTasksInTransaction } from './waits'
+import {
+  bindProjectAgentCollectingWaitMemberInTransaction,
+  bindProjectAgentWaitToTasksInTransaction,
+  type ProjectAgentCollectingTaskWait,
+} from './waits'
 
 type UnknownObject = { [key: string]: unknown }
 
@@ -102,15 +106,19 @@ export interface CreateProjectAgentOperationToolParams {
     suspension: ProjectAgentTaskSuspensionReceipt
   }) => void
   approvalPreflightStore?: ProjectAgentApprovalPreflightStore
+  /** Every member of a declared operation group is held by one approval barrier. */
+  approvalBarrierOperationIds?: readonly string[]
+  collectingTaskWait?: ProjectAgentCollectingTaskWait | null
 }
 
 export function createProjectAgentOperationTool(
   params: CreateProjectAgentOperationToolParams,
 ): Tool {
-  const requiresApproval = shouldRequireAssistantToolApproval({
+  const requiresApproval = params.approvalBarrierOperationIds?.includes(params.operation.id) === true
+    || shouldRequireAssistantToolApproval({
     mode: params.assistantPermissionMode,
     operation: params.operation,
-  })
+    })
   const needsApproval = async (_runContext: unknown, toolInput: unknown, toolCallId?: string): Promise<boolean> => {
     if (!requiresApproval) return false
     if (!params.approvalPreflightStore) return true
@@ -199,7 +207,7 @@ export function createProjectAgentOperationTool(
             }
             const taskIds = Array.from(new Set(batch.taskIds.map((taskId) => taskId.trim()).filter(Boolean))).sort()
             if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_BATCH_EMPTY:${params.operation.id}`)
-            const suspension = await bindProjectAgentWaitToTasksInTransaction(transaction, {
+            const waitInput = {
               runFence: params.runFence,
               runId,
               executionSegmentId: params.context.executionSegmentId ?? null,
@@ -212,7 +220,13 @@ export function createProjectAgentOperationTool(
               taskIds,
               followUpMode: params.operation.agentFlow?.onTaskComplete === 'complete' ? 'complete' : 'resume_agent',
               sourceOperationActivityId,
-            })
+            } as const
+            const suspension = params.collectingTaskWait
+              ? await bindProjectAgentCollectingWaitMemberInTransaction(transaction, {
+                  ...waitInput,
+                  group: params.collectingTaskWait,
+                })
+              : await bindProjectAgentWaitToTasksInTransaction(transaction, waitInput)
             if (!suspension) throw new Error(`PROJECT_AGENT_WAIT_BINDING_FAILED:${params.operation.id}`)
             bound = true
             boundBatch = { operationId: params.operation.id, taskIds, suspension }
@@ -242,6 +256,7 @@ export function createProjectAgentOperationTool(
           signal: params.operationSignal,
           continuationClaim: params.continuationClaim ?? null,
           taskBatchBinding,
+          concurrentExecutionSegmentId: params.collectingTaskWait ? params.context.executionSegmentId ?? null : null,
         }
         try {
           const execution = await executeProjectAgentOperationFromTool({
@@ -272,15 +287,16 @@ export function createProjectAgentOperationTool(
           throw error
         }
       }
-      const operationActivityId = randomUUID()
+      const operationActivityId = params.collectingTaskWait ? null : randomUUID()
       const taskBatchBinding = createTaskBatchBinding(operationActivityId)
       const executionFence: ProjectAgentOperationExecutionFence = {
         runFence: params.runFence,
         signal: params.operationSignal,
         continuationClaim: params.continuationClaim ?? null,
         taskBatchBinding,
+        concurrentExecutionSegmentId: params.collectingTaskWait ? params.context.executionSegmentId ?? null : null,
       }
-      const startedActivity = await appendProjectAgentEvents({
+      const startedActivity = operationActivityId ? await appendProjectAgentEvents({
         scope: {
           projectId: params.projectId,
           userId: params.userId,
@@ -302,7 +318,7 @@ export function createProjectAgentOperationTool(
             },
           },
         ],
-      })
+      }) : null
       if (startedActivity) writeActivityDataPart(params.writer, startedActivity)
       if (params.operation.intent === 'act') {
         writeOperationDataPart<ProjectAgentOperationStartPartData>(params.writer, 'data-agent-operation-start', {
@@ -327,7 +343,7 @@ export function createProjectAgentOperationTool(
           taskBatchBinding,
         })
         const result = execution.result
-        const settledActivity = taskBatchBinding.isCommitted() ? null : await appendProjectAgentEvents({
+        const settledActivity = taskBatchBinding.isCommitted() || !operationActivityId ? null : await appendProjectAgentEvents({
           scope: {
             projectId: params.projectId,
             userId: params.userId,
@@ -359,7 +375,7 @@ export function createProjectAgentOperationTool(
         return result
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error)
-        const failedActivity = await appendProjectAgentEvents({
+        const failedActivity = operationActivityId ? await appendProjectAgentEvents({
           scope: {
             projectId: params.projectId,
             userId: params.userId,
@@ -377,7 +393,7 @@ export function createProjectAgentOperationTool(
               errorMessage,
             },
           }],
-        })
+        }) : null
         if (failedActivity) writeActivityDataPart(params.writer, failedActivity)
         reportExecutionSettled({
           kind: 'failed',

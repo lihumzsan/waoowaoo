@@ -289,7 +289,10 @@ export function extractWorkspaceResourceRefsFromWriteResult(params: {
       const projectId = readString(editBible.projectId) ?? params.fallbackProjectId
       const episodeId = readString(editBible.episodeId)
       if (!episodeId) continue
-      refs.push(...editPipelineRefs(projectId, episodeId))
+      refs.push(
+        ...editPipelineRefs(projectId, episodeId),
+        resourceRef(WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS, projectId, episodeId),
+      )
       continue
     }
     if (isEditShotExecutionPlanRecord(data)) {

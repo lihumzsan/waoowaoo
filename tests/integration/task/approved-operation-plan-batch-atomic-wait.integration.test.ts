@@ -12,7 +12,12 @@ import { z } from 'zod'
 import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
 import { appendProjectAgentEvents } from '@/lib/project-agent/event'
 import { createProjectAgentRunFence } from '@/lib/project-agent/run-fence'
-import { bindProjectAgentWaitToTasksInTransaction } from '@/lib/project-agent/waits'
+import {
+  bindProjectAgentCollectingWaitMemberInTransaction,
+  bindProjectAgentWaitToTasksInTransaction,
+  prepareProjectAgentCollectingTaskWait,
+  sealProjectAgentCollectingTaskWait,
+} from '@/lib/project-agent/waits'
 import type { ProjectAgentOperationTaskBatchBinding } from '@/lib/operations/types'
 import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 function billingInfo(id: string): TaskBillingInfo {
@@ -341,5 +346,116 @@ describe('approved operation plan Task batch integration', () => {
     expect(waits).toHaveLength(1)
     expect((waits[0]?.taskIds as string[]).sort()).toEqual([...output.taskIds].sort())
     expect(tasks).toHaveLength(2)
+  })
+
+  it('collects two independent Operation task batches into one sealed Assistant Wait', async () => {
+    const seeded = await seedExecution(10)
+    await prisma.operationExecution.delete({ where: { id: seeded.execution.id } })
+    const { run: initialRun } = await createProjectAgentUserTurnRun({
+      runId: 'approved-assistant-group-run-1',
+      requestId: 'approved-assistant-group-request-1',
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      assistantId: 'workspace-command',
+      message: {
+        id: 'approved-assistant-group-message-1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'generate core and assets' }],
+      },
+    })
+    const runFence = createProjectAgentRunFence(initialRun)
+    const group = await prepareProjectAgentCollectingTaskWait({
+      runFence,
+      runId: initialRun.id,
+      executionSegmentId: 'decision:approved-assistant-group-1',
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      assistantId: 'workspace-command',
+      operationId: 'generate_edit_script_assets',
+      operationIds: ['generate_edit_script_assets', 'plan_chapters'],
+      taskIds: [],
+      followUpMode: 'resume_agent',
+    })
+    let bound = false
+    let committed = false
+    let committedSuspension: ProjectAgentTaskSuspensionReceipt | null = null
+    const taskBatchBinding: ProjectAgentOperationTaskBatchBinding = {
+      async bindInTransaction(transaction, batch) {
+        const suspension = await bindProjectAgentCollectingWaitMemberInTransaction(transaction, {
+          runFence,
+          runId: initialRun.id,
+          executionSegmentId: 'decision:approved-assistant-group-1',
+          projectId: seeded.project.id,
+          userId: seeded.user.id,
+          assistantId: 'workspace-command',
+          operationId: batch.operationId,
+          taskIds: [...batch.taskIds],
+          followUpMode: 'resume_agent',
+          group,
+        })
+        bound = true
+        committedSuspension = suspension
+        return suspension
+      },
+      isBound: () => bound,
+      markCommitted: () => { committed = bound },
+      isCommitted: () => committed,
+      getCommittedSuspension: () => committed ? committedSuspension : null,
+    }
+    const output = await invokeApprovedOperationPlan({
+      operation: createApprovedBatchOperation(seeded.plan),
+      ctx: {
+        request: new Request('http://localhost') as never,
+        userId: seeded.user.id,
+        projectId: seeded.project.id,
+        context: {},
+        source: 'assistant-panel',
+        writer: null,
+        executionFence: {
+          runFence,
+          signal: new AbortController().signal,
+        },
+        taskBatchBinding,
+      },
+      normalizedInput: { episodeId: null },
+      invocation: {
+        approvalGrantId: seeded.issued.approvalGrantId,
+        requestId: seeded.issued.operationRequestId,
+      },
+    })
+    await prisma.$transaction(async (transaction) => {
+      await bindProjectAgentCollectingWaitMemberInTransaction(transaction, {
+        runFence,
+        runId: initialRun.id,
+        executionSegmentId: 'decision:approved-assistant-group-1',
+        projectId: seeded.project.id,
+        userId: seeded.user.id,
+        assistantId: 'workspace-command',
+        operationId: 'plan_chapters',
+        taskIds: [output.taskIds[0]!],
+        followUpMode: 'resume_agent',
+        group,
+      })
+    })
+    await sealProjectAgentCollectingTaskWait({
+      runFence,
+      runId: initialRun.id,
+      executionSegmentId: 'decision:approved-assistant-group-1',
+      projectId: seeded.project.id,
+      userId: seeded.user.id,
+      assistantId: 'workspace-command',
+      operationId: group.operationId,
+      taskIds: output.taskIds,
+      followUpMode: 'resume_agent',
+      group,
+    })
+    const [storedRun, waits] = await Promise.all([
+      prisma.projectAgentRun.findUniqueOrThrow({ where: { id: initialRun.id } }),
+      prisma.projectAgentWait.findMany({ where: { runId: initialRun.id } }),
+    ])
+    expect(storedRun.status).toBe('awaiting_task')
+    expect(waits).toHaveLength(1)
+    expect(waits[0]?.status).toBe('pending')
+    expect((waits[0]?.taskIds as string[]).sort()).toEqual([...output.taskIds].sort())
   })
 })

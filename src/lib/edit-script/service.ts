@@ -1593,7 +1593,6 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
     progress: 18,
   })
 
-  const knownAssets = await loadKnownPlanAssets(input.projectId)
     const structure = await runStructuredPromptStep({
       userId: input.userId,
       projectId: input.projectId,
@@ -1621,9 +1620,12 @@ async function generateProjectEditScriptInternal(input: GenerateEditScriptInput)
         return rewriteStructureWithSystemShotIds(normalized)
       },
     })
+    // Asset generation runs in parallel with core planning. Reload after the
+    // model step so an image/profile that completed during planning is
+    // projected as ready instead of leaving a stale pending requirement.
     const requirements = buildProjectedAssetRequirements({
       structure,
-      knownAssets,
+      knownAssets: await loadKnownPlanAssets(input.projectId),
     })
     await persistEditScriptGenerationStep({
       projectId: input.projectId,

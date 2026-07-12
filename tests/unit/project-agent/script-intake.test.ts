@@ -16,6 +16,7 @@ function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowStat
     blocking: { kind: 'none', reason: null },
     nextAction: null,
     allowedOperationIds: [],
+    operationGroup: null,
   }
 }
 

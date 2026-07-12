@@ -208,7 +208,7 @@ export interface EditScriptAssetGenerationPayload {
     readonly targetId: string
   }>
   readonly submittedTasks: readonly EditScriptAssetGenerationTask[]
-  readonly editScript: EditScriptPayload
+  readonly editScript?: EditScriptPayload
 }
 
 export interface EditScriptAssetRevisionPayload {

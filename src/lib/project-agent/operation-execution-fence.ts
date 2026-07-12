@@ -21,6 +21,12 @@ export interface ProjectAgentOperationExecutionFence {
   } | null
   taskBatchBinding?: ProjectAgentOperationTaskBatchBinding | null
   /**
+   * Members of one declared model-step operation group may commit sibling
+   * Events while sharing the same ownership signal. The segment identity
+   * allows monotonic sibling advancement without accepting another run.
+   */
+  concurrentExecutionSegmentId?: string | null
+  /**
    * The durable, non-visible Choice intent prepared by this invocation. It is
    * distinct from a SuspensionReceipt: the final Interaction is committed by
    * execution-segment settlement together with the assistant message.
@@ -225,16 +231,39 @@ export async function assertProjectAgentOperationExecutionFenceInTransaction(
   const rows = await tx.$queryRaw<Array<{
     runVersion: number
     eventSeq: bigint
+    status: string
   }>>(Prisma.sql`
-    SELECT runVersion, eventSeq
+    SELECT runVersion, eventSeq, status
     FROM project_agent_runs
     WHERE id = ${fence.runFence.runId}
     FOR UPDATE
   `)
-  assertRunSnapshot({
-    fence,
-    run: rows[0] ?? null,
-  })
+  const run = rows[0] ?? null
+  if (fence.concurrentExecutionSegmentId) {
+    if (
+      !run
+      || run.status !== 'running'
+      || run.runVersion < fence.runFence.runVersion
+      || run.eventSeq < BigInt(fence.runFence.eventSeq)
+    ) {
+      throw new ProjectAgentOperationExecutionFenceError({
+        runId: fence.runFence.runId,
+        reason: run ? 'stale_run_fence' : 'run_missing',
+      })
+    }
+    const executionStarted = await tx.projectAgentEvent.findUnique({
+      where: { idempotencyKey: `run-execution-started:${fence.concurrentExecutionSegmentId}` },
+      select: { runId: true },
+    })
+    if (executionStarted?.runId !== fence.runFence.runId) {
+      throw new ProjectAgentOperationExecutionFenceError({
+        runId: fence.runFence.runId,
+        reason: 'stale_run_fence',
+      })
+    }
+  } else {
+    assertRunSnapshot({ fence, run })
+  }
   if (fence.continuationClaim) {
     const claims = await tx.$queryRaw<Array<{
       runId: string

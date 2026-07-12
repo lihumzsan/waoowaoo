@@ -51,11 +51,12 @@ type PlannedRequirement = {
 }
 
 type EditScriptAssetPlanMetadata = {
+  readonly source: 'planned_assets' | 'edit_requirements'
   readonly projectId: string
   readonly episodeId: string
   readonly scriptIds: readonly string[]
-  readonly representativeScriptId: string
-  readonly representativeChapterId: string
+  readonly representativeScriptId: string | null
+  readonly representativeChapterId: string | null
   readonly requirements: readonly PlannedRequirement[]
 }
 
@@ -86,7 +87,8 @@ function readPlanMetadata(plan: OperationPlan): EditScriptAssetPlanMetadata {
   const scriptIds = Array.isArray(value.scriptIds)
     ? value.scriptIds.map((item, index) => assertString(item, `scriptIds.${String(index)}`))
     : []
-  if (scriptIds.length === 0 || !Array.isArray(value.requirements)) {
+  const source = value.source === 'planned_assets' ? 'planned_assets' : 'edit_requirements'
+  if ((source === 'edit_requirements' && scriptIds.length === 0) || !Array.isArray(value.requirements)) {
     throw new Error('EDIT_SCRIPT_ASSET_PLAN_METADATA_INVALID:collections')
   }
   const requirements = value.requirements.map((item, index): PlannedRequirement => {
@@ -125,11 +127,16 @@ function readPlanMetadata(plan: OperationPlan): EditScriptAssetPlanMetadata {
     }
   })
   return {
+    source,
     projectId: assertString(value.projectId, 'projectId'),
     episodeId: assertString(value.episodeId, 'episodeId'),
     scriptIds,
-    representativeScriptId: assertString(value.representativeScriptId, 'representativeScriptId'),
-    representativeChapterId: assertString(value.representativeChapterId, 'representativeChapterId'),
+    representativeScriptId: value.representativeScriptId === null
+      ? null
+      : assertString(value.representativeScriptId, 'representativeScriptId'),
+    representativeChapterId: value.representativeChapterId === null
+      ? null
+      : assertString(value.representativeChapterId, 'representativeChapterId'),
     requirements,
   }
 }
@@ -229,6 +236,87 @@ export async function planProjectEditScriptAssetsOperation(
     ) === true
   if (!hasConfirmedStyle) {
     throw new Error(`EDIT_FIRST_MEDIA_STYLE_CONTEXT_REQUIRED:${input.episodeId}`)
+  }
+  if (allScripts.length === 0) {
+    if (!episodeBible?.bible) throw new Error(`EDIT_BIBLE_CONTENT_REQUIRED:${input.episodeId}`)
+    const plannedRequirements: PlannedRequirement[] = []
+    const tasksByAssetKey = new Map<string, PlannedTask>()
+    const plannedAssets = [
+      ...episodeBible.bible.characters.map((character) => ({
+        kind: 'character' as const,
+        name: character.name,
+        description: character.summary,
+      })),
+      ...episodeBible.bible.locations.map((location) => ({
+        kind: 'location' as const,
+        name: location.name,
+        description: location.summary,
+      })),
+    ]
+    for (const plannedAsset of plannedAssets) {
+      const assetKey = `${plannedAsset.kind}:${normalizedName(plannedAsset.name)}`
+      const asset = existingAssets.get(assetKey)
+      if (!asset) throw new Error(`EDIT_BIBLE_PLANNED_ASSET_MISSING:${assetKey}`)
+      let task: PlannedTask | null = null
+      if (!asset.hasOutput) {
+        const planned = await planAssetGenerateTask({
+          request: ctx.request,
+          kind: plannedAsset.kind,
+          assetId: asset.assetId,
+          episodeId: input.episodeId,
+          body: {
+            count: 1,
+            ...(plannedAsset.kind === 'character'
+              ? {
+                  appearanceId: asset.targetId,
+                  appearanceIndex: PRIMARY_APPEARANCE_INDEX,
+                }
+              : { imageIndex: 0 }),
+            meta: { locale: ctx.context.locale },
+          },
+          access: {
+            scope: 'project',
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+          },
+        })
+        task = planned.task
+        tasksByAssetKey.set(assetKey, task)
+      }
+      plannedRequirements.push({
+        requirementId: asset.assetId,
+        editScriptId: 'planned-assets',
+        kind: plannedAsset.kind,
+        name: plannedAsset.name,
+        description: plannedAsset.description,
+        previousStatus: asset.hasOutput ? 'completed' : 'pending',
+        previousTargetId: asset.assetId,
+        previousErrorMessage: null,
+        assetId: asset.assetId,
+        targetType: asset.targetType,
+        targetId: asset.targetId,
+        createAsset: false,
+        hasOutput: asset.hasOutput,
+        taskPlanId: task?.id ?? null,
+      })
+    }
+    return {
+      kind: 'task_submission',
+      operationId: 'generate_edit_script_assets',
+      projectId: ctx.projectId,
+      userId: ctx.userId,
+      tasks: [...tasksByAssetKey.values()],
+      reservedIdentityIds: [],
+      metadata: {
+        source: 'planned_assets',
+        projectId: ctx.projectId,
+        episodeId: input.episodeId,
+        scriptIds: [],
+        representativeScriptId: null,
+        representativeChapterId: null,
+        requirements: plannedRequirements,
+      },
+    }
   }
   const readyChapterIds = new Set(
     episodeScriptRows.filter((script) => script.status === 'ready' || script.status === 'completed').map((script) => script.chapterId),
@@ -360,6 +448,7 @@ export async function planProjectEditScriptAssetsOperation(
       requirement.createAsset ? [requirement.assetId, requirement.targetId] : []
     )))],
     metadata: {
+      source: 'edit_requirements',
       projectId: ctx.projectId,
       episodeId: input.episodeId,
       scriptIds: scripts.map((script) => script.id).filter((id): id is string => typeof id === 'string'),
@@ -374,6 +463,45 @@ async function applyPlanWrites(
   tx: import('@prisma/client').Prisma.TransactionClient,
   metadata: EditScriptAssetPlanMetadata,
 ): Promise<void> {
+  if (metadata.source === 'planned_assets') {
+    const [characters, locations] = await Promise.all([
+      tx.projectCharacter.findMany({
+        where: {
+          projectId: metadata.projectId,
+          id: { in: metadata.requirements.filter((item) => item.kind === 'character').map((item) => item.assetId) },
+        },
+        select: {
+          id: true,
+          appearances: {
+            select: { id: true },
+          },
+        },
+      }),
+      tx.projectLocation.findMany({
+        where: {
+          projectId: metadata.projectId,
+          assetKind: 'location',
+          id: { in: metadata.requirements.filter((item) => item.kind === 'location').map((item) => item.assetId) },
+        },
+        select: { id: true },
+      }),
+    ])
+    const existingIds = new Set([...characters.map((item) => item.id), ...locations.map((item) => item.id)])
+    const existingAppearanceIds = new Set(characters.flatMap((item) => item.appearances.map((appearance) => appearance.id)))
+    const missingIds = metadata.requirements.flatMap((item) => {
+      if (!existingIds.has(item.assetId)) return [item.assetId]
+      if (item.kind === 'character' && !existingAppearanceIds.has(item.targetId)) return [item.targetId]
+      return []
+    })
+    if (missingIds.length > 0) {
+      throw new ApiError('CONFLICT', {
+        code: 'OPERATION_PLAN_STALE',
+        operationId: 'generate_edit_script_assets',
+        missingAssetIds: missingIds,
+      })
+    }
+    return
+  }
   const createdKeys = new Set<string>()
   const current = await tx.projectEditAssetRequirement.findMany({
     where: {
@@ -507,21 +635,30 @@ export async function commitProjectEditScriptAssetsOperation(params: {
       targetId: item.targetId,
     })
   }
-  const persistedEditScript = await getPersistedEditScriptForRevision(
-    params.ctx.projectId,
-    metadata.episodeId,
-    metadata.representativeChapterId,
-    metadata.representativeScriptId,
-    transaction,
-  )
-  if (!persistedEditScript) throw new ApiError('NOT_FOUND')
-  const editScript = mapPersistedEditScriptForRevision(persistedEditScript)
-  const remainingRequirementCount = await transaction.projectEditAssetRequirement.count({
-    where: {
-      editScriptId: { in: [...metadata.scriptIds] },
-      status: { not: 'completed' },
-    },
-  })
+  const editScript = metadata.source === 'edit_requirements'
+    ? await (async () => {
+        if (!metadata.representativeChapterId || !metadata.representativeScriptId) {
+          throw new Error('EDIT_SCRIPT_ASSET_PLAN_REPRESENTATIVE_REQUIRED')
+        }
+        const persisted = await getPersistedEditScriptForRevision(
+          params.ctx.projectId,
+          metadata.episodeId,
+          metadata.representativeChapterId,
+          metadata.representativeScriptId,
+          transaction,
+        )
+        if (!persisted) throw new ApiError('NOT_FOUND')
+        return mapPersistedEditScriptForRevision(persisted)
+      })()
+    : undefined
+  const remainingRequirementCount = metadata.source === 'edit_requirements'
+    ? await transaction.projectEditAssetRequirement.count({
+        where: {
+          editScriptId: { in: [...metadata.scriptIds] },
+          status: { not: 'completed' },
+        },
+      })
+    : 0
   if (submittedTasks.length === 0 && remainingRequirementCount > 0) {
     throw new ApiError('INVALID_PARAMS', {
       code: 'EDIT_SCRIPT_ASSET_GENERATION_STALLED',
@@ -545,6 +682,6 @@ export async function commitProjectEditScriptAssetsOperation(params: {
       targetId: task.targetId,
     })),
     submittedTasks,
-    editScript,
+    ...(editScript ? { editScript } : {}),
   }
 }

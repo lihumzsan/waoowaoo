@@ -16,6 +16,7 @@
 - **ASO-04 — Scope 不匹配不得泄露资源存在性。** missing、foreign、wrong-kind 和 cross-parent 统一在副作用发生前以 `NOT_FOUND` 失败。
 - **ASO-05 — Copy 必须原子验证两端。** 全局 source 与项目 target 必须先完成授权；校验、替换和 source association 位于同一事务。
 - **ASO-06 — 删除不得只凭裸 ID。** destructive deletion 必须经过与 update、select、revert 相同的 scoped identity 证明。
+- **ASO-07 — 制作规划资产来源显式。** Edit-first 主流程中，`confirmEpisodeEditBible` 的确认事务通过 `ensureEditBibleAssets` 物化本次制作规划声明的 ProjectCharacter/ProjectLocation 及其首个 variant；后续 `generate_edit_script_assets` 只为这些既有 identity 规划并提交图片/空间档案任务，不得等核心剪辑表生成后再创建一套同义资产。核心剪辑 requirement 只绑定真实资产 identity，不是第二资产写入入口。
 
 ## 权威入口
 

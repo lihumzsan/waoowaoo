@@ -520,6 +520,32 @@ describe('Golden local model provider', () => {
     })
   })
 
+  it('emits every declared workflow operation-group member in one model response', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 19,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'system',
+          content: '[project_state_snapshot]\nworkflowStage=ready_to_generate_edit_script\nworkflowOperationGroupIds=generate_edit_script_assets,plan_chapters\n[/project_state_snapshot]',
+        }],
+        tools: [
+          { type: 'function', function: { name: 'generate_edit_script_assets', parameters: { type: 'object' } } },
+          { type: 'function', function: { name: 'plan_chapters', parameters: { type: 'object' } } },
+        ],
+      },
+    })
+
+    expect(decision).toMatchObject({
+      kind: 'tool_calls',
+      calls: [
+        { toolName: 'generate_edit_script_assets' },
+        { toolName: 'plan_chapters' },
+      ],
+    })
+  })
+
   it('emits two real tool calls for the duplicate-delivery scenario', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'duplicate-tool-call',

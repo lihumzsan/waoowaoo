@@ -86,9 +86,6 @@ function mergeAwaitDescriptors(
     const externalTaskDescriptors = matching.filter((descriptor): descriptor is Extract<RuntimeSignalDescriptor, { reason: 'awaiting_external_task' }> => (
       descriptor.reason === 'awaiting_external_task'
     ))
-    if (externalTaskDescriptors.length !== 1) {
-      throw new Error(`PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:${externalTaskDescriptors.map((item) => item.operationId).join(',')}`)
-    }
     return {
       reason: firstReason,
       stepCount,

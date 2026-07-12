@@ -8,6 +8,8 @@
 
 ## 不变量
 
+- **CP-00A — 规划资产可与核心剪辑并行。** 制作规划确认事务已经创建的 ProjectCharacter/ProjectLocation 是章节规划的资产菜单来源；确认视觉风格后，资产图片/空间档案任务可与 `plan_chapters` 并行。核心规划不得要求资产图片先完成，只要求角色与场景 identity/description 已存在；生成结果落库前必须重新读取资产状态，使并行期间已完成的图片投影为 completed requirement，避免事件先后顺序造成永久 pending。
+
 - **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。`persistentFactsIntroduced` 等 provenance 投影必须由服务端直接从本章 events 构造，模型输出不得包含事实台账字段。
 - **CP-02 — 模型只写镜头结构。** structure prompt/schema 只允许 `shots` 与 `generationSegments`；额外字段必须由 strict schema 显式拒绝，不得静默删除。
 - **CP-03 — 禁止自然语言事实 identity。** 不得用 substring、字符/token overlap、embedding 或其他语义相似度把模型文本解释为 canonical fact。

@@ -10,6 +10,8 @@
 
 ## 不变量
 
+- **BA-00A — 组审批只展示计费项。** 同一模型 step 的声明式 Operation group 中，只要存在需要审批的计费成员，整组 Tool call 必须共同冻结在一个持久 Approval interruption 中；`approvalItems` 保存全部 SDK call identity，`operationPlan`/quote 只来自真正计费的成员。批准恢复原 serialized RunState 并一次放行全部成员，禁止第二次模型推理、非计费成员提前执行或创建业务专用组合 Operation。
+
 - **BA-01 — 审批分类唯一。** `none`、`billable_media`、`destructive` 是 operation confirmation 的唯一分类；LLM 文本任务必须显式属于 `none`，不是漏配后的默认值。
 - **BA-02 — 精确计划先于媒体审批。** `billable_media` 的审批前必须确定真实 Task、目标、模型、输入、数量和准确报价。不得先批准、再让 LLM 或 worker 决定实际收费内容。
 - **BA-03 — 批准必须有不可变来源。** 最终收费任务只能携带 `OperationPlanSnapshot → ApprovalGrant → OperationExecution → operationPlanTaskId` provenance；计划 identity、不可变 payload/quote hash、Grant identity 与 CAS `version` 才是授权裁决事实。三个审批表不得重复持久化永远固定、没有 reader 分支的 `contractVersion`。`operationConfirmed` 布尔字段已退役，route、worker、Task payload 和恢复 envelope 都不得重建该布尔轨道。

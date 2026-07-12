@@ -7,6 +7,25 @@ import {
 } from './edit-first-workflow.fixture'
 
 describe('edit-first workflow state', () => {
+  it('declares core planning and planned asset generation as one parallel operation group', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      plannedAssetCount: 3,
+      pendingPlannedAssetCount: 2,
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_edit_script')
+    expect(state.allowedOperationIds).toEqual(['generate_edit_script_assets', 'plan_chapters'])
+    expect(state.operationGroup).toEqual({
+      id: 'edit_first_core_and_planned_assets',
+      operationIds: ['generate_edit_script_assets', 'plan_chapters'],
+      approvalOperationIds: ['generate_edit_script_assets'],
+    })
+  })
+
   it('recovers missing chapter planning when no planning task is active', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,

@@ -40,6 +40,7 @@ const DEMO_EDIT_FIRST_WORKFLOW: EditFirstWorkflowState = {
   },
   nextAction: null,
   allowedOperationIds: [],
+  operationGroup: null,
 }
 
 function demoNodeDefaultExpanded(node: WorkspaceCanvasFlowNode): boolean {

@@ -709,6 +709,12 @@ function readWorkflowStage(request: GoldenChatCompletionRequest): string | null 
   return messageText(request).match(/(?:^|\n)workflowStage=([^\n]+)/)?.[1]?.trim() ?? null
 }
 
+function readWorkflowOperationGroupIds(request: GoldenChatCompletionRequest): readonly string[] {
+  const raw = messageText(request).match(/(?:^|\n)workflowOperationGroupIds=([^\n]+)/)?.[1]?.trim() ?? ''
+  if (!raw || raw === 'none') return []
+  return Array.from(new Set(raw.split(',').map((value) => value.trim()).filter(Boolean)))
+}
+
 export function decideGoldenModelResponse(input: {
   readonly scenarioId: string
   readonly request: GoldenChatCompletionRequest
@@ -723,6 +729,20 @@ export function decideGoldenModelResponse(input: {
     return {
       kind: 'text',
       text: structuredText,
+    }
+  }
+
+  const groupedToolNames = readWorkflowOperationGroupIds(input.request)
+    .filter((toolName) => availableToolNames(input.request).has(toolName))
+    .filter((toolName) => !hasCompletedToolCall(input.request, toolName))
+  if (groupedToolNames.length > 1) {
+    return {
+      kind: 'tool_calls',
+      calls: groupedToolNames.map((toolName) => ({
+        toolCallId: `golden_call_${input.requestOrdinal}_${toolName}`,
+        toolName,
+        argumentsJson: JSON.stringify(buildToolArguments(input.request, toolName)),
+      })),
     }
   }
 

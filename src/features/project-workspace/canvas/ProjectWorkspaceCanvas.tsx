@@ -26,7 +26,7 @@ import {
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import { useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
+import { useProjectAssets, useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import { useWorkspaceEpisodeCanvasData } from '../hooks/useWorkspaceEpisodeCanvasData'
 import { useWorkspaceProvider } from '../WorkspaceProvider'
@@ -270,6 +270,7 @@ function ProjectWorkspaceCanvasContent({
     videoGroups,
   } = useWorkspaceEpisodeCanvasData()
   const { data: projectContext } = useProjectContext(projectId, episodeId ?? null)
+  const { data: projectAssets } = useProjectAssets(projectId)
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
   const editBible = editBibleResponse?.editBible ?? null
   const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
@@ -466,6 +467,8 @@ function ProjectWorkspaceCanvasContent({
     editScript: projectedEditScript,
     editScripts: projectedEditScripts,
     editShotExecutionPlan: scopedEditShotExecutionPlan,
+    projectCharacters: projectAssets.characters,
+    projectLocations: projectAssets.locations,
     activeTaskTargets: activeAssistantTaskTargets,
     editScriptPending: effectiveEditScriptPending,
     streamTargets: structuredStreamRuntime.targets,

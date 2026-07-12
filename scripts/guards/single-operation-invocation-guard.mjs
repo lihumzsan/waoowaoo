@@ -143,10 +143,45 @@ export function findSingleOperationInvocationViolations(scanRoot = root) {
   if (runtime.includes('createProjectAgentWait(') || !runtime.includes('PROJECT_AGENT_TASK_BATCH_WAIT_NOT_BOUND')) {
     violations.push(`${runtimePath} must verify transactionally bound Task identity and must not create a post-commit Wait`)
   }
+  for (const required of [
+    'prepareProjectAgentCollectingTaskWait',
+    'sealProjectAgentCollectingTaskWait',
+    'PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH',
+    'PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH',
+    'approvalItems:',
+  ]) {
+    if (!runtime.includes(required)) {
+      violations.push(`${runtimePath} is missing declared Operation-group authority ${required}`)
+    }
+  }
   const stopPolicyPath = 'src/lib/project-agent/stop-conditions.ts'
   const stopPolicy = fs.readFileSync(path.join(scanRoot, stopPolicyPath), 'utf8')
-  if (!stopPolicy.includes('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED')) {
-    violations.push(`${stopPolicyPath} must reject multiple long-running Operations in one model step`)
+  if (!stopPolicy.includes('taskWaits: externalTaskDescriptors.map')) {
+    violations.push(`${stopPolicyPath} must preserve every long-running Operation descriptor for the shared Wait`)
+  }
+  if (stopPolicy.includes('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED')) {
+    violations.push(`${stopPolicyPath} restores the retired single-async-Operation rejection`)
+  }
+  const waitsPath = 'src/lib/project-agent/waits.ts'
+  const waits = fs.readFileSync(path.join(scanRoot, waitsPath), 'utf8')
+  for (const required of [
+    "'collecting'",
+    'task.collection_started',
+    'task.collection_member_bound',
+    'task.collection_sealed',
+    'prepareProjectAgentTaskExecutionHandoffInTransaction',
+    "AND status = 'pending'",
+  ]) {
+    if (!waits.includes(required)) {
+      violations.push(`${waitsPath} is missing shared Wait-group lifecycle ${required}`)
+    }
+  }
+  const toolAdapterPath = 'src/lib/project-agent/agents-tool-adapter.ts'
+  const toolAdapter = fs.readFileSync(path.join(scanRoot, toolAdapterPath), 'utf8')
+  for (const required of ['approvalBarrierOperationIds', 'bindProjectAgentCollectingWaitMemberInTransaction']) {
+    if (!toolAdapter.includes(required)) {
+      violations.push(`${toolAdapterPath} is missing Operation-group barrier ${required}`)
+    }
   }
   return violations
 }
@@ -170,8 +205,8 @@ export function main() {
   ]
   if (violations.length > 0) {
     process.stderr.write([
-      '[single-operation-invocation] parallel API/tool operation semantics detected.',
-      'AR-04/BA-09: adapters translate source/result only; invocation.ts owns channels, prerequisites, schemas and execution mode.',
+      '[single-operation-invocation] Operation invocation or shared Wait-group contract violation.',
+      'AR-03C/AR-04/BA-09: adapters translate source/result only; invocation.ts owns execution and one sealed Wait owns grouped Task continuation.',
       'See docs/architecture/modules/assistant-run-lifecycle.md and billing-approval.md.',
       ...violations.map((violation) => `  - ${violation}`),
       '',

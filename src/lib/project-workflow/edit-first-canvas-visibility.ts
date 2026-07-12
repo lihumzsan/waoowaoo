@@ -24,6 +24,7 @@ export const EDIT_FIRST_CANVAS_PENDING_WORKFLOW: EditFirstWorkflowState = {
   },
   nextAction: null,
   allowedOperationIds: [],
+  operationGroup: null,
 }
 
 type OrderedEditFirstWorkflowStage = Exclude<EditFirstWorkflowStage, 'failed'>
@@ -93,7 +94,7 @@ export function resolveEditFirstCanvasVisibility(
   const editScript = stageAtLeast(workflow.stage, 'ready_to_generate_edit_script')
     || canRunAnyOperation(operations, ['generate_edit_script'])
 
-  const editAssetGroup = stageAtLeast(workflow.stage, 'ready_to_generate_assets')
+  const editAssetGroup = stageAtLeast(workflow.stage, 'ready_to_generate_style_previews')
     || canRunAnyOperation(operations, [
       'generate_edit_script_assets',
       'revise_edit_script_assets',

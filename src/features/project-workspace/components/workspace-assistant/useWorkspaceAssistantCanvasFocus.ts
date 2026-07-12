@@ -59,7 +59,6 @@ interface UseWorkspaceAssistantCanvasFocusParams {
 
 export function useWorkspaceAssistantCanvasFocus({
   sessionState,
-  pendingOperationId,
   runtimeFocusRequest,
   storageLoading,
   onActiveOperationChange,
@@ -67,9 +66,7 @@ export function useWorkspaceAssistantCanvasFocus({
   const currentActivity = sessionState?.currentActivity ?? null
   const activeExternalTaskOperationId = resolveWorkspaceAssistantExternalTaskOperationId(currentActivity)
   const activeTaskTargets = useMemo(() => {
-    const operationId = activeExternalTaskOperationId ?? pendingOperationId
     const targets = (sessionState?.activeTasks ?? []).flatMap((task) => {
-      if (operationId && task.operationId !== operationId) return []
       const target = buildWorkspaceAssistantActiveTaskTarget({
         taskId: task.taskId,
         operationId: task.operationId,
@@ -81,7 +78,7 @@ export function useWorkspaceAssistantCanvasFocus({
       return target ? [target] : []
     })
     return dedupeWorkspaceAssistantActiveTaskTargets(targets)
-  }, [activeExternalTaskOperationId, pendingOperationId, sessionState?.activeTasks])
+  }, [sessionState?.activeTasks])
 
   const externalTaskFocusRequest = useMemo<WorkspaceAssistantActiveFocusRequest | null>(() => (
     activeExternalTaskOperationId && currentActivity

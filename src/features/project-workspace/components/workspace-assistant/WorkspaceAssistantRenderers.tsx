@@ -277,25 +277,6 @@ function OperationPlanPreviewDataCard(props: DataMessagePartProps<ProjectAgentOp
   )
 }
 
-export function WorkspaceAssistantActiveRunCard(props: {
-  operationId: string | null
-  taskCount: number
-}) {
-  const t = useTranslations('assistantAgent')
-  const locale = normalizeProjectAgentLocale(useLocale())
-  const operationTitle = localizeProjectAgentOperationTitle(props.operationId ?? '', locale)
-  return (
-    <div className="order-last rounded-2xl border border-[var(--glass-stroke-base)] bg-white p-3 text-xs text-[var(--glass-text-secondary)]">
-      <div className="flex items-center gap-2">
-        <AppIcon name="loader" className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--glass-text-tertiary)]" />
-        <div className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--glass-text-primary)]">
-          {t('toolCall.running')} · {operationTitle} · {t('toolCall.taskCount', { count: props.taskCount })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function RatioChoiceShape(props: {
   ratio: string
   selected: boolean

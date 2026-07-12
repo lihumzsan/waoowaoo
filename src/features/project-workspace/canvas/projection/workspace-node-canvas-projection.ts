@@ -6,6 +6,8 @@ import { buildEditStylePreviewSetView } from '@/lib/edit-script/style-preview-se
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import { TASK_TYPE } from '@/lib/task/types'
 import type {
+  Character,
+  Location,
   ProjectEditAssetRequirement,
   ProjectEditBible,
   ProjectEditScript,
@@ -99,6 +101,8 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly editScript?: ProjectEditScript | null
   readonly editScripts?: readonly ProjectEditScript[]
   readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
+  readonly projectCharacters?: readonly Character[]
+  readonly projectLocations?: readonly Location[]
   readonly activeTaskTargets?: readonly WorkspaceCanvasActiveTaskTarget[]
   readonly editScriptPending?: boolean
   readonly streamTargets?: readonly WorkspaceCanvasStreamTarget[]
@@ -172,6 +176,16 @@ function parseStringList(value: string | null | undefined): string[] {
     return value.split(',').map((item) => item.trim()).filter(Boolean)
   }
   return value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function planningEntityNameSet(value: unknown, key: 'characters' | 'locations'): ReadonlySet<string> {
+  const record = readJsonRecord(value)
+  const collection = record?.[key]
+  if (!Array.isArray(collection)) return new Set()
+  return new Set(collection.flatMap((item) => {
+    const name = stringValue(readJsonRecord(item)?.name)
+    return name ? [name.replace(/\s+/g, ' ').toLocaleLowerCase()] : []
+  }))
 }
 
 function readShotIds(value: unknown): string[] {
@@ -693,6 +707,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     editScript = null,
     editScripts = [],
     editShotExecutionPlan = null,
+    projectCharacters = [],
+    projectLocations = [],
     activeTaskTargets = [],
     editScriptPending = false,
     streamTargets = [],
@@ -1097,17 +1113,66 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let assetGroupNodeId: string | null = null
-  const assetGroupScripts = (editScripts.length > 0 ? editScripts : editScript ? [editScript] : [])
-    .filter((script) => editFirstCanvasVisibility.editAssetGroup || script.requirements.length > 0)
-  assetGroupScripts.forEach((script, index) => {
-    const nodeId = workspaceNodeId.editAssetGroup(script.id)
-    if (editScript?.id === script.id || (!assetGroupNodeId && index === 0)) assetGroupNodeId = nodeId
-    const characterRequirements = countEditAssetRequirements(script.requirements, 'character')
-    const locationRequirements = countEditAssetRequirements(script.requirements, 'location')
-    const assetsReady = script.requirements.length > 0
-      && script.requirements.every((requirement) => requirement.status === 'completed')
-    const assetsFailed = script.requirements.some((requirement) => requirement.status === 'failed')
-    const assetsInconsistent = script.requirements.some((requirement) => requirement.status === 'generating')
+  const assetGroupScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
+  const allAssetRequirements = assetGroupScripts.flatMap((script) => script.requirements.map((requirement) => ({ script, requirement })))
+  const requirementByAssetId = new Map<string, (typeof allAssetRequirements)[number]>()
+  allAssetRequirements.forEach((item) => {
+    const key = item.requirement.targetId?.trim()
+    if (key && !requirementByAssetId.has(key)) requirementByAssetId.set(key, item)
+  })
+  const plannedCharacterNames = planningEntityNameSet(editBible?.bible, 'characters')
+  const plannedLocationNames = planningEntityNameSet(editBible?.bible, 'locations')
+  const plannedAssets = [
+    ...projectCharacters
+      .filter((character) => plannedCharacterNames.size === 0 || plannedCharacterNames.has(character.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase()))
+      .map((character) => {
+      const appearance = character.appearances[0] ?? null
+      const imageUrl = appearance?.imageUrl || appearance?.imageUrls?.[0] || appearance?.media?.url || null
+      return {
+        id: character.id,
+        kind: 'character' as const,
+        name: character.name,
+        description: character.profileData || character.introduction || appearance?.description || character.name,
+        previewImageUrl: imageUrl,
+        taskRunning: Boolean(appearance?.imageTaskRunning),
+        errorMessage: appearance?.imageErrorMessage ?? null,
+        taskTargetType: 'CharacterAppearance' as const,
+        taskTargetId: appearance?.id ?? character.id,
+      }
+    }),
+    ...projectLocations
+      .filter((location) => plannedLocationNames.size === 0 || plannedLocationNames.has(location.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase()))
+      .map((location) => {
+      const image = location.images.find((item) => item.id === location.selectedImageId)
+        ?? location.images.find((item) => item.isSelected)
+        ?? location.images[0]
+        ?? null
+      return {
+        id: location.id,
+        kind: 'location' as const,
+        name: location.name,
+        description: location.summary || image?.description || location.name,
+        previewImageUrl: image?.imageUrl || image?.media?.url || null,
+        taskRunning: Boolean(image?.imageTaskRunning),
+        errorMessage: image?.imageErrorMessage ?? image?.spatialProfileError ?? null,
+        taskTargetType: 'LocationImage' as const,
+        taskTargetId: location.id,
+      }
+    }),
+  ]
+  if (editFirstCanvasVisibility.editAssetGroup && (plannedAssets.length > 0 || allAssetRequirements.length > 0)) {
+    const nodeId = workspaceNodeId.editAssetGroup(episodeId)
+    assetGroupNodeId = nodeId
+    const primaryScript = editScript ?? assetGroupScripts[0] ?? null
+    const characterRequirements = plannedAssets.filter((asset) => asset.kind === 'character').length
+      || countEditAssetRequirements(allAssetRequirements.map((item) => item.requirement), 'character')
+    const locationRequirements = plannedAssets.filter((asset) => asset.kind === 'location').length
+      || countEditAssetRequirements(allAssetRequirements.map((item) => item.requirement), 'location')
+    const assetsReady = plannedAssets.length > 0 && plannedAssets.every((asset) => Boolean(asset.previewImageUrl))
+    const assetsFailed = plannedAssets.some((asset) => Boolean(asset.errorMessage))
+      || allAssetRequirements.some(({ requirement }) => requirement.status === 'failed')
+    const assetsInconsistent = plannedAssets.some((asset) => asset.taskRunning)
+      || allAssetRequirements.some(({ requirement }) => requirement.status === 'generating')
     const assetGroupPresentation = assetsFailed
         ? workspaceCanvasFailedResourcePresentation()
         : assetsReady
@@ -1117,7 +1182,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       id: nodeId,
       position: layoutPosition(savedLayouts, nodeId, {
         x: STORY_COLUMN_X + COLUMN_GAP_X,
-        y: STAGE_START_Y + index * (WORKSPACE_CANVAS_EDIT_SCRIPT_COLLAPSED_NODE_SIZE.height + 64) + 420 + ASSET_GROUP_Y_OFFSET,
+        y: STAGE_START_Y + 420 + ASSET_GROUP_Y_OFFSET,
       }),
       width: 720,
       height: WORKSPACE_CANVAS_DEFAULT_NODE_SIZE.height,
@@ -1128,10 +1193,12 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         kind: 'editAssetGroup',
         layoutNodeType: 'editAssetGroup',
         targetType: 'editAssetRequirement',
-        targetId: script.id,
+        targetId: episodeId,
         title: translate('nodes.editAssetGroup.title'),
         eyebrow: translate('nodes.editAssetGroup.eyebrow'),
-        body: script.requirements.map((requirement) => `${requirement.name} / ${requirement.kind}`).join('\n') || translate('empty.editAsset'),
+        body: plannedAssets.map((asset) => `${asset.name} / ${asset.kind}`).join('\n')
+          || allAssetRequirements.map(({ requirement }) => `${requirement.name} / ${requirement.kind}`).join('\n')
+          || translate('empty.editAsset'),
         meta: translate('nodes.editAssetGroup.meta', {
           characters: characterRequirements,
           locations: locationRequirements,
@@ -1139,38 +1206,67 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ...(assetGroupPresentation ?? (assetsInconsistent
           ? workspaceCanvasFailedResourcePresentation()
           : workspaceCanvasPendingResourcePresentation())),
-        actionLabel: assetsReady ? undefined : translate('actions.generateEditAssets'),
-        action: assetsReady ? undefined : { type: 'generate_edit_assets', editScriptId: script.id },
+        actionLabel: !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
+        action: !assetsReady && primaryScript ? { type: 'generate_edit_assets', editScriptId: primaryScript.id } : undefined,
         editAssetGroupDetails: {
-          editScriptId: script.id,
-          assets: script.requirements.map((requirement) => ({
-            requirementId: requirement.id,
+          editScriptId: primaryScript?.id ?? episodeId,
+          assets: (plannedAssets.length > 0 ? plannedAssets : allAssetRequirements.map(({ requirement }) => ({
+            id: requirement.targetId ?? requirement.id,
             kind: requirement.kind,
             name: requirement.name,
-            eyebrow: requirement.kind,
             description: requirement.description,
-            shotIds: requirement.shotIds,
-            shotNumbers: requirement.shotIds
-              .map((shotId) => script.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
-              .filter((value): value is number => typeof value === 'number'),
-            lifecycle: requirement.status === 'generating'
-              ? workspaceCanvasPendingResourcePresentation().lifecycle
-              : resourcePresentationFromStatus(requirement.status)?.lifecycle
-                ?? workspaceCanvasPendingResourcePresentation().lifecycle,
             previewImageUrl: assetPreviewUrl(requirement),
-            runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(requirement.taskTargetType ?? null, requirement.taskTargetId ?? null),
-            action: requirement.status === 'completed'
-              ? { type: 'regenerate_edit_asset_image', assetId: requirement.targetId ?? requirement.id, kind: requirement.kind }
-              : { type: 'generate_edit_asset', editScriptId: script.id, requirementId: requirement.id },
-            actionLabel: requirement.status === 'completed' ? translate('actions.regenerateImage') : translate('actions.generateEditAsset'),
-          })),
+            taskRunning: requirement.status === 'generating',
+            errorMessage: requirement.errorMessage ?? null,
+            taskTargetType: requirement.taskTargetType ?? (requirement.kind === 'character' ? 'CharacterAppearance' : 'LocationImage'),
+            taskTargetId: requirement.taskTargetId ?? requirement.targetId ?? requirement.id,
+          }))).map((asset) => {
+            const binding = requirementByAssetId.get(asset.id) ?? null
+            const requirement = binding?.requirement ?? null
+            const script = binding?.script ?? null
+            const shotIds = requirement?.shotIds ?? []
+            return {
+            requirementId: requirement?.id ?? `planned-asset:${asset.kind}:${asset.id}`,
+            kind: asset.kind,
+            name: asset.name,
+            eyebrow: asset.kind,
+            description: asset.description,
+            shotIds,
+            shotNumbers: shotIds
+              .map((shotId) => script?.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
+              .filter((value): value is number => typeof value === 'number'),
+            lifecycle: asset.taskRunning || requirement?.status === 'generating'
+              ? workspaceCanvasPendingResourcePresentation().lifecycle
+              : asset.errorMessage || requirement?.status === 'failed'
+                ? workspaceCanvasFailedResourcePresentation().lifecycle
+                : asset.previewImageUrl
+                  ? workspaceCanvasSucceededResourcePresentation().lifecycle
+                  : resourcePresentationFromStatus(requirement?.status)?.lifecycle
+                ?? workspaceCanvasPendingResourcePresentation().lifecycle,
+            previewImageUrl: asset.previewImageUrl,
+            runtimeTarget: TASK_RUNTIME_TARGETS.projectEditAssetImage(asset.taskTargetType, asset.taskTargetId),
+            action: asset.previewImageUrl
+              ? { type: 'regenerate_edit_asset_image', assetId: asset.id, kind: asset.kind }
+              : requirement && script
+                ? { type: 'generate_edit_asset', editScriptId: script.id, requirementId: requirement.id }
+                : undefined,
+            actionLabel: asset.previewImageUrl
+              ? translate('actions.regenerateImage')
+              : requirement && script
+                ? translate('actions.generateEditAsset')
+                : undefined,
+          }}),
         },
         onAction,
       },
     }))
-    const sourceNodeId = workspaceNodeId.editScript(episodeId, script.chapterId ?? null)
+    const sourceNodeId = primaryScript
+      ? workspaceNodeId.editScript(episodeId, primaryScript.chapterId ?? null)
+      : bibleNodeId
+    if (sourceNodeId) {
     edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
-  })
+    }
+  }
 
   let executionNodeId: string | null = null
   if (editScript && editFirstCanvasVisibility.editShotExecutionPlan) {

@@ -66,6 +66,12 @@ export interface EditFirstWorkflowAction {
   title: string
 }
 
+export interface EditFirstWorkflowOperationGroup {
+  readonly id: string
+  readonly operationIds: readonly EditFirstWorkflowOperationId[]
+  readonly approvalOperationIds: readonly EditFirstWorkflowOperationId[]
+}
+
 export type EditFirstWorkflowChoiceDecision =
   | { readonly choiceType: 'script_intake'; readonly decision: 'submit'; readonly normalizedBrief: string }
   | { readonly choiceType: 'script_review'; readonly decision: 'approve' | 'revise' }
@@ -82,6 +88,7 @@ export interface EditFirstWorkflowState {
   }
   nextAction: EditFirstWorkflowAction | null
   allowedOperationIds: EditFirstWorkflowOperationId[]
+  operationGroup: EditFirstWorkflowOperationGroup | null
 }
 
 export interface EditFirstWorkflowSnapshot {
@@ -96,6 +103,9 @@ export interface EditFirstWorkflowSnapshot {
   confirmedStylePreviewCount: number
   failedStylePreviewCount: number
   activeStylePreviewTaskCount: number
+  plannedAssetCount: number
+  pendingPlannedAssetCount: number
+  activePlannedAssetTaskCount: number
   hasEditScript: boolean
   activeEditScriptTaskCount: number
   editScriptStatus: string | null
@@ -149,6 +159,7 @@ export const EDIT_FIRST_WORKFLOW_EMPTY_STATE: EditFirstWorkflowState = {
   },
   nextAction: null,
   allowedOperationIds: [],
+  operationGroup: null,
 }
 
 function workflowAction(
@@ -168,6 +179,7 @@ function state(params: {
   blocking?: EditFirstWorkflowState['blocking']
   nextAction?: EditFirstWorkflowAction | null
   allowedOperationIds?: readonly EditFirstWorkflowOperationId[]
+  operationGroup?: EditFirstWorkflowOperationGroup | null
 }): EditFirstWorkflowState {
   const nextAction = params.nextAction ?? null
   return {
@@ -179,6 +191,7 @@ function state(params: {
     },
     nextAction,
     allowedOperationIds: params.allowedOperationIds ? [...params.allowedOperationIds] : nextAction ? [nextAction.operationId] : [],
+    operationGroup: params.operationGroup ?? null,
   }
 }
 
@@ -222,6 +235,19 @@ const ACTIVE_WORKFLOW_TASK_STATUSES = ['queued', 'processing'] as const
 
 function hasText(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function plannedBibleAssetNameKeys(value: unknown, key: 'characters' | 'locations'): ReadonlySet<string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return new Set()
+  const collection = (value as Record<string, unknown>)[key]
+  if (!Array.isArray(collection)) return new Set()
+  return new Set(collection.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const name = (item as Record<string, unknown>).name
+    return typeof name === 'string' && name.trim()
+      ? [name.trim().replace(/\s+/g, ' ').toLocaleLowerCase()]
+      : []
+  }))
 }
 
 function isActiveWorkflowStatus(status: string | null | undefined): boolean {
@@ -444,10 +470,23 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   }
 
   if (!snapshot.hasEditScript) {
-    if (snapshot.activeEditScriptTaskCount > 0) {
+    if (snapshot.activeEditScriptTaskCount > 0 || snapshot.activePlannedAssetTaskCount > 0) {
       return state({
         stage: 'edit_script_generating',
-        blocking: { kind: 'processing', reason: 'chapter edit planning tasks are still running' },
+        blocking: { kind: 'processing', reason: 'chapter edit planning and planned asset tasks are still running' },
+      })
+    }
+    if (snapshot.plannedAssetCount > 0 && snapshot.pendingPlannedAssetCount > 0) {
+      const operationIds = ['generate_edit_script_assets', 'plan_chapters'] as const
+      return state({
+        stage: 'ready_to_generate_edit_script',
+        nextAction: workflowAction('plan_chapters', 'Plan chapters and generate planned assets'),
+        allowedOperationIds: operationIds,
+        operationGroup: {
+          id: 'edit_first_core_and_planned_assets',
+          operationIds,
+          approvalOperationIds: ['generate_edit_script_assets'],
+        },
       })
     }
     return state({
@@ -819,6 +858,9 @@ export async function resolveEditFirstWorkflowState(params: {
     activeSoundscapeGenerationTaskCount,
     activeChapterRenderTaskCount,
     activeFinalRenderTaskCount,
+    plannedCharacters,
+    plannedLocations,
+    activePlannedAssetTaskCount,
   ] = await Promise.all([
     prisma.projectEditBible.findFirst({
       where: {
@@ -828,6 +870,7 @@ export async function resolveEditFirstWorkflowState(params: {
       select: {
         id: true,
         status: true,
+        bibleJson: true,
         sourceDocument: {
           select: {
             sourceKind: true,
@@ -1041,9 +1084,59 @@ export async function resolveEditFirstWorkflowState(params: {
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
+    prisma.projectCharacter.findMany({
+      where: { projectId: params.projectId },
+      select: {
+        name: true,
+        appearances: {
+          orderBy: { appearanceIndex: 'asc' },
+          take: 1,
+          select: { imageUrl: true, imageMediaId: true, imageUrls: true },
+        },
+      },
+    }),
+    prisma.projectLocation.findMany({
+      where: { projectId: params.projectId, assetKind: 'location' },
+      select: {
+        name: true,
+        images: {
+          orderBy: { imageIndex: 'asc' },
+          take: 1,
+          select: { imageUrl: true, imageMediaId: true },
+        },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        type: { in: [TASK_TYPE.IMAGE_CHARACTER, TASK_TYPE.IMAGE_LOCATION] },
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
   ])
 
   const expectedChapterCount = chapters.length
+  const plannedCharacterNames = plannedBibleAssetNameKeys(editBible?.bibleJson, 'characters')
+  const plannedLocationNames = plannedBibleAssetNameKeys(editBible?.bibleJson, 'locations')
+  const scopedPlannedCharacters = plannedCharacters.filter((character) => plannedCharacterNames.has(
+    character.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+  ))
+  const scopedPlannedLocations = plannedLocations.filter((location) => plannedLocationNames.has(
+    location.name.trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+  ))
+  const plannedAssetCount = scopedPlannedCharacters.length + scopedPlannedLocations.length
+  const pendingPlannedAssetCount = scopedPlannedCharacters.filter((character) => {
+    const appearance = character.appearances[0]
+    if (!appearance) return true
+    const imageUrls = typeof appearance.imageUrls === 'string'
+      ? appearance.imageUrls.trim()
+      : JSON.stringify(appearance.imageUrls ?? null)
+    return !appearance.imageMediaId && !appearance.imageUrl && (!imageUrls || imageUrls === '[]' || imageUrls === 'null')
+  }).length + scopedPlannedLocations.filter((location) => {
+    const image = location.images[0]
+    return !image?.imageMediaId && !image?.imageUrl
+  }).length
   const editScriptIds = new Set(editScripts.map((script) => script.id))
   const allEditScriptRequirements = editScripts.flatMap((script) => script.requirements)
   const editScriptStatus = resolveEpisodeArtifactStatus({
@@ -1194,6 +1287,9 @@ export async function resolveEditFirstWorkflowState(params: {
     confirmedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'confirmed').length ?? 0,
     failedStylePreviewCount: editBible?.stylePreviews.filter((preview) => preview.status === 'failed').length ?? 0,
     activeStylePreviewTaskCount,
+    plannedAssetCount,
+    pendingPlannedAssetCount,
+    activePlannedAssetTaskCount,
     hasEditScript: editScripts.length > 0,
     activeEditScriptTaskCount,
     editScriptStatus,

@@ -7,7 +7,7 @@
   "src/components/ui/model-dropdown-innovative.tsx": 588,
   "src/components/ui/model-dropdown-variants.tsx": 543,
   "src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts": 807,
-  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 852,
+  "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 833,
   "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 599,
   "src/lib/query/hooks/useAssets.ts": 456,
   "src/lib/query/hooks/useProjectEditScript.ts": 464,

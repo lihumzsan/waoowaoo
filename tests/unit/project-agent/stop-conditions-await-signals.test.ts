@@ -46,12 +46,22 @@ describe('project agent business stop signals', () => {
     })
   })
 
-  it('rejects multiple long-running Operations in one model step instead of creating parallel Wait state machines', () => {
+  it('collects multiple long-running Operations from one model step for one shared Wait', () => {
     const controller = createProjectAgentStopController()
-    expect(() => controller.evaluateStep([
+    expect(controller.evaluateStep([
       submittedTasksOutput('generate_edit_script', ['task-script-1']),
       submittedTasksOutput('generate_episode_videos', ['task-video-1', 'task-video-2']),
-    ])).toThrow('PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:generate_edit_script,generate_episode_videos')
+    ])).toEqual({
+      reason: 'awaiting_external_task',
+      stepCount: 2,
+      operationIds: ['generate_edit_script', 'generate_episode_videos'],
+      taskIds: ['task-script-1', 'task-video-1', 'task-video-2'],
+      phases: [],
+      taskWaits: [
+        { operationId: 'generate_edit_script', taskIds: ['task-script-1'], phases: [] },
+        { operationId: 'generate_episode_videos', taskIds: ['task-video-1', 'task-video-2'], phases: [] },
+      ],
+    })
   })
 
   it('[Completed status query] -> remains an observation without creating a wait', () => {

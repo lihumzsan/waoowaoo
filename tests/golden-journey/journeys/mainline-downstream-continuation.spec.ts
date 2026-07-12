@@ -412,16 +412,16 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       stage: 'needs_style_choice',
       boundary: 'style_choice',
     })
-    await expect.poll(async () => {
-      const snapshot = await readGoldenOracleSnapshot(scope)
-      return snapshot.activities.some((activity) => (
-        activity.operationId === 'plan_chapters'
-        && (activity.status === 'running' || activity.status === 'completed')
-      )) || snapshot.tasks.some((task) => task.operationId === 'plan_chapters')
-    }, {
+    await expect.poll(async () => await readGoldenMainlineBoundary(page), {
       timeout: 60_000,
-      message: 'the refreshed post-style workflow must let AI submit plan_chapters without a user wake-up message',
-    }).toBe(true)
+      message: 'the post-style model step must freeze core planning and billable planned-asset generation together',
+    }).toBe('approval')
+    await expect(page.locator(`article[data-node-id="${workspaceNodeId.editAssetGroup(scope.episodeId)}"]`)).toHaveCount(1)
+    await preserveGoldenApprovalCheckpointSource({
+      page,
+      scope,
+      stage: 'ready_to_generate_edit_script',
+    })
     await expect(page.getByText('成功 · 选择视觉风格', { exact: true })).toHaveCount(1)
     await expect(page.getByText('成功 · 确认视觉风格', { exact: true })).toHaveCount(0)
     await expect(styleBibleNode).toHaveCount(1)
@@ -434,45 +434,56 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
     await recordGoldenCheckpointSources({ page, scope })
   })
 
-  test('[GJ-DOWNSTREAM-STEP-ASSET-APPROVAL-RECOVERY] real UI wake-up reaches and approves required-asset generation', async ({ page, context }, testInfo) => {
+  test('[GJ-DOWNSTREAM-STEP-PARALLEL-APPROVAL-RECOVERY] one restored approval starts core and planned-asset tasks behind one Wait', async ({ page, context }, testInfo) => {
     test.setTimeout(4 * 60_000)
-    const source = await openGoldenSourceScope({ page, context })
-    await expect.poll(async () => await readGoldenWorkflowStage(page, source.scope), {
-      timeout: 90_000,
-      message: 'core edit planning must reach the required-asset generation boundary',
-    }).toBe('ready_to_generate_assets')
-
-    const automaticApproval = await waitForGoldenBoundary(page, 'approval', 10_000)
-    if (!automaticApproval) {
-      await attachGoldenOracleEvidence(testInfo, source.scope, 'golden-asset-approval-auto-continuation-missing')
-      await wakeGoldenAssistantThroughUi(page)
-      await expect.poll(async () => await readGoldenMainlineBoundary(page), {
-        timeout: 30_000,
-        message: 'a real user follow-up must let AI raise the required-asset Approval',
-      }).toBe('approval')
-    }
-    await preserveGoldenApprovalCheckpointSource({
+    const { scope } = await forkGoldenCheckpointWhenReady({
       page,
-      scope: source.scope,
-      stage: 'ready_to_generate_assets',
+      context,
+      stage: 'ready_to_generate_edit_script',
+      testInfo,
     })
+    await page.goto(
+      `/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`,
+      { waitUntil: 'domcontentloaded' },
+    )
     await reloadGoldenBoundary(page, 'approval')
     await submitGoldenBoundary(page, 'approval')
 
-    await expect.poll(async () => await readGoldenWorkflowStage(page, source.scope), {
+    await expect.poll(async () => {
+      const snapshot = await readGoldenOracleSnapshot(scope)
+      const groupedTasks = snapshot.tasks.filter((task) => (
+        task.operationId === 'plan_chapters' || task.operationId === 'generate_edit_script_assets'
+      ))
+      const operationIds = new Set(groupedTasks.map((task) => task.operationId))
+      const taskIds = new Set(groupedTasks.flatMap((task) => typeof task.id === 'string' ? [task.id] : []))
+      const matchingWaits = snapshot.waits.filter((wait) => {
+        const rawTaskIds = typeof wait.taskIds === 'string' ? JSON.parse(wait.taskIds) as unknown : wait.taskIds
+        return Array.isArray(rawTaskIds)
+          && rawTaskIds.length === taskIds.size
+          && rawTaskIds.every((taskId) => typeof taskId === 'string' && taskIds.has(taskId))
+      })
+      return operationIds.has('plan_chapters')
+        && operationIds.has('generate_edit_script_assets')
+        && matchingWaits.length === 1
+    }, {
       timeout: 90_000,
-      message: 'approved asset tasks must reach durable asset review facts',
+      message: 'approved core and planned-asset Operations must submit independently and share exactly one durable Wait',
+    }).toBe(true)
+
+    await expect.poll(async () => await readGoldenWorkflowStage(page, scope), {
+      timeout: 90_000,
+      message: 'both parallel branches must complete before durable asset review',
     }).toBe('assets_ready_for_review')
     const automaticChoice = await waitForGoldenBoundary(page, 'asset_review', 10_000)
     if (!automaticChoice) {
-      await attachGoldenOracleEvidence(testInfo, source.scope, 'golden-asset-review-auto-continuation-missing')
+      await attachGoldenOracleEvidence(testInfo, scope, 'golden-asset-review-auto-continuation-missing')
       await wakeGoldenAssistantThroughUi(page)
       await expect.poll(async () => await readGoldenMainlineBoundary(page), {
         timeout: 30_000,
         message: 'a real user follow-up must let AI raise the durable asset-review Choice',
       }).toBe('asset_review')
     }
-    await recordGoldenCheckpointSources({ page, scope: source.scope })
+    await recordGoldenCheckpointSources({ page, scope })
   })
 
   test('[GJ-DOWNSTREAM-STEP-ASSETS] fresh browser resumes the real generated-assets Choice and reaches video Approval', async ({ page, context }, testInfo) => {

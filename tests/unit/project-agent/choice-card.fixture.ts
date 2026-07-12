@@ -44,6 +44,7 @@ function workflow(
     },
     nextAction,
     allowedOperationIds: nextAction ? [nextAction.operationId] : [],
+    operationGroup: null,
   }
 }
 

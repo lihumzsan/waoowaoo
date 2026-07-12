@@ -18,11 +18,11 @@ import type { WorkspaceAssistantActiveFocusRequest } from '../workspace-assistan
 import {
   AssistantChoiceCardView,
   ConfirmationActionCard,
-  WorkspaceAssistantActiveRunCard,
   useWorkspaceAssistantMessagePartComponents,
   WorkspaceAssistantPendingTurnPlaceholder,
   WorkspaceAssistantThreadMessage,
 } from './workspace-assistant/WorkspaceAssistantRenderers'
+import { WorkspaceAssistantActiveRunCard } from './workspace-assistant/WorkspaceAssistantActiveRunCard'
 import { WorkspaceAssistantComposer } from './workspace-assistant/WorkspaceAssistantComposer'
 import {
   buildWorkspaceAssistantPanelLayout,
@@ -136,6 +136,10 @@ export default function WorkspaceAssistantPanel({
   const activeOperationPresentation = resolveWorkspaceAssistantActiveOperationPresentation(
     activeExternalTaskOperationId,
   )
+  const activeExternalTasks = assistantRuntime.sessionState?.activeTasks ?? []
+  const activeExternalTaskOperationIds = Array.from(new Set(
+    activeExternalTasks.flatMap((task) => task.operationId ? [task.operationId] : []),
+  )).sort()
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
   const activeChoiceCard = pendingInteraction?.kind === 'choice'
@@ -240,10 +244,10 @@ export default function WorkspaceAssistantPanel({
                     ) : null}
                     {showExternalTaskRunCard && activeExternalTaskOperationId ? (
                       <WorkspaceAssistantActiveRunCard
-                        operationId={activeExternalTaskOperationId}
-                        taskCount={(assistantRuntime.sessionState?.activeTasks ?? []).filter(
-                          (task) => task.operationId === activeExternalTaskOperationId,
-                        ).length}
+                        operationIds={activeExternalTaskOperationIds.length > 0
+                          ? activeExternalTaskOperationIds
+                          : [activeExternalTaskOperationId]}
+                        taskCount={activeExternalTasks.length}
                       />
                     ) : null}
                     {serverPendingApproval ? (

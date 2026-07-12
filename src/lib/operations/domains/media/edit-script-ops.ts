@@ -321,7 +321,7 @@ const editScriptAssetGenerationOutputSchema = z
         targetId: z.string().min(1),
       }),
     ),
-    editScript: editScriptSummaryOutputSchema,
+    editScript: editScriptSummaryOutputSchema.optional(),
   })
   .passthrough()
 
@@ -336,7 +336,7 @@ function toEditScriptAssetGenerationOutput(result: Awaited<ReturnType<typeof com
     taskIds: [...result.taskIds],
     results: result.results.map((item) => ({ ...item })),
     submittedTasks: result.submittedTasks.map((item) => ({ ...item })),
-    editScript: summarizeEditScriptPayload(result.editScript),
+    ...(result.editScript ? { editScript: summarizeEditScriptPayload(result.editScript) } : {}),
   })
 }
 
@@ -993,14 +993,14 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     generate_edit_script_assets: defineOperation({
       id: 'generate_edit_script_assets',
       summary:
-        'Create or reuse required character/location assets from the current core edit plan and submit missing image generation tasks.',
+        'Generate missing images and spatial profiles for the character/location assets created from the confirmed production plan. After core planning exists, the same operation can repair its bound asset requirements.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: EFFECTS_BULK_WRITE,
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将根据核心剪辑计划创建/复用角色与场景资产，并为缺失图片提交收费生成任务；用户批准当前不可变计划后执行。',
+        summary: '将为制作规划确认时已创建的角色与场景资产补齐图片和空间档案；用户批准当前不可变计费计划后执行。',
       },
       toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditScriptAssetsInputSchema,

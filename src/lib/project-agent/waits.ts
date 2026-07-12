@@ -9,11 +9,12 @@ import {
   appendProjectAssistantThreadMessagesInTransaction,
   buildProjectAssistantScopeRef,
 } from './persistence'
-import { appendProjectAgentEventsInTransaction } from './event'
+import { appendProjectAgentEvents, appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import {
   createProjectAgentRunFence,
+  assignProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
 import { prepareProjectAgentTaskExecutionHandoffInTransaction } from './execution-handoff'
@@ -22,7 +23,7 @@ import {
   projectAgentExecutionStartedIdempotencyKey,
 } from './execution-segment'
 
-export type ProjectAgentWaitStatus = 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
+export type ProjectAgentWaitStatus = 'collecting' | 'pending' | 'resolved' | 'claimed' | 'followed' | 'abandoned'
 export type ProjectAgentWaitTerminalStatus = 'completed' | 'failed' | 'canceled'
 export type ProjectAgentTaskFollowUpSettlementOutcome =
   | 'completed'
@@ -65,6 +66,15 @@ export interface CreateProjectAgentWaitInput extends ProjectAgentWaitScopeInput 
    * segment or continuation Activity.
    */
   sourceOperationActivityId?: string | null
+}
+
+export interface ProjectAgentCollectingTaskWait {
+  readonly waitId: string
+  readonly activityId: string
+  readonly runId: string
+  readonly operationId: string
+  readonly operationIds: readonly string[]
+  readonly followUpMode: ProjectAgentWaitFollowUpMode
 }
 
 interface ProjectAgentWaitRow {
@@ -317,13 +327,239 @@ function normalizeWaitFollowUpMode(value: string): ProjectAgentWaitFollowUpMode 
 
 function normalizeWaitStatus(value: string): ProjectAgentWaitStatus {
   if (
-    value === 'pending'
+    value === 'collecting'
+    || value === 'pending'
     || value === 'resolved'
     || value === 'claimed'
     || value === 'followed'
     || value === 'abandoned'
   ) return value
   throw new Error(`PROJECT_AGENT_WAIT_STATUS_INVALID:${value}`)
+}
+
+async function lockCurrentRunFenceInTransaction(
+  tx: Prisma.TransactionClient,
+  runId: string,
+): Promise<ProjectAgentRunFence> {
+  const rows = await tx.$queryRaw<Array<{ id: string; runVersion: number; eventSeq: bigint }>>(Prisma.sql`
+    SELECT id, runVersion, eventSeq
+    FROM project_agent_runs
+    WHERE id = ${runId}
+    FOR UPDATE
+  `)
+  const row = rows[0]
+  if (!row) throw new Error(`PROJECT_AGENT_RUN_NOT_FOUND:${runId}`)
+  return createProjectAgentRunFence(row)
+}
+
+export async function refreshProjectAgentRunFence(runFence: ProjectAgentRunFence): Promise<void> {
+  const current = await prisma.$transaction(async (tx) => lockCurrentRunFenceInTransaction(tx, runFence.runId))
+  assignProjectAgentRunFence(runFence, current)
+}
+
+export async function prepareProjectAgentCollectingTaskWait(input: CreateProjectAgentWaitInput & {
+  operationIds: readonly string[]
+}): Promise<ProjectAgentCollectingTaskWait> {
+  const operationIds = Array.from(new Set(input.operationIds.map((id) => id.trim()).filter(Boolean))).sort()
+  if (operationIds.length < 2) throw new Error('PROJECT_AGENT_WAIT_GROUP_REQUIRES_MULTIPLE_OPERATIONS')
+  const operationId = operationIds[0]
+  if (!operationId) throw new Error('PROJECT_AGENT_WAIT_GROUP_OPERATION_REQUIRED')
+  const waitId = randomUUID()
+  const activityId = randomUUID()
+  const { assistantId } = buildWaitScope(input)
+  await appendProjectAgentEvents({
+    scope: {
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
+    },
+    events: [
+      {
+        runFence: input.runFence,
+        idempotencyKey: `task-collection-started:${waitId}`,
+        event: {
+          kind: 'task.collection_started',
+          runId: input.runId,
+          activityId,
+          waitId,
+          operationId,
+          followUpMode: input.followUpMode,
+        },
+      },
+    ],
+  })
+  return { waitId, activityId, runId: input.runId, operationId, operationIds, followUpMode: input.followUpMode }
+}
+
+export async function bindProjectAgentCollectingWaitMemberInTransaction(
+  tx: Prisma.TransactionClient,
+  input: CreateProjectAgentWaitInput & {
+    group: ProjectAgentCollectingTaskWait
+  },
+): Promise<ProjectAgentTaskSuspensionReceipt> {
+  const taskIds = normalizeTaskIds(input.taskIds)
+  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_TASK_BATCH_EMPTY:${input.operationId}`)
+  if (!input.group.operationIds.includes(input.operationId)) {
+    throw new Error(`PROJECT_AGENT_WAIT_GROUP_OPERATION_MISMATCH:${input.operationId}`)
+  }
+  const waits = await tx.$queryRaw<Array<{ id: string; taskIds: unknown; status: string }>>(Prisma.sql`
+    SELECT id, taskIds, status
+    FROM project_agent_waits
+    WHERE id = ${input.group.waitId}
+      AND runId = ${input.runId}
+      AND projectId = ${input.projectId}
+      AND userId = ${input.userId}
+    FOR UPDATE
+  `)
+  const wait = waits[0]
+  if (!wait || wait.status !== 'collecting') {
+    throw new Error(`PROJECT_AGENT_WAIT_GROUP_NOT_COLLECTING:${input.group.waitId}`)
+  }
+  const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
+    SELECT id, status
+    FROM tasks
+    WHERE projectId = ${input.projectId}
+      AND userId = ${input.userId}
+      AND id IN (${Prisma.join(taskIds)})
+    FOR UPDATE
+  `)
+  const taskIdSet = new Set(tasks.map((task) => task.id))
+  const missingTaskIds = taskIds.filter((taskId) => !taskIdSet.has(taskId))
+  if (missingTaskIds.length > 0) throw new Error(`PROJECT_AGENT_WAIT_TASK_NOT_FOUND:${missingTaskIds.join(',')}`)
+  const groupTaskIds = normalizeTaskIds([...parseStringArray(wait.taskIds), ...taskIds])
+  const runFence = await lockCurrentRunFenceInTransaction(tx, input.runId)
+  const { assistantId, scopeRef } = buildWaitScope(input)
+  await appendProjectAgentEventsInTransaction(tx, {
+    scope: {
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      assistantId,
+      scopeRef,
+    },
+    events: [
+      ...(input.sourceOperationActivityId
+        ? [{
+            runFence,
+            idempotencyKey: `activity-completed:${input.sourceOperationActivityId}:before:${input.group.activityId}`,
+            event: {
+              kind: 'activity.completed' as const,
+              runId: input.runId,
+              activityId: input.sourceOperationActivityId,
+            },
+          }]
+        : []),
+      {
+        runFence,
+        idempotencyKey: `task-bound:${input.group.waitId}:${input.operationId}`,
+        event: {
+          kind: 'task.collection_member_bound',
+          runId: input.runId,
+          activityId: input.group.activityId,
+          waitId: input.group.waitId,
+          operationId: input.group.operationId,
+          taskIds: groupTaskIds,
+        },
+      },
+    ],
+  })
+  return {
+    kind: 'task',
+    runId: input.runId,
+    operationId: input.operationId,
+    activityId: input.group.activityId,
+    waitId: input.group.waitId,
+    taskIds,
+    followUpMode: input.group.followUpMode,
+  }
+}
+
+export async function sealProjectAgentCollectingTaskWait(input: CreateProjectAgentWaitInput & {
+  group: ProjectAgentCollectingTaskWait
+}): Promise<ProjectAgentTaskSuspensionReceipt> {
+  const taskIds = normalizeTaskIds(input.taskIds)
+  if (taskIds.length === 0) throw new Error(`PROJECT_AGENT_WAIT_GROUP_EMPTY:${input.group.waitId}`)
+  await prisma.$transaction(async (tx) => {
+    const runFence = await lockCurrentRunFenceInTransaction(tx, input.runId)
+    const { assistantId, scopeRef } = buildWaitScope(input)
+    await appendProjectAgentEventsInTransaction(tx, {
+      scope: {
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: input.episodeId ?? null,
+        assistantId,
+        scopeRef,
+      },
+      events: [
+        {
+          runFence,
+          idempotencyKey: `activity-started:${input.group.activityId}`,
+          event: {
+            kind: 'activity.started',
+            runId: input.runId,
+            activityId: input.group.activityId,
+            type: 'waiting_task',
+            operationId: input.group.operationId,
+          },
+        },
+        {
+          runFence,
+          idempotencyKey: `task-collection-sealed:${input.group.waitId}`,
+          event: {
+            kind: 'task.collection_sealed',
+            runId: input.runId,
+            activityId: input.group.activityId,
+            waitId: input.group.waitId,
+            operationId: input.group.operationId,
+            taskIds,
+            followUpMode: input.group.followUpMode,
+          },
+        },
+      ],
+    })
+    await prepareProjectAgentTaskExecutionHandoffInTransaction(tx, {
+      executionSegmentId: input.executionSegmentId ?? '',
+      runId: input.runId,
+      projectId: input.projectId,
+      userId: input.userId,
+      episodeId: input.episodeId ?? null,
+      locale: input.locale ?? null,
+      assistantId,
+      operationId: input.group.operationId,
+      waitId: input.group.waitId,
+      taskIds,
+      followUpMode: input.group.followUpMode,
+    })
+    const tasks = await tx.$queryRaw<ProjectAgentWaitTaskSnapshot[]>(Prisma.sql`
+      SELECT id, status
+      FROM tasks
+      WHERE projectId = ${input.projectId}
+        AND userId = ${input.userId}
+        AND id IN (${Prisma.join(taskIds)})
+      FOR UPDATE
+    `)
+    for (const task of tasks) {
+      const terminalType = readTerminalLifecycleTypeFromTaskStatus(task.status)
+      if (!terminalType) continue
+      await resolveProjectAgentWaitsForTaskTerminalInTransaction(tx, {
+        taskId: task.id,
+        projectId: input.projectId,
+        userId: input.userId,
+        lifecycleType: terminalType,
+      })
+    }
+  })
+  await refreshProjectAgentRunFence(input.runFence)
+  return {
+    kind: 'task',
+    runId: input.runId,
+    operationId: input.group.operationId,
+    activityId: input.group.activityId,
+    waitId: input.group.waitId,
+    taskIds,
+    followUpMode: input.group.followUpMode,
+  }
 }
 
 function normalizeWaitTerminalStatus(value: string | null): ProjectAgentWaitTerminalStatus | null {

@@ -49,6 +49,9 @@ import {
 } from './model'
 import { buildAiExecutionSessionId } from '@/lib/ai-exec/session'
 import {
+  prepareProjectAgentCollectingTaskWait,
+  sealProjectAgentCollectingTaskWait,
+  type ProjectAgentCollectingTaskWait,
   type ProjectAgentWaitFollowUp,
   type ProjectAgentWaitFollowUpMode,
 } from './waits'
@@ -430,6 +433,7 @@ function buildProjectStateVersion(params: {
     workflow.stage,
     workflow.blocking.kind,
     workflow.nextAction?.operationId ?? 'none',
+    workflow.operationGroup?.id ?? 'none',
     params.phase.planning.editBibleStatus ?? 'none',
     String(params.phase.planning.chapterCount),
     String(params.phase.progress.storyboardCount),
@@ -461,6 +465,9 @@ function buildProjectStateInputItem(params: {
     `workflowStage=${formatRuntimeStateValue(workflow.stage)}`,
     `workflowBlocking=${blockingReason}`,
     `workflowNextAction=${formatRuntimeStateValue(workflow.nextAction?.operationId)}`,
+    `workflowOperationGroup=${formatRuntimeStateValue(workflow.operationGroup?.id)}`,
+    `workflowOperationGroupIds=${formatRuntimeStateList(workflow.operationGroup?.operationIds ?? [])}`,
+    `workflowApprovalOperationIds=${formatRuntimeStateList(workflow.operationGroup?.approvalOperationIds ?? [])}`,
     `allowedOperationIds=${formatRuntimeStateList(workflow.allowedOperationIds)}`,
     `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
     `planning.editBibleStatus=${formatRuntimeStateValue(params.phase.planning.editBibleStatus)}`,
@@ -550,6 +557,28 @@ function readPlanSnapshotIdFromInterruptionPayload(value: unknown): string | nul
   return typeof planSnapshotId === 'string' && planSnapshotId.trim() ? planSnapshotId.trim() : null
 }
 
+interface PersistedApprovalGroupItem {
+  readonly approvalId: string
+  readonly operationId: string
+  readonly toolCallId: string | null
+}
+
+function readApprovalGroupItems(value: unknown): readonly PersistedApprovalGroupItem[] {
+  if (!isRecord(value) || !Array.isArray(value.approvalItems)) return []
+  return value.approvalItems.flatMap((item) => {
+    if (!isRecord(item)) return []
+    const approvalId = typeof item.approvalId === 'string' ? item.approvalId.trim() : ''
+    const operationId = typeof item.operationId === 'string' ? item.operationId.trim() : ''
+    const toolCallId = typeof item.toolCallId === 'string' ? item.toolCallId.trim() || null : null
+    return approvalId && operationId ? [{ approvalId, operationId, toolCallId }] : []
+  })
+}
+
+function readApprovalGroupOperationIds(value: unknown): readonly string[] {
+  const items = readApprovalGroupItems(value)
+  return Array.from(new Set(items.map((item) => item.operationId))).sort()
+}
+
 async function buildApprovalOperationPlanView(params: {
   item: RunToolApprovalItem
   operation: ProjectAgentOperationRegistry[string] | undefined
@@ -602,12 +631,58 @@ async function createProjectAgentWaitBindings(params: {
   registry: ProjectAgentOperationRegistry
   transactionallyBoundTaskBatches: ReadonlyMap<string, readonly string[]>
   committedSuspensions: ReadonlyMap<string, ProjectAgentSuspensionReceipt>
+  collectingTaskWait?: ProjectAgentCollectingTaskWait | null
+  runFence: ReturnType<typeof createProjectAgentRunFence>
+  executionSegmentId: string
+  projectId: string
+  userId: string
+  episodeId: string | null
+  locale: string
 }): Promise<ProjectAgentWaitFollowUpMode | null> {
   if (!params.stopPart || params.stopPart.reason !== 'awaiting_external_task' || params.stopPart.taskIds.length === 0) {
     return null
   }
+  if (params.collectingTaskWait) {
+    const expectedOperationIds = [...params.collectingTaskWait.operationIds].sort()
+    const actualOperationIds = params.stopPart.taskWaits.map((wait) => wait.operationId).sort()
+    if (JSON.stringify(actualOperationIds) !== JSON.stringify(expectedOperationIds)) {
+      throw new Error(`PROJECT_AGENT_WAIT_GROUP_MEMBER_MISMATCH:${expectedOperationIds.join(',')}:${actualOperationIds.join(',')}`)
+    }
+    const taskIds = Array.from(new Set(params.stopPart.taskWaits.flatMap((wait) => wait.taskIds))).sort()
+    for (const taskWait of params.stopPart.taskWaits) {
+      const boundTaskIds = params.transactionallyBoundTaskBatches.get(taskWait.operationId)
+      const suspension = params.committedSuspensions.get(taskWait.operationId)
+      if (!boundTaskIds || !suspension || suspension.kind !== 'task') {
+        throw new Error(`PROJECT_AGENT_WAIT_GROUP_MEMBER_NOT_BOUND:${taskWait.operationId}`)
+      }
+      if (suspension.waitId !== params.collectingTaskWait.waitId) {
+        throw new Error(`PROJECT_AGENT_WAIT_GROUP_IDENTITY_MISMATCH:${taskWait.operationId}`)
+      }
+    }
+    const sealed = await sealProjectAgentCollectingTaskWait({
+      runFence: params.runFence,
+      runId: params.runFence.runId,
+      executionSegmentId: params.executionSegmentId,
+      projectId: params.projectId,
+      userId: params.userId,
+      episodeId: params.episodeId,
+      locale: params.locale,
+      assistantId: 'workspace-command',
+      operationId: params.collectingTaskWait.operationId,
+      taskIds,
+      followUpMode: params.collectingTaskWait.followUpMode,
+      group: params.collectingTaskWait,
+    })
+    params.committedSuspensions.forEach((suspension) => {
+      if (suspension.kind !== 'task') return
+      if (suspension.waitId !== sealed.waitId) {
+        throw new Error(`PROJECT_AGENT_WAIT_GROUP_SEALED_RECEIPT_MISMATCH:${suspension.operationId}`)
+      }
+    })
+    return sealed.followUpMode
+  }
   if (params.stopPart.taskWaits.length !== 1) {
-    throw new Error(`PROJECT_AGENT_MULTIPLE_ASYNC_OPERATIONS_UNSUPPORTED:${params.stopPart.operationIds.join(',')}`)
+    throw new Error(`PROJECT_AGENT_WAIT_GROUP_REQUIRED:${params.stopPart.operationIds.join(',')}`)
   }
   const taskWait = params.stopPart.taskWaits[0]
   if (!taskWait) throw new Error('PROJECT_AGENT_TASK_WAIT_DESCRIPTOR_MISSING')
@@ -891,6 +966,27 @@ export async function createProjectAgentChatResponse(input: {
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
+  const approvalGroupOperationIds = approvalInterruption
+    ? readApprovalGroupOperationIds(approvalInterruption.payload)
+    : phase.editFirstWorkflow.operationGroup?.operationIds ?? []
+  const collectingTaskWait = control.kind === 'approval'
+    && control.approved
+    && approvalGroupOperationIds.length > 1
+    ? await prepareProjectAgentCollectingTaskWait({
+        runFence,
+        runId: input.run.id,
+        executionSegmentId: executionSegment.id,
+        projectId: input.projectId,
+        userId: input.userId,
+        episodeId: context.episodeId ?? null,
+        locale,
+        assistantId: 'workspace-command',
+        operationId: approvalGroupOperationIds[0] ?? 'operation_group',
+        operationIds: approvalGroupOperationIds,
+        taskIds: [],
+        followUpMode: resolveWaitFollowUpModeForOperations(operations, [...approvalGroupOperationIds]),
+      })
+    : null
   const liveWorkflow = createProjectAgentLiveWorkflowState({
     requestId,
     projectId: input.projectId,
@@ -1137,6 +1233,8 @@ export async function createProjectAgentChatResponse(input: {
         committedSuspensions.set(batch.operationId, batch.suspension)
       },
       approvalPreflightStore,
+      approvalBarrierOperationIds: approvalGroupOperationIds,
+      collectingTaskWait,
     }) as Tool<ProjectAgentAgentsRunContext>
   ))
 
@@ -1185,13 +1283,18 @@ export async function createProjectAgentChatResponse(input: {
           runContext,
           { contextStrategy: 'replace' },
         )
-        const approvalItem = findApprovalItem(state, approvalInterruption.approvalId)
-        if (control.kind === 'approval' && control.approved) {
-          state.approve(approvalItem)
-        } else {
-          state.reject(approvalItem, {
-            message: (control.kind === 'approval' ? control.reason : null) || 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
-          })
+        const storedApprovalItems = readApprovalGroupItems(approvalInterruption.payload)
+        const approvals = storedApprovalItems.length > 0
+          ? storedApprovalItems.map((item) => findApprovalItem(state, item.approvalId))
+          : [findApprovalItem(state, approvalInterruption.approvalId)]
+        for (const approvalItem of approvals) {
+          if (control.kind === 'approval' && control.approved) {
+            state.approve(approvalItem)
+          } else {
+            state.reject(approvalItem, {
+              message: (control.kind === 'approval' ? control.reason : null) || 'PROJECT_AGENT_TOOL_APPROVAL_REJECTED',
+            })
+          }
         }
         // The serialized SDK state is the immutable continuation of the exact
         // tool call the model requested. Rewriting its original input here can
@@ -1327,27 +1430,43 @@ export async function createProjectAgentChatResponse(input: {
           completionError = error
         }
 
-        const approvalItem = result.interruptions[0] ?? result.state.getInterruptions()[0] ?? null
-        const shouldPersistApprovalInterruption = !!approvalItem && latestStopPart?.reason !== 'awaiting_external_task'
-        const pendingApprovalHandoff = approvalItem && shouldPersistApprovalInterruption
+        const approvalItems = result.interruptions.length > 0
+          ? result.interruptions
+          : result.state.getInterruptions()
+        const shouldPersistApprovalInterruption = approvalItems.length > 0 && latestStopPart?.reason !== 'awaiting_external_task'
+        const pendingApprovalHandoff = shouldPersistApprovalInterruption
           ? await (async () => {
-          const approvalId = readApprovalId(approvalItem)
-          const operationId = approvalItem.name ?? 'unknown_operation'
-          const approvalToolCallId = readApprovalToolCallId(approvalItem)
-          const operationPlan = await buildApprovalOperationPlanView({
-            item: approvalItem,
-            operation: operations[operationId],
-            toolCallId: approvalToolCallId,
-            approvalPreflightStore,
-          })
-          const approvalInputHash = operationPlan?.inputHash
-            ?? stableArgsHash(readApprovalInput(approvalItem))
+            const members = await Promise.all(approvalItems.map(async (approvalItem) => {
+              const approvalId = readApprovalId(approvalItem)
+              const operationId = approvalItem.name ?? 'unknown_operation'
+              const toolCallId = readApprovalToolCallId(approvalItem)
+              const operationPlan = await buildApprovalOperationPlanView({
+                item: approvalItem,
+                operation: operations[operationId],
+                toolCallId,
+                approvalPreflightStore,
+              })
+              return {
+                approvalId,
+                operationId,
+                toolCallId,
+                inputHash: operationPlan?.inputHash ?? stableArgsHash(readApprovalInput(approvalItem)),
+                operationPlan,
+              }
+            }))
+            const expectedGroupIds = phase.editFirstWorkflow.operationGroup?.operationIds ?? []
+            if (expectedGroupIds.length > 0) {
+              const expected = Array.from(new Set(expectedGroupIds)).sort()
+              const actual = Array.from(new Set(members.map((member) => member.operationId))).sort()
+              if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                throw new Error(`PROJECT_AGENT_OPERATION_GROUP_INCOMPLETE:${expected.join(',')}:${actual.join(',')}`)
+              }
+            }
+            const primary = members.find((member) => member.operationPlan) ?? members[0]
+            if (!primary) throw new Error('PROJECT_AGENT_APPROVAL_GROUP_EMPTY')
             return {
-              approvalId,
-              operationId,
-              toolCallId: approvalToolCallId,
-              inputHash: approvalInputHash,
-              operationPlan,
+              ...primary,
+              members,
               runState: result.state.toString(),
             }
           })()
@@ -1359,6 +1478,13 @@ export async function createProjectAgentChatResponse(input: {
             registry: operations,
             transactionallyBoundTaskBatches,
             committedSuspensions,
+            collectingTaskWait,
+            runFence,
+            executionSegmentId: executionSegment.id,
+            projectId: input.projectId,
+            userId: input.userId,
+            episodeId: context.episodeId ?? null,
+            locale,
           })
         } catch (error) {
           if (input.settleTaskFollowUp) throw error
@@ -1415,6 +1541,12 @@ export async function createProjectAgentChatResponse(input: {
               operationId: pendingApprovalHandoff.operationId,
               toolCallId: pendingApprovalHandoff.toolCallId,
               inputHash: pendingApprovalHandoff.inputHash,
+              approvalItems: pendingApprovalHandoff.members.map((member) => ({
+                approvalId: member.approvalId,
+                operationId: member.operationId,
+                toolCallId: member.toolCallId,
+                inputHash: member.inputHash,
+              })),
               ...(pendingApprovalHandoff.operationPlan
                 ? { operationPlan: pendingApprovalHandoff.operationPlan }
                 : {}),
@@ -1472,10 +1604,15 @@ export async function createProjectAgentChatResponse(input: {
         } else if (!shouldPersistApprovalInterruption) {
           if (latestStopPart?.reason === 'awaiting_external_task') {
             chunks.push(createRuntimeStatusChunk('awaiting_task', 'awaiting_task'))
-            if (latestStopPart.taskWaits.length !== 1 || !latestStopPart.taskWaits[0]) {
-              throw new Error('PROJECT_AGENT_TASK_HANDOFF_WAIT_DESCRIPTOR_MISSING')
-            }
-            const taskWait = latestStopPart.taskWaits[0]
+            const taskWait = collectingTaskWait
+              ? {
+                  operationId: collectingTaskWait.operationId,
+                  taskIds: Array.from(new Set(latestStopPart.taskWaits.flatMap((wait) => wait.taskIds))).sort(),
+                }
+              : latestStopPart.taskWaits.length === 1 && latestStopPart.taskWaits[0]
+                ? latestStopPart.taskWaits[0]
+                : null
+            if (!taskWait) throw new Error('PROJECT_AGENT_TASK_HANDOFF_WAIT_DESCRIPTOR_MISSING')
             await settleProjectAgentPreparedTaskHandoff({
               executionFence: {
                 runFence,
