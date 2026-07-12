@@ -20,6 +20,7 @@ const validateMock = vi.hoisted(() => vi.fn(async (): Promise<{
     id: string
     firstLastFramePrompt: string | null
     firstLastFramePromptSourceFingerprint: string | null
+    videoDurationBinding?: string | null
   }
   lastPanel: { id: string }
   episodeId: string
@@ -143,6 +144,44 @@ describe('POST first-last-frame-prompt', () => {
       applied: true,
       fallbackUsed: false,
       warnings: [],
+    })
+    expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('returns persisted smart duration metadata with a matching prompt shortcut', async () => {
+    validateMock.mockResolvedValueOnce({
+      firstPanel: {
+        id: 'panel-1',
+        firstLastFramePrompt: 'Persisted transition',
+        firstLastFramePromptSourceFingerprint: 'fingerprint-current',
+        videoDurationBinding: JSON.stringify({
+          mode: 'manual',
+          targetDurationSeconds: 8,
+          durationSource: 'smart',
+          recommendationConfidence: 0.88,
+          recommendationReason: '包含移动和镜头推进',
+          recommendationFingerprint: 'smart-fp',
+        }),
+      },
+      lastPanel: { id: 'panel-2' },
+      episodeId: 'episode-1',
+    })
+
+    const response = await callRoute(POST, 'POST', {
+      firstPanelId: 'panel-1',
+      lastPanelId: 'panel-2',
+      reason: 'source_change',
+    }, { params: { projectId: 'project-1' } })
+
+    await expect(response.json()).resolves.toMatchObject({
+      prompt: 'Persisted transition',
+      smartDuration: {
+        durationSeconds: 8,
+        confidence: 0.88,
+        reason: '包含移动和镜头推进',
+        fingerprint: 'smart-fp',
+        source: 'smart',
+      },
     })
     expect(maybeSubmitLLMTaskMock).not.toHaveBeenCalled()
   })

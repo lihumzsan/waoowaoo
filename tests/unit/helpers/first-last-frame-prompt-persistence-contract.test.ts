@@ -22,6 +22,9 @@ describe('first-last-frame prompt persistence contract', () => {
     expect(prompt).toMatch(/Image 1[\s\S]*START/i)
     expect(prompt).toMatch(/Image 2[\s\S]*END/i)
     expect(prompt).toContain('transition_prompt')
+    expect(prompt).toContain('duration_analysis')
+    expect(prompt).toContain('motion_beats')
+    expect(prompt).toContain('confidence')
     expect(prompt).toMatch(/English/i)
   })
 

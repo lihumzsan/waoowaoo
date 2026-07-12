@@ -8,11 +8,20 @@ import {
   loadAdjacentFirstLastFramePanels,
   type FirstLastFramePromptReason,
 } from '@/lib/novel-promotion/first-last-frame-prompt'
+import {
+  buildFirstLastFrameSmartDurationFingerprint,
+  computeFirstLastFrameSmartDuration,
+  parseFirstLastFrameDurationAnalysis,
+  resolveFirstLastFrameSmartDurationBinding,
+  type FirstLastFrameDurationAnalysis,
+  type FirstLastFrameSmartDurationRecommendation,
+} from '@/lib/novel-promotion/first-last-frame-smart-duration'
 import { buildDefaultFirstLastFramePrompt } from '@/lib/novel-promotion/panel-continuity'
 import { buildPrompt, PROMPT_IDS } from '@/lib/prompt-i18n'
 import { prisma } from '@/lib/prisma'
 import { extractStorageKey, getSignedObjectUrl } from '@/lib/storage'
 import type { TaskJobData } from '@/lib/task/types'
+import { parseVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { assertTaskActive } from '@/lib/workers/utils'
 
@@ -22,6 +31,7 @@ export type GenerateFirstLastFramePromptResult = {
   applied: boolean
   fallbackUsed: boolean
   warnings: string[]
+  smartDuration?: FirstLastFrameSmartDurationRecommendation
 }
 
 function stringValue(value: unknown) {
@@ -107,7 +117,10 @@ function introducesContextAbsentArrivingEntity(prompt: string, sourceContext: st
   return false
 }
 
-function parseModelOutput(text: string, sourceContext: string): { prompt: string; warnings: string[] } | null {
+function parseModelOutput(
+  text: string,
+  sourceContext: string,
+): { prompt: string; warnings: string[]; durationAnalysis: FirstLastFrameDurationAnalysis | null } | null {
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   if (!unfenced) return null
   try {
@@ -128,7 +141,11 @@ function parseModelOutput(text: string, sourceContext: string): { prompt: string
     const warnings = Array.isArray(parsed.warnings)
       ? parsed.warnings.map(stringValue).filter(Boolean)
       : []
-    return { prompt, warnings }
+    return {
+      prompt,
+      warnings,
+      durationAnalysis: parseFirstLastFrameDurationAnalysis(parsed.duration_analysis ?? parsed.durationAnalysis),
+    }
   } catch {
     return null
   }
@@ -185,6 +202,11 @@ export async function handleFirstLastFramePromptTask(
     start.firstPanel as unknown as Record<string, unknown>,
     start.lastPanel as unknown as Record<string, unknown>,
   )
+  const smartDurationFingerprint = buildFirstLastFrameSmartDurationFingerprint({
+    sourceFingerprint,
+    workflowKey: getFirstLastFramePromptTiming(start.firstPanel as unknown as Record<string, unknown>).workflowKey,
+    fps: getFirstLastFramePromptTiming(start.firstPanel as unknown as Record<string, unknown>).fps,
+  })
   const startFirstVersion = panelVersion(start.firstPanel.updatedAt)
   const startLastVersion = panelVersion(start.lastPanel.updatedAt)
   const timing = getFirstLastFramePromptTiming(start.firstPanel as unknown as Record<string, unknown>)
@@ -237,6 +259,11 @@ export async function handleFirstLastFramePromptTask(
     lastPanel: start.lastPanel,
   })
   const warnings = generated?.warnings || [fallbackWarning]
+  const smartDuration = computeFirstLastFrameSmartDuration({
+    analysis: generated?.durationAnalysis ?? null,
+    fingerprint: smartDurationFingerprint,
+    fallbackReason: 'invalid_analysis',
+  })
 
   await reportTaskProgress(job, 80, { stage: 'first_last_frame_prompt_persist' })
   await assertTaskActive(job, 'first_last_frame_prompt_persist')
@@ -258,6 +285,10 @@ export async function handleFirstLastFramePromptTask(
       const versionsMatch = panelVersion(latest.firstPanel.updatedAt) === startFirstVersion
         && panelVersion(latest.lastPanel.updatedAt) === startLastVersion
       if (latestFingerprint !== sourceFingerprint || !versionsMatch) return false
+      const latestBinding = parseVideoDurationBinding(latest.firstPanel.videoDurationBinding)
+      const nextDurationBinding = latestBinding.durationSource === 'manual'
+        ? latestBinding
+        : resolveFirstLastFrameSmartDurationBinding(smartDuration)
       const write = await tx.novelPromotionPanel.updateMany({
         where: {
           id: firstPanelId,
@@ -268,6 +299,7 @@ export async function handleFirstLastFramePromptTask(
           firstLastFramePrompt: resultPrompt,
           firstLastFramePromptEditedByUser: false,
           firstLastFramePromptSourceFingerprint: sourceFingerprint,
+          videoDurationBinding: JSON.stringify(nextDurationBinding),
         },
       })
       return write.count === 1
@@ -276,5 +308,5 @@ export async function handleFirstLastFramePromptTask(
     if (!isSerializableConflict(error)) throw error
   }
 
-  return { prompt: resultPrompt, sourceFingerprint, applied, fallbackUsed, warnings }
+  return { prompt: resultPrompt, sourceFingerprint, applied, fallbackUsed, warnings, smartDuration }
 }

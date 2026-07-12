@@ -8,9 +8,31 @@ import {
   loadAdjacentFirstLastFramePanels,
   type FirstLastFramePromptReason,
 } from '@/lib/novel-promotion/first-last-frame-prompt'
+import {
+  COMFYUI_LTX23_GOON_FPS,
+  resolveLtx23GoonFrameCount,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { TASK_TYPE } from '@/lib/task/types'
+import { parseVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 const REASONS = new Set<FirstLastFramePromptReason>(['link', 'source_change', 'manual'])
+
+function buildPersistedSmartDurationResponse(
+  rawBinding: unknown,
+  fallbackFingerprint: string,
+) {
+  const binding = parseVideoDurationBinding(rawBinding)
+  if (binding.durationSource !== 'smart' || typeof binding.targetDurationSeconds !== 'number') return undefined
+  return {
+    durationSeconds: binding.targetDurationSeconds,
+    frameCount: resolveLtx23GoonFrameCount(binding.targetDurationSeconds),
+    fps: COMFYUI_LTX23_GOON_FPS,
+    confidence: binding.recommendationConfidence ?? 0,
+    reason: binding.recommendationReason || '智能推荐时长',
+    fingerprint: binding.recommendationFingerprint || fallbackFingerprint,
+    source: 'smart' as const,
+  }
+}
 
 export const POST = apiHandler(async (
   request: NextRequest,
@@ -54,6 +76,10 @@ export const POST = apiHandler(async (
         applied: true,
         fallbackUsed: false,
         warnings: [],
+        smartDuration: buildPersistedSmartDurationResponse(
+          panels.firstPanel.videoDurationBinding,
+          sourceFingerprint,
+        ),
       })
     }
 

@@ -140,23 +140,116 @@ describe('first-last-frame prompt worker', () => {
       ],
       action: 'first_last_frame_transition_prompt',
     }))
-    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith({
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         id: 'panel-1',
         linkedToNextPanel: true,
         updatedAt: new Date('2026-07-12T00:00:00.000Z'),
       },
-      data: {
+      data: expect.objectContaining({
         firstLastFramePrompt: validPrompt,
         firstLastFramePromptEditedByUser: false,
         firstLastFramePromptSourceFingerprint: expect.any(String),
-      },
-    })
+      }),
+    }))
     expect(result).toMatchObject({
       prompt: validPrompt,
       applied: true,
       fallbackUsed: false,
       warnings: ['keep motion subtle'],
+    })
+  })
+
+  it('parses duration analysis from the same vision call and persists smart binding', async () => {
+    loadPanelsMock.mockResolvedValue(context(framePanel('panel-1', 0, {
+      videoDurationBinding: null,
+    })))
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        transition_prompt: validPrompt,
+        duration_analysis: {
+          motion_beats: [
+            { type: 'body_action', order: 1 },
+            { type: 'locomotion', order: 2, parallel_group: 'move' },
+            { type: 'camera_standard', order: 2, parallel_group: 'move' },
+          ],
+          pacing: 'normal',
+          continuity: 'good',
+          confidence: 0.9,
+          reason: '包含转身和位置移动，镜头缓慢推进',
+        },
+        warnings: [],
+      }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        videoDurationBinding: expect.stringContaining('"durationSource":"smart"'),
+      }),
+    }))
+    expect(result.smartDuration).toMatchObject({
+      durationSeconds: 8,
+      frameCount: 193,
+      fps: 24,
+      confidence: 0.9,
+      source: 'smart',
+    })
+  })
+
+  it('does not overwrite an existing manual duration binding with smart analysis', async () => {
+    loadPanelsMock.mockResolvedValue(context(framePanel('panel-1', 0, {
+      videoDurationBinding: JSON.stringify({
+        mode: 'manual',
+        targetDurationSeconds: 6,
+        durationSource: 'manual',
+      }),
+    })))
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        transition_prompt: validPrompt,
+        duration_analysis: {
+          motion_beats: [{ type: 'locomotion', order: 1 }],
+          pacing: 'slow',
+          continuity: 'good',
+          confidence: 0.9,
+          reason: '大幅移动',
+        },
+      }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(transactionPanelMock.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        videoDurationBinding: JSON.stringify({
+          mode: 'manual',
+          voiceLineIds: [],
+          targetDurationSeconds: 6,
+          durationSource: 'manual',
+        }),
+      }),
+    }))
+    expect(result.smartDuration?.durationSeconds).toBeGreaterThanOrEqual(6)
+  })
+
+  it('falls back to 10s smart metadata when duration analysis is invalid but keeps prompt generation successful', async () => {
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        transition_prompt: validPrompt,
+        duration_analysis: { motion_beats: [{ type: 'unknown', order: 1 }] },
+      }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(result.fallbackUsed).toBe(false)
+    expect(result.smartDuration).toMatchObject({
+      durationSeconds: 10,
+      source: 'fallback',
+      fallbackReason: 'invalid_analysis',
     })
   })
 
