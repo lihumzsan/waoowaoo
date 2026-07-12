@@ -69,14 +69,41 @@ export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 
   return !entry || entry.status === 'idle' || entry.status === 'error'
 }
 
+export function clearSupersededPromptOperation(
+  entry: FirstLastFramePromptEntry,
+): FirstLastFramePromptEntry {
+  return {
+    ...entry,
+    status: 'idle',
+    errorMessage: undefined,
+  }
+}
+
 export function shouldAutoEnsurePrompt(params: {
   taskHydrated: boolean
   taskPhase?: string | null
+  ignoreActiveSnapshot?: boolean
 }) {
   if (!params.taskHydrated) return false
+  if (params.ignoreActiveSnapshot && (params.taskPhase === 'queued' || params.taskPhase === 'processing')) {
+    return true
+  }
   return params.taskPhase !== 'failed'
     && params.taskPhase !== 'queued'
     && params.taskPhase !== 'processing'
+}
+
+export function shouldProjectPromptTaskSnapshot(params: {
+  localOperationActive: boolean
+  ignoreActiveSnapshot: boolean
+  taskPhase?: string | null
+}) {
+  if (params.localOperationActive) return false
+  if (
+    params.ignoreActiveSnapshot
+    && (params.taskPhase === 'queued' || params.taskPhase === 'processing')
+  ) return false
+  return true
 }
 
 export function projectPromptTaskState(
@@ -88,6 +115,12 @@ export function projectPromptTaskState(
   }
   if (task.phase === 'failed') {
     return { ...entry, status: 'error', errorMessage: task.errorMessage || undefined }
+  }
+  if (
+    (task.phase === 'completed' || task.phase === 'idle')
+    && (entry.status === 'queued' || entry.status === 'processing')
+  ) {
+    return { ...entry, status: 'idle', errorMessage: undefined }
   }
   return entry
 }

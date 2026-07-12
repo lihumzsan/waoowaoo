@@ -9,11 +9,13 @@ import { useGenerateFirstLastFramePrompt } from '@/lib/query/mutations/useVideoM
 import {
   applyPromptResult,
   canStartPromptOperation,
+  clearSupersededPromptOperation,
   createPersistedPromptEntry,
   isPromptResultCurrent,
   projectPromptTaskState,
   shouldApplyPromptResult,
   shouldAutoEnsurePrompt,
+  shouldProjectPromptTaskSnapshot,
   type FirstLastFramePromptEntry,
 } from './first-last-frame-prompt-entry'
 
@@ -56,6 +58,7 @@ export function useFirstLastFramePromptEntries({
   const ensuredSignaturesRef = useRef(new Map<string, string>())
   const requestRevisionsRef = useRef(new Map<string, number>())
   const activeOperationsRef = useRef(new Set<string>())
+  const locallySettledPanelsRef = useRef(new Set<string>())
   const promptEntriesRef = useRef(promptEntries)
   promptEntriesRef.current = promptEntries
   const linkedPanelsRef = useRef(linkedPanels)
@@ -181,11 +184,20 @@ export function useFirstLastFramePromptEntries({
     const requestRevision = (requestRevisionsRef.current.get(panelKey) || 0) + 1
     requestRevisionsRef.current.set(panelKey, requestRevision)
     activeOperationsRef.current.add(panelKey)
+    locallySettledPanelsRef.current.delete(panelKey)
     setPromptEntries((previous) => new Map(previous).set(panelKey, {
       ...(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)),
       status: 'queued',
       errorMessage: undefined,
     }))
+
+    const clearSuperseded = () => {
+      ensuredSignaturesRef.current.delete(panelKey)
+      setPromptEntries((previous) => {
+        const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
+        return new Map(previous).set(panelKey, clearSupersededPromptOperation(current))
+      })
+    }
 
     try {
       const result = await ensureMutation.mutateAsync({
@@ -195,29 +207,33 @@ export function useFirstLastFramePromptEntries({
         reason,
       })
       if (!isPromptResultCurrent(signature, currentSignaturesRef.current.get(panelKey))) {
-        ensuredSignaturesRef.current.delete(panelKey)
-        setPromptEntries((previous) => {
-          const current = previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
-          return new Map(previous).set(panelKey, { ...current, status: 'idle' })
-        })
+        clearSuperseded()
         return
       }
-      if (!shouldApplyPromptResult({
+      const shouldApply = shouldApplyPromptResult({
         linked: reason === 'link' || linkedPanelsRef.current.get(panelKey) === true,
         requestRevision,
         currentRevision: requestRevisionsRef.current.get(panelKey) || 0,
-      })) return
+      })
+      if (!shouldApply) {
+        clearSuperseded()
+        return
+      }
       if (!result.applied) ensuredSignaturesRef.current.delete(panelKey)
       setPromptEntries((previous) => new Map(previous).set(panelKey, applyPromptResult(
         previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel),
         result,
       )))
     } catch (error) {
-      if (!shouldApplyPromptResult({
+      const shouldApply = shouldApplyPromptResult({
         linked: reason === 'link' || linkedPanelsRef.current.get(panelKey) === true,
         requestRevision,
         currentRevision: requestRevisionsRef.current.get(panelKey) || 0,
-      })) return
+      })
+      if (!shouldApply) {
+        clearSuperseded()
+        return
+      }
       setPromptEntries((previous) => new Map(previous).set(panelKey, {
         ...(previous.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)),
         status: 'error',
@@ -225,6 +241,7 @@ export function useFirstLastFramePromptEntries({
       }))
     } finally {
       activeOperationsRef.current.delete(panelKey)
+      locallySettledPanelsRef.current.add(panelKey)
     }
   }, [buildDerivedEntry, buildSourceSignature, ensureMutation, episodeId, getPanelPair])
 
@@ -240,6 +257,13 @@ export function useFirstLastFramePromptEntries({
         const current = next.get(panelKey) || buildDerivedEntry(pair.firstPanel, pair.lastPanel)
         const task = promptTaskStates.getTaskState(`panel-first-last-prompt:${panel.panelId}`)
         if (!task) continue
+        const ignoreActiveSnapshot = locallySettledPanelsRef.current.has(panelKey)
+        if (!shouldProjectPromptTaskSnapshot({
+          localOperationActive: activeOperationsRef.current.has(panelKey),
+          ignoreActiveSnapshot,
+          taskPhase: task.phase,
+        })) continue
+        if (ignoreActiveSnapshot) locallySettledPanelsRef.current.delete(panelKey)
         const projected = projectPromptTaskState(current, {
           phase: task.phase,
           errorMessage: task.lastError?.message,
@@ -251,7 +275,7 @@ export function useFirstLastFramePromptEntries({
       }
       return changed ? next : previous
     })
-  }, [allPanels, buildDerivedEntry, getPanelPair, promptTaskStates])
+  }, [allPanels, buildDerivedEntry, getPanelPair, promptEntries, promptTaskStates])
 
   useEffect(() => {
     for (let index = 0; index < allPanels.length - 1; index += 1) {
@@ -269,6 +293,7 @@ export function useFirstLastFramePromptEntries({
         || !shouldAutoEnsurePrompt({
           taskHydrated: !promptTaskStates.isFetching,
           taskPhase: task?.phase,
+          ignoreActiveSnapshot: locallySettledPanelsRef.current.has(panelKey),
         })
       ) continue
       void ensurePrompt(panelKey, 'source_change')
@@ -343,6 +368,12 @@ export function useFirstLastFramePromptEntries({
   const unlinkPrompt = useCallback((panelKey: string) => {
     requestRevisionsRef.current.set(panelKey, (requestRevisionsRef.current.get(panelKey) || 0) + 1)
     ensuredSignaturesRef.current.delete(panelKey)
+    locallySettledPanelsRef.current.add(panelKey)
+    setPromptEntries((previous) => {
+      const current = previous.get(panelKey)
+      if (!current) return previous
+      return new Map(previous).set(panelKey, clearSupersededPromptOperation(current))
+    })
   }, [])
 
   return {

@@ -157,4 +157,87 @@ describe('first/last-frame prompt entry', () => {
     expect(isCurrent('source-a', 'source-b')).toBe(false)
     expect(isCurrent('source-b', 'source-b')).toBe(true)
   })
+
+  it('restores a superseded queued entry so relinking can start a new ensure', async () => {
+    const promptState = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    ) as Record<string, unknown>
+
+    expect(typeof promptState.clearSupersededPromptOperation).toBe('function')
+    if (typeof promptState.clearSupersededPromptOperation !== 'function') return
+    const clear = promptState.clearSupersededPromptOperation as (entry: {
+      value: string
+      origin: 'generated'
+      dirty: boolean
+      status: 'queued'
+      errorMessage?: string
+    }) => { status: string; errorMessage?: string }
+    const cleared = clear({
+      value: 'Keep current text',
+      origin: 'generated',
+      dirty: false,
+      status: 'queued',
+      errorMessage: 'old error',
+    })
+
+    expect(cleared).toMatchObject({ value: 'Keep current text', status: 'idle' })
+    expect(cleared.errorMessage).toBeUndefined()
+    expect((promptState.canStartPromptOperation as (entry: { status: string }) => boolean)(cleared)).toBe(true)
+  })
+
+  it('keeps stale active target snapshots from overriding locally settled authority', async () => {
+    const promptState = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    ) as Record<string, unknown>
+
+    expect(typeof promptState.shouldProjectPromptTaskSnapshot).toBe('function')
+    if (typeof promptState.shouldProjectPromptTaskSnapshot !== 'function') return
+    const shouldProject = promptState.shouldProjectPromptTaskSnapshot as (params: {
+      localOperationActive: boolean
+      ignoreActiveSnapshot: boolean
+      taskPhase?: string | null
+    }) => boolean
+    expect(shouldProject({
+      localOperationActive: true,
+      ignoreActiveSnapshot: false,
+      taskPhase: 'processing',
+    })).toBe(false)
+    expect(shouldProject({
+      localOperationActive: false,
+      ignoreActiveSnapshot: true,
+      taskPhase: 'processing',
+    })).toBe(false)
+    expect(shouldProject({
+      localOperationActive: false,
+      ignoreActiveSnapshot: true,
+      taskPhase: 'completed',
+    })).toBe(true)
+  })
+
+  it('clears recovered active status when the authoritative target becomes completed or idle', async () => {
+    const { projectPromptTaskState } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const processing = {
+      value: 'Current text',
+      origin: 'generated' as const,
+      dirty: false,
+      status: 'processing' as const,
+    }
+
+    expect(projectPromptTaskState(processing, { phase: 'completed' }).status).toBe('idle')
+    expect(projectPromptTaskState(processing, { phase: 'idle' }).status).toBe('idle')
+  })
+
+  it('allows the latest source ensure while an older processing snapshot is intentionally ignored', async () => {
+    const { shouldAutoEnsurePrompt } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    expect(shouldAutoEnsurePrompt({
+      taskHydrated: true,
+      taskPhase: 'processing',
+      ignoreActiveSnapshot: true,
+    })).toBe(true)
+  })
 })
