@@ -917,6 +917,16 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   let editScriptNodeId: string | null = null
   if (editFirstCanvasVisibility.editScript || editScript || editScripts.length > 0 || editScriptPending) {
     const scriptNodes = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
+    const chapterIndexById = new Map(
+      (editBible?.chapters ?? []).map((chapter) => [chapter.id, chapter.chapterIndex] as const),
+    )
+    const editScriptTitle = (chapterId: string | null): string => {
+      if (!chapterId) return translate('nodes.editScript.title')
+      const chapterIndex = chapterIndexById.get(chapterId)
+      return chapterIndex === undefined
+        ? translate('nodes.editScript.title')
+        : translate('nodes.editScript.titleWithChapterNumber', { chapter: chapterIndex + 1 })
+    }
     const existingScriptChapterIds = new Set(scriptNodes.map((script) => script.chapterId).filter((chapterId): chapterId is string => Boolean(chapterId)))
     const pendingChapters = (editBible?.chapters ?? []).filter((chapter) => !existingScriptChapterIds.has(chapter.id))
     if (scriptNodes.length > 0) {
@@ -963,7 +973,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             layoutNodeType: 'editScript',
             targetType: 'editScript',
             targetId: script.id,
-            title: translate('nodes.editScript.title'),
+            title: editScriptTitle(scriptChapterId),
             eyebrow: translate('nodes.editScript.eyebrow'),
             body: script.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.action}`).join('\n')
               || translate('nodes.editScript.pendingBody'),
@@ -1003,7 +1013,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             layoutNodeType: 'editScript',
             targetType: 'editScript',
             targetId: chapter.id,
-            title: translate('nodes.editScript.title'),
+            title: editScriptTitle(chapter.id),
             eyebrow: translate('nodes.editScript.eyebrow'),
             body: chapter.summary || translate('nodes.editScript.pendingBody'),
             meta: translate('nodes.editScript.pendingMeta'),
@@ -1037,7 +1047,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             layoutNodeType: 'editScript',
             targetType: 'editScript',
             targetId: chapter.id,
-            title: translate('nodes.editScript.title'),
+            title: editScriptTitle(chapter.id),
             eyebrow: translate('nodes.editScript.eyebrow'),
             body: chapter.summary || translate('nodes.editScript.pendingBody'),
             meta: translate('nodes.editScript.pendingMeta'),

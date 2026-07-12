@@ -788,6 +788,7 @@
         },
         "editScript": {
           "title": "Core Edit Table",
+          "titleWithChapterNumber": "Core Edit Table {chapter}",
           "eyebrow": "Core Edit Table",
           "meta": "{shots} shots · {duration}s · assets {completed}/{assets}",
           "pendingTitle": "Generating Core Edit Table",

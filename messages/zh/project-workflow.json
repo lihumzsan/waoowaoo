@@ -788,6 +788,7 @@
         },
         "editScript": {
           "title": "核心剪辑表",
+          "titleWithChapterNumber": "核心剪辑表 {chapter}",
           "eyebrow": "核心剪辑表",
           "meta": "{shots} 个镜头 · {duration} 秒 · 资产 {completed}/{assets}",
           "pendingTitle": "核心剪辑表生成中",
