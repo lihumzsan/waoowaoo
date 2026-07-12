@@ -2,6 +2,11 @@ import {
   buildFirstLastFramePromptFingerprintInput,
   type FirstLastFrameFingerprintPanel,
 } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
+import {
+  COMFYUI_LTX23_GOON_DURATION_OPTIONS,
+  normalizeLtx23GoonDurationSeconds,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import { normalizeVideoDurationBinding, type VideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 export type FirstLastFramePromptEntry = {
   value: string
@@ -105,7 +110,7 @@ export function canStartPromptOperation(entry?: Pick<FirstLastFramePromptEntry, 
   return !entry || entry.status === 'idle' || entry.status === 'error'
 }
 
-const GOON_DURATIONS = new Set([4, 5, 6, 8, 10, 12])
+const GOON_DURATIONS = new Set<number>(COMFYUI_LTX23_GOON_DURATION_OPTIONS)
 
 export function resolveFirstLastFrameDurationSelection(
   field: string,
@@ -116,21 +121,39 @@ export function resolveFirstLastFrameDurationSelection(
   const duration = Number(rawValue)
   if (!GOON_DURATIONS.has(duration)) return null
   return {
-    binding: { mode: 'manual' as const, voiceLineIds: [], targetDurationSeconds: duration },
+    binding: {
+      mode: 'manual' as const,
+      voiceLineIds: [],
+      targetDurationSeconds: duration,
+      durationSource: 'manual' as const,
+    },
     generationOptions: { ...currentOptions, duration },
   }
+}
+
+function readPersistedTargetDuration(value: VideoDurationBinding | number | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = normalizeLtx23GoonDurationSeconds(value)
+    return normalized === value ? normalized : null
+  }
+  if (!value || typeof value !== 'object') return null
+  const binding = normalizeVideoDurationBinding(value)
+  if (typeof binding.targetDurationSeconds !== 'number') return null
+  const normalized = normalizeLtx23GoonDurationSeconds(binding.targetDurationSeconds)
+  return normalized === binding.targetDurationSeconds ? normalized : null
 }
 
 export function resolvePanelFirstLastFrameGenerationOptions<T extends Record<string, unknown>>(
   panelKey: string,
   defaults: T,
   overrides: ReadonlyMap<string, T>,
-  persistedTargetDuration?: number | null,
+  persistedTargetDuration?: VideoDurationBinding | number | null,
 ): T {
   const override = overrides.get(panelKey)
   if (override) return override
-  if (typeof persistedTargetDuration === 'number' && Number.isFinite(persistedTargetDuration)) {
-    return { ...defaults, duration: persistedTargetDuration }
+  const targetDuration = readPersistedTargetDuration(persistedTargetDuration)
+  if (targetDuration !== null) {
+    return { ...defaults, duration: targetDuration }
   }
   return defaults
 }

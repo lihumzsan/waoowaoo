@@ -1,11 +1,17 @@
 import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 export type VideoDurationMode = 'manual' | 'match_audio'
+export type VideoDurationSource = 'smart' | 'manual'
 
 export type VideoDurationBinding = {
   mode?: VideoDurationMode
   voiceLineIds?: string[]
   targetDurationSeconds?: number | null
+  durationSource?: VideoDurationSource
+  recommendationConfidence?: number
+  recommendationReason?: string
+  recommendationFingerprint?: string
+  recommendationAlgorithmVersion?: string
 }
 
 export type AudioDurationCandidate = {
@@ -77,14 +83,40 @@ function normalizeTargetDurationSeconds(value: unknown): number | null {
   return Number(value.toFixed(2))
 }
 
+function normalizeDurationSource(value: unknown): VideoDurationSource | undefined {
+  return value === 'smart' || value === 'manual' ? value : undefined
+}
+
+function normalizeConfidence(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) return undefined
+  return Number(value.toFixed(2))
+}
+
+function normalizeShortString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, maxLength) : undefined
+}
+
 export function normalizeVideoDurationBinding(value: unknown): VideoDurationBinding {
   if (!isRecord(value)) return { mode: 'manual', voiceLineIds: [] }
   const mode = value.mode === 'match_audio' ? 'match_audio' : 'manual'
   const targetDurationSeconds = normalizeTargetDurationSeconds(value.targetDurationSeconds)
+  const durationSource = normalizeDurationSource(value.durationSource)
+    ?? (mode === 'manual' && targetDurationSeconds !== null ? 'manual' : undefined)
+  const recommendationConfidence = normalizeConfidence(value.recommendationConfidence)
+  const recommendationReason = normalizeShortString(value.recommendationReason, 120)
+  const recommendationFingerprint = normalizeShortString(value.recommendationFingerprint, 128)
+  const recommendationAlgorithmVersion = normalizeShortString(value.recommendationAlgorithmVersion, 32)
   return {
     mode,
     voiceLineIds: normalizeVoiceLineIds(value.voiceLineIds),
     ...(targetDurationSeconds !== null ? { targetDurationSeconds } : {}),
+    ...(durationSource ? { durationSource } : {}),
+    ...(recommendationConfidence !== undefined ? { recommendationConfidence } : {}),
+    ...(recommendationReason ? { recommendationReason } : {}),
+    ...(recommendationFingerprint ? { recommendationFingerprint } : {}),
+    ...(recommendationAlgorithmVersion ? { recommendationAlgorithmVersion } : {}),
   }
 }
 

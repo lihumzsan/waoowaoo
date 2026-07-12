@@ -126,10 +126,28 @@ describe('first/last-frame prompt entry', () => {
     )
 
     expect(resolveFirstLastFrameDurationSelection('duration', '6', { fps: 24 })).toEqual({
-      binding: { mode: 'manual', voiceLineIds: [], targetDurationSeconds: 6 },
+      binding: { mode: 'manual', voiceLineIds: [], targetDurationSeconds: 6, durationSource: 'manual' },
       generationOptions: { duration: 6, fps: 24 },
     })
-    expect(resolveFirstLastFrameDurationSelection('duration', '7', {})).toBeNull()
+    expect(resolveFirstLastFrameDurationSelection('duration', '16', {})).toBeNull()
+  })
+
+  it('persists every supported first-last-frame duration as a manual override', async () => {
+    const { resolveFirstLastFrameDurationSelection } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+
+    for (const duration of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) {
+      expect(resolveFirstLastFrameDurationSelection('duration', String(duration), { fps: 24 })).toEqual({
+        binding: {
+          mode: 'manual',
+          voiceLineIds: [],
+          targetDurationSeconds: duration,
+          durationSource: 'manual',
+        },
+        generationOptions: { duration, fps: 24 },
+      })
+    }
   })
 
   it('isolates persisted duration selections between linked panels', async () => {
@@ -155,6 +173,37 @@ describe('first/last-frame prompt entry', () => {
       fps: 24,
     })
     expect(resolvePanelFirstLastFrameGenerationOptions('panel-b', defaults, emptyOverrides)).toEqual(defaults)
+  })
+
+  it('uses smart recommendation as default unless a manual binding exists', async () => {
+    const { resolvePanelFirstLastFrameGenerationOptions } = await import(
+      '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+    )
+    const defaults = { duration: 10, fps: 24 }
+    const overrides = new Map<string, typeof defaults>()
+
+    expect(resolvePanelFirstLastFrameGenerationOptions(
+      'panel-a',
+      defaults,
+      overrides,
+      {
+        mode: 'manual',
+        targetDurationSeconds: 8,
+        durationSource: 'smart',
+        recommendationFingerprint: 'fp-1',
+      },
+    )).toEqual({ duration: 8, fps: 24 })
+    expect(resolvePanelFirstLastFrameGenerationOptions(
+      'panel-a',
+      defaults,
+      overrides,
+      {
+        mode: 'manual',
+        targetDurationSeconds: 6,
+        durationSource: 'manual',
+        recommendationFingerprint: 'fp-1',
+      },
+    )).toEqual({ duration: 6, fps: 24 })
   })
 
   it('replaces user text when the source signature changes', async () => {

@@ -45,5 +45,7 @@ describe('first/last-frame prompt fingerprint input', () => {
       sceneType: 'interior',
     })
     expect(input.durationSeconds).toBe(8)
+    expect(input.durationSource).toBe('manual')
+    expect(input.smartDurationAlgorithmVersion).toBe('v1')
   })
 })
