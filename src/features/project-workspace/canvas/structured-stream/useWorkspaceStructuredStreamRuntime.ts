@@ -438,7 +438,6 @@ function buildSourceScriptRuntimeEntries(
     if (firstSegment) {
       try {
         const normalized = normalizeSourceScriptSegments({
-          version: 1,
           title: firstSegment.episodeTitle,
           summary: firstSegment.episodeSummary,
           segments: segmentItems.map((item) => item.segment),

@@ -66,7 +66,6 @@ const choiceCard = {
 }
 
 const choiceOffer = {
-  schemaVersion: 1,
   card: choiceCard,
   reviewedResource: fingerprintProjectAgentChoiceResource({
     kind: 'script_intake_prompt',
@@ -312,7 +311,6 @@ describe('project agent interruption consumption', () => {
       },
     })
     const offer = {
-      schemaVersion: 1 as const,
       card: {
         ...choiceCard,
         choiceType: 'script_review' as const,

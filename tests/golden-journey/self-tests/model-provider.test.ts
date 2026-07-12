@@ -207,7 +207,7 @@ describe('Golden local model provider', () => {
           content: [
             {
               type: 'text',
-              text: '你负责分析场景图片的空间结构。只输出 {"schemaVersion": 1, "anchors": []}。',
+              text: '你负责分析场景图片的空间结构。只输出 {"sceneSummary": "string", "anchors": []}。',
             },
             {
               type: 'image_url',
@@ -221,7 +221,6 @@ describe('Golden local model provider', () => {
     expect(decision.kind).toBe('text')
     if (decision.kind !== 'text') return
     const profile = parseLocationSpatialProfile(JSON.parse(decision.text) as unknown)
-    expect(profile.schemaVersion).toBe(1)
     expect(profile.anchors.length).toBeGreaterThan(0)
     expect(profile.depthLayout.midground).toContain('祭台')
   })
@@ -321,7 +320,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'user',
-          content: 'Required JSON shape: {"schemaVersion":1,"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"shotIds":["shot_real_1","shot_real_2"]}]',
+          content: 'Required JSON shape: {"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"shotIds":["shot_real_1","shot_real_2"]}]',
         }],
       },
     })

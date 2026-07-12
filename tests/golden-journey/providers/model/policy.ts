@@ -420,12 +420,11 @@ function generateLocationCandidatePromptContract(prompt: string): string | null 
 
 function generateLocationSpatialProfileContract(prompt: string): string | null {
   const isSpatialProfile = (
-    (prompt.includes('分析场景图片的空间结构') && prompt.includes('"schemaVersion": 1'))
-    || (prompt.includes('spatial structure of a location image') && prompt.includes('"schemaVersion": 1'))
+    (prompt.includes('分析场景图片的空间结构') && prompt.includes('"sceneSummary"'))
+    || (prompt.includes('spatial structure of a location image') && prompt.includes('"sceneSummary"'))
   )
   if (!isSpatialProfile) return null
   return JSON.stringify({
-    schemaVersion: 1,
     sceneSummary: '弯曲小路从碎石前景通向画面中央的废弃石质祭坛，残柱与枯树围合出封闭的荒野空间。',
     anchors: [
       {
@@ -606,7 +605,6 @@ function generateSoundscapePlanContract(prompt: string): string | null {
   const lastShotId = shotIds.at(-1)
   if (!firstShotId || !lastShotId) return null
   return JSON.stringify({
-    schemaVersion: 1,
     decision: 'soundscape',
     sources: [{
       sourceId: 'forbidden_shrine_wind',
@@ -642,7 +640,6 @@ function generatePromptContractText(request: GoldenChatCompletionRequest): strin
     && prompt.includes('"episodeIndex"')
   ) {
     return JSON.stringify({
-      version: 1,
       title: '禁坛归途',
       summary: '迷路旅人误入禁忌祭坛，逃离后发现自己仍在循环起点。',
       segments: [{

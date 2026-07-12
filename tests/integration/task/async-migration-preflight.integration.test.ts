@@ -39,13 +39,11 @@ describe('async migration preflight DB evidence', () => {
     await prisma.outboxCommand.create({
       data: {
         kind: 'task.lifecycle.broadcast',
-        version: 1,
         idempotencyKey: 'preflight-pending-outbox',
         aggregateType: 'task',
         aggregateId: 'preflight-active-task',
         payload: {
           kind: 'task.lifecycle.broadcast',
-          version: 1,
           eventId: 1,
           taskId: 'preflight-active-task',
         },

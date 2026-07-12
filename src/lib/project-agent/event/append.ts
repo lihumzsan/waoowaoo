@@ -63,7 +63,6 @@ async function createSessionBroadcastOutbox(
     aggregateId: projectAgentEventId,
     payload: {
       kind: OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST,
-      version: 1,
       projectAgentEventId,
     },
   })

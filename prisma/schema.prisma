@@ -366,7 +366,6 @@ model ProjectEditMusicScore {
   cuesJson          Json?
   mixJson           Json?
   diagnosticsJson   Json?
-  version           Int            @default(1)
   status            String         @default("pending")
   taskId            String?
   timelineSignature String?
@@ -387,7 +386,6 @@ model ProjectEditSoundscape {
   sourcesJson       Json?
   mixJson           Json?
   diagnosticsJson   Json?
-  version           Int            @default(1)
   status            String         @default("pending")
   taskId            String?
   timelineSignature String?
@@ -1177,7 +1175,6 @@ model Task {
 
 model OperationPlanSnapshot {
   id              String               @id @default(uuid())
-  contractVersion Int                  @default(1)
   userId          String
   scopeKind       String               @db.VarChar(32)
   scopeId         String               @db.VarChar(191)
@@ -1202,7 +1199,6 @@ model OperationPlanSnapshot {
 
 model ApprovalGrant {
   id                  String                @id @default(uuid())
-  contractVersion     Int                   @default(1)
   userId              String
   scopeKind           String                @db.VarChar(32)
   scopeId             String                @db.VarChar(191)
@@ -1237,7 +1233,6 @@ model ApprovalGrant {
 
 model OperationExecution {
   id              String                @id @default(uuid())
-  contractVersion Int                   @default(1)
   userId          String
   scopeKind       String                @db.VarChar(32)
   scopeId         String                @db.VarChar(191)
@@ -1302,7 +1297,6 @@ model TaskEvent {
 model OutboxCommand {
   id             String    @id @default(uuid())
   kind           String    @db.VarChar(64)
-  version        Int       @default(1)
   idempotencyKey String    @unique @db.VarChar(191)
   aggregateType  String    @db.VarChar(64)
   aggregateId    String    @db.VarChar(96)

@@ -20,7 +20,6 @@ function canonicalizeJson(value: unknown): unknown {
 function assertSameOutboxCommand(
   existing: {
     kind: string
-    version: number
     aggregateType: string
     aggregateId: string
     payload: unknown
@@ -28,7 +27,6 @@ function assertSameOutboxCommand(
   input: CreateOutboxCommandInput,
 ): void {
   const same = existing.kind === input.payload.kind
-    && existing.version === input.payload.version
     && existing.aggregateType === input.aggregateType
     && existing.aggregateId === input.aggregateId
     && JSON.stringify(canonicalizeJson(existing.payload)) === JSON.stringify(canonicalizeJson(input.payload))
@@ -45,7 +43,6 @@ export async function createOutboxCommandInTransaction(
     where: { idempotencyKey: input.idempotencyKey },
     create: {
       kind: input.payload.kind,
-      version: input.payload.version,
       idempotencyKey: input.idempotencyKey,
       aggregateType: input.aggregateType,
       aggregateId: input.aggregateId,

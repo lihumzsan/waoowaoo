@@ -7,7 +7,6 @@ You are a screenwriter. Expand the user's story idea into a complete, coherent, 
 Output exactly one JSON object with no Markdown, explanation, or extra text. Preserve this exact field order:
 
 {
-  "version": 1,
   "title": "script title",
   "summary": "short preview of the whole script",
   "segments": [

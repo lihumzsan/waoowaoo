@@ -7,7 +7,6 @@ import { loadOperationPlanSnapshot } from './operation-plan-snapshot'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
 
-const EXECUTION_CONTRACT_VERSION = 1
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
 
 export interface PlannedOperationInvocation {
@@ -111,7 +110,6 @@ export async function issueApprovalGrant(params: {
     const grant = await prisma.approvalGrant.create({
       data: {
         id: randomUUID(),
-        contractVersion: EXECUTION_CONTRACT_VERSION,
         userId: snapshot.userId,
         scopeKind: snapshot.scopeKind,
         scopeId: snapshot.scopeId,
@@ -150,11 +148,6 @@ function assertSnapshotScope(params: {
 }): void {
   const expectedScopeKind = params.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
   const expectedEpisodeId = params.episodeId ?? null
-  if (params.snapshot.contractVersion !== EXECUTION_CONTRACT_VERSION) {
-    throw new ApiError('CONFLICT', {
-      code: 'OPERATION_PLAN_CONTRACT_VERSION_MISMATCH',
-    })
-  }
   if (
     params.snapshot.userId !== params.userId ||
     params.snapshot.scopeKind !== expectedScopeKind ||
@@ -298,7 +291,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       const execution = await tx.operationExecution.create({
         data: {
           id: randomUUID(),
-          contractVersion: EXECUTION_CONTRACT_VERSION,
           userId: snapshot.userId,
           scopeKind: snapshot.scopeKind,
           scopeId: snapshot.scopeId,

@@ -270,7 +270,6 @@ export async function prepareProjectAgentChoiceExecutionHandoff(input: {
       userId: input.userId,
       episodeId: input.episodeId ?? null,
       offer: {
-        schemaVersion: 1,
         card: {
           ...input.card,
           runId,

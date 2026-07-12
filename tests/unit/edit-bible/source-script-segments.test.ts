@@ -25,7 +25,6 @@ function segment(sceneIndex: number, overrides: Partial<SourceScriptSceneSegment
 describe('source script scene segment normalizer', () => {
   it('derives both normalizedText and nested structure from one scene-level source', () => {
     const result = normalizeSourceScriptSegments({
-      version: 1,
       title: 'Script',
       summary: 'Script summary',
       segments: [segment(0), segment(1)],
@@ -37,16 +36,15 @@ describe('source script scene segment normalizer', () => {
 
   it('rejects duplicate and non-contiguous scene indexes', () => {
     expect(() => normalizeSourceScriptSegments({
-      version: 1, title: 'Script', summary: 'Summary', segments: [segment(0), segment(0)],
+      title: 'Script', summary: 'Summary', segments: [segment(0), segment(0)],
     })).toThrow('EDIT_SOURCE_SCRIPT_SEGMENT_DUPLICATE:0:0:0')
     expect(() => normalizeSourceScriptSegments({
-      version: 1, title: 'Script', summary: 'Summary', segments: [segment(0), segment(2)],
+      title: 'Script', summary: 'Summary', segments: [segment(0), segment(2)],
     })).toThrow('EDIT_SOURCE_SCRIPT_SCENE_INDEX_NON_CONTIGUOUS:0:0:2')
   })
 
   it('rejects conflicting parent metadata', () => {
     expect(() => normalizeSourceScriptSegments({
-      version: 1,
       title: 'Script',
       summary: 'Summary',
       segments: [segment(0), segment(1, { actTitle: 'Conflicting Act' })],

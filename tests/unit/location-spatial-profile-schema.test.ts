@@ -4,7 +4,6 @@ import {
 } from '@/lib/location-spatial-profile/types'
 
 const validProfile = {
-  schemaVersion: 1,
   sceneSummary: '寺院庭院中央有石径，左侧有木门，右侧有长凳。',
   anchors: [{
     id: 'anchor_left_door',

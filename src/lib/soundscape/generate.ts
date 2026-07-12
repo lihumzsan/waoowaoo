@@ -352,7 +352,6 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
     await writeSoundscapeProjectData({
       episodeId,
       soundscape: {
-        schemaVersion: 1,
         status: SOUNDSCAPE_STATUS.PLANNING,
         taskId: job.data.taskId,
         timelineSignature: signature,
@@ -407,7 +406,6 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
       await writeSoundscapeProjectData({
         episodeId,
         soundscape: {
-          schemaVersion: 1,
           status: SOUNDSCAPE_STATUS.COMPLETED,
           taskId: job.data.taskId,
           timelineSignature: signature,
@@ -429,7 +427,6 @@ export async function handleSoundscapePlanTask(job: Job<TaskJobData>) {
     await writeSoundscapeProjectData({
       episodeId,
       soundscape: {
-        schemaVersion: 1,
         status: SOUNDSCAPE_STATUS.PLANNED,
         taskId: job.data.taskId,
         timelineSignature: signature,
@@ -546,7 +543,6 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
     await writeSoundscapeProjectData({
       episodeId,
       soundscape: {
-        schemaVersion: 1,
         status: SOUNDSCAPE_STATUS.GENERATING,
         taskId: job.data.taskId,
         timelineSignature: signature,
@@ -620,7 +616,6 @@ export async function handleSoundscapeGenerateTask(job: Job<TaskJobData>) {
 
       await reportTaskProgress(job, 90, { stage: 'soundscape_persist' })
       const soundscapeData: SoundscapeProjectData = {
-        schemaVersion: 1,
         status: SOUNDSCAPE_STATUS.COMPLETED,
         taskId: job.data.taskId,
         timelineSignature: signature,

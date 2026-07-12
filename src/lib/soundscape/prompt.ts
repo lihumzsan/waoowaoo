@@ -30,7 +30,6 @@ function buildTimelinePayload(clips: readonly FinalRenderClipPlan[]): unknown {
 }
 
 const shapeExample = {
-  schemaVersion: 1,
   decision: 'soundscape',
   sources: [
     {

@@ -34,7 +34,6 @@ export async function readProjectEpisodeDetail(input: {
         select: {
           id: true,
           status: true,
-          version: true,
           taskId: true,
           timelineSignature: true,
           musicModel: true,
@@ -48,7 +47,6 @@ export async function readProjectEpisodeDetail(input: {
         select: {
           id: true,
           status: true,
-          version: true,
           taskId: true,
           timelineSignature: true,
           soundEffectModel: true,

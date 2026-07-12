@@ -140,7 +140,6 @@ describe('project agent session-state', () => {
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: {
-        schemaVersion: 1,
         card: {
           cardId: 'edit-first-bible-review:plan-1',
           runId: 'run-choice-1',
@@ -169,7 +168,6 @@ describe('project agent session-state', () => {
       approvalId: 'choice:approval-1',
       toolCallId: 'tool-choice-1',
       payload: {
-        schemaVersion: 1,
         card: {
           cardId: 'edit-first-bible-review:plan-1',
           runId: 'run-choice-1',

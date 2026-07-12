@@ -230,7 +230,6 @@ async function cloneWorkflowLabApprovalPlan(params: {
   await params.tx.operationPlanSnapshot.create({
     data: {
       id: targetSnapshotId,
-      contractVersion: sourceSnapshot.contractVersion,
       userId: params.userId,
       scopeKind: 'project',
       scopeId: params.projectId,

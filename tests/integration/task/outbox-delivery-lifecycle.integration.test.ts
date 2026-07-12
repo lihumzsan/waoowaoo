@@ -26,7 +26,6 @@ async function createValidCommand(idempotencyKey: string) {
     aggregateId: `task-${idempotencyKey}`,
     payload: {
       kind: 'task.lifecycle.broadcast',
-      version: 1,
       eventId: 1,
       taskId: `task-${idempotencyKey}`,
     },
@@ -88,11 +87,10 @@ describe('durable Outbox delivery lifecycle', () => {
     const command = await prisma.outboxCommand.create({
       data: {
         kind: 'poison.command',
-        version: 1,
         idempotencyKey: 'outbox-poison',
         aggregateType: 'task',
         aggregateId: 'task-poison',
-        payload: { kind: 'poison.command', version: 1 },
+        payload: { kind: 'poison.command' },
       },
     })
     const worker = createOutboxWorker()
@@ -134,7 +132,6 @@ describe('durable Outbox delivery lifecycle', () => {
       aggregateId: task.id,
       payload: {
         kind: 'task.enqueue',
-        version: 1,
         taskId: task.id,
         operationExecutionId: null,
       },

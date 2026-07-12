@@ -6,7 +6,6 @@ import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { getMediaObjectByPublicId, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import { getObjectBuffer } from '@/lib/storage'
 import {
-  DEMO_SNAPSHOT_SCHEMA_VERSION,
   findDemoSnapshotPrivateMediaReferences,
   isDemoPublicAssetPath,
   type DemoProjectSnapshot,
@@ -333,7 +332,6 @@ async function buildSnapshot(options: ExportOptions): Promise<DemoProjectSnapsho
   const finalVideo = normalizeFinalVideoSummary(serializedEpisode.editorProject) as ProjectFinalVideo | null
 
   return {
-    schemaVersion: DEMO_SNAPSHOT_SCHEMA_VERSION,
     slug: options.slug,
     project: {
       id: project.id,

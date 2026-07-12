@@ -1,5 +1,4 @@
 {
-  "schemaVersion": 1,
   "modules": [
     {
       "id": "billing-approval",
@@ -38,7 +37,8 @@
         "src/lib/mutation-batch/service.ts",
         "src/lib/edit-script/asset-generation-operation-plan.ts",
         "src/lib/edit-script/asset-revision.ts",
-        "src/lib/operations/domains"
+        "src/lib/operations/domains",
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
         "tests/unit/billing/media-approval-policy.test.ts",
@@ -81,8 +81,13 @@
         "src/lib/projects/read-episode-detail.ts",
         "src/app/api/projects/[projectId]/bible/route.ts",
         "src/lib/edit-bible/source-script-segments.ts",
+        "src/types/project.ts",
         "src/lib/structured-stream",
-        "src/lib/ai-prompts/templates/edit-bible/outline-script"
+        "src/lib/ai-prompts/templates/edit-bible/outline-script",
+        "src/lib/demo",
+        "src/demo-data/matrix-demo.json",
+        "scripts/export-demo-snapshot.ts",
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
@@ -131,8 +136,9 @@
         "src/lib/redis-config.ts",
         "src/lib/runtime-config/positive-integer.ts",
         "src/lib/outbox",
-        "src/lib/bgm-score/generate.ts",
+        "src/lib/bgm-score",
         "src/lib/soundscape/generate.ts",
+        "src/types/project.ts",
         "src/lib/edit-script/service.ts",
         "src/instrumentation.ts",
         "prisma/migrations/20260711070000_add_edit_script_task_ownership/migration.sql",
@@ -148,7 +154,8 @@
         "src/app/api/sse/route.ts",
         "src/lib/edit-bible/task-submission.ts",
         "src/lib/edit-script/task-submission.ts",
-        "src/lib/operations/submit-operation-task.ts"
+        "src/lib/operations/submit-operation-task.ts",
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
         "tests/integration/task/create-task-dedupe.integration.test.ts",
@@ -160,6 +167,7 @@
         "tests/integration/task/task-target-terminal-projectors.integration.test.ts",
         "tests/integration/task/task-target-terminal-ownership.integration.test.ts",
         "tests/integration/task/edit-script-ownership-migration.integration.test.ts",
+        "tests/integration/task/redundant-contract-version-migration.integration.test.ts",
         "tests/integration/task/outbox-delivery-lifecycle.integration.test.ts",
         "tests/integration/task/async-migration-preflight.integration.test.ts",
         "tests/unit/task/job-envelope.test.ts",
@@ -220,7 +228,8 @@
         "src/lib/query/hooks/useSSE.ts",
         "src/lib/query/workspace-sse-event-sequence.ts",
         "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql",
-        "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql"
+        "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql",
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
         "tests/integration/task/project-agent-continuation-settlement.integration.test.ts",
@@ -311,9 +320,14 @@
       "title": "AI Prompt 与模型输出契约",
       "sourcePaths": [
         "src/lib/ai-prompts",
+        "src/lib/location-spatial-profile",
+        "src/lib/soundscape/types.ts",
+        "src/lib/soundscape/prompt.ts",
+        "src/lib/edit-bible/schemas.ts",
         "standards/prompt-canary",
         "scripts/guards/prompt-i18n-guard.mjs",
-        "scripts/guards/prompt-semantic-regression.mjs"
+        "scripts/guards/prompt-semantic-regression.mjs",
+        "prisma/migrations/20260712233000_remove_redundant_contract_versions/migration.sql"
       ],
       "testPaths": [
         "tests/golden-journey/self-tests/model-provider.test.ts",
@@ -385,6 +399,7 @@
         "scripts/architecture-impact.mjs",
         "scripts/architecture-impact-lib.mjs",
         "scripts/guards/architecture-docs-contract-guard.mjs",
+        "scripts/guards/file-line-count-baseline.json",
         "scripts/verify-push.sh",
         "scripts/test-verification/run-required-suite.mjs",
         "scripts/test-verification/verify-vitest-report.mjs",

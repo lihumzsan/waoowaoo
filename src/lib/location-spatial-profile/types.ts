@@ -1,7 +1,5 @@
 import { z } from 'zod'
 
-export const LOCATION_SPATIAL_PROFILE_SCHEMA_VERSION = 1
-
 export const LOCATION_SPATIAL_PROFILE_STATUSES = [
   'pending',
   'analyzing',
@@ -67,7 +65,6 @@ const anchorSchema = z.object({
 }).strict()
 
 export const locationSpatialProfileSchema = z.object({
-  schemaVersion: z.literal(LOCATION_SPATIAL_PROFILE_SCHEMA_VERSION),
   sceneSummary: z.string().min(1),
   anchors: z.array(anchorSchema).min(1),
   depthLayout: z.object({

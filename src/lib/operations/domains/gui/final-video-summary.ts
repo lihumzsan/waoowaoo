@@ -25,7 +25,6 @@ export function normalizeMusicScoreSummary(value: unknown) {
   return {
     id: normalizeNullableString(score.id),
     status,
-    version: typeof score.version === 'number' ? score.version : null,
     taskId: normalizeNullableString(score.taskId),
     timelineSignature: normalizeNullableString(score.timelineSignature),
     musicModel: normalizeNullableString(score.musicModel),
@@ -53,7 +52,6 @@ export function normalizeSoundscapeSummary(value: unknown) {
   return {
     id: normalizeNullableString(soundscape.id),
     status,
-    version: typeof soundscape.version === 'number' ? soundscape.version : null,
     taskId: normalizeNullableString(soundscape.taskId),
     timelineSignature: normalizeNullableString(soundscape.timelineSignature),
     soundEffectModel: normalizeNullableString(soundscape.soundEffectModel),

@@ -116,7 +116,6 @@ export async function persistSubmittedTaskInTransaction(params: {
     aggregateId: stored.id,
     payload: {
       kind: OUTBOX_COMMAND_KIND.TASK_LIFECYCLE_BROADCAST,
-      version: 1,
       eventId: event.id,
       taskId: stored.id,
     },
@@ -127,7 +126,6 @@ export async function persistSubmittedTaskInTransaction(params: {
     aggregateId: stored.id,
     payload: {
       kind: OUTBOX_COMMAND_KIND.TASK_ENQUEUE,
-      version: 1,
       taskId: stored.id,
       operationExecutionId: stored.operationExecutionId,
     },

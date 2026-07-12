@@ -659,7 +659,6 @@ export async function resolveProjectAgentWaitsForTaskTerminalInTransaction(
         aggregateId: row.id,
         payload: {
           kind: OUTBOX_COMMAND_KIND.PROJECT_AGENT_CONTINUE_WAIT,
-          version: 1,
           waitId: row.id,
           runId: row.runId,
           expectedRunVersion: runFence.runVersion,
