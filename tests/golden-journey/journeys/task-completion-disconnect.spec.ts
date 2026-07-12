@@ -8,6 +8,7 @@ import { forkGoldenWorkflowCheckpoint } from '../fixtures/workflow-lab'
 import { readGoldenSourceFixtureManifest } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
+import { GOLDEN_EDIT_FIRST_WORKFLOW_STAGES } from '../contracts/stages'
 
 interface GoldenStorageState {
   readonly cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0]
@@ -65,12 +66,35 @@ test('[GJ-TASK-COMPLETES-DURING-BROWSER-DISCONNECT][GJ-SSE-OLD-CURSOR-REPLAY] du
     `/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`,
     { waitUntil: 'domcontentloaded' },
   )
-  await expect.poll(async () => await readGoldenWorkflowStage(reconnectedPage, scope), {
+  const renderReadyIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf('ready_to_render_chapters')
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(scope)
+    const tasks = snapshot.tasks.filter((task) => task.type === 'chapter_render')
+    return tasks.length === 1 ? tasks[0]?.status : null
+  }, {
     timeout: 60_000,
-  }).toBe('ready_to_render_chapters')
-  await expect(getGoldenApprovalButton(reconnectedPage)).toHaveCount(0)
+    message: 'the AI-owned follow-up must submit and finish one chapter render while the browser is absent',
+  }).toBe('completed')
+  const beforeReplayStage = await readGoldenWorkflowStage(reconnectedPage, scope)
+  expect(beforeReplayStage).not.toBe('failed')
+  expect(GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(beforeReplayStage)).toBeGreaterThan(renderReadyIndex)
 
   const beforeReplay = await readGoldenOracleSnapshot(scope)
+  const chapterRenderTasks = beforeReplay.tasks.filter((task) => task.type === 'chapter_render')
+  expect(chapterRenderTasks).toHaveLength(1)
+  expect(chapterRenderTasks[0]).toMatchObject({
+    status: 'completed',
+    attempt: 1,
+    operationId: 'render_chapters',
+  })
+  expect(beforeReplay.activities.filter((activity) => (
+    activity.type === 'operation'
+    && activity.operationId === 'render_chapters'
+  ))).toHaveLength(1)
+  expect(beforeReplay.interruptions.filter((interruption) => (
+    interruption.status === 'pending'
+    && interruption.operationId === 'generate_episode_videos'
+  ))).toHaveLength(0)
   const latestTaskEventId = beforeReplay.taskEvents.reduce((latest, event) => {
     const eventId = Number(event.id)
     return Number.isSafeInteger(eventId) ? Math.max(latest, eventId) : latest
@@ -92,7 +116,7 @@ test('[GJ-TASK-COMPLETES-DURING-BROWSER-DISCONNECT][GJ-SSE-OLD-CURSOR-REPLAY] du
   expect(new URL(replayRequest.url()).searchParams.get('cursor')).toContain(`t=${String(staleTaskEventId)}`)
   await expect.poll(async () => await readGoldenWorkflowStage(reconnectedPage, scope), {
     timeout: 60_000,
-  }).toBe('ready_to_render_chapters')
+  }).toBe(beforeReplayStage)
 
   const oracle = await attachGoldenOracleEvidence(testInfo, scope, 'golden-task-completion-disconnect-and-replay')
   const videoTasks = oracle.tasks.filter((task) => task.type === 'video_group')

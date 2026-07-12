@@ -44,7 +44,10 @@ and exercises checkpoints through the production Workflow Lab route.
   atomic commit may still apply operation-specific plan writes and resolves as
   noop without manufacturing Task rows.
 - Refresh/disconnect: the fork contains durable facts and is reopened through
-  the normal workspace route.
+  the normal workspace route. A successful Task follow-up may legitimately
+  execute the next AI-owned operation while the browser is absent, so replay
+  assertions require monotonic stage progress plus exactly-once Task and
+  Operation identities rather than one obsolete intermediate stage name.
 - Input-required recovery: if an early stage cannot execute without a user
   decision, the Assistant may raise its real Choice and Golden submits it
   through the UI; the harness does not invent a domain write.
