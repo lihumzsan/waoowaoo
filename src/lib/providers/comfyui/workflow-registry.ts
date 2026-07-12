@@ -2713,6 +2713,7 @@ const GOON_FIRST_LAST_FRAME_NODE_CONTRACT = {
   duration: '236',
   fps: '233',
   frameFormula: '235',
+  imageConditioning: ['265', '275'],
   output: '75',
 } as const
 
@@ -2752,12 +2753,19 @@ function applyGoonFirstLastFrameWorkflowControls(
   if (width !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.width, width)
   if (height !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.height, height)
 
-  setNumericNodeValue(
-    graph,
-    GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration,
-    normalizeLtx23GoonDurationSeconds(inject.durationSeconds),
-  )
+  const durationSeconds = normalizeLtx23GoonDurationSeconds(inject.durationSeconds)
+  setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration, durationSeconds)
   setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
+
+  const finalPixelFrameIndex = 8 * Math.round(
+    (durationSeconds * COMFYUI_LTX23_GOON_FPS) / 8,
+  )
+  for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
+    const conditioningNode = graph[nodeId]
+    if (conditioningNode && isRecord(conditioningNode.inputs)) {
+      conditioningNode.inputs['num_images.index_2'] = finalPixelFrameIndex
+    }
+  }
 
   const formulaNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.frameFormula]
   if (formulaNode && isRecord(formulaNode.inputs)) {

@@ -69,6 +69,27 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(Object.values(graph).some((node) => node.class_type === 'ImageConcatMulti')).toBe(false)
   })
 
+  it.each([
+    { durationSeconds: 4, finalFrameIndex: 96 },
+    { durationSeconds: 8, finalFrameIndex: 192 },
+    { durationSeconds: 12, finalFrameIndex: 288 },
+  ])('writes the explicit final pixel-frame index for a $durationSeconds-second Goon workflow', ({
+    durationSeconds,
+    finalFrameIndex,
+  }) => {
+    const graph = resolveComfyUiWorkflow(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      {
+        imageFilenames: ['first-frame.png', 'last-frame.png'],
+        durationSeconds,
+        fps: 24,
+      },
+    )
+
+    expect(graph['265']?.inputs?.['num_images.index_2']).toBe(finalFrameIndex)
+    expect(graph['275']?.inputs?.['num_images.index_2']).toBe(finalFrameIndex)
+  })
+
   it('injects prompt into connected PrimitiveStringMultiline value nodes', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
