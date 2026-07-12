@@ -35,7 +35,7 @@ message/card identity counts, and reload equivalence.
 | Scenario | Provider behavior | Expected product outcome |
 | --- | --- | --- |
 | `model-normal-mainline` | streams valid text/tool calls required for content preparation | mainline reaches final durable deliverable |
-| `model-stops-after-confirm` | returns successful confirmation tool call, then only prose and stops | prior success stays durable; server does not invoke the next operation from `nextAction`; product reports the declared recoverable AI-turn protocol result |
+| `model-stops-after-confirm` | from an empty project, traverses the real UI intake/script/planning path, returns a successful `confirm_bible` tool call, then only prose and stops | Bible confirmation stays durable; Run completes; workflow remains `ready_to_generate_style_previews`; server does not invoke the next operation and creates no style-preview Task, ApprovalGrant, or OperationExecution |
 | `model-duplicates-tool-call` | repeats the same operation identity/input | one durable domain effect and an idempotent/rejected duplicate, never two effects |
 | `model-stream-disconnect` | disconnects during text/tool-call streaming | committed facts remain recoverable; uncommitted facts do not appear; no automatic duplicate external submission |
 

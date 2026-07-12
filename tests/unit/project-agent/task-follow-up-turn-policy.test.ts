@@ -8,7 +8,6 @@ describe('task follow-up turn policy', () => {
     expect(policy.allowOperationIntent('query')).toBe(true)
     expect(policy.allowOperationIntent('plan')).toBe(true)
     expect(policy.allowOperationIntent('act')).toBe(false)
-    expect(policy.workflowNextActionIsObligation).toBe(false)
     expect(policy.explanationSettlement).toBe('failed')
   })
 
@@ -16,7 +15,6 @@ describe('task follow-up turn policy', () => {
     const policy = resolveProjectAgentTaskFollowUpTurnPolicy('completed')
 
     expect(policy.allowOperationIntent('act')).toBe(true)
-    expect(policy.workflowNextActionIsObligation).toBe(true)
     expect(policy.explanationSettlement).toBe('completed')
   })
 })

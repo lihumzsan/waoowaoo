@@ -110,13 +110,13 @@ initiates and drives all AI behaviour. The server persists and validates
 Run/execution-segment/interaction/Task facts, and may start only the
 durable recovery paths already owned by user controls or Task Outbox delivery.
 
-After a successful tool call, a stopped model is therefore a turn-protocol
-failure to classify through prompt/context/tool availability, completion
-conditions, or recovery/error expression. The server must preserve the
-completed handoff and express a recoverable protocol result. It must neither
-overwrite that fact with an unrelated failure nor execute `nextAction`
-deterministically. The revised repair plan is
-`root-cause-and-repair-plan.md`; it is the authority for this incident.
+After a successful tool call, a normally stopped model completes its current
+AI turn. The server must preserve the completed handoff and leave the workflow
+at its durable current stage. It must neither convert the remaining capability
+into a Run failure nor execute `nextAction` deterministically. Completion,
+Tool, persistence, ownership, and malformed-protocol failures remain explicit
+failure outcomes. The superseding recurrence contract is
+`../assistant-next-action-stop-recurrence-2026-07-12/README.md`.
 
 ## Persistent facts, writers, and projectors
 

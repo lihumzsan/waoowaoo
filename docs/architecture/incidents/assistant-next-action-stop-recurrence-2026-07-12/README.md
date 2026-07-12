@@ -99,22 +99,30 @@
 
 ## 测试计划与本阶段盲区
 
-本阶段按用户要求不修改或运行 Journey/Vitest。只执行无破坏的类型、lint、架构文档与结构检查，并如实报告结果。
+产品修复提交后，用户授权独立测试收敛阶段。没有新增场景清单；既有
+`GJ-MODEL-STOPS-AFTER-CONFIRM` 现在从空项目经过真实 UI、Task、MySQL、
+Redis、worker、Outbox 与 Session 路径到达制作规划确认，只在外部模型边界
+注入“`confirm_bible` 成功后正常停止”。只读 oracle 断言 Bible confirmed、
+Run completed、Workflow 为 `ready_to_generate_style_previews`，且视觉候选、
+图片 Task、ApprovalGrant 与 OperationExecution 均为零。
 
-下一阶段必须修复既有 Golden 防线，而不是新增第二套场景清单：
+本阶段完成的既有防线修复：
 
-- 让 model-stop 真实从 `bible_ready_for_review` 进入，完成一次 `confirm_bible` 后停止；断言 Bible 已确认、Run completed、Workflow 停在 `ready_to_generate_style_previews`、没有视觉 Task/Approval、刷新一致。
-- 删除 model simulator 的私有阶段优先级，改为消费生产注入的 capability/registry 事实。
-- 让场景声明驱动真实 startStage 与 terminal oracle，拒绝当前声明/实现漂移。
-- 在真实浏览器中按 durable identity 断言一次确认只显示一次。
+- 删除 `workflowNextActionIsObligation` 的旧 Logic 断言。
+- model-stop provider 只在已观察到完成的 `confirm_bible` tool call 时停止，不再在任意首个 Tool output 后停止。
+- 场景声明与真实入口统一为 `not_started → ready_to_generate_style_previews`，且 `allowFailedRun=false`。
+- `npm run test:golden:variant:model-stop`：1 passed，0 failed，0 skipped，0 todo。
+- 相关 Logic/Harness：3 files、26 tests passed，0 skipped，0 todo；`npm run typecheck` passed。
 
-本阶段未验证盲区：真实模型在新提示词下是否稳定继续发起独立视觉候选 Approval；模型合法空输出的完整浏览器呈现；历史 failed Run 的旧错误文案展示；重复 success UI 投影。
+deterministic mainline model 的固定 happy-path 顺序仍只用于外部模型替身和系统链路验证，不能作为真实 LLM 提示词行为证据；本 incident 不要求外部 LLM 必须继续调用工具。
+
+本阶段未验证盲区：真实模型在新提示词下是否稳定继续发起独立视觉候选 Approval（不作为确定性测试目标）；模型完全空输出的浏览器呈现；历史 failed Run 的旧错误文案展示；重复 success UI 投影。
 
 ## 历史回归矩阵
 
 | 历史症状 | 根因 | 旧修复 | 当前防线 | 本次复发与失效原因 |
 | --- | --- | --- | --- | --- |
-| `confirm_bible` 成功后仍有视觉候选动作，Run 失败 | prompt/context/completion 协议未一致 | remaining `nextAction` 显式失败，禁止服务端执行 | model-stop variant + runtime error | 防线把安全诊断变成用户可见业务失败；真实提示词仍要求模型停止 |
+| `confirm_bible` 成功后仍有视觉候选动作，Run 失败 | prompt/context/completion 协议未一致 | remaining `nextAction` 显式失败，禁止服务端执行 | 真实 model-stop Golden + durable oracle | 防线现验证正常停止完成且零后续副作用，不再把 capability 写成 Run 失败 |
 | 制作规划确认曾自动提交视觉候选 | 免费确认与收费媒体授权合并 | 拆为独立 billable operation | billing contract、operation registry | 项目助手提示词仍保留已删除的自动提交旧协议 |
-| 完整 Journey 通过而真实模型失败 | deterministic model 私有顺序替代 LLM 判断 | 固定优先级走通全链 | mainline + model provider self-test | 模拟器不理解生产提示词；model-stop 在首次 Choice 后停止，未到 Bible 确认 |
+| 完整 Journey 通过而真实模型失败 | deterministic model 私有顺序替代 LLM 判断 | 固定优先级走通全链 | mainline 只证明系统链；model-stop 独立注入停止 | model-stop 已真实到达 Bible 确认；mainline 不再被解释为提示词行为证明 |
 | 一次确认显示两次 | live/persisted/Activity 投影缺少统一呈现 identity | 仅检查持久 message/toolCall identity | mainline final oracle | 不检查同一消息内语义重复或浏览器可见 lifecycle 次数；本阶段暂不修 UI |

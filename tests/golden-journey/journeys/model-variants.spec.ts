@@ -2,14 +2,25 @@ import { test, expect } from '../browser/test'
 import { registerGoldenUser } from '../browser/pages/auth'
 import { launchGoldenStoryFromHome } from '../browser/pages/home'
 import {
+  approveGoldenScript,
   expectGoldenIntakeChoice,
+  readGoldenAssistantRunStatus,
   readGoldenWorkflowStage,
+  submitGoldenBoundary,
   submitGoldenIntakeChoices,
+  waitForGoldenProductionPlanOutcome,
   waitForGoldenScriptReviewOutcome,
 } from '../browser/pages/workspace'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
+import { GOLDEN_MODEL_VARIANT_SCENARIOS } from '../contracts/scenarios'
 
 const scenario = process.env.GOLDEN_MODEL_SCENARIO ?? 'normal-mainline'
+const modelStopScenario = GOLDEN_MODEL_VARIANT_SCENARIOS.find((candidate) => (
+  candidate.id === 'GJ-MODEL-STOPS-AFTER-CONFIRM'
+))
+if (!modelStopScenario || modelStopScenario.expectedTerminal.kind !== 'workflow_stage') {
+  throw new Error('GOLDEN_MODEL_STOP_SCENARIO_CONTRACT_MISSING')
+}
 
 async function startVariant(page: Parameters<typeof registerGoldenUser>[0], identity: string) {
   await registerGoldenUser(page, {
@@ -19,25 +30,40 @@ async function startVariant(page: Parameters<typeof registerGoldenUser>[0], iden
   return await launchGoldenStoryFromHome(page, '恐怖故事')
 }
 
-test('[GJ-MODEL-STOPS-AFTER-CONFIRM] preserves completed work and reports an AI-turn protocol failure without invoking nextAction', async ({ page }, testInfo) => {
+test('[GJ-MODEL-STOPS-AFTER-CONFIRM] accepts a normal model stop after production-plan confirmation', async ({ page, browserObservations }, testInfo) => {
   test.skip(scenario !== 'stop-after-successful-confirmation', 'run through test:golden:variant:model-stop')
   const scope = await startVariant(page, 'model-stop')
   await expectGoldenIntakeChoice(page)
   await submitGoldenIntakeChoices(page)
-  const outcome = await waitForGoldenScriptReviewOutcome(page)
+  expect(await waitForGoldenScriptReviewOutcome(page)).toBe('script_review')
+  await approveGoldenScript(page)
+  expect(await waitForGoldenProductionPlanOutcome(page)).toBe('bible_review')
+  await submitGoldenBoundary(page, 'bible_review')
+  await expect.poll(async () => await readGoldenWorkflowStage(page, scope), { timeout: 30_000 }).toBe(
+    modelStopScenario.expectedTerminal.stage,
+  )
+  await expect.poll(async () => await readGoldenAssistantRunStatus(page, scope), { timeout: 30_000 }).toBe('completed')
+  await expect(page.getByText('AI 运行失败', { exact: true })).toHaveCount(0)
   const oracle = await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-model-stop')
 
-  expect(outcome).toBe('assistant_failure')
-  expect(await readGoldenWorkflowStage(page, scope)).toBe('ready_to_ingest_script')
-  expect(oracle.domain.sourceDocuments).toHaveLength(0)
-  expect(oracle.tasks).toHaveLength(0)
-  expect(oracle.runs.some((run) => (
-    run.errorCode === 'PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED'
-  ))).toBe(true)
+  expect(oracle.domain.bibles.some((bible) => bible.status === 'confirmed')).toBe(true)
+  expect(oracle.domain.stylePreviews).toHaveLength(0)
+  expect(oracle.tasks.filter((task) => task.type === 'edit_style_preview_image')).toHaveLength(0)
+  expect(oracle.approvalGrants.filter((grant) => grant.operationId === 'generate_edit_style_previews')).toHaveLength(0)
+  expect(oracle.operationExecutions.filter((execution) => execution.operationId === 'generate_edit_style_previews')).toHaveLength(0)
+  expect(oracle.runs.some((run) => run.status === 'failed')).toBe(false)
+  expect(oracle.activities.filter((activity) => (
+    activity.operationId === 'confirm_bible' && activity.status === 'completed'
+  ))).toHaveLength(1)
   expect(oracle.activities.some((activity) => (
     activity.operationId === 'generate_edit_style_previews'
   ))).toBe(false)
-  expect(oracle.interruptions.filter((item) => item.type === 'choice' && item.status === 'consumed')).toHaveLength(1)
+  expect(oracle.interruptions.filter((item) => (
+    item.type === 'choice'
+    && item.status === 'consumed'
+    && item.operationId === 'request_edit_bible_review_choice'
+  ))).toHaveLength(1)
+  browserObservations.assertClean()
 })
 
 test('[GJ-MODEL-DUPLICATES-TOOL-CALL] duplicate calls create one durable effect', async ({ page }, testInfo) => {

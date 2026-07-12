@@ -195,8 +195,8 @@ export const GOLDEN_MODEL_VARIANT_SCENARIOS = [
   {
     id: 'GJ-MODEL-STOPS-AFTER-CONFIRM',
     kind: 'model_variant',
-    title: 'deterministic workflow continuation survives a model that stops after confirmation',
-    startStage: 'bible_ready_for_review',
+    title: 'the server accepts a normal model stop after production-plan confirmation without executing the next action',
+    startStage: 'not_started',
     expectedTerminal: {
       kind: 'workflow_stage',
       stage: 'ready_to_generate_style_previews',

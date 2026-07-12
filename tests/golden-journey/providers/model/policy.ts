@@ -133,8 +133,22 @@ function availableToolNames(request: GoldenChatCompletionRequest): Set<string> {
   return new Set(request.tools?.map((tool) => tool.function.name) ?? [])
 }
 
-function toolOutputCount(request: GoldenChatCompletionRequest): number {
-  return request.messages.filter((message) => message.role === 'tool').length
+function hasCompletedToolCall(request: GoldenChatCompletionRequest, toolName: string): boolean {
+  const toolNameByCallId = new Map<string, string>()
+  for (const message of request.messages) {
+    if (!Array.isArray(message.tool_calls)) continue
+    for (const toolCall of message.tool_calls) {
+      const record = asRecord(toolCall)
+      const fn = asRecord(record?.function)
+      if (typeof record?.id !== 'string' || typeof fn?.name !== 'string') continue
+      toolNameByCallId.set(record.id, fn.name)
+    }
+  }
+  return request.messages.some((message) => (
+    message.role === 'tool'
+    && typeof message.tool_call_id === 'string'
+    && toolNameByCallId.get(message.tool_call_id) === toolName
+  ))
 }
 
 function messageText(request: GoldenChatCompletionRequest): string {
@@ -715,7 +729,7 @@ export function decideGoldenModelResponse(input: {
   const toolName = selectWriteTool(input.request, input.forcedToolName)
   if (
     input.scenarioId === 'stop-after-successful-confirmation'
-    && toolOutputCount(input.request) > 0
+    && hasCompletedToolCall(input.request, 'confirm_bible')
   ) {
     return {
       kind: 'text',

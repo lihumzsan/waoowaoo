@@ -20,12 +20,12 @@ server owns durable Run, execution-segment, interruption, Task, Outbox,
 settlement, and recovery facts; it must not turn nextAction into a deterministic
 execution queue or rename such an executor as a recovery loop.
 
-Accordingly, a model that successfully calls a tool and then stops is an AI
-turn-protocol failure: its prompt/context/tool surface, completion condition,
-re-entry protocol, or failure expression is incomplete. nextAction may
-constrain the AI turn, describe enabled capabilities, and validate a result,
-but cannot itself cause a server-side invocation. The repair must make that
-failure explicit and recoverable without creating a second action executor.
+Accordingly, a model that successfully calls a tool and then normally stops
+has completed its current AI turn. `nextAction` may constrain the AI turn,
+describe enabled capabilities, and validate Tool legality, but cannot itself
+cause a server-side invocation or turn normal stopping into failure. The
+superseding recurrence repair preserves the durable result and leaves the
+workflow at its current stage without creating a second action executor.
 
 ## Scope, non-goals, and ownership
 
@@ -187,11 +187,12 @@ submit; a settlement-boundary crash/controlled failure when the production
 seam exists; and ReactFlow streaming resize. The same scenario must turn green
 without changing its oracle to accept the former error.
 
-The model-stop scenario asserts an explicit AI-turn protocol result: after the
-successful tool call, the server must persist the completed/waiting handoff,
-must not execute the next operation itself, and must surface a recoverable
-AI-turn continuation requirement rather than rewrite the prior success as an
-unrelated Run failure.
+The model-stop scenario starts from an empty project and reaches
+production-plan review through the real UI/Task path. After successful
+`confirm_bible`, the server must persist the confirmation, complete the Run,
+remain at `ready_to_generate_style_previews`,
+and create no style-preview Task, ApprovalGrant, or OperationExecution. It must
+not execute the next operation itself or rewrite the prior success as failure.
 
 ## Stage plan
 
@@ -330,7 +331,7 @@ On 2026-07-12, after the recurrences above were repaired:
   or tool-call identities, and reported no browser observation failures.
 | RC-5 | implemented | terminal statuses no longer self-transition; a late `run.failed` is retained only as a persisted secondary diagnostic and cannot overwrite the primary failure |
 | RC-6 | implementation complete, journey unverified | projection/user-layout/ReactFlow-measurement writers are separated; focused Canvas contract suite passes, but browser streaming-resize cannot start in this sandbox |
-| RC-7 | scenario/oracle revised, journey unverified | model-stop scenario now rejects server `nextAction` execution and requires `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED`; Playwright/local-provider servers cannot bind in this sandbox |
+| RC-7 | implemented and Golden verified | model-stop reaches Bible review through the real empty-project path, then proves completed Run plus zero next-action side effects; `npm run test:golden:variant:model-stop` passed 1/1 |
 
 ### Validation record (2026-07-12)
 
@@ -351,6 +352,12 @@ On 2026-07-12, after the recurrences above were repaired:
   Playwright's web server because the sandbox rejects `tsx` IPC sockets; the
   targeted interruption integration test cannot connect to MySQL
   `127.0.0.1:3307`. Neither is reported as a product pass or failure.
+
+### Superseding recurrence validation (2026-07-12)
+
+- Passed: `npm run test:golden:variant:model-stop` (1 passed, 0 failed, 0 skipped, 0 todo) with real Chromium, scoped MySQL/Redis, workers and read-only durable oracle.
+- Passed: focused Logic/Harness selection (3 files, 26 tests), `npm run typecheck`, targeted ESLint, and architecture documentation checks.
+- The earlier infrastructure-blocked record above remains historical evidence for the old sandbox; it is not the current result.
 
 ## Before/after authority changes
 
