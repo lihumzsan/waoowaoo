@@ -92,8 +92,12 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'Apply the user\'s review notes to the current Bible, beat sheet, ledger, or emotional curve. Use it when the user has concrete changes to the production plan that need to overwrite the existing global planning.',
   },
   generate_edit_style_previews: {
-    zh: '生成视觉风格候选图，供用户挑选整片风格。用户要求重做、调整，或要更黑暗/更抽象/指定某种非真人画风时也用它；非真人画风可以是动漫 3D 或风格化 3D。重新生成会在已有候选后面追加新的候选。',
-    en: 'Generate visual style preview images for the user to pick the film\'s style. Also use it when the user asks to redo or adjust the style, wants it darker or more abstract, or specifies a non-real-person art direction; a non-real-person direction can be anime 3D or stylized 3D. Regenerating appends new candidates after the existing ones.',
+    zh: '生成视觉风格方案文案和候选图提示词。用户要求重做、调整，或指定更黑暗、更抽象、动漫 3D 或风格化 3D 方向时也用它。该操作是普通文本任务，不生成图片。',
+    en: 'Generate the visual-style directions and image prompts. Also use it when the user asks to redo or adjust the style, wants it darker or more abstract, or specifies anime 3D or stylized 3D. This is a normal text task and does not generate images.',
+  },
+  generate_edit_style_preview_images: {
+    zh: '为已生成的视觉风格方案构造精确图片报价，获得批准后生成候选图。不要用它修改风格文案。',
+    en: 'Build the exact image quote for the generated visual-style directions and generate the preview images after approval. Do not use it to revise the style text.',
   },
   confirm_edit_style_preview: {
     zh: '确认用户刚刚在视觉风格选择卡片中选定的候选。stylePreviewId 必须原样使用 choice result 返回的值；本操作是写入选定风格的唯一入口。',
@@ -218,8 +222,12 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     en: 'Revise production plan',
   },
   generate_edit_style_previews: {
-    zh: '生成视觉风格',
-    en: 'Generate visual styles',
+    zh: '生成视觉风格方案',
+    en: 'Generate visual style directions',
+  },
+  generate_edit_style_preview_images: {
+    zh: '生成视觉风格候选图',
+    en: 'Generate visual style preview images',
   },
   confirm_edit_style_preview: {
     zh: '确认视觉风格',

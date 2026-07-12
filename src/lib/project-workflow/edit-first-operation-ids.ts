@@ -6,6 +6,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'confirm_bible',
   'revise_bible',
   'generate_edit_style_previews',
+  'generate_edit_style_preview_images',
   'confirm_edit_style_preview',
   'plan_chapters',
   'generate_edit_script',

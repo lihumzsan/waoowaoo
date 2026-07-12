@@ -148,6 +148,9 @@
       "sourcePaths": [
         "src/lib/task",
         "src/lib/workers",
+        "src/lib/llm-observe/task-policy.ts",
+        "messages/en/progress.json",
+        "messages/zh/progress.json",
         "src/lib/errors/codes.ts",
         "src/lib/redis.ts",
         "src/lib/redis-config.ts",
@@ -222,6 +225,8 @@
         "src/lib/ai-prompts/templates/project-agent",
         "src/lib/operations",
         "src/lib/project-workflow/edit-first.ts",
+        "src/lib/project-workflow/edit-first-operation-ids.ts",
+        "src/lib/edit-script/style-preview-operation-plan.ts",
         "src/lib/workflow-lab",
         "src/app/api/projects/[projectId]/assistant/chat",
         "src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts",

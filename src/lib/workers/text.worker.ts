@@ -11,6 +11,7 @@ import { handleReferenceToCharacterTask } from './handlers/reference-to-characte
 import { handleShotAITask } from './handlers/shot-ai-tasks'
 import { handleEditScriptGenerateTask } from './handlers/edit-script-generate'
 import { handleEditBibleGenerateTask } from './handlers/edit-bible-generate'
+import { handleEditStylePreviewOptionsTask } from './handlers/edit-style-preview-options-task-handler'
 import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
@@ -23,6 +24,7 @@ type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown
 const TEXT_TASK_HANDLERS = {
   edit_script_camera_plan: handleEditScriptStoryboardCameraPlanTask,
   edit_bible_generate: handleEditBibleGenerateTask,
+  edit_style_preview_options_generate: handleEditStylePreviewOptionsTask,
   edit_script_generate: handleEditScriptGenerateTask,
   edit_shot_execution_plan_generate: handleEditShotExecutionPlanGenerateTask,
   asset_hub_ai_design: handleAssetHubAIDesignTask,

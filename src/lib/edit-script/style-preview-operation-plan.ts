@@ -4,7 +4,7 @@ import {
   type OperationPlan,
 } from '@/lib/operations/planning'
 import { TASK_TYPE } from '@/lib/task/types'
-import { prepareProjectEditStylePreviewCandidates } from './service'
+import { readProjectEditStylePreviewCandidatesForImagePlan } from './service'
 
 export interface EditStylePreviewPlanMetadata {
   readonly bibleId: string
@@ -19,10 +19,8 @@ export async function planProjectEditStylePreviews(input: {
   readonly episodeId: string
   readonly locale: Locale
   readonly bibleId?: string
-  readonly styleDirection?: string
-  readonly count?: number
 }): Promise<OperationPlan> {
-  const prepared = await prepareProjectEditStylePreviewCandidates(input)
+  const prepared = await readProjectEditStylePreviewCandidatesForImagePlan(input)
   const imageModels = new Set(prepared.candidates.map((candidate) => candidate.imageModel))
   if (imageModels.size !== 1) throw new Error('EDIT_STYLE_PREVIEW_PLAN_IMAGE_MODEL_MISMATCH')
   const imageModel = prepared.candidates[0]?.imageModel
@@ -35,7 +33,7 @@ export async function planProjectEditStylePreviews(input: {
   }
   return {
     kind: 'task_submission',
-    operationId: 'generate_edit_style_previews',
+    operationId: 'generate_edit_style_preview_images',
     projectId: input.projectId,
     userId: input.userId,
     summary: 'Generate the planned visual style preview images.',

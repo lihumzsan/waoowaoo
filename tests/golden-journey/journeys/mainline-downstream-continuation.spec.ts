@@ -20,7 +20,7 @@ import {
 } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
-import { setGoldenMediaStatusDelay } from '../providers/control'
+import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
 import { readFile } from 'node:fs/promises'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import { GOLDEN_CHECKPOINTABLE_STAGES } from '../contracts/stages'
@@ -341,16 +341,33 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       stage: 'bible_ready_for_review',
       testInfo,
     })
-    await submitGoldenCheckpointBoundary({
-      page,
-      scope,
-      stage: 'bible_ready_for_review',
-      boundary: 'bible_review',
-    })
-    await expect.poll(async () => await readGoldenMainlineBoundary(page), {
-      timeout: 60_000,
-      message: 'AI must raise the paid style-generation Approval after Bible confirmation',
-    }).toBe('approval')
+    await setGoldenStreamPacing({ chunkSize: 20, delayMs: 10 })
+    try {
+      await submitGoldenCheckpointBoundary({
+        page,
+        scope,
+        stage: 'bible_ready_for_review',
+        boundary: 'bible_review',
+      })
+      await expect.poll(async () => {
+        const snapshot = await readGoldenOracleSnapshot(scope)
+        return snapshot.tasks.some((task) => (
+          task.type === 'edit_style_preview_options_generate'
+          && (task.status === 'queued' || task.status === 'processing')
+        ))
+      }, {
+        timeout: 30_000,
+        message: 'visual-style text generation must be a durable running Task before image approval',
+      }).toBe(true)
+      await expect(page.getByText('进行中 · 1 个任务', { exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText('生成视觉风格方案', { exact: true })).toBeVisible()
+      await expect.poll(async () => await readGoldenMainlineBoundary(page), {
+        timeout: 60_000,
+        message: 'the completed style-direction Task must continue into paid image Approval',
+      }).toBe('approval')
+    } finally {
+      await setGoldenStreamPacing(null)
+    }
     await expect(page.getByText('成功 · 确认制作规划', { exact: true })).toHaveCount(1)
     await reloadGoldenBoundary(page, 'approval')
     await setGoldenMediaStatusDelay(15_000)

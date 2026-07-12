@@ -39,7 +39,22 @@ describe('edit-first workflow state', () => {
     expect(state.allowedOperationIds).toEqual([])
   })
 
-  it('keeps planned visual style rows in the pre-submission stage until a task is active', () => {
+  it('routes style text and image generation through consecutive Task-backed operations', () => {
+    const directionsReady = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+    }))
+    expect(directionsReady.stage).toBe('ready_to_generate_style_previews')
+    expect(directionsReady.nextAction?.operationId).toBe('generate_edit_style_previews')
+
+    const directionsRunning = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      activeStylePreviewTaskCount: 1,
+    }))
+    expect(directionsRunning.stage).toBe('style_preview_generating')
+    expect(directionsRunning.blocking.kind).toBe('processing')
+
     const plannedOnly = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -47,7 +62,7 @@ describe('edit-first workflow state', () => {
       activeStylePreviewTaskCount: 0,
     }))
     expect(plannedOnly.stage).toBe('ready_to_generate_style_previews')
-    expect(plannedOnly.nextAction?.operationId).toBe('generate_edit_style_previews')
+    expect(plannedOnly.nextAction?.operationId).toBe('generate_edit_style_preview_images')
     expect(plannedOnly.blocking.kind).not.toBe('processing')
 
     const submitted = resolveEditFirstWorkflowStateFromSnapshot(snapshot({

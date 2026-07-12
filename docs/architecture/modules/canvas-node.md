@@ -12,7 +12,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - **CN-01 — 稳定身份与范围。** 节点 ID 必须由持久业务资源和明确 scope 派生；禁止用名称、数组下标、渲染顺序或临时 stream id 作为身份。
 - **CN-02 — 业务状态单一。** DB/Task 的终态与明确 runtime 状态才是节点业务状态来源；不得从历史消息、DOM 或文案反推流程是否运行。
-- **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格候选必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。视觉风格候选记录与 direct image Task 在计划事务中一一对应，不再存在父 Task 或以 Bible id 伪造的运行目标；Canvas 可把三个明确 target 聚合进同一个业务节点，但不得丢失任一 target 的失败、重试或终态。
+- **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格方案、视觉风格候选图必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditBible/EDIT_STYLE_PREVIEW_OPTIONS_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。方案文本 Task 原子创建 pending 候选并保留来源 taskId；媒体批准事务再把每个候选一一切换到 direct image Task，不存在父媒体 Task 或以 Bible id 伪造图片运行目标。Canvas 可把这些明确 target 聚合进同一个业务节点，但不得丢失任一 target 的失败、重试或终态。
 - **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。Task 提交后 Canvas 只投影 `editStyleBible:${ProjectEditBible.id}`：任一候选运行时为运行中，全部成功且未确认时为等待选择，确认后同一 identity 原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
 - **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
@@ -57,7 +57,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
 - Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
-- 视觉风格主链必须在真实 Task processing 窗口观察单一运行中 Style Bible 节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
+- 视觉风格主链必须先在真实文本 Task processing 窗口观察 Assistant 通用运行卡，再在 direct image Task processing 窗口观察单一运行中 Style Bible 节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。

@@ -419,6 +419,12 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   const terminalStylePreviewCount = snapshot.completedStylePreviewCount
     + snapshot.confirmedStylePreviewCount
     + snapshot.failedStylePreviewCount
+  if (snapshot.activeStylePreviewTaskCount > 0) {
+    return state({
+      stage: 'style_preview_generating',
+      blocking: { kind: 'processing', reason: 'visual style generation is still running' },
+    })
+  }
   const allStylePreviewsFailed = snapshot.stylePreviewCount > 0
     && snapshot.failedStylePreviewCount === snapshot.stylePreviewCount
     && terminalStylePreviewCount === snapshot.stylePreviewCount
@@ -435,21 +441,11 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
 
   if (snapshot.confirmedStylePreviewCount === 0) {
     if (snapshot.stylePreviewCount > terminalStylePreviewCount) {
-      const hasCompletedAndFailedPreviews = snapshot.completedStylePreviewCount > 0 && snapshot.failedStylePreviewCount > 0
-      if (snapshot.activeStylePreviewTaskCount === 0 && !hasCompletedAndFailedPreviews) {
-        const nextAction = workflowAction('generate_edit_style_previews', 'Generate style previews')
-        return state({
-          stage: 'ready_to_generate_style_previews',
-          nextAction,
-          allowedOperationIds: [nextAction.operationId],
-        })
-      }
+      const nextAction = workflowAction('generate_edit_style_preview_images', 'Generate style preview images')
       return state({
-        stage: hasCompletedAndFailedPreviews ? 'needs_style_choice' : 'style_preview_generating',
-        blocking: hasCompletedAndFailedPreviews
-          ? { kind: 'needs_user_choice', reason: 'choose and confirm one completed style preview' }
-          : { kind: 'processing', reason: 'style preview images are still generating' },
-        allowedOperationIds: hasCompletedAndFailedPreviews ? ['generate_edit_style_previews'] : [],
+        stage: 'ready_to_generate_style_previews',
+        nextAction,
+        allowedOperationIds: [nextAction.operationId],
       })
     }
 
@@ -1243,10 +1239,19 @@ export async function resolveEditFirstWorkflowState(params: {
       where: {
         projectId: params.projectId,
         episodeId: params.episodeId,
-        targetType: 'ProjectEditStylePreview',
-        targetId: { in: editBible.stylePreviews.map((preview) => preview.id) },
-        type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
         status: { in: ['queued', 'processing'] },
+        OR: [
+          {
+            targetType: 'ProjectEditBible',
+            targetId: editBible.id,
+            type: TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+          },
+          {
+            targetType: 'ProjectEditStylePreview',
+            targetId: { in: editBible.stylePreviews.map((preview) => preview.id) },
+            type: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
+          },
+        ],
       },
     })
     : 0

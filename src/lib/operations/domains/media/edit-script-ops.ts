@@ -1,8 +1,13 @@
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import { commitProjectEditScriptAssetRevisions, planProjectEditScriptAssetRevisions } from '@/lib/edit-script/asset-revision'
-import { approveProjectEpisodeEditScriptAssets, confirmProjectEditStylePreview } from '@/lib/edit-script/service'
+import {
+  approveProjectEpisodeEditScriptAssets,
+  confirmProjectEditStylePreview,
+  resolveProjectEditStylePreviewOptionsTaskTarget,
+} from '@/lib/edit-script/service'
 import {
   submitProjectEditShotExecutionPlanBatchTasks,
   submitProjectEditScriptGenerationTask,
@@ -73,6 +78,13 @@ const generateEditStylePreviewsInputSchema = z
       .max(3)
       .optional()
       .describe('Number of visual style candidates to generate. Defaults to 3 when omitted. Maximum is 3.'),
+  })
+  .passthrough()
+
+const generateEditStylePreviewImagesInputSchema = z
+  .object({
+    episodeId: z.string().trim().min(1).optional(),
+    bibleId: z.string().trim().min(1).optional(),
   })
   .passthrough()
 
@@ -163,6 +175,7 @@ const generateEditScriptStoryboardInputSchema = z
   .passthrough()
 
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
+type GenerateEditStylePreviewImagesInput = z.infer<typeof generateEditStylePreviewImagesInputSchema>
 type ConfirmEditStylePreviewInput = z.infer<typeof confirmEditStylePreviewInputSchema>
 type RequestEditChoiceInput = z.infer<typeof requestEditChoiceInputSchema>
 type RequestScriptIntakeChoiceInput = z.infer<typeof requestScriptIntakeChoiceInputSchema>
@@ -176,7 +189,7 @@ type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryb
 
 async function submitPlannedEditStylePreviewTasks(
   ctx: ProjectAgentOperationContext,
-  input: GenerateEditStylePreviewsInput,
+  input: GenerateEditStylePreviewImagesInput,
   plan: OperationPlan,
 ) {
   const transaction = ctx.executionAuthorization?.transaction
@@ -185,7 +198,7 @@ async function submitPlannedEditStylePreviewTasks(
   const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
   const results = await submitPlannedOperationTasks({
     ctx,
-    operationId: 'generate_edit_style_previews',
+    operationId: 'generate_edit_style_preview_images',
   })
   const submitted = plan.tasks.map((task) => {
     const result = results.get(task.id)
@@ -237,6 +250,20 @@ const editStylePreviewsTaskSubmitOutputSchema = refineTaskSubmitOperationOutputS
       targetId: z.string().min(1),
       taskIds: z.array(z.string().min(1)).min(1),
       total: z.number().int().positive(),
+    })
+    .passthrough(),
+)
+
+const editStylePreviewOptionsTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
+  taskSubmitOperationOutputSchemaBase
+    .extend({
+      episodeId: z.string().min(1),
+      bibleId: z.string().min(1),
+      taskType: z.literal(TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE),
+      targetType: z.literal('ProjectEditBible'),
+      targetId: z.string().min(1),
+      generation: z.number().int().positive(),
+      count: z.number().int().min(1).max(3),
     })
     .passthrough(),
 )
@@ -714,35 +741,141 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
       summary:
-        'Generate Bible-based visual style preview image tasks after the episode Bible has been confirmed. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that user feedback when present.',
+        'Generate Bible-based visual style directions and image prompts as one durable text Task. During visual style choice, use it again only when the user asks to regenerate or adjust candidates; styleDirection carries that feedback.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_WRITE,
+      effects: EFFECTS_SYNC_AI_WRITE,
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
       confirmation: {
-        kind: 'billable_media',
-        required: true,
-        summary: '将生成视觉风格候选图片并产生媒体费用。批准后执行当前已确定的生成调用。',
+        kind: 'none',
+        required: false,
       },
       agentFlow: {
         onTaskComplete: 'resume_agent',
       },
       toolInputSchema: EDIT_FIRST_STYLE_PREVIEWS_TOOL_INPUT_SCHEMA,
       inputSchema: generateEditStylePreviewsInputSchema,
+      outputSchema: editStylePreviewOptionsTaskSubmitOutputSchema,
+      execute: async (ctx, input: GenerateEditStylePreviewsInput) => {
+        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
+        const count = input.count ?? 3
+        const target = await resolveProjectEditStylePreviewOptionsTaskTarget({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          ...(input.bibleId ? { bibleId: input.bibleId } : {}),
+        })
+        const payload = await buildEditFirstTextTaskPayload({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          payload: {
+            episodeId,
+            bibleId: target.bibleId,
+            generation: target.generation,
+            count,
+            ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
+            displayMode: 'detail',
+          },
+        })
+        const result = await submitOperationTask({
+          request: ctx.request,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+          type: TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: target.bibleId,
+          operationId: 'generate_edit_style_previews',
+          source: ctx.source,
+          payload,
+          dedupeKey: `edit_style_preview_options:${ctx.projectId}:${episodeId}:${target.bibleId}:${String(target.generation)}:${String(target.requestOrdinal)}`,
+          locale: resolveLocale(ctx.context.locale),
+          onTaskCreatedInTransaction: async (tx, task) => {
+            const locked = (await tx.$queryRaw<Array<{ id: string; status: string }>>(Prisma.sql`
+              SELECT id, status
+              FROM project_edit_bibles
+              WHERE id = ${target.bibleId}
+              FOR UPDATE
+            `))[0] ?? null
+            if (!locked || locked.status !== 'confirmed') {
+              throw new Error(`EDIT_STYLE_PREVIEW_OPTIONS_SUBMISSION_STALE:${target.bibleId}:${locked?.status ?? 'missing'}`)
+            }
+            const activeTasks = await tx.task.findMany({
+              where: {
+                projectId: ctx.projectId,
+                episodeId,
+                type: TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+                targetType: 'ProjectEditBible',
+                targetId: target.bibleId,
+                status: { in: ['queued', 'processing'] },
+              },
+              select: { id: true },
+            })
+            if (activeTasks.some((active) => active.id !== task.id)) {
+              throw new Error(`EDIT_STYLE_PREVIEW_OPTIONS_ACTIVE_TASK_EXISTS:${target.bibleId}`)
+            }
+            const pendingCandidateCount = await tx.projectEditStylePreview.count({
+              where: { editBibleId: target.bibleId, status: { in: ['pending', 'generating'] } },
+            })
+            if (pendingCandidateCount > 0) {
+              throw new Error(`EDIT_STYLE_PREVIEW_OPTIONS_ACTIVE_BATCH_EXISTS:${target.bibleId}`)
+            }
+          },
+        })
+        const output = editStylePreviewOptionsTaskSubmitOutputSchema.parse({
+          ...result,
+          episodeId,
+          bibleId: target.bibleId,
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: target.bibleId,
+          generation: target.generation,
+          count,
+        })
+        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+          operationId: 'generate_edit_style_previews',
+          taskId: output.taskId,
+          status: output.status,
+          runId: output.runId || null,
+          deduped: output.deduped,
+          projectId: ctx.projectId,
+          episodeId,
+          taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
+          targetType: 'ProjectEditBible',
+          targetId: target.bibleId,
+        })
+        return output
+      },
+    }),
+    generate_edit_style_preview_images: defineOperation({
+      id: 'generate_edit_style_preview_images',
+      summary: 'Build the exact billable image plan for the completed visual style directions and submit only those preview-image Tasks after approval.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: EFFECTS_BULK_WRITE,
+      confirmation: {
+        kind: 'billable_media',
+        required: true,
+        summary: '将为已生成的视觉风格方案生成候选图片并产生媒体费用。批准后只执行当前报价中的图片任务。',
+      },
+      agentFlow: {
+        onTaskComplete: 'resume_agent',
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: generateEditStylePreviewImagesInputSchema,
       outputSchema: editStylePreviewsTaskSubmitOutputSchema,
-      plan: async (ctx, input: GenerateEditStylePreviewsInput) =>
+      plan: async (ctx, input: GenerateEditStylePreviewImagesInput) =>
         await planProjectEditStylePreviews({
           projectId: ctx.projectId,
           userId: ctx.userId,
           episodeId: resolveEpisodeId(input, ctx.context.episodeId),
           locale: resolveLocale(ctx.context.locale),
           ...(input.bibleId ? { bibleId: input.bibleId } : {}),
-          ...(input.styleDirection ? { styleDirection: input.styleDirection } : {}),
-          ...(input.count ? { count: input.count } : {}),
         }),
-      commit: async (ctx, input: GenerateEditStylePreviewsInput, plan) => {
+      commit: async (ctx, input: GenerateEditStylePreviewImagesInput, plan) => {
         const result = await submitPlannedEditStylePreviewTasks(ctx, input, plan)
         writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_edit_style_previews',
+          operationId: 'generate_edit_style_preview_images',
           taskId: result.taskId,
           status: result.status,
           runId: result.runId || null,

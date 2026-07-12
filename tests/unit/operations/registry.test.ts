@@ -83,6 +83,10 @@ describe('project agent operation registry', () => {
       tool: true,
       api: true,
     })
+    expect(registry.generate_edit_style_preview_images?.channels).toEqual({
+      tool: true,
+      api: true,
+    })
     expect(registry.generate_edit_script?.channels).toEqual({
       tool: true,
       api: true,
@@ -114,6 +118,7 @@ describe('project agent operation registry', () => {
     expect(registry.revise_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.generate_bible_from_script?.groupPath).toEqual(['edit-bible'])
     expect(registry.generate_edit_style_previews?.groupPath).toEqual(['edit-script'])
+    expect(registry.generate_edit_style_preview_images?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_shot_execution_plan?.groupPath).toEqual(['edit-script'])
@@ -187,7 +192,7 @@ describe('project agent operation registry', () => {
 
   it('requires real media approval for edit-first image and sound_effect generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    for (const operationId of ['generate_edit_style_previews', 'generate_episode_soundscape'] as const) {
+    for (const operationId of ['generate_edit_style_preview_images', 'generate_episode_soundscape'] as const) {
       const operation = registry[operationId]
       expect(operation).toBeDefined()
       expect(operation.channels).toEqual({ tool: true, api: true })

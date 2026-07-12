@@ -44,6 +44,7 @@
   "taskType": {
     "generic": "Task",
     "imagePanel": "Storyboard image",
+    "editStylePreviewOptionsGenerate": "Visual style directions",
     "editStylePreviewImage": "Edit style preview grid",
     "editScriptStoryboardPrepare": "Storyboard facts preparation",
     "editScriptStoryboardCameraPlan": "Storyboard panel build",
@@ -96,6 +97,9 @@
     "editStylePreviewImagePrepare": "Prepare style preview grid",
     "editStylePreviewImageGenerate": "Generate style preview grid",
     "editStylePreviewImagePersist": "Persist style preview grid",
+    "editStylePreviewOptionsPrepare": "Prepare visual style directions",
+    "editStylePreviewOptionsGenerate": "Generate visual style directions",
+    "editStylePreviewOptionsPersist": "Persist visual style directions",
     "editScriptStoryboardPrepare": "Generate spatial blocking plan",
     "editScriptStoryboardCameraPlan": "Generate camera language and composition plan",
     "generatePanelVideo": "Generate panel video",

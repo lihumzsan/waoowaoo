@@ -44,6 +44,7 @@
   "taskType": {
     "generic": "任务",
     "imagePanel": "分镜图片",
+    "editStylePreviewOptionsGenerate": "视觉风格方案",
     "editStylePreviewImage": "剪辑风格九宫格",
     "editScriptStoryboardPrepare": "分镜事实准备",
     "editScriptStoryboardCameraPlan": "分镜面板构建",
@@ -96,6 +97,9 @@
     "editStylePreviewImagePrepare": "准备风格九宫格",
     "editStylePreviewImageGenerate": "生成风格九宫格",
     "editStylePreviewImagePersist": "保存风格九宫格",
+    "editStylePreviewOptionsPrepare": "准备视觉风格方案",
+    "editStylePreviewOptionsGenerate": "生成视觉风格方案",
+    "editStylePreviewOptionsPersist": "保存视觉风格方案",
     "editScriptStoryboardPrepare": "生成空间定位规划",
     "editScriptStoryboardCameraPlan": "生成镜头语言与构图方案",
     "generatePanelVideo": "生成分镜视频",

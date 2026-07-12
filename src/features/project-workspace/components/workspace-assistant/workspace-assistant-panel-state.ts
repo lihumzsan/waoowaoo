@@ -2,7 +2,7 @@ import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
 export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
-  generate_edit_style_previews: 'stylePreviewGeneration',
+  generate_edit_style_preview_images: 'stylePreviewGeneration',
 } as const
 
 export type WorkspaceAssistantActiveOperationPresentation =
@@ -22,8 +22,7 @@ export function shouldShowWorkspaceAssistantExternalTaskRunCard(params: {
   storageLoading: boolean
   operationId: string | null | undefined
 }): boolean {
-  return !params.storageLoading
-    && resolveWorkspaceAssistantActiveOperationPresentation(params.operationId) === 'genericRun'
+  return !params.storageLoading && Boolean(params.operationId)
 }
 
 export function resolveWorkspaceAssistantExternalTaskOperationId(

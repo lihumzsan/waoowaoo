@@ -94,6 +94,7 @@ describe('tool input schema compatibility', () => {
     expect(Object.keys(registry.generate_edit_style_previews.toolInputSchema.properties)).toEqual([
       'styleDirection',
     ])
+    expect(Object.keys(registry.generate_edit_style_preview_images.toolInputSchema.properties)).toEqual([])
     expect(Object.keys(registry.revise_edit_script_assets.toolInputSchema.properties)).toEqual([
       'revisionNotes',
       'chapterId',
@@ -117,6 +118,7 @@ describe('tool input schema compatibility', () => {
       'generate_bible_from_script',
       'revise_bible',
       'generate_edit_style_previews',
+      'generate_edit_style_preview_images',
       'generate_edit_script',
       'generate_edit_script_assets',
       'revise_edit_script_assets',
