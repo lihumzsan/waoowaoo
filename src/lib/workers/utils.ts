@@ -532,15 +532,16 @@ export async function resolveVideoSourceFromGeneration(
     runtimeSelections,
   })
   const projectModelConfig = await getProjectModelConfig(job.data.projectId, params.userId)
+  const isComfyUiVideo = parseModelKeyStrict(params.modelId)?.provider === 'comfyui'
 
   const providerCapabilityOptions: Record<string, string | number | boolean> = { ...capabilityOptions }
-  delete providerCapabilityOptions.generationMode
+  if (!isComfyUiVideo) delete providerCapabilityOptions.generationMode
   if (allowCustomDuration) {
     delete providerCapabilityOptions.duration
   }
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
-    if (key === 'generationMode' || value === undefined) continue
+    if ((key === 'generationMode' && !isComfyUiVideo) || value === undefined) continue
     if (key === 'referenceAudioUrls' || key === 'referenceImageUrls') {
       providerRequestOptions[key] = Array.isArray(value)
         ? value.map((item) => typeof item === 'string' ? toFetchableUrl(item) : item)

@@ -126,6 +126,41 @@ describe('worker utils video generation resume', () => {
     expect(generatorApiMock.generateVideo).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves ComfyUI first-last routing and the tail image for provider submission', async () => {
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValueOnce({
+      duration: 10,
+      fps: 24,
+      generationMode: 'firstlastframe',
+    })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/first-last.mp4',
+    })
+
+    await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      imageUrl: 'data:image/png;base64,RklSU1Q=',
+      options: {
+        prompt: 'transition into the supplied tail frame',
+        duration: 10,
+        fps: 24,
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'data:image/png;base64,TEFTVA==',
+      },
+    })
+
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      'data:image/png;base64,RklSU1Q=',
+      expect.objectContaining({
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'data:image/png;base64,TEFTVA==',
+      }),
+    )
+  })
+
   it('validates custom audio-driven ComfyUI durations against the next allowed duration but submits the exact duration', async () => {
     configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
       runtimeSelections?: Record<string, unknown>
