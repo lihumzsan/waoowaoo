@@ -17,7 +17,7 @@ export const POST = apiHandler(async (
   if (!operationId.startsWith('asset_hub_')) {
     throw new ApiError('NOT_FOUND', { code: 'ASSET_HUB_OPERATION_REQUIRED' })
   }
-  const bodyUnknown: unknown = await request.json()
+  const bodyUnknown: unknown = await request.json().catch(() => ({}))
   const body = isRecord(bodyUnknown) ? bodyUnknown : {}
   const input = isRecord(body.input) ? body.input : body
   const routeContext = isRecord(body.context) ? body.context : {}

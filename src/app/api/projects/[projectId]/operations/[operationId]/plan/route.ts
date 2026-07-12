@@ -15,7 +15,7 @@ export const POST = apiHandler(async (
   const authResult = await requireProjectAuthLight(projectId)
   if (isErrorResponse(authResult)) return authResult
 
-  const bodyUnknown: unknown = await request.json()
+  const bodyUnknown: unknown = await request.json().catch(() => ({}))
   const body = isRecord(bodyUnknown) ? bodyUnknown : {}
   const input = isRecord(body.input) ? body.input : body
   const routeContext = isRecord(body.context) ? body.context : {}

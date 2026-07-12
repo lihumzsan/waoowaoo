@@ -1397,6 +1397,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       ? resourcePresentationFromStatus(bgmDetails.status)
         ?? workspaceCanvasPendingResourcePresentation()
       : null
+    const bgmActionAvailable = Boolean(bgmDetails)
+      || editFirstWorkflow.allowedOperationIds.includes('generate_episode_bgm_score')
     nodes.push(createMediaNode({
       id: bgmNodeId,
       position: layoutPosition(savedLayouts, bgmNodeId, { x: SHOT_GRID_START_X, y: bgmScoreDefaultY }),
@@ -1415,8 +1417,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
         meta: bgmDetails?.musicModel ?? '',
         ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
-        actionLabel: translate('actions.generateBgmScore'),
-        action: { type: 'generate_bgm_score' },
+        ...(bgmActionAvailable ? {
+          actionLabel: translate('actions.generateBgmScore'),
+          action: { type: 'generate_bgm_score' as const },
+        } : {}),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
         bgmScoreDetails: bgmDetails,
         onAction,
@@ -1435,6 +1439,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       ? resourcePresentationFromStatus(details.status)
         ?? workspaceCanvasPendingResourcePresentation()
       : null
+    const soundscapeActionAvailable = Boolean(details)
+      || editFirstWorkflow.allowedOperationIds.includes('plan_episode_soundscape')
+      || editFirstWorkflow.allowedOperationIds.includes('generate_episode_soundscape')
     nodes.push(createMediaNode({
       id: soundscapeNodeId,
       position: layoutPosition(savedLayouts, soundscapeNodeId, {
@@ -1458,12 +1465,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : translate('nodes.soundscape.body', { videos: videoGroups.length }),
         meta: details?.soundEffectModel ?? '',
         ...(soundscapePresentation ?? workspaceCanvasPendingResourcePresentation()),
-        actionLabel: translate(
-          soundscapeReadyForGeneration ? 'actions.generateSoundscape' : 'actions.planSoundscape',
-        ),
-        action: soundscapeReadyForGeneration
-          ? { type: 'generate_soundscape' }
-          : { type: 'plan_soundscape' },
+        ...(soundscapeActionAvailable ? {
+          actionLabel: translate(
+            soundscapeReadyForGeneration ? 'actions.generateSoundscape' : 'actions.planSoundscape',
+          ),
+          action: soundscapeReadyForGeneration
+            ? { type: 'generate_soundscape' as const }
+            : { type: 'plan_soundscape' as const },
+        } : {}),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeSoundscape(episodeId)),
         soundscapeDetails: details,
         onAction,

@@ -406,14 +406,20 @@ export default function WorkspaceAssistantPanel({
     activeExternalTaskFocusRequest,
     assistantRuntime.activeFocusRequest,
   ])
+  const activeOperationChangeRef = useRef(onActiveOperationChange)
+  const activeOperationSignatureRef = useRef<string | null>(null)
+  activeOperationChangeRef.current = onActiveOperationChange
   useEffect(() => {
-    onActiveOperationChange?.(assistantRuntime.storageLoading ? null : activeAssistantFocusRequest)
-    return () => onActiveOperationChange?.(null)
+    const next = assistantRuntime.storageLoading ? null : activeAssistantFocusRequest
+    const signature = JSON.stringify(next)
+    if (activeOperationSignatureRef.current === signature) return
+    activeOperationSignatureRef.current = signature
+    activeOperationChangeRef.current?.(next)
   }, [
     activeAssistantFocusRequest,
     assistantRuntime.storageLoading,
-    onActiveOperationChange,
   ])
+  useEffect(() => () => activeOperationChangeRef.current?.(null), [])
   const displayedActiveChoiceCard = serverPendingApproval ? null : activeChoiceCard
   const partComponents = useWorkspaceAssistantMessagePartComponents({
     hideChoiceCards: true,

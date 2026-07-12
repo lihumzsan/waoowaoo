@@ -311,19 +311,21 @@ function ProjectWorkspaceCanvasContent({
   const [submittingNodeIds, setSubmittingNodeIds] = useState<ReadonlySet<string>>(() => new Set())
   const [nodeDisclosureOverrides, setNodeDisclosureOverrides] = useState<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(() => new Map())
   const [focusHighlightRevision, setFocusHighlightRevision] = useState(0)
+  const [reactFlowReady, setReactFlowReady] = useState(false)
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
   const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
-  const stableEdgesRef = useRef<{
-    signature: string
-    edges: WorkspaceCanvasFlowEdge[]
-  } | null>(null)
-  const stableNodesRef = useRef<{
-    signature: string
-    nodes: WorkspaceCanvasFlowNode[]
-  } | null>(null)
+  const assistantSelectionSignatureRef = useRef<string | null>(null)
   const resolvedProjectedNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
+  const projectedFlowNodesRef = useRef<readonly WorkspaceCanvasFlowNode[]>([])
+  const projectedFlowEdgesRef = useRef<readonly WorkspaceCanvasFlowEdge[]>([])
+  const initialReactFlowNodesRef = useRef<WorkspaceCanvasFlowNode[] | null>(null)
+  const initialReactFlowEdgesRef = useRef<WorkspaceCanvasFlowEdge[] | null>(null)
+  const appliedProjectionSignatureRef = useRef<string | null>(null)
+  const projectionSignatureRef = useRef('')
+  const reactFlowRef = useRef(reactFlow)
+  reactFlowRef.current = reactFlow
   const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
   const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
   const activeAssistantTaskTargets = activeAssistantFocusRequest?.taskTargets ?? EMPTY_ACTIVE_TASK_TARGETS
@@ -599,13 +601,9 @@ function ProjectWorkspaceCanvasContent({
     () => buildWorkspaceCanvasNodeSignature(candidateFlowNodes),
     [candidateFlowNodes],
   )
-  if (stableNodesRef.current?.signature !== flowNodeSignature) {
-    stableNodesRef.current = {
-      signature: flowNodeSignature,
-      nodes: candidateFlowNodes,
-    }
-  }
-  const flowNodes = stableNodesRef.current.nodes
+  const flowNodes = candidateFlowNodes
+  if (initialReactFlowNodesRef.current === null) initialReactFlowNodesRef.current = [...flowNodes]
+  projectedFlowNodesRef.current = flowNodes
 
   const projectionNodeSignature = useMemo(
     () => buildWorkspaceCanvasNodeSignature(resolvedProjectedNodes),
@@ -615,13 +613,32 @@ function ProjectWorkspaceCanvasContent({
     () => buildWorkspaceCanvasEdgeSignature(projectionEdges),
     [projectionEdges],
   )
-  if (stableEdgesRef.current?.signature !== projectionEdgeSignature) {
-    stableEdgesRef.current = {
-      signature: projectionEdgeSignature,
-      edges: [...projectionEdges],
-    }
-  }
-  const flowEdges = stableEdgesRef.current.edges
+  projectedFlowEdgesRef.current = projectionEdges
+  if (initialReactFlowEdgesRef.current === null) initialReactFlowEdgesRef.current = [...projectionEdges]
+  projectionSignatureRef.current = `${flowNodeSignature}\n--edges--\n${projectionEdgeSignature}`
+  const syncProjectionToReactFlow = useCallback((flow = reactFlowRef.current) => {
+    const signature = projectionSignatureRef.current
+    if (appliedProjectionSignatureRef.current === signature) return
+    appliedProjectionSignatureRef.current = signature
+    flow.setNodes((currentNodes) => {
+      const currentById = new Map(currentNodes.map((node) => [node.id, node] as const))
+      return projectedFlowNodesRef.current.map((node) => {
+        const current = currentById.get(node.id)
+        return current?.measured
+          ? { ...node, measured: current.measured }
+          : node
+      })
+    })
+    flow.setEdges([...projectedFlowEdgesRef.current])
+  }, [])
+  const handleReactFlowInit = useCallback((flow: typeof reactFlow) => {
+    reactFlowRef.current = flow
+    setReactFlowReady(true)
+  }, [])
+  useEffect(() => {
+    if (!reactFlowReady) return
+    syncProjectionToReactFlow()
+  }, [flowNodeSignature, projectionEdgeSignature, reactFlowReady, syncProjectionToReactFlow])
   const operationFocusNodeIds = useMemo(
     () => resolveWorkspaceCanvasFocusNodeIds(flowNodes, activeAssistantOperationId),
     [activeAssistantOperationId, flowNodes],
@@ -847,6 +864,9 @@ function ProjectWorkspaceCanvasContent({
   }, [selectedNode])
 
   useEffect(() => {
+    const signature = JSON.stringify(assistantSelection)
+    if (assistantSelectionSignatureRef.current === signature) return
+    assistantSelectionSignatureRef.current = signature
     onAssistantSelectionChange?.(assistantSelection)
   }, [assistantSelection, onAssistantSelectionChange])
 
@@ -856,9 +876,10 @@ function ProjectWorkspaceCanvasContent({
     <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
-          nodes={flowNodes}
-          edges={flowEdges}
+          defaultNodes={initialReactFlowNodesRef.current}
+          defaultEdges={initialReactFlowEdgesRef.current}
           nodeTypes={workspaceNodeTypes}
+          onInit={handleReactFlowInit}
           onNodeClick={handleNodeClick}
           onPaneClick={handlePaneClick}
           onNodeDragStart={handleNodeDragStart}

@@ -22,5 +22,5 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const ttl = Number.isFinite(expires) && expires > 0 ? expires : DEFAULT_EXPIRES_SECONDS
 
   const signedUrl = await getSignedObjectUrl(key, ttl)
-  return NextResponse.redirect(signedUrl)
+  return NextResponse.redirect(new URL(signedUrl, request.url))
 })

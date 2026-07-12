@@ -166,6 +166,14 @@ export function useCanvasFocusFollow({
   focusNodeIdsRef.current = focusNodeIds
   currentFocusKeyRef.current = focusKey
 
+  const updatePendingFocusNodeIds = useCallback((next: readonly string[]) => {
+    setPendingFocusNodeIds((current) => (
+      current.length === next.length && current.every((id, index) => id === next[index])
+        ? current
+        : [...next]
+    ))
+  }, [])
+
   const collectFocusNodes = useCallback((): WorkspaceCanvasFlowNode[] => {
     const idSet = new Set(focusNodeIdsRef.current)
     if (idSet.size === 0) return []
@@ -198,10 +206,10 @@ export function useCanvasFocusFollow({
     const activeFocusKey = currentFocusKeyRef.current
     clearManualPause()
     lastFocusedKeyRef.current = activeFocusKey || null
-    setPendingFocusNodeIds([])
+    updatePendingFocusNodeIds([])
     runFitView(focusNodes)
     if (focusNodes.length > 0 && activeFocusKey) onFocusComplete?.(activeFocusKey)
-  }, [clearManualPause, collectFocusNodes, onFocusComplete, runFitView])
+  }, [clearManualPause, collectFocusNodes, onFocusComplete, runFitView, updatePendingFocusNodeIds])
 
   const notifyUserInteraction = useCallback(() => {
     const activeFocusKey = currentFocusKeyRef.current
@@ -215,9 +223,9 @@ export function useCanvasFocusFollow({
       manualPauseTimerRef.current = null
       setManualPauseRevision((current) => current + 1)
     }, FOCUS_FOLLOW_MANUAL_PAUSE_MS)
-    setPendingFocusNodeIds(focusNodeIdsRef.current)
+    updatePendingFocusNodeIds(focusNodeIdsRef.current)
     setManualPauseRevision((current) => current + 1)
-  }, [clearManualPauseTimer])
+  }, [clearManualPauseTimer, updatePendingFocusNodeIds])
 
   useEffect(() => {
     if (debounceTimerRef.current !== null) {
@@ -228,7 +236,7 @@ export function useCanvasFocusFollow({
     if (!focusKey) {
       clearManualPause()
       lastFocusedKeyRef.current = null
-      setPendingFocusNodeIds([])
+      updatePendingFocusNodeIds([])
       return undefined
     }
 
@@ -244,23 +252,23 @@ export function useCanvasFocusFollow({
       })
 
       if (decision === 'idle' || decision === 'skip_already_focused') {
-        setPendingFocusNodeIds([])
+        updatePendingFocusNodeIds([])
         return
       }
 
       if (decision === 'pending') {
-        setPendingFocusNodeIds(focusNodeIdsRef.current)
+        updatePendingFocusNodeIds(focusNodeIdsRef.current)
         return
       }
 
       const focusNodes = collectFocusNodes()
       if (focusNodes.length === 0) {
-        setPendingFocusNodeIds([])
+        updatePendingFocusNodeIds([])
         return
       }
 
       lastFocusedKeyRef.current = focusKey
-      setPendingFocusNodeIds([])
+      updatePendingFocusNodeIds([])
       runFitView(focusNodes)
       onFocusComplete?.(focusKey)
     }, FOCUS_FOLLOW_DEBOUNCE_MS)
@@ -271,7 +279,7 @@ export function useCanvasFocusFollow({
         debounceTimerRef.current = null
       }
     }
-  }, [clearManualPause, collectFocusNodes, containerRef, enabled, focusKey, manualPauseRevision, onFocusComplete, runFitView])
+  }, [clearManualPause, collectFocusNodes, containerRef, enabled, focusKey, manualPauseRevision, onFocusComplete, runFitView, updatePendingFocusNodeIds])
 
   useEffect(() => () => {
     clearManualPauseTimer()
