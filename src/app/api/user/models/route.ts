@@ -18,7 +18,10 @@ import {
 } from '@/lib/model-config-contract'
 import { findBuiltinCapabilities } from '@/lib/model-capabilities/catalog'
 import { findBuiltinPricingCatalogEntry } from '@/lib/model-pricing/catalog'
-import { isLegacyLtx23VideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
+import {
+  isLegacyLtx23SmoothFirstLastFrameModelKey,
+  isLegacyLtx23VideoModelKey,
+} from '@/lib/novel-promotion/video-model-defaults'
 import { isRemovedLegacyLtx23WorkflowKey } from '@/lib/providers/comfyui/ltx23-legacy'
 import { CODEX_PROVIDER_KEY } from '@/lib/providers/codex/constants'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
@@ -90,6 +93,13 @@ const COMFYUI_AUTO_ENABLED_HELPER_MODELS: StoredModel[] = [
     modelId: 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
     modelKey: 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
     name: 'ComfyUI · Seedance2.0 Bernini 480p I2V Audio LipSync',
+    type: 'video',
+    provider: 'comfyui',
+  },
+  {
+    modelId: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    modelKey: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    name: 'ComfyUI · LTX2.3 Goon First/Last Frame',
     type: 'video',
     provider: 'comfyui',
   },
@@ -223,7 +233,14 @@ function hasStoredProviderConnection(provider: StoredProvider): boolean {
 
 function isUserSelectableModel(model: StoredModel): boolean {
   const modelKey = toModelKey(model)
-  if (model.type === 'video' && (isRemovedLegacyLtx23WorkflowKey(modelKey) || isLegacyLtx23VideoModelKey(modelKey))) {
+  if (
+    model.type === 'video'
+    && (
+      isRemovedLegacyLtx23WorkflowKey(modelKey)
+      || isLegacyLtx23VideoModelKey(modelKey)
+      || isLegacyLtx23SmoothFirstLastFrameModelKey(modelKey)
+    )
+  ) {
     return false
   }
   if (model.type !== 'audio') return true

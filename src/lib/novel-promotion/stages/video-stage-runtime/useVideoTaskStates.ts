@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { Storyboard } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
 import { useVideoTaskPresentation } from '@/lib/query/hooks/useTaskPresentation'
-import { buildPanelLipTargets, buildPanelVideoTargets } from './task-targets'
+import { buildFirstLastFramePromptTargets, buildPanelLipTargets, buildPanelVideoTargets } from './task-targets'
 
 interface UseVideoTaskStatesParams {
   projectId: string
@@ -16,6 +16,10 @@ export function useVideoTaskStates({
 }: UseVideoTaskStatesParams) {
   const panelVideoTargets = useMemo(() => buildPanelVideoTargets(storyboards), [storyboards])
   const panelLipTargets = useMemo(() => buildPanelLipTargets(storyboards), [storyboards])
+  const firstLastFramePromptTargets = useMemo(
+    () => buildFirstLastFramePromptTargets(storyboards),
+    [storyboards],
+  )
 
   const panelVideoStates = useVideoTaskPresentation(projectId, panelVideoTargets, {
     enabled: !!projectId && panelVideoTargets.length > 0,
@@ -23,9 +27,13 @@ export function useVideoTaskStates({
   const panelLipStates = useVideoTaskPresentation(projectId, panelLipTargets, {
     enabled: !!projectId && panelLipTargets.length > 0,
   })
+  const firstLastFramePromptStates = useVideoTaskPresentation(projectId, firstLastFramePromptTargets, {
+    enabled: !!projectId && firstLastFramePromptTargets.length > 0,
+  })
 
   return {
     panelVideoStates,
     panelLipStates,
+    firstLastFramePromptStates,
   }
 }

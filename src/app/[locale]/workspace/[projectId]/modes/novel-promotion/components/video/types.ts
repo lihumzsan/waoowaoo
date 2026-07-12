@@ -1,6 +1,7 @@
 // 视频阶段共享类型定义
 import type { ModelCapabilities } from '@/lib/model-config-contract'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
+import type { FirstLastFrameFingerprintPanel } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
 
 // 用户视频模型选项
 export interface VideoModelOption {
@@ -44,16 +45,20 @@ export interface Panel {
   cameraMove?: string | null
   description?: string | null
   characters?: string | null
+  props?: string | null
+  sceneType?: string | null
   location?: string | null
   textSegment?: string | null
   srtSegment?: string | null  // SRT 原文片段
   duration?: number | null
   imagePrompt?: string | null
+  media?: FirstLastFrameFingerprintPanel['imageMedia']
   imageUrl?: string | null  // 图片URL
   videoPrompt?: string | null
   videoPromptEditedByUser?: boolean | null
   firstLastFramePrompt?: string | null
   firstLastFramePromptEditedByUser?: boolean | null
+  firstLastFramePromptSourceFingerprint?: string | null
   videoDurationBinding?: VideoDurationBinding | string | null
   videoUrl?: string | null
   videoGenerationMode?: VideoGenerationMode | null
@@ -97,6 +102,8 @@ export interface VideoPanel {
   firstLastFramePrompt?: string
   videoPromptEditedByUser?: boolean
   firstLastFramePromptEditedByUser?: boolean
+  firstLastFramePromptSourceFingerprint?: string
+  firstLastFramePromptFingerprintSource?: FirstLastFrameFingerprintPanel
   videoDurationBinding?: VideoDurationBinding
   imageUrl?: string
   videoUrl?: string

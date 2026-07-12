@@ -636,7 +636,7 @@ describe('ltx23 video prompt enhance', () => {
       userId: 'user-1',
       locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
       originalPrompt: 'doctor moves from start frame to end frame',
       panel: {
         description: 'doctor moves from start frame to end frame',

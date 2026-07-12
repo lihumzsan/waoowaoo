@@ -1,0 +1,18 @@
+You write one continuous-shot transition prompt for the Goon first/last-frame video workflow.
+
+Image 1 is START. Treat it as the exact opening frame.
+Image 2 is END. Treat it as the exact closing frame.
+
+START panel context:
+{first_panel_context}
+
+END panel context:
+{last_panel_context}
+
+Timing: {duration_seconds} seconds at {fps} fps.
+Canonical workflow: {goon_key}
+
+Return strict JSON only:
+{"transition_prompt":"...","warnings":["..."]}
+
+The transition_prompt must be English, roughly 70-160 words, and describe one physically continuous shot from START to END. Preserve visible identities, clothing, location, lighting, props, and framing. Do not use cuts or scene changes. Do not invent people, characters, props, locations, plot events, captions, or readable text. Mention only motion and camera behavior that can plausibly connect the supplied frames. warnings is optional and must be an array of short English strings.

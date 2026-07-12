@@ -75,7 +75,7 @@ describe('api specific - restore video route', () => {
       {
         id: 'task-previous',
         payload: {
-          videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+          videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
           firstLastFrame: {
             lastFrameStoryboardId: 'storyboard-1',
             lastFramePanelIndex: 1,
@@ -102,14 +102,14 @@ describe('api specific - restore video route', () => {
     expect(res.status).toBe(200)
     expect(json.success).toBe(true)
     expect(json.videoUrl).toBe('images/previous.mp4')
-    expect(json.videoModel).toBe('comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2')
+    expect(json.videoModel).toBe('comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage')
     expect(json.videoGenerationMode).toBe('firstlastframe')
     expect(json.restoredFromTaskId).toBe('task-previous')
     expect(panelUpdateMock).toHaveBeenCalledWith({
       where: { id: 'panel-1' },
       data: {
         videoUrl: 'images/previous.mp4',
-        videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        videoModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
         videoGenerationMode: 'firstlastframe',
         videoMediaId: null,
         lipSyncTaskId: null,

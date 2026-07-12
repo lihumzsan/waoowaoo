@@ -82,7 +82,8 @@
     "assetHubAiModifyCharacter": "Asset hub character modify",
     "assetHubAiModifyLocation": "Asset hub location modify",
     "assetHubAiModifyProp": "Asset hub prop modify",
-    "assetHubReferenceToCharacter": "Asset hub reference to character"
+    "assetHubReferenceToCharacter": "Asset hub reference to character",
+    "generateFirstLastFramePrompt": "First/last frame transition prompt"
   },
   "stage": {
     "received": "Task received",
@@ -115,7 +116,10 @@
     "enqueueFailed": "Task enqueue failed",
     "llmProxySubmit": "Submit LLM task",
     "llmProxyExecute": "Execute LLM task",
-    "llmProxyPersist": "Persist LLM result"
+    "llmProxyPersist": "Persist LLM result",
+    "firstLastFramePromptPrepare": "Check linked frames",
+    "firstLastFramePromptGenerate": "Write transition prompt",
+    "firstLastFramePromptPersist": "Save transition prompt"
   },
   "runConsole": {
     "storyToScript": "Story to Script",

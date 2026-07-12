@@ -185,6 +185,7 @@ export interface NovelPromotionPanel {
   videoPromptEditedByUser?: boolean
   firstLastFramePrompt?: string | null
   firstLastFramePromptEditedByUser?: boolean
+  firstLastFramePromptSourceFingerprint?: string | null
   videoDurationBinding?: string | null
   videoUrl: string | null
   videoGenerationMode?: 'normal' | 'firstlastframe' | 'split' | null

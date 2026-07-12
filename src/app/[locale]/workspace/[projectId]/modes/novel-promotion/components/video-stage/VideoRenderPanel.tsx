@@ -3,6 +3,8 @@ import type { MutableRefObject } from 'react'
 import type { CapabilitySelections, CapabilityValue } from '@/lib/model-config-contract'
 import { VideoPanelCard, type VideoPanel, type VideoModelOption, type MatchedVoiceLine, type FirstLastFrameParams, type VideoDurationBinding, type VideoGenerationOptions } from '../video'
 import type { PromptField } from '@/lib/novel-promotion/stages/video-stage-runtime/useVideoPromptState'
+import type { FirstLastFramePromptEntry } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
+import { resolvePanelFirstLastFrameGenerationOptions } from '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
 
 interface VideoRenderPanelProps {
   allPanels: VideoPanel[]
@@ -23,6 +25,7 @@ interface VideoRenderPanelProps {
   flModel: string
   flModelOptions: VideoModelOption[]
   flGenerationOptions: VideoGenerationOptions
+  flGenerationOptionsByPanel: Map<string, VideoGenerationOptions>
   flCapabilityFields: Array<{
     field: string
     label: string
@@ -31,7 +34,7 @@ interface VideoRenderPanelProps {
     value: CapabilityValue | undefined
   }>
   flMissingCapabilityFields: string[]
-  flCustomPrompts: Map<string, string>
+  promptEntries: Map<string, FirstLastFramePromptEntry>
   onGenerateVideo: (
     storyboardId: string,
     panelIndex: number,
@@ -49,9 +52,10 @@ interface VideoRenderPanelProps {
   onLipSync: (storyboardId: string, panelIndex: number, voiceLineId: string, panelId?: string) => Promise<void>
   onToggleLink: (panelKey: string, storyboardId: string, panelIndex: number) => Promise<void>
   onFlModelChange: (model: string) => void
-  onFlCapabilityChange: (field: string, rawValue: string) => void
-  onFlCustomPromptChange: (key: string, value: string) => void
-  onResetFlPrompt: (key: string) => void
+  onFlCapabilityChange: (panelKey: string, field: string, rawValue: string) => Promise<void>
+  onFlPromptChange: (key: string, value: string) => void
+  onSaveFlPrompt: (key: string, value: string) => Promise<void>
+  onRegenerateFlPrompt: (key: string) => Promise<void>
   onGenerateFirstLastFrame: (
     firstStoryboardId: string,
     firstPanelIndex: number,
@@ -65,7 +69,6 @@ interface VideoRenderPanelProps {
   onToggleLipSyncVideo: (key: string, value: boolean) => void
   getNextPanel: (currentIndex: number) => VideoPanel | null
   isLinkedAsLastFrame: (currentIndex: number) => boolean
-  getDefaultFlPrompt: (firstPrompt?: string, lastPrompt?: string) => string
   getLocalPrompt: (panelKey: string, externalPrompt?: string, field?: PromptField) => string
   updateLocalPrompt: (panelKey: string, value: string, field?: PromptField) => void
   savePrompt: (
@@ -96,9 +99,10 @@ export default function VideoRenderPanel({
   flModel,
   flModelOptions,
   flGenerationOptions,
+  flGenerationOptionsByPanel,
   flCapabilityFields,
   flMissingCapabilityFields,
-  flCustomPrompts,
+  promptEntries,
   onGenerateVideo,
   onUpdatePanelVideoModel,
   onUpdatePanelVideoDurationBinding,
@@ -107,14 +111,14 @@ export default function VideoRenderPanel({
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
-  onFlCustomPromptChange,
-  onResetFlPrompt,
+  onFlPromptChange,
+  onSaveFlPrompt,
+  onRegenerateFlPrompt,
   onGenerateFirstLastFrame,
   onPreviewImage,
   onToggleLipSyncVideo,
   getNextPanel,
   isLinkedAsLastFrame,
-  getDefaultFlPrompt,
   getLocalPrompt,
   updateLocalPrompt,
   savePrompt,
@@ -133,12 +137,22 @@ export default function VideoRenderPanel({
           const prevPanel = idx > 0 ? allPanels[idx - 1] : null
           const hasNext = idx < allPanels.length - 1
           const promptField: PromptField = isLinked ? 'firstLastFramePrompt' : 'videoPrompt'
-          const defaultFlPrompt = getDefaultFlPrompt(panel.textPanel?.video_prompt, nextPanel?.textPanel?.video_prompt)
-          const externalPrompt = isLinked
-            ? (panel.firstLastFramePrompt || defaultFlPrompt)
-            : panel.textPanel?.video_prompt
-          const localPrompt = getLocalPrompt(panelKey, externalPrompt, promptField)
-          const isSavingPrompt = savingPrompts.has(`${promptField}:${panelKey}`)
+          const flPromptEntry = isLinked ? promptEntries.get(panelKey) : undefined
+          const panelFlGenerationOptions = resolvePanelFirstLastFrameGenerationOptions(
+            panelKey,
+            flGenerationOptions,
+            flGenerationOptionsByPanel,
+            panel.videoDurationBinding?.targetDurationSeconds,
+          )
+          const panelFlCapabilityFields = flCapabilityFields.map((field) => field.field === 'duration'
+            ? { ...field, value: panelFlGenerationOptions.duration ?? field.value }
+            : field)
+          const localPrompt = isLinked
+            ? (flPromptEntry?.value || '')
+            : getLocalPrompt(panelKey, panel.textPanel?.video_prompt, promptField)
+          const isSavingPrompt = isLinked
+            ? flPromptEntry?.status === 'saving'
+            : savingPrompts.has(`${promptField}:${panelKey}`)
 
           return (
             <div
@@ -177,27 +191,28 @@ export default function VideoRenderPanel({
                 hasNext={hasNext}
                 flModel={flModel}
                 flModelOptions={flModelOptions}
-                flGenerationOptions={flGenerationOptions}
-                flCapabilityFields={flCapabilityFields}
+                flGenerationOptions={panelFlGenerationOptions}
+                flCapabilityFields={panelFlCapabilityFields}
                 flMissingCapabilityFields={flMissingCapabilityFields}
-                flCustomPrompt={flCustomPrompts.get(panelKey) || panel.firstLastFramePrompt || ''}
-                defaultFlPrompt={defaultFlPrompt}
+                flPromptEntry={flPromptEntry}
                 localPrompt={localPrompt}
                 isSavingPrompt={isSavingPrompt}
                 onUpdateLocalPrompt={(value) => {
-                  updateLocalPrompt(panelKey, value, promptField)
-                  if (isLinked) onFlCustomPromptChange(panelKey, value)
+                  if (isLinked) onFlPromptChange(panelKey, value)
+                  else updateLocalPrompt(panelKey, value, promptField)
                 }}
-                onSavePrompt={(value) => savePrompt(panel.storyboardId, panel.panelIndex, panelKey, value, promptField)}
+                onSavePrompt={(value) => isLinked
+                  ? onSaveFlPrompt(panelKey, value)
+                  : savePrompt(panel.storyboardId, panel.panelIndex, panelKey, value, promptField)}
                 onGenerateVideo={onGenerateVideo}
                 onUpdatePanelVideoModel={onUpdatePanelVideoModel}
                 onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
                 onRestorePreviousVideo={onRestorePreviousVideo}
                 onToggleLink={onToggleLink}
                 onFlModelChange={onFlModelChange}
-                onFlCapabilityChange={onFlCapabilityChange}
-                onFlCustomPromptChange={onFlCustomPromptChange}
-                onResetFlPrompt={onResetFlPrompt}
+                onFlCapabilityChange={(field, rawValue) => onFlCapabilityChange(panelKey, field, rawValue)}
+                onFlPromptChange={onFlPromptChange}
+                onRegenerateFlPrompt={onRegenerateFlPrompt}
                 onGenerateFirstLastFrame={onGenerateFirstLastFrame}
                 onPreviewImage={onPreviewImage}
               />

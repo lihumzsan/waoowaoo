@@ -60,8 +60,7 @@ export function useVideoPanelActions({
   flGenerationOptions,
   flCapabilityFields,
   flMissingCapabilityFields,
-  flCustomPrompt,
-  defaultFlPrompt,
+  flPromptEntry,
   localPrompt,
   isSavingPrompt,
   onUpdateLocalPrompt,
@@ -73,8 +72,8 @@ export function useVideoPanelActions({
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
-  onFlCustomPromptChange,
-  onResetFlPrompt,
+  onFlPromptChange,
+  onRegenerateFlPrompt,
   onGenerateFirstLastFrame,
   onPreviewImage,
 }: VideoPanelCardShellProps) {
@@ -120,6 +119,10 @@ export function useVideoPanelActions({
     localPrompt,
     onUpdateLocalPrompt,
     onSavePrompt,
+    ...(isLinked ? {
+      controlledValue: flPromptEntry?.value || '',
+      onControlledValueChange: (value: string) => onFlPromptChange(panelKey, value),
+    } : {}),
   })
 
   const voiceManager = usePanelVoiceManager({
@@ -217,8 +220,7 @@ export function useVideoPanelActions({
       flGenerationOptions,
       flCapabilityFields,
       flMissingCapabilityFields,
-      flCustomPrompt,
-      defaultFlPrompt,
+      flPromptEntry,
       videoRatio,
     },
     actions: {
@@ -230,8 +232,8 @@ export function useVideoPanelActions({
       onToggleLink,
       onFlModelChange,
       onFlCapabilityChange,
-      onFlCustomPromptChange,
-      onResetFlPrompt,
+      onFlPromptChange,
+      onRegenerateFlPrompt,
       onGenerateFirstLastFrame,
     },
     computed: {

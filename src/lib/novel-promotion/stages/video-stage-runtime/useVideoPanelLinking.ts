@@ -85,17 +85,17 @@ export function useVideoPanelLinking({
     const currentLinked = linkedPanels.get(panelKey) || false
     const newLinked = !currentLinked
 
-    applyOverride(panelKey, newLinked)
-
     try {
       await updatePanelLinkMutation.mutateAsync({
         storyboardId,
         panelIndex,
         linked: newLinked,
       })
+      applyOverride(panelKey, newLinked)
+      return newLinked
     } catch (error) {
       _ulogError('Failed to save link state:', error)
-      applyOverride(panelKey, currentLinked)
+      return currentLinked
     }
   }, [applyOverride, linkedPanels, updatePanelLinkMutation])
 

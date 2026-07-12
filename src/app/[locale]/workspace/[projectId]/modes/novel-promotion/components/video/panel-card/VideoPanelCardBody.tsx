@@ -53,6 +53,9 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
   const showsOutgoingLinkBadge = layout.isLinked && !!layout.nextPanel
   const showsPromptEditor = !layout.isLastFrame || layout.isLinked
   const showsFirstLastFrameActions = layout.isLinked && !!layout.nextPanel
+  const flPromptActive = layout.flPromptEntry?.status === 'queued'
+    || layout.flPromptEntry?.status === 'processing'
+    || layout.flPromptEntry?.status === 'saving'
   const blocksVideoGenerationForMissingAudioTiming = durationBinding.isAudioDriven
     && !durationBinding.hasValidAudioSelection
 
@@ -116,7 +119,7 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-[var(--glass-text-tertiary)]">{t('promptModal.promptLabel')}</span>
               {!promptEditor.isEditing && (
-                <button onClick={promptEditor.handleStartEdit} className="text-[var(--glass-text-tertiary)] hover:text-[var(--glass-tone-info-fg)] transition-colors p-0.5">
+                <button disabled={flPromptActive} onClick={promptEditor.handleStartEdit} className="text-[var(--glass-text-tertiary)] hover:text-[var(--glass-tone-info-fg)] transition-colors p-0.5 disabled:opacity-50">
                   <AppIcon name="edit" className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -125,22 +128,57 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
             {promptEditor.isEditing ? (
               <div className="relative mb-3">
                 <textarea
-                  value={promptEditor.editingPrompt}
-                  onChange={(event) => promptEditor.setEditingPrompt(event.target.value)}
+                  value={layout.isLinked ? (layout.flPromptEntry?.value || '') : promptEditor.editingPrompt}
+                  disabled={flPromptActive}
+                  onChange={(event) => {
+                    if (layout.isLinked) actions.onFlPromptChange(panelKey, event.target.value)
+                    else promptEditor.setEditingPrompt(event.target.value)
+                  }}
                   autoFocus
                   className="w-full text-xs p-2 pr-16 border border-[var(--glass-stroke-focus)] rounded-lg bg-[var(--glass-bg-surface)] text-[var(--glass-text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--glass-tone-info-fg)] resize-none"
                   rows={3}
                   placeholder={t('promptModal.placeholder')}
                 />
                 <div className="absolute right-1 top-1 flex flex-col gap-1">
-                  <button onClick={promptEditor.handleSave} disabled={promptEditor.isSavingPrompt} className="px-2 py-1 text-[10px] bg-[var(--glass-accent-from)] text-white rounded">{promptEditor.isSavingPrompt ? '...' : t('panelCard.save')}</button>
-                  <button onClick={promptEditor.handleCancelEdit} disabled={promptEditor.isSavingPrompt} className="px-2 py-1 text-[10px] bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] rounded">{t('panelCard.cancel')}</button>
+                  <button onClick={promptEditor.handleSave} disabled={promptEditor.isSavingPrompt || flPromptActive} className="px-2 py-1 text-[10px] bg-[var(--glass-accent-from)] text-white rounded">{promptEditor.isSavingPrompt ? '...' : t('panelCard.save')}</button>
+                  {!layout.isLinked && (
+                    <button onClick={promptEditor.handleCancelEdit} disabled={promptEditor.isSavingPrompt} className="px-2 py-1 text-[10px] bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] rounded">{t('panelCard.cancel')}</button>
+                  )}
                 </div>
               </div>
             ) : (
-              <div onClick={promptEditor.handleStartEdit} className="text-xs p-2 border border-[var(--glass-stroke-base)] rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] cursor-pointer">
+              <div onClick={flPromptActive ? undefined : promptEditor.handleStartEdit} className={`text-xs p-2 border border-[var(--glass-stroke-base)] rounded-lg bg-[var(--glass-bg-muted)] text-[var(--glass-text-secondary)] ${flPromptActive ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                 {promptEditor.localPrompt || <span className="text-[var(--glass-text-tertiary)] italic">{t('panelCard.clickToEditPrompt')}</span>}
               </div>
+            )}
+
+            {layout.isLinked && layout.flPromptEntry?.status !== 'idle' && (
+              <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] ${layout.flPromptEntry?.status === 'error'
+                ? 'bg-[var(--glass-tone-danger-bg)] text-[var(--glass-tone-danger-fg)]'
+                : 'bg-[var(--glass-tone-info-bg)] text-[var(--glass-tone-info-fg)]'
+              }`}>
+                {layout.flPromptEntry?.status === 'queued' && t('firstLastFrame.promptQueued')}
+                {layout.flPromptEntry?.status === 'processing' && t('firstLastFrame.promptProcessing')}
+                {layout.flPromptEntry?.status === 'saving' && t('firstLastFrame.promptSaving')}
+                {layout.flPromptEntry?.status === 'error' && (layout.flPromptEntry.errorMessage || t('firstLastFrame.promptError'))}
+              </div>
+            )}
+            {layout.isLinked && layout.flPromptEntry?.fallbackUsed && (
+              <div className="mt-2 rounded-lg bg-[var(--glass-tone-warning-bg)] px-2 py-1.5 text-[11px] text-[var(--glass-tone-warning-fg)]">
+                {t('firstLastFrame.promptFallbackWarning')}
+              </div>
+            )}
+            {layout.isLinked && (
+              <button
+                type="button"
+                onClick={() => { void actions.onRegenerateFlPrompt(panelKey) }}
+                disabled={flPromptActive}
+                className="mt-2 text-xs text-[var(--glass-tone-info-fg)] underline"
+              >
+                {layout.flPromptEntry?.status === 'error' || layout.flPromptEntry?.fallbackUsed
+                  ? t('firstLastFrame.retryPrompt')
+                  : t('firstLastFrame.regeneratePrompt')}
+              </button>
             )}
 
             {showsFirstLastFrameActions ? (() => {
@@ -159,6 +197,8 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                     )}
                     disabled={
                       taskStatus.isVideoTaskRunning
+                      || flPromptActive
+                      || layout.flPromptEntry?.ready === false
                       || !panel.imageUrl
                       || !linkedNextPanel.imageUrl
                       || !layout.flModel
@@ -168,7 +208,11 @@ export default function VideoPanelCardBody({ runtime }: VideoPanelCardBodyProps)
                   >
                     {isFirstLastFrameGenerated ? t('firstLastFrame.generated') : taskStatus.isVideoTaskRunning ? taskStatus.taskRunningVideoLabel : t('firstLastFrame.generate')}
                   </button>
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className={`flex-1 min-w-0 ${flPromptActive ? 'pointer-events-none opacity-60' : ''}`}
+                    data-prompt-config-disabled={flPromptActive ? 'true' : 'false'}
+                    aria-disabled={flPromptActive}
+                  >
                     <ModelCapabilityDropdown
                       compact
                       models={layout.flModelOptions}

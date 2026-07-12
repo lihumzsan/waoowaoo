@@ -37,7 +37,8 @@ const workerState = vi.hoisted(() => ({
 }))
 
 const LTX23_DEFAULT_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
-const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
+const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage'
+const LEGACY_LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
 const LTX23_LARGE_MOTION_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage'
 const BERNINI_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
 const BERNINI_AUDIO_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
@@ -550,25 +551,25 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: submits slow stable camera routed shots to the video generator', async () => {
+  it('VIDEO_PANEL: canonicalizes the legacy first-last-frame key to Goon', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: LTX23_FIRST_LAST_MODEL,
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
         firstLastFrame: {
-          flModel: LTX23_FIRST_LAST_MODEL,
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
           lastFrameStoryboardId: 'storyboard-1',
           lastFramePanelIndex: 0,
         },
         ltx23WorkflowRouting: {
-          selectedModelKey: LTX23_FIRST_LAST_MODEL,
+          selectedModelKey: LEGACY_LTX23_FIRST_LAST_MODEL,
           category: 'first_last_frame',
           reasons: ['slow_stable_camera_movement'],
           durationSeconds: 12,
-          fps: 25,
+          fps: 24,
         },
         generationOptions: {
           duration: 12,
@@ -588,7 +589,7 @@ describe('worker video processor behavior', () => {
         allowCustomDuration: true,
         options: expect.objectContaining({
           duration: 12,
-          fps: 25,
+          fps: 24,
           generationMode: 'firstlastframe',
           lastFrameImageUrl: 'https://signed.example/cos/panel-image.png',
         }),
@@ -1041,14 +1042,12 @@ describe('worker video processor behavior', () => {
 
     await processor!(job)
 
-    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      originalPrompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
-      generationMode: 'firstlastframe',
-    }))
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
+          prompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
           generationMode: 'firstlastframe',
           lastFrameImageUrl: 'https://signed.example/cos/last-frame.png',
         }),
@@ -1058,7 +1057,54 @@ describe('worker video processor behavior', () => {
       where: { id: 'panel-1' },
       data: expect.objectContaining({
         firstLastFramePrompt: expect.stringContaining('Bridge naturally into the last frame'),
+        firstLastFramePromptEditedByUser: false,
         videoGenerationMode: 'firstlastframe',
+      }),
+    })
+  })
+
+  it('VIDEO_PANEL: forwards the visible first-last custom prompt and edited flag without enhancement', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+    const customPrompt = 'A single continuous tracking shot carries the same woman from the doorway to the window while her coat, face, room, lighting, and visible furniture remain unchanged, ending precisely in the supplied final composition.'
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      firstLastFramePrompt: 'older persisted prompt',
+      firstLastFramePromptEditedByUser: false,
+    }))
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(buildPanel({
+      id: 'panel-2',
+      panelIndex: 1,
+      imageUrl: 'cos/last-frame.png',
+    }))
+
+    await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt,
+          customPromptEditedByUser: true,
+        },
+        generationOptions: { duration: 8 },
+      },
+    }))
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({ prompt: customPrompt }),
+      }),
+    )
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        firstLastFramePrompt: customPrompt,
+        firstLastFramePromptEditedByUser: true,
       }),
     })
   })

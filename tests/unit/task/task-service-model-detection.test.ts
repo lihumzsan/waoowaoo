@@ -23,12 +23,12 @@ describe('task service model detection', () => {
       payload: {
         videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
         firstLastFrame: {
-          flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+          flModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
         },
       },
     })).toEqual([
       'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-      'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
     ])
   })
 

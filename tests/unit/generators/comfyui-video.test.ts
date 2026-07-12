@@ -49,10 +49,10 @@ describe('ComfyUI video workflow selection', () => {
     )).toBe(COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID)
   })
 
-  it('keeps the latest first-last-frame profile workflow request unchanged', () => {
-    expect(selectComfyUiVideoWorkflowKey(COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame, 'bridge the two frames', {
+  it('keeps the Goon first-last-frame profile workflow request unchanged', () => {
+    expect(selectComfyUiVideoWorkflowKey(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame, 'bridge the two frames', {
       generationMode: 'firstlastframe',
-    })).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame)
+    })).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)
   })
 
   it('keeps latest ltx23 profile workflow ids unchanged', () => {
@@ -86,6 +86,28 @@ describe('ComfyUI video generator', () => {
       videoBase64: 'video-base64',
       mimeType: 'video/mp4',
     })
+  })
+
+  it('canonicalizes the old smooth first-last-frame key to Goon', async () => {
+    const generator = new ComfyUIVideoGenerator()
+
+    const result = await generator.generate({
+      userId: 'user-1',
+      imageUrl: 'https://example.com/first.png',
+      prompt: 'bridge the two frames',
+      options: {
+        modelId: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'https://example.com/last.png',
+      },
+    })
+
+    expect(result.success).toBe(true)
+    expect(runComfyUiVideoWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      workflowKey: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      durationSeconds: 10,
+      lastFrameImageUrl: 'https://example.com/last.png',
+    }))
   })
 
   it('normalizes removed LTX2.3 profile requests to Bernini and forwards non-empty reference images', async () => {

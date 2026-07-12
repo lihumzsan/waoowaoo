@@ -35,6 +35,40 @@ describe('comfyui workflow registry prompt injection', () => {
     }
   })
 
+  it('adapts the bundled Goon first-last-frame workflow through its exact node contract', () => {
+    const sourceGraph = loadComfyUiWorkflowJsonFile(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+    )
+    const fixedNegativePrompt = sourceGraph?.['110']?.inputs?.text
+    const graph = resolveComfyUiWorkflow(
+      'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      {
+        prompt: 'A direct positive transition prompt.',
+        imageFilenames: ['first-frame.png', 'last-frame.png'],
+        width: 960,
+        height: 544,
+        durationSeconds: 5,
+        fps: 30,
+      },
+    )
+
+    expect(graph['121']?.inputs?.text).toBe('A direct positive transition prompt.')
+    expect(typeof fixedNegativePrompt).toBe('string')
+    expect(graph['110']?.inputs?.text).toBe(fixedNegativePrompt)
+    expect(graph['149']?.inputs?.image).toBe('first-frame.png')
+    expect(graph['269']?.inputs?.image).toBe('last-frame.png')
+    expect(graph['237']?.inputs?.value).toBe(960)
+    expect(graph['238']?.inputs?.value).toBe(544)
+    expect(graph['236']?.inputs?.value).toBe(5)
+    expect(graph['233']?.inputs?.value).toBe(24)
+    expect(graph['235']?.inputs?.expression).toBe('1+ 8*(round(a*b)/8)')
+    expect(graph['75']?.class_type).toBe('SaveVideo')
+    expect(graph['122']?.inputs?.audio).toEqual(['127', 0])
+    expect(Object.values(graph).some((node) => 'generateAudio' in node.inputs)).toBe(false)
+    expect(Object.values(graph).some((node) => /(?:rh|codex)/i.test(node.class_type))).toBe(false)
+    expect(Object.values(graph).some((node) => node.class_type === 'ImageConcatMulti')).toBe(false)
+  })
+
   it('injects prompt into connected PrimitiveStringMultiline value nodes', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
@@ -102,23 +136,21 @@ describe('comfyui workflow registry prompt injection', () => {
     expect(graph['4']?.inputs?.image).toBe('source.png')
   })
 
-  it('uses the final filename as the last-frame image for LTX2.3 first-last slots', () => {
+  it('uses the final filename as the last-frame image for Goon first-last slots', () => {
     workflowRoot = createWorkflowRoot()
     process.env.COMFYUI_WORKFLOW_ROOT = workflowRoot
 
-    writeWorkflow(workflowRoot, 'basevideo/ltx23-profiles/t8-smooth-first-last-frame', {
+    writeWorkflow(workflowRoot, 'basevideo/ltx23-profiles/goon-first-last-frame-2stage', {
       '1': { class_type: 'LoadImage', inputs: { image: 'old-first.png', upload: 'image' } },
-      '2': { class_type: 'LoadImage', inputs: { image: 'old-middle.png', upload: 'image' } },
-      '3': { class_type: 'LoadImage', inputs: { image: 'old-last.png', upload: 'image' } },
+      '2': { class_type: 'LoadImage', inputs: { image: 'old-last.png', upload: 'image' } },
     })
 
-    const graph = resolveComfyUiWorkflow('basevideo/ltx23-profiles/t8-smooth-first-last-frame', {
+    const graph = resolveComfyUiWorkflow('basevideo/ltx23-profiles/goon-first-last-frame-2stage', {
       imageFilenames: ['first.png', 'reference.png', 'last.png'],
     })
 
     expect(graph['1']?.inputs?.image).toBe('first.png')
     expect(graph['2']?.inputs?.image).toBe('last.png')
-    expect(graph['3']?.inputs?.image).toBe('last.png')
   })
 
   it('prefers the latest ui nodes over stale embedded extra.prompt snapshots', () => {

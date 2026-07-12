@@ -109,7 +109,7 @@ export function useVideoStageRuntime({
   const downloadRemoteBlobMutation = useDownloadRemoteBlob()
   const matchedVoiceLinesQuery = useMatchedVoiceLines(projectId, episodeId)
 
-  const { panelVideoStates, panelLipStates } = useVideoTaskStates({
+  const { panelVideoStates, panelLipStates, firstLastFramePromptStates } = useVideoTaskStates({
     projectId,
     storyboards,
   })
@@ -404,24 +404,41 @@ export function useVideoStageRuntime({
     flModel,
     flModelOptions,
     flGenerationOptions,
+    flGenerationOptionsByPanel,
     flCapabilityFields,
     flMissingCapabilityFields,
-    flCustomPrompts,
+    promptEntries,
     setFlModel,
     setFlCapabilityValue,
-    setFlCustomPrompt,
-    resetFlCustomPrompt,
+    setPromptValue,
+    savePromptValue,
+    ensurePrompt,
+    unlinkPrompt,
     handleGenerateFirstLastFrame,
-    getDefaultFlPrompt,
     getNextPanel,
     isLinkedAsLastFrame,
   } = useVideoFirstLastFrameFlow({
+    projectId,
+    episodeId,
     allPanels,
     linkedPanels,
     videoModelOptions: allVideoModelOptions,
     onGenerateVideo: handleGenerateVideoWithImmediateLock,
-    t: (key) => t(key as never),
+    promptTaskStates: firstLastFramePromptStates,
+    onUpdatePrompt: onUpdateVideoPrompt,
+    onUpdatePanelVideoDurationBinding,
   })
+
+  const handleToggleLinkAndEnsure = useCallback(async (
+    panelKey: string,
+    storyboardId: string,
+    panelIndex: number,
+  ) => {
+    const wasLinked = linkedPanels.get(panelKey) === true
+    const linked = await handleToggleLink(panelKey, storyboardId, panelIndex)
+    if (!wasLinked && linked) await ensurePrompt(panelKey, 'link')
+    if (wasLinked && !linked) unlinkPrompt(panelKey)
+  }, [ensurePrompt, handleToggleLink, linkedPanels, unlinkPrompt])
 
   useEffect(() => {
     if (submittingVideoPanelKeys.size === 0) return
@@ -573,25 +590,26 @@ export function useVideoStageRuntime({
         flModel={flModel}
         flModelOptions={flModelOptions}
         flGenerationOptions={flGenerationOptions}
+        flGenerationOptionsByPanel={flGenerationOptionsByPanel}
         flCapabilityFields={flCapabilityFields}
         flMissingCapabilityFields={flMissingCapabilityFields}
-        flCustomPrompts={flCustomPrompts}
+        promptEntries={promptEntries}
         onGenerateVideo={handleGenerateVideoWithImmediateLock}
         onUpdatePanelVideoModel={onUpdatePanelVideoModel}
         onUpdatePanelVideoDurationBinding={onUpdatePanelVideoDurationBinding}
         onRestorePreviousVideo={onRestorePreviousVideo}
         onLipSync={handleLipSync}
-        onToggleLink={handleToggleLink}
+        onToggleLink={handleToggleLinkAndEnsure}
         onFlModelChange={setFlModel}
         onFlCapabilityChange={setFlCapabilityValue}
-        onFlCustomPromptChange={setFlCustomPrompt}
-        onResetFlPrompt={resetFlCustomPrompt}
+        onFlPromptChange={setPromptValue}
+        onSaveFlPrompt={savePromptValue}
+        onRegenerateFlPrompt={(panelKey) => ensurePrompt(panelKey, 'manual')}
         onGenerateFirstLastFrame={handleGenerateFirstLastFrame}
         onPreviewImage={setPreviewImage}
         onToggleLipSyncVideo={toggleLipSyncVideo}
         getNextPanel={getNextPanel}
         isLinkedAsLastFrame={isLinkedAsLastFrame}
-        getDefaultFlPrompt={getDefaultFlPrompt}
         getLocalPrompt={getLocalPrompt}
         updateLocalPrompt={updateLocalPrompt}
         savePrompt={savePrompt}

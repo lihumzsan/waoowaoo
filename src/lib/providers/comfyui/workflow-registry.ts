@@ -1,9 +1,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
+  COMFYUI_LTX23_GOON_FPS,
   COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
   getLtx23WorkflowProfile,
+  isComfyUiLtx23GoonFirstLastFrameWorkflow,
+  normalizeLtx23GoonDurationSeconds,
   normalizeLtx23WorkflowKey,
 } from './ltx23-workflow-profiles'
 import {
@@ -1765,6 +1768,10 @@ const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> =
     fpsNodeIds: ['1375'],
     promptRelaySegmentCount: 4,
   },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame]: {
+    durationNodeIds: ['236'],
+    fpsNodeIds: ['233'],
+  },
   [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s]: {
     durationNodeIds: ['164'],
     fpsNodeIds: ['142'],
@@ -2697,6 +2704,67 @@ function applyLtx23WorkflowProfileControls(
   }
 }
 
+const GOON_FIRST_LAST_FRAME_NODE_CONTRACT = {
+  positivePrompt: '121',
+  firstImage: '149',
+  lastImage: '269',
+  width: '237',
+  height: '238',
+  duration: '236',
+  fps: '233',
+  frameFormula: '235',
+  output: '75',
+} as const
+
+const GOON_FIRST_LAST_FRAME_FORMULA = '1+ 8*(round(a*b)/8)'
+
+function applyGoonFirstLastFrameWorkflowControls(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  inject: ComfyUiWorkflowInject,
+): void {
+  if (!isComfyUiLtx23GoonFirstLastFrameWorkflow(workflowKey)) return
+
+  const prompt = readTrimmedString(inject.prompt)
+  const positivePromptNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.positivePrompt]
+  if (prompt && positivePromptNode && isRecord(positivePromptNode.inputs)) {
+    positivePromptNode.inputs.text = prompt
+  }
+
+  const imageFilenames = Array.isArray(inject.imageFilenames)
+    ? inject.imageFilenames.filter(
+        (filename): filename is string => typeof filename === 'string' && filename.trim().length > 0,
+      )
+    : []
+  const firstImage = imageFilenames[0]
+  const lastImage = imageFilenames[imageFilenames.length - 1] ?? firstImage
+  const firstImageNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.firstImage]
+  const lastImageNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.lastImage]
+  if (firstImage && firstImageNode && isRecord(firstImageNode.inputs)) {
+    firstImageNode.inputs.image = firstImage
+  }
+  if (lastImage && lastImageNode && isRecord(lastImageNode.inputs)) {
+    lastImageNode.inputs.image = lastImage
+  }
+
+  const width = clampDimension(inject.width)
+  const height = clampDimension(inject.height)
+  if (width !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.width, width)
+  if (height !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.height, height)
+
+  setNumericNodeValue(
+    graph,
+    GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration,
+    normalizeLtx23GoonDurationSeconds(inject.durationSeconds),
+  )
+  setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
+
+  const formulaNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.frameFormula]
+  if (formulaNode && isRecord(formulaNode.inputs)) {
+    formulaNode.inputs.expression = GOON_FIRST_LAST_FRAME_FORMULA
+  }
+}
+
 function formatDateSegment(date: Date): string {
   const year = String(date.getFullYear())
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -2977,8 +3045,9 @@ export function resolveComfyUiWorkflow(
 
   const graph = cloneWorkflow(readWorkflowGraphFromFile(filePath))
   const isBerniniWorkflow = isSeedance2BerniniWorkflowKey(workflowKey)
+  const isGoonFirstLastFrameWorkflow = isComfyUiLtx23GoonFirstLastFrameWorkflow(workflowKey)
   bypassOptionalModelNodes(graph)
-  if (!isBerniniWorkflow) {
+  if (!isBerniniWorkflow && !isGoonFirstLastFrameWorkflow) {
     applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
   }
   applyDimensionHeuristics(graph, inject.width, inject.height)
@@ -2989,6 +3058,10 @@ export function resolveComfyUiWorkflow(
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
   applyLtx23WorkflowProfileControls(graph, workflowKey, inject)
+  applyGoonFirstLastFrameWorkflowControls(graph, workflowKey, {
+    ...inject,
+    imageFilenames,
+  })
   applySeedance2BerniniWorkflowControls(graph, workflowKey, inject)
   applySaveOutputHeuristics(graph)
   inlineValueHelperNodes(graph)

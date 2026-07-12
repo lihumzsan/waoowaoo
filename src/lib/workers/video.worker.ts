@@ -40,8 +40,13 @@ import {
 import {
   DEFAULT_VIDEO_MODEL_KEY,
   isBerniniAudioLipsyncVideoModelKey,
+  normalizeVideoModelKey,
 } from '@/lib/novel-promotion/video-model-defaults'
-import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
+import {
+  COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
+  COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID,
+  getLtx23WorkflowProfile,
+} from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import { resolveLtx23WorkflowRoute } from '@/lib/providers/comfyui/ltx23-workflow-router'
 import {
   SEEDANCE2_BERNINI_DEFAULT_DURATION_SECONDS,
@@ -67,6 +72,13 @@ function readNonEmptyString(value: unknown): string | null {
 function normalizeWorkerVideoModelKey(raw: string | null | undefined): string {
   const trimmed = typeof raw === 'string' ? raw.trim().replace(/\\/g, '/') : ''
   if (!trimmed) return ''
+  const normalized = normalizeVideoModelKey(trimmed)
+  if (
+    normalized === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY
+    || normalized === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_WORKFLOW_ID
+  ) {
+    return normalized
+  }
   return isBerniniAudioLipsyncVideoModelKey(trimmed)
     ? DEFAULT_VIDEO_MODEL_KEY
     : trimmed
@@ -535,6 +547,7 @@ async function generateVideoForPanel(
   generationMode: VideoGenerationMode
   actualVideoTokens?: number
   firstLastFramePromptToPersist?: string
+  firstLastFramePromptEditedByUserToPersist?: boolean
 }> {
   if (!panel.imageUrl) {
     throw new Error(`Panel ${panel.id} has no imageUrl`)
@@ -705,7 +718,12 @@ async function generateVideoForPanel(
     generationMode,
     userEdited: promptEditedByUser,
   })
-  const effectivePrompt = isLtx23VideoModel(model)
+  const isGoonFirstLastFrame = Boolean(
+    firstLastFramePayload && model === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
+  )
+  const effectivePrompt = isGoonFirstLastFrame
+    ? basePrompt
+    : isLtx23VideoModel(model)
     ? (
         await enhanceLtx23VideoPrompt({
           userId: job.data.userId,
@@ -775,7 +793,10 @@ async function generateVideoForPanel(
     cosKey,
     generationMode,
     ...(firstLastFramePayload && (firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt)
-      ? { firstLastFramePromptToPersist: firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt || undefined }
+      ? {
+          firstLastFramePromptToPersist: firstLastCustomPrompt || persistedFirstLastPrompt || defaultFirstLastPrompt || undefined,
+          firstLastFramePromptEditedByUserToPersist: promptEditedByUser,
+        }
       : {}),
     ...(typeof generatedVideo.actualVideoTokens === 'number'
       ? { actualVideoTokens: generatedVideo.actualVideoTokens }
@@ -800,7 +821,13 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
     panelId: panel.id,
   })
 
-  const { cosKey, generationMode, actualVideoTokens, firstLastFramePromptToPersist } = await generateVideoForPanel(
+  const {
+    cosKey,
+    generationMode,
+    actualVideoTokens,
+    firstLastFramePromptToPersist,
+    firstLastFramePromptEditedByUserToPersist,
+  } = await generateVideoForPanel(
     job,
     panel,
     payload,
@@ -817,7 +844,10 @@ async function handleVideoPanelTask(job: Job<TaskJobData>) {
       videoUrl: cosKey,
       videoModel: modelId,
       videoGenerationMode: generationMode,
-      ...(firstLastFramePromptToPersist ? { firstLastFramePrompt: firstLastFramePromptToPersist } : {}),
+      ...(firstLastFramePromptToPersist ? {
+        firstLastFramePrompt: firstLastFramePromptToPersist,
+        firstLastFramePromptEditedByUser: firstLastFramePromptEditedByUserToPersist === true,
+      } : {}),
     },
   })
 
