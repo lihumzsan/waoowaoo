@@ -5,7 +5,6 @@ import type {
 
 export interface ProjectAgentTaskFollowUpTurnPolicy {
   readonly allowOperationIntent: (intent: OperationIntent) => boolean
-  readonly explanationSettlement: 'completed' | 'failed'
 }
 
 /**
@@ -19,11 +18,9 @@ export function resolveProjectAgentTaskFollowUpTurnPolicy(
   if (terminalStatus === 'failed') {
     return {
       allowOperationIntent: (intent) => intent !== 'act',
-      explanationSettlement: 'failed',
     }
   }
   return {
     allowOperationIntent: () => true,
-    explanationSettlement: terminalStatus === 'completed' ? 'completed' : 'failed',
   }
 }

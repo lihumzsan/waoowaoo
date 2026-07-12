@@ -1697,7 +1697,7 @@ export async function createProjectAgentChatResponse(input: {
             runStatusFinalized = true
           } else {
             if (input.settleTaskFollowUp) {
-              taskFollowUpSettlement = taskFollowUpTurnPolicy?.explanationSettlement ?? 'completed'
+              taskFollowUpSettlement = 'completed'
             }
             else pendingRunSettlement = {
                 status: 'completed',
