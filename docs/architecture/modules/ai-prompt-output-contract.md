@@ -44,6 +44,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - Prompt 根目录曾没有通用架构路由，字段变化依赖人工记住 Schema/stream/fixture；现在所有 Prompt 先命中本模块，再沿实际调用链审计适用消费者。
 - location spatial profile、soundscape plan 与 source script 曾要求模型重复输出固定的版本标记，但系统没有第二协议或任何 reader 分支；这些字段既不能提供迁移能力，又扩大了 Prompt/schema/fixture 漂移面，现只保留真实形状字段。
 - 核心剪辑、摄影执行计划与 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback，使协议抄写错误直接泄漏到 UI。现在三条链统一为 raw 名称/短引用/clip order，服务端解析成 final identity；BGM 与最终配乐的模型输入也只保留镜头号和 clip order。
+- 一分钟创作简报曾生成 1757 字源剧本并被全局规划估成 275 秒；首次纠正只强化源剧本 Prompt，又用“每个 Beat 通常 15-45 秒”的通用区间估时。真实复发中，源剧本已压缩为单场、4 个 Beat、509 字，但全局规划仍按固定区间估成 115 秒，证明旧防线没有覆盖“紧凑剧本 + 多 Beat”的真实组合。当前防线让源剧本按用户时长控制全部正文规模，同时要求 Beat 时长只从对白、动作、反应、停顿和转场的实际表演时间派生；Beat 数量不得成为扩大片长的第二解释源。尚未用真实模型重复生成该案例，模型服从性仍是未验证盲区。
 
 ## 修改检查表
 

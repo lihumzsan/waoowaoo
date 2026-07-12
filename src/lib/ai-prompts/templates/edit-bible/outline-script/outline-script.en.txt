@@ -49,9 +49,16 @@ Output exactly one JSON object with no Markdown, explanation, or extra text. Pre
 
 - Write the story itself, not creative notes, director notes, setting tables, or process explanations.
 - Every scene needs a clear place, filmable action, useful dialogue or narration, emotional or informational movement, and a natural connection to adjacent scenes.
-- If the user specifies runtime, match it through scene count, dialogue density, action, pauses, transitions, and pacing. Never pad with repetition.
 - Once an identity, relationship, place trait, important object, goal, or constraint appears, keep it consistent.
 - The joined body text of all segments must not exceed 10,000 characters. If the limit conflicts with runtime, preserve the user's core facts, relationships, and main plot first.
+
+# Runtime Rules
+
+- When the user specifies a runtime, the complete script must be performable within it. Merely labeling the title, summary, or metadata with that runtime does not satisfy the requirement.
+- Keep the combined `body` text of an English script to about 140-180 words per requested minute. Use less text when action, pauses, or atmosphere take more screen time.
+- Do not fix the number of scenes, acts, or story beats. Let the story determine its structure.
+- Before output, check whether the script runs long. If it does, remove secondary events, repeated description, long dialogue, and unnecessary action.
+- If the user gives no runtime, write a naturally compact short film and do not declare a fixed duration.
 
 # Input
 
@@ -62,5 +69,6 @@ The user's story idea:
 
 - Is the output only the specified JSON, with no duplicate full-text field?
 - Did you preserve every user fact and runtime constraint?
+- When the user specifies a runtime, do the combined body length and actual performance time fit it?
 - Is every completed scene a self-contained segment that can be displayed immediately?
 - Are indexes contiguous from 0, metadata consistent, and joined bodies a complete filmable script?
