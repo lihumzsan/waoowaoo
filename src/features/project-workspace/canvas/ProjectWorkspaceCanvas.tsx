@@ -293,15 +293,12 @@ function ProjectWorkspaceCanvasContent({
     }
     return null
   }, [editScript, editScripts, workspaceScope])
-  const scopedEditShotExecutionPlan = useMemo(() => {
+  const scopedEditShotExecutionPlans = useMemo(() => {
     if (workspaceScope.kind === 'chapter') {
-      return editShotExecutionPlans.find((plan) => plan.chapterId === workspaceScope.chapterId)
-        ?? null
+      return editShotExecutionPlans.filter((plan) => plan.chapterId === workspaceScope.chapterId)
     }
-    return editShotExecutionPlans.find((plan) => plan.editScriptId === scopedEditScript?.id)
-      ?? editShotExecutionPlans[0]
-      ?? null
-  }, [editShotExecutionPlans, scopedEditScript?.id, workspaceScope])
+    return editShotExecutionPlans
+  }, [editShotExecutionPlans, workspaceScope])
   const reactFlow = useReactFlow<WorkspaceCanvasFlowNode>()
   const runNodeAction = useWorkspaceNodeCanvasActions()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -466,7 +463,7 @@ function ProjectWorkspaceCanvasContent({
     editBible,
     editScript: projectedEditScript,
     editScripts: projectedEditScripts,
-    editShotExecutionPlan: scopedEditShotExecutionPlan,
+    editShotExecutionPlans: scopedEditShotExecutionPlans,
     projectCharacters: projectAssets.characters,
     projectLocations: projectAssets.locations,
     activeTaskTargets: activeAssistantTaskTargets,

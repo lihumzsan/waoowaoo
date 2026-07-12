@@ -795,6 +795,7 @@ async function getPersistedEditShotExecutionPlan(projectId: string, episodeId: s
       projectId,
       episodeId,
       chapterId: resolvedChapterId,
+      status: 'ready',
       ...(editScriptId ? { editScriptId } : {}),
     },
   })
@@ -1196,6 +1197,7 @@ export async function readProjectEditShotExecutionPlans(input: {
     where: {
       projectId: input.projectId,
       episodeId: input.episodeId,
+      status: 'ready',
     },
     orderBy: { createdAt: 'asc' },
   })

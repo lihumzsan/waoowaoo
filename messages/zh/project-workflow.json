@@ -799,6 +799,7 @@
         },
         "editShotExecutionPlan": {
           "title": "镜头执行计划",
+          "titleWithChapterNumber": "镜头执行计划 {chapter}",
           "eyebrow": "摄影与空间执行",
           "body": "已锁定每个 shot 的景别、焦段、机位高度、构图、光线、轴线、人物位置和关键物体位置。",
           "pendingBody": "等待根据核心剪辑表、资产和空间画像生成全片 shot 级执行计划。",

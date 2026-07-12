@@ -104,6 +104,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - 核心剪辑表真实 Task 曾执行 3 个 DB attempts，却只有 attempt 1 的一个 `submitted` 模型 checkpoint；attempt 2/3 重放同一份 Schema-invalid 输出。旧测试分别证明“输出错误可排队重试”和“相同 invocation 只调用一次”，没有执行两者组合；现由结构化结果边界把失败的 invocation 显式重开，并由 provider checkpoint Critical scenario 证明更高 attempt 只重新提交该单元。
 - Git 历史严格口径下已有 8 次直接 queue/retry/reconcile 修复；扩展到终态 SSE 与业务目标生命周期则为 10 次。反复出现的共同根因不是 BullMQ 本身，而是 retry、watchdog、worker handler 和启动恢复曾同时解释 Task/target 状态。
 - Outbox 行与 payload、provider checkpoint、MusicScore/Soundscape resource row 曾各自写入固定为 `1` 的版本标记，但所有 reader 只有一个实现且从不按该值分流；这制造了重复字段和伪版本治理。本模块只保留真正参与并发、重放、修订或 CAS 裁决的版本事实。
+- 镜头执行计划的长结构化输出曾把 provider 的逐 token delta 直接发布成独立 ephemeral SSE event；两个并行章节及 retry 在正常生成窗口内耗尽 2048 个 identity，客户端虽按契约 fail closed 并请求 snapshot resync，流式 presentation 仍会中断且日志误显为 parse error。当前防线不放宽 identity/fingerprint 窗口，也不增加 timer 或 replay polling；唯一 worker stream 出口按字符确定性合并小 delta 后再分配连续 `streamRunId + stepAttempt + lane + seq`，Golden 用 1 字符 provider 碎片验证 processing preview、终态与 console clean。
 
 ## 修改检查表
 

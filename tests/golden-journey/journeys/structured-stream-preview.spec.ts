@@ -59,7 +59,7 @@ test('[GJ-CANVAS-STRUCTURED-PREVIEW] paced model output remains a processing car
   await expect.poll(async () => await readGoldenMainlineBoundary(page), { timeout: 30_000 }).toBe('script_review')
 
   const node = page.locator(`article[data-node-id="${workspaceNodeId.editBible(scope.episodeId)}"]`)
-  await setGoldenStreamPacing({ chunkSize: 32, delayMs: 120 })
+  await setGoldenStreamPacing({ chunkSize: 1, delayMs: 1 })
   try {
     await submitGoldenBoundary(page, 'script_review')
     await expect.poll(async () => ({

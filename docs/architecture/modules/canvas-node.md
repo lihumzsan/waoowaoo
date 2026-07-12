@@ -69,6 +69,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
 - 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
 - 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
+- `BUG-CN-004`：多章节镜头执行计划 Task 已按 editScript target 提交，但全章节 Canvas 仍把 `editScript=null` 传给只接受单实例的 projector，因此 Assistant 显示整批运行而 Canvas 没有任何对应节点；同时 owner-fenced worker 写入的 `generating + {}` 行被 episode 正式读取当作完整 ready payload 解析，reload 触发 `shots/generationSegmentExecutions` schema 失败。旧 mocked episode 测试把计划列表固定为空，Golden 也只验证终态 stage，没有观察真实 processing + reload。当前防线是正式计划 Query 只暴露 ready materialization、Canvas 从全部 editScripts 穷尽投影稳定节点并只把 Task target 交给统一 lifecycle resolver，纯投影规格反证单实例 gate。真实 processing + reload 浏览器组合仍未验证：对应 Golden stage probe 当前被缺失的 Workflow Lab checkpoint 阻塞，未通过前不得宣称该盲区关闭。
 
 ## 修改检查表
 

@@ -799,6 +799,7 @@
         },
         "editShotExecutionPlan": {
           "title": "Shot Execution Plan",
+          "titleWithChapterNumber": "Shot Execution Plan {chapter}",
           "eyebrow": "Camera And Blocking",
           "body": "Shot scale, lens, camera height, composition, lighting, axis, character positions, and key object positions are locked for every shot.",
           "pendingBody": "Waiting to generate the full shot-level execution plan from the core edit table, assets, and spatial profiles.",

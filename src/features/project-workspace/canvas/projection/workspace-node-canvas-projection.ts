@@ -100,7 +100,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly editBible?: ProjectEditBible | null
   readonly editScript?: ProjectEditScript | null
   readonly editScripts?: readonly ProjectEditScript[]
-  readonly editShotExecutionPlan?: ProjectEditShotExecutionPlan | null
+  readonly editShotExecutionPlans?: readonly ProjectEditShotExecutionPlan[]
   readonly projectCharacters?: readonly Character[]
   readonly projectLocations?: readonly Location[]
   readonly activeTaskTargets?: readonly WorkspaceCanvasActiveTaskTarget[]
@@ -751,7 +751,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     editBible = null,
     editScript = null,
     editScripts = [],
-    editShotExecutionPlan = null,
+    editShotExecutionPlans = [],
     projectCharacters = [],
     projectLocations = [],
     activeTaskTargets = [],
@@ -769,6 +769,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const nodes: WorkspaceCanvasFlowNode[] = []
   const edges: WorkspaceCanvasFlowEdge[] = []
   const panelsByShot = panelByShotId(storyboards)
+  const projectedEditScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
+  const chapterIndexById = new Map(
+    (editBible?.chapters ?? []).map((chapter) => [chapter.id, chapter.chapterIndex] as const),
+  )
   const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
   const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
   const stylePreviewSetView = buildEditStylePreviewSetView({
@@ -976,11 +980,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let editScriptNodeId: string | null = null
+  const editScriptNodeIdsByScriptId = new Map<string, string>()
   if (editFirstCanvasVisibility.editScript || editScript || editScripts.length > 0 || editScriptPending) {
-    const scriptNodes = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
-    const chapterIndexById = new Map(
-      (editBible?.chapters ?? []).map((chapter) => [chapter.id, chapter.chapterIndex] as const),
-    )
+    const scriptNodes = projectedEditScripts
     const editScriptTitle = (chapterId: string | null): string => {
       if (!chapterId) return translate('nodes.editScript.title')
       const chapterIndex = chapterIndexById.get(chapterId)
@@ -994,6 +996,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       scriptNodes.forEach((script, index) => {
         const nodeId = workspaceNodeId.editScript(episodeId, script.chapterId ?? null)
         const scriptChapterId = script.chapterId ?? null
+        editScriptNodeIdsByScriptId.set(script.id, nodeId)
         if (editScript?.id === script.id || (!editScriptNodeId && index === 0)) editScriptNodeId = nodeId
         const editScriptPresentation = resourcePresentationFromStatus(script.status)
           ?? workspaceCanvasPendingResourcePresentation()
@@ -1305,56 +1308,69 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let executionNodeId: string | null = null
-  if (editScript && editFirstCanvasVisibility.editShotExecutionPlan) {
-    const matchingExecutionPlan = editShotExecutionPlan?.editScriptId === editScript.id ? editShotExecutionPlan : null
-    const executionPresentation = matchingExecutionPlan
-      ? resourcePresentationFromStatus(matchingExecutionPlan.status)
-        ?? workspaceCanvasPendingResourcePresentation()
-      : null
-    executionNodeId = workspaceNodeId.editShotExecutionPlan(editScript.id)
-    nodes.push(createNode({
-      id: executionNodeId,
-      position: layoutPosition(savedLayouts, executionNodeId, { x: STORY_COLUMN_X + COLUMN_GAP_X * 2, y: STAGE_START_Y }),
-      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
-      height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
-      data: {
-        projectId,
-        episodeName,
-        kind: 'editShotExecutionPlan',
-        layoutNodeType: 'editShotExecutionPlan',
-        targetType: 'editShotExecutionPlan',
-        targetId: editScript.id,
-        title: translate('nodes.editShotExecutionPlan.title'),
-        eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
-        body: matchingExecutionPlan
-          ? matchingExecutionPlan.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`).join('\n')
-          : translate('nodes.editShotExecutionPlan.pendingBody'),
-        meta: matchingExecutionPlan
-          ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
-          : '',
-        ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(editScript.id)),
-        actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
-        action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: editScript.id },
-        editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, editScript, translate) } : undefined,
-        onAction,
-      },
-    }))
-    if (assetGroupNodeId) {
-      edges.push(createEdge(`edge:${assetGroupNodeId}:${executionNodeId}`, assetGroupNodeId, executionNodeId))
-    } else if (editScriptNodeId) {
-      edges.push(createEdge(`edge:${editScriptNodeId}:${executionNodeId}`, editScriptNodeId, executionNodeId))
-    }
+  const executionNodeIdsByEditScriptId = new Map<string, string>()
+  const executionPlanByEditScriptId = new Map(
+    editShotExecutionPlans.map((plan) => [plan.editScriptId, plan] as const),
+  )
+  if (editFirstCanvasVisibility.editShotExecutionPlan) {
+    projectedEditScripts.forEach((script, index) => {
+      const matchingExecutionPlan = executionPlanByEditScriptId.get(script.id) ?? null
+      const executionPresentation = matchingExecutionPlan
+        ? resourcePresentationFromStatus(matchingExecutionPlan.status)
+          ?? workspaceCanvasPendingResourcePresentation()
+        : null
+      const nodeId = workspaceNodeId.editShotExecutionPlan(script.id)
+      executionNodeIdsByEditScriptId.set(script.id, nodeId)
+      if (editScript?.id === script.id || executionNodeId === null) executionNodeId = nodeId
+      const chapterIndex = script.chapterId ? chapterIndexById.get(script.chapterId) : undefined
+      nodes.push(createNode({
+        id: nodeId,
+        position: layoutPosition(savedLayouts, nodeId, {
+          x: STORY_COLUMN_X + COLUMN_GAP_X * 2,
+          y: STAGE_START_Y + index * (WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height + 64),
+        }),
+        width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
+        height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
+        data: {
+          projectId,
+          episodeName,
+          kind: 'editShotExecutionPlan',
+          layoutNodeType: 'editShotExecutionPlan',
+          targetType: 'editShotExecutionPlan',
+          targetId: script.id,
+          title: chapterIndex === undefined
+            ? translate('nodes.editShotExecutionPlan.title')
+            : translate('nodes.editShotExecutionPlan.titleWithChapterNumber', { chapter: chapterIndex + 1 }),
+          eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
+          body: matchingExecutionPlan
+            ? matchingExecutionPlan.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`).join('\n')
+            : translate('nodes.editShotExecutionPlan.pendingBody'),
+          meta: matchingExecutionPlan
+            ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
+            : '',
+          ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
+          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(script.id)),
+          actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
+          action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: script.id },
+          editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, script, translate) } : undefined,
+          onAction,
+        },
+      }))
+      const sourceNodeId = assetGroupNodeId ?? editScriptNodeIdsByScriptId.get(script.id) ?? null
+      if (sourceNodeId) {
+        edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
+      }
+    })
   }
 
   const panelList = collectPanels(storyboards)
   const shotNodeIdsByShotId = new Map<string, string>()
-  let storyboardSourceNodeId: string | null = null
-  if (executionNodeId) {
-    storyboardSourceNodeId = executionNodeId
-  } else if (editScriptNodeId) {
-    storyboardSourceNodeId = editScriptNodeId
-  }
+  const storyboardSourceNodeId = executionNodeId ?? editScriptNodeId
+  const storyboardEditScriptIdById = new Map(
+    storyboards.flatMap((storyboard) => storyboard.editScriptId
+      ? [[storyboard.id, storyboard.editScriptId] as const]
+      : []),
+  )
   const visibleStoryboardPanelCount = editFirstCanvasVisibility.storyboardPanels && storyboardSourceNodeId
     ? panelList.length
     : 0
@@ -1418,7 +1434,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           onAction,
         },
       }))
-      edges.push(createEdge(`edge:${storyboardSourceNodeId}:${nodeId}`, storyboardSourceNodeId, nodeId))
+      const panelEditScriptId = storyboardEditScriptIdById.get(panel.storyboardId) ?? null
+      const panelSourceNodeId = panelEditScriptId
+        ? executionNodeIdsByEditScriptId.get(panelEditScriptId)
+          ?? editScriptNodeIdsByScriptId.get(panelEditScriptId)
+          ?? storyboardSourceNodeId
+        : storyboardSourceNodeId
+      edges.push(createEdge(`edge:${panelSourceNodeId}:${nodeId}`, panelSourceNodeId, nodeId))
     })
   }
   const storyboardStageBottomY = maxNodeBottomY(nodes, 'shot') ?? defaultStoryboardBottomY(visibleStoryboardPanelCount)
