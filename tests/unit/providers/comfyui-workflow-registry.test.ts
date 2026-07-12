@@ -738,7 +738,6 @@ describe('comfyui workflow registry', () => {
       height: 848,
       durationSeconds: 5,
       fps: 24,
-      motionStrength: 1,
     })
 
     expect(workflow['390']?.inputs.value).toBe(121)

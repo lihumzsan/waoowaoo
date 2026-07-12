@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/model-config-contract'
 import { resolveGenerationOptionsForModel } from '@/lib/model-capabilities/lookup'
+import {
+  normalizeVideoGenerationSelections,
+  resolveEffectiveVideoCapabilityDefinitions,
+} from '@/lib/model-capabilities/video-effective'
 
 describe('model-capabilities/lookup - video singleton defaults', () => {
   const modelKey = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
@@ -10,7 +14,7 @@ describe('model-capabilities/lookup - video singleton defaults', () => {
       durationOptions: [5, 10],
       fpsOptions: [24],
       resolutionOptions: ['480p'],
-      motionStrengthOptions: [2, 1, 3],
+      motionStrengthOptions: [1, 2, 3],
     },
   }
 
@@ -40,5 +44,14 @@ describe('model-capabilities/lookup - video singleton defaults', () => {
       resolution: '480p',
       motionStrength: 2,
     })
+  })
+
+  it('uses the first motion strength option as the UI default', () => {
+    const definitions = resolveEffectiveVideoCapabilityDefinitions({
+      videoCapabilities: capabilities.video,
+    })
+    const result = normalizeVideoGenerationSelections({ definitions })
+
+    expect(result.motionStrength).toBe(1)
   })
 })

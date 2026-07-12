@@ -53,7 +53,7 @@ describe('comfyui video capabilities catalog', () => {
       expect(capabilities?.video?.durationOptions).toEqual([5, 10])
       expect(capabilities?.video?.fpsOptions).toEqual([24])
       expect(capabilities?.video?.resolutionOptions).toEqual(['480p'])
-      expect(capabilities?.video?.motionStrengthOptions).toEqual([2, 1, 3])
+      expect(capabilities?.video?.motionStrengthOptions).toEqual([1, 2, 3])
       expect(capabilities?.video?.firstlastframe).toBe(false)
       expect(capabilities?.video?.supportGenerateAudio).toBe(false)
       expect(capabilities?.video?.fieldI18n?.motionStrength?.optionLabelKeys).toEqual({

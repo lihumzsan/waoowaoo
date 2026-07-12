@@ -1223,8 +1223,8 @@
           "480p"
         ],
         "motionStrengthOptions": [
-          2,
           1,
+          2,
           3
         ],
         "firstlastframe": false,
@@ -1262,8 +1262,8 @@
           "480p"
         ],
         "motionStrengthOptions": [
-          2,
           1,
+          2,
           3
         ],
         "firstlastframe": false,
