@@ -135,7 +135,7 @@ describe('Project Agent execution segment DB integration', () => {
       kind: 'approval_response',
       interruptionId,
     })
-    await appendProjectAgentEvents({
+    await expect(appendProjectAgentEvents({
       scope: { projectId: project.id, userId: user.id, assistantId: 'workspace-command' },
       events: [{
         runFence: createProjectAgentRunFence(resumedRun),
@@ -147,7 +147,7 @@ describe('Project Agent execution segment DB integration', () => {
           controlKind: decisionSegment.controlKind,
         },
       }],
-    })
+    })).rejects.toThrow('PROJECT_AGENT_EXECUTION_SEGMENT_ALREADY_STARTED')
 
     const [keys, consumedInterruption] = await Promise.all([
       prisma.projectAgentEvent.findMany({

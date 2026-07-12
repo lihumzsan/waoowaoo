@@ -79,10 +79,28 @@ interface EditFirstChoiceDefinition {
     workflow: EditFirstWorkflowState,
     decision: EditFirstWorkflowChoiceDecision,
   ) => EditFirstWorkflowAction | null
+  /**
+   * A structured user confirmation whose complete Operation input is already
+   * present in the persisted Choice decision. These commands are committed by
+   * the Choice consumption transaction; the model must not relay them.
+   *
+   * Non-confirmation submissions and creative revision requests return null
+   * until their Task/Approval handoff or revision input contract is owned by a
+   * deterministic server executor.
+   */
+  readonly resolveAtomicConfirmationCommand: (
+    decision: EditFirstChoiceDecision,
+  ) => EditFirstChoiceAtomicConfirmationCommand | null
   readonly resolveReviewedResource: (
     params: EditFirstChoiceResourceResolverParams,
   ) => Promise<ProjectAgentChoiceReviewedResource>
 }
+
+export type EditFirstChoiceAtomicConfirmationCommand =
+  | { readonly operationId: 'approve_script'; readonly input: Record<string, never> }
+  | { readonly operationId: 'confirm_bible'; readonly input: { readonly aspectRatio: '9:16' | '16:9' | '21:9' } }
+  | { readonly operationId: 'confirm_edit_style_preview'; readonly input: Record<string, never> }
+  | { readonly operationId: 'approve_edit_script_assets'; readonly input: Record<string, never> }
 
 function workflowAction(
   operationId: EditFirstWorkflowAction['operationId'],
@@ -131,6 +149,7 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         ? workflowAction('ingest_script', 'Generate source script')
         : null
     },
+    resolveAtomicConfirmationCommand: () => null,
     resolveReviewedResource: async (params) => await resolveScriptIntakeChoiceResource(params),
   },
   script_review: {
@@ -164,6 +183,14 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         ? workflowAction('approve_script', 'Approve generated script')
         : workflowAction('revise_script', 'Revise generated script')
     },
+    resolveAtomicConfirmationCommand: (decision) => {
+      if (decision.choiceType !== 'script_review') {
+        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:script_review:${decision.choiceType}`)
+      }
+      return decision.decision === 'approve'
+        ? { operationId: 'approve_script', input: {} }
+        : null
+    },
     resolveReviewedResource: async (params) => await resolveScriptReviewChoiceResource(params),
   },
   bible_review: {
@@ -196,6 +223,14 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
       return decision.decision === 'approve'
         ? workflowAction('confirm_bible', 'Confirm episode plan')
         : workflowAction('revise_bible', 'Revise episode plan')
+    },
+    resolveAtomicConfirmationCommand: (decision) => {
+      if (decision.choiceType !== 'bible_review') {
+        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:bible_review:${decision.choiceType}`)
+      }
+      return decision.decision === 'approve'
+        ? { operationId: 'confirm_bible', input: { aspectRatio: decision.aspectRatio } }
+        : null
     },
     resolveReviewedResource: async (params) => await resolveBibleReviewChoiceResource(params),
   },
@@ -233,6 +268,10 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         ? workflowAction('confirm_edit_style_preview', 'Confirm selected visual style')
         : null
     },
+    resolveAtomicConfirmationCommand: (decision) => {
+      assertDecisionType(decision, 'style')
+      return { operationId: 'confirm_edit_style_preview', input: {} }
+    },
     resolveReviewedResource: async (params) => await resolveStyleChoiceResource(params),
   },
   asset_review: {
@@ -266,6 +305,14 @@ export const EDIT_FIRST_CHOICE_REGISTRY = {
         ? workflowAction('approve_edit_script_assets', 'Approve required assets')
         : workflowAction('revise_edit_script_assets', 'Revise required assets')
     },
+    resolveAtomicConfirmationCommand: (decision) => {
+      if (decision.choiceType !== 'asset_review') {
+        throw new Error(`EDIT_FIRST_CHOICE_REGISTRY_DECISION_MISMATCH:asset_review:${decision.choiceType}`)
+      }
+      return decision.decision === 'approve'
+        ? { operationId: 'approve_edit_script_assets', input: {} }
+        : null
+    },
     resolveReviewedResource: async (params) => await resolveAssetReviewChoiceResource(params),
   },
 } as const satisfies Record<EditFirstChoiceType, EditFirstChoiceDefinition>
@@ -274,6 +321,13 @@ export function getEditFirstChoiceDefinition(
   choiceType: EditFirstChoiceType,
 ): EditFirstChoiceDefinition {
   return EDIT_FIRST_CHOICE_REGISTRY[choiceType]
+}
+
+export function resolveEditFirstChoiceAtomicConfirmationCommand(
+  decision: EditFirstChoiceDecision,
+): EditFirstChoiceAtomicConfirmationCommand | null {
+  return getEditFirstChoiceDefinition(decision.choiceType)
+    .resolveAtomicConfirmationCommand(decision)
 }
 
 type EditFirstChoiceToolIdMap = {

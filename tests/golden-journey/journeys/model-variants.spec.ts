@@ -30,7 +30,7 @@ async function startVariant(page: Parameters<typeof registerGoldenUser>[0], iden
   return await launchGoldenStoryFromHome(page, '恐怖故事')
 }
 
-test('[GJ-MODEL-STOPS-AFTER-CONFIRM] accepts a normal model stop after production-plan confirmation', async ({ page, browserObservations }, testInfo) => {
+test('[GJ-MODEL-STOPS-AFTER-CONFIRM] keeps an atomic production-plan confirmation when the subsequent model turn stops', async ({ page, browserObservations }, testInfo) => {
   test.skip(scenario !== 'stop-after-successful-confirmation', 'run through test:golden:variant:model-stop')
   const scope = await startVariant(page, 'model-stop')
   await expectGoldenIntakeChoice(page)
@@ -44,6 +44,7 @@ test('[GJ-MODEL-STOPS-AFTER-CONFIRM] accepts a normal model stop after productio
   )
   await expect.poll(async () => await readGoldenAssistantRunStatus(page, scope), { timeout: 30_000 }).toBe('completed')
   await expect(page.getByText('AI 运行失败', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('成功 · 确认制作规划', { exact: true })).toHaveCount(1)
   const oracle = await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-model-stop')
 
   expect(oracle.domain.bibles.some((bible) => bible.status === 'confirmed')).toBe(true)

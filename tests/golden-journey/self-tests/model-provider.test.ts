@@ -448,6 +448,44 @@ describe('Golden local model provider', () => {
     })
   })
 
+  it('injects the model-stop variant only after the atomic Bible Choice reaches refreshed workflow state', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'stop-after-successful-confirmation',
+      requestOrdinal: 17,
+      request: {
+        model: 'golden-model',
+        messages: [
+          {
+            role: 'assistant',
+            tool_calls: [{
+              id: 'bible-choice-call',
+              type: 'function',
+              function: { name: 'request_edit_bible_review_choice', arguments: '{}' },
+            }],
+          },
+          {
+            role: 'tool',
+            tool_call_id: 'bible-choice-call',
+            content: '{"ok":true,"decision":"approve","aspectRatio":"16:9"}',
+          },
+          {
+            role: 'system',
+            content: '[project_state_snapshot]\nworkflowStage=ready_to_generate_style_previews\n[/project_state_snapshot]',
+          },
+        ],
+        tools: [{
+          type: 'function',
+          function: { name: 'generate_edit_style_previews', parameters: { type: 'object' } },
+        }],
+      },
+    })
+
+    expect(decision).toMatchObject({
+      kind: 'text',
+      text: expect.stringContaining('confirmation was committed'),
+    })
+  })
+
   it('passes null when production asks AI to let the system resolve chapter scope', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',

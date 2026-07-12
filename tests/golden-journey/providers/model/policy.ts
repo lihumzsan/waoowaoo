@@ -698,7 +698,7 @@ function selectWriteTool(request: GoldenChatCompletionRequest, forcedToolName?: 
   if (forcedToolName && available.has(forcedToolName) && !alreadyCalled.has(forcedToolName)) {
     return forcedToolName
   }
-  const workflowStage = messageText(request).match(/(?:^|\n)workflowStage=([^\n]+)/)?.[1]?.trim()
+  const workflowStage = readWorkflowStage(request)
   const stageTool = workflowStage ? WORKFLOW_STAGE_TOOL[workflowStage] : undefined
   if (stageTool && available.has(stageTool) && !alreadyCalled.has(stageTool)) {
     return stageTool
@@ -706,6 +706,10 @@ function selectWriteTool(request: GoldenChatCompletionRequest, forcedToolName?: 
   return WRITE_TOOL_PRIORITY.find((toolName) => (
     available.has(toolName) && !alreadyCalled.has(toolName)
   )) ?? null
+}
+
+function readWorkflowStage(request: GoldenChatCompletionRequest): string | null {
+  return messageText(request).match(/(?:^|\n)workflowStage=([^\n]+)/)?.[1]?.trim() ?? null
 }
 
 export function decideGoldenModelResponse(input: {
@@ -728,11 +732,12 @@ export function decideGoldenModelResponse(input: {
   const toolName = selectWriteTool(input.request, input.forcedToolName)
   if (
     input.scenarioId === 'stop-after-successful-confirmation'
-    && hasCompletedToolCall(input.request, 'confirm_bible')
+    && readWorkflowStage(input.request) === 'ready_to_generate_style_previews'
+    && hasCompletedToolCall(input.request, 'request_edit_bible_review_choice')
   ) {
     return {
       kind: 'text',
-      text: 'Confirmation succeeded. I am stopping without requesting the next operation.',
+      text: 'The user confirmation was committed before this model turn. I am stopping without requesting the next operation.',
     }
   }
   if (!toolName) {

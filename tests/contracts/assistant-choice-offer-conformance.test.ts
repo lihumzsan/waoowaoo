@@ -9,6 +9,7 @@ import {
   EDIT_FIRST_CHOICE_REGISTRY,
   EDIT_FIRST_CHOICE_TOOL_IDS,
   EDIT_FIRST_CHOICE_TYPES,
+  resolveEditFirstChoiceAtomicConfirmationCommand,
 } from '@/lib/project-agent/edit-first-choice-tools'
 import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
 import type { ProjectAgentChoiceCardDefinition } from '@/lib/project-agent/types'
@@ -41,6 +42,7 @@ describe('assistant choice offer conformance', () => {
         workflowDecision: typeof definition.toWorkflowDecision,
         isEnabled: typeof definition.isEnabled,
         workflowAction: typeof definition.resolveWorkflowAction,
+        atomicConfirmation: typeof definition.resolveAtomicConfirmationCommand,
         resolveResource: typeof definition.resolveReviewedResource,
       }
     })).toEqual([
@@ -55,8 +57,67 @@ describe('assistant choice offer conformance', () => {
       expect(definition.toWorkflowDecision).toBeTypeOf('function')
       expect(definition.isEnabled).toBeTypeOf('function')
       expect(definition.resolveWorkflowAction).toBeTypeOf('function')
+      expect(definition.resolveAtomicConfirmationCommand).toBeTypeOf('function')
       expect(definition.resolveReviewedResource).toBeTypeOf('function')
     }
+  })
+
+  it('maps every deterministic confirmation to one non-billable transactional Operation', () => {
+    const operations = createProjectAgentOperationRegistry()
+    const decisions = [
+      { choiceType: 'script_review', decision: 'approve' },
+      { choiceType: 'bible_review', decision: 'approve', aspectRatio: '16:9' },
+      { choiceType: 'style', decision: 'select', stylePreviewId: 'style-1' },
+      { choiceType: 'asset_review', decision: 'approve' },
+    ] as const
+    const commands = decisions.map((decision) => resolveEditFirstChoiceAtomicConfirmationCommand(decision))
+
+    expect(commands).toEqual([
+      { operationId: 'approve_script', input: {} },
+      { operationId: 'confirm_bible', input: { aspectRatio: '16:9' } },
+      { operationId: 'confirm_edit_style_preview', input: {} },
+      { operationId: 'approve_edit_script_assets', input: {} },
+    ])
+    for (const command of commands) {
+      if (!command) throw new Error('EXPECTED_ATOMIC_CONFIRMATION_COMMAND')
+      const operation = operations[command.operationId]
+      expect(operation, command.operationId).toMatchObject({
+        channels: { tool: true },
+        intent: 'act',
+        confirmation: { kind: 'none', required: false },
+        effects: {
+          writes: true,
+          billable: false,
+          longRunning: false,
+          externalSideEffects: false,
+        },
+      })
+      expect(operation?.executeInTransaction, command.operationId).toBeTypeOf('function')
+      expect(operation?.inputSchema.safeParse(command.input).success, command.operationId).toBe(true)
+    }
+  })
+
+  it('keeps non-confirmation Choice decisions out of the atomic confirmation executor', () => {
+    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
+      choiceType: 'script_intake',
+      decision: 'submit',
+      normalizedBrief: 'brief',
+    })).toBeNull()
+    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
+      choiceType: 'script_review',
+      decision: 'revise',
+      revisionNotes: 'revise script',
+    })).toBeNull()
+    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
+      choiceType: 'bible_review',
+      decision: 'revise',
+      revisionNotes: 'revise plan',
+    })).toBeNull()
+    expect(resolveEditFirstChoiceAtomicConfirmationCommand({
+      choiceType: 'asset_review',
+      decision: 'revise',
+      revisionNotes: 'revise assets',
+    })).toBeNull()
   })
 
   it('binds every registered choice type to one explicit reviewed-resource kind', () => {

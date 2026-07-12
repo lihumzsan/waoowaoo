@@ -430,6 +430,11 @@ const EFFECTS_DOMAIN_WRITE = {
   longRunning: false,
 } as const
 
+const EFFECTS_BULK_DOMAIN_WRITE = {
+  ...EFFECTS_DOMAIN_WRITE,
+  bulk: true,
+} as const
+
 const EFFECTS_BULK_WRITE = {
   writes: true,
   billable: true,
@@ -1024,7 +1029,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       summary: 'Record the user approval of all ready required edit-first assets so shot execution planning can proceed.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_WRITE,
+      effects: EFFECTS_BULK_DOMAIN_WRITE,
       confirmation: {
         kind: 'none',
         required: false,

@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api-errors'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
   assertProjectAgentOperationExecutionFenceCurrent,
@@ -6,7 +7,6 @@ import {
   requireProjectAgentChoiceHandoffReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
-import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
 import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
 import { normalizeProjectAgentToolInput } from './tool-input-schema'
@@ -35,6 +35,7 @@ export type ProjectAgentOperationInvocationResult =
       data: unknown
       operation: ProjectAgentOperationDefinition
       outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }>
+      publishResourceChanges(): Promise<void>
     }
   | {
       kind: 'approval_required'
@@ -193,13 +194,21 @@ export async function invokeProjectAgentOperation(params: {
   input: unknown
   approvedInvocation?: PlannedOperationInvocation | null
   returnApprovalRequired?: boolean
+  transaction?: Prisma.TransactionClient
+  invocationMode?: 'default' | 'atomic_choice_confirmation'
+  deferResourceChangePublication?: boolean
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
+  const invocationMode = params.invocationMode ?? 'default'
+  const atomicChoiceConfirmation = invocationMode === 'atomic_choice_confirmation'
+  if (Boolean(params.transaction) !== atomicChoiceConfirmation) {
+    throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_MODE_INVALID:${params.operationId}:${invocationMode}`)
+  }
   const executionFence = params.context.executionFence ?? null
   if (params.channel === 'tool' && !executionFence) {
     throw new Error(`PROJECT_AGENT_OPERATION_EXECUTION_FENCE_REQUIRED:${params.operationId}`)
   }
-  if (executionFence) {
+  if (executionFence && !params.transaction) {
     await assertProjectAgentOperationExecutionFenceCurrent(executionFence)
   }
 
@@ -212,6 +221,21 @@ export async function invokeProjectAgentOperation(params: {
     if (operationRequiresTaskBatchBinding(operation) && !params.context.taskBatchBinding) {
       throw new Error(`PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED:${operation.id}`)
     }
+  }
+  if (
+    atomicChoiceConfirmation
+    && (
+      operation.intent !== 'act'
+      || !operation.effects.writes
+      || operation.effects.billable
+      || operation.effects.longRunning
+      || operation.effects.externalSideEffects
+      || operation.confirmation.kind !== 'none'
+      || operation.agentFlow?.suspendsFor
+      || !operation.executeInTransaction
+    )
+  ) {
+    throw new Error(`PROJECT_AGENT_CHOICE_ATOMIC_OPERATION_CONTRACT_INVALID:${operation.id}`)
   }
   const prepared = prepareProjectAgentOperationInput({
     channel: params.channel,
@@ -250,16 +274,19 @@ export async function invokeProjectAgentOperation(params: {
     }
     const executeInTransaction = operation.executeInTransaction
     if (executeInTransaction) {
-      result = await prisma.$transaction(async (tx) => {
+      const executeTransaction = async (tx: Prisma.TransactionClient): Promise<unknown> => {
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
-      const output = await executeInTransaction(params.context, parsedInput, tx)
+        const output = await executeInTransaction(params.context, parsedInput, tx)
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
         return output
-      })
+      }
+      result = params.transaction
+        ? await executeTransaction(params.transaction)
+        : await prisma.$transaction(executeTransaction)
     } else {
       const execute = operation.execute
       if (!execute) {
@@ -300,17 +327,24 @@ export async function invokeProjectAgentOperation(params: {
       : params.channel === 'tool' && operationMayCompleteWithoutTasks(operation)
         ? { kind: 'noop', data: parsedOutput.data }
         : { kind: 'completed', data: parsedOutput.data }
-  await publishWorkspaceResourceChangedEventsFromWriteResult({
-    result: parsedOutput.data,
-    fallbackProjectId: params.context.projectId,
-    userId: params.context.userId,
-    fallbackEpisodeId: prepared.effectiveEpisodeId || null,
-  })
+  let resourceChangesPublished = false
+  const publishResourceChanges = async (): Promise<void> => {
+    if (resourceChangesPublished) return
+    resourceChangesPublished = true
+    await publishWorkspaceResourceChangedEventsFromWriteResult({
+      result: parsedOutput.data,
+      fallbackProjectId: params.context.projectId,
+      userId: params.context.userId,
+      fallbackEpisodeId: prepared.effectiveEpisodeId || null,
+    })
+  }
+  if (!params.deferResourceChangePublication) await publishResourceChanges()
   return {
     kind: 'executed',
     data: parsedOutput.data,
     operation,
     outcome,
+    publishResourceChanges,
   }
   }
 

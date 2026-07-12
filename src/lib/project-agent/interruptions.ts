@@ -1,7 +1,11 @@
 import { isDeepStrictEqual } from 'node:util'
+import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import type { UIMessage } from 'ai'
+import type { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { createProjectAgentOperationRegistry } from '@/lib/operations/registry'
+import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
 import type { ProjectAssistantId } from './types'
 import {
   appendProjectAssistantThreadMessagesInTransaction,
@@ -15,6 +19,7 @@ import {
   type ProjectAgentChoiceOffer,
 } from './choice-offer'
 import type { EditFirstChoiceDecision } from './edit-first-choice-result'
+import { resolveEditFirstChoiceAtomicConfirmationCommand } from './edit-first-choice-tools'
 import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
@@ -58,6 +63,11 @@ export interface ProjectAgentChoiceInterruptionRecord {
   toolCallId: string | null
   payload: Prisma.JsonValue
   offer: ProjectAgentChoiceOffer
+}
+
+export interface ProjectAgentConsumedChoiceInterruptionRecord extends ProjectAgentChoiceInterruptionRecord {
+  parsedResponse: EditFirstChoiceDecision
+  appliedOperationId: string | null
 }
 
 export interface ProjectAgentInterruptionSnapshot {
@@ -485,17 +495,20 @@ export async function getLatestProjectAgentInterruptionForRun(params: ProjectAge
 }
 
 export async function consumeProjectAgentChoiceInterruption(params: ProjectAgentInterruptionScope & {
+  request: NextRequest
   runId: string
   interruptionId: string
   cardId: string
   toolCallId: string
   response: Prisma.InputJsonValue
   latestUserText: string
+  operationSignal: AbortSignal
+  locale?: string | null
   visibleMessages?: UIMessage[]
-}): Promise<(ProjectAgentChoiceInterruptionRecord & { parsedResponse: EditFirstChoiceDecision }) | null> {
+}): Promise<ProjectAgentConsumedChoiceInterruptionRecord | null> {
   const { assistantId, scopeRef } = buildScope(params)
   try {
-    return await prisma.$transaction(async (tx) => {
+    const consumed = await prisma.$transaction(async (tx) => {
       const runFence = await lockCurrentInterruptionConsumeRunFence(tx, {
         ...params,
         assistantId,
@@ -541,6 +554,95 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
         kind: 'choice_response',
         interruptionId: record.id,
       })
+      const atomicCommand = resolveEditFirstChoiceAtomicConfirmationCommand(parsedResponse)
+      const atomicExecution = atomicCommand
+        ? await invokeProjectAgentOperation({
+            transaction: tx,
+            invocationMode: 'atomic_choice_confirmation',
+            deferResourceChangePublication: true,
+            registry: createProjectAgentOperationRegistry(),
+            channel: 'tool',
+            operationId: atomicCommand.operationId,
+            context: {
+              request: params.request,
+              userId: params.userId,
+              projectId: params.projectId,
+              context: {
+                episodeId: params.episodeId ?? null,
+                ...(params.locale ? { locale: params.locale } : {}),
+                runId: params.runId,
+                runFence,
+                executionSegmentId: executionSegment.id,
+                choiceDecision: parsedResponse,
+              },
+              source: 'assistant-choice',
+              writer: null,
+              toolCallId: null,
+              executionFence: {
+                runFence,
+                signal: params.operationSignal,
+                continuationClaim: null,
+                taskBatchBinding: null,
+              },
+              taskBatchBinding: null,
+            },
+            input: atomicCommand.input,
+          })
+        : null
+      if (atomicExecution?.kind === 'approval_required') {
+        throw new Error(`PROJECT_AGENT_CHOICE_ATOMIC_OPERATION_APPROVAL_INVALID:${atomicCommand?.operationId ?? 'unknown'}`)
+      }
+      const atomicActivityId = atomicExecution ? randomUUID() : null
+      const events: ProjectAgentEventInput[] = [
+        {
+          runFence,
+          event: {
+            kind: 'interruption.resolved',
+            runId: params.runId,
+            activityId: record.activityId,
+            interruptionId: record.id,
+            outcome: 'consumed',
+            response: JSON.parse(JSON.stringify(parsedResponse)) as Prisma.InputJsonValue,
+          },
+        },
+      ]
+      if (atomicExecution && atomicActivityId) {
+        events.push(
+          {
+            runFence,
+            idempotencyKey: `activity-started:choice-command:${record.id}`,
+            event: {
+              kind: 'activity.started',
+              runId: params.runId,
+              activityId: atomicActivityId,
+              type: 'operation',
+              operationId: atomicExecution.operation.id,
+              sourceOperationId: record.operationId,
+              toolCallId: record.toolCallId,
+              choiceType: offer.card.choiceType,
+            },
+          },
+          {
+            runFence,
+            idempotencyKey: `activity-completed:choice-command:${record.id}`,
+            event: {
+              kind: 'activity.completed',
+              runId: params.runId,
+              activityId: atomicActivityId,
+            },
+          },
+        )
+      }
+      events.push({
+        runFence,
+        idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
+        event: {
+          kind: 'run.execution_started',
+          runId: params.runId,
+          executionSegmentId: executionSegment.id,
+          controlKind: executionSegment.controlKind,
+        },
+      })
       await appendProjectAgentEventsInTransaction(tx, {
         scope: {
           projectId: params.projectId,
@@ -549,29 +651,7 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
           assistantId,
           scopeRef,
         },
-        events: [
-          {
-            runFence,
-            event: {
-              kind: 'interruption.resolved',
-              runId: params.runId,
-              activityId: record.activityId,
-              interruptionId: record.id,
-              outcome: 'consumed',
-              response: JSON.parse(JSON.stringify(parsedResponse)) as Prisma.InputJsonValue,
-            },
-          },
-          {
-            runFence,
-            idempotencyKey: projectAgentExecutionStartedIdempotencyKey(executionSegment.id),
-            event: {
-              kind: 'run.execution_started',
-              runId: params.runId,
-              executionSegmentId: executionSegment.id,
-              controlKind: executionSegment.controlKind,
-            },
-          },
-        ],
+        events,
       })
       if (params.visibleMessages?.length) {
         await appendProjectAssistantThreadMessagesInTransaction(tx, {
@@ -584,18 +664,25 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
       }
 
       return {
-        id: record.id,
-        runId: record.runId,
-        activityId: record.activityId,
-        type: 'choice' as const,
-        status: 'consumed' as const,
-        operationId: record.operationId,
-        toolCallId: record.toolCallId,
-        payload: record.payload,
-        offer,
-        parsedResponse,
+        interruption: {
+          id: record.id,
+          runId: record.runId,
+          activityId: record.activityId,
+          type: 'choice' as const,
+          status: 'consumed' as const,
+          operationId: record.operationId,
+          toolCallId: record.toolCallId,
+          payload: record.payload,
+          offer,
+          parsedResponse,
+          appliedOperationId: atomicExecution?.operation.id ?? null,
+        },
+        publishResourceChanges: atomicExecution?.publishResourceChanges ?? null,
       }
     })
+    if (!consumed) return null
+    await consumed.publishResourceChanges?.()
+    return consumed.interruption
   } catch (error) {
     if (isInterruptionConsumeRace(error)) return null
     throw error
@@ -612,7 +699,7 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
     latestUserText: string
     visibleMessages?: UIMessage[]
   },
-): Promise<(ProjectAgentChoiceInterruptionRecord & { parsedResponse: EditFirstChoiceDecision }) | null> {
+): Promise<ProjectAgentConsumedChoiceInterruptionRecord | null> {
   const { assistantId, scopeRef } = buildScope(params)
   return await prisma.$transaction(async (tx) => {
     const record = await tx.projectAgentInterruption.findFirst({
@@ -636,19 +723,36 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
       || offer.card.toolCallId !== params.toolCallId
       || record.toolCallId !== params.toolCallId
     ) return null
-    await assertProjectAgentChoiceOfferCurrent({
-      tx,
-      projectId: params.projectId,
-      userId: params.userId,
-      episodeId: params.episodeId,
-      offer,
-    })
     const parsedResponse = parseProjectAgentChoiceDecision({
       offer,
       response: params.response,
       latestUserText: params.latestUserText,
     })
     if (!isDeepStrictEqual(record.response, parsedResponse)) return null
+    const atomicCommand = resolveEditFirstChoiceAtomicConfirmationCommand(parsedResponse)
+    const appliedActivity = atomicCommand
+      ? await tx.projectAgentActivity.findFirst({
+          where: {
+            runId: params.runId,
+            operationId: atomicCommand.operationId,
+            sourceOperationId: record.operationId,
+            toolCallId: record.toolCallId,
+            choiceType: offer.card.choiceType,
+            status: 'completed',
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { operationId: true },
+        })
+      : null
+    if (!appliedActivity) {
+      await assertProjectAgentChoiceOfferCurrent({
+        tx,
+        projectId: params.projectId,
+        userId: params.userId,
+        episodeId: params.episodeId,
+        offer,
+      })
+    }
     if (params.visibleMessages?.length) {
       await appendProjectAssistantThreadMessagesInTransaction(tx, {
         projectId: params.projectId,
@@ -669,6 +773,7 @@ export async function readRetryableConsumedProjectAgentChoiceInterruption(
       payload: record.payload,
       offer,
       parsedResponse,
+      appliedOperationId: appliedActivity?.operationId ?? null,
     }
   })
 }

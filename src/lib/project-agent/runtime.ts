@@ -166,8 +166,10 @@ function resolveProjectAgentRunFailureTerminal(params: {
 
 /**
  * Control resolved by the route from the structured request body + database.
- * Choice controls carry only the submitted user decision. The model chooses
- * the next tool from live workflow availability.
+ * Choice controls carry the submitted user decision plus the identity of an
+ * atomic confirmation Operation already committed by the Choice transaction,
+ * when applicable. The model chooses only the subsequent tool from the
+ * refreshed workflow availability.
  */
 export type ProjectAgentResolvedControl =
   | {
@@ -186,6 +188,7 @@ export type ProjectAgentResolvedControl =
     choiceType: EditFirstChoiceType
     toolCallId: string | null
     cardId: string | null
+    appliedOperationId: string | null
     choiceResult: EditFirstChoiceResult
   }
   | {
@@ -791,7 +794,7 @@ export async function createProjectAgentChatResponse(input: {
     userId: input.userId,
     episodeId: context.episodeId || null,
   })
-  const phase = control.kind === 'choice'
+  const phase = control.kind === 'choice' && !control.appliedOperationId
     ? {
         ...resolvedPhase,
         editFirstWorkflow: resolveEditFirstWorkflowChoice(

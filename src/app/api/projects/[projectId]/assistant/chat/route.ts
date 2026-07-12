@@ -15,6 +15,7 @@ import {
   acquireProjectAgentRunLock,
   safelyReleaseProjectAgentRunLock,
 } from '@/lib/project-agent/run-lock'
+import { startProjectAgentRunHeartbeat } from '@/lib/project-agent/run-heartbeat'
 import {
   createProjectAgentControlVisibleUserMessageId,
   parseProjectAgentControlAction,
@@ -265,12 +266,15 @@ interface ResolvedProjectAgentControlCommand {
  * from message history.
  */
 async function resolveProjectAgentControl(params: {
+  request: NextRequest
   controlAction: ProjectAgentControlAction | null
   scope: ProjectAgentControlScope
   messages: UIMessage[]
   run: ProjectAgentRunRecord
   declinedInterruptions: readonly DeclinedProjectAgentInterruption[]
   visibleUserMessages: UIMessage[]
+  operationSignal: AbortSignal | null
+  locale: string | null
 }): Promise<ResolvedProjectAgentControlCommand> {
   const { controlAction, scope } = params
 
@@ -321,15 +325,19 @@ async function resolveProjectAgentControl(params: {
   }
 
   if (controlAction.type === 'choice_response') {
+    if (!params.operationSignal) throw new Error('PROJECT_AGENT_CHOICE_OPERATION_SIGNAL_REQUIRED')
     const latestUserText = readLatestVisibleUserText(params.messages)
     const choiceParams = {
       ...scope,
+      request: params.request,
       runId: controlAction.runId,
       interruptionId: controlAction.interruptionId,
       cardId: controlAction.cardId,
       toolCallId: controlAction.toolCallId,
       response: controlAction.output as Prisma.InputJsonObject,
       latestUserText,
+      operationSignal: params.operationSignal,
+      locale: params.locale,
       visibleMessages: params.visibleUserMessages,
     }
     const consumed = await consumeProjectAgentChoiceInterruption(choiceParams)
@@ -347,6 +355,7 @@ async function resolveProjectAgentControl(params: {
         choiceType: consumedChoice.offer.card.choiceType,
         toolCallId: consumedChoice.offer.card.toolCallId,
         cardId: consumedChoice.offer.card.cardId,
+        appliedOperationId: consumedChoice.appliedOperationId,
         choiceResult: buildEditFirstChoiceResultFromDecision({
           decision: consumedChoice.parsedResponse,
           toolCallId: consumedChoice.offer.card.toolCallId,
@@ -502,14 +511,38 @@ export const POST = apiHandler(async (
         run = created.run
         declinedInterruptions = created.declinedInterruptions
       }
-      const resolvedControl = await resolveProjectAgentControl({
-        controlAction,
-        scope,
-        messages,
-        run,
-        declinedInterruptions,
-        visibleUserMessages,
-      })
+      const choiceOwnershipController = controlAction?.type === 'choice_response'
+        ? new AbortController()
+        : null
+      const choiceHeartbeat = choiceOwnershipController
+        ? startProjectAgentRunHeartbeat({
+            runId: run.id,
+            runLock,
+            onOwnershipLost: (error) => {
+              if (!choiceOwnershipController.signal.aborted) choiceOwnershipController.abort(error)
+            },
+          })
+        : null
+      const resolvedControl = await (async () => {
+        try {
+          return await resolveProjectAgentControl({
+            request,
+            controlAction,
+            scope,
+            messages,
+            run,
+            declinedInterruptions,
+            visibleUserMessages,
+            operationSignal: choiceOwnershipController?.signal ?? null,
+            locale: readNonEmptyString(body.locale),
+          })
+        } finally {
+          await choiceHeartbeat?.stop()
+        }
+      })()
+      if (choiceOwnershipController?.signal.aborted) {
+        throw choiceOwnershipController.signal.reason
+      }
       const control = resolvedControl.control
       if (controlAction) {
         if (resolvedControl.retryInterruptionId) {

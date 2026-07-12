@@ -214,6 +214,7 @@
         "src/app/api/sse/route.ts",
         "src/lib/query/hooks/useSSE.ts",
         "src/lib/query/workspace-sse-event-sequence.ts",
+        "docs/architecture/incidents/assistant-choice-command-atomicity-2026-07-12",
         "prisma/migrations/20260711173000_remove_plan_run_persistence/migration.sql",
         "prisma/migrations/20260711220000_add_project_agent_execution_handoffs/migration.sql"
       ],

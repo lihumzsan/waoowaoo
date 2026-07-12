@@ -1,5 +1,7 @@
 # Assistant nextAction 停止误判复发治理
 
+> 后续收敛：本事故关于“任意剩余 `nextAction` 不得由服务端自动执行”的结论保持有效；结构化 Choice 中已由用户明确发起的确定性确认命令不再被视为剩余 `nextAction`，而是在 Choice 消费事务中调用 registry 映射的唯一 Operation。见 [Assistant Choice 确认命令原子化](../assistant-choice-command-atomicity-2026-07-12/README.md)。
+
 ## 分类与证据
 
 - 任务类型：D（Architecture Incident）。
@@ -101,15 +103,15 @@
 
 产品修复提交后，用户授权独立测试收敛阶段。没有新增场景清单；既有
 `GJ-MODEL-STOPS-AFTER-CONFIRM` 现在从空项目经过真实 UI、Task、MySQL、
-Redis、worker、Outbox 与 Session 路径到达制作规划确认，只在外部模型边界
-注入“`confirm_bible` 成功后正常停止”。只读 oracle 断言 Bible confirmed、
+Redis、worker、Outbox 与 Session 路径到达制作规划确认。后续原子化事故把
+`confirm_bible` 移入 Choice 消费事务，因此场景改为在确认后的首个模型回合正常停止。只读 oracle 仍断言 Bible confirmed、
 Run completed、Workflow 为 `ready_to_generate_style_previews`，且视觉候选、
 图片 Task、ApprovalGrant 与 OperationExecution 均为零。
 
 本阶段完成的既有防线修复：
 
 - 删除 `workflowNextActionIsObligation` 的旧 Logic 断言。
-- model-stop provider 只在已观察到完成的 `confirm_bible` tool call 时停止，不再在任意首个 Tool output 后停止。
+- model-stop provider 只在已观察到完成的制作规划 Choice 以及刷新后的 `ready_to_generate_style_previews` 状态时停止，不再等待已经删除的模型 `confirm_bible` tool call。
 - 场景声明与真实入口统一为 `not_started → ready_to_generate_style_previews`，且 `allowFailedRun=false`。
 - `npm run test:golden:variant:model-stop`：1 passed，0 failed，0 skipped，0 todo。
 - 相关 Logic/Harness：3 files、26 tests passed，0 skipped，0 todo；`npm run typecheck` passed。

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
 
 const prismaMock = vi.hoisted(() => ({
   $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback(prismaMock)),
@@ -12,6 +13,9 @@ const prismaMock = vi.hoisted(() => ({
       runVersion: number
       eventSeq: bigint
     }>> => []),
+  },
+  projectAgentActivity: {
+    findFirst: vi.fn(async () => null),
   },
   projectEditBible: {
     findFirst: vi.fn(),
@@ -76,6 +80,8 @@ const choiceOffer = {
 
 const choiceScope = {
   ...scope,
+  request: new NextRequest('http://localhost/api/projects/project-1/assistant/chat'),
+  operationSignal: new AbortController().signal,
   cardId: 'card-1',
   toolCallId: 'tool-1',
   latestUserText: 'canonical brief',
