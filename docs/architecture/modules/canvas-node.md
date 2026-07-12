@@ -12,7 +12,8 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - **CN-01 — 稳定身份与范围。** 节点 ID 必须由持久业务资源和明确 scope 派生；禁止用名称、数组下标、渲染顺序或临时 stream id 作为身份。
 - **CN-02 — 业务状态单一。** DB/Task 的终态与明确 runtime 状态才是节点业务状态来源；不得从历史消息、DOM 或文案反推流程是否运行。
-- **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格候选必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。视觉风格候选记录与 direct image Task 在计划事务中一一对应，不再存在父 Task 或以 Bible id 伪造的占位运行目标。
+- **CN-02A — 运行目标按产物隔离。** 源剧本、制作规划、视觉风格候选必须分别订阅 `ProjectEditSourceScript/EDIT_SOURCE_SCRIPT_GENERATE`、`ProjectEditBible/EDIT_BIBLE_GENERATE`、`ProjectEditStylePreview/EDIT_STYLE_PREVIEW_IMAGE`；共享数据库主记录不等于共享运行状态。视觉风格候选记录与 direct image Task 在计划事务中一一对应，不再存在父 Task 或以 Bible id 伪造的运行目标；Canvas 可把三个明确 target 聚合进同一个业务节点，但不得丢失任一 target 的失败、重试或终态。
+- **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。Task 提交后 Canvas 只投影 `editStyleBible:${ProjectEditBible.id}`：任一候选运行时为运行中，全部成功且未确认时为等待选择，确认后同一 identity 原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
@@ -35,6 +36,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - renderer 运行态只读取最终 `data.lifecycle`；禁止恢复 `__running`、operationId pending switch 或把 DB `generating` 本地改写为 `ready`。
 - DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
 - Task/Mutation 受影响资源契约：`src/lib/workspace-resource/resource-impact.ts`；禁止从 TaskType 或 target 文案猜测 Query。
+- 视觉风格候选集合的共享纯 View：`src/lib/edit-script/style-preview-set-view.ts`；Assistant 与 Canvas 不得各自重新解释候选可见性、生成、完成、确认和失败语义。
 - 终态通知到正式 Query：`src/lib/query/workspace-sse-event-sync.ts` 与 `src/lib/query/resource-change-sync.ts`；SSE 不直接调用 `setQueryData` 写业务资源。
 - SSE 去重、replay cursor 与 Task 终态水位：`src/lib/query/workspace-sse-event-sequence.ts`；同一 Task 到达终态后拒绝晚到 lifecycle/stream，只有被接受的事件才进入 Cache 与 runtime。
 - 源剧本单一 normalizer：`src/lib/edit-bible/source-script-segments.ts`。
@@ -51,6 +53,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
 - Canvas guards 阻止旧 lifecycle 字段、第二 resolver、history inference、server mirror 和 children-state Presence 回流；它们不替代真实浏览器渲染与交互。
+- 视觉风格主链必须在真实 Task processing 窗口观察单一运行中 Style Bible 节点，并在 Choice 确认与 reload 后观察相同 node identity 的正式内容；只验证终态 workflow stage 或 registry 完整性不构成覆盖。
 ## 历史回归
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
@@ -59,6 +62,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle；详见 [2026-07-12 structured-stream preview 事故](../incidents/canvas-structured-stream-preview-2026-07-12/README.md)。
 - `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write，详见 [动效 Presence 收敛](../canvas-motion-presence-convergence.md)。
 - `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint，详见 [Canvas 展开内容缩放模糊事故](../incidents/canvas-motion-rasterization-2026-07-12/README.md)。
+- 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，详见 [视觉风格投影回归](../incidents/style-preview-projection-regression-2026-07-12/README.md)。
 
 ## 修改检查表
 

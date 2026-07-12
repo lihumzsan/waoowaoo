@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
+import { buildEditStylePreviewSetView } from '@/lib/edit-script/style-preview-set-view'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import { TASK_TYPE } from '@/lib/task/types'
 import type {
@@ -709,6 +710,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const panelsByShot = panelByShotId(storyboards)
   const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
   const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
+  const stylePreviewSetView = buildEditStylePreviewSetView({
+    previews: editBible?.stylePreviews ?? [],
+  })
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
   const activeSourceScriptTaskTarget = findActiveTaskTarget(
@@ -852,69 +856,23 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     if (sourceScriptNodeId) edges.push(createEdge(`edge:${sourceScriptNodeId}:${bibleNodeId}`, sourceScriptNodeId, bibleNodeId))
   }
 
-  const stylePreviewCandidates = editBible?.stylePreviews ?? []
-  const displayableStylePreviewCandidates = stylePreviewCandidates.filter((preview) => (
-    Boolean(preview.taskId)
-    || preview.status === 'completed'
-    || preview.status === 'confirmed'
-    || preview.status === 'failed'
-  ))
-  const stylePreviewNodeIds: string[] = []
   const stylePreviewStartY = (sourceScriptNodeId
     ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96
     : STAGE_START_Y) + ROW_GAP_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height
-  if (editBible && !styleBibleDetails) {
-    displayableStylePreviewCandidates.forEach((preview, index) => {
-      const nodeId = workspaceNodeId.editStylePreview(preview.id)
-      const previewDetails = buildStyleBibleDetails(preview.styleBible)
-      const completed = preview.status === 'completed' || preview.status === 'confirmed'
-      const failed = preview.status === 'failed'
-      stylePreviewNodeIds.push(nodeId)
-      nodes.push(createMediaNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, {
-          x: STORY_COLUMN_X + index * (WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width + 44),
-          y: stylePreviewStartY,
-        }),
-        width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
-        loadingContext: { styleImageUrl: preview.imageUrl },
-        data: {
-          projectId,
-          episodeName,
-          kind: 'editStylePreview',
-          layoutNodeType: 'editStylePreview',
-          targetType: 'editStylePreview',
-          targetId: preview.id,
-          title: preview.title,
-          eyebrow: translate('nodes.editStylePreview.eyebrow'),
-          body: preview.summary || translate('nodes.editStylePreview.body'),
-          meta: completed ? translate('nodes.editStylePreview.meta') : '',
-          ...(completed
-            ? workspaceCanvasSucceededResourcePresentation()
-            : failed
-              ? workspaceCanvasFailedResourcePresentation()
-              : workspaceCanvasPendingResourcePresentation()),
-          previewImageUrl: preview.imageUrl,
-          styleBibleDetails: previewDetails ?? undefined,
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(preview.id)),
-          onAction,
-        },
-      }))
-      if (bibleNodeId) edges.push(createEdge(`edge:${bibleNodeId}:${nodeId}`, bibleNodeId, nodeId))
-    })
-  }
-
   let styleBibleNodeId: string | null = null
-  if (styleBibleDetails && editBible) {
+  if (editBible && (styleBibleDetails || stylePreviewSetView)) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
+    const stylePreviewRuntimeTargets = stylePreviewSetView?.allCandidates.flatMap((candidate) => {
+      const target = TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(candidate.id)
+      return target ? [target] : []
+    }) ?? []
+    const hasGeneratingPreview = stylePreviewSetView?.hasGeneratingPreview ?? false
+    const hasFailedPreview = stylePreviewSetView?.hasFailedPreview ?? false
     nodes.push(createMediaNode({
       id: styleBibleNodeId,
       position: layoutPosition(savedLayouts, styleBibleNodeId, {
         x: STORY_COLUMN_X,
-        y: stylePreviewNodeIds.length > 0
-          ? stylePreviewStartY + WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height + 96
-          : stylePreviewStartY,
+        y: stylePreviewStartY,
       }),
       width: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.width,
       height: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE.height,
@@ -926,21 +884,32 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         layoutNodeType: 'editStyleBible',
         targetType: 'editStyleBible',
         targetId: editBible.id,
-        title: translate('nodes.editStyleBible.title'),
+        title: translate(styleBibleDetails
+          ? 'nodes.editStyleBible.title'
+          : hasGeneratingPreview
+            ? 'nodes.editStyleBible.pendingTitle'
+            : hasFailedPreview
+              ? 'nodes.editStyleBible.failedTitle'
+              : 'nodes.editStyleBible.waitingTitle'),
         eyebrow: translate('nodes.editStyleBible.eyebrow'),
-        body: styleBibleDetails.styleSummary ?? translate('nodes.editStyleBible.body'),
-        meta: translate('status.succeeded'),
-        ...workspaceCanvasSucceededResourcePresentation(),
+        body: styleBibleDetails?.styleSummary ?? translate(hasGeneratingPreview
+          ? 'nodes.editStyleBible.pendingBody'
+          : hasFailedPreview
+            ? 'nodes.editStyleBible.failedBody'
+            : 'nodes.editStyleBible.waitingBody'),
+        meta: styleBibleDetails ? translate('status.succeeded') : '',
+        ...(styleBibleDetails
+          ? workspaceCanvasSucceededResourcePresentation()
+          : hasFailedPreview && !hasGeneratingPreview
+            ? workspaceCanvasFailedResourcePresentation()
+            : workspaceCanvasPendingResourcePresentation()),
         previewImageUrl: stylePreviewImageUrl,
-        styleBibleDetails,
+        styleBibleDetails: styleBibleDetails ?? undefined,
+        runtimeTargets: stylePreviewRuntimeTargets,
         onAction,
       },
     }))
-    if (stylePreviewNodeIds.length > 0) {
-      stylePreviewNodeIds.forEach((previewNodeId) => {
-        edges.push(createEdge(`edge:${previewNodeId}:${styleBibleNodeId}`, previewNodeId, styleBibleNodeId as string))
-      })
-    } else if (bibleNodeId) {
+    if (bibleNodeId) {
       edges.push(createEdge(`edge:${bibleNodeId}:${styleBibleNodeId}`, bibleNodeId, styleBibleNodeId))
     }
   }

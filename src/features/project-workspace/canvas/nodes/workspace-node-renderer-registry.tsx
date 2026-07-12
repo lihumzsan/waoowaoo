@@ -10,7 +10,6 @@ import { EditScriptNodeRenderer } from './renderers/edit-script'
 import { EditShotExecutionPlanNodeRenderer } from './renderers/edit-shot-execution-plan'
 import { EditSourceScriptNodeRenderer } from './renderers/edit-source-script'
 import { EditStyleBibleNodeRenderer } from './renderers/edit-style-bible'
-import { EditStylePreviewNodeRenderer } from './renderers/edit-style-preview'
 import { FinalTimelineNodeRenderer } from './renderers/final-timeline'
 import { ImageAssetNodeRenderer } from './renderers/image-asset'
 import { ShotNodeRenderer } from './renderers/shot'
@@ -26,7 +25,6 @@ export const WORKSPACE_CANVAS_NODE_RENDERERS = {
   finalTimeline: FinalTimelineNodeRenderer,
   editSourceScript: EditSourceScriptNodeRenderer,
   editBible: EditBibleNodeRenderer,
-  editStylePreview: EditStylePreviewNodeRenderer,
   editStyleBible: EditStyleBibleNodeRenderer,
   editPipelineStep: EditPipelineStepNodeRenderer,
   editProcessGroup: EditProcessGroupNodeRenderer,

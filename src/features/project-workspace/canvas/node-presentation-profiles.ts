@@ -140,16 +140,6 @@ const WORKSPACE_CANVAS_NODE_PRESENTATION_PROFILES = {
     defaultExpanded: false,
     disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
   },
-  editStylePreview: {
-    collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
-    expanded: {
-      width: 620,
-      height: 760,
-    },
-    expandedLayout: 'stack',
-    defaultExpanded: false,
-    disclosure: STREAM_AWARE_COLLAPSIBLE_DISCLOSURE,
-  },
   editStyleBible: {
     collapsed: WORKSPACE_CANVAS_EDIT_STYLE_BIBLE_NODE_SIZE,
     expanded: {

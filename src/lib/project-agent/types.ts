@@ -258,23 +258,6 @@ export interface TaskBatchSubmittedPartData {
   mutationBatchId?: string | null
 }
 
-export interface EditStylePreviewGenerationPartData {
-  operationId: 'generate_edit_style_previews'
-  agentRunId: string
-  projectId: string
-  episodeId: string
-  bibleId: string
-  items: Array<{
-    id: string
-    styleKey: `style_${'a' | 'b' | 'c'}` | `style_${'a' | 'b' | 'c'}_${number}`
-    title: string
-    summary: string
-    // 追加候选在「建行 → 派发任务 → 回填 taskId」之间存在窗口；taskId 缺失时仍需展示成生成中。
-    taskId?: string
-    aspectRatio?: '9:16' | '16:9' | '21:9'
-  }>
-}
-
 export interface ProjectAssistantContextSnapshot {
   projectId: string
   projectName: string
@@ -318,7 +301,6 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-stop'
   | 'data-assistant-choice-card'
   | 'data-assistant-choice-resolved'
-  | 'data-edit-style-preview-generation'
   | 'data-project-phase'
   | 'data-task-submitted'
   | 'data-task-batch-submitted'

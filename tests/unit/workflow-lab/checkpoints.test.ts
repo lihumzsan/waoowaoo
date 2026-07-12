@@ -6,6 +6,7 @@ import {
 } from '@/lib/workflow-lab/checkpoints'
 import { addWorkflowLabPlanTargetReplacements } from '@/lib/workflow-lab/clone-json'
 import {
+  shouldWorkflowLabCloneConfirmedStyleBible,
   shouldWorkflowLabKeepAssetRequirementTarget,
   shouldWorkflowLabKeepChapterRenderOutcome,
 } from '@/lib/workflow-lab/clone-stage'
@@ -71,6 +72,13 @@ describe('Workflow Lab checkpoint authority', () => {
     expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_generate_videos')).toBe(false)
     expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_render_chapters')).toBe(false)
     expect(shouldWorkflowLabKeepChapterRenderOutcome('ready_to_generate_bgm_score')).toBe(true)
+  })
+
+  it('does not leak a confirmed Style Bible into generation or choice checkpoints', () => {
+    expect(shouldWorkflowLabCloneConfirmedStyleBible('bible_ready_for_review')).toBe(false)
+    expect(shouldWorkflowLabCloneConfirmedStyleBible('style_preview_generating')).toBe(false)
+    expect(shouldWorkflowLabCloneConfirmedStyleBible('needs_style_choice')).toBe(false)
+    expect(shouldWorkflowLabCloneConfirmedStyleBible('ready_to_generate_edit_script')).toBe(true)
   })
 
   it('does not guess an interruption when a historical tool-call identity is duplicated', () => {

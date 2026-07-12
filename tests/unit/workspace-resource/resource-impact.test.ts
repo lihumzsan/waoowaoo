@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 import {
+  extractWorkspaceResourceRefsFromWriteResult,
   extractWorkspaceResourceRefsFromTaskLifecycleEvent,
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/workspace-resource/resource-impact'
@@ -22,6 +23,37 @@ function kindsForTask(input: {
 }
 
 describe('resource-impact', () => {
+  it('invalidates the edit Bible when style preview submission or confirmation writes a target result', () => {
+    for (const result of [
+      {
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'preview-1',
+        taskIds: ['task-1', 'task-2', 'task-3'],
+      },
+      {
+        id: 'preview-1',
+        projectId: 'project-1',
+        episodeId: 'episode-1',
+        status: 'confirmed',
+        targetType: 'ProjectEditStylePreview',
+        targetId: 'preview-1',
+      },
+    ]) {
+      expect(extractWorkspaceResourceRefsFromWriteResult({
+        result,
+        fallbackProjectId: 'project-1',
+        fallbackEpisodeId: 'episode-1',
+      })).toEqual([
+        { kind: WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId: 'project-1', episodeId: 'episode-1' },
+        { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
+      ])
+    }
+  })
+
   it('declares edit pipeline resources for edit generation tasks', () => {
     expect(kindsForTask({
       taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,

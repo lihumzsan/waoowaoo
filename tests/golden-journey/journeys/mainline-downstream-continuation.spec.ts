@@ -19,9 +19,12 @@ import {
   type GoldenSourceFixtureManifest,
 } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
+import { readGoldenOracleSnapshot } from '../oracle/reader'
+import { setGoldenMediaStatusDelay } from '../providers/control'
 import { readFile } from 'node:fs/promises'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import { GOLDEN_CHECKPOINTABLE_STAGES } from '../contracts/stages'
+import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 
 interface GoldenStorageState {
   readonly cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0]
@@ -35,6 +38,16 @@ function toGoldenScope(scope: {
     projectId: scope.projectId,
     episodeId: scope.episodeId,
   }
+}
+
+async function readGoldenEditBibleId(scope: {
+  readonly projectId: string
+  readonly episodeId: string
+}): Promise<string> {
+  const snapshot = await readGoldenOracleSnapshot(scope)
+  const id = snapshot.domain.bibles[0]?.id
+  if (typeof id !== 'string' || !id.trim()) throw new Error('GOLDEN_EDIT_BIBLE_ID_MISSING')
+  return id
 }
 
 async function forkGoldenCheckpointWhenReady(input: {
@@ -338,12 +351,37 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       timeout: 60_000,
       message: 'AI must raise the paid style-generation Approval after Bible confirmation',
     }).toBe('approval')
+    await expect(page.getByText('成功 · 确认制作规划', { exact: true })).toHaveCount(1)
     await reloadGoldenBoundary(page, 'approval')
-    await submitGoldenBoundary(page, 'approval')
-    await expect.poll(async () => await readGoldenWorkflowStage(page, scope), {
-      timeout: 30_000,
-      message: 'style Approval must durably submit the real image tasks',
-    }).not.toBe('ready_to_generate_style_previews')
+    await setGoldenMediaStatusDelay(15_000)
+    try {
+      await submitGoldenBoundary(page, 'approval')
+      await expect.poll(async () => {
+        const snapshot = await readGoldenOracleSnapshot(scope)
+        const tasks = snapshot.tasks.filter((task) => task.type === 'edit_style_preview_image')
+        return tasks.length === 3 && tasks.every((task) => task.status === 'queued' || task.status === 'processing')
+      }, {
+        timeout: 30_000,
+        message: 'style Approval must durably submit three still-running image tasks',
+      }).toBe(true)
+
+      await expect(page.getByText('正在生成视觉风格候选图', { exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText('暮色手绘惊悚', { exact: true })).toBeVisible()
+      await expect(page.getByText('风格化立体寓言', { exact: true })).toBeVisible()
+      await expect(page.getByText('剪纸影戏迷局', { exact: true })).toBeVisible()
+
+      const bibleId = await readGoldenEditBibleId(scope)
+      const styleBibleNode = page.locator(`article[data-node-id="${workspaceNodeId.editStyleBible(bibleId)}"]`)
+      await expect(styleBibleNode).toHaveCount(1)
+      await expect(styleBibleNode).toContainText('Style Bible 生成中')
+      await expect.poll(async () => styleBibleNode.getAttribute('data-lifecycle-phase'), {
+        timeout: 30_000,
+        message: 'the single Style Bible node must aggregate the running preview targets',
+      }).toMatch(/^(queued|processing)$/)
+      await expect(page.locator('article[data-node-id^="edit-style-preview:"]')).toHaveCount(0)
+    } finally {
+      await setGoldenMediaStatusDelay(0)
+    }
     await attachGoldenOracleEvidence(testInfo, scope, 'golden-style-approval-submitted')
     await recordGoldenCheckpointSources({ page, scope })
   })
@@ -356,12 +394,41 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       stage: 'needs_style_choice',
       testInfo,
     })
+    const bibleId = await readGoldenEditBibleId(scope)
+    await page.goto(
+      `/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`,
+      { waitUntil: 'domcontentloaded' },
+    )
+    const styleBibleNode = page.locator(`article[data-node-id="${workspaceNodeId.editStyleBible(bibleId)}"]`)
+    await expect(styleBibleNode).toHaveCount(1)
+    await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'pending')
+    await expect(styleBibleNode).toContainText('等待选择视觉风格')
+
     await submitGoldenCheckpointBoundary({
       page,
       scope,
       stage: 'needs_style_choice',
       boundary: 'style_choice',
     })
+    await expect.poll(async () => {
+      const snapshot = await readGoldenOracleSnapshot(scope)
+      return snapshot.activities.some((activity) => (
+        activity.operationId === 'plan_chapters'
+        && (activity.status === 'running' || activity.status === 'completed')
+      )) || snapshot.tasks.some((task) => task.operationId === 'plan_chapters')
+    }, {
+      timeout: 60_000,
+      message: 'the refreshed post-style workflow must let AI submit plan_chapters without a user wake-up message',
+    }).toBe(true)
+    await expect(page.getByText('成功 · 选择视觉风格', { exact: true })).toHaveCount(1)
+    await expect(page.getByText('成功 · 确认视觉风格', { exact: true })).toHaveCount(0)
+    await expect(styleBibleNode).toHaveCount(1)
+    await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded', { timeout: 30_000 })
+    await expect(styleBibleNode).toContainText('Style Bible')
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(styleBibleNode).toHaveCount(1)
+    await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded')
+    await expect(page.locator('article[data-node-id^="edit-style-preview:"]')).toHaveCount(0)
     await recordGoldenCheckpointSources({ page, scope })
   })
 

@@ -762,15 +762,14 @@
           "pendingBody": "AI 正在根据创作问诊结果创作完整可拍摄剧本。",
           "pendingMeta": "生成完成后由 assistant 发起剧本确认"
         },
-        "editStylePreview": {
-          "pendingTitle": "视觉风格生成中",
-          "pendingBody": "AI 正在根据制作规划生成视觉风格候选和九宫格预览。",
-          "eyebrow": "风格候选",
-          "body": "根据剧本生成的九宫格影片基调预览。",
-          "meta": "确认后作为唯一 Style Bible"
-        },
         "editStyleBible": {
           "title": "Style Bible",
+          "pendingTitle": "Style Bible 生成中",
+          "pendingBody": "AI 正在根据制作规划生成视觉风格候选；候选图将在右侧 Assistant 中展示。",
+          "waitingTitle": "等待选择视觉风格",
+          "waitingBody": "视觉风格候选已生成，请在右侧 Assistant 中选择一个风格。",
+          "failedTitle": "Style Bible 生成失败",
+          "failedBody": "视觉风格候选未能全部生成，请在右侧 Assistant 中查看失败原因并重试。",
           "eyebrow": "风格圣经",
           "body": "全链路统一使用的画面、镜头和声音滤镜风格规则。",
           "meta": "资产、分镜和视频提示词共用的唯一风格来源"

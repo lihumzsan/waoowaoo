@@ -47,3 +47,16 @@ export async function setGoldenMediaScenario(
   })
   if (!response.ok) throw new Error(`GOLDEN_MEDIA_CONTROL_HTTP_${String(response.status)}`)
 }
+
+export async function setGoldenMediaStatusDelay(delayMs: number): Promise<void> {
+  const descriptor = JSON.parse(await readFile(
+    path.resolve(process.cwd(), 'artifacts/golden-journey/environment.json'),
+    'utf8',
+  )) as GoldenEnvironmentDescriptor
+  const response = await fetch(`${descriptor.providerBaseUrl}/__golden/media-delay`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ delayMs }),
+  })
+  if (!response.ok) throw new Error(`GOLDEN_MEDIA_DELAY_HTTP_${String(response.status)}`)
+}

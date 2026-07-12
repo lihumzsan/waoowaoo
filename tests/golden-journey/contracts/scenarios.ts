@@ -32,7 +32,7 @@ export const GOLDEN_MAINLINE_SCENARIO = {
 export const GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO = {
   id: 'GJ-DOWNSTREAM-CHECKPOINT-TO-FINAL-DELIVERABLE',
   kind: 'mainline',
-  title: 'a production Workflow Lab checkpoint continues through the real browser workflow to a durable final video',
+  title: 'a production Workflow Lab checkpoint shows the original Assistant style candidates and one stable Canvas Style Bible through processing confirmation reload and final delivery',
   startStage: 'script_ready_for_review',
   expectedTerminal: {
     kind: 'workflow_stage',

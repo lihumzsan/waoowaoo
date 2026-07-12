@@ -15,6 +15,7 @@ import {
   resolveWorkflowLabStylePreviewStatus,
   shouldWorkflowLabCloneEditScript,
   shouldWorkflowLabCloneBible,
+  shouldWorkflowLabCloneConfirmedStyleBible,
   shouldWorkflowLabCloneShotExecutionPlan,
   shouldWorkflowLabCloneStylePreviews,
   shouldWorkflowLabKeepAssetRequirementTarget,
@@ -132,7 +133,9 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
         beatSheetJson: toNullableInputJson(bible.beatSheetJson),
         ledgerJson: toNullableInputJson(bible.ledgerJson),
         emotionalCurveJson: toNullableInputJson(bible.emotionalCurveJson),
-        styleBibleJson: toNullableInputJson(bible.styleBibleJson),
+        styleBibleJson: shouldWorkflowLabCloneConfirmedStyleBible(params.stage)
+          ? toNullableInputJson(bible.styleBibleJson)
+          : Prisma.JsonNull,
         diagnosticsJson: toNullableInputJson(bible.diagnosticsJson),
         version: bible.version,
         status: resolveWorkflowLabBibleStatus(params.stage, bible.status),

@@ -278,6 +278,12 @@ export function extractWorkspaceResourceRefsFromWriteResult(params: {
 }): WorkspaceResourceRef[] {
   const refs: WorkspaceResourceRef[] = []
   for (const data of readWriteResultData(params.result)) {
+    if (isRecord(data) && readString(data.targetType) === 'ProjectEditStylePreview') {
+      const projectId = readString(data.projectId) ?? params.fallbackProjectId
+      const episodeId = readString(data.episodeId) ?? params.fallbackEpisodeId ?? null
+      if (episodeId) refs.push(...editStylePreviewRefs(projectId, episodeId))
+      continue
+    }
     const editBible = readEditBibleRecord(data)
     if (editBible) {
       const projectId = readString(editBible.projectId) ?? params.fallbackProjectId

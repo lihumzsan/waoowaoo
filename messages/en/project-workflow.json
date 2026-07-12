@@ -762,15 +762,14 @@
           "pendingBody": "AI is expanding the creative intake into a complete production-ready script.",
           "pendingMeta": "The assistant will request script confirmation when it is ready"
         },
-        "editStylePreview": {
-          "pendingTitle": "Generating Visual Styles",
-          "pendingBody": "AI is generating visual style candidates and preview grids from the production plan.",
-          "eyebrow": "Style Candidate",
-          "body": "A 3x3 film tone preview generated from the bible.",
-          "meta": "Becomes the single Style Bible"
-        },
         "editStyleBible": {
           "title": "Style Bible",
+          "pendingTitle": "Generating Style Bible",
+          "pendingBody": "AI is generating visual style candidates from the production plan; previews appear in the Assistant on the right.",
+          "waitingTitle": "Choose a Visual Style",
+          "waitingBody": "Visual style candidates are ready. Choose one in the Assistant on the right.",
+          "failedTitle": "Style Bible Generation Failed",
+          "failedBody": "Not all visual style candidates could be generated. Review the failure and retry in the Assistant on the right.",
           "eyebrow": "Style Bible",
           "body": "Shared visual, camera, and sound-filter style rules for the full chain.",
           "meta": "The single style source for assets, storyboards, and video prompts"

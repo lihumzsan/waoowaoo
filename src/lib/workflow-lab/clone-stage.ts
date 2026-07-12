@@ -49,6 +49,10 @@ export function shouldWorkflowLabCloneStylePreviews(stage: EditFirstWorkflowStag
   return workflowLabStageAtLeast(stage, 'needs_style_choice')
 }
 
+export function shouldWorkflowLabCloneConfirmedStyleBible(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_edit_script')
+}
+
 export function shouldWorkflowLabCloneEditScript(stage: EditFirstWorkflowStage): boolean {
   return workflowLabStageAtLeast(stage, 'ready_to_generate_assets')
 }

@@ -772,7 +772,6 @@ export function useWorkspaceAssistantMessagePartComponents({
                 onSubmitChoiceResponse={onSubmitChoiceResponse}
               />
             ),
-        'edit-style-preview-generation': HiddenRuntimeContextDataCard,
         'agent-interruption-resolved': HiddenRuntimeContextDataCard,
         'assistant-choice-resolved': HiddenRuntimeContextDataCard,
         'project-phase': ProjectPhaseDataCard,

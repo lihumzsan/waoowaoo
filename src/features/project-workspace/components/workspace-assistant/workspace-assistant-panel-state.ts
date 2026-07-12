@@ -1,11 +1,29 @@
 import type { ProjectAgentRunPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentSessionActivity } from '@/lib/project-agent/session-state'
 
+export const WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS = {
+  generate_edit_style_previews: 'stylePreviewGeneration',
+} as const
+
+export type WorkspaceAssistantActiveOperationPresentation =
+  | (typeof WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS)[keyof typeof WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS]
+  | 'genericRun'
+
+export function resolveWorkspaceAssistantActiveOperationPresentation(
+  operationId: string | null | undefined,
+): WorkspaceAssistantActiveOperationPresentation | null {
+  if (!operationId) return null
+  return WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS[
+    operationId as keyof typeof WORKSPACE_ASSISTANT_ACTIVE_OPERATION_PRESENTATIONS
+  ] ?? 'genericRun'
+}
+
 export function shouldShowWorkspaceAssistantExternalTaskRunCard(params: {
   storageLoading: boolean
   operationId: string | null | undefined
 }): boolean {
-  return !params.storageLoading && Boolean(params.operationId)
+  return !params.storageLoading
+    && resolveWorkspaceAssistantActiveOperationPresentation(params.operationId) === 'genericRun'
 }
 
 export function resolveWorkspaceAssistantExternalTaskOperationId(

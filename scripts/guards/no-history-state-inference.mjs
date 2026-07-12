@@ -72,6 +72,9 @@ const runtimeStatePath = 'src/features/project-workspace/components/workspace-as
 const runtimeState = fs.readFileSync(path.resolve(process.cwd(), runtimeStatePath), 'utf8')
 const renderersPath = 'src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx'
 const renderers = fs.readFileSync(path.resolve(process.cwd(), renderersPath), 'utf8')
+const stylePreviewRendererPath = 'src/features/project-workspace/components/workspace-assistant/EditStylePreviewGenerationDataCard.tsx'
+const stylePreviewRenderer = fs.readFileSync(path.resolve(process.cwd(), stylePreviewRendererPath), 'utf8')
+const assistantRenderers = `${renderers}\n${stylePreviewRenderer}`
 const controlPath = 'src/lib/project-agent/control.ts'
 const control = fs.readFileSync(path.resolve(process.cwd(), controlPath), 'utf8')
 const chatRoutePath = 'src/app/api/projects/[projectId]/assistant/chat/route.ts'
@@ -92,18 +95,17 @@ if (
 ) {
   violations.push('client optimistic and server persisted control messages do not share one canonical identity authority')
 }
-if (!renderers.includes("'edit-style-preview-generation': HiddenRuntimeContextDataCard")) {
-  violations.push(`${renderersPath} restores a rendered historical style-generation surface instead of Session/Choice projection`)
+if (assistantRenderers.includes("'edit-style-preview-generation'")) {
+  violations.push(`${renderersPath} restores the deleted historical style-generation message protocol`)
 }
 for (const marker of [
-  'EditStylePreviewGenerationDataCard',
   'refetchInterval',
   'useTaskTargetStateMap',
   'data.items',
   "targetType: 'ProjectEditStylePreview'",
 ]) {
-  if (renderers.includes(marker)) {
-    violations.push(`${renderersPath} restores private style-preview lifecycle via ${JSON.stringify(marker)}`)
+  if (assistantRenderers.includes(marker)) {
+    violations.push(`${renderersPath} or ${stylePreviewRendererPath} restores private style-preview lifecycle inference via ${JSON.stringify(marker)}`)
   }
 }
 

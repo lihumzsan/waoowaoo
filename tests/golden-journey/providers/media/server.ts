@@ -7,6 +7,7 @@ type GoldenMediaScenario = 'normal' | 'retry-once' | 'terminal-failure'
 interface GoldenFalRequest {
   readonly id: string
   readonly kind: GoldenFalRequestKind
+  readonly createdAt: number
 }
 
 function writeJson(response: ServerResponse, status: number, value: unknown): void {
@@ -75,6 +76,7 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
   const falRequests = new Map<string, GoldenFalRequest>()
   let requestOrdinal = 0
   let scenario = parseMediaScenario(process.env.GOLDEN_MEDIA_SCENARIO ?? 'normal')
+  let statusDelayMs = 0
   let retryableFailureInjected = false
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', requestOrigin(request))
@@ -90,6 +92,22 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
         scenario = parseMediaScenario(record?.scenario)
         retryableFailureInjected = false
         writeJson(response, 200, { ok: true, scenario })
+      }).catch((error: unknown) => {
+        writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+      })
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/__golden/media-delay') {
+      void readJsonBody(request).then((body) => {
+        const record = body && typeof body === 'object' && !Array.isArray(body)
+          ? body as Record<string, unknown>
+          : null
+        const delayMs = record?.delayMs
+        if (!Number.isInteger(delayMs) || (delayMs as number) < 0 || (delayMs as number) > 60_000) {
+          throw new Error(`GOLDEN_MEDIA_DELAY_INVALID:${String(delayMs)}`)
+        }
+        statusDelayMs = delayMs as number
+        writeJson(response, 200, { ok: true, delayMs: statusDelayMs })
       }).catch((error: unknown) => {
         writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
       })
@@ -139,6 +157,10 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
 
     const falRequest = findFalRequestByPath(falRequests, url.pathname)
     if (request.method === 'GET' && falRequest && url.pathname.endsWith('/status')) {
+      if (Date.now() - falRequest.createdAt < statusDelayMs) {
+        writeJson(response, 200, { status: 'IN_PROGRESS' })
+        return
+      }
       writeJson(response, 200, {
         status: 'COMPLETED',
         response_url: `${requestOrigin(request)}/fal-results/${falRequest.id}`,
@@ -173,7 +195,7 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
       requestOrdinal += 1
       const id = `golden_fal_${requestOrdinal}`
       const kind = falRequestKind(url.pathname)
-      falRequests.set(id, { id, kind })
+      falRequests.set(id, { id, kind, createdAt: Date.now() })
       const origin = requestOrigin(request)
       writeJson(response, 200, kind === 'audio'
         ? {

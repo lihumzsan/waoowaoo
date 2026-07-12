@@ -52,14 +52,9 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     stream: supported('editBible'), terminalHandoff: supported('editBible'), rendererKey: 'editBible',
     focus: supported('operation'), conformanceFixture: 'editBible',
   },
-  editStylePreview: {
-    kind: 'editStylePreview', identityScope: 'resource', resource: supported('editBible'), runtime: supported('taskTarget'),
-    stream: notApplicable('Style preview images do not expose structured text items.'), terminalHandoff: supported('editBible'),
-    rendererKey: 'editStylePreview', focus: supported('operation'), conformanceFixture: 'editStylePreview',
-  },
   editStyleBible: {
-    kind: 'editStyleBible', identityScope: 'resource', resource: supported('editBible'), runtime: notApplicable('Confirmed style is persisted content.'),
-    stream: notApplicable('Confirmed style has no active structured stream.'), terminalHandoff: supported('editBible'),
+    kind: 'editStyleBible', identityScope: 'resource', resource: supported('editBible'), runtime: supported('taskTarget'),
+    stream: notApplicable('Style preview image tasks expose runtime state but no structured text items.'), terminalHandoff: supported('editBible'),
     rendererKey: 'editStyleBible', focus: supported('operation'), conformanceFixture: 'editStyleBible',
   },
   editPipelineStep: {

@@ -12,7 +12,6 @@ export type WorkspaceCanvasNodeKind =
   | 'finalTimeline'
   | 'editSourceScript'
   | 'editBible'
-  | 'editStylePreview'
   | 'editStyleBible'
   | 'editPipelineStep'
   | 'editProcessGroup'
@@ -29,7 +28,6 @@ export type WorkspaceCanvasMediaNodeKind = Extract<WorkspaceCanvasNodeKind,
   | 'imageAsset'
   | 'videoClip'
   | 'finalTimeline'
-  | 'editStylePreview'
   | 'editStyleBible'
   | 'videoPlan'
   | 'bgmScore'
@@ -42,7 +40,7 @@ export interface MediaLoadingContext {
   readonly styleImageUrl: string | null
 }
 
-export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editSourceScript' | 'editBible' | 'editStylePreview' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
+export type WorkspaceCanvasTargetType = 'episode' | 'storyboard' | 'panel' | 'videoGroup' | 'editSourceScript' | 'editBible' | 'editStyleBible' | 'editPipelineStep' | 'editScript' | 'editShotExecutionPlan' | 'editAssetRequirement' | 'projectCharacter' | 'projectLocation'
 
 export type WorkspaceCanvasNodeAction =
   | {

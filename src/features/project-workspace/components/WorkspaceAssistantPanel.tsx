@@ -1,9 +1,10 @@
 'use client'
 
-import type { CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AppIcon } from '@/components/ui/icons'
+import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { TextAttachmentUploadDialog } from '@/components/project-assistant/TextAttachmentUploadDialog'
 import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
@@ -33,7 +34,10 @@ import { useWorkspaceAssistantMessageDispatch } from './workspace-assistant/useW
 import { useWorkspaceAssistantPanelResize } from './workspace-assistant/useWorkspaceAssistantPanelResize'
 import { useWorkspaceAssistantPermissionMode } from './workspace-assistant/useWorkspaceAssistantPermissionMode'
 import { useWorkspaceAssistantRuntime } from './workspace-assistant/useWorkspaceAssistantRuntime'
+import { EditStylePreviewGenerationDataCard } from './workspace-assistant/EditStylePreviewGenerationDataCard'
+import { useWorkspaceStylePreviewGenerationView } from './workspace-assistant/useWorkspaceStylePreviewGenerationView'
 import {
+  resolveWorkspaceAssistantActiveOperationPresentation,
   resolveWorkspaceAssistantAwaitingExternalTask,
   resolveWorkspaceAssistantAwaitingUserInput,
   resolveWorkspaceAssistantRunFailureDetail,
@@ -110,6 +114,8 @@ export default function WorkspaceAssistantPanel({
   const panelResize = useWorkspaceAssistantPanelResize()
   const panelLayout = buildWorkspaceAssistantPanelLayout(panelResize.width)
   const composer = useWorkspaceAssistantComposer(assistantRuntime.sendMessage)
+  const [stylePreviewDockCollapsed, setStylePreviewDockCollapsed] = useState(false)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
 
   useWorkspaceAssistantMessageDispatch({
     autoStartDraft,
@@ -127,6 +133,20 @@ export default function WorkspaceAssistantPanel({
     storageLoading: assistantRuntime.storageLoading,
     onActiveOperationChange,
   })
+  const activeOperationPresentation = resolveWorkspaceAssistantActiveOperationPresentation(
+    activeExternalTaskOperationId,
+  )
+  const stylePreviewGenerationView = useWorkspaceStylePreviewGenerationView({
+    projectId,
+    episodeId,
+    enabled: activeOperationPresentation === 'stylePreviewGeneration',
+  })
+  const stylePreviewDockCardKey = stylePreviewGenerationView
+    ? stylePreviewGenerationView.allCandidates.map((candidate) => candidate.id).join(':')
+    : null
+  useEffect(() => {
+    setStylePreviewDockCollapsed(false)
+  }, [stylePreviewDockCardKey])
 
   const pendingInteraction = assistantRuntime.pendingInteraction
   const serverPendingApproval = pendingInteraction?.kind === 'approval' ? pendingInteraction : null
@@ -234,6 +254,27 @@ export default function WorkspaceAssistantPanel({
                         })}
                       />
                     ) : null}
+                    {stylePreviewGenerationView ? (
+                      stylePreviewDockCollapsed ? (
+                        <button
+                          type="button"
+                          onClick={() => setStylePreviewDockCollapsed(false)}
+                          className="flex w-full items-center gap-2 rounded-2xl border border-[var(--glass-stroke-base)] bg-white/95 px-3.5 py-2.5 text-left shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-colors hover:bg-neutral-50"
+                        >
+                          <AppIcon name="imageAlt" className="h-4 w-4 shrink-0 text-[var(--glass-accent-from)]" />
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--glass-text-primary)]">
+                            {t('panel.stylePreviewDockCollapsed', { count: stylePreviewGenerationView.candidates.length })}
+                          </span>
+                          <span className="shrink-0 text-[12px] font-medium text-[var(--glass-text-tertiary)]">{t('panel.stylePreviewDockExpand')}</span>
+                          <AppIcon name="chevronDown" className="h-4 w-4 shrink-0 text-[var(--glass-text-tertiary)]" />
+                        </button>
+                      ) : (
+                        <EditStylePreviewGenerationDataCard
+                          view={stylePreviewGenerationView}
+                          onPreviewImage={setPreviewImageUrl}
+                        />
+                      )
+                    ) : null}
                   </div>
                 </div>
               </ThreadPrimitive.Viewport>
@@ -257,7 +298,10 @@ export default function WorkspaceAssistantPanel({
                     attachDisabled={composer.attachments.length >= PROJECT_ASSISTANT_TEXT_ATTACHMENT_MAX_FILES}
                     assistantPermissionMode={assistantPermissionMode}
                     onChange={composer.setText}
-                    onSubmit={composer.submit}
+                    onSubmit={async () => {
+                      setStylePreviewDockCollapsed(true)
+                      await composer.submit()
+                    }}
                     onStopReply={assistantRuntime.stopReply}
                     onAttachClick={() => composer.setAttachmentDialogOpen(true)}
                     onRemoveAttachment={composer.removeAttachment}
@@ -269,6 +313,9 @@ export default function WorkspaceAssistantPanel({
           </AssistantRuntimeProvider>
         </div>
       </div>
+      {previewImageUrl ? (
+        <ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      ) : null}
       <TextAttachmentUploadDialog
         open={composer.attachmentDialogOpen}
         disabled={

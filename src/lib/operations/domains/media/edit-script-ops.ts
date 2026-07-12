@@ -248,6 +248,8 @@ const confirmEditStylePreviewOutputSchema = z
     episodeId: z.string().min(1),
     status: z.literal('confirmed'),
     aspectRatio: editScriptVideoRatioSchema,
+    targetType: z.literal('ProjectEditStylePreview'),
+    targetId: z.string().min(1),
   })
   .passthrough()
 
@@ -786,7 +788,11 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
           aspectRatio: aspectRatio.data,
           client: transaction,
         })
-        return confirmEditStylePreviewOutputSchema.parse(confirmed)
+        return confirmEditStylePreviewOutputSchema.parse({
+          ...confirmed,
+          targetType: 'ProjectEditStylePreview',
+          targetId: confirmed.id,
+        })
       },
     }),
     [EDIT_FIRST_CHOICE_TOOL_IDS.script_intake]: buildRequestEditChoiceOperation('script_intake'),

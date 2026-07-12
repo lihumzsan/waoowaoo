@@ -47,8 +47,6 @@ export function nodeIconName(kind: WorkspaceCanvasFlowNode['data']['kind']): App
       return 'clipboardCheck'
     case 'editBible':
       return 'bookOpen'
-    case 'editStylePreview':
-      return 'image'
     case 'editStyleBible':
       return 'sparklesAlt'
     case 'editPipelineStep':
@@ -1779,7 +1777,7 @@ export function StyleBibleContent({
 }) {
   const details = data.styleBibleDetails
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-  const shouldShowPreview = (data.kind === 'editStylePreview' || data.kind === 'editStyleBible') && hasText(data.previewImageUrl)
+  const shouldShowPreview = data.kind === 'editStyleBible' && hasText(data.previewImageUrl)
 
   const collapsedContent = (
     <div className="space-y-2">

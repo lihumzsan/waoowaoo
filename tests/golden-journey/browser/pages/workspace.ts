@@ -147,7 +147,10 @@ export async function readGoldenMainlineBoundary(page: Page): Promise<GoldenMain
   if (await visible(page, '补充创作方向')) return 'script_intake'
   if (await visible(page, '确认剧本')) return 'script_review'
   if (await visible(page, '确认制作规划')) return 'bible_review'
-  if (await visible(page, '选择视觉风格')) return 'style_choice'
+  if (
+    await visible(page, '选择视觉风格')
+    && await page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true }).count() > 0
+  ) return 'style_choice'
   if (await visible(page, '审核分镜资产')) return 'asset_review'
   if (await visible(page, '需要确认')) return 'approval'
   if (await page.getByLabel('成片时间线', { exact: true }).count() > 0) return 'final_output'

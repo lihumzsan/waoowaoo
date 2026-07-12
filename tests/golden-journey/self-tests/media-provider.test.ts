@@ -43,6 +43,22 @@ describe('Golden local media provider', () => {
     })
   })
 
+  it('holds FAL status at the real external boundary for processing-state browser oracles', async () => {
+    runningServer = await startGoldenMediaServer()
+    const control = await fetch(`${runningServer.baseUrl}/__golden/media-delay`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ delayMs: 50 }),
+    })
+    await expect(control.json()).resolves.toEqual({ ok: true, delayMs: 50 })
+    const submit = await fetch(`${runningServer.baseUrl}/openai/gpt-image-2`, { method: 'POST' })
+    const request = await submit.json() as { request_id: string }
+    const statusUrl = `${runningServer.baseUrl}/openai/gpt-image-2/requests/${request.request_id}/status`
+    await expect((await fetch(statusUrl)).json()).resolves.toEqual({ status: 'IN_PROGRESS' })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    await expect((await fetch(statusUrl)).json()).resolves.toMatchObject({ status: 'COMPLETED' })
+  })
+
   it('implements the complete FAL music submission status and result protocol', async () => {
     runningServer = await startGoldenMediaServer()
     const submit = await fetch(`${runningServer.baseUrl}/fal-ai/lyria-3`, { method: 'POST' })

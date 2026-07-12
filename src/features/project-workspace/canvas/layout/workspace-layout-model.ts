@@ -79,7 +79,6 @@ export function resolveWorkspaceCanvasLayoutLane(kind: WorkspaceCanvasNodeKind):
   switch (kind) {
     case 'editSourceScript':
     case 'editBible':
-    case 'editStylePreview':
     case 'editStyleBible':
       return 'story'
     case 'editPipelineStep':
