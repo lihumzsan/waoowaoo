@@ -160,11 +160,13 @@ function signalChildTree(child: ChildProcess, signal: NodeJS.Signals): void {
 }
 
 async function waitForApp(children: readonly ChildProcess[]): Promise<void> {
-  for (let attempt = 0; attempt < 180; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const deadChild = children.find((child) => child.exitCode !== null)
     if (deadChild) throw new Error(`GOLDEN_ENVIRONMENT_CHILD_EXITED:${String(deadChild.exitCode)}`)
     try {
-      const response = await fetch(`http://127.0.0.1:${APP_PORT}/api/system/boot-id`)
+      const response = await fetch(`http://127.0.0.1:${APP_PORT}/api/system/boot-id`, {
+        signal: AbortSignal.timeout(2_000),
+      })
       if (response.ok) return
     } catch {
       // The app is still booting.
