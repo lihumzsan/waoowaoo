@@ -6,7 +6,7 @@ import { PRIMARY_APPEARANCE_INDEX } from '@/lib/constants'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { readEpisodeEditBible, readEpisodeEditChapters } from '@/lib/edit-bible'
 import type { Locale } from '@/i18n/routing'
-import { submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
+import { submitPlannedOperationTasks, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
 import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { prisma } from '@/lib/prisma'
@@ -474,19 +474,11 @@ export async function commitProjectEditScriptAssetsOperation(params: {
     throw new ApiError('CONFLICT', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
   }
   const transaction = requireOperationExecutionTransaction(params.ctx)
-  const submitted = new Map<string, Awaited<ReturnType<typeof submitPlannedOperationTask>>>()
   await applyPlanWrites(transaction, metadata)
-
-  for (const task of params.plan.tasks) {
-    submitted.set(
-      task.id,
-      await submitPlannedOperationTask({
-        ctx: params.ctx,
-        task,
-        operationId: 'generate_edit_script_assets',
-      }),
-    )
-  }
+  const submitted = await submitPlannedOperationTasks({
+    ctx: params.ctx,
+    operationId: 'generate_edit_script_assets',
+  })
 
   const submittedTasks: EditScriptAssetGenerationTask[] = []
   const representedPlans = new Set<string>()

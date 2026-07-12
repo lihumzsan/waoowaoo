@@ -8,7 +8,7 @@ import { CHARACTER_ASSET_IMAGE_RATIO, LOCATION_IMAGE_RATIO } from '@/lib/constan
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import type { Locale } from '@/i18n/routing'
-import { createPlannedTask, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import { createPlannedTask, submitPlannedOperationTasks, type OperationPlan } from '@/lib/operations/planning'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import type { EditScriptAssetRevisionPayload, EditScriptAssetRevisionTask } from './types'
 import {
@@ -348,15 +348,16 @@ export async function commitProjectEditScriptAssetRevisions(params: {
   if (!transaction) throw new Error('OPERATION_EXECUTION_TRANSACTION_REQUIRED')
   const metadata = readRevisionPlanMetadata(params.plan)
   const taskById = new Map(params.plan.tasks.map((task) => [task.id, task]))
+  const submitted = await submitPlannedOperationTasks({
+    ctx: params.ctx,
+    operationId: 'revise_edit_script_assets',
+  })
   const submittedTasks: EditScriptAssetRevisionTask[] = []
   for (const item of metadata.items) {
     const task = taskById.get(item.planTaskId)
     if (!task) throw new Error(`EDIT_SCRIPT_ASSET_REVISION_TASK_MISSING:${item.planTaskId}`)
-    const result = await submitPlannedOperationTask({
-      ctx: params.ctx,
-      task,
-      operationId: 'revise_edit_script_assets',
-    })
+    const result = submitted.get(task.id)
+    if (!result) throw new Error(`EDIT_SCRIPT_ASSET_REVISION_RESULT_MISSING:${task.id}`)
     submittedTasks.push({
       requirementId: item.requirementId,
       kind: item.kind,

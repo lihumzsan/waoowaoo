@@ -16,6 +16,7 @@ import type {
 import { createProjectAgentOperationRegistryForApi } from './registry'
 import { assertOperationChannelAllowed } from './channel-policy'
 import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
+import type { SubmitTaskResult } from '@/lib/task/submitter'
 import {
   attachPersistedPlanIdentity,
   persistOperationPlanSnapshot,
@@ -226,7 +227,25 @@ export async function submitPlannedOperationTask(params: {
   ctx: ProjectAgentOperationContext
   task: PlannedTask
   operationId: string
-}) {
+}): Promise<SubmitTaskResult> {
+  const results = await submitPlannedOperationTasks({
+    ctx: params.ctx,
+    operationId: params.operationId,
+  })
+  if (results.size !== 1) {
+    throw new Error(`OPERATION_PLAN_BATCH_SUBMISSION_REQUIRED:${params.operationId}:${String(results.size)}`)
+  }
+  const result = results.get(params.task.id)
+  if (!result) {
+    throw new Error(`OPERATION_PLAN_TASK_RESULT_MISSING:${params.operationId}:${params.task.id}`)
+  }
+  return result
+}
+
+export async function submitPlannedOperationTasks(params: {
+  ctx: ProjectAgentOperationContext
+  operationId: string
+}): Promise<Map<string, SubmitTaskResult>> {
   const authorization = params.ctx.executionAuthorization
   if (!authorization) {
     throw new ApiError('INVALID_PARAMS', {
@@ -238,11 +257,7 @@ export async function submitPlannedOperationTask(params: {
     ...authorization,
     operationSource: params.ctx.source,
   })
-  const result = results.get(params.task.id)
-  if (!result) {
-    throw new Error(`OPERATION_PLAN_TASK_RESULT_MISSING:${params.operationId}:${params.task.id}`)
-  }
-  return result
+  return results
 }
 
 export async function planOperation<Input>(params: {

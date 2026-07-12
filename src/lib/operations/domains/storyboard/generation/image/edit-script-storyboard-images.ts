@@ -12,7 +12,7 @@ import { writeOperationDataPart } from '@/lib/operations/types'
 import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
-  submitPlannedOperationTask,
+  submitPlannedOperationTasks,
   type OperationPlan,
   type PlannedTask,
 } from '@/lib/operations/planning'
@@ -173,14 +173,15 @@ export async function commitGenerateEditScriptStoryboardImagesOperation(
 
   const taskResults: Array<{
     task: PlannedTask
-    result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
+    result: Awaited<ReturnType<typeof submitPlannedOperationTasks>> extends Map<string, infer Result> ? Result : never
   }> = []
+  const submitted = await submitPlannedOperationTasks({
+    ctx,
+    operationId: 'generate_edit_script_storyboard_images',
+  })
   for (const task of plan.tasks) {
-    const result = await submitPlannedOperationTask({
-      ctx,
-      task,
-      operationId: 'generate_edit_script_storyboard_images',
-    })
+    const result = submitted.get(task.id)
+    if (!result) throw new Error(`EDIT_SCRIPT_STORYBOARD_IMAGE_TASK_RESULT_MISSING:${task.id}`)
     taskResults.push({ task, result })
   }
 

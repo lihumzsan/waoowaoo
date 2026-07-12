@@ -40,7 +40,7 @@ import {
 } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { buildEditFirstTextTaskPayload } from '@/lib/edit-script/task-billing'
 import { createTaskBatchKey, readLatestFailedTaskBatchKeyForTarget } from '@/lib/task/batch'
-import { submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
+import { submitPlannedOperationTasks, type OperationPlan } from '@/lib/operations/planning'
 import { planProjectEditStylePreviews, readEditStylePreviewPlanMetadata } from '@/lib/edit-script/style-preview-operation-plan'
 import {
   commitProjectEditScriptAssetsOperation,
@@ -183,16 +183,15 @@ async function submitPlannedEditStylePreviewTasks(
   if (!transaction) throw new Error('OPERATION_EXECUTION_TRANSACTION_REQUIRED')
   const metadata = readEditStylePreviewPlanMetadata(plan)
   const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-  const submitted = await Promise.all(
-    plan.tasks.map(async (task) => ({
-      task,
-      result: await submitPlannedOperationTask({
-        ctx,
-        task,
-        operationId: 'generate_edit_style_previews',
-      }),
-    })),
-  )
+  const results = await submitPlannedOperationTasks({
+    ctx,
+    operationId: 'generate_edit_style_previews',
+  })
+  const submitted = plan.tasks.map((task) => {
+    const result = results.get(task.id)
+    if (!result) throw new Error(`EDIT_STYLE_PREVIEW_TASK_RESULT_MISSING:${task.id}`)
+    return { task, result }
+  })
   await Promise.all(
     submitted.map(({ task, result }) =>
       transaction.projectEditStylePreview.update({

@@ -8,6 +8,7 @@ import {
   createPlannedTask,
   requirePlannedTaskBillingInfo,
   submitPlannedOperationTask,
+  submitPlannedOperationTasks,
   type OperationPlan,
   type PlannedTask,
 } from '@/lib/operations/planning'
@@ -620,20 +621,39 @@ export async function commitPlannedVideoGroupBatch(params: {
   operationId: string
   plan: OperationPlan
 }): Promise<CommittedVideoGroupTask[]> {
+  const transaction = requireOperationExecutionTransaction(params.ctx)
   const metadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
-  const committed: CommittedVideoGroupTask[] = []
-  for (const task of params.plan.tasks) {
+  const prepared = params.plan.tasks.map((task) => {
     const metadata = metadataByTaskId.get(task.id)
     if (!metadata) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_PLAN_TASK_METADATA_MISSING:${task.id}`)
-    committed.push(
-      await commitPlannedVideoGroupTask({
-        ctx: params.ctx,
-        input: params.input,
-        operationId: params.operationId,
-        task,
-        metadata,
-      }),
-    )
+    return { task, metadata }
+  })
+  for (const item of prepared) {
+    await prepareVideoGroupRecordForPlan(transaction, item.metadata)
+  }
+  const submitted = await submitPlannedOperationTasks({
+    ctx: params.ctx,
+    operationId: params.operationId,
+  })
+  const committed: CommittedVideoGroupTask[] = []
+  for (const { task, metadata } of prepared) {
+    const result = submitted.get(task.id)
+    if (!result) throw new Error(`PROJECT_AGENT_VIDEO_GROUP_TASK_RESULT_MISSING:${task.id}`)
+    await transaction.projectVideoGroup.update({
+      where: { id: metadata.groupId },
+      data: {
+        taskId: result.taskId,
+        status: result.status,
+        ...(metadata.sourceMode === 'asset_reference'
+          ? {
+              prompt: metadata.prompt ?? null,
+              referenceImageUrl: metadata.referenceImageUrls?.[0] ?? null,
+              referenceImageMediaId: null,
+            }
+          : {}),
+      },
+    })
+    committed.push({ metadata, result })
   }
   return committed
 }

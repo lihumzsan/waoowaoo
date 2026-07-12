@@ -4,15 +4,14 @@ import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import type { TaskBatchSubmittedPartData } from '@/lib/project-agent/types'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
 import { writeOperationDataPart } from '@/lib/operations/types'
-import { submitPlannedOperationTask, type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
+import { type OperationPlan, type PlannedTask } from '@/lib/operations/planning'
 import { type GenerationSegmentVideoPlanItem } from '@/lib/video-groups/types'
 import { assertNoManagedVideoModelInput, isRecord, normalizeString, type UnknownObject } from './shared'
 import {
   buildEpisodeGenerationSegmentVideoPlan,
-  commitPlannedVideoGroupTask,
+  commitPlannedVideoGroupBatch,
   parseShotIdsJson,
   planVideoGroupTask,
-  readPlannedVideoGroupMetadataByTaskId,
   resolveEditChapterId,
   type PlannedVideoGroupTaskMetadata,
 } from './video-group-planning'
@@ -191,7 +190,6 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
         ]
       })
     : []
-  const videoGroupMetadataByTaskId = readPlannedVideoGroupMetadataByTaskId(params.plan)
   if (params.plan.tasks.length === 0) {
     return {
       success: true,
@@ -207,24 +205,19 @@ export async function commitGenerateEpisodeVideosAutoPlan(params: {
       groupVideoModel: normalizeString(metadata.groupVideoModel),
     }
   }
-  const submitted: Array<{
-    task: PlannedTask
-    result: Awaited<ReturnType<typeof submitPlannedOperationTask>>
-  }> = []
-  for (const task of params.plan.tasks) {
+  const committed = await commitPlannedVideoGroupBatch({
+    ctx: params.ctx,
+    input: params.input,
+    operationId: params.operationId,
+    plan: params.plan,
+  })
+  const submitted = params.plan.tasks.map((task) => {
     const item = itemByTaskId.get(task.id)
     if (!item) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_PLAN_ITEM_MISSING:${task.id}`)
-    const groupMetadata = videoGroupMetadataByTaskId.get(task.id)
-    if (!groupMetadata) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_GROUP_METADATA_MISSING:${task.id}`)
-    const committed = await commitPlannedVideoGroupTask({
-      ctx: params.ctx,
-      input: params.input,
-      operationId: params.operationId,
-      task,
-      metadata: groupMetadata,
-    })
-    submitted.push({ task, result: committed.result })
-  }
+    const result = committed.find((candidate) => candidate.metadata.planTaskId === task.id)?.result
+    if (!result) throw new Error(`PROJECT_AGENT_AUTO_VIDEO_TASK_RESULT_MISSING:${task.id}`)
+    return { task, result }
+  })
 
   const taskIds = submitted.map((item) => item.result.taskId)
   writeOperationDataPart<TaskBatchSubmittedPartData>(params.ctx.writer, 'data-task-batch-submitted', {
