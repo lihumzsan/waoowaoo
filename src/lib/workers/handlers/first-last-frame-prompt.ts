@@ -45,18 +45,57 @@ function panelContext(panel: Record<string, unknown>) {
 
 const NON_ENGLISH_SCRIPT_PATTERN = /[\u0400-\u052f\u0600-\u06ff\u3400-\u9fff]/u
 const CUT_OR_SCENE_TRANSITION_PATTERN = /\b(?:(?:(?:hard|smash|jump|match|abrupt|sudden)\s+)?cut(?:s|ting)?|(?:dissolv(?:e|es|ed|ing)|fade(?:s|d|ing)?|transition(?:s|ed|ing)?)\s+(?:to|into)|scene\s+(?:changes?|shifts?|transitions?)\s+(?:to|into))\b/i
-const INVENTED_SUBJECT_PATTERN = /\b(?:a|an|another)\s+(?:new\s+)?(?:stranger|person|character|man|woman|child|figure)\s+(?:enters?|appears?|emerges?|arrives?)\b/i
+const NEW_ENTITY_PATTERN = /\b(?:another|new|second)\s+(?:stranger|person|character|man|woman|child|boy|girl|figure|animal|dog|cat|horse|vehicle|car)\b/i
+const ENTITY_ARRIVAL_PATTERN = /\b(?:enters?|appears?|emerges?|arrives?)\b/i
+const ENTITY_REVEAL_PATTERN = /\b(?:reveals?|introduces?)\s+(?:(?:a|an|the)\s+)?(?:(?:another|new|second)\s+)?(?:stranger|person|character|man|woman|child|boy|girl|figure|animal|dog|cat|horse)\b/i
+const ANOTHER_LOCATION_PATTERN = /\b(?:shot|scene|camera|view|image)\s+(?:switches|moves|shifts|changes)\s+to\s+(?:(?:a|an|the)\s+)?(?:another|new|second|different)\s+(?:room|location|place|setting|space|area|scene)\b/i
 const INVENTED_PROP_PATTERN = /\b(?:(?:carrying|holding|wielding)\s+(?:a|an)\s+)?(?:new|newly\s+introduced)\s+(?:prop|object|sword|weapon|knife|gun|bag|tool)\b/i
+const PROP_ACQUISITION_PATTERN = /\b(?:picks?\s+up|grabs?|draws?|carries?)\s+([^,.!?;]+?)(?=\s+(?:from|off|out|through|across|beside|near|while|and|then|before|after|toward|towards|into|onto|at|as)\b|[,.!?;]|$)/gi
 
-function hasEnglishSignal(prompt: string) {
-  const latinLetterCount = (prompt.match(/[A-Za-z]/g) || []).length
-  const nonWhitespaceCount = (prompt.match(/\S/g) || []).length
-  return latinLetterCount >= 140
-    && nonWhitespaceCount > 0
-    && latinLetterCount / nonWhitespaceCount >= 0.45
+const ENGLISH_GRAMMAR_MARKERS = new Set([
+  'the', 'and', 'or', 'but', 'as', 'while', 'when', 'where', 'with', 'without',
+  'to', 'from', 'of', 'in', 'into', 'on', 'at', 'by', 'for', 'through', 'across',
+  'she', 'he', 'it', 'they', 'her', 'his', 'their', 'this', 'that', 'these', 'those',
+  'is', 'are', 'was', 'were', 'be', 'being', 'has', 'have', 'had', 'does', 'do',
+  'can', 'will', 'would', 'should', 'then', 'after', 'before', 'until', 'toward', 'towards',
+])
+const NON_ENGLISH_FUNCTION_MARKERS = new Set([
+  'la', 'el', 'los', 'las', 'una', 'uno', 'ella', 'mientras', 'hacia', 'con', 'sin', 'que', 'por', 'del',
+  'le', 'les', 'une', 'elle', 'tandis', 'dans', 'avec', 'vers', 'sans', 'des', 'du', 'un',
+  'dan', 'yang', 'dengan', 'dari', 'untuk', 'pada', 'ini', 'itu', 'saat', 'dia', 'menuju', 'sambil', 'tanpa',
+])
+
+function wordTokens(text: string) {
+  return (text.toLowerCase().match(/[a-z]+(?:'[a-z]+)?/g) || [])
 }
 
-function parseModelOutput(text: string): { prompt: string; warnings: string[] } | null {
+function hasEnglishLanguageSignal(prompt: string) {
+  const tokens = wordTokens(prompt)
+  const englishMarkers = tokens.filter((token) => ENGLISH_GRAMMAR_MARKERS.has(token))
+  const nonEnglishMarkerCount = tokens.filter((token) => NON_ENGLISH_FUNCTION_MARKERS.has(token)).length
+  const uniqueEnglishMarkers = new Set(englishMarkers)
+  const englishDensity = englishMarkers.length / tokens.length
+  const nonEnglishDensity = nonEnglishMarkerCount / tokens.length
+  return tokens.length >= 60
+    && englishMarkers.length >= 8
+    && uniqueEnglishMarkers.size >= 5
+    && englishDensity >= 0.08
+    && nonEnglishDensity < 0.1
+}
+
+function introducesContextAbsentProp(prompt: string, sourceContext: string) {
+  const sourceTokens = new Set(wordTokens(sourceContext))
+  for (const match of prompt.matchAll(PROP_ACQUISITION_PATTERN)) {
+    const phraseTokens = wordTokens(match[1]).filter((token) => ![
+      'a', 'an', 'the', 'her', 'his', 'their', 'its', 'new', 'small', 'large', 'old',
+    ].includes(token))
+    const prop = phraseTokens.at(-1)
+    if (prop && !sourceTokens.has(prop)) return true
+  }
+  return false
+}
+
+function parseModelOutput(text: string, sourceContext: string): { prompt: string; warnings: string[] } | null {
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   if (!unfenced) return null
   try {
@@ -64,11 +103,15 @@ function parseModelOutput(text: string): { prompt: string; warnings: string[] } 
     const prompt = stringValue(parsed.transition_prompt)
     const wordCount = prompt.split(/\s+/u).filter(Boolean).length
     if (!prompt || wordCount < 70 || wordCount > 160) return null
-    if (NON_ENGLISH_SCRIPT_PATTERN.test(prompt) || !hasEnglishSignal(prompt)) return null
+    if (NON_ENGLISH_SCRIPT_PATTERN.test(prompt) || !hasEnglishLanguageSignal(prompt)) return null
     if (
       CUT_OR_SCENE_TRANSITION_PATTERN.test(prompt)
-      || INVENTED_SUBJECT_PATTERN.test(prompt)
+      || NEW_ENTITY_PATTERN.test(prompt)
+      || ENTITY_ARRIVAL_PATTERN.test(prompt)
+      || ENTITY_REVEAL_PATTERN.test(prompt)
+      || ANOTHER_LOCATION_PATTERN.test(prompt)
       || INVENTED_PROP_PATTERN.test(prompt)
+      || introducesContextAbsentProp(prompt, sourceContext)
     ) return null
     const warnings = Array.isArray(parsed.warnings)
       ? parsed.warnings.map(stringValue).filter(Boolean)
@@ -147,6 +190,10 @@ export async function handleFirstLastFramePromptTask(
       goon_key: timing.workflowKey,
     },
   })
+  const sourceContext = [
+    panelContext(start.firstPanel as unknown as Record<string, unknown>),
+    panelContext(start.lastPanel as unknown as Record<string, unknown>),
+  ].join('\n')
 
   await reportTaskProgress(job, 45, { stage: 'first_last_frame_prompt_generate' })
   let generated: { prompt: string; warnings: string[] } | null = null
@@ -166,7 +213,7 @@ export async function handleFirstLastFramePromptTask(
         stepTotal: 1,
       },
     })
-    generated = parseModelOutput(completion.text)
+    generated = parseModelOutput(completion.text, sourceContext)
     if (!generated) fallbackWarning = 'Vision model returned an invalid transition prompt; deterministic bridge used.'
   } catch (error) {
     fallbackWarning = `Vision prompt generation failed; deterministic bridge used: ${error instanceof Error ? error.message : String(error)}`

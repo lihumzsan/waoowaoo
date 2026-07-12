@@ -52,6 +52,16 @@ const validPrompt = [
   'Her motion eases into stillness at the window, matching the final framing exactly without introducing anyone, anything, or any change of scene.',
 ].join(' ')
 
+const asciiSpanishPrompt = Array.from({ length: 8 }, () => (
+  'La camara sigue a la mujer mientras ella camina por el pasillo y mira hacia la ventana con movimiento suave'
+)).join(' ')
+const asciiFrenchPrompt = Array.from({ length: 7 }, () => (
+  'La camera suit la femme tandis qu elle marche dans le couloir et regarde vers la fenetre avec un mouvement doux'
+)).join(' ')
+const asciiIndonesianPrompt = Array.from({ length: 8 }, () => (
+  'Kamera mengikuti wanita itu saat dia berjalan menuju jendela dan melihat keluar dengan gerakan yang lembut dan tenang'
+)).join(' ')
+
 function framePanel(id: string, index: number, overrides: Record<string, unknown> = {}) {
   return {
     id,
@@ -174,6 +184,13 @@ describe('first-last-frame prompt worker', () => {
     ['new stranger', `${validPrompt} A stranger enters from the doorway.`],
     ['new person', `${validPrompt} A new person appears behind her.`],
     ['new prop', `${validPrompt} She is carrying a newly introduced sword.`],
+    ['ASCII Spanish output', asciiSpanishPrompt],
+    ['ASCII French output', asciiFrenchPrompt],
+    ['ASCII Indonesian output', asciiIndonesianPrompt],
+    ['context-absent picked-up prop', `${validPrompt} She picks up a sword from the table.`],
+    ['revealed second person', `${validPrompt} The camera reveals a second man near the window.`],
+    ['new animal entering', `${validPrompt} A dog enters through the doorway.`],
+    ['switch to another location', `${validPrompt} The shot switches to another room.`],
   ])('uses fallback for forbidden or non-English prompt: %s', async (_label, transitionPrompt) => {
     aiMock.executeAiVisionStep.mockResolvedValueOnce({
       text: JSON.stringify({ transition_prompt: transitionPrompt }),
@@ -183,6 +200,22 @@ describe('first-last-frame prompt worker', () => {
 
     expect(result.fallbackUsed).toBe(true)
     expect(result.prompt).toContain('Bridge naturally into the last frame')
+    expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows a picked-up prop when the prop is present in the structured panel context', async () => {
+    loadPanelsMock.mockResolvedValue(context(framePanel('panel-1', 0, {
+      props: '[{"name":"sword"}]',
+    })))
+    const transitionPrompt = `${validPrompt} She picks up a sword from the table.`
+    aiMock.executeAiVisionStep.mockResolvedValueOnce({
+      text: JSON.stringify({ transition_prompt: transitionPrompt }),
+    })
+
+    const result = await handleFirstLastFramePromptTask(job())
+
+    expect(result.fallbackUsed).toBe(false)
+    expect(result.prompt).toBe(transitionPrompt)
     expect(aiMock.executeAiVisionStep).toHaveBeenCalledTimes(1)
   })
 
