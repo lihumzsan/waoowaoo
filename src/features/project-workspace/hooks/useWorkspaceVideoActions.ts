@@ -1,19 +1,13 @@
 'use client'
 
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import { useGenerateVideo, useBatchGenerateVideos, useGenerateBgmScore, usePlanSoundscape, useGenerateSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
+import { usePlanSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
 import { useUpdateProjectPanelVideoPrompt, useUpdateProjectConfig } from '@/lib/query/hooks'
-import type {
-  WorkspaceBatchVideoGenerationParams,
-  WorkspaceVideoGenerationOptions,
-} from '../video-generation-types'
 
 interface UseWorkspaceVideoActionsParams {
   projectId: string
   episodeId?: string
   t: (key: string) => string
-  singleShotVideoModel?: string | null
-  sequenceVideoModel?: string | null
 }
 
 function isAbortError(err: unknown): boolean {
@@ -30,71 +24,11 @@ export function useWorkspaceVideoActions({
   projectId,
   episodeId,
   t,
-  singleShotVideoModel,
-  sequenceVideoModel,
 }: UseWorkspaceVideoActionsParams) {
-  const generateVideoMutation = useGenerateVideo(projectId, episodeId || null)
-  const batchGenerateVideosMutation = useBatchGenerateVideos(projectId, episodeId || null)
-  const generateBgmScoreMutation = useGenerateBgmScore(projectId, episodeId || null)
   const planSoundscapeMutation = usePlanSoundscape(projectId, episodeId || null)
-  const generateSoundscapeMutation = useGenerateSoundscape(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId, episodeId || null)
   const updateProjectConfigMutation = useUpdateProjectConfig(projectId)
-
-  const handleGenerateVideo = async (
-    storyboardId: string,
-    panelIndex: number,
-    generationOptions?: WorkspaceVideoGenerationOptions,
-    panelId?: string,
-  ) => {
-    if (typeof singleShotVideoModel !== 'string' || !singleShotVideoModel.trim()) {
-      alert(t('execution.videoModelRequired'))
-      return
-    }
-    try {
-      await generateVideoMutation.mutateAsync({
-        storyboardId,
-        panelIndex,
-        panelId,
-        generationOptions,
-      })
-    } catch (err: unknown) {
-      if (isAbortError(err)) {
-        _ulogInfo(t('execution.requestAborted'))
-        return
-      }
-      alert(`${t('execution.generationFailed')}: ${getErrorMessage(err)}`)
-      throw err
-    }
-  }
-
-  const handleGenerateAllVideos = async (options?: WorkspaceBatchVideoGenerationParams) => {
-    if (!episodeId) {
-      alert(t('execution.selectEpisode'))
-      return
-    }
-    const requiresSequenceModel = options?.mode === 'grid' || options?.mode === 'auto' || options?.mode === 'asset-reference'
-    const hasSingleShotModel = typeof singleShotVideoModel === 'string' && Boolean(singleShotVideoModel.trim())
-    const hasSequenceModel = typeof sequenceVideoModel === 'string' && Boolean(sequenceVideoModel.trim())
-    if (!hasSingleShotModel || (requiresSequenceModel && !hasSequenceModel)) {
-      alert(t('execution.videoModelRequired'))
-      return
-    }
-
-    try {
-      await batchGenerateVideosMutation.mutateAsync({
-        ...options,
-      })
-    } catch (err: unknown) {
-      if (isAbortError(err)) {
-        _ulogInfo(t('execution.requestAborted'))
-        return
-      }
-      alert(`${t('execution.batchVideoFailed')}: ${getErrorMessage(err)}`)
-      throw err
-    }
-  }
 
   const handleRenderFinalVideo = async () => {
     if (!episodeId) {
@@ -109,40 +43,6 @@ export function useWorkspaceVideoActions({
         return
       }
       alert(`${t('execution.finalRenderFailed')}: ${getErrorMessage(err)}`)
-      throw err
-    }
-  }
-
-  const handleGenerateBgmScore = async () => {
-    if (!episodeId) {
-      alert(t('execution.selectEpisode'))
-      return
-    }
-    try {
-      await generateBgmScoreMutation.mutateAsync()
-    } catch (err: unknown) {
-      if (isAbortError(err)) {
-        _ulogInfo(t('execution.requestAborted'))
-        return
-      }
-      alert(`${t('execution.bgmScoreFailed')}: ${getErrorMessage(err)}`)
-      throw err
-    }
-  }
-
-  const handleGenerateSoundscape = async () => {
-    if (!episodeId) {
-      alert(t('execution.selectEpisode'))
-      return
-    }
-    try {
-      await generateSoundscapeMutation.mutateAsync()
-    } catch (err: unknown) {
-      if (isAbortError(err)) {
-        _ulogInfo(t('execution.requestAborted'))
-        return
-      }
-      alert(`${t('execution.soundscapeFailed')}: ${getErrorMessage(err)}`)
       throw err
     }
   }
@@ -187,11 +87,7 @@ export function useWorkspaceVideoActions({
   }
 
   return {
-    handleGenerateVideo,
-    handleGenerateAllVideos,
-    handleGenerateBgmScore,
     handlePlanSoundscape,
-    handleGenerateSoundscape,
     handleRenderFinalVideo,
     handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel,

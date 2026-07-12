@@ -7,10 +7,6 @@ import type {
 } from '../WorkspaceRuntimeContext'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
-import type {
-  WorkspaceBatchVideoGenerationParams,
-  WorkspaceVideoGenerationOptions,
-} from '../video-generation-types'
 
 interface UseWorkspaceRuntimeParams {
   assetsLoading: boolean
@@ -36,21 +32,9 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
   handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
-  handleGeneratePanelImage: (panelId: string, count?: number) => Promise<void>
-  handleGenerateVideo: (
-    storyboardId: string,
-    panelIndex: number,
-    generationOptions?: WorkspaceVideoGenerationOptions,
-    panelId?: string,
-  ) => Promise<void>
-  handleGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
-  handleGenerateBgmScore: () => Promise<void>
   handlePlanSoundscape: () => Promise<void>
-  handleGenerateSoundscape: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
-  handleGenerateEditAssets: (editScriptId: string, requirementId?: string) => Promise<void>
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
-  handleRegenerateProjectAssetImage: (assetId: string, kind: 'character' | 'location') => Promise<void>
   handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
   handleUpdateVideoPrompt: (
     storyboardId: string,
@@ -79,16 +63,9 @@ export function useWorkspaceRuntime({
   handleGenerateEditBible,
   handleGenerateEditScript,
   openAssetLibrary,
-  handleGeneratePanelImage,
-  handleGenerateVideo,
-  handleGenerateAllVideos,
-  handleGenerateBgmScore,
   handlePlanSoundscape,
-  handleGenerateSoundscape,
   handleRenderFinalVideo,
-  handleGenerateEditAssets,
   handleGenerateEditShotExecutionPlan,
-  handleRegenerateProjectAssetImage,
   handleGenerateEditStoryboard,
   handleUpdateVideoPrompt,
   handleUpdateEditAssetRequirementDescription,
@@ -116,16 +93,9 @@ export function useWorkspaceRuntime({
     onGenerateEditBible: handleGenerateEditBible,
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
-    onGeneratePanelImage: handleGeneratePanelImage,
-    onGenerateVideo: handleGenerateVideo,
-    onGenerateAllVideos: handleGenerateAllVideos,
-    onGenerateBgmScore: handleGenerateBgmScore,
     onPlanSoundscape: handlePlanSoundscape,
-    onGenerateSoundscape: handleGenerateSoundscape,
     onRenderFinalVideo: handleRenderFinalVideo,
-    onGenerateEditAssets: handleGenerateEditAssets,
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
-    onRegenerateProjectAssetImage: handleRegenerateProjectAssetImage,
     onGenerateEditStoryboard: handleGenerateEditStoryboard,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
@@ -133,17 +103,10 @@ export function useWorkspaceRuntime({
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
   }), [
     assetsLoading,
-    handleGenerateAllVideos,
-    handleGenerateBgmScore,
     handlePlanSoundscape,
-    handleGenerateSoundscape,
     handleRenderFinalVideo,
-    handleGenerateEditAssets,
     handleGenerateEditShotExecutionPlan,
-    handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
-    handleGeneratePanelImage,
-    handleGenerateVideo,
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditBible,

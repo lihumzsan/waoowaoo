@@ -14,16 +14,13 @@ import { useWorkspaceProjectSnapshot } from './useWorkspaceProjectSnapshot'
 import { useWorkspaceModalEscape } from './useWorkspaceModalEscape'
 import { useWorkspaceRuntime } from './useWorkspaceRuntime'
 import { useWorkspaceConfigActions } from './useWorkspaceConfigActions'
-import { useWorkspaceImageActions } from './useWorkspaceImageActions'
 import { buildWorkspaceControllerViewModel } from './workspace-controller-view-model'
 import type { ProjectWorkspaceProps } from '../types'
 import { useRouter } from '@/i18n/navigation'
 import {
-  useAssetActions,
   useCreateProjectEditBible,
   useCreateProjectEditScript,
   useCreateProjectEditShotExecutionPlan,
-  useGenerateProjectEditScriptAssets,
   useGenerateProjectEditScriptStoryboard,
   useUpdateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/query/hooks'
@@ -109,20 +106,11 @@ export function useProjectWorkspaceController({
     projectId,
     episodeId,
     t,
-    singleShotVideoModel: projectSnapshot.singleShotVideoModel,
-    sequenceVideoModel: projectSnapshot.sequenceVideoModel,
-  })
-  const imageActions = useWorkspaceImageActions({
-    projectId,
-    episodeId,
   })
   const createEditBible = useCreateProjectEditBible(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
   const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
-  const generateEditAssets = useGenerateProjectEditScriptAssets(projectId)
   const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
-  const characterAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'character' })
-  const locationAssetActions = useAssetActions({ scope: 'project', projectId, kind: 'location' })
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
   const handleGenerateEditBible = async (input: WorkspaceEditBibleGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
@@ -146,17 +134,6 @@ export function useProjectWorkspaceController({
       episodeId,
       editScriptId,
     })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleGenerateEditAssets = async (editScriptId: string, requirementId?: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await generateEditAssets.mutateAsync({ episodeId, editScriptId, requirementId })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleRegenerateProjectAssetImage = async (assetId: string, kind: 'character' | 'location') => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    const actions = kind === 'character' ? characterAssetActions : locationAssetActions
-    await actions.generate({ id: assetId, episodeId })
     await onRefresh({ mode: 'full' })
   }
   const handleGenerateEditStoryboard = async (editScriptId: string) => {
@@ -187,16 +164,9 @@ export function useProjectWorkspaceController({
     handleGenerateEditBible,
     handleGenerateEditScript,
     openAssetLibrary: assetLibrary.openAssetLibrary,
-    handleGeneratePanelImage: imageActions.handleGeneratePanelImage,
-    handleGenerateVideo: videoActions.handleGenerateVideo,
-    handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
-    handleGenerateBgmScore: videoActions.handleGenerateBgmScore,
     handlePlanSoundscape: videoActions.handlePlanSoundscape,
-    handleGenerateSoundscape: videoActions.handleGenerateSoundscape,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
-    handleGenerateEditAssets,
     handleGenerateEditShotExecutionPlan,
-    handleRegenerateProjectAssetImage,
     handleGenerateEditStoryboard,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateEditAssetRequirementDescription,
@@ -231,8 +201,6 @@ export function useProjectWorkspaceController({
   }
 
   const videoState = {
-    handleGenerateVideo: videoActions.handleGenerateVideo,
-    handleGenerateAllVideos: videoActions.handleGenerateAllVideos,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,
   }

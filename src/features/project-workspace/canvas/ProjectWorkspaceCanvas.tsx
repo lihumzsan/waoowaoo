@@ -15,9 +15,13 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
+import { useQueryClient } from '@tanstack/react-query'
 import { AppIcon } from '@/components/ui/icons'
 import { logWarn as _ulogWarn } from '@/lib/logging/core'
-import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
+import { apiFetch } from '@/lib/api-fetch'
+import { issueOperationApprovalGrant } from '@/lib/query/operation-plan-client'
+import { queryKeys } from '@/lib/query/keys'
+import { resolveTaskErrorMessage } from '@/lib/task/error-message'
 import type { ProjectEditScript } from '@/types/project'
 import {
   isTaskRuntimeRunningPhase,
@@ -38,13 +42,13 @@ import {
 } from '../workspace-scope'
 import { useCanvasLayoutPersistence } from './hooks/useCanvasLayoutPersistence'
 import {
-  useWorkspaceCanvasActionBillingPreviews,
-  workspaceCanvasActionBillingPreviewKey,
-} from './hooks/useWorkspaceCanvasActionBillingPreviews'
-import {
   useWorkspaceNodeCanvasProjection,
 } from './hooks/useWorkspaceNodeCanvasProjection'
 import { useWorkspaceNodeCanvasActions } from './hooks/useWorkspaceNodeCanvasActions'
+import {
+  WorkspaceCanvasBillingProvider,
+  type WorkspaceCanvasBillableExecution,
+} from './WorkspaceCanvasBillingContext'
 import {
   resolveWorkspaceCanvasFocusNodeIds,
   resolveWorkspaceCanvasStyleBibleFocusNodeIds,
@@ -211,44 +215,6 @@ function CanvasViewportControls({
   )
 }
 
-function attachWorkspaceCanvasBillingPreviewLabels(params: {
-  readonly projectId?: string | null
-  readonly episodeId?: string | null
-  readonly nodes: readonly WorkspaceCanvasFlowNode[]
-  readonly previews: ReadonlyMap<string, BillingActionQuotePreview>
-}): WorkspaceCanvasFlowNode[] {
-  return params.nodes.map((node) => {
-    const actionKey = workspaceCanvasActionBillingPreviewKey({
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      action: node.data.action,
-    })
-    const secondaryActionKey = workspaceCanvasActionBillingPreviewKey({
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      action: node.data.secondaryAction,
-    })
-    const tertiaryActionKey = workspaceCanvasActionBillingPreviewKey({
-      projectId: params.projectId,
-      episodeId: params.episodeId,
-      action: node.data.tertiaryAction,
-    })
-    const actionBillingQuote = actionKey ? params.previews.get(actionKey) : undefined
-    const secondaryActionBillingQuote = secondaryActionKey ? params.previews.get(secondaryActionKey) : undefined
-    const tertiaryActionBillingQuote = tertiaryActionKey ? params.previews.get(tertiaryActionKey) : undefined
-    if (!actionBillingQuote && !secondaryActionBillingQuote && !tertiaryActionBillingQuote) return node
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        ...(actionBillingQuote ? { actionBillingQuote } : {}),
-        ...(secondaryActionBillingQuote ? { secondaryActionBillingQuote } : {}),
-        ...(tertiaryActionBillingQuote ? { tertiaryActionBillingQuote } : {}),
-      },
-    }
-  })
-}
-
 function ProjectWorkspaceCanvasContent({
   onAssistantSelectionChange,
   editScriptPending = false,
@@ -257,8 +223,8 @@ function ProjectWorkspaceCanvasContent({
   workspaceScopeId,
 }: ProjectWorkspaceCanvasContentProps) {
   const t = useTranslations('projectWorkflow.canvas.workspace')
-  const billingT = useTranslations('assistantAgent')
   const { projectId, episodeId } = useWorkspaceProvider()
+  const queryClient = useQueryClient()
   const runtime = useWorkspaceRuntime()
   const {
     episodeName,
@@ -327,6 +293,42 @@ function ProjectWorkspaceCanvasContent({
   const userNodePositionsRef = useRef<ReadonlyMap<string, WorkspaceCanvasUserPosition>>(new Map())
   const activeAssistantOperationId = activeAssistantFocusRequest?.operationId ?? null
   const activeAssistantTaskTargets = activeAssistantFocusRequest?.taskTargets ?? EMPTY_ACTIVE_TASK_TARGETS
+
+  const executeBillableAction = useCallback(async ({
+    request,
+    plan,
+    nodeId,
+  }: WorkspaceCanvasBillableExecution) => {
+    setSubmittingNodeIds((current) => new Set(current).add(nodeId))
+    try {
+      const approval = await issueOperationApprovalGrant(plan)
+      const response = await apiFetch(
+        `/api/projects/${projectId}/operations/${request.operationId}/execute`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: request.input,
+            ...approval,
+          }),
+        },
+      )
+      if (!response.ok) {
+        const error: unknown = await response.json().catch(() => ({}))
+        throw new Error(resolveTaskErrorMessage(error, t('errors.mediaOperationExecutionFailed')))
+      }
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.targetStatesAll(projectId),
+        exact: false,
+      })
+    } finally {
+      setSubmittingNodeIds((current) => {
+        const next = new Set(current)
+        next.delete(nodeId)
+        return next
+      })
+    }
+  }, [projectId, queryClient, t])
 
   const {
     layout,
@@ -478,34 +480,10 @@ function ProjectWorkspaceCanvasContent({
     onAction: onNodeAction,
   })
   const projectedNodes = projection.nodes
-  const billingQuoteWithCredits = useCallback(
-    (values: { count: number; cost: number }) => billingT('cards.billingQuoteWithCredits', values),
-    [billingT],
-  )
-  const billingQuoteWithoutCredits = useCallback(
-    (values: { count: number }) => billingT('cards.billingQuoteWithoutCredits', values),
-    [billingT],
-  )
-  const actionBillingPreviews = useWorkspaceCanvasActionBillingPreviews({
-    projectId,
-    episodeId,
-    nodes: projectedNodes,
-    withCredits: billingQuoteWithCredits,
-    withoutCredits: billingQuoteWithoutCredits,
-  })
-  const projectedNodesWithBilling = useMemo(
-    () => attachWorkspaceCanvasBillingPreviewLabels({
-      projectId,
-      episodeId,
-      nodes: projectedNodes,
-      previews: actionBillingPreviews,
-    }),
-    [actionBillingPreviews, episodeId, projectId, projectedNodes],
-  )
   const projectionEdges = projection.edges
   const workspaceRuntimeTargets = useMemo(
-    () => collectWorkspaceNodeRuntimeTargets(projectedNodesWithBilling),
-    [projectedNodesWithBilling],
+    () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
+    [projectedNodes],
   )
   const workspaceTaskStateMap = useTaskTargetStateMap(projectId, workspaceRuntimeTargets, {
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
@@ -588,8 +566,8 @@ function ProjectWorkspaceCanvasContent({
     workspaceTaskStateMap.byQueryKey,
   ])
   const resolvedProjectedNodes = useMemo(
-    () => attachNodeUiState(projectedNodesWithBilling),
-    [attachNodeUiState, projectedNodesWithBilling],
+    () => attachNodeUiState(projectedNodes),
+    [attachNodeUiState, projectedNodes],
   )
   resolvedProjectedNodesRef.current = resolvedProjectedNodes
   userNodePositionsRef.current = userNodePositions
@@ -710,7 +688,7 @@ function ProjectWorkspaceCanvasContent({
   }, [flowNodes, updateNodeDisclosureOverrides])
 
   useEffect(() => {
-    const projectedNodeIds = new Set(projectedNodesWithBilling.map((node) => node.id))
+    const projectedNodeIds = new Set(projectedNodes.map((node) => node.id))
     updateNodeDisclosureOverrides((current) => {
       let changed = false
       const next = new Map<string, WorkspaceCanvasNodeDisclosureOverride>()
@@ -735,7 +713,7 @@ function ProjectWorkspaceCanvasContent({
       })
       return changed ? next : current
     })
-  }, [projectedNodesWithBilling, projectionNodeSignature, updateNodeDisclosureOverrides])
+  }, [projectedNodes, projectionNodeSignature, updateNodeDisclosureOverrides])
 
   const persistCurrentLayout = useCallback(async (nextNodes: readonly WorkspaceCanvasFlowNode[]) => {
     if (!episodeId) return
@@ -873,6 +851,11 @@ function ProjectWorkspaceCanvasContent({
   if (!episodeId) return null
 
   return (
+    <WorkspaceCanvasBillingProvider value={{
+      projectId,
+      episodeId,
+      execute: executeBillableAction,
+    }}>
     <div className="workspace-canvas-layout-animated h-full min-h-0 w-full overflow-hidden bg-[var(--glass-bg-canvas)]">
       <div ref={canvasRef} className="h-full" onWheelCapture={applyWheelZoom}>
         <ReactFlow
@@ -957,6 +940,7 @@ function ProjectWorkspaceCanvasContent({
         </ReactFlow>
       </div>
     </div>
+    </WorkspaceCanvasBillingProvider>
   )
 }
 

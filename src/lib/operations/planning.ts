@@ -214,11 +214,24 @@ export async function persistOperationPlanView(params: {
   episodeId?: string | null
 }): Promise<OperationPlanView> {
   const quote = await quoteOperationPlan(params.plan)
+  const taskEpisodeIds = Array.from(new Set(
+    params.plan.tasks
+      .map((task) => task.episodeId ?? null)
+      .filter((episodeId): episodeId is string => Boolean(episodeId)),
+  ))
+  if (taskEpisodeIds.length > 1) {
+    throw new Error(`OPERATION_PLAN_EPISODE_SCOPE_AMBIGUOUS:${params.plan.operationId}`)
+  }
+  const plannedEpisodeId = taskEpisodeIds[0] ?? null
+  const requestedEpisodeId = params.episodeId ?? null
+  if (plannedEpisodeId && requestedEpisodeId && plannedEpisodeId !== requestedEpisodeId) {
+    throw new Error(`OPERATION_PLAN_EPISODE_SCOPE_MISMATCH:${params.plan.operationId}`)
+  }
   const snapshot = await persistOperationPlanSnapshot({
     plan: params.plan,
     normalizedInput: params.normalizedInput,
     quote,
-    episodeId: params.episodeId ?? null,
+    episodeId: plannedEpisodeId ?? requestedEpisodeId,
   })
   return attachPersistedPlanIdentity(await toOperationPlanView(params.plan), snapshot)
 }

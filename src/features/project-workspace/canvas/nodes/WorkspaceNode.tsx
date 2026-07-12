@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslations } from 'next-intl'
-import BillingActionButton from '@/components/billing/BillingActionButton'
 import { EstimatedTaskProgressInline } from '@/components/task/EstimatedTaskProgressOverlay'
 import ImagePreviewModal from '@/components/ui/ImagePreviewModal'
 import { AppIcon, type AppIconName } from '@/components/ui/icons'
@@ -23,6 +22,7 @@ import {
   nodeShowsMetaFooter,
 } from './WorkspaceNodeRenderers'
 import { NodeContent } from './workspace-node-renderer-registry'
+import { CanvasActionButton } from './CanvasActionButton'
 
 function nodeUsesInlineTaskProgress(kind: WorkspaceCanvasFlowNode['data']['kind']): boolean {
   return kind === 'videoPlan' || kind === 'bgmScore' || kind === 'soundscape' || kind === 'finalTimeline'
@@ -97,14 +97,15 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {showHeaderAction && action && data.actionLabel ? (
-                  <BillingActionButton
+                  <CanvasActionButton
+                    action={action}
+                    nodeId={data.nodeId ?? data.targetId}
                     type="button"
                     icon={nodeActionIconName(action)}
                     label={data.actionLabel}
-                    quote={data.actionBillingQuote}
                     className="py-2"
                     disabled={data.actionDisabled === true || isRunning}
-                    onClick={() => {
+                    onDirectAction={() => {
                       if (!isRunning) data.onAction?.(action, data.nodeId)
                     }}
                   />
@@ -147,40 +148,43 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
                       </button>
                     ) : null}
                     {action && data.actionLabel && !showHeaderAction ? (
-                      <BillingActionButton
+                      <CanvasActionButton
+                        action={action}
+                        nodeId={data.nodeId ?? data.targetId}
                         type="button"
                         icon={nodeActionIconName(action)}
                         label={data.actionLabel}
-                        quote={data.actionBillingQuote}
                         loading={isRunning}
                         disabled={data.actionDisabled === true || isRunning}
-                        onClick={() => {
+                        onDirectAction={() => {
                           if (!isRunning) data.onAction?.(action, data.nodeId)
                         }}
                       />
                     ) : null}
                     {secondaryAction && data.secondaryActionLabel ? (
-                      <BillingActionButton
+                      <CanvasActionButton
+                        action={secondaryAction}
+                        nodeId={data.nodeId ?? data.targetId}
                         type="button"
                         tone="secondary"
                         icon={secondaryActionIcon}
                         label={data.secondaryActionLabel}
-                        quote={data.secondaryActionBillingQuote}
                         disabled={data.actionDisabled === true || isRunning}
-                        onClick={() => {
+                        onDirectAction={() => {
                           if (!isRunning) data.onAction?.(secondaryAction, data.nodeId)
                         }}
                       />
                     ) : null}
                     {tertiaryAction && data.tertiaryActionLabel ? (
-                      <BillingActionButton
+                      <CanvasActionButton
+                        action={tertiaryAction}
+                        nodeId={data.nodeId ?? data.targetId}
                         type="button"
                         tone="secondary"
                         icon={tertiaryActionIcon}
                         label={data.tertiaryActionLabel}
-                        quote={data.tertiaryActionBillingQuote}
                         disabled={data.actionDisabled === true || isRunning}
-                        onClick={() => {
+                        onDirectAction={() => {
                           if (!isRunning) data.onAction?.(tertiaryAction, data.nodeId)
                         }}
                       />

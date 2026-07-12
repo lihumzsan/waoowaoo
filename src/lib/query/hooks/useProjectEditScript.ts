@@ -5,29 +5,10 @@ import { apiFetch } from '@/lib/api-fetch'
 import { readProjectEditScriptJsonError } from '@/lib/query/project-edit-script-error'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
 import type { ProjectEditBible, ProjectEditChapter, ProjectEditScript, ProjectEditShotExecutionPlan } from '@/types/project'
-import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
-import { useMediaOperationBillingPlan } from '../use-media-operation-billing-plan'
 
 interface EditScriptResponse {
   editScript: ProjectEditScript | null
-}
-
-interface EditScriptAssetSubmittedTask {
-  readonly taskId: string
-  readonly taskType: string
-  readonly targetType: 'CharacterAppearance' | 'LocationImage'
-  readonly targetId: string
-}
-
-interface GenerateEditScriptAssetsResponse {
-  readonly editScript: ProjectEditScript | null
-  readonly submittedTasks?: readonly EditScriptAssetSubmittedTask[]
-}
-
-interface GenerateEditScriptAssetsMutationResult {
-  readonly editScript: ProjectEditScript
-  readonly submittedTasks: readonly EditScriptAssetSubmittedTask[]
 }
 
 export interface EditBibleResponse {
@@ -66,12 +47,6 @@ interface ReviseEditBibleInput {
 interface CreateEditShotExecutionPlanInput {
   episodeId: string
   editScriptId?: string
-}
-
-interface GenerateEditScriptAssetsInput {
-  episodeId: string
-  editScriptId?: string
-  requirementId?: string
 }
 
 interface GenerateEditScriptStoryboardInput {
@@ -352,54 +327,6 @@ export function useCreateProjectEditShotExecutionPlan(projectId: string | null) 
         queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, variables.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, variables.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
-      ])
-    },
-  })
-}
-
-export function useGenerateProjectEditScriptAssets(projectId: string | null) {
-  const queryClient = useQueryClient()
-  const mediaOperationBillingPlan = useMediaOperationBillingPlan(projectId)
-  return useMutation({
-    mutationFn: async (input: GenerateEditScriptAssetsInput) => {
-      if (!projectId) throw new Error('Project ID is required')
-      const confirmation = await mediaOperationBillingPlan('generate_edit_script_assets', { ...input })
-      const response = await apiFetch(`/api/projects/${projectId}/edit-script/assets/generate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...input, ...confirmation }),
-      })
-      if (!response.ok) {
-        throw await readJsonError(response, 'Failed to generate required assets')
-      }
-      const data = await response.json() as GenerateEditScriptAssetsResponse
-      if (!data.editScript) throw new Error('EDIT_SCRIPT_RESPONSE_EMPTY')
-      return {
-        editScript: data.editScript,
-        submittedTasks: data.submittedTasks ?? [],
-      } satisfies GenerateEditScriptAssetsMutationResult
-    },
-    onSuccess: async ({ editScript, submittedTasks }) => {
-      if (!projectId) return
-      queryClient.setQueryData(queryKeys.project.editScript(projectId, editScript.episodeId), editScript)
-      submittedTasks.forEach((task) => {
-        upsertTaskTargetOverlay(queryClient, {
-          projectId,
-          targetType: task.targetType,
-          targetId: task.targetId,
-          runningTaskId: task.taskId,
-          runningTaskType: task.taskType,
-          intent: 'generate',
-        })
-      })
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, editScript.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project.context(projectId, editScript.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, editScript.episodeId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.projectData(projectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.assets.all('project', projectId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.pending(projectId, editScript.episodeId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false }),
       ])
     },

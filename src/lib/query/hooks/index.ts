@@ -102,7 +102,6 @@ export {
     useUpdateProjectEpisodeField,
     useGetProjectStoryboardStats,
     useUpdateProjectPanelVideoPrompt,
-    useRegenerateProjectPanelImage,
     useConfirmProjectCharacterSelection,
     useConfirmProjectLocationSelection,
     useBatchGenerateCharacterImages,
@@ -124,9 +123,6 @@ export type {
 // 分镜
 export {
     useStoryboards,
-    useRegeneratePanelImage,
-    useGenerateVideo,
-    useBatchGenerateVideos,
     useSelectPanelCandidate,
     useRefreshStoryboards,
     type StoryboardPanel,
@@ -172,7 +168,6 @@ export {
     useCreateProjectEditBible,
     useCreateProjectEditScript,
     useConfirmProjectEditBible,
-    useGenerateProjectEditScriptAssets,
     useGenerateProjectEditScriptStoryboard,
     useReviseProjectEditBible,
     useUpdateProjectEditScriptAssetRequirementDescription,

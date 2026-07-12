@@ -147,13 +147,13 @@ function assertSnapshotScope(params: {
   allowExpired: boolean
 }): void {
   const expectedScopeKind = params.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
-  const expectedEpisodeId = params.episodeId ?? null
+  const requestedEpisodeId = params.episodeId ?? null
   if (
     params.snapshot.userId !== params.userId ||
     params.snapshot.scopeKind !== expectedScopeKind ||
     params.snapshot.scopeId !== params.projectId ||
     params.snapshot.operationId !== params.operationId ||
-    params.snapshot.episodeId !== expectedEpisodeId
+    (requestedEpisodeId !== null && params.snapshot.episodeId !== requestedEpisodeId)
   ) {
     throw new ApiError('FORBIDDEN', {
       code: 'OPERATION_PLAN_SCOPE_MISMATCH',
@@ -324,6 +324,10 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       const committedOutput = await commit(
         {
           ...params.ctx,
+          context: {
+            ...params.ctx.context,
+            episodeId: snapshot.episodeId,
+          },
           writer: bufferedWriter,
           executionAuthorization: {
             approvalGrantId: grant.id,

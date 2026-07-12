@@ -1431,7 +1431,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             TASK_RUNTIME_TARGETS.projectPanelImageOperations(panel.id),
             TASK_RUNTIME_TARGETS.projectPanelVideo(panel.id),
           ),
-          actionLabel: translate('actions.generateImage'),
+          actionLabel: translate(previewImageUrl ? 'actions.regenerateImage' : 'actions.generateImage'),
           action: { type: 'generate_image', panelId: panel.id },
           shotDetails: shotDetails(panel),
           imageDetails: imageDetails(panel),
@@ -1506,7 +1506,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           }),
           ...(videoGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
           runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
-          actionLabel: canGenerateGroup ? translate('actions.generateVideo') : undefined,
+          actionLabel: canGenerateGroup
+            ? translate(details.outputUrl ? 'actions.regenerateVideo' : 'actions.generateVideo')
+            : undefined,
           action: canGenerateGroup && gridMode
             ? {
                 type: 'generate_video_group',
@@ -1562,7 +1564,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         meta: bgmDetails?.musicModel ?? '',
         ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
         ...(bgmActionAvailable ? {
-          actionLabel: translate('actions.generateBgmScore'),
+          actionLabel: translate(bgmDetails?.mixUrl ? 'actions.regenerateBgmScore' : 'actions.generateBgmScore'),
           action: { type: 'generate_bgm_score' as const },
         } : {}),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
@@ -1581,7 +1583,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const soundscapeReadyForGeneration = details?.decision === 'soundscape'
       && details.status !== 'planning'
       && details.status !== 'generating'
-      && !details.mixUrl
     const soundscapePresentation = details
       ? resourcePresentationFromStatus(details.status)
         ?? workspaceCanvasPendingResourcePresentation()
@@ -1614,7 +1615,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ...(soundscapePresentation ?? workspaceCanvasPendingResourcePresentation()),
         ...(soundscapeActionAvailable ? {
           actionLabel: translate(
-            soundscapeReadyForGeneration ? 'actions.generateSoundscape' : 'actions.planSoundscape',
+            soundscapeReadyForGeneration
+              ? details?.mixUrl ? 'actions.regenerateSoundscape' : 'actions.generateSoundscape'
+              : 'actions.planSoundscape',
           ),
           action: soundscapeReadyForGeneration
             ? { type: 'generate_soundscape' as const }

@@ -13,6 +13,7 @@ import {
 } from '../lifecycle/workspace-canvas-lifecycle'
 import { AdaptiveImageAspectFrame } from './AdaptiveImageAspectFrame'
 import { CanvasMediaGenerationSurface } from './CanvasMediaGenerationSurface'
+import { CanvasActionButton } from './CanvasActionButton'
 import { FieldGlyph } from './field-glyphs'
 import { ShotGrid, shotDetailIconGrid, type ShotField, type ShotGridCard } from './shot-grid'
 import { ProductionPlanningView } from './ProductionPlanningView'
@@ -2051,9 +2052,13 @@ export function VideoPlanContent({
     && assetReferenceVideoModel.length === 0
   const shouldShowAssetReferences = previewMode === 'reference' && generationMode === 'asset-reference'
   const missingReferenceLabel = shouldShowAssetReferences ? labels('assetReferenceImagesMissing') : labels('storyboardReferenceImagesMissing')
-  const generateLabel = generationMode === 'storyboard'
-    ? labels('generateStoryboardReferenceVideo')
-    : labels('generateAssetReferenceVideo')
+  const generateLabel = displayOutputUrl
+    ? generationMode === 'storyboard'
+      ? labels('regenerateStoryboardReferenceVideo')
+      : labels('regenerateAssetReferenceVideo')
+    : generationMode === 'storyboard'
+      ? labels('generateStoryboardReferenceVideo')
+      : labels('generateAssetReferenceVideo')
   const handleOutputVideoLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const nextAspectRatio = videoElementAspectRatio(event.currentTarget)
     if (nextAspectRatio === null) return
@@ -2063,40 +2068,33 @@ export function VideoPlanContent({
         : nextAspectRatio
     ))
   }
-  const handleGenerateSelectedMode = () => {
-    if (!canGenerateSelectedMode) return
-    if (generationMode === 'asset-reference') {
-      void dispatchNodeAction(data, {
+  const selectedGenerationAction: WorkspaceCanvasNodeAction | null = !canGenerateSelectedMode
+    ? null
+    : generationMode === 'asset-reference'
+      ? {
         type: 'generate_asset_reference_video',
         segmentIndex: details.segmentIndex,
         referenceImageUrls: assetReferenceImageUrls,
         generationOptions: videoPlanGenerationOptions(data),
-      })
-      return
-    }
-    if (details.kind === 'group') {
-      void dispatchNodeAction(data, {
-        type: 'generate_video_group',
-        gridMode: details.gridMode === '3x3' ? '3x3' : '2x2',
-        shotIds: details.shotIds,
-        generationOptions: videoPlanGenerationOptions(data),
-      })
-      return
-    }
-    if (
-      hasText(firstStoryboardReference?.panelId)
-      && hasText(firstStoryboardReference?.storyboardId)
-      && typeof firstStoryboardReference.panelIndex === 'number'
-    ) {
-      void dispatchNodeAction(data, {
-        type: 'generate_video',
-        storyboardId: firstStoryboardReference.storyboardId,
-        panelIndex: firstStoryboardReference.panelIndex,
-        panelId: firstStoryboardReference.panelId,
-        generationOptions: videoPlanGenerationOptions(data),
-      })
-    }
-  }
+      }
+      : details.kind === 'group'
+        ? {
+          type: 'generate_video_group',
+          gridMode: details.gridMode === '3x3' ? '3x3' : '2x2',
+          shotIds: details.shotIds,
+          generationOptions: videoPlanGenerationOptions(data),
+        }
+        : hasText(firstStoryboardReference?.panelId)
+          && hasText(firstStoryboardReference?.storyboardId)
+          && typeof firstStoryboardReference.panelIndex === 'number'
+          ? {
+            type: 'generate_video',
+            storyboardId: firstStoryboardReference.storyboardId,
+            panelIndex: firstStoryboardReference.panelIndex,
+            panelId: firstStoryboardReference.panelId,
+            generationOptions: videoPlanGenerationOptions(data),
+          }
+          : null
   const renderPromptSection = (promptExpanded: boolean) => details.prompt ? (
     <EditablePromptSection
       title={labels('videoPlanPrompt')}
@@ -2193,14 +2191,25 @@ export function VideoPlanContent({
               {labels('assetReferenceVideoMode')}
             </button>
           </div>
-          <button
-            type="button"
-            disabled={!canGenerateSelectedMode}
-            onClick={handleGenerateSelectedMode}
-            className="w-full rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {generateLabel}
-          </button>
+          {selectedGenerationAction ? (
+            <CanvasActionButton
+              action={selectedGenerationAction}
+              nodeId={data.nodeId ?? data.targetId}
+              type="button"
+              icon="video"
+              label={generateLabel}
+              className="w-full rounded-md"
+              onDirectAction={() => dispatchNodeAction(data, selectedGenerationAction)}
+            />
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="w-full rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generateLabel}
+            </button>
+          )}
           {shouldShowVideoModelHint ? (
             <p className="text-xs leading-5 text-[var(--glass-tone-danger-fg)]">{labels('videoPlanModelMissing')}</p>
           ) : null}

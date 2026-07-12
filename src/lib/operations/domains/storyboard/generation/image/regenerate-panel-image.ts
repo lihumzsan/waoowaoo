@@ -42,26 +42,35 @@ export async function planRegeneratePanelImageOperation(
   assertNoLegacyArtStyle(input as Record<string, unknown>)
   const locale = resolveLocaleFromContext(ctx.context.locale)
 
-  let panelId = normalizeString(input.panelId)
-  if (!panelId) {
-    const storyboardId = normalizeString(input.storyboardId)
-    const panelIndex = typeof input.panelIndex === 'number' ? input.panelIndex : NaN
-    if (!storyboardId || !Number.isFinite(panelIndex)) {
-      throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
-    }
-    const panel = await prisma.projectPanel.findFirst({
-      where: {
-        storyboardId,
-        panelIndex,
-      },
-      select: { id: true },
-    })
-    panelId = panel?.id || ''
+  const requestedPanelId = normalizeString(input.panelId)
+  const storyboardId = normalizeString(input.storyboardId)
+  const panelIndex = typeof input.panelIndex === 'number' ? input.panelIndex : NaN
+  if (!requestedPanelId && (!storyboardId || !Number.isFinite(panelIndex))) {
+    throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
   }
-
-  if (!panelId) {
+  const requestedEpisodeId = normalizeString(ctx.context.episodeId)
+  const panel = await prisma.projectPanel.findFirst({
+    where: {
+      ...(requestedPanelId
+        ? { id: requestedPanelId }
+        : { storyboardId, panelIndex: Number(panelIndex) }),
+      storyboard: {
+        episode: {
+          projectId: ctx.projectId,
+          ...(requestedEpisodeId ? { id: requestedEpisodeId } : {}),
+        },
+      },
+    },
+    select: {
+      id: true,
+      storyboard: { select: { episodeId: true } },
+    },
+  })
+  if (!panel) {
     throw new Error('PROJECT_AGENT_PANEL_NOT_FOUND')
   }
+  const panelId = panel.id
+  const episodeId = panel.storyboard.episodeId
 
   const candidateCount = resolveCandidateCount(input.count)
   const referencePanelIds = normalizeStringArray(input.referencePanelIds).slice(0, 8)
@@ -170,6 +179,7 @@ export async function planRegeneratePanelImageOperation(
         taskType: TASK_TYPE.IMAGE_PANEL,
         targetType: 'ProjectPanel',
         targetId: panelId,
+        episodeId,
         locale: taskLocale,
         payload: withTaskUiPayload(billingPayload, {
           intent: 'regenerate',
@@ -185,6 +195,7 @@ export async function planRegeneratePanelImageOperation(
     ],
     metadata: {
       panelId,
+      episodeId,
     },
   }
 }
@@ -209,7 +220,7 @@ export async function commitRegeneratePanelImageOperation(
     userId: ctx.userId,
     source: ctx.source,
     operationId: 'regenerate_panel_image',
-    episodeId: null,
+    episodeId: task.episodeId ?? null,
     summary: `regenerate_panel_image:${panelId}`,
     entries: [
       {
@@ -229,7 +240,7 @@ export async function commitRegeneratePanelImageOperation(
     billingReceipt: result.billingReceiptView,
     mutationBatchId: mutationBatch.id,
     projectId: ctx.projectId,
-    episodeId: null,
+    episodeId: task.episodeId ?? null,
     taskType: TASK_TYPE.IMAGE_PANEL,
     targetType: 'ProjectPanel',
     targetId: panelId,

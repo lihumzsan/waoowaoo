@@ -3,10 +3,6 @@
 import type { UserModelsPayload } from './useWorkspaceUserModels'
 import type { WorkspaceRuntimeValue } from '../WorkspaceRuntimeContext'
 import type { TaskPresentationState } from '@/lib/task/presentation'
-import type {
-  WorkspaceBatchVideoGenerationParams,
-  WorkspaceVideoGenerationOptions,
-} from '../video-generation-types'
 import type { CapabilitySelections } from '@/lib/ai-registry/types'
 import { VideoPricingTier } from '@/lib/ai-registry/video-capabilities'
 
@@ -73,13 +69,6 @@ interface BuildWorkspaceControllerViewModelParams {
     showCreatingToast: boolean
   }
   videoState: {
-    handleGenerateVideo: (
-      storyboardId: string,
-      panelIndex: number,
-      generationOptions?: WorkspaceVideoGenerationOptions,
-      panelId?: string,
-    ) => Promise<void>
-    handleGenerateAllVideos: (options?: WorkspaceBatchVideoGenerationParams) => Promise<void>
     handleUpdateVideoPrompt: (
       storyboardId: string,
       panelIndex: number,

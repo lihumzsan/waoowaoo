@@ -52,6 +52,7 @@ export async function planGeneratePanelVideoOperation(params: {
   let previousVideoUrl: string | null = null
   let previousLastVideoGenerationOptions: unknown = null
   let episodeId: string | null = null
+  const requestedEpisodeId = normalizeString(params.ctx.context.episodeId)
   if (!panelId) {
     const storyboardId = normalizeString(payload.storyboardId)
     const panelIndex = typeof payload.panelIndex === 'number' ? payload.panelIndex : NaN
@@ -59,7 +60,16 @@ export async function planGeneratePanelVideoOperation(params: {
       throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
     }
     const panel = await prisma.projectPanel.findFirst({
-      where: { storyboardId, panelIndex: Number(panelIndex) },
+      where: {
+        storyboardId,
+        panelIndex: Number(panelIndex),
+        storyboard: {
+          episode: {
+            projectId: params.ctx.projectId,
+            ...(requestedEpisodeId ? { id: requestedEpisodeId } : {}),
+          },
+        },
+      },
       select: {
         id: true,
         videoUrl: true,
@@ -78,8 +88,16 @@ export async function planGeneratePanelVideoOperation(params: {
     throw new Error('PROJECT_AGENT_PANEL_NOT_FOUND')
   }
   if (normalizeString(payload.panelId)) {
-    const panel = await prisma.projectPanel.findUnique({
-      where: { id: panelId },
+    const panel = await prisma.projectPanel.findFirst({
+      where: {
+        id: panelId,
+        storyboard: {
+          episode: {
+            projectId: params.ctx.projectId,
+            ...(requestedEpisodeId ? { id: requestedEpisodeId } : {}),
+          },
+        },
+      },
       select: {
         videoUrl: true,
         duration: true,

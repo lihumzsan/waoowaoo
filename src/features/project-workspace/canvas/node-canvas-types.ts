@@ -2,7 +2,6 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type { LocationSpatialProfileStatus } from '@/lib/location-spatial-profile/types'
-import type { BillingActionQuotePreview } from '@/lib/billing/action-quote-preview'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
 
 export type WorkspaceCanvasNodeKind =
@@ -436,13 +435,10 @@ export interface WorkspaceCanvasNodeData {
   }
   readonly actionLabel?: string
   readonly action?: WorkspaceCanvasNodeAction
-  readonly actionBillingQuote?: BillingActionQuotePreview
   readonly secondaryActionLabel?: string
   readonly secondaryAction?: WorkspaceCanvasNodeAction
-  readonly secondaryActionBillingQuote?: BillingActionQuotePreview
   readonly tertiaryActionLabel?: string
   readonly tertiaryAction?: WorkspaceCanvasNodeAction
-  readonly tertiaryActionBillingQuote?: BillingActionQuotePreview
   readonly actionDisabled?: boolean
   readonly readOnly?: boolean
   readonly onAction?: WorkspaceCanvasNodeActionHandler

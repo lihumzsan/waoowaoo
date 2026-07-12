@@ -28,6 +28,8 @@
 - **BA-14 — 一个 Task type 只对应一种成本语义。** 同一 handler 可以复用实现，但文本分析与收费媒体生成必须使用不同 TaskType/Operation identity。`reference_character_description_extract` 属文本直提交流程；`reference_to_character` 属图片 `plan → quote → ApprovalGrant → commit`。payload 布尔值不得在 worker 内把一种 billing policy 变成另一种。
 - **BA-15 — 计划预留 identity 必须显式。** plan 阶段创建、commit 阶段才物化且不等于 Task target 的实体 identity，必须由 `OperationPlan.reservedIdentityIds` 穷尽声明。不可变 snapshot、quote、Approval payload 与 Workflow Lab clone 共用这份 identity 契约；禁止只把父实体 ID 藏在 operation-specific metadata。克隆或作用域迁移必须用一个 replacement map 重写 reserved identity、Task target、payload、metadata 与 dedupe identity 后再计算 hash，未映射 identity 必须显式失败或生成新 canonical identity，不得复用另一 project/attempt 的预留主键。
 - **BA-16 — 零 Task 计划是原子 noop。** `billable_media` 的最终计划允许因全部目标已复用而包含零 Task；Grant、Execution 与 operation-specific plan writes 仍由同一 commit transaction 结算，Task submitter 返回空结果，invocation 投影为 `noop`。零 Task 不得与重复 Task identity 混为无效计划，也不得伪造占位 Task、跳过 plan writes 或建立第二条零 Task commit 分支。
+- **BA-17 — 直接 UI 批准只能消费当前展示计划。** Canvas 等直接操作入口可以把用户点击已展示数量与 credits 的按钮视为批准，但按钮必须持有完整 `OperationPlanView`，Grant 与 execute 必须消费该 View 的同一 `planSnapshotId`；禁止预览 plan A、点击后重新 plan B，或用不展示报价的普通按钮提交收费媒体。所有 Canvas 收费 action 只能经过 `CanvasActionButton`，免费规划与非计费合成不得伪装成收费按钮。
+- **BA-18 — Episode scope 由计划产物裁决。** planner 必须从经过 project ownership 校验的真实 target 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝同一计划包含多个 episode，并以计划 Task scope 为 canonical episode。execute 只校验 session、project、operation 与可选的显式 scope 限制，commit context 必须从已批准 snapshot 注入 episode；禁止要求客户端在批准后重复提交同一 episode 事实或从 route body 重建 scope。
 
 ## 权威入口
 
@@ -37,6 +39,8 @@
 - Grant 发放、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
 - API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
+- Project UI 的唯一收费执行 route：`src/app/api/projects/[projectId]/operations/[operationId]/execute/route.ts`；route 只鉴权并把 immutable Grant provenance 交给统一 invocation，不解释媒体类型或 episode。
+- Canvas 收费 action 解析与唯一按钮：`src/features/project-workspace/canvas/hooks/useWorkspaceCanvasBillableAction.ts`、`src/features/project-workspace/canvas/nodes/CanvasActionButton.tsx`；同一个 query result 同时提供可见 quote 与点击授权的 snapshot。
 - ApprovalGrant 与充值/支付 route：`src/app/api/operation-approval-grants/**`、`src/app/api/payments/**` 只负责鉴权、参数和调用既有 grant/payment service，不得建立第二审批或账本 writer。
 - 批准计划的唯一 Task 创建入口：`src/lib/task/approved-plan-submitter.ts`；它只消费已经由当前 invocation 绑定的 execution context，不拥有 Grant 消费权。
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
@@ -71,6 +75,7 @@
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。
 - 制作规划确认曾在 `bible_review` 副作用中直接提交视觉风格任务：后端虽持有报价，UI 未清楚展示 credits，且 Task 未绑定 Agent Wait。免费结果确认与收费媒体授权必须保持两个显式边沿。
 - 视觉风格媒体 plan 曾为了得到精确图片 Prompt 而在 approval preflight 同步调用 LLM 并创建候选记录；虽然图片报价准确，却让 plan 成为第二个长任务执行器和领域 writer。现由普通文本 Task 先持久化方案，图片 plan 只读该 Task 的成功结果。
+- Canvas 曾为按钮价格预取 plan A，点击 mutation 又创建 plan B 并自动签发 Grant；分镜图片和单镜头视频的专用 route 还遗漏 episode context，导致合法 Grant 被 scope mismatch 拒绝，视频详情普通按钮则完全不展示价格。旧 unit/conformance 只覆盖 plan、Grant 或节点结构，没有走通直接 UI 的“可见 quote → 同 snapshot Grant → commit”。现删除媒体专用提交 route 和各自 mutation，Canvas 只持有一个 plan handle，snapshot 从真实 Task target 取得 canonical episode，通用 execute 不再重新解释 scope。
 
 ## 修改检查表
 
