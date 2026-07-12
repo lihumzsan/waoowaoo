@@ -454,6 +454,8 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
       },
       firstLastFrame: {
         flModel: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+        customPrompt: 'visible persisted transition prompt',
+        customPromptEditedByUser: true,
       },
     },
     params: { projectId: 'project-1' },
@@ -469,6 +471,8 @@ const DIRECT_CASES: ReadonlyArray<DirectRouteCase> = [
       },
       firstLastFrame: {
         flModel: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+        customPrompt: 'visible persisted transition prompt',
+        customPromptEditedByUser: true,
       },
     },
   },

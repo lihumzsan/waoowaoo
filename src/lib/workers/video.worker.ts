@@ -717,7 +717,12 @@ async function generateVideoForPanel(
     generationMode,
     userEdited: promptEditedByUser,
   })
-  const effectivePrompt = isLtx23VideoModel(model)
+  const isGoonFirstLastFrame = Boolean(
+    firstLastFramePayload && model === COMFYUI_LTX23_GOON_FIRST_LAST_FRAME_MODEL_KEY,
+  )
+  const effectivePrompt = isGoonFirstLastFrame
+    ? basePrompt
+    : isLtx23VideoModel(model)
     ? (
         await enhanceLtx23VideoPrompt({
           userId: job.data.userId,

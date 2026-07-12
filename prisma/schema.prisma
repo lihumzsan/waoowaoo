@@ -210,6 +210,7 @@ model NovelPromotionPanel {
   videoPromptEditedByUser Boolean             @default(false)
   firstLastFramePrompt String?                @db.Text
   firstLastFramePromptEditedByUser Boolean    @default(false)
+  firstLastFramePromptSourceFingerprint String? @db.VarChar(64)
   videoDurationBinding String?                @db.Text
   videoModel        String?                   @db.Text
   videoUrl          String?                   @db.Text

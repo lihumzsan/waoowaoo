@@ -1042,14 +1042,12 @@ describe('worker video processor behavior', () => {
 
     await processor!(job)
 
-    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      originalPrompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
-      generationMode: 'firstlastframe',
-    }))
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
+          prompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
           generationMode: 'firstlastframe',
           lastFrameImageUrl: 'https://signed.example/cos/last-frame.png',
         }),
@@ -1062,6 +1060,45 @@ describe('worker video processor behavior', () => {
         videoGenerationMode: 'firstlastframe',
       }),
     })
+  })
+
+  it('VIDEO_PANEL: forwards the visible first-last custom prompt and edited flag without enhancement', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+    const customPrompt = 'A single continuous tracking shot carries the same woman from the doorway to the window while her coat, face, room, lighting, and visible furniture remain unchanged, ending precisely in the supplied final composition.'
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      firstLastFramePrompt: 'older persisted prompt',
+      firstLastFramePromptEditedByUser: false,
+    }))
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(buildPanel({
+      id: 'panel-2',
+      panelIndex: 1,
+      imageUrl: 'cos/last-frame.png',
+    }))
+
+    await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt,
+          customPromptEditedByUser: true,
+        },
+        generationOptions: { duration: 8 },
+      },
+    }))
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({ prompt: customPrompt }),
+      }),
+    )
   })
 
   it('LIP_SYNC: fails explicitly when panel is missing', async () => {
