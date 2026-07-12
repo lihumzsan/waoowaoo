@@ -1,17 +1,25 @@
 import { Prisma } from '@prisma/client'
+import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import {
   mapWorkflowLabId,
   readMappedId,
   toInputJson,
   type WorkflowLabCloneMaps,
 } from './clone-json'
+import {
+  shouldWorkflowLabKeepStoryboardImages,
+  shouldWorkflowLabKeepStoryboardVideos,
+} from './clone-stage'
 
 export async function cloneWorkflowLabStoryboards(params: {
   readonly tx: Prisma.TransactionClient
   readonly sourceEpisodeId: string
   readonly targetEpisodeId: string
+  readonly stage: EditFirstWorkflowStage
   readonly maps: WorkflowLabCloneMaps
 }) {
+  const keepImages = shouldWorkflowLabKeepStoryboardImages(params.stage)
+  const keepVideos = shouldWorkflowLabKeepStoryboardVideos(params.stage)
   const storyboards = await params.tx.projectStoryboard.findMany({
     where: { episodeId: params.sourceEpisodeId },
     orderBy: { createdAt: 'asc' },
@@ -33,7 +41,7 @@ export async function cloneWorkflowLabStoryboards(params: {
         episodeId: params.targetEpisodeId,
         chapterId: targetChapterId,
         ...(targetEditScriptId ? { editScriptId: targetEditScriptId } : {}),
-        storyboardImageUrl: storyboard.storyboardImageUrl,
+        storyboardImageUrl: keepImages ? storyboard.storyboardImageUrl : null,
         panelCount: storyboard.panelCount,
         storyboardTextJson: storyboard.storyboardTextJson,
         lastError: storyboard.lastError,
@@ -64,14 +72,14 @@ export async function cloneWorkflowLabStoryboards(params: {
           srtEnd: panel.srtEnd,
           duration: panel.duration,
           imagePrompt: panel.imagePrompt,
-          imageUrl: panel.imageUrl,
-          imageMediaId: panel.imageMediaId,
+          imageUrl: keepImages ? panel.imageUrl : null,
+          imageMediaId: keepImages ? panel.imageMediaId : null,
           videoPrompt: panel.videoPrompt,
-          videoUrl: panel.videoUrl,
-          lastVideoGenerationOptions: panel.lastVideoGenerationOptions === null
+          videoUrl: keepVideos ? panel.videoUrl : null,
+          lastVideoGenerationOptions: !keepVideos || panel.lastVideoGenerationOptions === null
             ? Prisma.JsonNull
             : toInputJson(panel.lastVideoGenerationOptions),
-          videoMediaId: panel.videoMediaId,
+          videoMediaId: keepVideos ? panel.videoMediaId : null,
           sceneType: panel.sceneType,
           candidateImages: panel.candidateImages,
           sourceShotId: panel.sourceShotId,
@@ -104,8 +112,8 @@ export async function cloneWorkflowLabStoryboards(params: {
             : null,
           description: supplementaryPanel.description,
           imagePrompt: supplementaryPanel.imagePrompt,
-          imageUrl: supplementaryPanel.imageUrl,
-          imageMediaId: supplementaryPanel.imageMediaId,
+          imageUrl: keepImages ? supplementaryPanel.imageUrl : null,
+          imageMediaId: keepImages ? supplementaryPanel.imageMediaId : null,
           characters: supplementaryPanel.characters,
           location: supplementaryPanel.location,
         },

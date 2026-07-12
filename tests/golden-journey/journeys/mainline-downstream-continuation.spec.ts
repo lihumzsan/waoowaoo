@@ -47,6 +47,7 @@ async function forkGoldenCheckpointWhenReady(input: {
   readonly scope: { readonly projectId: string; readonly episodeId: string }
 }> {
   const source = await readGoldenSourceFixtureManifest()
+  const checkpointSource = source.checkpointSources?.[input.stage] ?? source.scope
   const authState = JSON.parse(await readFile(source.authStatePath, 'utf8')) as GoldenStorageState
   await input.context.addCookies(authState.cookies)
   await input.page.goto('/zh/home', { waitUntil: 'domcontentloaded' })
@@ -56,23 +57,23 @@ async function forkGoldenCheckpointWhenReady(input: {
     try {
       const scope = await forkGoldenWorkflowCheckpoint({
         page: input.page,
-        source: source.scope,
+        source: checkpointSource,
         stage: input.stage,
       })
       const checkpointStages = await listGoldenWorkflowCheckpointStages({
         page: input.page,
-        source: source.scope,
+        source: checkpointSource,
       })
       await writeGoldenSourceFixtureManifest({
         ...source,
         scope: toGoldenScope(scope),
         checkpointSources: {
-          ...Object.fromEntries(checkpointStages.map((stage) => [stage, toGoldenScope(source.scope)])),
+          ...Object.fromEntries(checkpointStages.map((stage) => [stage, toGoldenScope(checkpointSource)])),
           ...source.checkpointSources,
         },
         createdAt: new Date().toISOString(),
       })
-      await attachGoldenOracleEvidence(input.testInfo, source.scope, `golden-chain-source-${input.stage}`)
+      await attachGoldenOracleEvidence(input.testInfo, checkpointSource, `golden-chain-source-${input.stage}`)
       return { source, scope }
     } catch (error) {
       if (!(error instanceof Error) || !error.message.includes(`GOLDEN_STAGE_CHECKPOINT_MISSING:${input.stage}`)) {

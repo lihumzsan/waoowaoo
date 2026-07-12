@@ -74,6 +74,10 @@ export function resolveWorkflowLabBibleStatus(stage: EditFirstWorkflowStage, sou
   return 'confirmed'
 }
 
+export function shouldWorkflowLabKeepBibleLock(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_style_previews')
+}
+
 export function resolveWorkflowLabStylePreviewStatus(stage: EditFirstWorkflowStage, sourceStatus: string): string {
   if (stage === 'needs_style_choice' && sourceStatus === 'confirmed') return 'completed'
   return sourceStatus
@@ -86,4 +90,23 @@ export function resolveWorkflowLabEditAssetReviewStatus(stage: EditFirstWorkflow
 
 export function shouldWorkflowLabKeepAssetRequirementTarget(stage: EditFirstWorkflowStage): boolean {
   return workflowLabStageAtLeast(stage, 'ready_to_generate_assets')
+}
+
+export function resolveWorkflowLabAssetRequirementStatus(
+  stage: EditFirstWorkflowStage,
+  sourceStatus: string,
+): string {
+  return workflowLabStageAtLeast(stage, 'assets_ready_for_review') ? sourceStatus : 'pending'
+}
+
+export function shouldWorkflowLabKeepAssetRequirementError(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'assets_ready_for_review')
+}
+
+export function shouldWorkflowLabKeepStoryboardImages(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_generate_videos')
+}
+
+export function shouldWorkflowLabKeepStoryboardVideos(stage: EditFirstWorkflowStage): boolean {
+  return workflowLabStageAtLeast(stage, 'ready_to_render_chapters')
 }

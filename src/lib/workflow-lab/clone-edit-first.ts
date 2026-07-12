@@ -10,6 +10,7 @@ import {
 import { rewriteWorkflowLabValue } from './message-rewrite'
 import {
   resolveWorkflowLabEditAssetReviewStatus,
+  resolveWorkflowLabAssetRequirementStatus,
   resolveWorkflowLabBibleStatus,
   resolveWorkflowLabStylePreviewStatus,
   shouldWorkflowLabCloneEditScript,
@@ -17,6 +18,8 @@ import {
   shouldWorkflowLabCloneShotExecutionPlan,
   shouldWorkflowLabCloneStylePreviews,
   shouldWorkflowLabKeepAssetRequirementTarget,
+  shouldWorkflowLabKeepAssetRequirementError,
+  shouldWorkflowLabKeepBibleLock,
 } from './clone-stage'
 
 async function cloneWorkflowLabChapters(params: {
@@ -130,7 +133,7 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
         diagnosticsJson: toNullableInputJson(bible.diagnosticsJson),
         version: bible.version,
         status: resolveWorkflowLabBibleStatus(params.stage, bible.status),
-        lockedAt: bible.lockedAt,
+        lockedAt: shouldWorkflowLabKeepBibleLock(params.stage) ? bible.lockedAt : null,
       },
       select: { id: true },
     })
@@ -232,9 +235,11 @@ export async function cloneWorkflowLabEditFirstArtifacts(params: {
           name: requirement.name,
           description: requirement.description,
           requiredForShotIds: toInputJson(requirement.requiredForShotIds),
-          status: keepTarget ? requirement.status : 'pending',
+          status: resolveWorkflowLabAssetRequirementStatus(params.stage, requirement.status),
           targetId: mappedTargetId,
-          errorMessage: keepTarget ? requirement.errorMessage : null,
+          errorMessage: shouldWorkflowLabKeepAssetRequirementError(params.stage)
+            ? requirement.errorMessage
+            : null,
         },
         select: { id: true },
       })

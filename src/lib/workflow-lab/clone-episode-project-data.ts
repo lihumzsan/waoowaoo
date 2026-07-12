@@ -36,6 +36,7 @@ export async function cloneEpisodeProjectData(params: {
       tx: params.tx,
       sourceEpisodeId: params.sourceEpisodeId,
       targetEpisodeId: params.targetEpisodeId,
+      stage: params.stage,
       maps: params.maps,
     })
   }

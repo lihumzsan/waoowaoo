@@ -68,6 +68,7 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
         ? null
         : OPERATION_BY_STAGE[scenario.startStage] ?? null)
       let approvalSubmitted = false
+      let intakeChoiceSubmitted = false
       if (scope.checkpointKind === 'approval') {
         await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
         await page.reload({ waitUntil: 'domcontentloaded' })
@@ -103,6 +104,13 @@ for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
           await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
           await getGoldenApprovalButton(page).click()
           approvalSubmitted = true
+        }
+        if (!intakeChoiceSubmitted && scenario.startStage === 'ready_to_ingest_script') {
+          const activeBoundary = await readGoldenMainlineBoundary(page)
+          if (activeBoundary === 'script_intake') {
+            await submitGoldenBoundary(page, activeBoundary)
+            intakeChoiceSubmitted = true
+          }
         }
         await page.waitForTimeout(250)
       }
