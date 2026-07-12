@@ -10,7 +10,10 @@ import {
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 import type { WorkspaceCanvasLifecycle } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasStreamPatch } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
-import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
+import {
+  collectWorkspaceNodeRuntimeTargets,
+  resolveWorkspaceCanvasNodeData,
+} from '@/features/project-workspace/canvas/workspace-node-runtime'
 import { taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, type TaskSSEEvent } from '@/lib/task/types'
 import { AI_PROMPT_IDS } from '@/lib/ai-prompts/ids'
@@ -343,5 +346,63 @@ describe('workspace structured stream runtime', () => {
       phase: 'pending',
       error: null,
     })
+  })
+
+  it('collects asset-card targets and resolves both the group and item from the same task state', () => {
+    const assetTarget = {
+      targetType: 'CharacterAppearance',
+      targetId: 'appearance-1',
+      types: [TASK_TYPE.IMAGE_CHARACTER],
+    } as const
+    const node: WorkspaceCanvasFlowNode = {
+      id: 'edit-asset-group:episode-1',
+      type: 'workspaceNode',
+      position: { x: 0, y: 0 },
+      data: {
+        kind: 'editAssetGroup',
+        mediaLoadingContext: { styleImageUrl: null },
+        layoutNodeType: 'editAssetGroup',
+        targetType: 'editAssetRequirement',
+        targetId: 'episode-1',
+        title: 'Assets',
+        eyebrow: 'Assets',
+        body: 'Character',
+        meta: '',
+        lifecycle: pendingLifecycle,
+        width: 720,
+        height: 360,
+        editAssetGroupDetails: {
+          editScriptId: 'episode-1',
+          assets: [{
+            requirementId: 'planned-asset:character:character-1',
+            kind: 'character',
+            name: 'Character',
+            eyebrow: 'character',
+            description: 'Character description',
+            shotIds: [],
+            shotNumbers: [],
+            lifecycle: pendingLifecycle,
+            runtimeTarget: assetTarget,
+          }],
+        },
+      },
+    }
+    const processingState = {
+      phase: 'processing',
+      taskId: 'asset-task-1',
+      runningTaskId: 'asset-task-1',
+      runningTaskType: TASK_TYPE.IMAGE_CHARACTER,
+    } as const
+
+    expect(collectWorkspaceNodeRuntimeTargets([node])).toEqual([assetTarget])
+    const resolved = resolveWorkspaceCanvasNodeData({
+      node,
+      statesByQueryKey: new Map([[taskRuntimeTargetQueryKey(assetTarget), processingState]]),
+      streamPatch: null,
+      submitting: false,
+    })
+
+    expect(resolved.lifecycle.phase).toBe('processing')
+    expect(resolved.editAssetGroupDetails?.assets[0]?.lifecycle.phase).toBe('processing')
   })
 })

@@ -100,6 +100,7 @@
         "tests/contracts/canvas-node-conformance.test.ts",
         "tests/unit/edit-bible/source-script-segments.test.ts",
         "tests/integration/provider/source-script-scene-stream.contract.test.ts",
+        "tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts",
         "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
       ],
       "guardPaths": [
@@ -133,6 +134,7 @@
       "testPaths": [
         "tests/unit/edit-chapter/persistent-facts.test.ts",
         "tests/golden-journey/self-tests/model-provider.test.ts",
+        "tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts",
         "tests/golden-journey/journeys/structured-stream-preview.spec.ts"
       ],
       "guardPaths": [
@@ -315,6 +317,7 @@
         "tests/integration/provider/fal-queue-result-errors.contract.test.ts",
         "tests/integration/provider/fal-video-seedance.contract.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
+        "tests/unit/provider/llm-stream-finalization.test.ts",
         "tests/unit/task/async-poll-external-id.test.ts"
       ],
       "guardPaths": [

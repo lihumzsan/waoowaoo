@@ -20,7 +20,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
-- **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。structured stream 只提供可丢弃的 presentation/content，预览解析失败只能跳过该预览项，绝不能写入节点业务失败；运行中的失败只来自真实 Task `failed` 终态，持久资源失败只来自正式 Query。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
+- **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。structured stream 只提供可丢弃的 presentation/content，预览解析失败只能跳过该预览项，绝不能写入节点业务失败；运行中的失败只来自真实 Task `failed` 终态，持久资源失败只来自正式 Query。组合节点必须由同一个 runtime target collector 穷尽收集父节点和子项声明的 target，再由同一个 resolver 同时投影组与子项；projection 不得把 `generating`、`taskRunning` 或缺少预览图解释成失败。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
 - **CN-08 — 终态通知后读取正式资源。** Canvas Task 必须先持久化业务资源，再由 Terminal Service 提交 completed/failed/canceled Event。终态 Event 只通过显式 `affectedResources` 通知客户端；客户端不得从 Task payload 直接写业务 Query Cache，而应由 `resource-change-sync.ts` invalidate 并 refetch active Query。Query fetch 是 Canvas 内容的唯一 Cache writer；Task Event 只负责清除 Task/structured runtime。缺少 `affectedResources` 时不得按 TaskType 猜测资源。网络失败保持 Query stale/invalidated 并交给正常重试或刷新，不得伪造成 Task 失败。
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。单一 raw/final 形状不得携带没有 parser 分流语义的固定版本标记；不得恢复重复的 `scriptText + structure` 输出。
@@ -51,6 +51,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 ## 验证
 
 - `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口、reload divergence 或稳定展开内容仍持有 animation/transform/will-change 都是场景失败。
+- `tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts` 的并行批准场景必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，并证明该节点不再含媒体 loading surface；同场景还验证资产审核只保留整组确认动作。
 - `GJ-CANVAS-STRUCTURED-PREVIEW` 必须让本地 provider 受控分块输出，并在 Task 仍为 processing 时观察制作规划 raw item 卡片；只检查终态正式 Query 不构成 structured preview 覆盖。
 - `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
@@ -67,6 +68,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint。
 - 视觉风格生成曾同时存在三个候选节点和最终 Style Bible 节点；Assistant 生成卡删除后真实 Journey 仍绿色，确认写入又因资源影响缺口不刷新 Canvas。现收敛为单节点身份与共享 View，Golden 必须观察 processing UI、确认后相同 identity 和 reload。
 - 核心剪辑 structured preview 曾在名称缺失时回显 locationId/characterId，正式对白、最终时间线与 Soundscape 展开详情也各自回显内部 ID；这些分散 fallback 让坏引用看似可用并把 UUID 暴露给用户。现在 preview 直接消费名称/短引用 raw schema，正式 View 由服务端/projector 用 canonical identity 解析为当前名称或顺序，renderer 不再显示 identity。
+- 并行生成资产与核心剪辑后，资产组 projection 曾把 `taskRunning/generating` 直接映射为 `failed`，同时 runtime target collector 又只收集父节点 target，导致组卡误报失败、子卡始终“待生成”；核心剪辑 renderer 还在没有 structured preview 时显示媒体式大灰块。旧防线只验证单节点 lifecycle resolver，没有覆盖组合节点子项 target。现由唯一 collector 穷尽父/子 target，父组和子项共用 resolver；projection 只消费正式资源成功/失败，剪辑节点无 details 时只保留文字内容，不再创建媒体 fallback。
 
 ## 修改检查表
 

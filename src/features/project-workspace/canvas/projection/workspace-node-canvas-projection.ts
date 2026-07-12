@@ -1179,7 +1179,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         name: character.name,
         description: character.profileData || character.introduction || appearance?.description || character.name,
         previewImageUrl: imageUrl,
-        taskRunning: Boolean(appearance?.imageTaskRunning),
         errorMessage: appearance?.imageErrorMessage ?? null,
         taskTargetType: 'CharacterAppearance' as const,
         taskTargetId: appearance?.id ?? character.id,
@@ -1198,7 +1197,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         name: location.name,
         description: location.summary || image?.description || location.name,
         previewImageUrl: image?.imageUrl || image?.media?.url || null,
-        taskRunning: Boolean(image?.imageTaskRunning),
         errorMessage: image?.imageErrorMessage ?? image?.spatialProfileError ?? null,
         taskTargetType: 'LocationImage' as const,
         taskTargetId: location.id,
@@ -1216,8 +1214,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     const assetsReady = plannedAssets.length > 0 && plannedAssets.every((asset) => Boolean(asset.previewImageUrl))
     const assetsFailed = plannedAssets.some((asset) => Boolean(asset.errorMessage))
       || allAssetRequirements.some(({ requirement }) => requirement.status === 'failed')
-    const assetsInconsistent = plannedAssets.some((asset) => asset.taskRunning)
-      || allAssetRequirements.some(({ requirement }) => requirement.status === 'generating')
     const assetGroupPresentation = assetsFailed
         ? workspaceCanvasFailedResourcePresentation()
         : assetsReady
@@ -1248,9 +1244,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           characters: characterRequirements,
           locations: locationRequirements,
         }),
-        ...(assetGroupPresentation ?? (assetsInconsistent
-          ? workspaceCanvasFailedResourcePresentation()
-          : workspaceCanvasPendingResourcePresentation())),
+        ...(assetGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
         actionLabel: !assetsReady && primaryScript ? translate('actions.generateEditAssets') : undefined,
         action: !assetsReady && primaryScript ? { type: 'generate_edit_assets', editScriptId: primaryScript.id } : undefined,
         editAssetGroupDetails: {
@@ -1261,7 +1255,6 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             name: requirement.name,
             description: requirement.description,
             previewImageUrl: assetPreviewUrl(requirement),
-            taskRunning: requirement.status === 'generating',
             errorMessage: requirement.errorMessage ?? null,
             taskTargetType: requirement.taskTargetType ?? (requirement.kind === 'character' ? 'CharacterAppearance' : 'LocationImage'),
             taskTargetId: requirement.taskTargetId ?? requirement.targetId ?? requirement.id,
@@ -1280,9 +1273,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
             shotNumbers: shotIds
               .map((shotId) => script?.shots.find((shot) => shot.shotId === shotId)?.shotNumber ?? null)
               .filter((value): value is number => typeof value === 'number'),
-            lifecycle: asset.taskRunning || requirement?.status === 'generating'
-              ? workspaceCanvasPendingResourcePresentation().lifecycle
-              : asset.errorMessage || requirement?.status === 'failed'
+            lifecycle: asset.errorMessage || requirement?.status === 'failed'
                 ? workspaceCanvasFailedResourcePresentation().lifecycle
                 : asset.previewImageUrl
                   ? workspaceCanvasSucceededResourcePresentation().lifecycle

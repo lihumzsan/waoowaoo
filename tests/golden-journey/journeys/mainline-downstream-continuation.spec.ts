@@ -470,6 +470,15 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
       message: 'approved core and planned-asset Operations must submit independently and share exactly one durable Wait',
     }).toBe(true)
 
+    const editScriptNodes = page.locator('article[data-node-id^="edit-script:"]')
+    await expect.poll(async () => await editScriptNodes.evaluateAll((nodes) => nodes.some((node) => (
+      node.getAttribute('data-lifecycle-phase') === 'streaming'
+      && node.querySelector('.workspace-node-loading-surface') === null
+    ))), {
+      timeout: 60_000,
+      message: 'a completed shot must render through structured text streaming without the removed media loading fallback',
+    }).toBe(true)
+
     await expect.poll(async () => await readGoldenWorkflowStage(page, scope), {
       timeout: 90_000,
       message: 'both parallel branches must complete before durable asset review',
@@ -483,6 +492,8 @@ test.describe.serial('Golden downstream checkpoint staircase', () => {
         message: 'a real user follow-up must let AI raise the durable asset-review Choice',
       }).toBe('asset_review')
     }
+    await expect(page.getByText('已就绪资产', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '资产满意，继续', exact: true }).filter({ visible: true }).last()).toBeVisible()
     await recordGoldenCheckpointSources({ page, scope })
   })
 

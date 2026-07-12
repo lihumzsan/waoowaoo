@@ -274,4 +274,54 @@ describe('edit-first assistant choice cards', () => {
     expect(card.groups[0]?.options.map((option) => option.value)).toEqual(['style-a', 'style-b'])
     expect(card.groups[0]?.options).toHaveLength(2)
   })
+
+  it('builds one episode-level asset confirmation without chapter selection options', async () => {
+    prismaState.editScriptFindMany.mockResolvedValueOnce([
+      {
+        id: 'script-1',
+        chapterId: 'chapter-1',
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+        requirements: [{
+          id: 'requirement-1',
+          kind: 'character',
+          name: 'Character',
+          status: 'completed',
+          targetId: 'character-1',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
+          errorMessage: null,
+        }],
+      },
+      {
+        id: 'script-2',
+        chapterId: 'chapter-2',
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+        requirements: [{
+          id: 'requirement-2',
+          kind: 'character',
+          name: 'Character',
+          status: 'completed',
+          targetId: 'character-1',
+          updatedAt: new Date('2026-01-01T00:00:00Z'),
+          errorMessage: null,
+        }],
+      },
+    ])
+
+    const card = await buildEditFirstAssistantChoiceCard({
+      projectId: 'project-1',
+      userId: 'user-1',
+      episodeId: 'episode-1',
+      locale: 'zh',
+      workflow: workflow('assets_ready_for_review'),
+      choiceType: 'asset_review',
+      toolCallId: 'tool-call-assets',
+    })
+
+    expect(card).toMatchObject({
+      choiceType: 'asset_review',
+      groups: [],
+      submitLabel: '资产满意，继续',
+      submit: { kind: 'submit_tool_output', decision: 'approve' },
+    })
+  })
 })

@@ -286,6 +286,13 @@ export function emitChunkedText(
   return seq
 }
 
+/** Returns only the suffix proven to belong to the same streamed completion. */
+export function resolveUnstreamedFinalText(streamedText: string, finalText: string): string {
+  if (!finalText) return ''
+  if (!streamedText) return finalText
+  return finalText.startsWith(streamedText) ? finalText.slice(streamedText.length) : ''
+}
+
 export class StreamChunkTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`LLM_STREAM_TIMEOUT: No stream chunk received within ${Math.round(timeoutMs / 1000)}s`)

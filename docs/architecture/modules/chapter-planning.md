@@ -8,7 +8,7 @@
 
 ## 不变量
 
-- **CP-00A — 规划资产可与核心剪辑并行。** 制作规划确认事务已经创建的 ProjectCharacter/ProjectLocation 是章节规划的资产菜单来源；确认视觉风格后，资产图片/空间档案任务可与 `plan_chapters` 并行。核心规划不得要求资产图片先完成，只要求角色与场景 identity/description 已存在；生成结果落库前必须重新读取资产状态，使并行期间已完成的图片投影为 completed requirement，避免事件先后顺序造成永久 pending。
+- **CP-00A — 规划资产可与核心剪辑并行。** 制作规划确认事务已经创建的 ProjectCharacter/ProjectLocation 是章节规划的资产菜单来源；确认视觉风格后，资产图片/空间档案任务可与 `plan_chapters` 并行。核心规划不得要求资产图片先完成，只要求角色与场景 identity/description 已存在；生成结果落库前必须重新读取资产状态，使并行期间已完成的图片投影为 completed requirement，避免事件先后顺序造成永久 pending。资产审核面向本集这一组共享 canonical 资产，章节 requirement 只参与完整性与受审 fingerprint，不产生“选择某章资产”的第二语义；用户动作只有确认整组资产或提交整组修改意见。
 
 - **CP-01 — Ledger 事实唯一。** 入章事实来自 ledger snapshot，本章新增持久事实来自 ledger events。`persistentFactsIntroduced` 等 provenance 投影必须由服务端直接从本章 events 构造，模型输出不得包含事实台账字段。
 - **CP-02 — 模型只写镜头结构。** structure prompt/schema 只允许 `shots` 与 `generationSegments`；额外字段必须由 strict schema 显式拒绝，不得静默删除。
@@ -32,6 +32,7 @@
 - `tests/unit/edit-chapter/persistent-facts.test.ts` 是 Logic Specification：验证 ledger event facts 的确定性顺序、去重和 exact projection。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 验证协议替身输出可被生产 strict schema 消费；它不代替真实模型行为。
 - `tests/golden-journey/journeys/structured-stream-preview.spec.ts` 如覆盖核心剪辑生成，则以其既有 canonical command 证明真实 UI/Task/worker/资源组合；未运行不得声称通过。
+- `tests/golden-journey/journeys/mainline-downstream-continuation.spec.ts` 的并行批准场景验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见，以及最终资产审核没有章节选择语义。
 - `scripts/guards/chapter-plan-fact-authority-guard.mjs` 只反证模型事实字段、第二 provenance constructor 或旧自然语言 validator 被重新接回；它不证明用户行为。
 
 ## 历史回归

@@ -431,19 +431,7 @@ export async function buildAssetReviewChoiceCard(params: {
     description: isEnglish
       ? 'Check the generated characters, locations, and spatial profiles. Continue only when the required assets look ready for shot planning.'
       : '请检查已生成的人物、场景和空间档案。确认满意后将继续生成镜头执行计划。',
-    groups: [{
-      key: 'assetSummary',
-      label: isEnglish ? 'Ready assets' : '已就绪资产',
-      required: false,
-      presentation: 'options',
-      options: editScripts.map((script, index) => ({
-        value: script.id,
-        label: isEnglish
-          ? `Chapter ${String(index + 1)} · ${String(script.requirements.length)} asset(s)`
-          : `第 ${String(index + 1)} 章 · ${String(script.requirements.length)} 个资产`,
-        description: script.requirements.map((requirement) => `${requirement.name} / ${requirement.kind}`).join('\n'),
-      })),
-    }],
+    groups: [],
     submitLabel: isEnglish ? 'Assets Look Good' : '资产满意，继续',
     submit: {
       kind: 'submit_tool_output',

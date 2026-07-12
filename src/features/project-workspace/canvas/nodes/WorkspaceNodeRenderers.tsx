@@ -1367,14 +1367,6 @@ export function EditScriptContent({
 }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const details = data.editScriptDetails
-  if (nodeIsRunning(data) && !details) {
-    return (
-      <div className="space-y-4">
-        <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
-        <div className="workspace-node-loading-surface h-[320px] rounded-[18px] border border-slate-200 bg-slate-100" />
-      </div>
-    )
-  }
   if (!details) return <p className={`${SELECTABLE_TEXT_CLASS} text-sm leading-6 text-[var(--glass-text-secondary)]`}>{data.body}</p>
   const listSeparator = labels('listSeparator')
   const allCharacterNames = uniqueCompactEntityNames(details.shots.flatMap((shot) => shot.characters))

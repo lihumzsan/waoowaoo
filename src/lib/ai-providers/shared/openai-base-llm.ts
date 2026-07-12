@@ -18,7 +18,9 @@ import {
   getSystemPrompt,
   mapReasoningEffort,
   emitStreamChunk,
+  emitChunkedText,
   emitStreamStage,
+  resolveUnstreamedFinalText,
   resolveStreamStepMeta,
   withStreamChunkTimeout,
   shouldUseOpenAIReasoningProviderOptions,
@@ -348,7 +350,15 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
       finalCompletion = await finalChatCompletionFn.call(stream)
       const finalParts = getCompletionParts(finalCompletion)
       reasoning = finalParts.reasoning || reasoning
-      text = finalParts.text || text
+      const finalText = finalParts.text || text
+      seq = emitChunkedText(
+        resolveUnstreamedFinalText(text, finalText),
+        input.callbacks,
+        'text',
+        seq,
+        stepMeta,
+      )
+      text = finalText
     } catch (error: unknown) {
       throw new AppError('EXTERNAL_ERROR', 'OpenRouter final completion could not be read', {
         details: { failure: 'final_completion_read_failed' },

@@ -24,11 +24,20 @@ export function collectWorkspaceNodeRuntimeTargets(
 ): TaskRuntimeTarget[] {
   const targetsByKey = new Map<string, TaskRuntimeTarget>()
   for (const node of nodes) {
-    for (const target of node.data.runtimeTargets ?? []) {
+    for (const target of nodeRuntimeTargets(node)) {
       targetsByKey.set(taskRuntimeTargetQueryKey(target), target)
     }
   }
   return Array.from(targetsByKey.values())
+}
+
+function nodeRuntimeTargets(node: WorkspaceCanvasFlowNode): TaskRuntimeTarget[] {
+  const targets = [...(node.data.runtimeTargets ?? [])]
+  if (node.data.kind !== 'editAssetGroup') return targets
+  for (const asset of node.data.editAssetGroupDetails?.assets ?? []) {
+    if (asset.runtimeTarget) targets.push(asset.runtimeTarget)
+  }
+  return targets
 }
 
 function orderedRuntimeStates(
@@ -36,7 +45,7 @@ function orderedRuntimeStates(
   statesByQueryKey: ReadonlyMap<string, TaskRuntimeStateLike>,
 ): TaskRuntimeStateLike[] {
   const states: TaskRuntimeStateLike[] = []
-  for (const target of node.data.runtimeTargets ?? []) {
+  for (const target of nodeRuntimeTargets(node)) {
     const state = statesByQueryKey.get(taskRuntimeTargetQueryKey(target))
     if (state) states.push(state)
   }
