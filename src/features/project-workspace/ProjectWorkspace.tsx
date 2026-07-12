@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
-import { AnimatedBackground } from '@/components/ui/SharedComponents'
 import { apiFetch } from '@/lib/api-fetch'
 import { useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { WorkspaceProvider } from './WorkspaceProvider'
@@ -97,8 +96,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
 
   return (
     <div className={isEpisodeWorkspace ? 'h-full min-h-0 overflow-hidden' : undefined}>
-      <AnimatedBackground />
-
       <WorkspaceHeaderShell
         isSettingsModalOpen={vm.ui.isSettingsModalOpen}
         isWorldContextModalOpen={vm.ui.isWorldContextModalOpen}

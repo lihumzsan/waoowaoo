@@ -65,6 +65,7 @@
       "document": "docs/architecture/modules/canvas-node.md",
       "title": "Canvas 节点与流式状态",
       "sourcePaths": [
+        "src/features/project-workspace/ProjectWorkspace.tsx",
         "src/features/project-workspace/canvas",
         "src/styles/animations.css",
         "src/lib/workspace-resource/resource-impact.ts",
