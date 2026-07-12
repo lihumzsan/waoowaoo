@@ -1,5 +1,11 @@
 # Assistant Golden Journey incident — revised root-cause and repair plan
 
+> 后续决策：本文件关于“remaining `nextAction` 必须产生
+> `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED`”的结论已被真实复发推翻。
+> 当前权威治理为
+> [Assistant nextAction 停止误判复发治理](../assistant-next-action-stop-recurrence-2026-07-12/README.md)：
+> `nextAction` 只表达 capability，AI 正常停止结算为 completed，服务端仍不得执行该 action。
+
 ## Governing decision
 
 This is one class-D Architecture Incident. It spans the Assistant turn

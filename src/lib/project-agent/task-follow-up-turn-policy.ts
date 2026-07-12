@@ -5,7 +5,6 @@ import type {
 
 export interface ProjectAgentTaskFollowUpTurnPolicy {
   readonly allowOperationIntent: (intent: OperationIntent) => boolean
-  readonly workflowNextActionIsObligation: boolean
   readonly explanationSettlement: 'completed' | 'failed'
 }
 
@@ -20,13 +19,11 @@ export function resolveProjectAgentTaskFollowUpTurnPolicy(
   if (terminalStatus === 'failed') {
     return {
       allowOperationIntent: (intent) => intent !== 'act',
-      workflowNextActionIsObligation: false,
       explanationSettlement: 'failed',
     }
   }
   return {
     allowOperationIntent: () => true,
-    workflowNextActionIsObligation: true,
     explanationSettlement: terminalStatus === 'completed' ? 'completed' : 'failed',
   }
 }

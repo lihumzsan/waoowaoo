@@ -9,8 +9,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 ## 不变量
 
 - **AR-01 — 服务端权威。** thread/run 的 append、终态、锁和恢复由服务端管理；客户端和模型不得持有第二套 run 状态。
-- **AR-02 — 每回合有结算语义。** 一个 turn 必须明确是完成、等待用户、等待 Task、继续 Agent 还是失败；零输出、伪完成和停滞必须显式报错或进入明确状态。
-- **AR-02A — Choice 续跑不可静默完成。** 用户提交结构化选择后，服务端必须在同一消费事务中锁定 current Run fence 与 pending interruption，消费决定并开始其唯一 response execution segment；已启用的权威 `nextAction` 只约束该 AI 回合可用的能力、上下文和结果校验，不能授权服务端自行执行 operation。AI 回合必须自行发起相应工具调用；若模型在成功工具调用后停止但仍有义务，服务端必须保留已提交事实，以 `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED` 结算为可由下一条用户指令开启的新 AI 回合，不能只输出成功文案把 Run 标记完成，也不能把 `nextAction` 变成服务器执行器。
+- **AR-02 — 每回合有结算语义。** 一个 turn 必须明确是完成、等待用户、等待 Task、继续 Agent 还是失败；合法的空输出或未发起新 Tool 可以结算为 `completed` 且不产生领域事实，只有 completion、Tool、持久化、ownership 或协议本身失败才可结算为失败。模型文案不得伪造领域完成。
+- **AR-02A — Choice 续跑由 AI 发起。** 用户提交结构化选择后，服务端必须在同一消费事务中锁定 current Run fence 与 pending interruption，消费决定并开始其唯一 response execution segment；已启用的权威 `nextAction` 只约束该 AI 回合可用的能力和 Tool 合法性，不能授权服务端自行执行 operation，也不能成为本回合必须耗尽的义务。AI 可以继续发起 Tool，也可以正常停止并把 Run 结算为 `completed`；领域状态保留在正式 Workflow 阶段，后续用户/AI 回合可继续。
 - **AR-02B — Choice Offer 单一权威。** Choice 工具必须先把完整且不可变的 Offer 持久化为不可见 `ProjectAgentExecutionHandoff(kind=choice)`；唯一 settlement 在同一事务中把它写入可见 `ProjectAgentInterruption.payload`、assistant message 与 Run 等待状态。可见 Offer 同时包含 schema version、必填的 run/interruption/card/tool identity、完整卡片和受审资源 fingerprint。首屏 stream 与刷新后的 Session 只能投影已提交的 Interruption Offer；不得刷新时重查资源重建卡片，也不得接受客户端提交的 `choiceType` 作为控制事实。
 - **AR-02C — Choice 原子提交。** Choice control 只提交 interruptionId、cardId、toolCallId 与原始回答。服务端必须在同一数据库事务中读取并严格解析 Offer、校验三个身份、重读当前受审资源 fingerprint、把回答规范化成穷尽的 ChoiceDecision，最后消费 interruption 并推进 Run。Event 只持久化规范化 Decision，客户端多余字段不得进入权威历史。身份或 fingerprint 不匹配必须 conflict，且 interruption 保持 pending。
 - **AR-02D — Choice 不执行领域写入。** 所有 Choice 卡片统一使用 `submit_tool_output`，只记录用户决定。Workflow 把已消费的决定映射为唯一 `nextAction`，注册式 Operation 独占领域写入。视觉风格选择必须走 `confirm_edit_style_preview`；Choice renderer、Panel 与旧风格生成卡不得直接调用确认 API、不得以空 interruption/tool identity 续跑。
@@ -125,6 +125,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
 - 制作规划 choice 曾通过局部副作用提交视觉风格 Task，导致模型文案、候选记录、run/Wait 三套状态分离；Choice 只负责落用户决定，异步执行必须回到 registry 与 runtime。
+- `PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED` 曾把“Workflow 仍有可用 `nextAction`”解释为 Run 失败。真实复发证明 capability 不是 obligation；该 writer 已删除，详见 [Assistant nextAction 停止误判复发治理](../incidents/assistant-next-action-stop-recurrence-2026-07-12/README.md)。
 - `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。详见 [Assistant Suspension 收敛设计](../assistant-suspension-convergence.md)。
 
 ## 修改检查表
@@ -134,7 +135,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 3. Task 终态如何幂等地唤醒正确 run？
 4. 并发、重放、心跳超时和取消是否有测试？
 5. 是否新增了按 operation id 或消息文本的控制流特判？若是，必须重做为 registry/状态机语义。
-6. Choice 落库后若 Workflow 存在 `nextAction`，它是否只作为 AI 回合的能力/协议约束；AI 停止时是否保留已提交事实并明确表达可恢复协议结果，而没有服务器硬编码执行该 action？
+6. Choice 落库后若 Workflow 存在 `nextAction`，它是否只作为 AI 回合的能力与 Tool 合法性约束；AI 停止时是否正常结算且保留已提交事实，而没有服务器执行、失败化或强制耗尽该 action？
 7. 此转换是否带有可区分同状态代次的持久 `runVersion/eventSeq`？仅比较 status 不能阻止 ABA，未具备版本围栏时必须明确记录为未完成风险。
 8. Choice 卡片是否来自持久 Offer，提交是否验证 card/tool/resource fingerprint，Event 是否只保存规范化 Decision？
 9. 若 Operation 声明了 Choice suspension，是否只验证本次已提交的通用 receipt，而没有在提交后读取 Run status、按 operation id 分支或要求继续 `running`？

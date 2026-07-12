@@ -1390,34 +1390,6 @@ export async function createProjectAgentChatResponse(input: {
           runStatusFinalized = true
           throw completionError
         }
-        const unresolvedWorkflowAction = !shouldPersistApprovalInterruption
-          && !latestStopPart
-          && (taskFollowUpTurnPolicy?.workflowNextActionIsObligation ?? true)
-          ? (await liveWorkflow.get()).nextAction
-          : null
-        if (unresolvedWorkflowAction) {
-          const errorMessage = `Assistant turn ended after a completed operation while a constrained AI action remained available: ${unresolvedWorkflowAction.operationId}`
-          if (input.settleTaskFollowUp) {
-            /*
-             * This turn owns an already-claimed durable Wait continuation.
-             * It must settle that continuation through its single callback,
-             * not leave a normal Run settlement for onSettled to discover.
-             * The server still does not execute nextAction: the AI turn ends
-             * explicitly as failed and the prior Task result remains durable.
-             */
-            taskFollowUpSettlement = 'failed'
-          } else {
-            pendingRunSettlement = {
-              status: 'failed',
-              stopReason: 'ai_turn_protocol_required',
-              errorCode: 'PROJECT_AGENT_AI_TURN_PROTOCOL_REQUIRED',
-              errorMessage,
-            }
-          }
-          chunks.push(createRuntimeStatusChunk('failed', 'ai_turn_protocol_required'))
-          runStatusFinalized = true
-          return chunks
-        }
         if (pendingApprovalHandoff) {
           chunks.push(createRuntimeStatusChunk('awaiting_approval', 'awaiting_approval'))
           const preparedApprovalHandoff = await prepareProjectAgentApprovalExecutionHandoff({

@@ -167,6 +167,7 @@
       "title": "Assistant Run 生命周期",
       "sourcePaths": [
         "src/lib/project-agent",
+        "src/lib/ai-prompts/templates/project-agent",
         "src/lib/operations",
         "src/lib/project-workflow/edit-first.ts",
         "src/lib/workflow-lab",
