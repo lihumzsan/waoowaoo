@@ -20,6 +20,7 @@
 - **TG-08 — 穷尽 conformance。** registry conformance 必须枚举生产 registry，并验证 capability/policy/identity 等真实契约。动态调用后只检查“返回 Response”不构成 conformance。
 - **TG-09 — Harness fail-closed。** Golden 场景未挂载、required case 被跳过、依赖不可用、浏览器异常、外部付费调用或只读 oracle 写入都必须显式失败。
 - **TG-10 — 执行时机独立。** 本模块定义测试证据和命令，不定义 commit、push、PR、nightly 或 release 的运行时机。Git hooks 保持由独立策略决定。
+- **TG-11 — 关键 Journey 契约同步。** 已承担权威证据职责的 Golden/Critical Journey 所覆盖的用户流程、阶段、生产入口、生命周期、终态、失败语义或禁止副作用发生变化时，同一变更必须审计并同步 canonical scenario contract、真实驱动路径与独立 oracle，并实际运行该场景的 canonical command。若 observable 不变，必须记录“不适用 + 原因”并证明原场景仍通过。禁止保留旧语义、删除场景、放宽断言或以 skip/todo 逃避同步；未执行或基础设施不可用只能报告未验证。
 
 ## 准入类别
 
@@ -89,3 +90,4 @@ Critical Infrastructure 测试只开放一个受控故障 seam，并验证真实
 6. 断言是否收口到用户结果或权威持久事实？
 7. 场景是否被一个明确命令实际发现，且无 skip/todo？
 8. 删除旧测试时，它是无效证据，还是需要先由真实场景接管？
+9. 本次是否改变了既有 Golden/Critical 所覆盖的流程、入口、生命周期、终态、失败或禁止副作用？若改变，scenario contract、真实驱动路径、独立 oracle 与 canonical command 是否已同步；若未改变，是否记录了“不适用 + 原因”并证明原场景仍通过？

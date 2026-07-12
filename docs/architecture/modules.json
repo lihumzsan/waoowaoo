@@ -335,6 +335,7 @@
         "tests/integration/api/specific",
         "tests/concurrency/billing",
         "docs/architecture/incidents/assistant-golden-journey",
+        "docs/architecture/incidents/journey-contract-drift-governance-2026-07-12",
         "docs/architecture/incidents/test-system-reset",
         "docs/architecture/incidents/system-journey-coverage"
       ],

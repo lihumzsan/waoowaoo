@@ -119,6 +119,7 @@
 ## 10. 测试与验证
 
 - 测试治理统一遵守 `docs/architecture/modules/test-governance.md`。生产代码发生变化不自动要求新增测试；必须先选择已有 Golden、Critical、Logic 或 Conformance 证据。
+- 已承担权威证据职责的 Golden/Critical Journey 所覆盖的用户流程、阶段、生产入口、生命周期、终态、失败语义或禁止副作用发生变化时，同一变更必须审计并同步其 scenario contract、真实驱动路径与独立 oracle，并实际运行该场景的 canonical command；若 observable 确实不变，必须记录“不适用 + 原因”并证明原场景仍通过。禁止保留旧语义、删除场景、放宽断言或以 skip/todo 逃避同步；场景未执行或基础设施不可用时只能报告未验证，不得宣称阶段完成。
 - 新测试只有五类准入：真实 Golden Journey、浏览器无法经济注入的关键基础设施故障、非平凡纯逻辑规格、穷尽生产 registry conformance、测试 harness fail-closed 自测。无法归类时禁止新增。
 - 新测试必须写明权威 oracle、会拒绝的具体错误实现、真实入口、最终断言和可执行命令；测试数量、覆盖率、mutation 分数和目录齐全度都不是质量目标。
 - Golden Journey 是跨 UI/API/service/DB/queue/worker/Outbox/SSE/刷新组合行为的最高证据。允许并优先使用仓库内 Playwright；禁止使用 Browser Use 或 AI 驱动元素选择充当可重复测试证据。
