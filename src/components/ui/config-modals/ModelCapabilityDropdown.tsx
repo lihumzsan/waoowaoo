@@ -36,6 +36,8 @@ export interface CapabilityFieldDefinition {
     label: string
     options: CapabilityValue[]
     disabledOptions?: CapabilityValue[]
+    /** Optional option value that should be labeled as recommended. */
+    recommendedValue?: CapabilityValue
 }
 
 export interface CapabilityBooleanToggle {
@@ -107,6 +109,16 @@ function shouldUseSelectControl(field: string, options: CapabilityValue[]): bool
 function isOptionDisabled(def: CapabilityFieldDefinition, option: CapabilityValue): boolean {
     if (!Array.isArray(def.disabledOptions) || def.disabledOptions.length === 0) return false
     return def.disabledOptions.includes(option)
+}
+
+export function formatRecommendedCapabilityLabel(
+    label: string,
+    value: CapabilityValue,
+    recommendedValue: CapabilityValue | undefined,
+): string {
+    return recommendedValue !== undefined && value === recommendedValue
+        ? `${label}（推荐）`
+        : label
 }
 
 // ─── Component ────────────────────────────────────────
@@ -365,7 +377,11 @@ export function ModelCapabilityDropdown({
                                                                 const ratioValue = String(def.options[0])
                                                                 return isR && isValidRatioText(ratioValue) ? <RatioIcon ratio={ratioValue} size={10} /> : null
                                                             })()}
-                                                            {formatOptionLabel(def.options[0])}
+                                                            {formatRecommendedCapabilityLabel(
+                                                                formatOptionLabel(def.options[0]),
+                                                                def.options[0],
+                                                                def.recommendedValue,
+                                                            )}
                                                             <span className="text-[var(--glass-text-tertiary)] text-[10px]">({t('fixed')})</span>
                                                         </span>
                                                     ) : useSelect ? (
@@ -379,7 +395,11 @@ export function ModelCapabilityDropdown({
                                                                     const s = String(opt)
                                                                     return (
                                                                         <option key={s} value={s}>
-                                                                            {formatOptionLabel(opt)}
+                                                                            {formatRecommendedCapabilityLabel(
+                                                                                formatOptionLabel(opt),
+                                                                                opt,
+                                                                                def.recommendedValue,
+                                                                            )}
                                                                         </option>
                                                                     )
                                                                 })}
@@ -405,7 +425,11 @@ export function ModelCapabilityDropdown({
                                                                             }`}
                                                                     >
                                                                         {isR && isValidRatioText(s) && <RatioIcon ratio={s} size={10} selected={on} />}
-                                                                        {formatOptionLabel(opt)}
+                                                                        {formatRecommendedCapabilityLabel(
+                                                                            formatOptionLabel(opt),
+                                                                            opt,
+                                                                            def.recommendedValue,
+                                                                        )}
                                                                     </button>
                                                                 )
                                                             })}
