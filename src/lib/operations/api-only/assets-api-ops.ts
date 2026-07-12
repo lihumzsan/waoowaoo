@@ -7,7 +7,7 @@ import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   submitPlannedOperationTask,
   type OperationPlan,
@@ -299,13 +299,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           kind: input.kind,
           assetId: input.assetId,
           imageBuffer,
-          locale: resolveRequiredTaskLocale(ctx.request, {
-            scope: input.scope,
-            kind: input.kind,
-            projectId,
-            assetId: input.assetId,
-            imageIndex: input.imageIndex,
-          }),
+          locale: resolveOperationLocale(ctx.context),
           ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
           ...(input.imageIndex !== undefined ? { imageIndex: input.imageIndex } : {}),
         })

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
@@ -153,7 +153,7 @@ export async function planRegeneratePanelImageOperation(
   })
 
   const hasOutputAtStart = await hasPanelImageOutput(panelId)
-  const taskLocale = resolveRequiredTaskLocale(ctx.request, body)
+  const taskLocale = resolveOperationLocale(ctx.context)
   const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
     projectId: ctx.projectId,
     storyboardId: normalizeString(input.storyboardId) || null,

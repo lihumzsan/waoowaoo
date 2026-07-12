@@ -5,6 +5,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { normalizeString, submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 
 const EFFECTS_BILLABLE_LONG_RUNNING = {
   writes: true,
@@ -38,6 +39,7 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
       execute: async (ctx, input) =>
         submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           type: TASK_TYPE.AI_MODIFY_APPEARANCE,
@@ -87,6 +89,7 @@ export function createLlmTaskOperations(): ProjectAgentOperationRegistryDraft {
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           type: TASK_TYPE.AI_MODIFY_PROP,

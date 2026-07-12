@@ -1,13 +1,13 @@
 import { createHash } from 'crypto'
 import { ApiError } from '@/lib/api-errors'
+import type { Locale } from '@/i18n/routing'
 
 export function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export function resolveLocaleFromContext(locale?: unknown): string {
-  const normalized = normalizeString(locale)
-  return normalized || 'zh'
+export function resolveLocaleFromContext(locale?: unknown): Locale {
+  return locale === 'en' ? 'en' : 'zh'
 }
 
 export function resolveCandidateCount(input?: unknown): number {

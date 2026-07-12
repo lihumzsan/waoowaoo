@@ -4,7 +4,6 @@ import { ApiError } from '@/lib/api-errors'
 import { prepareTaskSubmissionInput, type SubmitTaskResult } from '@/lib/task/submitter'
 import { type TaskBillingInfo, type TaskType } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import type { Locale } from '@/i18n/routing'
 import type { Prisma } from '@prisma/client'
 import {
@@ -35,7 +34,7 @@ export interface OperationTaskSubmissionParams {
   dedupeKey?: string | null
   batchKey?: string | null
   priority?: number
-  locale?: Locale
+  locale: Locale
   billingInfo?: TaskBillingInfo | null
   billingInfoSource?: 'auto' | 'planned'
   decoratePayload?: boolean
@@ -47,7 +46,7 @@ export interface OperationTaskSubmissionParams {
 
 async function prepareOperationTaskSubmission(params: OperationTaskSubmissionParams) {
   const executionFence = getProjectAgentOperationExecutionFence()
-  const locale = params.locale ?? resolveRequiredTaskLocale(params.request, params.payload)
+  const locale = params.locale
   const billingInfo = params.billingInfo !== undefined
     ? params.billingInfo
     : isBillableTaskType(params.type)

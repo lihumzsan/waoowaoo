@@ -6,6 +6,7 @@ import { getProjectModelConfig } from '@/lib/config-service'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   commitReferenceCharacterGeneration,
   planReferenceCharacterGeneration,
@@ -59,6 +60,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           type: TASK_TYPE.AI_CREATE_CHARACTER,
@@ -104,6 +106,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           type: TASK_TYPE.AI_CREATE_LOCATION,
@@ -137,6 +140,7 @@ export function createExtraOperations(): ProjectAgentOperationRegistryDraft {
         const imageIndex = input.imageIndex ?? 0
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           type: TASK_TYPE.AI_MODIFY_LOCATION,

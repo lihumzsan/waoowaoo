@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { buildImageBillingPayload, getProjectModelConfig } from '@/lib/config-service'
@@ -73,10 +72,7 @@ export async function planGenerateEditScriptStoryboardImagesOperation(
   }
   await resolveModelSelection(ctx.userId, projectModelConfig.storyboardModel, 'image')
   const locale = resolveLocaleFromContext(ctx.context.locale)
-  const taskLocale = resolveRequiredTaskLocale(ctx.request, {
-    count: 1,
-    meta: { locale },
-  })
+  const taskLocale = locale
   const styleBibleSignatures = new Map<string, string>()
   const readStyleBibleSignature = async (panelStoryboardId: string) => {
     const cached = styleBibleSignatures.get(panelStoryboardId)

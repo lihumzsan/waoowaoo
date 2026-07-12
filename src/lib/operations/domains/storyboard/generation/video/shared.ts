@@ -1,4 +1,3 @@
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { parseModelKeyStrict } from '@/lib/ai-registry/selection'
 import type { CapabilityValue } from '@/lib/ai-registry/types'
 import { resolveAiVideoTokenPricingContract } from '@/lib/ai-exec/video-token-pricing'
@@ -10,6 +9,7 @@ import { isCloudDeployment } from '@/lib/deployment/config'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import type { Locale } from '@/i18n/routing'
 
 export type UnknownObject = { [key: string]: unknown }
 type VideoTaskModelPurpose = 'single-shot-video' | 'sequence-video'
@@ -26,9 +26,8 @@ export function normalizeStringList(value: unknown): string[] {
     .filter((item) => item.length > 0)
 }
 
-export function resolveLocaleFromContext(locale?: unknown): string {
-  const normalized = normalizeString(locale)
-  return normalized || 'zh'
+export function resolveLocaleFromContext(locale?: unknown): Locale {
+  return locale === 'en' ? 'en' : 'zh'
 }
 
 export function isRecord(value: unknown): value is UnknownObject {
@@ -224,7 +223,7 @@ export function buildVideoTaskPayload(params: {
 
   return {
     payload,
-    localeForTask: resolveRequiredTaskLocale(params.ctx.request, payload),
+    localeForTask: locale,
   }
 }
 

@@ -13,10 +13,6 @@ import { appendProjectAgentEventsInTransaction } from './event'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
 import {
-  isProjectAgentRunWakeupBudgetAvailable,
-  PROJECT_AGENT_RUN_WAKEUP_LIMIT,
-} from './run-budget'
-import {
   createProjectAgentRunFence,
   type ProjectAgentRunFence,
 } from './run-fence'
@@ -890,70 +886,6 @@ export async function startProjectAgentWaitFollowUp(input: {
     runVersion: row.runVersion,
     eventSeq: row.eventSeq,
   })
-  const wakeupBudgetAvailable = await isProjectAgentRunWakeupBudgetAvailable({
-    projectId: input.projectId,
-    userId: input.userId,
-    runId: input.runId,
-  })
-  if (!wakeupBudgetAvailable) {
-    const message: UIMessage = {
-      id: `workspace-assistant-run:wakeup-budget:${rowRunId}:${row.id}`,
-      role: 'assistant',
-      metadata: { custom: { projectAgentRunId: rowRunId } },
-      parts: [{
-        type: 'data-agent-run',
-        data: {
-          runId: rowRunId,
-          requestId: input.commandId,
-          status: 'failed',
-          controlKind: 'task_follow_up',
-          stopReason: 'run_budget_exceeded',
-        },
-      }],
-    }
-    await prisma.$transaction(async (tx) => {
-      await appendProjectAssistantThreadMessagesInTransaction(tx, {
-        projectId: row.projectId,
-        userId: row.userId,
-        episodeId: row.episodeId,
-        assistantId: row.assistantId as ProjectAssistantId,
-        messages: [message],
-      })
-      await appendProjectAgentEventsInTransaction(tx, {
-        scope: {
-          projectId: row.projectId,
-          userId: row.userId,
-          episodeId: row.episodeId,
-          assistantId: row.assistantId as ProjectAssistantId,
-          scopeRef: row.scopeRef,
-        },
-        events: [{
-          runFence,
-          idempotencyKey: `wait-followed:${row.id}:${input.commandId}:budget-exhausted`,
-          event: {
-            kind: 'wait.followed',
-            runId: rowRunId,
-            activityId: rowActivityId,
-            waitId: row.id,
-            claimId: input.claimOwner,
-            commandId: input.commandId,
-            sourceOperationId: row.operationId,
-          },
-        }, {
-          runFence,
-          idempotencyKey: `run-failed:${rowRunId}:wakeup-budget`,
-          event: {
-            kind: 'run.failed',
-            runId: rowRunId,
-            stopReason: 'run_budget_exceeded',
-            errorCode: 'PROJECT_AGENT_RUN_WAKEUP_BUDGET_EXCEEDED',
-            errorMessage: `Project agent wake-up budget exceeded (${PROJECT_AGENT_RUN_WAKEUP_LIMIT}).`,
-          },
-        }],
-      })
-    })
-    return null
-  }
   const executionSegment = createProjectAgentExecutionSegment({
     kind: 'task_follow_up',
     commandId: input.commandId,

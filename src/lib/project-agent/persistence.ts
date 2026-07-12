@@ -51,9 +51,27 @@ function toThreadSnapshot(record: ProjectAssistantThread, messages: UIMessage[])
 }
 
 function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMessage[] {
-  const existingById = new Map(existing.map((message) => [message.id, message] as const))
-  const nextMessages = [...existing]
-  for (const message of appended) {
+  const nextMessages = existing.map((message) => ({ ...message, parts: [...message.parts] }))
+  const existingById = new Map(nextMessages.map((message) => [message.id, message] as const))
+  const toolPartLocations = new Map<string, { messageIndex: number; partIndex: number }>()
+  for (const [messageIndex, message] of nextMessages.entries()) {
+    for (const [partIndex, part] of message.parts.entries()) {
+      if (part.type === 'dynamic-tool' && typeof part.toolCallId === 'string') {
+        toolPartLocations.set(part.toolCallId, { messageIndex, partIndex })
+      }
+    }
+  }
+  for (const appendedMessage of appended) {
+    const message = { ...appendedMessage, parts: [...appendedMessage.parts] }
+    message.parts = message.parts.filter((part) => {
+      if (part.type !== 'dynamic-tool' || typeof part.toolCallId !== 'string') return true
+      const prior = toolPartLocations.get(part.toolCallId)
+      if (!prior) return true
+      const priorMessage = nextMessages[prior.messageIndex]
+      if (!priorMessage) throw new Error(`PROJECT_ASSISTANT_TOOL_CALL_MESSAGE_MISSING:${part.toolCallId}`)
+      priorMessage.parts[prior.partIndex] = part
+      return false
+    })
     const persisted = existingById.get(message.id)
     if (persisted) {
       if (!isDeepStrictEqual(persisted, message)) {
@@ -62,7 +80,13 @@ function mergeAppendMessages(existing: UIMessage[], appended: UIMessage[]): UIMe
       continue
     }
     existingById.set(message.id, message)
+    const messageIndex = nextMessages.length
     nextMessages.push(message)
+    for (const [partIndex, part] of message.parts.entries()) {
+      if (part.type === 'dynamic-tool' && typeof part.toolCallId === 'string') {
+        toolPartLocations.set(part.toolCallId, { messageIndex, partIndex })
+      }
+    }
   }
   return ensureUniqueUIMessages(nextMessages)
 }

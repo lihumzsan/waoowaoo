@@ -1,10 +1,7 @@
 import type { NextRequest } from 'next/server'
-import {
-  buildToolError,
-  normalizeOperationExecutionToolError,
-  withOperationErrorDetails,
-} from '@/lib/adapters/operation-error-normalizer'
+import { normalizeOperationExecutionToolError } from '@/lib/adapters/operation-error-normalizer'
 import { persistOperationPlanView, planOperation, type OperationPlanView } from '@/lib/operations/planning'
+import { prepareProjectAgentOperationInput } from '@/lib/operations/invocation'
 import type {
   ProjectAgentOperationDefinition,
   ProjectAgentToolResult,
@@ -109,27 +106,13 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
 }): Promise<boolean> {
   if (!params.operation.plan) return true
 
-  const parsed = params.operation.inputSchema.safeParse(params.input)
-  if (!parsed.success) {
-    params.store.setFailed({
-      operationId: params.operation.id,
-      toolCallId: params.toolCallId,
-      input: params.input,
-      result: {
-        ok: false,
-        error: buildToolError({
-          code: 'OPERATION_INPUT_INVALID',
-          message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
-          operationId: params.operation.id,
-          details: withOperationErrorDetails(params.operation),
-          issues: parsed.error.issues,
-        }),
-      },
-    })
-    return false
-  }
-
   try {
+    const prepared = prepareProjectAgentOperationInput({
+      channel: 'tool',
+      operation: params.operation,
+      context: params.context,
+      input: params.input,
+    })
     const plan = await planOperation({
       operation: params.operation,
       ctx: {
@@ -141,7 +124,7 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
         writer: null,
         toolCallId: params.toolCallId,
       },
-      input: parsed.data,
+      input: prepared.input,
     })
     params.store.setPlanned({
       operationId: params.operation.id,
@@ -149,7 +132,7 @@ export async function preflightProjectAgentToolApproval<Input>(params: {
       input: params.input,
       operationPlan: await persistOperationPlanView({
         plan,
-        normalizedInput: parsed.data,
+        normalizedInput: prepared.input,
         episodeId: params.context.episodeId ?? null,
       }),
     })

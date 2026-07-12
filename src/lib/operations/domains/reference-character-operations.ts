@@ -17,11 +17,11 @@ import {
   type OperationPlan,
 } from '@/lib/operations/planning'
 import { prisma } from '@/lib/prisma'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
 import { TASK_TYPE } from '@/lib/task/types'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { resolveModelSelection } from '@/lib/user-api/runtime-config'
 import { submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 
 const referenceImagesSchema = z.array(z.string().min(1)).min(1).max(5)
 
@@ -211,7 +211,7 @@ export async function planReferenceCharacterGeneration(params: {
     targetType,
     targetId,
     payload,
-    locale: resolveRequiredTaskLocale(params.ctx.request, payload),
+    locale: resolveOperationLocale(params.ctx.context),
     dedupeKey: `${params.operationId}:${digest}`,
     billingInfo: requirePlannedTaskBillingInfo({
       taskType,
@@ -271,6 +271,7 @@ export async function submitReferenceCharacterExtraction(params: {
     .slice(0, 24)
   return await submitOperationTask({
     request: params.ctx.request,
+    locale: resolveOperationLocale(params.ctx.context),
     userId: params.ctx.userId,
     projectId: params.ctx.projectId,
     type: taskType,

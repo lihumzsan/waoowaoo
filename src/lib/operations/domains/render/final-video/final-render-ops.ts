@@ -8,6 +8,7 @@ import { defineOperation } from '@/lib/operations/define-operation'
 import { EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { submitOperationTask, submitOperationTaskBatch } from '@/lib/operations/submit-operation-task'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   refineTaskSubmitOperationOutputSchema,
   taskSubmitOperationOutputSchemaBase,
@@ -126,6 +127,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
             }
           return {
               request: ctx.request,
+              locale: resolveOperationLocale(ctx.context),
               userId: ctx.userId,
               projectId: ctx.projectId,
               episodeId,
@@ -203,6 +205,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
 
         const result = await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: ctx.projectId,
           episodeId,

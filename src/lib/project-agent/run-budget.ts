@@ -10,7 +10,6 @@ type OperationActivityIdentity = {
 
 const OPERATION_TARGET_ATTEMPT_LIMIT = 2
 const CONSECUTIVE_FAILURE_LIMIT = 3
-const RUN_WAKEUP_LIMIT = 10
 
 function isRecord(value: unknown): value is UnknownObject {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -150,21 +149,3 @@ export async function enforceProjectAgentOperationRunBudget(input: {
 
   return null
 }
-
-export async function isProjectAgentRunWakeupBudgetAvailable(input: {
-  projectId: string
-  userId: string
-  runId: string
-}): Promise<boolean> {
-  const wakeupCount = await prisma.projectAgentEvent.count({
-    where: {
-      projectId: input.projectId,
-      userId: input.userId,
-      runId: input.runId,
-      kind: 'wait.followed',
-    },
-  })
-  return wakeupCount < RUN_WAKEUP_LIMIT
-}
-
-export const PROJECT_AGENT_RUN_WAKEUP_LIMIT = RUN_WAKEUP_LIMIT

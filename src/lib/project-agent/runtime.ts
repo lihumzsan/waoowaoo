@@ -756,6 +756,7 @@ export async function createProjectAgentChatResponse(input: {
           })
   const executionControlKind = executionSegment.controlKind
   const contextBase = normalizeProjectAgentContext(input.context)
+  const locale = normalizeProjectAgentLocale(contextBase.locale)
   const approvedPlanSnapshotId = control.kind === 'approval' && control.approved
     ? readPlanSnapshotIdFromInterruptionPayload(control.interruption.payload)
     : null
@@ -768,6 +769,7 @@ export async function createProjectAgentChatResponse(input: {
     : null
   const context: ProjectAgentContext = {
     ...contextBase,
+    locale,
     runId: input.run.id,
     runFence,
     executionSegmentId: executionSegment.id,
@@ -810,7 +812,6 @@ export async function createProjectAgentChatResponse(input: {
     assistantModelKey,
     openRouterSessionId,
   })
-  const locale = normalizeProjectAgentLocale(context.locale)
   let runLockReleased = false
   const releaseRunLockOnce = async () => {
     if (!input.runLock || runLockReleased) return
@@ -1318,13 +1319,14 @@ export async function createProjectAgentChatResponse(input: {
           const approvalId = readApprovalId(approvalItem)
           const operationId = approvalItem.name ?? 'unknown_operation'
           const approvalToolCallId = readApprovalToolCallId(approvalItem)
-          const approvalInputHash = stableArgsHash(readApprovalInput(approvalItem))
           const operationPlan = await buildApprovalOperationPlanView({
             item: approvalItem,
             operation: operations[operationId],
             toolCallId: approvalToolCallId,
             approvalPreflightStore,
           })
+          const approvalInputHash = operationPlan?.inputHash
+            ?? stableArgsHash(readApprovalInput(approvalItem))
             return {
               approvalId,
               operationId,

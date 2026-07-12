@@ -13,7 +13,7 @@ import { isCloudDeployment, isPlatformProviderCredentialMode } from '@/lib/deplo
 import { getProjectModelConfig } from '@/lib/config-service'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
 import { getPlatformRuntimePlan } from '@/lib/platform-runtime/presets'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
@@ -251,7 +251,7 @@ async function planGenerateProjectMusicOperation(ctx: ProjectAgentOperationConte
         targetType: 'Project',
         targetId: ctx.projectId,
         payload,
-        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        locale: resolveOperationLocale(ctx.context),
         episodeId,
         dedupeKey: `music_generate:${ctx.projectId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
@@ -331,7 +331,7 @@ async function planGenerateEpisodeBgmScoreOperation(
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
-        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        locale: resolveOperationLocale(ctx.context),
         episodeId,
         dedupeKey: `music_score_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
@@ -374,7 +374,7 @@ async function planEpisodeSoundscapeOperation(ctx: ProjectAgentOperationContext,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
-        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        locale: resolveOperationLocale(ctx.context),
         episodeId,
         dedupeKey: `soundscape_plan:${ctx.projectId}:${episodeId}:${hashPayload(payload)}`,
         billingInfo: requirePlannedTaskBillingInfo({
@@ -456,7 +456,7 @@ async function planGenerateEpisodeSoundscapeOperation(
         targetType: 'ProjectEpisode',
         targetId: episodeId,
         payload,
-        locale: resolveRequiredTaskLocale(ctx.request, payload),
+        locale: resolveOperationLocale(ctx.context),
         episodeId,
         dedupeKey: `soundscape_generate:${ctx.projectId}:${episodeId}:${soundscapePlanHash}`,
         billingInfo: requirePlannedTaskBillingInfo({

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { TASK_TYPE } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo } from '@/lib/billing'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
@@ -102,7 +102,7 @@ async function planRegenerateGroupOperation(
       message,
     })
   }
-  const locale = resolveRequiredTaskLocale(ctx.request, billingPayload)
+  const locale = resolveOperationLocale(ctx.context)
   const episodeId = normalizeString(input.episodeId) || null
   const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({
     projectId: ctx.projectId,
@@ -201,7 +201,7 @@ async function planRegenerateSingleImageOperation(
       message,
     })
   }
-  const locale = resolveRequiredTaskLocale(ctx.request, billingPayload)
+  const locale = resolveOperationLocale(ctx.context)
   const episodeId = normalizeString(input.episodeId) || null
   const styleBibleSignature = await resolveEditScriptStyleBibleSignatureForTask({ projectId: ctx.projectId, episodeId })
   const payload = withTaskUiPayload(billingPayload, {

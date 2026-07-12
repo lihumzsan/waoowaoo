@@ -1,5 +1,6 @@
 import type { ProjectAgentContext } from '@/lib/project-agent/types'
 import type { OperationPrerequisites } from './types'
+import type { Locale } from '@/i18n/routing'
 
 export const OPERATION_ENVIRONMENT_INPUT_KEYS = [
   'projectId',
@@ -25,6 +26,10 @@ function readTrimmedString(value: unknown): string {
 
 export function isOperationEnvironmentInputKey(key: string): boolean {
   return OPERATION_ENVIRONMENT_INPUT_KEY_SET.has(key)
+}
+
+export function resolveOperationLocale(context: ProjectAgentContext): Locale {
+  return context.locale === 'en' ? 'en' : 'zh'
 }
 
 export function stripOperationEnvironmentInputFields(input: unknown): unknown {

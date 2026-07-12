@@ -121,11 +121,7 @@ export function createProjectAgentOperationTool(
       userId: params.userId,
       context: params.context,
       source: 'assistant-panel',
-      input: normalizeProjectAgentToolInput({
-        input: toolInput,
-        inputSchema: params.operation.inputSchema,
-        toolInputSchema: params.operation.toolInputSchema,
-      }),
+      input: toolInput,
       toolCallId,
       store: params.approvalPreflightStore,
     })

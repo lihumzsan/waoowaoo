@@ -138,6 +138,47 @@ function operationRequiresTaskBatchBinding(operation: ProjectAgentOperationDefin
     )
 }
 
+export function prepareProjectAgentOperationInput(params: {
+  channel: OperationInvocationChannel
+  operation: ProjectAgentOperationDefinition
+  context: ProjectAgentOperationContext['context']
+  input: unknown
+  approvedInvocation?: PlannedOperationInvocation | null
+}): {
+  input: unknown
+  invocation: PlannedOperationInvocation | null
+  effectiveEpisodeId: string
+} {
+  assertOperationChannelAllowed(params.operation, params.channel)
+  const normalized = normalizeInvocationInput(params)
+  const normalizedBusinessInput = params.channel === 'tool'
+    ? normalizeProjectAgentToolInput({
+        input: normalized.businessInput,
+        inputSchema: params.operation.inputSchema,
+        toolInputSchema: params.operation.toolInputSchema,
+      })
+    : normalized.businessInput
+  const effectiveEpisodeId = assertPrerequisites({
+    operation: params.operation,
+    input: normalizedBusinessInput,
+    context: params.context,
+  })
+  const parsedInput = params.operation.inputSchema.safeParse(normalizedBusinessInput)
+  if (!parsedInput.success) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'OPERATION_INPUT_INVALID',
+      operationId: params.operation.id,
+      message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
+      issues: parsedInput.error.issues,
+    })
+  }
+  return {
+    input: parsedInput.data,
+    invocation: normalized.invocation,
+    effectiveEpisodeId,
+  }
+}
+
 /**
  * The sole runtime authority for invoking a registered Assistant operation.
  * Adapters may provide source context and translate the result/error shape, but
@@ -163,7 +204,6 @@ export async function invokeProjectAgentOperation(params: {
   }
 
   const invoke = async (): Promise<ProjectAgentOperationInvocationResult> => {
-  assertOperationChannelAllowed(operation, params.channel)
   if (params.channel === 'tool') {
     assertAssistantToolWriteAuthority(
       operation.id,
@@ -173,38 +213,18 @@ export async function invokeProjectAgentOperation(params: {
       throw new Error(`PROJECT_AGENT_OPERATION_TASK_BATCH_BINDING_REQUIRED:${operation.id}`)
     }
   }
-  const normalized = normalizeInvocationInput({
+  const prepared = prepareProjectAgentOperationInput({
     channel: params.channel,
     operation,
     context: params.context.context,
     input: params.input,
     approvedInvocation: params.approvedInvocation,
   })
-  const normalizedBusinessInput = params.channel === 'tool'
-    ? normalizeProjectAgentToolInput({
-        input: normalized.businessInput,
-        inputSchema: operation.inputSchema,
-        toolInputSchema: operation.toolInputSchema,
-      })
-    : normalized.businessInput
-  const effectiveEpisodeId = assertPrerequisites({
-    operation,
-    input: normalizedBusinessInput,
-    context: params.context.context,
-  })
-  const parsedInput = operation.inputSchema.safeParse(normalizedBusinessInput)
-  if (!parsedInput.success) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'OPERATION_INPUT_INVALID',
-      operationId: operation.id,
-      message: 'PROJECT_AGENT_INVALID_OPERATION_INPUT',
-      issues: parsedInput.error.issues,
-    })
-  }
+  const parsedInput = prepared.input
 
   let result: unknown
   if (operation.confirmation.kind === 'billable_media') {
-    if (!normalized.invocation) {
+    if (!prepared.invocation) {
       if (params.returnApprovalRequired) {
         return { kind: 'approval_required', operation, outcome: { kind: 'wait_approval' } }
       }
@@ -217,11 +237,11 @@ export async function invokeProjectAgentOperation(params: {
     result = await invokeApprovedOperationPlan({
       operation,
       ctx: params.context,
-      normalizedInput: parsedInput.data,
-      invocation: normalized.invocation,
+      normalizedInput: parsedInput,
+      invocation: prepared.invocation,
     })
   } else {
-    if (normalized.invocation) {
+    if (prepared.invocation) {
       throw new ApiError('INVALID_PARAMS', {
         code: 'APPROVAL_GRANT_NOT_APPLICABLE',
         operationId: operation.id,
@@ -234,7 +254,7 @@ export async function invokeProjectAgentOperation(params: {
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
-        const output = await executeInTransaction(params.context, parsedInput.data, tx)
+      const output = await executeInTransaction(params.context, parsedInput, tx)
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
@@ -245,7 +265,7 @@ export async function invokeProjectAgentOperation(params: {
       if (!execute) {
         throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
       }
-      result = await execute(params.context, parsedInput.data)
+      result = await execute(params.context, parsedInput)
       if (
         params.channel === 'tool'
         && operation.effects.writes
@@ -284,7 +304,7 @@ export async function invokeProjectAgentOperation(params: {
     result: parsedOutput.data,
     fallbackProjectId: params.context.projectId,
     userId: params.context.userId,
-    fallbackEpisodeId: effectiveEpisodeId || null,
+    fallbackEpisodeId: prepared.effectiveEpisodeId || null,
   })
   return {
     kind: 'executed',

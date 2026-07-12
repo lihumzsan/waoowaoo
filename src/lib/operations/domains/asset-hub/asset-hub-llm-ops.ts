@@ -7,6 +7,7 @@ import { TASK_TYPE } from '@/lib/task/types'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { normalizeString, submitOperationTask } from '@/lib/operations/submit-operation-task'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
   commitReferenceCharacterGeneration,
   planReferenceCharacterGeneration,
@@ -57,6 +58,7 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: 'global-asset-hub',
           type: TASK_TYPE.ASSET_HUB_AI_DESIGN_CHARACTER,
@@ -101,6 +103,7 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: 'global-asset-hub',
           type: TASK_TYPE.ASSET_HUB_AI_DESIGN_LOCATION,
@@ -149,6 +152,7 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: 'global-asset-hub',
           type: TASK_TYPE.ASSET_HUB_AI_MODIFY_CHARACTER,
@@ -196,6 +200,7 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: 'global-asset-hub',
           type: TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION,
@@ -259,6 +264,7 @@ export function createAssetHubLlmOperations(): ProjectAgentOperationRegistryDraf
 
         return await submitOperationTask({
           request: ctx.request,
+          locale: resolveOperationLocale(ctx.context),
           userId: ctx.userId,
           projectId: 'global-asset-hub',
           type: TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP,

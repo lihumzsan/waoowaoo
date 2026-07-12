@@ -9,7 +9,7 @@ import { generateUniqueKey, getSignedUrl, uploadObject } from '@/lib/storage'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { getUserModelConfig } from '@/lib/config-service'
-import { resolveRequiredTaskLocale } from '@/lib/task/resolve-locale'
+import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { analyzeAndPersistGlobalLocationImageSpatialProfile } from '@/lib/location-spatial-profile/service'
 import { requireOwnedAssetTarget } from '@/lib/assets/services/asset-scope-ownership'
 
@@ -402,7 +402,7 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
               imageId,
               userId: ctx.userId,
               model: userConfig.analysisModel,
-              locale: resolveRequiredTaskLocale(ctx.request, { type, id, imageIndex }),
+              locale: resolveOperationLocale(ctx.context),
             })
             return { success: true, imageKey: key, imageIndex }
           }
@@ -423,7 +423,7 @@ export function createAssetHubApiOperations(): ProjectAgentOperationRegistryDraf
             imageId: created.id,
             userId: ctx.userId,
             model: userConfig.analysisModel,
-            locale: resolveRequiredTaskLocale(ctx.request, { type, id, imageIndex: maxIndex }),
+            locale: resolveOperationLocale(ctx.context),
           })
           return { success: true, imageKey: key, imageIndex: maxIndex }
         }
