@@ -34,6 +34,7 @@ import { resolveAnalysisModel } from './resolve-analysis-model'
 import { createArtifact, listArtifacts } from '@/lib/run-runtime/service'
 import { assertWorkflowRunActive, withWorkflowRunLease } from '@/lib/run-runtime/workflow-lease'
 import { parseScreenplayPayload } from './screenplay-convert-helpers'
+import { resolveWorkflowRunId } from './workflow-run-id'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
@@ -138,12 +139,17 @@ export async function handleStoryToScriptTask(job: Job<TaskJobData>) {
   const screenplayPromptTemplate = getPromptTemplate(PROMPT_IDS.NP_SCREENPLAY_CONVERSION, job.data.locale)
   const maxLength = 30000
   const content = mergedContent.length > maxLength ? mergedContent.slice(0, maxLength) : mergedContent
-  const payloadMeta = typeof payload.meta === 'object' && payload.meta !== null
-    ? (payload.meta as AnyObj)
-    : {}
-  const runId = typeof payload.runId === 'string' && payload.runId.trim()
-    ? payload.runId.trim()
-    : (typeof payloadMeta.runId === 'string' ? payloadMeta.runId.trim() : '')
+  const runId = await resolveWorkflowRunId({
+    payload,
+    taskId: job.data.taskId,
+    findRunIdByTaskId: async (taskId) => {
+      const run = await prisma.graphRun.findUnique({
+        where: { taskId },
+        select: { id: true },
+      })
+      return run?.id || null
+    },
+  })
   if (!runId) {
     throw new Error('runId is required for story_to_script pipeline')
   }

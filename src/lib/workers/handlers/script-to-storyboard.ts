@@ -37,6 +37,7 @@ import {
   runScriptToStoryboardAtomicRetry,
 } from './script-to-storyboard-atomic-retry'
 import { buildVoiceLineRowsFromDialogueBeats } from '@/lib/novel-promotion/dialogue-beats'
+import { resolveWorkflowRunId } from './workflow-run-id'
 
 type AnyObj = Record<string, unknown>
 const MAX_VOICE_ANALYZE_ATTEMPTS = 2
@@ -149,12 +150,17 @@ export async function handleScriptToStoryboardTask(job: Job<TaskJobData>) {
   const phase2CinematographyTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_CINEMATOGRAPHER, job.data.locale)
   const phase2ActingTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_ACTING_DIRECTION, job.data.locale)
   const phase3DetailTemplate = getPromptTemplate(PROMPT_IDS.NP_AGENT_STORYBOARD_DETAIL, job.data.locale)
-  const payloadMeta = typeof payload.meta === 'object' && payload.meta !== null
-    ? (payload.meta as AnyObj)
-    : {}
-  const runId = typeof payload.runId === 'string' && payload.runId.trim()
-    ? payload.runId.trim()
-    : (typeof payloadMeta.runId === 'string' ? payloadMeta.runId.trim() : '')
+  const runId = await resolveWorkflowRunId({
+    payload,
+    taskId: job.data.taskId,
+    findRunIdByTaskId: async (taskId) => {
+      const run = await prisma.graphRun.findUnique({
+        where: { taskId },
+        select: { id: true },
+      })
+      return run?.id || null
+    },
+  })
   if (!runId) {
     throw new Error('runId is required for script_to_storyboard pipeline')
   }

@@ -96,6 +96,7 @@ tmp-check-*.jpg
 # internal AI agent config (not for public)
 AGENTS.md
 agent/
+.superpowers/
 
 # internal docs (not for public)
 docs/*
