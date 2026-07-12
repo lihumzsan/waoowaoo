@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import type { GoldenWorkspaceScope } from '../browser/pages/home'
 
 const SOURCE_MANIFEST_PATH = path.resolve(
@@ -11,6 +12,7 @@ export interface GoldenSourceFixtureManifest {
   readonly username: string
   readonly password: string
   readonly scope: GoldenWorkspaceScope
+  readonly checkpointSources?: Partial<Record<EditFirstWorkflowStage, GoldenWorkspaceScope>>
   readonly authStatePath: string
   readonly createdAt: string
 }

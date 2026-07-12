@@ -38,6 +38,21 @@ function decodeAttachment<T>(attachments: readonly PlaywrightAttachment[], name:
   return JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8')) as T
 }
 
+function decodeProductEvidence(attachments: readonly PlaywrightAttachment[]): Record<string, unknown> {
+  return Object.fromEntries(attachments.flatMap((attachment) => {
+    if (!attachment.name.startsWith('golden-') || !attachment.body) return []
+    if (attachment.name === 'golden-browser-observations' || attachment.name.startsWith('golden-oracle')) return []
+    try {
+      return [[
+        attachment.name,
+        JSON.parse(Buffer.from(attachment.body, 'base64').toString('utf8')) as unknown,
+      ]]
+    } catch {
+      return []
+    }
+  }))
+}
+
 function flattenSuites(suites: readonly PlaywrightSuite[]): PlaywrightSuite[] {
   return suites.flatMap((suite) => [suite, ...flattenSuites(suite.suites ?? [])])
 }
@@ -100,7 +115,9 @@ async function main(): Promise<void> {
       const contract = GOLDEN_SCENARIO_CONTRACTS.find((candidate) => candidate.id === scenarioId)
       const declaredExpected = contract?.expectedTerminal.kind === 'workflow_stage'
         ? contract.expectedTerminal.stage
-        : contract?.expectedTerminal.code ?? null
+        : contract?.expectedTerminal.kind === 'declared_failure'
+          ? contract.expectedTerminal.code
+          : contract?.expectedTerminal.fact ?? null
       const blockedMatch = errors.join('\n').match(/GOLDEN_MAINLINE_BLOCKED:([^:]+)/)
       const derivedActual = outcome?.actual
         ?? blockedMatch?.[1]
@@ -119,6 +136,7 @@ async function main(): Promise<void> {
         errors,
         observedStages,
         browser: browser ?? null,
+        productEvidence: decodeProductEvidence(attachments),
         oracle: oracle ? {
           runs: oracle.runs?.map((run) => ({
             id: run.id,
@@ -159,7 +177,7 @@ async function main(): Promise<void> {
   await mkdir(root, { recursive: true })
   await writeFile(path.join(root, 'diagnostic-matrix.json'), JSON.stringify(report, null, 2))
   const markdown = [
-    '# Assistant Golden Journey diagnostic matrix',
+    '# Product Golden Journey diagnostic matrix',
     '',
     `Generated: ${report.generatedAt}`,
     '',

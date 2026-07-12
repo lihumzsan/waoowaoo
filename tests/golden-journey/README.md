@@ -1,7 +1,7 @@
 # Golden Journey test architecture
 
-This directory is the only home for the Assistant Golden Journey executable
-test system.
+This directory is the only home for executable browser-level product Golden
+Journeys, including but not limited to the Assistant workflow.
 
 ```text
 tests/golden-journey/
@@ -35,8 +35,16 @@ to `artifacts/golden-journey/runs/<run-id>/` and appended to
 
 Primary commands:
 
-- `npm run test:golden:self`: harness self-tests plus mandatory mount proof.
+- `npm run test:golden:self`: harness self-tests, mandatory mount proof, and two-scope MySQL/Redis isolation proof.
 - `npm run test:golden:mainline`: one real story-to-final-deliverable journey.
+- `npm run test:golden:product`: independent auth/session, project CRUD, ownership, i18n identity, self-hosted capability, and Asset Hub reuse journeys.
 - `npm run test:golden:matrix`: mainline plus all checkpointable stage probes.
 - `npm run test:golden:variant:*`: deterministic model/provider fault variants.
 - `npm run test:golden:report`: latest matrix plus immutable run history.
+
+The product suite does not depend on the Assistant reaching a downstream
+checkpoint. An Assistant lifecycle failure therefore cannot hide failures in
+authentication, project ownership, asset reuse, locale preservation, or
+deployment capability surfaces. It runs self-hosted with the real `user-key` credential
+mode; Assistant media journeys use the local protocol gateway through their
+separate `platform-key` test environment.

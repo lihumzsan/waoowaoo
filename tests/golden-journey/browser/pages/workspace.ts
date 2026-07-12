@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import type { GoldenWorkspaceScope } from './home'
@@ -7,20 +7,62 @@ export async function readGoldenWorkflowStage(
   page: Page,
   scope: GoldenWorkspaceScope,
 ): Promise<EditFirstWorkflowStage> {
-  const value = await page.evaluate(async ({ projectId, episodeId }) => {
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/context?episodeId=${encodeURIComponent(episodeId)}`)
-    if (!response.ok) throw new Error(`GOLDEN_CONTEXT_HTTP_${String(response.status)}`)
-    const payload: unknown = await response.json()
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
-    const context = (payload as Record<string, unknown>).context
-    if (!context || typeof context !== 'object' || Array.isArray(context)) return null
-    const workflow = (context as Record<string, unknown>).editFirstWorkflow
-    if (!workflow || typeof workflow !== 'object' || Array.isArray(workflow)) return null
-    const stage = (workflow as Record<string, unknown>).stage
-    return typeof stage === 'string' ? stage : null
-  }, scope)
+  return (await readGoldenWorkflowProjection(page, scope)).stage
+}
+
+export async function readGoldenWorkflowProjection(
+  page: Page,
+  scope: GoldenWorkspaceScope,
+): Promise<{
+  readonly stage: EditFirstWorkflowStage
+  readonly nextActionId: string | null
+}> {
+  const response = await page.request.get(
+    `/api/projects/${encodeURIComponent(scope.projectId)}/context?episodeId=${encodeURIComponent(scope.episodeId)}`,
+  )
+  if (!response.ok()) throw new Error(`GOLDEN_CONTEXT_HTTP_${String(response.status())}`)
+  const payload: unknown = await response.json()
+  const context = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>).context
+    : null
+  const workflow = context && typeof context === 'object' && !Array.isArray(context)
+    ? (context as Record<string, unknown>).editFirstWorkflow
+    : null
+  const value = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).stage
+    : null
   if (!value) throw new Error('GOLDEN_CONTEXT_WORKFLOW_STAGE_MISSING')
-  return value as EditFirstWorkflowStage
+  const nextAction = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).nextAction
+    : null
+  const nextActionId = nextAction && typeof nextAction === 'object' && !Array.isArray(nextAction)
+    ? (nextAction as Record<string, unknown>).id
+    : null
+  return {
+    stage: value as EditFirstWorkflowStage,
+    nextActionId: typeof nextActionId === 'string' ? nextActionId : null,
+  }
+}
+
+export async function readGoldenAssistantRunStatus(
+  page: Page,
+  scope: GoldenWorkspaceScope,
+): Promise<string | null> {
+  const response = await page.request.get(
+    `/api/projects/${encodeURIComponent(scope.projectId)}/assistant/session-state?episodeId=${encodeURIComponent(scope.episodeId)}`,
+  )
+  if (!response.ok()) {
+    const body = await response.text()
+    throw new Error(`GOLDEN_ASSISTANT_SESSION_HTTP_${String(response.status())}:${body}`)
+  }
+  const payload: unknown = await response.json()
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const sessionState = (payload as Record<string, unknown>).sessionState
+  if (!sessionState || typeof sessionState !== 'object' || Array.isArray(sessionState)) return null
+  const currentRun = (sessionState as Record<string, unknown>).currentRun
+  if (!currentRun || typeof currentRun !== 'object' || Array.isArray(currentRun)) return null
+  const status = (currentRun as Record<string, unknown>).status
+  return typeof status === 'string' ? status : null
 }
 
 export async function expectGoldenIntakeChoice(page: Page): Promise<void> {
@@ -121,6 +163,15 @@ export async function reloadGoldenBoundary(page: Page, expected: GoldenMainlineB
   }).toBe(expected)
 }
 
+export function getGoldenApprovalButton(page: Page): Locator {
+  const currentApprovalCard = page
+    .getByText('需要确认', { exact: true })
+    .filter({ visible: true })
+    .last()
+    .locator('..')
+  return currentApprovalCard.getByRole('button').filter({ hasText: '继续执行' }).last()
+}
+
 export async function submitGoldenBoundary(page: Page, boundary: GoldenMainlineBoundary): Promise<void> {
   if (boundary === 'script_intake') {
     await submitGoldenIntakeChoices(page)
@@ -145,6 +196,6 @@ export async function submitGoldenBoundary(page: Page, boundary: GoldenMainlineB
     return
   }
   if (boundary === 'approval') {
-    await page.getByRole('button', { name: '继续执行', exact: true }).filter({ visible: true }).last().click()
+    await getGoldenApprovalButton(page).click()
   }
 }

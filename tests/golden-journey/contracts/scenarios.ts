@@ -29,6 +29,149 @@ export const GOLDEN_MAINLINE_SCENARIO = {
   ...REQUIRED_INFRASTRUCTURE,
 } as const satisfies GoldenScenarioContract
 
+export const GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO = {
+  id: 'GJ-DOWNSTREAM-CHECKPOINT-TO-FINAL-DELIVERABLE',
+  kind: 'mainline',
+  title: 'a production Workflow Lab checkpoint continues through the real browser workflow to a durable final video',
+  startStage: 'script_ready_for_review',
+  expectedTerminal: {
+    kind: 'workflow_stage',
+    stage: 'completed',
+    allowFailedRun: false,
+  },
+  modelBehavior: 'normal-mainline',
+  ...REQUIRED_INFRASTRUCTURE,
+} as const satisfies GoldenScenarioContract
+
+export const GOLDEN_PRODUCT_JOURNEY_SCENARIOS = [
+  {
+    id: 'GJ-AUTH-UNAUTHENTICATED-DENIAL',
+    kind: 'product_journey',
+    title: 'an unauthenticated browser is redirected from workspace and receives no project API data',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'unauthenticated_workspace_access_denied',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-AUTH-SESSION-RECOVERY',
+    kind: 'product_journey',
+    title: 'a registered user keeps a durable session across reload and can sign out and sign in again',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'authenticated_session_restored_after_logout',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-PROJECT-CRUD-DURABILITY',
+    kind: 'product_journey',
+    title: 'a project owner creates searches edits reloads and deletes one durable project through the UI',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'project_crud_persisted',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-PROJECT-CROSS-USER-ISOLATION',
+    kind: 'product_journey',
+    title: 'a second authenticated user cannot list read mutate open or delete the owner project',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'cross_user_project_access_denied',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-PROJECT-CREATE-RESPONSE-LOSS',
+    kind: 'product_journey',
+    title: 'a project committed by the server remains discoverable exactly once after the browser loses the response',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'committed_project_recovers_after_response_loss',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-I18N-CRITICAL-PROJECT',
+    kind: 'product_journey',
+    title: 'an English registration and project creation survives the product language switch to Chinese with one identity',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'project_identity_preserved_across_locale_switch',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-DEPLOY-SELF-HOSTED-CAPABILITIES',
+    kind: 'product_journey',
+    title: 'self-hosted public capability facts match the authentication and navigation surfaces',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'self_hosted_capabilities_match_ui',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-ASSET-HUB-PROJECT-REUSE',
+    kind: 'product_journey',
+    title: 'an edited global character can be reimported and deleted while one isolated project copy remains durable',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'global_character_reused_by_project',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+  {
+    id: 'GJ-ASSET-HUB-CROSS-PROJECT-DENIAL',
+    kind: 'product_journey',
+    title: 'one authenticated project cannot overwrite an asset owned by another user and project',
+    startStage: 'outside_workflow',
+    expectedTerminal: {
+      kind: 'product_fact',
+      fact: 'cross_project_asset_mutation_denied',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'none',
+    ...REQUIRED_INFRASTRUCTURE,
+    requiresWorkers: false,
+  },
+] as const satisfies readonly GoldenScenarioContract[]
+
 function stageProbeId(stage: EditFirstWorkflowStage): string {
   return `GJ-STAGE-${stage.toUpperCase().replaceAll('_', '-')}`
 }
@@ -119,6 +262,32 @@ export const GOLDEN_INFRASTRUCTURE_VARIANT_SCENARIOS = [
     ...REQUIRED_INFRASTRUCTURE,
   },
   {
+    id: 'GJ-TASK-COMPLETES-DURING-BROWSER-DISCONNECT',
+    kind: 'infrastructure_variant',
+    title: 'a production Task completes while the page is disconnected and a new page restores the next durable stage',
+    startStage: 'ready_to_generate_videos',
+    expectedTerminal: {
+      kind: 'workflow_stage',
+      stage: 'ready_to_render_chapters',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'normal-stage-probe',
+    ...REQUIRED_INFRASTRUCTURE,
+  },
+  {
+    id: 'GJ-SSE-OLD-CURSOR-REPLAY',
+    kind: 'infrastructure_variant',
+    title: 'a browser reconnects with an older durable cursor and real server replay preserves one current result',
+    startStage: 'ready_to_generate_videos',
+    expectedTerminal: {
+      kind: 'workflow_stage',
+      stage: 'ready_to_render_chapters',
+      allowFailedRun: false,
+    },
+    modelBehavior: 'normal-stage-probe',
+    ...REQUIRED_INFRASTRUCTURE,
+  },
+  {
     id: 'GJ-CHOICE-DOUBLE-SUBMIT',
     kind: 'infrastructure_variant',
     title: 'two browser submissions consume one Choice and create one continuation',
@@ -175,6 +344,8 @@ export const GOLDEN_INFRASTRUCTURE_VARIANT_SCENARIOS = [
 
 export const GOLDEN_SCENARIO_CONTRACTS: readonly GoldenScenarioContract[] = [
   GOLDEN_MAINLINE_SCENARIO,
+  GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO,
+  ...GOLDEN_PRODUCT_JOURNEY_SCENARIOS,
   ...GOLDEN_STAGE_PROBE_SCENARIOS,
   ...GOLDEN_MODEL_VARIANT_SCENARIOS,
   ...GOLDEN_INFRASTRUCTURE_VARIANT_SCENARIOS,
@@ -185,6 +356,10 @@ export const GOLDEN_STAGE_COVERAGE: readonly GoldenStageCoverage[] =
     stage,
     scenarioIds: [
       GOLDEN_MAINLINE_SCENARIO.id,
+      ...(GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(stage)
+        >= GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO.startStage)
+        ? [GOLDEN_DOWNSTREAM_CONTINUATION_SCENARIO.id]
+        : []),
       ...(GOLDEN_CHECKPOINTABLE_STAGES.includes(stage as (typeof GOLDEN_CHECKPOINTABLE_STAGES)[number])
         ? [stageProbeId(stage)]
         : []),

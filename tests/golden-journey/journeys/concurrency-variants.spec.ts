@@ -22,9 +22,9 @@ test('[GJ-CHOICE-DOUBLE-SUBMIT] concurrent confirmation resumes a Choice once', 
   await button.dblclick({ delay: 5 })
   const outcome = await waitForGoldenProductionPlanOutcome(page)
   const oracle = await attachGoldenOracleEvidence(testInfo, scope)
+  expect(outcome).toBe('bible_review')
   const consumedScriptChoices = oracle.interruptions.filter((item) => (
     item.type === 'choice' && item.operationId === 'request_edit_script_review_choice' && item.status !== 'pending'
   ))
   expect(consumedScriptChoices).toHaveLength(1)
-  expect(outcome).toBe('bible_review')
 })

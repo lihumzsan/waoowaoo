@@ -54,12 +54,10 @@ export const GOLDEN_CHECKPOINTABLE_STAGES = [
   'ready_to_generate_bible',
   'bible_ready_for_review',
   'needs_style_choice',
-  'ready_to_generate_edit_script',
   'ready_to_generate_assets',
   'assets_ready_for_review',
   'ready_to_generate_shot_execution_plan',
   'ready_to_generate_storyboard',
   'ready_to_generate_storyboard_images',
   'ready_to_generate_videos',
-  'ready_to_render_final',
 ] as const satisfies readonly EditFirstWorkflowStage[]

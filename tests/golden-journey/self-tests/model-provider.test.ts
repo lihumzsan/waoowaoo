@@ -6,6 +6,26 @@ import type { GoldenProviderGateway } from '../providers/gateway'
 import { startGoldenProviderGateway } from '../providers/gateway'
 import type { GoldenMediaServer } from '../providers/media/server'
 import { startGoldenMediaServer } from '../providers/media/server'
+import {
+  normalizeRawBeatSheet,
+  normalizeRawEditBible,
+  normalizeRawEmotionalCurve,
+  normalizeRawLedger,
+} from '@/lib/edit-bible/source-anchor-normalization'
+import { validateEditBibleBundle } from '@/lib/edit-bible/cross-check'
+import { buildEditSourceBlocks, formatEditSourceBlocksForPrompt } from '@/lib/edit-source-document'
+import { editStylePreviewOptionsSchema } from '@/lib/edit-script/types'
+import { editScriptCoreSchema } from '@/lib/edit-script/types'
+import { normalizeEditShotExecutionPlan } from '@/lib/edit-script/normalize'
+import { normalizeChapterPlanOutput } from '@/lib/edit-chapter'
+import { parseLocationCandidatePrompt } from '@/lib/asset-generation/location-candidate-prompts'
+import { parseLocationSpatialProfile } from '@/lib/location-spatial-profile/types'
+import { bgmScorePlanSchema } from '@/lib/bgm-score/types'
+import { soundscapePlanSchema } from '@/lib/soundscape/types'
+import {
+  applyGoldenRuntimeIdentity,
+  resolveGoldenRuntimeIdentity,
+} from '../runtime/identity'
 
 let runningServer: GoldenModelServer | null = null
 let mediaServer: GoldenMediaServer | null = null
@@ -21,6 +41,15 @@ afterEach(async () => {
 })
 
 describe('Golden local model provider', () => {
+  it('keeps one explicit runtime identity across Playwright and its environment process', () => {
+    const environment: NodeJS.ProcessEnv = { NODE_ENV: 'test' }
+    const first = resolveGoldenRuntimeIdentity(environment)
+    applyGoldenRuntimeIdentity(first, environment)
+    const inherited = resolveGoldenRuntimeIdentity(environment)
+
+    expect(inherited).toEqual(first)
+    expect(first.appPort).not.toBe(first.coordinatorPort)
+  })
   it('honors the script-intake JSON contract when production expresses it only in the prompt', () => {
     const decision = decideGoldenModelResponse({
       scenarioId: 'normal-mainline',
@@ -55,6 +84,255 @@ describe('Golden local model provider', () => {
     if (decision.kind !== 'text') return
     const parsed = JSON.parse(decision.text) as { segments: unknown[] }
     expect(parsed.segments).toHaveLength(1)
+  })
+
+  it('returns one cross-consistent production edit-bible bundle across four prompt-only calls', () => {
+    const sourceText = '暮色压住荒野。旅人走到废弃祭坛前，转身逃跑后又回到同一座祭坛。'
+    const blocks = buildEditSourceBlocks(sourceText)
+    const source = formatEditSourceBlocksForPrompt(blocks)
+    const decide = (contract: string): unknown => {
+      const decision = decideGoldenModelResponse({
+        scenarioId: 'normal-mainline',
+        requestOrdinal: 1,
+        request: {
+          model: 'golden-model',
+          messages: [{ role: 'user', content: `${contract}\n\n${source}\n\n原文长度：${String(sourceText.length)}` }],
+        },
+      })
+      expect(decision.kind).toBe('text')
+      if (decision.kind !== 'text') throw new Error('GOLDEN_EDIT_BIBLE_TEXT_REQUIRED')
+      return JSON.parse(decision.text) as unknown
+    }
+    const bible = normalizeRawEditBible({
+      raw: decide('{"voiceProfile":"固有声线","worldRules":[]}'),
+    })
+    const beatSheet = normalizeRawBeatSheet({
+      raw: decide('{"beatId":"beat_001","estimatedDurationSec":30,"sourceAnchor":{}}'),
+      sourceText,
+      blocks,
+    })
+    const ledger = normalizeRawLedger({
+      raw: decide('{"eventId":"event_001","beatId":"beat_001","persistentFacts":[]}'),
+      beatSheet,
+    })
+    const emotionalCurve = normalizeRawEmotionalCurve({
+      raw: decide('{"cueId":"cue_001","musicPolicy":"underscore","sourceAnchor":{}}'),
+      sourceText,
+      blocks,
+    })
+
+    expect(validateEditBibleBundle({
+      bundle: { bible, beatSheet, ledger, emotionalCurve },
+      sourceText,
+    })).toMatchObject({
+      bible: { title: '禁坛归途' },
+      beatSheet: { beats: [{ beatId: 'beat_001' }] },
+      ledger: { events: [{ eventId: 'event_001' }] },
+      emotionalCurve: { cues: [{ cueId: 'cue_001' }] },
+    })
+  })
+
+  it('routes the prompt-only style-options contract before embedded Bible fields', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 1,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: '{"voiceProfile":"固有声线","worldRules":[],"stylePreviews":[{"stylePolicy":{},"gridImagePrompt":"string"}]}',
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    expect(editStylePreviewOptionsSchema.parse(JSON.parse(decision.text)).stylePreviews).toHaveLength(3)
+  })
+
+  it('uses exact production asset identities in the prompt-only core edit plan', () => {
+    const assetMenu = {
+      locations: [{ id: 'location-real-1', name: '废弃祭坛', description: '循环发生地' }],
+      characters: [{ id: 'character-real-1', name: '旅人', description: '受困主角' }],
+    }
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 19,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: `已确认资产菜单：\n${JSON.stringify(assetMenu)}\n\n只输出包含 "shotPurpose" 和 "generationSegments" 的 JSON。`,
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const normalized = normalizeChapterPlanOutput(JSON.parse(decision.text), assetMenu)
+    expect(normalized.shots).toHaveLength(3)
+    expect(normalized.shots[1]?.scene.locationId).toBe('location-real-1')
+    expect(normalized.shots[1]?.characters[0]?.characterId).toBe('character-real-1')
+  })
+
+  it('honors the production location candidate JSON contract expressed only in the prompt', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 20,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: '【场景生成要求（用于出图，中文描述）】\n请把结果转换成一条最终可复用场景资产图片提示词。\n只输出 JSON：{"prompt":"最终图片生成提示词"}。',
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const prompt = parseLocationCandidatePrompt(JSON.parse(decision.text) as Record<string, unknown>)
+    expect(prompt).toContain('废弃祭坛')
+    expect(prompt).toContain('前景')
+    expect(prompt).not.toContain('旅人')
+  })
+
+  it('honors the production location spatial-profile vision contract expressed only in the prompt', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 21,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: '你负责分析场景图片的空间结构。只输出 {"schemaVersion": 1, "anchors": []}。',
+            },
+            {
+              type: 'image_url',
+              image_url: { url: 'data:image/png;base64,Z29sZGVu' },
+            },
+          ],
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const profile = parseLocationSpatialProfile(JSON.parse(decision.text) as unknown)
+    expect(profile.schemaVersion).toBe(1)
+    expect(profile.anchors.length).toBeGreaterThan(0)
+    expect(profile.depthLayout.midground).toContain('祭台')
+  })
+
+  it('covers the exact production shots and segments in the prompt-only shot execution plan', () => {
+    const core = editScriptCoreSchema.parse({
+      shots: [
+        {
+          shotId: 'shot-real-1',
+          shotNumber: 1,
+          shotPurpose: 'establishing',
+          durationSec: 4,
+          scene: { locationId: 'location-real-1', name: '废弃祭坛', subScene: '祭坛全貌' },
+          action: '暮色笼罩祭坛。',
+          characters: [],
+          keyObjects: [{ name: '祭坛石碑', role: '空间地标' }],
+          dialogue: [],
+          sound: '一次短促石块碰撞声。',
+        },
+        {
+          shotId: 'shot-real-2',
+          shotNumber: 2,
+          shotPurpose: 'action',
+          durationSec: 4,
+          scene: { locationId: 'location-real-1', name: '废弃祭坛', subScene: '石碑旁' },
+          action: '旅人靠近石碑。',
+          characters: [{
+            characterId: 'character-real-1',
+            name: '旅人',
+            visibility: 'visible',
+            role: 'focus',
+            performance: '谨慎靠近',
+          }],
+          keyObjects: [{ name: '石碑', role: '异常规则载体' }],
+          dialogue: [],
+          sound: '一次脚步声。',
+        },
+      ],
+      generationSegments: [{
+        shotIds: ['shot-real-1', 'shot-real-2'],
+        continuity: '共享祭坛空间与连续动作。',
+      }],
+    })
+    const productionPromptInput = {
+      shots: core.shots,
+      videoGenerationSegments: core.generationSegments,
+    }
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 22,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: `核心剪辑计划：\n${JSON.stringify(productionPromptInput)}\n\n只输出包含 "generationSegmentExecutions" 和 "continuousVideoPrompt" 的 JSON。`,
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const normalized = normalizeEditShotExecutionPlan(
+      JSON.parse(decision.text),
+      core.shots,
+      core.generationSegments,
+    )
+    expect(normalized.shots.map((shot) => shot.shotId)).toEqual(['shot-real-1', 'shot-real-2'])
+    expect(normalized.generationSegmentExecutions[0]?.shotIds).toEqual(['shot-real-1', 'shot-real-2'])
+  })
+
+  it('honors the production BGM score plan contract expressed only in the prompt', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 23,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: 'Required JSON shape:\n{"durationSeconds":12,"creativeBrief":{},"scoreDesign":{},"virtualLayers":[],"promptSections":[],"finalPrompt":"string"}\n只返回严格 JSON。',
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const plan = bgmScorePlanSchema.parse(JSON.parse(decision.text))
+    expect(plan.durationSeconds).toBe(12)
+    expect(plan.finalPrompt.length).toBeGreaterThanOrEqual(80)
+    expect(plan.scoreDesign.sections).toHaveLength(1)
+  })
+
+  it('uses real timeline shot identities in the production soundscape plan contract', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 24,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'user',
+          content: 'Required JSON shape: {"schemaVersion":1,"environmentFingerprint":"string","transitionIn":"fade"}\nFinal rendered media timeline JSON:\n[{"shotIds":["shot_real_1","shot_real_2"]}]',
+        }],
+      },
+    })
+
+    expect(decision.kind).toBe('text')
+    if (decision.kind !== 'text') return
+    const plan = soundscapePlanSchema.parse(JSON.parse(decision.text))
+    expect(plan.sections[0]).toMatchObject({
+      fromShotId: 'shot_real_1',
+      toShotId: 'shot_real_2',
+    })
   })
 
   it('serves a streamed OpenAI-compatible tool call over HTTP', async () => {
@@ -112,6 +390,96 @@ describe('Golden local model provider', () => {
     expect(JSON.parse(decision.argumentsJson)).toEqual({
       sourceKind: 'prompt_generated_outline',
       text: 'A deterministic folk-horror story about a lost traveler, a forbidden shrine, and a closed-loop ending.',
+    })
+  })
+
+  it('does not let an old prompt-only contract override the currently available workflow tool', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 3,
+      request: {
+        model: 'golden-model',
+        messages: [
+          { role: 'user', content: '{"voiceProfile":"固有声线","worldRules":[]}' },
+          { role: 'user', content: 'Continue the current workflow.' },
+        ],
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'generate_edit_style_previews',
+            parameters: { type: 'object', properties: {} },
+          },
+        }],
+      },
+    })
+
+    expect(decision).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'generate_edit_style_previews',
+    })
+  })
+
+  it('uses the live workflow stage to raise the user Choice after asynchronous style tasks finish', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 16,
+      request: {
+        model: 'golden-model',
+        messages: [{
+          role: 'system',
+          content: '[project_state_snapshot]\nworkflowStage=needs_style_choice\n[/project_state_snapshot]',
+        }],
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'generate_edit_style_previews', parameters: { type: 'object' } },
+          },
+          {
+            type: 'function',
+            function: { name: 'request_edit_style_choice', parameters: { type: 'object' } },
+          },
+        ],
+      },
+    })
+
+    expect(decision).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'request_edit_style_choice',
+    })
+  })
+
+  it('passes null when production asks AI to let the system resolve chapter scope', () => {
+    const decision = decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 18,
+      request: {
+        model: 'golden-model',
+        messages: [{ role: 'user', content: 'Plan every missing chapter.' }],
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'plan_chapters',
+            parameters: {
+              type: 'object',
+              required: ['chapterIds'],
+              properties: {
+                chapterIds: {
+                  anyOf: [
+                    { type: 'array', items: { type: 'string' }, minItems: 1 },
+                    { type: 'null' },
+                  ],
+                },
+              },
+            },
+          },
+        }],
+      },
+    })
+
+    expect(decision).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'plan_chapters',
+      argumentsJson: '{"chapterIds":null}',
     })
   })
 

@@ -3,6 +3,7 @@ import { registerGoldenUser } from '../browser/pages/auth'
 import { launchGoldenStoryFromHome } from '../browser/pages/home'
 import {
   expectGoldenIntakeChoice,
+  readGoldenWorkflowStage,
   submitGoldenIntakeChoices,
   waitForGoldenScriptReviewOutcome,
 } from '../browser/pages/workspace'
@@ -27,6 +28,9 @@ test('[GJ-MODEL-STOPS-AFTER-CONFIRM] preserves completed work and reports an AI-
   const oracle = await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-model-stop')
 
   expect(outcome).toBe('assistant_failure')
+  expect(await readGoldenWorkflowStage(page, scope)).toBe('ready_to_ingest_script')
+  expect(oracle.domain.sourceDocuments).toHaveLength(0)
+  expect(oracle.tasks).toHaveLength(0)
   expect(oracle.activities.filter((activity) => (
     activity.type === 'operation' && activity.status === 'completed'
   )).length).toBeGreaterThan(0)
@@ -36,6 +40,7 @@ test('[GJ-MODEL-STOPS-AFTER-CONFIRM] preserves completed work and reports an AI-
   expect(oracle.activities.some((activity) => (
     activity.operationId === 'generate_edit_style_previews'
   ))).toBe(false)
+  expect(oracle.interruptions.filter((item) => item.type === 'choice' && item.status === 'consumed')).toHaveLength(1)
 })
 
 test('[GJ-MODEL-DUPLICATES-TOOL-CALL] duplicate calls create one durable effect', async ({ page }, testInfo) => {

@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from '../browser/test'
-import { readGoldenMainlineBoundary, readGoldenWorkflowStage } from '../browser/pages/workspace'
+import {
+  getGoldenApprovalButton,
+  readGoldenWorkflowStage,
+} from '../browser/pages/workspace'
 import { forkGoldenWorkflowCheckpoint } from '../fixtures/workflow-lab'
 import { readGoldenSourceFixtureManifest } from '../fixtures/source-manifest'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
-import { setGoldenForcedTool } from '../providers/control'
 
 interface GoldenStorageState {
   readonly cookies: Parameters<import('@playwright/test').BrowserContext['addCookies']>[0]
@@ -24,14 +26,10 @@ test('[GJ-APPROVAL-DOUBLE-SUBMIT] concurrent approval creates one grant and one 
   })
   await page.goto(`/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`)
   await expect.poll(async () => await readGoldenWorkflowStage(page, scope)).toBe('ready_to_generate_videos')
-  await setGoldenForcedTool('generate_episode_videos')
-  const composer = page.getByPlaceholder('和 AI 一起创造')
-  await composer.fill('继续执行当前工作流的下一步')
-  await composer.press('Enter')
-  await expect.poll(async () => await readGoldenMainlineBoundary(page), { timeout: 60_000 }).toBe('approval')
+  await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 60_000 })
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect.poll(async () => await readGoldenMainlineBoundary(page), { timeout: 30_000 }).toBe('approval')
-  await page.getByRole('button', { name: '继续执行', exact: true }).dblclick({ delay: 5 })
+  await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
+  await getGoldenApprovalButton(page).dblclick({ delay: 5 })
   await expect.poll(async () => {
     const stage = await readGoldenWorkflowStage(page, scope)
     return stage === 'videos_generating' || stage === 'ready_to_render_chapters'

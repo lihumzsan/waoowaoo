@@ -1,5 +1,6 @@
 import { test, expect } from '../browser/test'
 import {
+  getGoldenApprovalButton,
   readGoldenMainlineBoundary,
   readGoldenWorkflowStage,
   submitGoldenBoundary,
@@ -38,43 +39,78 @@ const OPERATION_BY_STAGE: Readonly<Record<string, string>> = {
 }
 
 for (const scenario of GOLDEN_STAGE_PROBE_SCENARIOS) {
-  test(`[${scenario.id}] canonical checkpoint reaches ${scenario.expectedTerminal.kind === 'workflow_stage' ? scenario.expectedTerminal.stage : scenario.expectedTerminal.code}`, async ({ page, context }, testInfo) => {
+  const terminalLabel = scenario.expectedTerminal.kind === 'workflow_stage'
+    ? scenario.expectedTerminal.stage
+    : scenario.expectedTerminal.kind === 'declared_failure'
+      ? scenario.expectedTerminal.code
+      : scenario.expectedTerminal.fact
+  test(`[${scenario.id}] canonical checkpoint reaches ${terminalLabel}`, async ({ page, context }, testInfo) => {
     test.setTimeout(5 * 60_000)
     const source = await readGoldenSourceFixtureManifest()
     const authState = JSON.parse(await readFile(source.authStatePath, 'utf8')) as GoldenStorageState
     await context.addCookies(authState.cookies)
     await page.goto('/zh/home')
+    if (scenario.startStage === 'outside_workflow') {
+      throw new Error(`GOLDEN_STAGE_PROBE_START_UNSUPPORTED:${scenario.id}`)
+    }
+    const checkpointSource = source.checkpointSources?.[scenario.startStage] ?? source.scope
     const scope = await forkGoldenWorkflowCheckpoint({
       page,
-      source: source.scope,
+      source: checkpointSource,
       stage: scenario.startStage,
     })
     await page.goto(`/zh/workspace/${encodeURIComponent(scope.projectId)}?episode=${encodeURIComponent(scope.episodeId)}`)
     await expect.poll(async () => await readGoldenWorkflowStage(page, scope), { timeout: 30_000 }).toBe(scenario.startStage)
 
-    const boundary = BOUNDARY_BY_STAGE[scenario.startStage]
-    await setGoldenForcedTool(OPERATION_BY_STAGE[scenario.startStage] ?? null)
-    if (boundary) {
-      await expect.poll(async () => await readGoldenMainlineBoundary(page), { timeout: 30_000 }).toBe(boundary)
-      await submitGoldenBoundary(page, boundary)
-    } else {
-      const composer = page.getByPlaceholder('和 AI 一起创造')
-      await composer.fill('继续执行当前工作流的下一步')
-      await composer.press('Enter')
-    }
+    try {
+      const boundary = BOUNDARY_BY_STAGE[scenario.startStage]
+      await setGoldenForcedTool(scope.checkpointKind === 'approval'
+        ? null
+        : OPERATION_BY_STAGE[scenario.startStage] ?? null)
+      let approvalSubmitted = false
+      if (scope.checkpointKind === 'approval') {
+        await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
+        await getGoldenApprovalButton(page).click()
+        approvalSubmitted = true
+      } else if (boundary) {
+        await expect.poll(async () => await readGoldenMainlineBoundary(page), { timeout: 30_000 }).toBe(boundary)
+        await submitGoldenBoundary(page, boundary)
+      } else {
+        const composer = page.getByPlaceholder('和 AI 一起创造')
+        await composer.fill('继续执行当前工作流的下一步')
+        await composer.press('Enter')
+      }
 
-    if (scenario.expectedTerminal.kind !== 'workflow_stage') {
-      throw new Error(`GOLDEN_STAGE_PROBE_TERMINAL_UNSUPPORTED:${scenario.id}`)
+      if (scenario.expectedTerminal.kind !== 'workflow_stage') {
+        throw new Error(`GOLDEN_STAGE_PROBE_TERMINAL_UNSUPPORTED:${scenario.id}`)
+      }
+      const minimumStageIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(scenario.expectedTerminal.stage)
+      const advanceDeadline = Date.now() + 120_000
+      let advanced = false
+      while (Date.now() < advanceDeadline) {
+        const actual = await readGoldenWorkflowStage(page, scope)
+        const actualIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(actual)
+        if (actual !== 'failed' && actualIndex >= minimumStageIndex) {
+          advanced = true
+          break
+        }
+        if (actual === 'failed') break
+        if (!approvalSubmitted && await getGoldenApprovalButton(page).count() > 0) {
+          await setGoldenForcedTool(null)
+          await page.reload({ waitUntil: 'domcontentloaded' })
+          await expect(getGoldenApprovalButton(page)).toBeVisible({ timeout: 30_000 })
+          await getGoldenApprovalButton(page).click()
+          approvalSubmitted = true
+        }
+        await page.waitForTimeout(250)
+      }
+      expect(advanced, `${scenario.startStage} must advance through at least ${scenario.expectedTerminal.stage}`).toBe(true)
+    } catch (error) {
+      await attachGoldenOracleEvidence(testInfo, scope)
+      throw error
     }
-    const minimumStageIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(scenario.expectedTerminal.stage)
-    await expect.poll(async () => {
-      const actual = await readGoldenWorkflowStage(page, scope)
-      const actualIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(actual)
-      return actual !== 'failed' && actualIndex >= minimumStageIndex
-    }, {
-      timeout: 120_000,
-      message: `${scenario.startStage} must advance through at least ${scenario.expectedTerminal.stage}`,
-    }).toBe(true)
     await attachGoldenOracleEvidence(testInfo, scope)
   })
 }

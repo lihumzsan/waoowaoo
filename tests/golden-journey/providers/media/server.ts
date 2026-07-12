@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createGoldenMediaAssets } from './assets'
 
 type GoldenFalRequestKind = 'image' | 'audio'
+type GoldenMediaScenario = 'normal' | 'retry-once' | 'terminal-failure'
 
 interface GoldenFalRequest {
   readonly id: string
@@ -11,6 +12,18 @@ interface GoldenFalRequest {
 function writeJson(response: ServerResponse, status: number, value: unknown): void {
   response.writeHead(status, { 'content-type': 'application/json' })
   response.end(JSON.stringify(value))
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  if (chunks.length === 0) return null
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+}
+
+function parseMediaScenario(value: unknown): GoldenMediaScenario {
+  if (value === 'normal' || value === 'retry-once' || value === 'terminal-failure') return value
+  throw new Error(`GOLDEN_MEDIA_SCENARIO_INVALID:${String(value)}`)
 }
 
 function requestOrigin(request: IncomingMessage): string {
@@ -27,6 +40,20 @@ function mediaResponse(response: ServerResponse, contentType: string, body: Buff
 
 function falRequestKind(pathname: string): GoldenFalRequestKind {
   return pathname.includes('lyria') || pathname.includes('music') ? 'audio' : 'image'
+}
+
+function falAudioResult(origin: string): {
+  readonly audio: {
+    readonly url: string
+    readonly content_type: 'audio/mpeg'
+  }
+} {
+  return {
+    audio: {
+      url: `${origin}/assets/golden.mp3`,
+      content_type: 'audio/mpeg',
+    },
+  }
 }
 
 function findFalRequestByPath(
@@ -47,12 +74,25 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
   const assets = await createGoldenMediaAssets()
   const falRequests = new Map<string, GoldenFalRequest>()
   let requestOrdinal = 0
-  const scenario = process.env.GOLDEN_MEDIA_SCENARIO ?? 'normal'
+  let scenario = parseMediaScenario(process.env.GOLDEN_MEDIA_SCENARIO ?? 'normal')
   let retryableFailureInjected = false
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', requestOrigin(request))
     if (request.method === 'GET' && url.pathname === '/health') {
       writeJson(response, 200, { ok: true })
+      return
+    }
+    if (request.method === 'POST' && url.pathname === '/__golden/media-control') {
+      void readJsonBody(request).then((body) => {
+        const record = body && typeof body === 'object' && !Array.isArray(body)
+          ? body as Record<string, unknown>
+          : null
+        scenario = parseMediaScenario(record?.scenario)
+        retryableFailureInjected = false
+        writeJson(response, 200, { ok: true, scenario })
+      }).catch((error: unknown) => {
+        writeJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+      })
       return
     }
     if (request.method === 'GET' && url.pathname === '/assets/golden.png') {
@@ -111,7 +151,7 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
         : `${requestOrigin(request)}/assets/golden.mp3`
       writeJson(response, 200, falRequest.kind === 'image'
         ? { images: [{ url: mediaUrl }] }
-        : { audio: { url: mediaUrl } })
+        : falAudioResult(requestOrigin(request)))
       return
     }
     if (request.method === 'GET' && url.pathname.startsWith('/fal-results/')) {
@@ -126,18 +166,22 @@ export async function startGoldenMediaServer(port = 0): Promise<GoldenMediaServe
         : `${requestOrigin(request)}/assets/golden.mp3`
       writeJson(response, 200, stored.kind === 'image'
         ? { images: [{ url: mediaUrl }] }
-        : { audio: { url: mediaUrl } })
+        : falAudioResult(requestOrigin(request)))
       return
     }
     if (request.method === 'POST') {
       requestOrdinal += 1
       const id = `golden_fal_${requestOrdinal}`
-      falRequests.set(id, { id, kind: falRequestKind(url.pathname) })
-      writeJson(response, 200, {
-        request_id: id,
-        response_url: `${requestOrigin(request)}/requests/${id}`,
-        status_url: `${requestOrigin(request)}/requests/${id}/status`,
-      })
+      const kind = falRequestKind(url.pathname)
+      falRequests.set(id, { id, kind })
+      const origin = requestOrigin(request)
+      writeJson(response, 200, kind === 'audio'
+        ? {
+            request_id: id,
+            response_url: `${origin}/fal-results/${id}`,
+            status_url: `${origin}/fal-music/requests/${id}/status`,
+          }
+        : { request_id: id })
       return
     }
     writeJson(response, 404, { error: 'GOLDEN_MEDIA_ROUTE_NOT_FOUND' })
