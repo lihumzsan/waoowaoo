@@ -133,8 +133,8 @@ export function inspectTaskTargetOwnershipContract(input) {
       violations.push(`Terminal Service idempotent replay must validate its durable bundle: ${required}`)
     }
   }
-  if (!input.reconciler.includes('recoverMaterializedCompletion')) {
-    violations.push('reconciler must resume the same Task after materialized success wins the terminal race')
+  if (!input.reconciler.includes('recoverInterruptedProcessingTask')) {
+    violations.push('reconciler must resume the same interrupted Task, including materialized-success races')
   }
   return violations
 }

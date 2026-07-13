@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Queue } from 'bullmq'
+import { Queue, QueueEvents, Worker } from 'bullmq'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { observeTaskJobAcrossQueues, reconcileActiveTasks } from '@/lib/task/reconcile'
-import { getVideoQueue, removeTaskJob } from '@/lib/task/queues'
+import { buildTaskJobEnvelope } from '@/lib/task/job-envelope'
+import { getVideoQueue, QUEUE_NAME, removeTaskJob } from '@/lib/task/queues'
+import { queueRedis } from '@/lib/redis'
 import { TASK_STATUS, TASK_TYPE, type TaskJobData } from '@/lib/task/types'
+import { withTaskLifecycle } from '@/lib/workers/shared'
 
 describe('task reconciler DB and Redis integration', () => {
   const queuedJobIds: string[] = []
@@ -144,6 +147,133 @@ describe('task reconciler DB and Redis integration', () => {
         .resolves.toBe('unavailable')
     } finally {
       await unavailableQueue.close()
+    }
+  })
+
+  it('recovers a processing video task after its stalled delivery terminated without DB handoff', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const episode = await prisma.projectEpisode.create({
+      data: {
+        projectId: project.id,
+        episodeNumber: 1,
+        name: 'Episode 1',
+      },
+    })
+    const chapter = await prisma.projectEditChapter.create({
+      data: {
+        episodeId: episode.id,
+        chapterIndex: 0,
+      },
+    })
+    const group = await prisma.projectVideoGroup.create({
+      data: {
+        projectId: project.id,
+        episodeId: episode.id,
+        chapterId: chapter.id,
+        gridMode: '2x2',
+        shotIds: ['shot-1', 'shot-2'],
+        shotNumbers: [1, 2],
+        durationSec: 6,
+        prompt: 'Keep the two shots visually continuous.',
+        status: 'processing',
+      },
+    })
+    const staleAt = new Date(Date.now() - 120_000)
+    const task = await prisma.task.create({
+      data: {
+        userId: user.id,
+        projectId: project.id,
+        episodeId: episode.id,
+        type: TASK_TYPE.VIDEO_GROUP,
+        targetType: 'ProjectVideoGroup',
+        targetId: group.id,
+        status: TASK_STATUS.PROCESSING,
+        progress: 51,
+        attempt: 1,
+        externalId: 'OPENROUTER:VIDEO:provider-completed-task',
+        payload: {
+          groupId: group.id,
+          episodeId: episode.id,
+          chapterId: chapter.id,
+          gridMode: '2x2',
+          shotIds: ['shot-1', 'shot-2'],
+          videoModel: 'openrouter::video-model',
+          meta: { locale: 'zh' },
+        },
+        executionFingerprint: 'processing-video-recovery-fingerprint',
+        billingInfo: { billable: false, source: 'task', status: 'skipped' },
+        queuedAt: staleAt,
+        startedAt: staleAt,
+        heartbeatAt: staleAt,
+      },
+    })
+    await prisma.projectVideoGroup.update({
+      where: { id: group.id },
+      data: { taskId: task.id },
+    })
+    queuedJobIds.push(task.id)
+
+    const queue = getVideoQueue()
+    const events = new QueueEvents(QUEUE_NAME.VIDEO, { connection: queueRedis })
+    let handlerEntered = false
+    const staleDeliveryWorker = new Worker<TaskJobData>(
+      QUEUE_NAME.VIDEO,
+      async (job) => await withTaskLifecycle(job, async () => {
+        handlerEntered = true
+        return { unexpected: true }
+      }),
+      { connection: queueRedis, concurrency: 1 },
+    )
+    let workerClosed = false
+    try {
+      await Promise.all([events.waitUntilReady(), staleDeliveryWorker.waitUntilReady()])
+      const envelope = buildTaskJobEnvelope(task)
+      const terminalJob = await queue.add(task.type, envelope.data, { jobId: task.id })
+      await expect(terminalJob.waitUntilFinished(events)).rejects.toThrow('TASK_ATTEMPT_ALREADY_PROCESSING')
+      expect(handlerEntered).toBe(false)
+      await staleDeliveryWorker.close()
+      workerClosed = true
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { updatedAt: staleAt },
+      })
+
+      const result = await reconcileActiveTasks([queue])
+      const recoveredTask = await prisma.task.findUniqueOrThrow({ where: { id: task.id } })
+      const recoveredGroup = await prisma.projectVideoGroup.findUniqueOrThrow({ where: { id: group.id } })
+      const recoveredJob = await queue.getJob(task.id)
+
+      expect(result).toEqual({
+        failedTaskIds: [],
+        recoveredTaskIds: [task.id],
+        unavailableTaskIds: [],
+      })
+      expect(recoveredTask).toMatchObject({
+        status: TASK_STATUS.QUEUED,
+        progress: 51,
+        attempt: 1,
+        externalId: 'OPENROUTER:VIDEO:provider-completed-task',
+        startedAt: null,
+        heartbeatAt: null,
+        finishedAt: null,
+        errorCode: null,
+        errorMessage: null,
+        billingInfo: { billable: false, source: 'task', status: 'skipped' },
+      })
+      expect(recoveredGroup).toMatchObject({
+        status: 'processing',
+        taskId: task.id,
+        videoUrl: null,
+        videoMediaId: null,
+        errorCode: null,
+        errorMessage: null,
+      })
+      expect(recoveredJob).not.toBeNull()
+      await expect(recoveredJob!.getState()).resolves.toBe('waiting')
+    } finally {
+      if (!workerClosed) await staleDeliveryWorker.close()
+      await events.close()
     }
   })
 })

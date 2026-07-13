@@ -52,12 +52,6 @@ export function getTaskReconcilerRuntimeConfig(env: RuntimeEnvironment = process
       defaultValue: 60_000,
       minValue: 1_000,
     }),
-    processingTimeoutMs: resolvePositiveIntegerConfig({
-      name: 'TASK_PROCESSING_TIMEOUT_MS',
-      value: env.TASK_PROCESSING_TIMEOUT_MS,
-      defaultValue: 5 * 60_000,
-      minValue: 1_000,
-    }),
     terminalGraceMs: resolvePositiveIntegerConfig({
       name: 'TASK_RECONCILE_TERMINAL_GRACE_MS',
       value: env.TASK_RECONCILE_TERMINAL_GRACE_MS,

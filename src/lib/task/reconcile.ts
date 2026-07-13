@@ -3,8 +3,8 @@ import { prisma } from '@/lib/prisma'
 import type { Queue } from 'bullmq'
 import { buildTaskJobEnvelope, type TaskJobEnvelopeSource } from './job-envelope'
 import { addTaskJob, getAllQueues } from './queues'
-import { markTaskEnqueueFailed, markTaskEnqueued, sweepStaleTasks } from './service'
-import { TASK_EVENT_TYPE, TASK_STATUS, type TaskJobEnvelope, type TaskJobData, type TaskStatus } from './types'
+import { markTaskEnqueueFailed, markTaskEnqueued } from './service'
+import { TASK_STATUS, type TaskJobEnvelope, type TaskJobData, type TaskStatus } from './types'
 import { commitTaskTerminal, type TaskTerminalCommitResult } from './terminal'
 import { enqueuePersistedTask } from './enqueue'
 import { getTaskReconcilerRuntimeConfig } from '@/lib/workers/runtime-config'
@@ -133,11 +133,11 @@ async function recoverQueuedTask(task: ReconcileTask): Promise<QueuedTaskRecover
   }
 }
 
-async function recoverMaterializedCompletion(task: ReconcileTask): Promise<QueuedTaskRecovery> {
+async function recoverInterruptedProcessingTask(task: ReconcileTask): Promise<QueuedTaskRecovery> {
   const reset = await prisma.task.updateMany({
     where: {
       id: task.id,
-      status: task.status,
+      status: TASK_STATUS.PROCESSING,
       updatedAt: task.updatedAt,
     },
     data: {
@@ -150,7 +150,9 @@ async function recoverMaterializedCompletion(task: ReconcileTask): Promise<Queue
   return await recoverQueuedTask({ ...task, status: TASK_STATUS.QUEUED })
 }
 
-export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> {
+export async function reconcileActiveTasks(
+  queues: readonly Pick<Queue<TaskJobData>, 'getJob'>[] = getAllQueues(),
+): Promise<TaskReconciliationResult> {
   const now = Date.now()
   const activeTasks = await prisma.task.findMany({
     where: { status: { in: ACTIVE_STATUSES } },
@@ -187,7 +189,7 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
   }
 
   for (const task of activeTasks) {
-    const observation = await observeTaskJob(task.id)
+    const observation = await observeTaskJobAcrossQueues(task.id, queues)
     if (observation === 'alive') continue
     if (observation === 'unavailable') {
       result.unavailableTaskIds.push(task.id)
@@ -200,47 +202,29 @@ export async function reconcileActiveTasks(): Promise<TaskReconciliationResult> 
       continue
     }
 
-    if (observation === 'absent' && task.status === TASK_STATUS.QUEUED) {
+    if (task.status === TASK_STATUS.QUEUED) {
       const recovery = await recoverQueuedTask(task)
       if (recovery === 'recovered') result.recoveredTaskIds.push(task.id)
       if (recovery === 'failed') result.failedTaskIds.push(task.id)
       continue
     }
 
-    const reason =
-      typeof observation === 'object' && observation.failedReason
-        ? `Queue job ${observation.jobState} before Task terminal update: ${observation.failedReason}`
-        : typeof observation === 'object'
-          ? 'Queue job already terminated but DB was not updated'
-          : 'Queue job absent after reconciliation grace period'
-    const terminal = await failOrphanedTask(task, reason)
-    if (terminal.applied) {
-      result.failedTaskIds.push(task.id)
-      continue
-    }
-    if (terminal.reason === 'completion_pending') {
-      const recovery = await recoverMaterializedCompletion(task)
-      if (recovery === 'recovered') result.recoveredTaskIds.push(task.id)
-      if (recovery === 'failed') result.failedTaskIds.push(task.id)
-    }
+    const recovery = await recoverInterruptedProcessingTask(task)
+    if (recovery === 'recovered') result.recoveredTaskIds.push(task.id)
+    if (recovery === 'failed') result.failedTaskIds.push(task.id)
   }
 
   return result
 }
 
 async function executeTaskReconciliationCycle(): Promise<void> {
-  const sweptProcessing = await sweepStaleTasks({
-    processingThresholdMs: reconcilerConfig.processingTimeoutMs,
-  })
-
   const reconciled = await reconcileActiveTasks()
-  const changed = sweptProcessing.length + reconciled.failedTaskIds.length + reconciled.recoveredTaskIds.length
+  const changed = reconciled.failedTaskIds.length + reconciled.recoveredTaskIds.length
   if (changed > 0 || reconciled.unavailableTaskIds.length > 0) {
     logger.info({
       action: 'task.reconcile.cycle',
       message: 'Task reconciliation cycle completed',
       details: {
-        timedOut: sweptProcessing.length,
         failed: reconciled.failedTaskIds.length,
         recovered: reconciled.recoveredTaskIds.length,
         unavailable: reconciled.unavailableTaskIds.length,

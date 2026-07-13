@@ -15,7 +15,10 @@ export function inspectTaskAttemptOwnerContract(input) {
     'processingAttemptWhere(taskId, attempt)',
     'status: TASK_STATUS.QUEUED',
     'attempt: { increment: 1 }',
-    'return claimed.attempt',
+    "kind: 'claimed'",
+    "kind: 'already_processing'",
+    "kind: 'terminal'",
+    "kind: 'missing'",
   ]) {
     if (!input.service.includes(required)) {
       violations.push(`Task attempt claim is missing CAS contract: ${required}`)
@@ -28,7 +31,10 @@ export function inspectTaskAttemptOwnerContract(input) {
     violations.push('legacy processing claim entry must not exist')
   }
   for (const required of [
-    'taskAttempt = await tryClaimTaskAttempt({ taskId })',
+    'const claim = await tryClaimTaskAttempt({ taskId })',
+    "if (claim.kind === 'already_processing')",
+    'throw new UnrecoverableError(`TASK_ATTEMPT_ALREADY_PROCESSING:',
+    'taskAttempt = claim.attempt',
     'const maxAttempts = getTaskMaxAttempts(data.type)',
     "fence: { kind: 'attempt', attempt: taskAttempt }",
     'touchTaskHeartbeat(taskId, taskAttempt)',

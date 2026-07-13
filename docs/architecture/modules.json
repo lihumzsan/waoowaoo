@@ -191,6 +191,8 @@
         "src/instrumentation.ts",
         "prisma/migrations/20260711070000_add_edit_script_task_ownership/migration.sql",
         "scripts/check-async-migration-preflight.ts",
+        "scripts/guards/single-task-attempt-owner-guard.mjs",
+        "scripts/guards/task-target-ownership-guard.mjs",
         "src/lib/workspace-resource/resource-impact.ts",
         "src/lib/query/resource-change-sync.ts",
         "src/lib/query/workspace-sse-event-sync.ts",

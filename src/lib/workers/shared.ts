@@ -216,14 +216,26 @@ export async function withTaskLifecycle(job: Job<TaskJobData>, handler: (job: Jo
         episodeId: data.episodeId || null,
       },
     })
-    taskAttempt = await tryClaimTaskAttempt({ taskId })
-    if (taskAttempt === null) {
+    const claim = await tryClaimTaskAttempt({ taskId })
+    if (claim.kind === 'already_processing') {
+      logger.warn({
+        action: 'worker.delivery.already_processing',
+        message: 'stalled or duplicate delivery cannot claim the active DB attempt',
+        details: { activeAttempt: claim.attempt },
+      })
+      throw new UnrecoverableError(`TASK_ATTEMPT_ALREADY_PROCESSING:${taskId}:${claim.attempt}`)
+    }
+    if (claim.kind === 'missing' || claim.kind === 'terminal') {
       logger.info({
         action: 'worker.skip.terminated',
         message: 'task is not active, skip worker execution',
+        details: claim.kind === 'terminal'
+          ? { status: claim.status, attempt: claim.attempt }
+          : { status: 'missing' },
       })
       return
     }
+    taskAttempt = claim.attempt
     const processingPayload = withFlowFields(data, {
       queue: job.queueName,
       stage: 'received',

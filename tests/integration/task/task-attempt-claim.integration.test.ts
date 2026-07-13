@@ -31,7 +31,8 @@ describe('task attempt ownership MySQL integration', () => {
 
     const firstClaims = await Promise.all(Array.from({ length: 8 }, async () =>
       await tryClaimTaskAttempt({ taskId: task.id })))
-    expect(firstClaims.filter((attempt) => attempt === 1)).toHaveLength(1)
+    expect(firstClaims.filter((claim) => claim.kind === 'claimed' && claim.attempt === 1)).toHaveLength(1)
+    expect(firstClaims.filter((claim) => claim.kind === 'already_processing' && claim.attempt === 1)).toHaveLength(7)
     await expect(prisma.task.findUniqueOrThrow({
       where: { id: task.id },
       select: { status: true, attempt: true },
@@ -42,12 +43,36 @@ describe('task attempt ownership MySQL integration', () => {
 
     const secondClaims = await Promise.all(Array.from({ length: 8 }, async () =>
       await tryClaimTaskAttempt({ taskId: task.id })))
-    expect(secondClaims.filter((attempt) => attempt === 2)).toHaveLength(1)
+    expect(secondClaims.filter((claim) => claim.kind === 'claimed' && claim.attempt === 2)).toHaveLength(1)
+    expect(secondClaims.filter((claim) => claim.kind === 'already_processing' && claim.attempt === 2)).toHaveLength(7)
     await expect(prisma.task.findUniqueOrThrow({
       where: { id: task.id },
       select: { status: true, attempt: true },
     })).resolves.toEqual({ status: 'processing', attempt: 2 })
 
-    await expect(tryClaimTaskAttempt({ taskId: task.id })).resolves.toBeNull()
+    await expect(tryClaimTaskAttempt({ taskId: task.id })).resolves.toEqual({
+      kind: 'already_processing',
+      attempt: 2,
+    })
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { status: 'failed' },
+    })
+    await expect(tryClaimTaskAttempt({ taskId: task.id })).resolves.toEqual({
+      kind: 'terminal',
+      status: 'failed',
+      attempt: 2,
+    })
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { status: 'unknown-status' },
+    })
+    await expect(tryClaimTaskAttempt({ taskId: task.id })).rejects.toThrow(
+      `TASK_ATTEMPT_CLAIM_RESULT_INVALID:${task.id}:unknown-status`,
+    )
+    await expect(tryClaimTaskAttempt({ taskId: 'missing-attempt-owner-task' })).resolves.toEqual({
+      kind: 'missing',
+    })
   })
 })

@@ -11,6 +11,19 @@ function isActiveStatus(status: string) {
   return status === TASK_STATUS.QUEUED || status === TASK_STATUS.PROCESSING
 }
 
+type TaskTerminalStatus =
+  | typeof TASK_STATUS.COMPLETED
+  | typeof TASK_STATUS.FAILED
+  | typeof TASK_STATUS.CANCELED
+  | typeof TASK_STATUS.DISMISSED
+
+function isTerminalStatus(status: string): status is TaskTerminalStatus {
+  return status === TASK_STATUS.COMPLETED
+    || status === TASK_STATUS.FAILED
+    || status === TASK_STATUS.CANCELED
+    || status === TASK_STATUS.DISMISSED
+}
+
 function toObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   return value as Record<string, unknown>
@@ -114,10 +127,16 @@ export async function isTaskActive(taskId: string) {
   return isActiveStatus(task.status)
 }
 
+export type TaskAttemptClaimResult =
+  | { kind: 'claimed'; attempt: number }
+  | { kind: 'already_processing'; attempt: number }
+  | { kind: 'terminal'; status: TaskTerminalStatus; attempt: number }
+  | { kind: 'missing' }
+
 export async function tryClaimTaskAttempt(params: {
   readonly taskId: string
   readonly externalId?: string | null
-}): Promise<number | null> {
+}): Promise<TaskAttemptClaimResult> {
   const data: Prisma.TaskUpdateManyMutationInput = {
     status: TASK_STATUS.PROCESSING,
     startedAt: new Date(),
@@ -136,15 +155,27 @@ export async function tryClaimTaskAttempt(params: {
       },
       data,
     })
-    if (result.count === 0) return null
-    const claimed = await tx.task.findUnique({
+    const current = await tx.task.findUnique({
       where: { id: params.taskId },
       select: { status: true, attempt: true },
     })
-    if (!claimed || claimed.status !== TASK_STATUS.PROCESSING || claimed.attempt < 1) {
-      throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}`)
+    if (!current) return { kind: 'missing' }
+    if (result.count === 1) {
+      if (current.status !== TASK_STATUS.PROCESSING || current.attempt < 1) {
+        throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}`)
+      }
+      return { kind: 'claimed', attempt: current.attempt }
     }
-    return claimed.attempt
+    if (current.status === TASK_STATUS.PROCESSING) {
+      if (current.attempt < 1) {
+        throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}:${current.status}:${current.attempt}`)
+      }
+      return { kind: 'already_processing', attempt: current.attempt }
+    }
+    if (isTerminalStatus(current.status)) {
+      return { kind: 'terminal', status: current.status, attempt: current.attempt }
+    }
+    throw new Error(`TASK_ATTEMPT_CLAIM_RESULT_INVALID:${params.taskId}:${current.status}`)
   })
 }
 
@@ -277,72 +308,6 @@ export async function cancelTask(taskId: string, reason = 'Task cancelled by use
     task,
     cancelled,
   }
-}
-
-export async function sweepStaleTasks(params: {
-  processingThresholdMs: number
-  limit?: number
-}) {
-  const limit = Math.max(1, params.limit || 200)
-  const processingBefore = new Date(Date.now() - Math.max(1, params.processingThresholdMs))
-
-  const staleProcessing = await taskModel.findMany({
-    where: {
-      status: TASK_STATUS.PROCESSING,
-      OR: [
-        { heartbeatAt: { lt: processingBefore } },
-        {
-          heartbeatAt: null,
-          startedAt: { lt: processingBefore },
-        },
-        {
-          heartbeatAt: null,
-          startedAt: null,
-          updatedAt: { lt: processingBefore },
-        },
-      ],
-    },
-    orderBy: { updatedAt: 'asc' },
-    take: limit,
-    select: {
-      id: true,
-      userId: true,
-      projectId: true,
-      episodeId: true,
-      type: true,
-      targetType: true,
-      targetId: true,
-      billingInfo: true,
-      updatedAt: true,
-    },
-  })
-
-  if (staleProcessing.length === 0) return []
-
-  const timedOut: Array<typeof staleProcessing[number] & {
-    errorCode: string
-    errorMessage: string
-  }> = []
-  for (const task of staleProcessing) {
-    const terminal = await commitTaskTerminal({
-      kind: 'failed',
-      taskId: task.id,
-      fence: { kind: 'snapshot', updatedAt: task.updatedAt },
-      source: 'timeout',
-      errorCode: 'WATCHDOG_TIMEOUT',
-      errorMessage: 'Task heartbeat timeout',
-      eventPayload: { stage: 'reconciler_timeout' },
-    })
-    if (terminal.applied) {
-      timedOut.push({
-        ...task,
-        errorCode: 'WATCHDOG_TIMEOUT',
-        errorMessage: 'Task heartbeat timeout',
-      })
-    }
-  }
-
-  return timedOut
 }
 
 export async function dismissFailedTasks(
