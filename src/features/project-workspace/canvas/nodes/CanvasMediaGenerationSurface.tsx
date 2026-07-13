@@ -13,14 +13,11 @@ import {
 } from '../lifecycle/workspace-canvas-lifecycle'
 import { resolveCanvasMediaSurfacePhase } from './canvas-media-generation-view'
 
-export type CanvasMediaBackgroundPolicy = 'required-style-bible' | 'neutral'
-
 interface CanvasMediaGenerationSurfaceProps {
   readonly lifecycle: WorkspaceCanvasLifecycle
   readonly hasOutput: boolean
   readonly outputImageUrl?: string | null
   readonly styleImageUrl: string | null
-  readonly backgroundPolicy: CanvasMediaBackgroundPolicy
   readonly placeholder: ReactNode
   readonly ringSize: number
 }
@@ -30,7 +27,6 @@ export function CanvasMediaGenerationSurface({
   hasOutput,
   outputImageUrl,
   styleImageUrl,
-  backgroundPolicy,
   placeholder,
   ringSize,
 }: CanvasMediaGenerationSurfaceProps) {
@@ -43,12 +39,11 @@ export function CanvasMediaGenerationSurface({
   })
   const displayStyleImageUrl = toDisplayImageUrl(styleImageUrl)
   const displayOutputImageUrl = toDisplayImageUrl(outputImageUrl)
-  const missingRequiredStyle = backgroundPolicy === 'required-style-bible' && !displayStyleImageUrl
   const running = isWorkspaceCanvasLifecycleRunning(lifecycle)
   const failed = phase === 'failed-empty' || phase === 'failed-existing'
   const needsEmptyBackground = !hasOutput
-  const showPlaceholder = phase === 'empty' && !missingRequiredStyle
-  const showContractError = phase === 'contract-error' || (needsEmptyBackground && missingRequiredStyle)
+  const showPlaceholder = phase === 'empty'
+  const showContractError = phase === 'contract-error'
   const backgroundKind = hasOutput
     ? 'output'
     : displayStyleImageUrl
@@ -97,7 +92,7 @@ export function CanvasMediaGenerationSurface({
       {showContractError ? (
         <div className="absolute inset-x-4 top-4 z-10 flex items-center justify-center gap-2 rounded-[12px] border border-[var(--glass-tone-danger-ring)] bg-[var(--glass-tone-danger-bg)] px-3 py-2 text-center text-xs font-semibold text-[var(--glass-tone-danger-fg)]">
           <AppIcon name="alertSolid" className="h-4 w-4 shrink-0" />
-          <span>{phase === 'contract-error' ? labels('mediaOutputMissing') : labels('styleBibleImageMissing')}</span>
+          <span>{labels('mediaOutputMissing')}</span>
         </div>
       ) : null}
 

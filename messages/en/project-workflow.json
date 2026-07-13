@@ -371,7 +371,6 @@
         "focus": "Focus",
         "summary": "Summary",
         "error": "Error",
-        "styleBibleImageMissing": "Confirmed Style Bible image is missing",
         "mediaOutputMissing": "The task completed without a media result",
         "candidateImages": "Candidate Images",
         "candidateImageAlt": "Candidate Image {index}",

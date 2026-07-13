@@ -371,7 +371,6 @@
         "focus": "焦点",
         "summary": "摘要",
         "error": "错误",
-        "styleBibleImageMissing": "缺少已确认的 Style Bible 图片",
         "mediaOutputMissing": "任务已完成，但媒体结果缺失",
         "candidateImages": "候选图",
         "candidateImageAlt": "候选图 {index}",

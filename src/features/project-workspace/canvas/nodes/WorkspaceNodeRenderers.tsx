@@ -512,7 +512,6 @@ function ShotImagePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['da
         hasOutput={Boolean(displayImageUrl)}
         outputImageUrl={data.previewImageUrl}
         styleImageUrl={styleImageUrl}
-        backgroundPolicy="required-style-bible"
         ringSize={72}
         placeholder={(
           <span className="inline-flex h-16 w-16 items-center justify-center rounded-[18px] bg-white/72 shadow-sm ring-1 ring-slate-200 backdrop-blur">
@@ -689,7 +688,6 @@ export function MediaPreview({ data }: { readonly data: WorkspaceCanvasFlowNode[
         hasOutput={Boolean(displayVideoUrl || displayImageUrl)}
         outputImageUrl={data.previewImageUrl ?? displayVideoUrl}
         styleImageUrl={mediaLoadingStyleImageUrl(data)}
-        backgroundPolicy="required-style-bible"
         ringSize={loadingRingSize}
         placeholder={isEditAsset ? (
           <AppIcon name="imageAlt" className="h-8 w-8 text-slate-300" />
@@ -1491,7 +1489,6 @@ function EditAssetGroupHeroCard({
               hasOutput={Boolean(imageUrl)}
               outputImageUrl={previewSourceImageUrl}
               styleImageUrl={styleImageUrl}
-              backgroundPolicy="required-style-bible"
               ringSize={loadingSize}
               placeholder={<AppIcon name={editAssetPlaceholderIconName(asset.kind)} className="h-9 w-9 text-slate-300" />}
             />
@@ -1646,7 +1643,6 @@ function StyleBiblePreview({ data }: { readonly data: WorkspaceCanvasFlowNode['d
             hasOutput={Boolean(displayImageUrl)}
             outputImageUrl={sourceImageUrl}
             styleImageUrl={mediaLoadingStyleImageUrl(data)}
-            backgroundPolicy="neutral"
             ringSize={64}
             placeholder={<AppIcon name="image" className="h-8 w-8 text-slate-400" />}
           />
