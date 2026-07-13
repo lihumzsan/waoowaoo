@@ -94,7 +94,14 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
   it('requires an explicit notApplicable declaration for unsupported capabilities', () => {
     expect(['supported', 'notApplicable']).toContain(definition.stream.kind)
     expect(['supported', 'notApplicable']).toContain(definition.runtime.kind)
+    expect(['supported', 'notApplicable']).toContain(definition.materializeFromTask.kind)
     expect(['supported', 'notApplicable']).toContain(definition.terminalHandoff.kind)
+    if (definition.materializeFromTask.kind === 'supported') {
+      expect(definition.materializeFromTask.value.targetType.length).toBeGreaterThan(0)
+      expect(definition.materializeFromTask.value.taskTypes.length).toBeGreaterThan(0)
+    } else {
+      expect(definition.materializeFromTask.reason.length).toBeGreaterThan(0)
+    }
   })
 
   it('accepts matching stream facts and rejects the same stream after terminal handoff', () => {

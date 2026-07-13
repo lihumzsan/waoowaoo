@@ -141,7 +141,7 @@ async function assertParallelPlanning(input: {
   }).toBe(true)
 }
 
-async function assertShotExecutionPlansSurviveReload(input: {
+async function assertShotExecutionPlansMaterializeAndSurviveReload(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
 }): Promise<void> {
@@ -162,16 +162,21 @@ async function assertShotExecutionPlansSurviveReload(input: {
     message: 'multi-chapter asset approval must submit at least two durable shot-plan Tasks',
   }).toBe(true)
 
-  await input.page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(input.page.locator('article[data-node-id^="edit-shot-execution-plan:edit-script:"]'))
-    .toHaveCount(runningTargetIds.length, { timeout: 30_000 })
-  for (const targetId of runningTargetIds) {
-    const node = input.page.locator(
-      `article[data-node-id="${workspaceNodeId.editShotExecutionPlan(targetId)}"]`,
-    )
-    await expect(node).toHaveCount(1)
-    await expect(node).toHaveAttribute('data-lifecycle-phase', /^(queued|processing|streaming)$/)
+  const assertRunningNodes = async (): Promise<void> => {
+    await expect(input.page.locator('article[data-node-id^="edit-shot-execution-plan:edit-script:"]'))
+      .toHaveCount(runningTargetIds.length, { timeout: 30_000 })
+    for (const targetId of runningTargetIds) {
+      const node = input.page.locator(
+        `article[data-node-id="${workspaceNodeId.editShotExecutionPlan(targetId)}"]`,
+      )
+      await expect(node).toHaveCount(1)
+      await expect(node).toHaveAttribute('data-lifecycle-phase', /^(queued|processing|streaming)$/)
+    }
   }
+
+  await assertRunningNodes()
+  await input.page.reload({ waitUntil: 'domcontentloaded' })
+  await assertRunningNodes()
 }
 
 async function assertRunningShotMediaSurfaces(page: import('@playwright/test').Page): Promise<void> {
@@ -226,7 +231,7 @@ async function submitObservedBoundary(input: {
     await setGoldenStreamPacing({ chunkSize: 1, delayMs: 10 })
     try {
       await submitGoldenBoundary(input.page, input.boundary)
-      await assertShotExecutionPlansSurviveReload(input)
+      await assertShotExecutionPlansMaterializeAndSurviveReload(input)
     } finally {
       await setGoldenStreamPacing(null)
     }

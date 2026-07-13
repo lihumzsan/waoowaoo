@@ -100,6 +100,7 @@
         "tests/unit/project-workspace/structured-stream-runtime.test.ts",
         "tests/unit/project-workspace/workspace-canvas-motion-presence.test.ts",
         "tests/unit/project-workspace/workspace-canvas-lifecycle.test.ts",
+        "tests/unit/project-workspace/multi-chapter-shot-execution-projection.test.ts",
         "tests/unit/project-workspace/canvas-media-generation-surface.test.ts",
         "tests/unit/edit-script/style-preview-set-view.test.ts",
         "tests/contracts/canvas-node-conformance.test.ts",

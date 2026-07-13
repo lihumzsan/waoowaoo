@@ -6,9 +6,9 @@ import type { ProjectEditScript } from '@/types/project'
 /**
  * Logic Specification
  * Authority: CN-01/CN-06/CN-07 and the editScript multi-chapter reference projection.
- * Rejects: gating all shot-execution nodes on one selected editScript.
+ * Rejects: waiting for workflow refresh or the first stream item before projecting active shot-plan Tasks.
  * Production entry: buildWorkspaceNodeCanvasProjection.
- * Oracle: one stable node and one canonical Task target per ready chapter script.
+ * Oracle: one stable node and one canonical Task target per active chapter Task before workflow advances.
  * Command: npx vitest run tests/unit/project-workspace/multi-chapter-shot-execution-projection.test.ts
  */
 
@@ -29,7 +29,7 @@ function editScript(id: string, chapterId: string): ProjectEditScript {
 }
 
 describe('multi-chapter shot execution Canvas projection', () => {
-  it('projects every chapter target through the existing node lifecycle contract', () => {
+  it('materializes every active chapter target before workflow and stream catch up', () => {
     const scripts = [
       editScript('edit-script-1', 'chapter-1'),
       editScript('edit-script-2', 'chapter-2'),
@@ -40,14 +40,20 @@ describe('multi-chapter shot execution Canvas projection', () => {
       storyboards: [],
       editFirstWorkflow: {
         active: true,
-        stage: 'ready_to_generate_shot_execution_plan',
-        blocking: { kind: 'processing', reason: 'shot execution plans are generating' },
+        stage: 'assets_ready_for_review',
+        blocking: { kind: 'needs_user_choice', reason: 'cached workflow has not observed the submitted Tasks' },
         nextAction: null,
         allowedOperationIds: [],
         operationGroup: null,
       },
       editScripts: scripts,
       editShotExecutionPlans: [],
+      activeTaskTargets: scripts.map((script) => ({
+        taskId: `task-${script.id}`,
+        targetType: 'ProjectEditScript',
+        targetId: script.id,
+        types: ['edit_shot_execution_plan_generate'],
+      })),
       savedLayouts: [],
       translate: (key) => key,
     })

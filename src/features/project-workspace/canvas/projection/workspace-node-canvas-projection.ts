@@ -4,7 +4,6 @@ import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
 import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
 import { buildEditStylePreviewSetView } from '@/lib/edit-script/style-preview-set-view'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
-import { TASK_TYPE } from '@/lib/task/types'
 import type {
   Character,
   Location,
@@ -71,6 +70,7 @@ import {
   WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE,
 } from '../node-presentation-profiles'
 import { workspaceNodeId } from '../workspace-canvas-node-ids'
+import { resolveWorkspaceCanvasNodeMaterialization } from '../registry/workspace-canvas-node-registry'
 import type { WorkspaceCanvasStreamTarget } from '../structured-stream/workspace-structured-stream-runtime-types'
 import {
   workspaceCanvasFailedResourcePresentation,
@@ -227,24 +227,6 @@ function findStreamTarget(
   return targets.find((target) => (
     target.streamKind === streamKind
     && (target.episodeId === null || target.episodeId === episodeId)
-  )) ?? null
-}
-
-function taskTargetIncludesType(
-  target: WorkspaceCanvasActiveTaskTarget,
-  taskType: string,
-): boolean {
-  return target.types?.includes(taskType) ?? false
-}
-
-function findActiveTaskTarget(
-  targets: readonly WorkspaceCanvasActiveTaskTarget[],
-  targetType: string,
-  taskType: string,
-): WorkspaceCanvasActiveTaskTarget | null {
-  return targets.find((target) => (
-    target.targetType === targetType
-    && taskTargetIncludesType(target, taskType)
   )) ?? null
 }
 
@@ -773,25 +755,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   })
   const stylePreviewImageUrl = confirmedStylePreviewImageUrl(editBible)
   const stylePreviewAspectRatio = confirmedStylePreviewAspectRatio(editBible)
-  const activeSourceScriptTaskTarget = findActiveTaskTarget(
-    activeTaskTargets,
-    'ProjectEditSourceScript',
-    TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE,
-  )
-  const activeEditBibleTaskTarget = findActiveTaskTarget(
-    activeTaskTargets,
-    'ProjectEditBible',
-    TASK_TYPE.EDIT_BIBLE_GENERATE,
-  )
-  const activeStylePreviewOptionsTaskTarget = findActiveTaskTarget(
-    activeTaskTargets,
-    'ProjectEditBible',
-    TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE,
-  )
   const editSourceScriptStreamTarget = findStreamTarget(streamTargets, 'editSourceScript', episodeId)
   const editBibleStreamTarget = findStreamTarget(streamTargets, 'editBible', episodeId)
-  const sourceScriptRuntimeTargetId = editBible?.id ?? activeSourceScriptTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
-  const editBibleRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editBibleStreamTarget?.targetId ?? null
   const sourceScriptMaterialized = Boolean(
     editBible?.sourceKind === 'prompt_generated_script'
     && (
@@ -799,23 +764,26 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       || editBible.scriptStructure
     ),
   )
-  const sourceScriptRunning = !sourceScriptMaterialized && (
-    Boolean(activeSourceScriptTaskTarget)
-    || Boolean(editSourceScriptStreamTarget)
-    || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
-  )
   const sourceScriptFailed = Boolean(
     editBible?.status === 'failed'
     && editBible.sourceKind === 'prompt_generated_outline'
     && !sourceScriptMaterialized,
   )
-  const hasSourceScriptNode = sourceScriptRunning
-    || sourceScriptMaterialized
-    || sourceScriptFailed
-    || Boolean(editSourceScriptStreamTarget)
-  const bibleRunning = Boolean(activeEditBibleTaskTarget)
-    || Boolean(editBibleStreamTarget)
-    || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
+  const sourceScriptStreamAvailable = Boolean(editSourceScriptStreamTarget)
+    || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
+  const sourceScriptProjection = resolveWorkspaceCanvasNodeMaterialization('editSourceScript', activeTaskTargets, {
+    identityAvailable: true,
+    workflowVisible: false,
+    resourceAvailable: sourceScriptMaterialized || sourceScriptFailed,
+    streamAvailable: sourceScriptStreamAvailable,
+    submissionAvailable: false,
+    targetId: editBible?.id ?? null,
+  })
+  const activeSourceScriptTaskTarget = sourceScriptProjection.activeTaskTargets[0] ?? null
+  const sourceScriptRuntimeTargetId = editBible?.id ?? activeSourceScriptTaskTarget?.targetId ?? editSourceScriptStreamTarget?.targetId ?? null
+  const sourceScriptRunning = !sourceScriptMaterialized && (
+    sourceScriptProjection.activeTaskTargets.length > 0 || sourceScriptStreamAvailable
+  )
   const hasProductionPlanningArtifact = Boolean(
     editBible
     && (
@@ -829,9 +797,21 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       || (editBible.status === 'failed' && editBible.sourceKind !== 'prompt_generated_outline')
     ),
   )
-  const hasProductionPlanningNode = hasProductionPlanningArtifact || bibleRunning || Boolean(editBibleStreamTarget)
+  const bibleStreamAvailable = Boolean(editBibleStreamTarget)
+    || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
+  const bibleProjection = resolveWorkspaceCanvasNodeMaterialization('editBible', activeTaskTargets, {
+    identityAvailable: true,
+    workflowVisible: false,
+    resourceAvailable: hasProductionPlanningArtifact,
+    streamAvailable: bibleStreamAvailable,
+    submissionAvailable: editScriptPending,
+    targetId: editBible?.id ?? null,
+  })
+  const activeEditBibleTaskTarget = bibleProjection.activeTaskTargets[0] ?? null
+  const editBibleRuntimeTargetId = editBible?.id ?? activeEditBibleTaskTarget?.targetId ?? editBibleStreamTarget?.targetId ?? null
+  const bibleRunning = bibleProjection.activeTaskTargets.length > 0 || bibleStreamAvailable
   let sourceScriptNodeId: string | null = null
-  if (hasSourceScriptNode) {
+  if (sourceScriptProjection.materialized) {
     sourceScriptNodeId = workspaceNodeId.editSourceScript(episodeId)
     const sourceScriptPresentation = sourceScriptFailed
       ? workspaceCanvasFailedResourcePresentation()
@@ -868,7 +848,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
 
   let bibleNodeId: string | null = null
-  if (hasProductionPlanningNode || editScriptPending || bibleRunning || (hasProductionPlanningArtifact && editBibleRuntimeTargetId)) {
+  if (bibleProjection.materialized) {
     const biblePresentation = editBible
       ? resourcePresentationFromStatus(editBible.status) ?? workspaceCanvasPendingResourcePresentation()
       : workspaceCanvasPendingResourcePresentation()
@@ -923,9 +903,17 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     ? STAGE_START_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height + 96
     : STAGE_START_Y) + ROW_GAP_Y + WORKSPACE_CANVAS_EDIT_BIBLE_NODE_SIZE.height
   let styleBibleNodeId: string | null = null
-  const stylePreviewOptionsRunning = Boolean(activeStylePreviewOptionsTaskTarget)
+  const styleBibleProjection = resolveWorkspaceCanvasNodeMaterialization('editStyleBible', activeTaskTargets, {
+    identityAvailable: Boolean(editBible),
+    workflowVisible: editFirstWorkflow.stage === 'style_preview_generating',
+    resourceAvailable: Boolean(styleBibleDetails || stylePreviewSetView),
+    streamAvailable: false,
+    submissionAvailable: false,
+    targetId: editBible?.id ?? null,
+  })
+  const stylePreviewOptionsRunning = styleBibleProjection.activeTaskTargets.length > 0
     || (editFirstWorkflow.stage === 'style_preview_generating' && !stylePreviewSetView)
-  if (editBible && (styleBibleDetails || stylePreviewSetView || stylePreviewOptionsRunning)) {
+  if (editBible && styleBibleProjection.materialized) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     const stylePreviewRuntimeTargets = stylePreviewSetView?.allCandidates.flatMap((candidate) => {
       const target = TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(candidate.id)
@@ -1338,56 +1326,68 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const executionPlanByEditScriptId = new Map(
     editShotExecutionPlans.map((plan) => [plan.editScriptId, plan] as const),
   )
-  if (editFirstCanvasVisibility.editShotExecutionPlan) {
-    projectedEditScripts.forEach((script, index) => {
-      const matchingExecutionPlan = executionPlanByEditScriptId.get(script.id) ?? null
-      const executionPresentation = matchingExecutionPlan
-        ? resourcePresentationFromStatus(matchingExecutionPlan.status)
-          ?? workspaceCanvasPendingResourcePresentation()
-        : null
-      const nodeId = workspaceNodeId.editShotExecutionPlan(script.id)
-      executionNodeIdsByEditScriptId.set(script.id, nodeId)
-      if (editScript?.id === script.id || executionNodeId === null) executionNodeId = nodeId
-      const chapterIndex = script.chapterId ? chapterIndexById.get(script.chapterId) : undefined
-      nodes.push(createNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, {
-          x: STORY_COLUMN_X + COLUMN_GAP_X * 2,
-          y: STAGE_START_Y + index * (WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height + 64),
-        }),
-        width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
-        data: {
-          projectId,
-          episodeName,
-          kind: 'editShotExecutionPlan',
-          layoutNodeType: 'editShotExecutionPlan',
-          targetType: 'editShotExecutionPlan',
-          targetId: script.id,
-          title: chapterIndex === undefined
-            ? translate('nodes.editShotExecutionPlan.title')
-            : translate('nodes.editShotExecutionPlan.titleWithChapterNumber', { chapter: chapterIndex + 1 }),
-          eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
-          body: matchingExecutionPlan
-            ? matchingExecutionPlan.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`).join('\n')
-            : translate('nodes.editShotExecutionPlan.pendingBody'),
-          meta: matchingExecutionPlan
-            ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
-            : '',
-          ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(script.id)),
-          actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
-          action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: script.id },
-          editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, script, translate) } : undefined,
-          onAction,
-        },
-      }))
-      const sourceNodeId = assetGroupNodeId ?? editScriptNodeIdsByScriptId.get(script.id) ?? null
-      if (sourceNodeId) {
-        edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
-      }
+  const streamedExecutionPlanTargetIds = new Set(
+    streamTargets
+      .filter((target) => target.streamKind === 'editShotExecutionPlan')
+      .map((target) => target.targetId),
+  )
+  projectedEditScripts.forEach((script, index) => {
+    const matchingExecutionPlan = executionPlanByEditScriptId.get(script.id) ?? null
+    const executionPlanProjection = resolveWorkspaceCanvasNodeMaterialization('editShotExecutionPlan', activeTaskTargets, {
+      identityAvailable: true,
+      workflowVisible: editFirstCanvasVisibility.editShotExecutionPlan,
+      resourceAvailable: matchingExecutionPlan !== null,
+      streamAvailable: streamedExecutionPlanTargetIds.has(script.id),
+      submissionAvailable: false,
+      targetId: script.id,
     })
-  }
+    if (!executionPlanProjection.materialized) return
+    const executionPresentation = matchingExecutionPlan
+      ? resourcePresentationFromStatus(matchingExecutionPlan.status)
+        ?? workspaceCanvasPendingResourcePresentation()
+      : null
+    const nodeId = workspaceNodeId.editShotExecutionPlan(script.id)
+    executionNodeIdsByEditScriptId.set(script.id, nodeId)
+    if (editScript?.id === script.id || executionNodeId === null) executionNodeId = nodeId
+    const chapterIndex = script.chapterId ? chapterIndexById.get(script.chapterId) : undefined
+    nodes.push(createNode({
+      id: nodeId,
+      position: layoutPosition(savedLayouts, nodeId, {
+        x: STORY_COLUMN_X + COLUMN_GAP_X * 2,
+        y: STAGE_START_Y + index * (WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height + 64),
+      }),
+      width: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_EDIT_CINEMATOGRAPHY_COLLAPSED_NODE_SIZE.height,
+      data: {
+        projectId,
+        episodeName,
+        kind: 'editShotExecutionPlan',
+        layoutNodeType: 'editShotExecutionPlan',
+        targetType: 'editShotExecutionPlan',
+        targetId: script.id,
+        title: chapterIndex === undefined
+          ? translate('nodes.editShotExecutionPlan.title')
+          : translate('nodes.editShotExecutionPlan.titleWithChapterNumber', { chapter: chapterIndex + 1 }),
+        eyebrow: translate('nodes.editShotExecutionPlan.eyebrow'),
+        body: matchingExecutionPlan
+          ? matchingExecutionPlan.shots.slice(0, 4).map((shot) => `${shot.shotNumber}. ${shot.camera.shotScale} / ${shot.blocking.spatialNote}`).join('\n')
+          : translate('nodes.editShotExecutionPlan.pendingBody'),
+        meta: matchingExecutionPlan
+          ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
+          : '',
+        ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(script.id)),
+        actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
+        action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: script.id },
+        editPipelineStepDetails: matchingExecutionPlan ? { items: executionItems(matchingExecutionPlan, script, translate) } : undefined,
+        onAction,
+      },
+    }))
+    const sourceNodeId = assetGroupNodeId ?? editScriptNodeIdsByScriptId.get(script.id) ?? null
+    if (sourceNodeId) {
+      edges.push(createEdge(`edge:${sourceNodeId}:${nodeId}`, sourceNodeId, nodeId))
+    }
+  })
 
   const panelList = collectPanels(storyboards)
   const shotNodeIdsByShotId = new Map<string, string>()
