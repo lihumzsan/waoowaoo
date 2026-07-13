@@ -106,8 +106,13 @@ if (/TASK_TARGET_OVERLAY_TTL_MS|expiresAt/.test(overlay) || /runtime\.expiresAt/
 }
 
 const structuredRuntime = read('src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts')
+const structuredIdentity = read('src/features/project-workspace/canvas/structured-stream/workspace-structured-stream-identity.ts')
+const structuredRuntimeContract = `${structuredRuntime}\n${structuredIdentity}`
 for (const required of ['streamRunId', 'stepAttempt', 'lastSeq', 'MAX_STREAM_ACCUMULATORS', 'MAX_TERMINAL_STREAM_RUNS']) {
-  if (!structuredRuntime.includes(required)) violations.push(`structured runtime identity/bound is missing ${required}`)
+  if (!structuredRuntimeContract.includes(required)) violations.push(`structured runtime identity/bound is missing ${required}`)
+}
+if (!structuredRuntime.includes('workspace-structured-stream-identity')) {
+  violations.push('structured runtime must consume the canonical stream identity/bound module')
 }
 
 const sseHook = read('src/lib/query/hooks/useSSE.ts')

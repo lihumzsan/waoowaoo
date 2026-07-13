@@ -773,8 +773,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     || (editBible ? hasStreamTarget(streamTargets, 'editSourceScript', editBible.id) : false)
   const sourceScriptProjection = resolveWorkspaceCanvasNodeMaterialization('editSourceScript', activeTaskTargets, {
     identityAvailable: true,
-    workflowVisible: false,
-    resourceAvailable: sourceScriptMaterialized || sourceScriptFailed,
+    workflowVisible: editFirstCanvasVisibility.editSourceScript,
+    resourceAvailable: Boolean(
+      editBible
+      && (
+        editBible.sourceKind === 'prompt_generated_outline'
+        || editBible.sourceKind === 'prompt_generated_script'
+      ),
+    ),
     streamAvailable: sourceScriptStreamAvailable,
     submissionAvailable: false,
     targetId: editBible?.id ?? null,
@@ -801,7 +807,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     || (editBible ? hasStreamTarget(streamTargets, 'editBible', editBible.id) : false)
   const bibleProjection = resolveWorkspaceCanvasNodeMaterialization('editBible', activeTaskTargets, {
     identityAvailable: true,
-    workflowVisible: false,
+    workflowVisible: editFirstCanvasVisibility.editBible,
     resourceAvailable: hasProductionPlanningArtifact,
     streamAvailable: bibleStreamAvailable,
     submissionAvailable: editScriptPending,

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addBoundedIdentity,
   buildStreamRuntimeEntries,
   isTerminalStructuredStreamLifecycle,
   processStructuredStreamEvent,
   snapshotsFromAccumulators,
   type StructuredStreamSnapshot,
 } from '@/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime'
+import { markTaskEntriesForTerminalHandoff } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-handoff'
+import { addBoundedIdentity } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-identity'
 import type { WorkspaceCanvasFlowNode } from '@/features/project-workspace/canvas/node-canvas-types'
 import type { WorkspaceCanvasLifecycle } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
 import type { WorkspaceCanvasStreamPatch } from '@/features/project-workspace/canvas/structured-stream/workspace-structured-stream-runtime-types'
@@ -176,6 +177,20 @@ describe('workspace structured stream runtime', () => {
     expect([...identities]).toEqual([
       'run-12', 'run-13', 'run-14', 'run-15', 'run-16', 'run-17', 'run-18', 'run-19',
     ])
+  })
+
+  it('turns completed stream content into a handoff and replaces it on a new run for the same target', () => {
+    const active = processStructuredStreamEvent(new Map(), chunk({ seq: 1 }))
+    const handoff = markTaskEntriesForTerminalHandoff(active, 'task-1')
+    expect([...handoff.values()].every((accumulator) => accumulator.terminalHandoff)).toBe(true)
+    expect(snapshotsFromAccumulators(handoff).every((snapshot) => snapshot.terminalHandoff)).toBe(true)
+
+    const retry = processStructuredStreamEvent(handoff, {
+      ...chunk({ seq: 1, streamRunId: 'run-2' }),
+      taskId: 'task-2',
+    })
+    expect([...retry.values()]).toHaveLength(1)
+    expect([...retry.values()][0]).toMatchObject({ taskId: 'task-2', terminalHandoff: false })
   })
 
   it('treats canceled as a terminal lifecycle that clears structured runtime', () => {

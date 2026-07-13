@@ -25,6 +25,82 @@ const USER_BOUNDARIES = new Set<GoldenMainlineBoundary>([
   'approval',
 ])
 
+const CANVAS_STREAM_CONTINUITY_KEY = 'golden:canvas-stream-continuity'
+
+async function installCanvasStreamContinuityObserver(page: import('@playwright/test').Page): Promise<void> {
+  await page.addInitScript(({ storageKey }) => {
+    interface ContinuityState {
+      readonly seenIds: string[]
+      readonly missingIds: string[]
+    }
+    const readState = (): ContinuityState => {
+      const raw = window.sessionStorage.getItem(storageKey)
+      if (!raw) return { seenIds: [], missingIds: [] }
+      try {
+        return JSON.parse(raw) as ContinuityState
+      } catch {
+        return { seenIds: [], missingIds: [] }
+      }
+    }
+    let unloading = false
+    const documentSeenIds = new Set<string>()
+    window.addEventListener('pagehide', () => { unloading = true }, { once: true })
+    const observe = (): void => {
+      const check = (): void => {
+        if (unloading) return
+        const state = readState()
+        const seenIds = new Set(state.seenIds)
+        const missingIds = new Set(state.missingIds)
+        document.querySelectorAll('article[data-node-id][data-lifecycle-phase="streaming"]').forEach((node) => {
+          const nodeId = node.getAttribute('data-node-id')
+          if (nodeId) {
+            seenIds.add(nodeId)
+            documentSeenIds.add(nodeId)
+          }
+        })
+        const currentIds = new Set(Array.from(
+          document.querySelectorAll('article[data-node-id]'),
+          (node) => node.getAttribute('data-node-id'),
+        ).filter((nodeId): nodeId is string => Boolean(nodeId)))
+        seenIds.forEach((nodeId) => {
+          if (currentIds.has(nodeId)) documentSeenIds.add(nodeId)
+        })
+        documentSeenIds.forEach((nodeId) => {
+          if (!currentIds.has(nodeId)) missingIds.add(nodeId)
+        })
+        window.sessionStorage.setItem(storageKey, JSON.stringify({
+          seenIds: [...seenIds],
+          missingIds: [...missingIds],
+        }))
+      }
+      check()
+      new MutationObserver(check).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-lifecycle-phase'],
+        childList: true,
+        subtree: true,
+      })
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', observe, { once: true })
+    } else {
+      observe()
+    }
+  }, { storageKey: CANVAS_STREAM_CONTINUITY_KEY })
+}
+
+async function readCanvasStreamContinuity(page: import('@playwright/test').Page): Promise<{
+  readonly seenIds: string[]
+  readonly missingIds: string[]
+}> {
+  return await page.evaluate((storageKey) => {
+    const raw = window.sessionStorage.getItem(storageKey)
+    return raw
+      ? JSON.parse(raw) as { seenIds: string[]; missingIds: string[] }
+      : { seenIds: [], missingIds: [] }
+  }, CANVAS_STREAM_CONTINUITY_KEY)
+}
+
 interface GoldenScope {
   readonly projectId: string
   readonly episodeId: string
@@ -289,6 +365,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   browserObservations,
 }, testInfo) => {
   test.setTimeout(30 * 60_000)
+  await installCanvasStreamContinuityObserver(page)
   await registerGoldenUser(page, {
     username: `golden-complete-${String(Date.now())}`,
     password: 'golden-complete-password',
@@ -372,6 +449,9 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)
       expect(observedAudioVisibleAtAudioStage, 'main Journey must observe audio nodes at the audio stage').toBe(true)
+      const streamContinuity = await readCanvasStreamContinuity(page)
+      expect(streamContinuity.seenIds.length, 'main Journey must observe at least one structured-stream Canvas node').toBeGreaterThan(0)
+      expect(streamContinuity.missingIds, 'a streamed canonical node must never disappear before formal Query handoff').toEqual([])
       expect(oracle.identities.duplicateMessageIds).toHaveLength(0)
       expect(oracle.identities.duplicateToolCallIds).toHaveLength(0)
       browserObservations.assertClean()

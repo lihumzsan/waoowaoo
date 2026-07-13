@@ -68,7 +68,7 @@ function persistedPhase(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasPer
 }
 
 function streamFact(patch: WorkspaceCanvasStreamPatch | null) {
-  return patch ? {
+  return patch && patch.terminalHandoff !== true ? {
     taskId: patch.taskId,
     taskType: patch.taskType,
     presentation: patch.presentation,
@@ -128,6 +128,12 @@ export function resolveWorkspaceCanvasNodeData(input: {
     submitting: input.submitting,
   })
   const acceptsStreamContent = lifecycle.phase === 'streaming'
+    || Boolean(
+      input.streamPatch?.terminalHandoff === true
+      && basePhase === 'pending'
+      && lifecycle.phase !== 'failed'
+      && lifecycle.phase !== 'canceled',
+    )
   const editAssetGroupDetails = resolveEditAssetGroupRuntimeDetails(input)
 
   return {

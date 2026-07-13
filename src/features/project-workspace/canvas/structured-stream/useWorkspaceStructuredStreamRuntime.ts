@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, isTaskTerminalEventType, type SSEEvent } from '@/lib/task/types'
 import { normalizeSourceScriptSegments } from '@/lib/edit-bible/source-script-segments'
 import type { EditSourceScriptStructure } from '@/lib/edit-bible/schemas'
@@ -30,6 +30,17 @@ import type {
   WorkspaceCanvasStreamTarget,
 } from './workspace-structured-stream-runtime-types'
 import { buildSoundscapeStreamView } from './soundscape-stream-view'
+import {
+  areAllTerminalHandoffs,
+  markTaskEntriesForTerminalHandoff,
+  removeTargetTerminalHandoffs,
+  removeTaskEntries,
+} from './workspace-structured-stream-handoff'
+import {
+  addBoundedIdentity,
+  createStructuredStreamAccumulatorKey,
+  trimOldestMapEntries,
+} from './workspace-structured-stream-identity'
 
 type TranslateValues = Readonly<Record<string, string | number>>
 type Translate = (key: string, values?: TranslateValues) => string
@@ -42,6 +53,7 @@ interface UseWorkspaceStructuredStreamRuntimeInput {
 interface UseWorkspaceStructuredStreamRuntimeResult {
   readonly targets: readonly WorkspaceCanvasStreamTarget[]
   readonly patches: readonly WorkspaceCanvasStreamPatch[]
+  readonly releaseTerminalHandoffs: (taskIds: readonly string[]) => void
 }
 
 export interface StreamAccumulator {
@@ -59,6 +71,7 @@ export interface StreamAccumulator {
   readonly items: readonly StructuredStreamItem[]
   readonly errorMessage: string | null
   readonly lastSeq: number
+  readonly terminalHandoff: boolean
 }
 
 export interface StructuredStreamSnapshot {
@@ -70,6 +83,7 @@ export interface StructuredStreamSnapshot {
   readonly adapterKey: StructuredStreamAdapterKey
   readonly items: readonly StructuredStreamItem[]
   readonly errorMessage: string | null
+  readonly terminalHandoff?: boolean
 }
 
 
@@ -86,49 +100,6 @@ function readPositiveInteger(value: unknown): number | null {
 }
 
 const MAX_STREAM_ACCUMULATORS = 128
-const MAX_TERMINAL_STREAM_RUNS = 512
-
-function trimOldestMapEntries<TKey, TValue>(map: Map<TKey, TValue>, limit: number): void {
-  while (map.size > limit) {
-    const oldest = map.keys().next().value as TKey | undefined
-    if (oldest === undefined) return
-    map.delete(oldest)
-  }
-}
-
-export function addBoundedIdentity(
-  current: ReadonlySet<string>,
-  identity: string,
-  limit = MAX_TERMINAL_STREAM_RUNS,
-): ReadonlySet<string> {
-  const next = new Set(current)
-  next.delete(identity)
-  next.add(identity)
-  while (next.size > limit) {
-    const oldest = next.values().next().value as string | undefined
-    if (!oldest) break
-    next.delete(oldest)
-  }
-  return next
-}
-
-function createAccumulatorKey(input: {
-  readonly taskId: string
-  readonly streamRunId: string
-  readonly stepAttempt: number
-  readonly stepId: string | null
-  readonly lane: string
-  readonly adapterKey: StructuredStreamAdapterKey
-}): string {
-  return [
-    input.taskId,
-    input.streamRunId,
-    String(input.stepAttempt),
-    input.stepId ?? '__step',
-    input.lane,
-    input.adapterKey,
-  ].join('|')
-}
 
 function normalizeItems(
   adapter: StructuredStreamAdapter,
@@ -192,9 +163,13 @@ export function processStructuredStreamEvent(
   })
   if (adapters.length === 0) return current
 
-  const next = new Map(current)
+  const next = new Map(removeTargetTerminalHandoffs(
+    current,
+    event.targetType ?? null,
+    event.targetId ?? null,
+  ))
   adapters.forEach((adapter) => {
-    const key = createAccumulatorKey({
+    const key = createStructuredStreamAccumulatorKey({
       taskId: event.taskId,
       streamRunId,
       stepAttempt,
@@ -243,6 +218,7 @@ export function processStructuredStreamEvent(
         items: normalized.items,
         errorMessage: normalized.errorMessage ?? previous?.errorMessage ?? null,
         lastSeq: seq,
+        terminalHandoff: false,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -261,6 +237,7 @@ export function processStructuredStreamEvent(
         items: previous?.items ?? [],
         errorMessage: message,
         lastSeq: seq,
+        terminalHandoff: false,
       })
     }
   })
@@ -284,18 +261,8 @@ export function snapshotsFromAccumulators(
       adapterKey: accumulator.adapter.key,
       items: accumulator.items,
       errorMessage: accumulator.errorMessage,
+      terminalHandoff: accumulator.terminalHandoff,
     }))
-}
-
-function removeAccumulatorsForTask<T extends { readonly taskId: string }>(
-  current: ReadonlyMap<string, T>,
-  taskId: string,
-): ReadonlyMap<string, T> {
-  const next = new Map(current)
-  next.forEach((accumulator, key) => {
-    if (accumulator.taskId === taskId) next.delete(key)
-  })
-  return next
 }
 
 export function shouldClearStreamAccumulatorsForLifecycle(
@@ -368,6 +335,7 @@ function createStreamRuntimeEntry(input: {
   readonly targetType: string | null
   readonly targetId: string
   readonly episodeId: string | null
+  readonly terminalHandoff: boolean
   readonly presentation: WorkspaceCanvasStreamPresentation
   readonly data: WorkspaceCanvasStreamPatchData
 }): WorkspaceCanvasStreamRuntimeEntry {
@@ -386,6 +354,7 @@ function createStreamRuntimeEntry(input: {
       streamKind: input.streamKind,
       taskId: input.taskId,
       taskType: input.taskType,
+      terminalHandoff: input.terminalHandoff,
       presentation: input.presentation,
       data: input.data,
     },
@@ -457,6 +426,7 @@ function buildSourceScriptRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
+      terminalHandoff: areAllTerminalHandoffs(group),
       presentation: streamPresentation(rawItems),
       data: {
         body: structure.summary ?? translate('nodes.editSourceScript.pendingBody'),
@@ -506,6 +476,7 @@ function buildProductionPlanningRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId: firstSnapshot.targetId,
       episodeId: firstSnapshot.episodeId,
+      terminalHandoff: areAllTerminalHandoffs(group),
       presentation: streamPresentation(rawItems),
       data: {
         body,
@@ -554,6 +525,7 @@ function buildEditScriptRuntimeEntries(
       targetType: firstSnapshot.targetType,
       targetId,
       episodeId: firstSnapshot.episodeId ?? episodeId,
+      terminalHandoff: areAllTerminalHandoffs(scopedSnapshots),
       presentation: streamPresentation(rawItems),
       data: {
         body: translate('nodes.editScript.pendingBody'),
@@ -608,6 +580,7 @@ function buildShotExecutionRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: editScriptId,
     episodeId: firstSnapshot.episodeId,
+    terminalHandoff: areAllTerminalHandoffs(matchingSnapshots),
     presentation: streamPresentation(rawItems),
     data: {
       body: translate('nodes.editShotExecutionPlan.pendingBody'),
@@ -642,6 +615,9 @@ function buildBgmRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
+    terminalHandoff: areAllTerminalHandoffs(
+      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('bgm.')),
+    ),
     presentation: streamPresentation(rawItems),
     data: {
       body: translate('nodes.bgmScore.body', { videos: 0 }),
@@ -708,6 +684,9 @@ function buildSoundscapeRuntimeEntry(
     targetType: firstSnapshot.targetType,
     targetId: episodeId,
     episodeId: firstSnapshot.episodeId ?? episodeId,
+    terminalHandoff: areAllTerminalHandoffs(
+      snapshots.filter((snapshot) => snapshot.adapterKey.startsWith('soundscape.')),
+    ),
     presentation: streamPresentation(rawItems),
     data: {
       body: translate('nodes.soundscape.body', { videos: 0 }),
@@ -770,7 +749,7 @@ export function useWorkspaceStructuredStreamRuntime({
       const payload = readRecord(event.payload)
       const lifecycleType = readString(payload.lifecycleType)
       if (shouldClearStreamAccumulatorsForLifecycle(lifecycleType, payload)) {
-        setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
+        setAccumulators((current) => removeTaskEntries(current, event.taskId))
         return
       }
       if (!isTerminalStructuredStreamLifecycle(lifecycleType)) return
@@ -783,9 +762,18 @@ export function useWorkspaceStructuredStreamRuntime({
       const runsByTask = new Map(streamRunIdsByTaskRef.current)
       runsByTask.delete(event.taskId)
       streamRunIdsByTaskRef.current = runsByTask
-      setAccumulators((current) => removeAccumulatorsForTask(current, event.taskId))
+      setAccumulators((current) => (
+        lifecycleType === TASK_EVENT_TYPE.COMPLETED
+          ? markTaskEntriesForTerminalHandoff(current, event.taskId)
+          : removeTaskEntries(current, event.taskId)
+      ))
     })
   }, [episodeId, subscribeTaskEvents])
+
+  const releaseTerminalHandoffs = useCallback((taskIds: readonly string[]) => {
+    const identities = new Set(taskIds.filter((taskId) => taskId.trim().length > 0))
+    setAccumulators((current) => removeTaskEntries(current, identities))
+  }, [])
 
   const entries = useMemo(
     () => buildStreamRuntimeEntries(
@@ -799,5 +787,6 @@ export function useWorkspaceStructuredStreamRuntime({
   return useMemo(() => ({
     targets: entries.map((entry) => entry.target),
     patches: entries.map((entry) => entry.patch),
-  }), [entries])
+    releaseTerminalHandoffs,
+  }), [entries, releaseTerminalHandoffs])
 }

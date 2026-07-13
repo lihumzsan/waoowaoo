@@ -456,6 +456,7 @@ function ProjectWorkspaceCanvasContent({
     episodeId: episodeId ?? 'pending-episode',
     translate: t,
   })
+  const { releaseTerminalHandoffs } = structuredStreamRuntime
   const projection = useWorkspaceNodeCanvasProjection({
     projectId,
     episodeId: episodeId ?? 'pending-episode',
@@ -481,6 +482,24 @@ function ProjectWorkspaceCanvasContent({
   })
   const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
+  const releasableTerminalStreamTaskIds = useMemo(() => {
+    const formalNodeIds = new Set(projectedNodes.flatMap((node) => (
+      node.data.lifecycle.phase === 'succeeded'
+      || node.data.lifecycle.phase === 'failed'
+      || node.data.lifecycle.phase === 'canceled'
+        ? [node.id]
+        : []
+    )))
+    return structuredStreamRuntime.patches.flatMap((patch) => (
+      patch.terminalHandoff === true && formalNodeIds.has(patch.nodeId)
+        ? [patch.taskId]
+        : []
+    ))
+  }, [projectedNodes, structuredStreamRuntime.patches])
+  useEffect(() => {
+    if (releasableTerminalStreamTaskIds.length === 0) return
+    releaseTerminalHandoffs(releasableTerminalStreamTaskIds)
+  }, [releasableTerminalStreamTaskIds, releaseTerminalHandoffs])
   const workspaceRuntimeTargets = useMemo(
     () => collectWorkspaceNodeRuntimeTargets(projectedNodes),
     [projectedNodes],
