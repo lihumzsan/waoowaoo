@@ -356,7 +356,7 @@ export function shouldProjectPromptTaskSnapshot(params: {
   ignoreActiveSnapshot: boolean
   taskPhase?: string | null
 }) {
-  if (params.localOperationActive) return false
+  if (params.localOperationActive) return params.taskPhase === 'processing'
   if (
     params.ignoreActiveSnapshot
     && (params.taskPhase === 'queued' || params.taskPhase === 'processing')

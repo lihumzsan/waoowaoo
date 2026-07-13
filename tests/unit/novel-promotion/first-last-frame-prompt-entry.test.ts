@@ -578,7 +578,7 @@ describe('first/last-frame prompt entry', () => {
     expect((promptState.canStartPromptOperation as (entry: { status: string }) => boolean)(cleared)).toBe(true)
   })
 
-  it('keeps stale active target snapshots from overriding locally settled authority', async () => {
+  it('projects worker processing while protecting locally settled authority from stale active snapshots', async () => {
     const promptState = await import(
       '@/lib/novel-promotion/stages/video-stage-runtime/first-last-frame-prompt-entry'
     ) as Record<string, unknown>
@@ -594,6 +594,11 @@ describe('first/last-frame prompt entry', () => {
       localOperationActive: true,
       ignoreActiveSnapshot: false,
       taskPhase: 'processing',
+    })).toBe(true)
+    expect(shouldProject({
+      localOperationActive: true,
+      ignoreActiveSnapshot: false,
+      taskPhase: 'completed',
     })).toBe(false)
     expect(shouldProject({
       localOperationActive: false,
