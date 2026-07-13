@@ -369,6 +369,13 @@ async function assertAudioNodeVisibility(
   await expect(page.locator('article[data-node-id^="soundscape:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
 }
 
+async function assertFinalTimelineVisibility(
+  page: import('@playwright/test').Page,
+  expectedCount: 0 | 1,
+): Promise<void> {
+  await expect(page.locator('article[data-node-id^="final:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+}
+
 async function assertAllScopeVideoProjection(
   page: import('@playwright/test').Page,
   videoGroups: readonly Record<string, unknown>[],
@@ -487,6 +494,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   let reloadedCompletedStage = false
   let observedAudioHiddenBeforeVideos = false
   let observedAudioVisibleAtAudioStage = false
+  let observedFinalTimelineHiddenBeforeAudioCompletion = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
   const deadline = Date.now() + 25 * 60_000
 
@@ -516,7 +524,9 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       }
       if (workflowStage === 'ready_to_plan_audio_layers' || workflowStage === 'audio_layers_planning') {
         await assertAudioNodeVisibility(page, 1)
+        await assertFinalTimelineVisibility(page, 0)
         observedAudioVisibleAtAudioStage = true
+        observedFinalTimelineHiddenBeforeAudioCompletion = true
       }
       if (
         (
@@ -605,8 +615,13 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(asRecord(soundscape?.planJson)).toMatchObject({ decision: 'soundscape' })
       expect(asRecord(soundscape?.mixJson)).not.toBeNull()
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
+      await assertFinalTimelineVisibility(page, 1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)
       expect(observedAudioVisibleAtAudioStage, 'main Journey must observe audio nodes at the audio stage').toBe(true)
+      expect(
+        observedFinalTimelineHiddenBeforeAudioCompletion,
+        'main Journey must not expose final rendering before both audio layers are complete',
+      ).toBe(true)
       const streamContinuity = await readCanvasStreamContinuity(page)
       expect(streamContinuity.seenIds.length, 'main Journey must observe at least one structured-stream Canvas node').toBeGreaterThan(0)
       expect(streamContinuity.missingIds, 'a streamed canonical node must never disappear before formal Query handoff').toEqual([])

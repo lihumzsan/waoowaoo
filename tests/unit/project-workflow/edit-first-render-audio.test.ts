@@ -34,6 +34,9 @@ describe('edit-first workflow state', () => {
     expect(visibilityAt('ready_to_generate_videos')).toMatchObject({ bgmScore: false, soundscape: false })
     expect(visibilityAt('chapters_rendering')).toMatchObject({ bgmScore: false, soundscape: false })
     expect(visibilityAt('ready_to_plan_audio_layers')).toMatchObject({ bgmScore: true, soundscape: true })
+    expect(visibilityAt('ready_to_render_chapters').finalTimeline).toBe(false)
+    expect(visibilityAt('ready_to_plan_audio_layers').finalTimeline).toBe(false)
+    expect(visibilityAt('ready_to_render_final').finalTimeline).toBe(true)
   })
 
   it('materializes active audio Tasks while the workflow context catches up', () => {
@@ -98,6 +101,89 @@ describe('edit-first workflow state', () => {
     expect(state.stage).toBe('ready_to_render_chapters')
     expect(state.nextAction?.operationId).toBe('render_chapters')
     expect(state.allowedOperationIds).toEqual(['render_chapters'])
+  })
+
+  it('keeps a stale final-render failure behind missing chapter and audio prerequisites', () => {
+    const beforeChapterRender = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 0,
+      finalRenderStatus: 'failed',
+    }))
+
+    expect(beforeChapterRender.stage).toBe('ready_to_render_chapters')
+    expect(beforeChapterRender.allowedOperationIds).toEqual(['render_chapters'])
+
+    const beforeAudioPlanning = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 1,
+      finalRenderStatus: 'failed',
+    }))
+
+    expect(beforeAudioPlanning.stage).toBe('ready_to_plan_audio_layers')
+    expect(beforeAudioPlanning.allowedOperationIds).toEqual([
+      'plan_episode_bgm_score',
+      'plan_episode_soundscape',
+    ])
+  })
+
+  it('keeps a stale failed final resource visible without an executable final action', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      finalVideo: {
+        id: 'final-1',
+        episodeId: 'episode-1',
+        renderStatus: 'failed',
+        renderTaskId: 'final-task-1',
+        outputUrl: null,
+        updatedAt: '2026-07-13T00:00:00.000Z',
+      },
+      editFirstWorkflow: {
+        active: true,
+        stage: 'ready_to_render_chapters',
+        blocking: { kind: 'none', reason: null },
+        nextAction: {
+          id: 'render_chapters',
+          operationId: 'render_chapters',
+          title: 'Render chapter videos',
+        },
+        allowedOperationIds: ['render_chapters'],
+        operationGroup: null,
+      },
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+
+    const finalNode = projection.nodes.find((node) => node.data.kind === 'finalTimeline')
+    expect(finalNode?.id).toBe(workspaceNodeId.finalTimeline('episode-1'))
+    expect(finalNode?.data.action).toBeUndefined()
   })
 
   it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {

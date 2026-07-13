@@ -1702,7 +1702,15 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   )
 
   let finalNodeId: string | null = null
-  if (editFirstCanvasVisibility.finalTimeline) {
+  const finalTimelineProjection = resolveWorkspaceCanvasNodeMaterialization('finalTimeline', activeTaskTargets, {
+    identityAvailable: true,
+    workflowVisible: editFirstCanvasVisibility.finalTimeline,
+    resourceAvailable: Boolean(finalVideo?.renderStatus || finalVideo?.outputUrl),
+    streamAvailable: false,
+    submissionAvailable: false,
+    targetId: episodeId,
+  })
+  if (finalTimelineProjection.materialized) {
     const finalEditScripts = editScripts.length > 0 ? editScripts : editScript ? [editScript] : []
     const finalShotNumberById = new Map(finalEditScripts.flatMap((script) => (
       script.shots.map((shot) => [shot.shotId, shot.shotNumber] as const)
@@ -1714,6 +1722,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ? resourcePresentationFromStatus(finalVideo.renderStatus)
           ?? workspaceCanvasPendingResourcePresentation()
         : null
+    const finalRenderActionAvailable = editFirstWorkflow.allowedOperationIds.includes('render_final_video')
     nodes.push(createMediaNode({
       id: finalNodeId,
       position: layoutPosition(savedLayouts, finalNodeId, { x: SHOT_GRID_START_X, y: bgmStageBottomY + FINAL_TIMELINE_GAP_Y }),
@@ -1732,8 +1741,10 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: finalVideo?.outputUrl ?? translate('nodes.finalTimeline.body'),
         meta: finalVideo?.renderStatus ?? '',
         ...(finalPresentation ?? workspaceCanvasPendingResourcePresentation()),
-        actionLabel: translate('actions.renderFinalVideo'),
-        action: { type: 'render_final_video' },
+        ...(finalRenderActionAvailable ? {
+          actionLabel: translate('actions.renderFinalVideo'),
+          action: { type: 'render_final_video' as const },
+        } : {}),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeFinalRender(episodeId)),
         finalDetails: {
           totalShots: finalEditScripts.length > 0

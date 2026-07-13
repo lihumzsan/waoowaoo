@@ -14,6 +14,8 @@ import {
   taskSubmitOperationOutputSchemaBase,
 } from '@/lib/operations/output-schemas'
 import { createTaskBatchKey } from '@/lib/task/batch'
+import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { ApiError } from '@/lib/api-errors'
 
 const finalRenderInputSchema = z.object({
   episodeId: z.string().min(1).optional(),
@@ -42,6 +44,21 @@ async function resolveEpisodeId(input: FinalRenderInput, contextEpisodeId: unkno
   })
   if (!episode) throw new Error('PROJECT_AGENT_EPISODE_NOT_FOUND')
   return episode.id
+}
+
+async function assertFinalRenderAllowed(input: {
+  readonly projectId: string
+  readonly userId: string
+  readonly episodeId: string
+}): Promise<void> {
+  const workflow = await resolveEditFirstWorkflowState(input)
+  if (workflow.allowedOperationIds.includes('render_final_video')) return
+  throw new ApiError('CONFLICT', {
+    code: 'OPERATION_NOT_ALLOWED',
+    operationId: 'render_final_video',
+    workflowStage: workflow.stage,
+    message: `EDIT_FIRST_FINAL_RENDER_NOT_ALLOWED:${workflow.stage}`,
+  })
 }
 
 async function resolveRenderChapterTargets(input: {
@@ -198,6 +215,11 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       outputSchema: taskSubmitOutput,
       execute: async (ctx, input) => {
         const episodeId = await resolveEpisodeId(input, ctx.context.episodeId, ctx.projectId)
+        await assertFinalRenderAllowed({
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          episodeId,
+        })
         const payload: Record<string, unknown> = {
           episodeId,
           ...(typeof input.bgmVolume === 'number' ? { bgmVolume: input.bgmVolume } : {}),

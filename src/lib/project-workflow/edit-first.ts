@@ -635,16 +635,6 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.finalRenderStatus === 'failed') {
-    const nextAction = workflowAction('render_final_video', 'Render final video')
-    return state({
-      stage: 'failed',
-      blocking: { kind: 'failed', reason: 'final video render failed' },
-      nextAction,
-      allowedOperationIds: [nextAction.operationId],
-    })
-  }
-
   if (snapshot.failedVideoSegmentCount > 0) {
     const nextAction = workflowAction('generate_episode_videos', 'Regenerate videos')
     return state({
@@ -795,6 +785,17 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
             approvalOperationIds: missingGenerationActions,
           }
         : null,
+    })
+  }
+
+  // A stale downstream failure never outranks missing upstream render or audio facts.
+  if (snapshot.finalRenderStatus === 'failed') {
+    const nextAction = workflowAction('render_final_video', 'Render final video')
+    return state({
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'final video render failed' },
+      nextAction,
+      allowedOperationIds: [nextAction.operationId],
     })
   }
 

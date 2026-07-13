@@ -165,7 +165,6 @@ export function resolveEditFirstCanvasVisibility(
 
   const finalTimeline = stageAtLeast(workflow.stage, 'ready_to_render_final')
     || canRunAnyOperation(operations, [
-      'render_chapters',
       'render_final_video',
     ])
 
