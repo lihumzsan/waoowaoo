@@ -64,7 +64,6 @@ export function useProjectWorkspaceController({
   const assetLibrary = useWorkspaceAssetLibraryShell({
     searchParams,
     router,
-    onRefresh,
   })
 
   useWorkspaceModalEscape({
@@ -94,11 +93,7 @@ export function useProjectWorkspaceController({
   const execution = useWorkspaceExecution({
     projectId,
     episodeId,
-    analysisModel: projectSnapshot.analysisModel,
-    novelText: projectSnapshot.novelText,
     t,
-    onRefresh,
-    onOpenAssetLibrary: assetLibrary.openAssetLibrary,
   })
 
   const videoActions = useWorkspaceVideoActions({

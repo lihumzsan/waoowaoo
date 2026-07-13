@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ProgressToast from '@/components/ProgressToast'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { BrandLoading } from '@/components/ui/BrandLoading'
@@ -28,6 +28,11 @@ type DeploymentPayload = {
   features?: PublicDeploymentFeatures
 }
 
+type WorkspaceScopeSelection = {
+  episodeId: string | null
+  scopeId: WorkspaceScopeId
+}
+
 function isDeploymentPayload(value: unknown): value is DeploymentPayload {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -38,7 +43,10 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
   const [activeAssistantFocusRequest, setActiveAssistantFocusRequest] = useState<WorkspaceAssistantActiveFocusRequest | null>(null)
   const [styleBibleFocusRequestId, setStyleBibleFocusRequestId] = useState(0)
   const [projectConfigurable, setProjectConfigurable] = useState(true)
-  const [workspaceScopeId, setWorkspaceScopeId] = useState<WorkspaceScopeId>(WORKSPACE_SCOPE_ALL_ID)
+  const [workspaceScopeSelection, setWorkspaceScopeSelection] = useState<WorkspaceScopeSelection>(() => ({
+    episodeId: props.episodeId ?? null,
+    scopeId: WORKSPACE_SCOPE_ALL_ID,
+  }))
   const isEpisodeWorkspace = props.viewMode === 'episode'
 
   const {
@@ -59,6 +67,18 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
     () => editBibleResponse?.chapters ?? [],
     [editBibleResponse?.chapters],
   )
+  const workspaceEpisodeId = episodeId ?? null
+  const selectedWorkspaceScope = readWorkspaceScopeId(workspaceScopeSelection.scopeId)
+  const workspaceScopeId = workspaceScopeSelection.episodeId === workspaceEpisodeId
+    && (
+      selectedWorkspaceScope.kind !== 'chapter'
+      || workspaceChapters.some((chapter) => chapter.id === selectedWorkspaceScope.chapterId)
+    )
+    ? workspaceScopeSelection.scopeId
+    : WORKSPACE_SCOPE_ALL_ID
+  const handleWorkspaceScopeSelect = useCallback((scopeId: WorkspaceScopeId) => {
+    setWorkspaceScopeSelection({ episodeId: workspaceEpisodeId, scopeId })
+  }, [workspaceEpisodeId])
 
   useEffect(() => {
     let canceled = false
@@ -77,17 +97,6 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
       canceled = true
     }
   }, [])
-
-  useEffect(() => {
-    setWorkspaceScopeId(WORKSPACE_SCOPE_ALL_ID)
-  }, [episodeId])
-
-  useEffect(() => {
-    const scope = readWorkspaceScopeId(workspaceScopeId)
-    if (scope.kind !== 'chapter') return
-    const chapterExists = workspaceChapters.some((chapter) => chapter.id === scope.chapterId)
-    if (!chapterExists) setWorkspaceScopeId(WORKSPACE_SCOPE_ALL_ID)
-  }, [workspaceChapters, workspaceScopeId])
 
   if (!vm.project.projectData) {
     return <BrandLoading className="h-full min-h-[240px]" />
@@ -130,7 +139,7 @@ function ProjectWorkspaceContent(props: ProjectWorkspaceProps) {
         currentWorkflow={projectContext?.editFirstWorkflow ?? null}
         workspaceChapters={workspaceChapters}
         currentWorkspaceScopeId={workspaceScopeId}
-        onWorkspaceScopeSelect={setWorkspaceScopeId}
+        onWorkspaceScopeSelect={handleWorkspaceScopeSelect}
       />
 
       <div className={isEpisodeWorkspace ? 'h-full min-h-0 overflow-hidden' : undefined}>

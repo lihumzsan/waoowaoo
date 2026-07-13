@@ -42,7 +42,7 @@ interface BuildWorkspaceControllerViewModelParams {
     isAssetLibraryOpen: boolean
     assetLibraryFocusCharacterId: string | null
     assetLibraryFocusRequestId: number
-    openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
+    openAssetLibrary: (characterId?: string | null) => void
     closeAssetLibrary: () => void
     userModelsForSettings: UserModelsPayload | null
     userVideoModels: Array<{

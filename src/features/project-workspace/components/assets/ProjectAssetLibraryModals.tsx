@@ -171,7 +171,6 @@ export default function ProjectAssetLibraryModals({
 
       {copyFromGlobalTarget && (
         <GlobalAssetPicker
-          isOpen={!!copyFromGlobalTarget}
           onClose={handleCloseCopyPicker}
           onSelect={handleConfirmCopyFromGlobal}
           type={copyFromGlobalTarget.type}

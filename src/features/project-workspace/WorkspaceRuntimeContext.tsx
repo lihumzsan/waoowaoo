@@ -46,7 +46,7 @@ export interface WorkspaceRuntimeValue {
   ) => Promise<void>
   onUpdateEditAssetRequirementDescription: (editScriptId: string, requirementId: string, description: string) => Promise<void>
   onUpdatePanelVideoModel: (storyboardId: string, panelIndex: number, model: string) => Promise<void>
-  onOpenAssetLibraryForCharacter: (characterId?: string | null, refreshAssets?: boolean) => void
+  onOpenAssetLibraryForCharacter: (characterId?: string | null) => void
 }
 
 const WorkspaceRuntimeContext = createContext<WorkspaceRuntimeValue | null>(null)

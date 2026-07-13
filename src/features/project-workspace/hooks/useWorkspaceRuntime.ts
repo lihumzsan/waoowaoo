@@ -31,7 +31,7 @@ interface UseWorkspaceRuntimeParams {
   onRequestAssistantGuidance: () => Promise<void>
   handleGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
   handleGenerateEditScript: () => Promise<void>
-  openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
+  openAssetLibrary: (characterId?: string | null) => void
   handlePlanBgmScore: () => Promise<void>
   handlePlanSoundscape: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
@@ -100,7 +100,7 @@ export function useWorkspaceRuntime({
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
-    onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
+    onOpenAssetLibraryForCharacter: (characterId) => openAssetLibrary(characterId),
   }), [
     assetsLoading,
     handlePlanBgmScore,

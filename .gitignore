@@ -93,13 +93,8 @@ AGENTS.md
 
 # internal docs (not for public)
 docs/**
-!docs/agent/
-!docs/agent/**
 !docs/architecture/
 !docs/architecture/**
-
-# generated artifacts (local only)
-docs/agent/artifacts/*.export.json
 /artifacts/golden-journey/
 # GitHub CI workflows (internal)
 # .github/ — 只保留 workflows，忽略其他

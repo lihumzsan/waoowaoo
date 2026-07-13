@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-type RefreshOptions = { scope?: string; mode?: string }
-
 interface RouterLike {
   replace: (href: string, options?: { scroll?: boolean }) => void
 }
@@ -16,29 +14,21 @@ interface SearchParamsLike {
 interface UseWorkspaceAssetLibraryShellParams {
   searchParams: SearchParamsLike | null
   router: RouterLike
-  onRefresh: (options?: RefreshOptions) => Promise<void>
 }
 
 export function useWorkspaceAssetLibraryShell({
   searchParams,
   router,
-  onRefresh,
 }: UseWorkspaceAssetLibraryShellParams) {
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false)
   const [assetLibraryFocusCharacterId, setAssetLibraryFocusCharacterId] = useState<string | null>(null)
   const [assetLibraryFocusRequestId, setAssetLibraryFocusRequestId] = useState(0)
 
-  const openAssetLibrary = useCallback((focusCharacterId?: string | null, refreshAssets = true) => {
+  const openAssetLibrary = useCallback((focusCharacterId?: string | null) => {
     setAssetLibraryFocusCharacterId(focusCharacterId || null)
     setAssetLibraryFocusRequestId(prev => prev + 1)
     setIsAssetLibraryOpen(true)
-
-    if (refreshAssets) {
-      window.setTimeout(() => {
-        onRefresh({ scope: 'assets' })
-      }, 0)
-    }
-  }, [onRefresh])
+  }, [])
 
   const closeAssetLibrary = useCallback(() => {
     setIsAssetLibraryOpen(false)
@@ -61,10 +51,6 @@ export function useWorkspaceAssetLibraryShell({
 
     openAssetLibrary(focusCharacterId)
   }, [openAssetLibrary, router, searchParams])
-
-  useEffect(() => {
-    void onRefresh({ scope: 'assets' })
-  }, [onRefresh])
 
   return {
     isAssetLibraryOpen,

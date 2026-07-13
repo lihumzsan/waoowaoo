@@ -6,11 +6,7 @@ import { dispatchWorkspaceAssistantMessage } from '../components/workspace-assis
 interface UseWorkspaceExecutionParams {
   projectId: string
   episodeId?: string
-  analysisModel?: string | null
-  novelText: string
   t: (key: string) => string
-  onRefresh: (options?: { scope?: string; mode?: string }) => Promise<void>
-  onOpenAssetLibrary: (focusCharacterId?: string | null, refreshAssets?: boolean) => void
 }
 
 export function useWorkspaceExecution({

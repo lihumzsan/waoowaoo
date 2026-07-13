@@ -35,7 +35,6 @@
     "start:log-cleanup": "tsx --env-file=.env scripts/log-cleanup.ts",
     "start:board": "tsx --env-file=.env scripts/bull-board.ts",
     "stats:errors": "tsx scripts/task-error-stats.ts",
-    "agent:export-operation-registry": "node --import tsx scripts/agent/export-operation-registry.ts",
     "architecture:impact": "node scripts/architecture-impact.mjs",
     "check:architecture-docs": "node scripts/guards/architecture-docs-contract-guard.mjs",
     "check:chapter-plan-fact-authority": "node scripts/guards/chapter-plan-fact-authority-guard.mjs",

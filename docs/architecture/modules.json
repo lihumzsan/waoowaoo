@@ -76,7 +76,10 @@
         "src/features/project-workspace/ProjectWorkspace.tsx",
         "src/features/project-workspace/WorkspaceRuntimeContext.tsx",
         "src/features/project-workspace/hooks/useProjectWorkspaceController.ts",
+        "src/features/project-workspace/hooks/useWorkspaceAssetLibraryShell.ts",
+        "src/features/project-workspace/hooks/useWorkspaceExecution.ts",
         "src/features/project-workspace/hooks/useWorkspaceRuntime.ts",
+        "src/features/project-workspace/hooks/workspace-controller-view-model.ts",
         "src/features/project-workspace/hooks/useWorkspaceVideoActions.ts",
         "src/features/project-workspace/canvas",
         "src/features/demo/DemoProjectCanvas.tsx",
@@ -472,6 +475,7 @@
         "src/lib/assets/services/read-assets.ts",
         "src/lib/operations/api-only/assets-api-ops.ts",
         "src/lib/operations/domains/project/project-data-ops.ts",
+        "src/components/shared/assets/GlobalAssetPicker.tsx",
         "src/app/api/assets",
         "src/app/api/asset-hub"
       ],

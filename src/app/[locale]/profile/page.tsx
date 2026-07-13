@@ -115,7 +115,6 @@ export default function ProfilePage() {
 
   const urlSection = readProfileSectionParam(searchParams.get('section'))
 
-  const [activeSection, setActiveSection] = useState<ProfileSection>(urlSection)
   const [deploymentFeatures, setDeploymentFeatures] = useState<PublicDeploymentFeatures | null>(null)
   const [deploymentLoadFailed, setDeploymentLoadFailed] = useState(false)
   const [balance, setBalance] = useState<BalancePayload | null>(null)
@@ -130,6 +129,10 @@ export default function ProfilePage() {
   const [recharging, setRecharging] = useState(false)
   const [creditsModalOpen, setCreditsModalOpen] = useState(false)
   const isSigningOutRef = useRef(false)
+  const activeSection = deploymentFeatures
+    && !isProfileSectionEnabled(urlSection, deploymentFeatures)
+    ? getDefaultProfileSection(deploymentFeatures)
+    : urlSection
 
   const handleSignOut = useCallback(async () => {
     isSigningOutRef.current = true
@@ -147,10 +150,6 @@ export default function ProfilePage() {
     if (status === 'loading' || isSigningOutRef.current) return
     if (!session) { router.push({ pathname: '/auth/signin' }); return }
   }, [router, session, status])
-
-  useEffect(() => {
-    setActiveSection(urlSection)
-  }, [urlSection])
 
   useEffect(() => {
     if (!session) return
@@ -179,15 +178,14 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!deploymentFeatures) return
-    if (isProfileSectionEnabled(activeSection, deploymentFeatures)) return
+    if (isProfileSectionEnabled(urlSection, deploymentFeatures)) return
 
     const nextSection = getDefaultProfileSection(deploymentFeatures)
-    setActiveSection(nextSection)
     router.replace(
       { pathname: '/profile', query: { section: nextSection } },
       { scroll: false },
     )
-  }, [activeSection, deploymentFeatures, router])
+  }, [deploymentFeatures, router, urlSection])
 
   const loadBalance = useCallback(async () => {
     const response = await apiFetch('/api/user/balance')
@@ -285,7 +283,6 @@ export default function ProfilePage() {
   ]
 
   const handleSectionChange = (section: ProfileSection) => {
-    setActiveSection(section)
     router.replace(
       { pathname: '/profile', query: { section } },
       { scroll: false },

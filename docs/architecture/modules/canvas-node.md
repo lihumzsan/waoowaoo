@@ -73,7 +73,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - `854c888cd` 建立了正确的 node registry 与统一 lifecycle，但把原本的巨型实现整体搬入 2231 行 `WorkspaceNodeRenderers.tsx` 和 1795 行 projector，并为每个 kind 留下只转发六行的 wrapper；后续多个修复仍必须进入同一热点文件，模块名没有形成真实所有权。当前删除巨型 renderer 与全部薄 wrapper，registry 直接指向真实领域实现；projector 收敛为 17 行唯一编排入口和四个领域 builder，presentation/projection/focus/action policy 都由穷尽契约声明。现有 Canvas conformance、projection Logic 与 Golden Journey 共同拒绝漏接 kind、identity/edge 漂移和真实组合路径回归。
 
-- 角色/场景批量生成曾由 Canvas、Asset Library 与局部 mutation 同时维护 generation key、baseline、90 秒 timer 和 Task target terminal Effect；终态资源刷新又按 target/operation ID 猜 Query，形成多个竞争解释者。集中 helper 只把猜测搬到一个文件，没有删除输入歧义。当前 UI 只保留带精确 taskId/taskType 的提交 receipt 与正式 Task overlay；Task/Operation 的资源影响由后端 registry 显式声明并通过持久 SSE 交接，客户端共享 resource sync，旧 target invalidator、baseline helper、timer 与手工下游列表已删除。
+- 角色/场景批量生成曾由 Canvas、Asset Library 与局部 mutation 同时维护 generation key、baseline、90 秒 timer 和 Task target terminal Effect；终态资源刷新又按 target/operation ID 猜 Query，形成多个竞争解释者。集中 helper 只把猜测搬到一个文件，没有删除输入歧义。Asset Library shell 还曾在 Workspace 挂载时主动 refetch，并在打开时通过 `setTimeout(0)` 再次 refetch，即使 Canvas 与 Asset Library 已订阅同一正式 Query。当前 UI 只保留带精确 taskId/taskType 的提交 receipt 与正式 Task overlay；Task/Operation 的资源影响由后端 registry 显式声明并通过持久 SSE 交接，客户端共享 resource sync，Asset Library 打开只改变纯 UI 状态，旧 target invalidator、baseline helper、timer、挂载/打开 refetch 与手工下游列表已删除。
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
