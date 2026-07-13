@@ -53,7 +53,7 @@
 
 ## 验证
 
-- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。
+- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、久置且内容未变的 Grant 仍可消费、两个审批表不存在 `expiresAt`、计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。
 - `tests/unit/operations/video-group-canonical-identity.test.ts` 验证尚未物化的视频分组 identity 只由项目、episode、chapter、grid mode 与有序 shot identity 确定，防止 registry 重验证因随机 UUID 误判计划变化。
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。

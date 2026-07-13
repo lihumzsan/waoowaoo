@@ -82,6 +82,55 @@ describe('Approval plan change and durable replay integration', () => {
     await prisma.operationPlanSnapshot.deleteMany()
   })
 
+  it('executes an unchanged Grant after the former TTL window', async () => {
+    const seeded = await seedGrant()
+    const formerTtlBoundary = new Date('2020-01-01T00:00:00.000Z')
+    await prisma.$transaction([
+      prisma.operationPlanSnapshot.update({
+        where: { id: seeded.snapshot.id },
+        data: { createdAt: formerTtlBoundary },
+      }),
+      prisma.approvalGrant.update({
+        where: { id: seeded.issued.approvalGrantId },
+        data: {
+          issuedAt: formerTtlBoundary,
+          createdAt: formerTtlBoundary,
+          updatedAt: formerTtlBoundary,
+        },
+      }),
+    ])
+    const expiryColumns = await prisma.$queryRaw<Array<{ tableName: string }>>`
+      SELECT TABLE_NAME AS tableName
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME IN ('operation_plan_snapshots', 'approval_grants')
+        AND COLUMN_NAME = 'expiresAt'
+      ORDER BY TABLE_NAME
+    `
+    const plan = vi.fn(async (): Promise<OperationPlan> => seeded.plan)
+    const commit = vi.fn(async () => ({ durable: 'aged-plan-executed' }))
+
+    expect(expiryColumns).toEqual([])
+    await expect(invokeApprovedOperationPlan(invocationParams({
+      seeded,
+      operation: buildOperation({ plan, commit }),
+    }))).resolves.toEqual({ durable: 'aged-plan-executed' })
+
+    const [grant, execution] = await Promise.all([
+      prisma.approvalGrant.findUniqueOrThrow({ where: { id: seeded.issued.approvalGrantId } }),
+      prisma.operationExecution.findUniqueOrThrow({
+        where: { approvalGrantId: seeded.issued.approvalGrantId },
+      }),
+    ])
+    expect(plan).toHaveBeenCalledTimes(1)
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(grant).toMatchObject({ revokedAt: null, version: 1 })
+    expect(grant.consumedAt).not.toBeNull()
+    expect(grant.consumedExecutionId).toBe(execution.id)
+    expect(await prisma.operationExecution.count()).toBe(1)
+    expect(await prisma.task.count()).toBe(0)
+  })
+
   it('revokes an unconsumed Grant when the current registry plan changed', async () => {
     const seeded = await seedGrant()
     const plan = vi.fn(async (): Promise<OperationPlan> => ({
