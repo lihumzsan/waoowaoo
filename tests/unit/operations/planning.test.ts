@@ -69,6 +69,7 @@ function buildPlan(): OperationPlan {
           unit: 'image',
         }),
         locale: 'zh',
+        episodeId: 'episode-1',
       },
       {
         id: 'video-task',
@@ -83,6 +84,7 @@ function buildPlan(): OperationPlan {
           unit: 'second',
         }),
         locale: 'zh',
+        episodeId: 'episode-1',
       },
       {
         id: 'text-task',
@@ -91,6 +93,7 @@ function buildPlan(): OperationPlan {
         payload: { model: 'expensive-text-payload' },
         billingInfo: textBillingInfo(),
         locale: 'zh',
+        episodeId: 'episode-1',
       },
       {
         id: 'music-task',
@@ -141,6 +144,22 @@ describe('operation planning billing quote', () => {
       'planned-video-model',
       'planned-music-model',
     ])
+  })
+
+  /**
+   * Authority: TL-01 registry-declared Task resource scope at the plan boundary.
+   * Rejects: quoting an immutable approval plan that can never produce a valid episode-scoped Task.
+   * Production entry: quoteOperationPlan using the production TaskDefinition registry and resource resolver.
+   * Oracle: quote creation fails before any snapshot or approval can be persisted.
+   * Command: npx vitest run tests/unit/operations/planning.test.ts
+   */
+  it('rejects an approval plan whose Task omits registry-required resource scope', async () => {
+    const plan = buildPlan()
+    plan.tasks[0] = { ...plan.tasks[0]!, episodeId: null }
+
+    await expect(quoteOperationPlan(plan)).rejects.toThrow(
+      'WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:storyboards',
+    )
   })
 
   it('hides credit amounts in self-hosted plan views while preserving task count', async () => {

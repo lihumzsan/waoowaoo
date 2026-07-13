@@ -247,6 +247,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,
@@ -282,6 +283,7 @@ export function createMediaOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,

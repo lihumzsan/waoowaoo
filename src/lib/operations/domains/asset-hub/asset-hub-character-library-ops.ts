@@ -100,6 +100,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -111,7 +112,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         name: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
         assertAssetHubCharacterRecordOnlyInput(body)
@@ -122,16 +123,16 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         const folderId = normalizeString(body.folderId) || null
         const initialImageUrl = normalizeString(body.initialImageUrl) || null
         const descriptionText = normalizeString(body.description) || `${name} 的角色设定`
-        const imageMedia = await resolveMediaRefFromLegacyValue(initialImageUrl)
-        const characterWithAppearances = await prisma.$transaction(async (tx) => {
+        const imageMedia = await resolveMediaRefFromLegacyValue(initialImageUrl, transaction)
+        const characterWithAppearances = await (async () => {
           if (folderId) {
-            const folder = await tx.globalAssetFolder.findUnique({
+            const folder = await transaction.globalAssetFolder.findUnique({
               where: { id: folderId },
               select: { id: true, userId: true },
             })
             if (!folder || folder.userId !== ctx.userId) throw new ApiError('INVALID_PARAMS')
           }
-          const character = await tx.globalCharacter.create({
+          const character = await transaction.globalCharacter.create({
             data: {
               userId: ctx.userId,
               folderId,
@@ -139,7 +140,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
               aliases: null,
             },
           })
-          await tx.globalCharacterAppearance.create({
+          await transaction.globalCharacterAppearance.create({
             data: {
               characterId: character.id,
               appearanceIndex: PRIMARY_APPEARANCE_INDEX,
@@ -152,14 +153,14 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
               previousImageUrls: encodeImageUrls([]),
             },
           })
-          return await tx.globalCharacter.findUnique({
+          return await transaction.globalCharacter.findUnique({
             where: { id: character.id },
             include: { appearances: true },
           })
-        })
+        })()
 
         const withMedia = characterWithAppearances
-          ? await attachMediaFieldsToGlobalCharacter(characterWithAppearances)
+          ? await attachMediaFieldsToGlobalCharacter(characterWithAppearances, transaction)
           : null
 
         return {
@@ -205,6 +206,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -216,7 +218,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         characterId: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         const characterId = normalizeString(body.characterId)
         if (!characterId) throw new ApiError('INVALID_PARAMS')
@@ -225,7 +227,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',
           assetId: characterId,
-        })
+        }, transaction)
 
         const updateData: Record<string, unknown> = {}
 
@@ -240,7 +242,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         if (body.folderId !== undefined) {
           const folderId = normalizeString(body.folderId) || null
           if (folderId) {
-            const folder = await prisma.globalAssetFolder.findUnique({
+            const folder = await transaction.globalAssetFolder.findUnique({
               where: { id: folderId },
               select: { id: true, userId: true },
             })
@@ -249,13 +251,13 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
           updateData.folderId = folderId
         }
 
-        const updated = await prisma.globalCharacter.update({
+        const updated = await transaction.globalCharacter.update({
           where: { id: characterId },
           data: updateData,
           include: { appearances: true },
         })
 
-        const withMedia = await attachMediaFieldsToGlobalCharacter(updated)
+        const withMedia = await attachMediaFieldsToGlobalCharacter(updated, transaction)
         return { success: true, character: withMedia }
       },
     }),
@@ -266,6 +268,7 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -281,14 +284,14 @@ export function createAssetHubCharacterLibraryOperations(): ProjectAgentOperatio
         characterId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',
           assetId: input.characterId,
-        })
+        }, transaction)
 
-        await prisma.globalCharacter.delete({ where: { id: input.characterId } })
+        await transaction.globalCharacter.delete({ where: { id: input.characterId } })
         return { success: true }
       },
     }),

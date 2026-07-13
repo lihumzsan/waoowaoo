@@ -5,7 +5,18 @@ import { submitTask } from '@/lib/task/submitter'
 import { TASK_TYPE } from '@/lib/task/types'
 import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
-import { createTestUser, seedBalance } from '../../helpers/billing-fixtures'
+import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
+
+async function createEditScriptTaskScope(userId: string, episodeNumber: number) {
+  const project = await createTestProject(userId)
+  const episode = await prisma.projectEpisode.create({
+    data: { projectId: project.id, episodeNumber, name: `Billing episode ${episodeNumber}` },
+  })
+  const chapter = await prisma.projectEditChapter.create({
+    data: { episodeId: episode.id, chapterIndex: 0 },
+  })
+  return { project, episode, chapter }
+}
 
 describe('billing/submitter integration', () => {
   beforeEach(async () => {
@@ -16,19 +27,22 @@ describe('billing/submitter integration', () => {
 
   it('builds billing info server-side for billable task submission', async () => {
     const user = await createTestUser()
+    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 1)
     await seedBalance(user.id, 10)
 
     const result = await submitTask({
       userId: user.id,
       locale: 'en',
-      projectId: 'project-a',
+      projectId: project.id,
+      episodeId: episode.id,
       type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
       targetType: 'ProjectEditChapter',
-      targetId: 'project-a',
-      payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-a' },
+      targetId: chapter.id,
+      payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
     })
 
     expect(result.success).toBe(true)
+    expect(result.taskType).toBe(TASK_TYPE.EDIT_SCRIPT_GENERATE)
     const task = await prisma.task.findUnique({ where: { id: result.taskId } })
     expect(task).toBeTruthy()
     const billing = task?.billingInfo as { billable?: boolean; source?: string } | null
@@ -42,11 +56,12 @@ describe('billing/submitter integration', () => {
 
   it('marks task as failed when balance is insufficient', async () => {
     const user = await createTestUser()
+    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 2)
     await seedBalance(user.id, 0)
 
     const billingInfo = buildDefaultTaskBillingInfo(TASK_TYPE.EDIT_SCRIPT_GENERATE, {
       analysisModel: 'openrouter::openai/gpt-5.5',
-      episodeId: 'episode-b',
+      episodeId: episode.id,
     })
     expect(billingInfo?.billable).toBe(true)
 
@@ -54,11 +69,12 @@ describe('billing/submitter integration', () => {
       submitTask({
         userId: user.id,
         locale: 'en',
-        projectId: 'project-b',
+        projectId: project.id,
+        episodeId: episode.id,
         type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
         targetType: 'ProjectEditChapter',
-        targetId: 'project-b',
-        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-b' },
+        targetId: chapter.id,
+        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
         billingInfo,
       }),
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_BALANCE' } satisfies Pick<ApiError, 'code'>)
@@ -126,6 +142,7 @@ describe('billing/submitter integration', () => {
 
   it('rolls back Task, billing freeze, event, and Outbox when the submission transaction fails', async () => {
     const user = await createTestUser()
+    const { project, episode, chapter } = await createEditScriptTaskScope(user.id, 3)
     await seedBalance(user.id, 10)
     const eventCountBefore = await prisma.taskEvent.count()
     const outboxCountBefore = await prisma.outboxCommand.count()
@@ -134,11 +151,12 @@ describe('billing/submitter integration', () => {
       submitTask({
         userId: user.id,
         locale: 'en',
-        projectId: 'project-e',
+        projectId: project.id,
+        episodeId: episode.id,
         type: TASK_TYPE.EDIT_SCRIPT_GENERATE,
         targetType: 'ProjectEditChapter',
-        targetId: 'project-e',
-        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: 'episode-e' },
+        targetId: chapter.id,
+        payload: { analysisModel: 'openrouter::openai/gpt-5.5', episodeId: episode.id },
         onTaskCreatedInTransaction: async () => {
           throw new Error('target ownership failed')
         },

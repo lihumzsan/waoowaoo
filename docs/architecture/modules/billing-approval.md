@@ -32,6 +32,7 @@
 - **BA-18 — Episode scope 由计划产物裁决，chapter scope 由目标显式携带。** planner 必须从经过 project ownership 校验的真实 target 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝同一计划包含多个 episode，并以计划 Task scope 为 canonical episode。单个 chapter-owned 资源的 Canvas action 与 plan input 必须携带所属 `chapterId`，registry 在 planner 前拒绝缺失 scope，禁止通过默认章节、数组位置或最近记录推断。execute 只校验 session、project、operation 与可选的显式 scope 限制，commit context 必须从已批准 snapshot 注入 episode；禁止要求客户端在批准后重复提交同一 episode 事实或从 route body 重建 scope。
 - **BA-19 — 计划只因内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验由 `invokeApprovedOperationPlan` 重新调用当前 registry definition 的纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才进入 Grant 锁事务消费，任一变化必须在该事务撤销 Grant，且不得创建 Execution、Task、冻结或 Outbox。已完成 Execution 的幂等重放直接返回同一持久 output，不得因后续计划变化重新执行。planner 必须对相同事实确定性输出；随机预留 identity、时间戳或调用顺序不得进入计划 Hash。
 - **BA-20 — 组批准不合并执行身份。** 一个 Approval 卡可以合计展示多个收费 Operation 的 quote，但每个 member 仍必须持有自己的 `OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链；合计 View 不得携带或冒充任一 snapshot identity。用户批准后，全部 member Grant 必须在一个事务中签发，任一 snapshot 缺失、越权或不可用则整组零签发；Task/Wait 继续由各 member 的独立 plan commit 与通用 Operation Group barrier 原子汇合。
+- **BA-21 — 计划必须在批准前证明 Task 资源作用域结构完整。** quote 与不可变 snapshot 写入都必须从 `TaskDefinition.terminalResourceImpact` 穷尽解析每个 PlannedTask 的必需 project/episode scope；最终 Task 提交还必须在写入前验证 episode 真实属于该 project。禁止让缺失必需 scope 的计划先获得报价或 Grant，也禁止让越权 scope 写入任何 Task。Operation planner、snapshot writer 和 Task submitter 必须复用同一个 resolver，不得各自维护 TaskType 或资源名单。
 
 ## 权威入口
 
@@ -48,6 +49,7 @@
 - 非媒体 Task 的统一提交：`src/lib/operations/submit-operation-task.ts` 与 `src/lib/task/submitter.ts`；这两个入口不接受批准 provenance，收费媒体调用在此 fail closed。
 - 批准 Task 的 durable enqueue：`src/lib/outbox/types.ts` 的 `task.enqueue` → `src/lib/task/enqueue.ts`。
 - TaskType 的 billing policy：`src/lib/task/definition.ts`；`src/lib/billing/task-policy.ts` 只执行 registry 指定的 policy，不维护第二份 TaskType 集合或 switch。
+- 计划 Task 的资源作用域结构校验：`src/lib/operations/planning.ts` 的 `assertOperationPlanTaskResourceScopes` 复用 `TaskDefinition.terminalResourceImpact`；quote 与 snapshot writer 都必须在持久化或发放 Grant 前调用它。episode/project 归属由共享 Task 提交 primitive 在任何 Task 写入前验证。
 - `standards/pricing/**` 当前是 `scripts/check-pricing-catalog.mjs` 的校验输入，不是生产运行时计费 writer；生产金额由 `src/lib/ai-registry/pricing-*` 与 provider code catalog 解析。修改 standards pricing 必须同时审计运行时 catalog 与 `BUILTIN_PRICING_VERSION`，在双表示收敛前不得仅凭 JSON 变更宣称生产价格已改变。
 
 调用层不得自行维护媒体类型名单、确认布尔值或报价任务的平行集合。
@@ -56,6 +58,7 @@
 
 - `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、久置且内容未变的 Grant 仍可消费、两个审批表不存在 `expiresAt`、计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。
 - `tests/unit/operations/video-group-canonical-identity.test.ts` 验证尚未物化的视频分组 identity 只由项目、episode、chapter、grid mode 与有序 shot identity 确定，防止 registry 重验证因随机 UUID 误判计划变化。
+- `tests/unit/operations/planning.test.ts` 验证计划边界拒绝缺少 registry 所需资源 scope 的 Task；`tests/integration/task/create-task-dedupe.integration.test.ts` 使用真实数据库验证 Task 提交边界拒绝缺失或跨 project 的 episode。
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
 - `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
@@ -84,6 +87,7 @@
 - Canvas 曾为按钮价格预取 plan A，点击 mutation 又创建 plan B 并自动签发 Grant；分镜图片和单镜头视频的专用 route 还遗漏 episode context，导致合法 Grant 被 scope mismatch 拒绝，视频详情普通按钮则完全不展示价格。旧 unit/conformance 只覆盖 plan、Grant 或节点结构，没有走通直接 UI 的“可见 quote → 同 snapshot Grant → commit”。现删除媒体专用提交 route 和各自 mutation，Canvas 只持有一个 plan handle，snapshot 从真实 Task target 取得 canonical episode，通用 execute 不再重新解释 scope。
 - 多章节 Canvas 在“全部”范围恢复逐章视频节点后，每个节点会立即预取自己的付费计划；旧 action 只携带 episodeId 与 shotIds，chapterId 在 projection → renderer → plan request 三层被丢失，planner 因而进入默认章节解析并对多章节 episode 显式拒绝。旧 Logic 只验证节点存在，Golden 也没有在最终全部范围保持 browser-observation clean，因此统一计费入口本身仍可制造 403。当前视频计划 View 把所属 chapterId 作为必填 scope，两个单段生成 action 与 request builder 原样传递，四个只处理单章的连续/资产参考视频 input schema 在 planner 前拒绝缺失 chapterId；主 Golden 同时以 DB 视频组对齐节点/播放器并拒绝任何 4xx/5xx 浏览器请求。
 - Operation plan 与 Grant 曾统一写入 15 分钟 `expiresAt`。真实创作流程中用户在报价卡停留超过 15 分钟后，Assistant control 先消费 interruption，再由 `issueApprovalGrant` 抛出 `OPERATION_PLAN_EXPIRED`，导致一张仍可点击的卡片变成原始 Runtime Error；旧 Critical 场景只证明“过期 Grant 无副作用”和“已消费 Grant 可重放”，没有覆盖真实 Assistant 控制顺序，也把 timer 固化成正确性来源。当前协议删除两个 `expiresAt` 与所有时间判断；所有收费 Operation 由同一 registry planner 和三个 Hash 进行内容重验证，变化时撤销旧 Grant，未变化时无论停留多久都可执行。
+- Operation plan 曾只校验 payload、quote 与 episode 一致性，没有从 Task registry 验证每个 Task 的终态资源作用域；因此测试 fixture 和潜在 planner 可以生成引用不存在或跨 project episode 的不可执行计划，直到 Grant 消费后的 Task 提交才失败。旧审批原子性场景证明了“同一计划全有或全无”，却没有反证“计划本身能通过权威 Task 边界”。当前 quote、snapshot 与 Task submitter 复用 `TaskDefinition.terminalResourceImpact` 的同一作用域 resolver，缺失或越权在批准前 fail closed。
 
 ## 修改检查表
 

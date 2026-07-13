@@ -40,6 +40,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,
@@ -69,6 +70,7 @@ export function createStoryboardPanelImageOperations(): ProjectAgentOperationReg
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,

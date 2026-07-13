@@ -38,6 +38,7 @@ const EFFECTS_QUERY = {
 
 const EFFECTS_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: false,
   destructive: false,
   overwrite: false,

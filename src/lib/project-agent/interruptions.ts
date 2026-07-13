@@ -559,7 +559,6 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
         ? await invokeProjectAgentOperation({
             transaction: tx,
             invocationMode: 'atomic_choice_confirmation',
-            deferResourceChangePublication: true,
             registry: createProjectAgentOperationRegistry(),
             channel: 'tool',
             operationId: atomicCommand.operationId,
@@ -677,11 +676,9 @@ export async function consumeProjectAgentChoiceInterruption(params: ProjectAgent
           parsedResponse,
           appliedOperationId: atomicExecution?.operation.id ?? null,
         },
-        publishResourceChanges: atomicExecution?.publishResourceChanges ?? null,
       }
     })
     if (!consumed) return null
-    await consumed.publishResourceChanges?.()
     return consumed.interruption
   } catch (error) {
     if (isInterruptionConsumeRace(error)) return null

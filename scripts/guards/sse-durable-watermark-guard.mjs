@@ -24,10 +24,30 @@ export function inspectSseDurableWatermarkContract(input) {
     'mutationEventAtMs',
     'mutationBatchId',
     'agentEventId',
-    'v2;',
+    'resourceEventAtMs',
+    'resourceOutboxId',
+    'v3;',
     'advanceWorkspaceSseCursor',
   ]) {
     if (!input.protocol.includes(required)) violations.push(`SSE composite cursor contract missing: ${required}`)
+  }
+  for (const forbidden of ['v1;', 'v2;']) {
+    if (input.protocol.includes(forbidden)) violations.push(`SSE obsolete cursor protocol restored: ${forbidden}`)
+  }
+  if (!input.client.includes('workspace-sse-cursor:v3:')) {
+    violations.push('SSE client storage key must isolate the v3 resource watermark protocol')
+  }
+  for (const required of [
+    'listWorkspaceResourceReplayEvents',
+    'resourceEvents.length === replayLimit',
+    'buildRecoveryResourceCheckpoint',
+  ]) {
+    if (!input.bootstrap.includes(required)) {
+      violations.push(`SSE resource replay recovery contract missing: ${required}`)
+    }
+  }
+  if (!input.client.includes('isWorkspaceSseEvent')) {
+    violations.push('SSE client must use the protocol-owned event validator')
   }
   const subscribeIndex = input.route.indexOf('await sharedSubscriber.addChannelListener(')
   const bootstrapIndex = input.route.indexOf("operationId: 'get_sse_bootstrap'")
@@ -99,6 +119,7 @@ function runCli() {
   const violations = inspectSseDurableWatermarkContract({
     client: read('src/lib/query/hooks/useSSE.ts'),
     protocol: read('src/lib/sse/protocol.ts'),
+    bootstrap: read('src/lib/operations/domains/debug/sse-ops.ts'),
     route: read('src/app/api/sse/route.ts'),
     eventAppend: read('src/lib/project-agent/event/append.ts'),
     outboxWorker: read('src/lib/workers/outbox.worker.ts'),
@@ -113,7 +134,7 @@ function runCli() {
     for (const violation of violations) console.error(`- ${violation}`)
     process.exit(1)
   }
-  console.log('[sse-durable-watermark] OK Task/Mutation/Assistant durable cursor + subscribe-before-bootstrap')
+  console.log('[sse-durable-watermark] OK Task/Mutation/Assistant/Resource durable cursor + subscribe-before-bootstrap')
 }
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null

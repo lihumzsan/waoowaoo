@@ -309,6 +309,7 @@ export function createConfigOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_data',
         billable: false,
         destructive: false,
         overwrite: true,

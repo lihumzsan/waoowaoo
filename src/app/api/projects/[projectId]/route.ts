@@ -56,7 +56,7 @@ export const PATCH = apiHandler(async (
   return NextResponse.json(result)
 })
 
-// DELETE - 删除项目（同时清理COS文件）
+// DELETE - 删除项目及其领域关系；共享媒体回收由独立 lifecycle owner 负责
 export const DELETE = apiHandler(async (
   request: NextRequest,
   context: { params: Promise<{ projectId: string }> }
@@ -76,4 +76,3 @@ export const DELETE = apiHandler(async (
 
   return NextResponse.json(result)
 })
-

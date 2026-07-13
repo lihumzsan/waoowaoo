@@ -769,6 +769,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,
@@ -793,6 +794,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -820,6 +822,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -845,6 +848,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -872,6 +876,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,

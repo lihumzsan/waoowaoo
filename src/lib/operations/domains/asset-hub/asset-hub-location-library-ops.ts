@@ -81,6 +81,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -92,7 +93,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         name: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
         const name = normalizeString(body.name)
@@ -100,7 +101,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
 
         const folderId = normalizeString(body.folderId) || null
         if (folderId) {
-          const folder = await prisma.globalAssetFolder.findUnique({
+          const folder = await transaction.globalAssetFolder.findUnique({
             where: { id: folderId },
             select: { id: true, userId: true },
           })
@@ -112,7 +113,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
           ? normalizeImageGenerationCount('location', body.count)
           : 1
 
-        const location = await prisma.globalLocation.create({
+        const location = await transaction.globalLocation.create({
           data: {
             userId: ctx.userId,
             folderId,
@@ -121,7 +122,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
           },
         })
 
-        await prisma.globalLocationImage.createMany({
+        await transaction.globalLocationImage.createMany({
           data: Array.from({ length: count }, (_value, imageIndex) => ({
             locationId: location.id,
             imageIndex,
@@ -129,12 +130,14 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
           })),
         })
 
-        const withImages = await prisma.globalLocation.findUnique({
+        const withImages = await transaction.globalLocation.findUnique({
           where: { id: location.id },
           include: { images: true },
         })
 
-        const withMedia = withImages ? await attachMediaFieldsToGlobalLocation(withImages) : null
+        const withMedia = withImages
+          ? await attachMediaFieldsToGlobalLocation(withImages, transaction)
+          : null
         return { success: true, location: withMedia }
       },
     }),
@@ -173,6 +176,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -184,7 +188,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         locationId: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         const locationId = normalizeString(body.locationId)
         if (!locationId) throw new ApiError('INVALID_PARAMS')
@@ -193,7 +197,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
           access: { scope: 'global', userId: ctx.userId },
           kind: 'location',
           assetId: locationId,
-        })
+        }, transaction)
 
         const updateData: Record<string, unknown> = {}
         if (body.name !== undefined) {
@@ -206,7 +210,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         if (body.folderId !== undefined) {
           const folderId = normalizeString(body.folderId) || null
           if (folderId) {
-            const folder = await prisma.globalAssetFolder.findUnique({
+            const folder = await transaction.globalAssetFolder.findUnique({
               where: { id: folderId },
               select: { id: true, userId: true },
             })
@@ -215,13 +219,13 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
           updateData.folderId = folderId
         }
 
-        const updated = await prisma.globalLocation.update({
+        const updated = await transaction.globalLocation.update({
           where: { id: locationId },
           data: updateData,
           include: { images: true },
         })
 
-        const withMedia = await attachMediaFieldsToGlobalLocation(updated)
+        const withMedia = await attachMediaFieldsToGlobalLocation(updated, transaction)
         return { success: true, location: withMedia }
       },
     }),
@@ -232,6 +236,7 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -247,14 +252,14 @@ export function createAssetHubLocationLibraryOperations(): ProjectAgentOperation
         locationId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
           kind: 'location',
           assetId: input.locationId,
-        })
+        }, transaction)
 
-        await prisma.globalLocation.delete({ where: { id: input.locationId } })
+        await transaction.globalLocation.delete({ where: { id: input.locationId } })
         return { success: true }
       },
     }),

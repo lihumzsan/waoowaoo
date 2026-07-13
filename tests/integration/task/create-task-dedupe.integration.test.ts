@@ -19,12 +19,12 @@ function buildInput(params: {
   return {
     userId: params.userId,
     projectId: params.projectId,
-    type: TASK_TYPE.IMAGE_PANEL,
-    targetType: 'ProjectPanel',
-    targetId: `panel-${params.suffix}`,
-    dedupeKey: `image-panel:${params.projectId}:${params.suffix}`,
+    type: TASK_TYPE.IMAGE_CHARACTER,
+    targetType: 'CharacterAppearance',
+    targetId: `appearance-${params.suffix}`,
+    dedupeKey: `image-character:${params.projectId}:${params.suffix}`,
     payload: {
-      panelId: `panel-${params.suffix}`,
+      appearanceId: `appearance-${params.suffix}`,
       prompt: `prompt-${params.suffix}`,
       meta: { locale: 'en' },
     },
@@ -61,6 +61,29 @@ describe('transactional Task batch dedupe', () => {
     await expect(prisma.outboxCommand.count({
       where: { aggregateType: 'task', aggregateId: created?.task.id },
     })).resolves.toBe(2)
+  })
+
+  it('rejects a Task whose registry-declared terminal resource scope is missing or belongs to another project', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const otherProject = await createTestProject(user.id)
+    const otherEpisode = await prisma.projectEpisode.create({
+      data: { projectId: otherProject.id, episodeNumber: 1, name: 'Other project episode' },
+    })
+    const input: CreateTaskInput = {
+      userId: user.id,
+      projectId: project.id,
+      type: TASK_TYPE.IMAGE_PANEL,
+      targetType: 'ProjectPanel',
+      targetId: 'panel-invalid-scope',
+      payload: { panelId: 'panel-invalid-scope', meta: { locale: 'en' } },
+    }
+
+    await expect(persistBatch([input])).rejects.toThrow('WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:storyboards')
+    await expect(persistBatch([{ ...input, episodeId: otherEpisode.id }])).rejects.toThrow(
+      `TASK_EPISODE_SCOPE_MISMATCH:${project.id}:${otherEpisode.id}`,
+    )
+    await expect(prisma.task.count()).resolves.toBe(0)
   })
 
   it('strictly reuses an active Task only when its fingerprint and durable bundle match', async () => {

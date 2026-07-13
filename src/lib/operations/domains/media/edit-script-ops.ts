@@ -420,6 +420,7 @@ const planChaptersOutputSchema = z
 
 const EFFECTS_SYNC_AI_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: true,
   destructive: false,
   overwrite: true,
@@ -440,6 +441,7 @@ const EFFECTS_NONE = {
 
 const EFFECTS_DOMAIN_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'edit_style_preview',
   billable: false,
   destructive: false,
   overwrite: true,
@@ -455,6 +457,7 @@ const EFFECTS_BULK_DOMAIN_WRITE = {
 
 const EFFECTS_BULK_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: true,
   destructive: false,
   overwrite: true,
@@ -1141,7 +1144,7 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
       summary: 'Record the user approval of all ready required edit-first assets so shot execution planning can proceed.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_DOMAIN_WRITE,
+      effects: { ...EFFECTS_BULK_DOMAIN_WRITE, workspaceResourceImpact: 'edit_pipeline_assets' },
       confirmation: {
         kind: 'none',
         required: false,

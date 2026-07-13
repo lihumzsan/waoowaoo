@@ -81,6 +81,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -163,6 +164,7 @@ export function createTaskOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: true,
         overwrite: true,

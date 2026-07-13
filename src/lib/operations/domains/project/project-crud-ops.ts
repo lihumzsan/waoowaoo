@@ -2,8 +2,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { addSignedUrlsToProject, deleteObjects } from '@/lib/storage'
-import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { addSignedUrlsToProject } from '@/lib/storage'
 import { logProjectAction } from '@/lib/logging/semantic'
 import { resolveTaskLocale } from '@/lib/task/resolve-locale'
 import {
@@ -46,74 +45,6 @@ async function requireOwnedProject(
   return project
 }
 
-async function collectProjectStorageKeys(projectId: string): Promise<string[]> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: {
-      characters: {
-        include: {
-          appearances: true,
-        },
-      },
-      locations: {
-        include: {
-          images: true,
-        },
-      },
-      episodes: {
-        include: {
-          storyboards: {
-            include: {
-              panels: true,
-            },
-          },
-        },
-      },
-    },
-  })
-
-  if (!project) {
-    throw new ApiError('NOT_FOUND')
-  }
-
-  const keys: string[] = []
-
-  for (const character of project.characters) {
-    for (const appearance of character.appearances) {
-      const key = await resolveStorageKeyFromMediaValue(appearance.imageUrl)
-      if (key) keys.push(key)
-    }
-  }
-
-  for (const location of project.locations) {
-    for (const image of location.images) {
-      const key = await resolveStorageKeyFromMediaValue(image.imageUrl)
-      if (key) keys.push(key)
-    }
-  }
-
-  for (const episode of project.episodes) {
-    const audioKey = await resolveStorageKeyFromMediaValue(episode.audioUrl)
-    if (audioKey) keys.push(audioKey)
-
-    for (const storyboard of episode.storyboards) {
-      const storyboardKey = await resolveStorageKeyFromMediaValue(storyboard.storyboardImageUrl)
-      if (storyboardKey) keys.push(storyboardKey)
-
-      for (const panel of storyboard.panels) {
-        const imageKey = await resolveStorageKeyFromMediaValue(panel.imageUrl)
-        if (imageKey) keys.push(imageKey)
-
-        const videoKey = await resolveStorageKeyFromMediaValue(panel.videoUrl)
-        if (videoKey) keys.push(videoKey)
-
-      }
-    }
-  }
-
-  return keys
-}
-
 export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraft {
   return {
     get_project_basic: {
@@ -143,6 +74,7 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_data',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -197,17 +129,18 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
 
     delete_project: {
       id: 'delete_project',
-      summary: 'Delete the project and cleanup storage objects (destructive).',
+      summary: 'Delete the project and its domain relations (destructive).',
       intent: 'act',
       channels: { tool: false, api: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: true,
         overwrite: true,
         bulk: true,
-        externalSideEffects: true,
-        longRunning: true,
+        externalSideEffects: false,
+        longRunning: false,
       },
       confirmation: {
         required: true,
@@ -216,17 +149,13 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
       inputSchema: z.object({
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx) => {
-        const project = await requireOwnedProject({ projectId: ctx.projectId, userId: ctx.userId })
+      executeInTransaction: async (ctx, _input, transaction) => {
+        const project = await requireOwnedProject(
+          { projectId: ctx.projectId, userId: ctx.userId },
+          transaction,
+        )
 
-        const keys = await collectProjectStorageKeys(ctx.projectId)
-        const cosKeys = Array.from(new Set(keys.filter(Boolean)))
-
-        const cosResult = cosKeys.length > 0
-          ? await deleteObjects(cosKeys)
-          : { success: 0, failed: 0 }
-
-        await prisma.project.delete({
+        await transaction.project.delete({
           where: { id: ctx.projectId },
         })
 
@@ -238,16 +167,10 @@ export function createProjectCrudOperations(): ProjectAgentOperationRegistryDraf
           project.name,
           {
             projectName: project.name,
-            cosFilesDeleted: cosResult.success,
-            cosFilesFailed: cosResult.failed,
           },
         )
 
-        return {
-          success: true,
-          cosFilesDeleted: cosResult.success,
-          cosFilesFailed: cosResult.failed,
-        }
+        return { success: true }
       },
     },
   }

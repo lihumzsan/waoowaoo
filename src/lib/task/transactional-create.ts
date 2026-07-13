@@ -2,6 +2,8 @@ import { Prisma, type Task } from '@prisma/client'
 import { prepareTaskBillingInTransaction } from '@/lib/billing'
 import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
 import { OUTBOX_COMMAND_KIND } from '@/lib/outbox/types'
+import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+import { getTaskDefinition } from './definition'
 import { buildTaskLifecycleEventPayload } from './publisher'
 import { createTaskExecutionFingerprint } from './execution-identity'
 import { claimTaskTargetOwnershipInTransaction } from './target-ownership'
@@ -19,7 +21,27 @@ function toJson(value: unknown): Prisma.InputJsonValue | Prisma.NullTypes.JsonNu
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
 }
 
-export async function persistSubmittedTaskInTransaction(params: {
+async function assertTaskSubmissionScope(
+  tx: Prisma.TransactionClient,
+  input: CreateTaskInput & { readonly id?: string },
+): Promise<void> {
+  const episodeId = input.episodeId || null
+  resolveWorkspaceResourceRefs({
+    impact: getTaskDefinition(input.type).terminalResourceImpact,
+    projectId: input.projectId,
+    episodeId,
+  })
+  if (!episodeId) return
+  const episode = await tx.projectEpisode.findUnique({
+    where: { id: episodeId },
+    select: { projectId: true },
+  })
+  if (!episode || episode.projectId !== input.projectId) {
+    throw new Error(`TASK_EPISODE_SCOPE_MISMATCH:${input.projectId}:${episodeId}`)
+  }
+}
+
+async function persistValidatedSubmittedTaskInTransaction(params: {
   readonly tx: Prisma.TransactionClient
   readonly input: CreateTaskInput & { readonly id?: string }
   readonly billingMode: BillingMode
@@ -133,6 +155,19 @@ export async function persistSubmittedTaskInTransaction(params: {
   return stored
 }
 
+export async function persistSubmittedTaskInTransaction(params: {
+  readonly tx: Prisma.TransactionClient
+  readonly input: CreateTaskInput & { readonly id?: string }
+  readonly billingMode: BillingMode
+  readonly onTaskCreatedInTransaction?: (
+    tx: Prisma.TransactionClient,
+    task: { id: string },
+  ) => Promise<void>
+}): Promise<Task> {
+  await assertTaskSubmissionScope(params.tx, params.input)
+  return await persistValidatedSubmittedTaskInTransaction(params)
+}
+
 type PersistedBatchTask = {
   readonly task: Task
   readonly deduped: boolean
@@ -239,6 +274,7 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
 
   const ordered: PersistedBatchTask[] = []
   for (const input of params.inputs) {
+    await assertTaskSubmissionScope(params.tx, input)
     const existingCandidate = await loadExistingBatchTask(params.tx, input)
     if (existingCandidate) {
       const existing = await lockExistingBatchTaskById(params.tx, existingCandidate.id)
@@ -247,7 +283,7 @@ export async function persistSubmittedTaskBatchInTransaction(params: {
       continue
     }
     try {
-      const task = await persistSubmittedTaskInTransaction({
+      const task = await persistValidatedSubmittedTaskInTransaction({
         tx: params.tx,
         input,
         billingMode: params.billingMode,

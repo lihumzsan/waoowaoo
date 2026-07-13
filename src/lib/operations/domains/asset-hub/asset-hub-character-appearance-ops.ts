@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { prisma } from '@/lib/prisma'
 import { encodeImageUrls } from '@/lib/contracts/image-urls-contract'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
@@ -46,6 +45,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -58,7 +58,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
         const characterId = normalizeString(body.characterId)
@@ -68,9 +68,9 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',
           assetId: characterId,
-        })
+        }, transaction)
 
-        const appearance = await prisma.globalCharacterAppearance.findFirst({
+        const appearance = await transaction.globalCharacterAppearance.findFirst({
           where: { characterId, appearanceIndex },
         })
         if (!appearance) throw new ApiError('NOT_FOUND')
@@ -101,7 +101,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
 
         if (body.changeReason !== undefined) updateData.changeReason = body.changeReason
 
-        await prisma.globalCharacterAppearance.update({
+        await transaction.globalCharacterAppearance.update({
           where: { id: appearance.id },
           data: updateData,
         })
@@ -116,6 +116,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -128,7 +129,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         description: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const body = input as unknown as Record<string, unknown>
         assertNoLegacyArtStyle(body)
         const characterId = normalizeString(body.characterId)
@@ -139,8 +140,8 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',
           assetId: characterId,
-        })
-        const character = await prisma.globalCharacter.findUniqueOrThrow({
+        }, transaction)
+        const character = await transaction.globalCharacter.findUniqueOrThrow({
           where: { id: characterId },
           include: { appearances: true },
         })
@@ -148,7 +149,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         const maxIndex = character.appearances.reduce((max, appearance) => Math.max(max, appearance.appearanceIndex), 0)
         const newIndex = maxIndex + 1
 
-        const appearance = await prisma.globalCharacterAppearance.create({
+        const appearance = await transaction.globalCharacterAppearance.create({
           data: {
             characterId,
             appearanceIndex: newIndex,
@@ -170,6 +171,7 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'global_assets',
         billable: false,
         destructive: true,
         overwrite: false,
@@ -186,28 +188,28 @@ export function createAssetHubCharacterAppearanceOperations(): ProjectAgentOpera
         appearanceIndex: z.union([z.number().int().min(0), z.string().min(1)]),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const appearanceIndex = parseAppearanceIndex(input.appearanceIndex)
 
         await requireOwnedAssetTarget({
           access: { scope: 'global', userId: ctx.userId },
           kind: 'character',
           assetId: input.characterId,
-        })
-        const character = await prisma.globalCharacter.findUniqueOrThrow({
+        }, transaction)
+        const character = await transaction.globalCharacter.findUniqueOrThrow({
           where: { id: input.characterId },
           include: { appearances: true },
         })
 
         if (character.appearances.length <= 1) throw new ApiError('INVALID_PARAMS')
 
-        const appearance = await prisma.globalCharacterAppearance.findFirst({
+        const appearance = await transaction.globalCharacterAppearance.findFirst({
           where: { characterId: input.characterId, appearanceIndex },
           select: { id: true },
         })
         if (!appearance) throw new ApiError('NOT_FOUND')
 
-        await prisma.globalCharacterAppearance.delete({ where: { id: appearance.id } })
+        await transaction.globalCharacterAppearance.delete({ where: { id: appearance.id } })
         return { success: true }
       },
     }),

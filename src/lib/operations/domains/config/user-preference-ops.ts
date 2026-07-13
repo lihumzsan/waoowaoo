@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
 import { getDeploymentConfig, isPlatformProviderCredentialMode, toPublicDeploymentConfig } from '@/lib/deployment/config'
 import { getPlatformDefaultModels } from '@/lib/platform-models/catalog'
@@ -65,6 +64,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: false,
@@ -108,6 +108,7 @@ export function createUserPreferenceOperations(): ProjectAgentOperationRegistryD
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: true,

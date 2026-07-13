@@ -11,6 +11,7 @@ describe('operation output schemas', () => {
       success: true,
       async: true,
       taskId: 'task_1',
+      taskType: 'image_panel',
       status: 'queued',
       runId: null,
       deduped: false,
@@ -23,6 +24,7 @@ describe('operation output schemas', () => {
       success: true,
       async: false,
       taskId: 'task_1',
+      taskType: 'image_panel',
       status: 'queued',
       runId: null,
       deduped: false,
@@ -31,6 +33,25 @@ describe('operation output schemas', () => {
       throw new Error('expected taskSubmitOperationOutputSchema to reject async=false; this would hide a submit-op semantic bug')
     }
     expect(bad.error.issues.map((issue) => issue.message).join('\n')).toContain('TASK_SUBMIT_OUTPUT_EXPECTS_SUCCESS_TRUE_ASYNC_TRUE')
+
+    expect(taskSubmitOperationOutputSchema.safeParse({
+      success: true,
+      async: true,
+      taskId: 'task_1',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+    }).success).toBe(false)
+
+    expect(taskSubmitOperationOutputSchema.safeParse({
+      success: true,
+      async: true,
+      taskId: 'task_1',
+      taskType: 'unknown_task_type',
+      status: 'queued',
+      runId: null,
+      deduped: false,
+    }).success).toBe(false)
   })
 
   it('enforces minimal stable shape for batch task submission outputs', () => {
@@ -77,4 +98,3 @@ describe('operation output schemas', () => {
     }
   })
 })
-

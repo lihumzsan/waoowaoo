@@ -6,13 +6,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import {
   applyWorkspaceSSEEvent,
-  isWorkspaceSSEEvent,
 } from '../workspace-sse-event-sync'
 import { WorkspaceSSEEventSequence } from '../workspace-sse-event-sequence'
-import { queryKeys } from '../keys'
 import {
   advanceWorkspaceSseCursor,
   EMPTY_WORKSPACE_SSE_CURSOR,
+  isWorkspaceSseEvent,
   parseWorkspaceSseCursor,
   serializeWorkspaceSseCursor,
   type WorkspaceSseCursor,
@@ -26,7 +25,7 @@ type UseSSEOptions = {
 }
 
 function cursorStorageKey(projectId: string, episodeId: string | null | undefined): string {
-  return `workspace-sse-cursor:v1:${projectId}:${episodeId ?? 'all'}`
+  return `workspace-sse-cursor:v3:${projectId}:${episodeId ?? 'all'}`
 }
 
 function readStoredCursor(projectId: string, episodeId: string | null | undefined): WorkspaceSseCursor {
@@ -49,9 +48,7 @@ function persistCursor(projectId: string, episodeId: string | null | undefined, 
 export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSEOptions) {
   const queryClient = useQueryClient()
   const sourceRef = useRef<EventSource | null>(null)
-  const targetStatesInvalidateTimerRef = useRef<number | null>(null)
   const cursorRef = useRef<WorkspaceSseCursor>({ ...EMPTY_WORKSPACE_SSE_CURSOR })
-  const isGlobalAssetProject = projectId === 'global-asset-hub'
   const [snapshotResyncGeneration, setSnapshotResyncGeneration] = useState(0)
 
   const connection = useMemo(() => {
@@ -59,7 +56,12 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     const cursor = readStoredCursor(projectId, episodeId)
     const params = new URLSearchParams({ projectId })
     if (episodeId) params.set('episodeId', episodeId)
-    if (cursor.taskEventId > 0 || cursor.mutationEventAtMs > 0 || cursor.agentEventId !== '0') {
+    if (
+      cursor.taskEventId > 0
+      || cursor.mutationEventAtMs > 0
+      || cursor.agentEventId !== '0'
+      || cursor.resourceEventAtMs > 0
+    ) {
       params.set('cursor', serializeWorkspaceSseCursor(cursor))
     }
     return { url: `/api/sse?${params}`, cursor, generation: snapshotResyncGeneration }
@@ -73,29 +75,18 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     [connection],
   )
 
-  const scheduleTargetStatesInvalidation = useCallback(() => {
-    if (!projectId || targetStatesInvalidateTimerRef.current !== null) return
-    targetStatesInvalidateTimerRef.current = window.setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.targetStatesAll(projectId), exact: false })
-      targetStatesInvalidateTimerRef.current = null
-    }, 800)
-  }, [projectId, queryClient])
-
   const applyEvent = useCallback((payload: SSEEvent) => {
     if (!projectId) return
     applyWorkspaceSSEEvent({
       queryClient,
       event: payload,
       projectId,
-      episodeId,
-      isGlobalAssetProject,
-      scheduleTargetStatesInvalidation,
     })
     onEvent?.(payload)
-  }, [episodeId, isGlobalAssetProject, onEvent, projectId, queryClient, scheduleTargetStatesInvalidation])
+  }, [onEvent, projectId, queryClient])
 
   const handleParsedEvent = useCallback((payload: unknown, transportCursor?: string) => {
-    if (!isWorkspaceSSEEvent(payload)) throw new Error('WORKSPACE_SSE_EVENT_INVALID')
+    if (!isWorkspaceSseEvent(payload)) throw new Error('WORKSPACE_SSE_EVENT_INVALID')
     const decision = eventSequence.process(payload, applyEvent)
     if (decision === 'duplicate' || decision === 'invalid') return
     const nextCursor = transportCursor
@@ -152,10 +143,6 @@ export function useSSE({ projectId, episodeId, enabled = true, onEvent }: UseSSE
     }
 
     return () => {
-      if (targetStatesInvalidateTimerRef.current !== null) {
-        window.clearTimeout(targetStatesInvalidateTimerRef.current)
-        targetStatesInvalidateTimerRef.current = null
-      }
       for (const listener of listeners) {
         source.removeEventListener(listener.type, listener.handler)
       }

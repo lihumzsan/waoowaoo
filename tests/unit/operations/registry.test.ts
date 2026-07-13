@@ -16,6 +16,34 @@ describe('project agent operation registry', () => {
       expect(['required', 'optional', 'forbidden']).toContain(operation.prerequisites.episodeId)
       expect(typeof operation.confirmation.required).toBe('boolean')
       expect(typeof operation.effects.writes).toBe('boolean')
+      if (operation.effects.writes) {
+        expect([
+          'none',
+          'edit_pipeline',
+          'edit_pipeline_assets',
+          'edit_style_preview',
+          'storyboards',
+          'project_assets',
+          'scoped_assets',
+          'global_assets',
+          'videos',
+          'episode',
+          'project_data',
+          'project_workspace',
+        ], operation.id).toContain(operation.effects.workspaceResourceImpact)
+        if (operation.effects.workspaceResourceImpact !== 'none') {
+          expect(operation.executeInTransaction, operation.id).toBeTypeOf('function')
+          expect(operation.execute, operation.id).toBeUndefined()
+          expect(operation.confirmation.kind, operation.id).not.toBe('billable_media')
+          if (operation.effects.externalSideEffects) {
+            expect(operation.prepareTransaction, operation.id).toBeTypeOf('function')
+            expect(operation.compensateTransactionFailure, operation.id).toBeTypeOf('function')
+            expect(operation.channels.tool, operation.id).toBe(false)
+          }
+        }
+      } else {
+        expect(operation.effects.workspaceResourceImpact, operation.id).toBeUndefined()
+      }
       expect(typeof operation.effects.billable).toBe('boolean')
       expect(typeof operation.effects.destructive).toBe('boolean')
       expect(typeof operation.effects.overwrite).toBe('boolean')
@@ -165,6 +193,7 @@ describe('project agent operation registry', () => {
     })
     expect(operation.effects).toEqual({
       writes: true,
+      workspaceResourceImpact: 'none',
       billable: true,
       destructive: false,
       overwrite: false,
@@ -183,6 +212,7 @@ describe('project agent operation registry', () => {
       expect(operation.plan, operation.id).toBeTypeOf('function')
       expect(operation.commit, operation.id).toBeTypeOf('function')
       expect(operation.execute, operation.id).toBeUndefined()
+      expect(operation.effects.workspaceResourceImpact, operation.id).toBe('none')
     }
   })
 
@@ -271,6 +301,7 @@ describe('project agent operation registry', () => {
     expect(operation.prerequisites.episodeId).toBe('required')
     expect(operation.effects).toEqual({
       writes: true,
+      workspaceResourceImpact: 'none',
       billable: false,
       destructive: false,
       overwrite: true,

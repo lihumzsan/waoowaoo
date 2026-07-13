@@ -1,10 +1,9 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { createMutationBatch, createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
+import { createMutationBatchInTransaction } from '@/lib/mutation-batch/service'
 import { serializeStructuredJsonField } from '@/lib/project-workflow/panel-ai-data-sync'
 import type { ProjectAgentOperationContext } from '@/lib/operations/types'
-import { getSignedUrl, generateUniqueKey, downloadAndUploadImage, toFetchableUrl } from '@/lib/storage'
+import { getSignedUrl } from '@/lib/storage'
 import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
 function normalizeString(value: unknown): string {
@@ -19,23 +18,6 @@ function toStructuredJsonField(value: unknown, fieldName: string): string | null
     throw new Error(message || 'INVALID_PARAMS')
   }
 }
-
-const storyboardMutationActionSchema = z.enum([
-  'update_panel_prompt',
-  'select_panel_candidate',
-  'cancel_panel_candidates',
-])
-
-const storyboardMutationInputSchema = z.object({
-  action: storyboardMutationActionSchema,
-  storyboardId: z.string().min(1).optional(),
-  panelId: z.string().min(1).optional(),
-  panelIndex: z.number().int().min(0).max(2000).optional(),
-  videoPrompt: z.string().nullable().optional(),
-  imagePrompt: z.string().nullable().optional(),
-  selectedImageUrl: z.string().optional(),
-  actingNotes: z.unknown().optional(),
-}).passthrough()
 
 export const updateStoryboardPanelPromptInputSchema = z.object({
   storyboardId: z.string().min(1).optional(),
@@ -65,7 +47,16 @@ export const cancelStoryboardPanelCandidatesInputSchema = z.object({
   panelId: z.string().min(1),
 })
 
-type StoryboardMutationInput = z.infer<typeof storyboardMutationInputSchema>
+type StoryboardMutationInput = {
+  action: 'update_panel_prompt' | 'select_panel_candidate' | 'cancel_panel_candidates'
+  storyboardId?: string
+  panelId?: string
+  panelIndex?: number
+  videoPrompt?: string | null
+  imagePrompt?: string | null
+  selectedImageUrl?: string
+  actingNotes?: unknown
+}
 
 function parseUnknownArray(jsonValue: string | null): unknown[] {
   if (!jsonValue) return []
@@ -80,7 +71,7 @@ function parseUnknownArray(jsonValue: string | null): unknown[] {
 async function resolveStoryboardContext(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
-  client: Prisma.TransactionClient | typeof prisma,
+  client: Prisma.TransactionClient,
 ) {
   const panelId = normalizeString(input.panelId)
   if (panelId) {
@@ -140,9 +131,9 @@ async function executeCandidateMutation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
-  transaction?: Prisma.TransactionClient,
+  transaction: Prisma.TransactionClient,
 ) {
-  const client = transaction ?? prisma
+  const client = transaction
   const panelId = normalizeString(input.panelId)
   if (!panelId) throw new Error('PROJECT_AGENT_PANEL_REQUIRED')
 
@@ -187,9 +178,7 @@ async function executeCandidateMutation(
         },
       ],
     }
-    const mutationBatch = transaction
-      ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
-      : await createMutationBatch(mutationBatchInput)
+    const mutationBatch = await createMutationBatchInTransaction(transaction, mutationBatchInput)
 
     return { success: true, panelId, mutationBatchId: mutationBatch.id }
   }
@@ -198,25 +187,16 @@ async function executeCandidateMutation(
   if (!selectedImageUrl) throw new Error('PROJECT_AGENT_SELECTED_IMAGE_REQUIRED')
 
   const candidateImages = parseUnknownArray(panel.candidateImages)
-  const selectedCosKey = await resolveStorageKeyFromMediaValue(selectedImageUrl)
+  const selectedCosKey = await resolveStorageKeyFromMediaValue(selectedImageUrl, transaction)
   const candidateKeys = (await Promise.all(
-    candidateImages.map((candidate: unknown) => resolveStorageKeyFromMediaValue(candidate)),
+    candidateImages.map((candidate: unknown) => resolveStorageKeyFromMediaValue(candidate, transaction)),
   )).filter((key): key is string => !!key)
 
   if (!selectedCosKey || !candidateKeys.includes(selectedCosKey)) {
     throw new Error('PROJECT_AGENT_PANEL_CANDIDATE_INVALID')
   }
 
-  let finalImageKey = selectedCosKey
-  const isReusableKey = !finalImageKey.startsWith('http://')
-    && !finalImageKey.startsWith('https://')
-    && !finalImageKey.startsWith('/')
-
-  if (!isReusableKey) {
-    const sourceUrl = toFetchableUrl(selectedImageUrl)
-    const cosKey = generateUniqueKey(`panel-${panelId}-selected`, 'png')
-    finalImageKey = await downloadAndUploadImage(sourceUrl, cosKey)
-  }
+  const finalImageKey = selectedCosKey
 
   const previousCandidateImages = panel.candidateImages
   const previousImageUrl = panel.imageUrl
@@ -248,9 +228,7 @@ async function executeCandidateMutation(
       },
     ],
   }
-  const mutationBatch = transaction
-    ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
-    : await createMutationBatch(mutationBatchInput)
+  const mutationBatch = await createMutationBatchInTransaction(transaction, mutationBatchInput)
 
   return {
     success: true,
@@ -265,9 +243,9 @@ async function executePromptMutation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
-  transaction?: Prisma.TransactionClient,
+  transaction: Prisma.TransactionClient,
 ) {
-  const client = transaction ?? prisma
+  const client = transaction
   const { panelId, episodeId } = await resolveStoryboardContext(ctx, input, client)
 
   const updateData: Record<string, unknown> = {}
@@ -316,9 +294,7 @@ async function executePromptMutation(
       },
     ],
   }
-  const mutationBatch = transaction
-    ? await createMutationBatchInTransaction(transaction, mutationBatchInput)
-    : await createMutationBatch(mutationBatchInput)
+  const mutationBatch = await createMutationBatchInTransaction(transaction, mutationBatchInput)
 
   return { success: true, panelId, mutationBatchId: mutationBatch.id }
 }
@@ -327,7 +303,7 @@ export async function executeStoryboardMutationOperation(
   ctx: ProjectAgentOperationContext,
   input: StoryboardMutationInput,
   operationId: string,
-  transaction?: Prisma.TransactionClient,
+  transaction: Prisma.TransactionClient,
 ) {
   if (input.action === 'select_panel_candidate' || input.action === 'cancel_panel_candidates') {
     return await executeCandidateMutation(ctx, input, operationId, transaction)

@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
-import { prisma } from '@/lib/prisma'
 import { listRecentMutationBatches } from '@/lib/mutation-batch/service'
 import { revertMutationBatch } from '@/lib/mutation-batch/revert'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
@@ -57,6 +56,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       channels: { tool: false, api: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_workspace',
         billable: false,
         destructive: true,
         overwrite: true,
@@ -72,7 +72,8 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
         batchId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => revertMutationBatch({
+      executeInTransaction: async (ctx, input, transaction) => revertMutationBatch({
+        transaction,
         batchId: input.batchId,
         projectId: ctx.projectId,
         userId: ctx.userId,
@@ -86,6 +87,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
       channels: { tool: false, api: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_workspace',
         billable: false,
         destructive: true,
         overwrite: true,
@@ -101,8 +103,8 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
         batchId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const batch = await prisma.mutationBatch.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const batch = await transaction.mutationBatch.findUnique({
           where: { id: input.batchId },
           select: { id: true, projectId: true, userId: true },
         })
@@ -110,6 +112,7 @@ export function createGovernanceOperations(): ProjectAgentOperationRegistryDraft
         if (batch.userId !== ctx.userId) throw new ApiError('FORBIDDEN')
 
         return await revertMutationBatch({
+          transaction,
           batchId: batch.id,
           projectId: batch.projectId,
           userId: ctx.userId,

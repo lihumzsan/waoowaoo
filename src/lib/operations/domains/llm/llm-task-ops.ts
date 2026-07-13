@@ -9,6 +9,7 @@ import { resolveOperationLocale } from '@/lib/operations/environment-input'
 
 const EFFECTS_BILLABLE_LONG_RUNNING = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: true,
   destructive: false,
   overwrite: false,

@@ -10,6 +10,7 @@ import {
 
 const EFFECTS_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'storyboards',
   billable: false,
   destructive: false,
   overwrite: false,
@@ -54,10 +55,10 @@ export function createStoryboardPanelEditOperations(): ProjectAgentOperationRegi
       },
       inputSchema: selectStoryboardPanelCandidateInputSchema,
       outputSchema: storyboardMutationOperationOutputSchema,
-      execute: async (ctx, input) => executeStoryboardMutationOperation(ctx, {
+      executeInTransaction: async (ctx, input, transaction) => executeStoryboardMutationOperation(ctx, {
         ...input,
         action: 'select_panel_candidate',
-      }, 'select_storyboard_panel_candidate'),
+      }, 'select_storyboard_panel_candidate', transaction),
     }),
     cancel_storyboard_panel_candidates: defineOperation({
       id: 'cancel_storyboard_panel_candidates',

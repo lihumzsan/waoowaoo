@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client'
 import type { ProjectAgentOperationExecutionFence } from '@/lib/project-agent/operation-execution-fence'
 import type { ProjectAgentTaskSuspensionReceipt } from '@/lib/project-agent/suspension'
 import type { ProjectAgentChoiceHandoffReceipt } from '@/lib/project-agent/execution-handoff'
+import type { WorkspaceResourceImpact } from '@/lib/workspace-resource/resource-impact'
 
 export type ProjectAgentOperationId = string
 
@@ -57,7 +58,25 @@ type BivariantTransactionalOperationExecute<Input, Output> = {
     context: ProjectAgentOperationContext,
     input: Input,
     transaction: Prisma.TransactionClient,
+    prepared: unknown,
   ): Promise<Output>
+}['bivarianceHack']
+
+type BivariantTransactionalOperationPrepare<Input> = {
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+  ): Promise<unknown>
+}['bivarianceHack']
+
+type BivariantTransactionalOperationCompensate<Input, Output> = {
+  bivarianceHack(
+    context: ProjectAgentOperationContext,
+    input: Input,
+    prepared: unknown,
+    output: Output | null,
+    transactionError: unknown,
+  ): Promise<void>
 }['bivarianceHack']
 
 type BivariantOperationPlan<Input> = {
@@ -81,8 +100,7 @@ export interface OperationChannels {
   api: boolean
 }
 
-export interface OperationEffects {
-  writes: boolean
+type OperationEffectFlags = {
   billable: boolean
   destructive: boolean
   overwrite: boolean
@@ -90,6 +108,17 @@ export interface OperationEffects {
   externalSideEffects: boolean
   longRunning: boolean
 }
+
+export type OperationEffects = OperationEffectFlags & (
+  | {
+      writes: false
+      workspaceResourceImpact?: never
+    }
+  | {
+      writes: true
+      workspaceResourceImpact: WorkspaceResourceImpact
+    }
+)
 
 export type AssistantOperationWriteAuthority = {
   kind: 'transactional_task_submission'
@@ -206,12 +235,14 @@ type NonTransactionalDirectOperationBehavior<Input, Output> = {
   commit?: never
   execute: BivariantOperationExecute<Input, Output>
   executeInTransaction?: never
+  prepareTransaction?: never
+  compensateTransactionFailure?: never
   assistantWriteAuthority?: Extract<AssistantOperationWriteAuthority, {
     kind: 'transactional_task_submission'
   }>
 }
 
-type TransactionalDirectOperationBehavior<Input, Output> = {
+type TransactionalDirectOperationBehaviorBase<Input, Output> = {
   confirmation?: Omit<OperationConfirmation, 'kind'> & {
     kind?: Exclude<OperationApprovalKind, 'billable_media'>
   }
@@ -221,6 +252,18 @@ type TransactionalDirectOperationBehavior<Input, Output> = {
   executeInTransaction: BivariantTransactionalOperationExecute<Input, Output>
   assistantWriteAuthority?: never
 }
+
+type TransactionalDirectOperationBehavior<Input, Output> =
+  TransactionalDirectOperationBehaviorBase<Input, Output> & (
+    | {
+        prepareTransaction?: never
+        compensateTransactionFailure?: never
+      }
+    | {
+        prepareTransaction: BivariantTransactionalOperationPrepare<Input>
+        compensateTransactionFailure: BivariantTransactionalOperationCompensate<Input, Output>
+      }
+  )
 
 type DirectOperationBehavior<Input, Output> =
   | NonTransactionalDirectOperationBehavior<Input, Output>
@@ -235,6 +278,8 @@ type BillablePlannedOperationBehavior<Input, Output> = {
   commit: BivariantOperationCommit<Input, Output>
   execute?: never
   executeInTransaction?: never
+  prepareTransaction?: never
+  compensateTransactionFailure?: never
   assistantWriteAuthority?: never
 }
 

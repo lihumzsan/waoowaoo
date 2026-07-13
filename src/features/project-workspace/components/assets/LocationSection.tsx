@@ -20,8 +20,8 @@ interface LocationSectionProps {
     projectId: string
     assetType?: 'location' | 'prop'
     activeTaskKeys: Set<string>
-    onClearTaskKey: (key: string) => void
-    onRegisterTransientTaskKey: (key: string) => void
+    onClearSubmittingTaskKey: (key: string) => void
+    onRegisterSubmittingTaskKey: (key: string) => void
     // 回调函数
     onAddLocation: () => void
     onDeleteLocation: (locationId: string) => void
@@ -44,8 +44,8 @@ export default function LocationSection({
     projectId,
     assetType = 'location',
     activeTaskKeys,
-    onClearTaskKey,
-    onRegisterTransientTaskKey,
+    onClearSubmittingTaskKey,
+    onRegisterSubmittingTaskKey,
     onAddLocation,
     onDeleteLocation,
     onEditLocation,
@@ -117,34 +117,33 @@ export default function LocationSection({
                                 const imageIndex = validImages[0].imageIndex
                                 const taskKey = `location-${location.id}-${imageIndex}`
                                 _ulogInfo('[LocationSection] 调用单张重新生成, imageIndex:', imageIndex)
-                                onRegisterTransientTaskKey(taskKey)
-                                void onRegenerateSingle(location.id, imageIndex).catch(() => {
-                                    onClearTaskKey(taskKey)
-                                })
+                                onRegisterSubmittingTaskKey(taskKey)
+                                void onRegenerateSingle(location.id, imageIndex)
+                                    .catch(() => undefined)
+                                    .finally(() => onClearSubmittingTaskKey(taskKey))
                             }
                             // 多图或无图：重新生成整组
                             else {
                                 const taskKey = `location-${location.id}-group`
                                 _ulogInfo('[LocationSection] 调用整组重新生成')
-                                onRegisterTransientTaskKey(taskKey)
-                                void onRegenerateGroup(location.id, count).catch(() => {
-                                    onClearTaskKey(taskKey)
-                                })
+                                onRegisterSubmittingTaskKey(taskKey)
+                                void onRegenerateGroup(location.id, count)
+                                    .catch(() => undefined)
+                                    .finally(() => onClearSubmittingTaskKey(taskKey))
                             }
                         }}
                         onGenerate={(count) => {
                             const taskKey = `location-${location.id}-group`
-                            onRegisterTransientTaskKey(taskKey)
-                            void handleGenerateImage(generateType, location.id, undefined, count).catch(() => {
-                                onClearTaskKey(taskKey)
-                            })
+                            onRegisterSubmittingTaskKey(taskKey)
+                            void handleGenerateImage(generateType, location.id, undefined, count)
+                                .catch(() => undefined)
+                                .finally(() => onClearSubmittingTaskKey(taskKey))
                         }}
                         onUndo={() => onUndo(location.id)}
                         onImageClick={onImageClick}
                         onSelectImage={onSelectImage}
                         onCopyFromGlobal={() => onCopyFromGlobal(location.id)}
                         activeTaskKeys={activeTaskKeys}
-                        onClearTaskKey={onClearTaskKey}
                         projectId={projectId}
                         onConfirmSelection={onConfirmSelection}
                     />

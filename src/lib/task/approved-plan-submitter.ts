@@ -6,7 +6,7 @@ import { loadOperationPlanSnapshot } from '@/lib/operations/operation-plan-snaps
 import type { PlannedTask } from '@/lib/operations/planning'
 import { buildTaskProgressGroupId, withTaskProgressGroupPayload } from './progress-group'
 import { normalizeTaskPayload, toObject, type SubmitTaskResult } from './submitter'
-import { type CreateTaskInput, type TaskBillingInfo } from './types'
+import { isTaskType, type CreateTaskInput, type TaskBillingInfo } from './types'
 import { persistSubmittedTaskBatchInTransaction } from './transactional-create'
 
 function taskIdForPlanItem(operationExecutionId: string, operationPlanTaskId: string): string {
@@ -126,6 +126,7 @@ export async function submitApprovedOperationPlanTasks(params: {
   })
   return await buildSubmitTaskResults(persisted.map(({ task, deduped }) => ({
       id: task.id,
+      taskType: task.type,
       operationPlanTaskId: task.operationPlanTaskId,
       status: task.status,
       billingInfo: task.billingInfo,
@@ -136,6 +137,7 @@ export async function submitApprovedOperationPlanTasks(params: {
 async function buildSubmitTaskResults(
   stored: Array<{
     id: string
+    taskType: string
     operationPlanTaskId: string | null
     status: string
     billingInfo: Prisma.JsonValue | null
@@ -145,11 +147,13 @@ async function buildSubmitTaskResults(
   const result = new Map<string, SubmitTaskResult>()
   for (const task of stored) {
     if (!task.operationPlanTaskId) throw new Error(`OPERATION_PLAN_TASK_ID_MISSING:${task.id}`)
+    if (!isTaskType(task.taskType)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.taskType}`)
     const billingInfo = task.billingInfo as TaskBillingInfo | null
     result.set(task.operationPlanTaskId, {
       success: true,
       async: true,
       taskId: task.id,
+      taskType: task.taskType,
       runId: null,
       status: task.status,
       deduped: task.deduped,

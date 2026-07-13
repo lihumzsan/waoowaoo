@@ -1,13 +1,12 @@
+import type { Prisma } from '@prisma/client'
 import { ApiError } from '@/lib/api-errors'
-import { prisma } from '@/lib/prisma'
-import { deleteObject } from '@/lib/storage'
-import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 
 export async function confirmProjectLocationBackedSelection(
   assetId: string,
-  selectedIndex?: number | null,
+  selectedIndex: number | null | undefined,
+  client: Prisma.TransactionClient,
 ): Promise<{ success: true }> {
-  const location = await prisma.projectLocation.findUnique({
+  const location = await client.projectLocation.findUnique({
     where: { id: assetId },
     include: { images: { orderBy: { imageIndex: 'asc' } } },
   })
@@ -32,18 +31,16 @@ export async function confirmProjectLocationBackedSelection(
       throw new ApiError('INVALID_PARAMS')
     }
     if (onlyImage) {
-      await prisma.$transaction(async (tx) => {
-        await tx.locationImage.update({
+      await client.locationImage.update({
           where: { id: onlyImage.id },
           data: {
             imageIndex: 0,
             isSelected: true,
           },
         })
-        await tx.projectLocation.update({
+      await client.projectLocation.update({
           where: { id: assetId },
           data: { selectedImageId: onlyImage.id },
-        })
       })
     }
     return { success: true }
@@ -53,35 +50,22 @@ export async function confirmProjectLocationBackedSelection(
     throw new ApiError('INVALID_PARAMS')
   }
 
-  const imagesToDelete = location.images.filter((image) => image.id !== selectedImage.id)
-  for (const image of imagesToDelete) {
-    if (!image.imageUrl) continue
-    const storageKey = await resolveStorageKeyFromMediaValue(image.imageUrl)
-    if (!storageKey) continue
-    try {
-      await deleteObject(storageKey)
-    } catch {
-    }
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.locationImage.deleteMany({
+  await client.locationImage.deleteMany({
       where: {
         locationId: assetId,
         id: { not: selectedImage.id },
       },
     })
-    await tx.locationImage.update({
+  await client.locationImage.update({
       where: { id: selectedImage.id },
       data: {
         imageIndex: 0,
         isSelected: true,
       },
     })
-    await tx.projectLocation.update({
+  await client.projectLocation.update({
       where: { id: assetId },
       data: { selectedImageId: selectedImage.id },
-    })
   })
 
   return { success: true }

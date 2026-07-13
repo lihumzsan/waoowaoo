@@ -1,8 +1,11 @@
+import { requireWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+
 export const OUTBOX_COMMAND_KIND = {
   TASK_ENQUEUE: 'task.enqueue',
   TASK_LIFECYCLE_BROADCAST: 'task.lifecycle.broadcast',
   PROJECT_AGENT_CONTINUE_WAIT: 'project_agent.continue_wait',
   PROJECT_AGENT_SESSION_BROADCAST: 'project_agent.session_broadcast',
+  WORKSPACE_RESOURCE_BROADCAST: 'workspace_resource.broadcast',
 } as const
 
 export type OutboxCommandKind = (typeof OUTBOX_COMMAND_KIND)[keyof typeof OUTBOX_COMMAND_KIND]
@@ -32,15 +35,24 @@ export type ProjectAgentSessionBroadcastCommand = {
   projectAgentEventId: string
 }
 
+export type WorkspaceResourceBroadcastCommand = {
+  kind: typeof OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST
+  projectId: string
+  userId: string
+  operationId: string
+  affectedResources: import('@/lib/task/types').WorkspaceResourceRef[]
+}
+
 export type OutboxCommandPayload =
   | TaskEnqueueCommand
   | TaskLifecycleBroadcastCommand
   | ProjectAgentContinueWaitCommand
   | ProjectAgentSessionBroadcastCommand
+  | WorkspaceResourceBroadcastCommand
 
 export type CreateOutboxCommandInput = {
   idempotencyKey: string
-  aggregateType: 'task' | 'project_agent_wait' | 'project_agent_event'
+  aggregateType: 'task' | 'project_agent_wait' | 'project_agent_event' | 'workspace_resource'
   aggregateId: string
   payload: OutboxCommandPayload
   availableAt?: Date
@@ -132,6 +144,23 @@ export function parseOutboxCommandPayload(value: unknown): OutboxCommandPayload 
         kind,
         projectAgentEventId: readCanonicalBigIntString(record, 'projectAgentEventId'),
       }
+    case OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST: {
+      const projectId = readRequiredString(record, 'projectId')
+      const affectedResources = requireWorkspaceResourceRefs(record.affectedResources)
+      if (affectedResources.length === 0) {
+        throw new Error('OUTBOX_COMMAND_AFFECTED_RESOURCES_EMPTY')
+      }
+      if (affectedResources.some((ref) => ref.projectId !== projectId)) {
+        throw new Error('OUTBOX_COMMAND_AFFECTED_RESOURCES_PROJECT_MISMATCH')
+      }
+      return {
+        kind,
+        projectId,
+        userId: readRequiredString(record, 'userId'),
+        operationId: readRequiredString(record, 'operationId'),
+        affectedResources,
+      }
+    }
     default:
       throw new Error(`OUTBOX_COMMAND_KIND_UNSUPPORTED:${kind}`)
   }

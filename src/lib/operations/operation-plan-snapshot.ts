@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { BillingQuoteView, OperationPlan, OperationPlanView, PlannedTask } from './planning'
+import {
+  assertOperationPlanTaskResourceScopes,
+  type BillingQuoteView,
+  type OperationPlan,
+  type OperationPlanView,
+  type PlannedTask,
+} from './planning'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 
 function toInputJson(value: unknown): Prisma.InputJsonValue {
@@ -131,6 +137,7 @@ export async function persistOperationPlanSnapshot(params: {
   quote: BillingQuoteView
   episodeId?: string | null
 }): Promise<PersistedOperationPlanSnapshot> {
+  assertOperationPlanTaskResourceScopes(params.plan)
   const scopeKind = params.plan.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId
   const normalizedInput = toInputJson(params.normalizedInput)

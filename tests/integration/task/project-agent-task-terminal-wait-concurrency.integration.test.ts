@@ -21,6 +21,9 @@ describe('Project Agent Task terminal Wait concurrency', () => {
   it('serializes two terminal commits through the locked Wait aggregate without leaving awaiting_task stuck', async () => {
     const user = await createTestUser()
     const project = await createTestProject(user.id)
+    const episode = await prisma.projectEpisode.create({
+      data: { projectId: project.id, episodeNumber: 1, name: 'Terminal concurrency episode' },
+    })
     const { run } = await createProjectAgentUserTurnRun({
       runId: 'assistant-terminal-race-run',
       requestId: 'assistant-terminal-race-request',
@@ -55,6 +58,7 @@ describe('Project Agent Task terminal Wait concurrency', () => {
         id,
         userId: user.id,
         projectId: project.id,
+        episodeId: episode.id,
         type: TASK_TYPE.IMAGE_PANEL,
         targetType: 'ProjectPanel',
         targetId: `${id}-target`,

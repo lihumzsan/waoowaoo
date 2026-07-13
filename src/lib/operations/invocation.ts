@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { ApiError } from '@/lib/api-errors'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -7,7 +8,8 @@ import {
   requireProjectAgentChoiceHandoffReceipt,
   runWithProjectAgentOperationExecutionFence,
 } from '@/lib/project-agent/operation-execution-fence'
-import { publishWorkspaceResourceChangedEventsFromWriteResult } from '@/lib/workspace-resource/resource-change-events'
+import { createWorkspaceResourceBroadcastsInTransaction } from '@/lib/workspace-resource/resource-change-events'
+import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import { resolveOperationEffectiveEpisodeId, resolveOperationScopeInput } from './environment-input'
 import { normalizeProjectAgentToolInput } from './tool-input-schema'
 import {
@@ -35,7 +37,6 @@ export type ProjectAgentOperationInvocationResult =
       data: unknown
       operation: ProjectAgentOperationDefinition
       outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }>
-      publishResourceChanges(): Promise<void>
     }
   | {
       kind: 'approval_required'
@@ -196,7 +197,6 @@ export async function invokeProjectAgentOperation(params: {
   returnApprovalRequired?: boolean
   transaction?: Prisma.TransactionClient
   invocationMode?: 'default' | 'atomic_choice_confirmation'
-  deferResourceChangePublication?: boolean
 }): Promise<ProjectAgentOperationInvocationResult> {
   const operation = requireOperation(params.registry, params.operationId)
   const invocationMode = params.invocationMode ?? 'default'
@@ -245,8 +245,41 @@ export async function invokeProjectAgentOperation(params: {
     approvedInvocation: params.approvedInvocation,
   })
   const parsedInput = prepared.input
+  const affectedResources = operation.effects.writes
+    ? resolveWorkspaceResourceRefs({
+        impact: operation.effects.workspaceResourceImpact,
+        projectId: params.context.projectId,
+        episodeId: prepared.effectiveEpisodeId || null,
+      })
+    : []
+  if (
+    affectedResources.length > 0
+    && operation.confirmation.kind === 'billable_media'
+  ) {
+    throw new Error(`OPERATION_RESOURCE_TASK_TERMINAL_REQUIRED:${operation.id}`)
+  }
+  if (
+    affectedResources.length > 0
+    && !operation.executeInTransaction
+  ) {
+    throw new Error(`OPERATION_RESOURCE_TRANSACTION_REQUIRED:${operation.id}`)
+  }
+  const resourceInvocationId = randomUUID()
 
-  let result: unknown
+  const parseOutput = (value: unknown): unknown => {
+    const parsedOutput = operation.outputSchema.safeParse(value)
+    if (!parsedOutput.success) {
+      throw new ApiError('EXTERNAL_ERROR', {
+        code: 'OPERATION_OUTPUT_INVALID',
+        operationId: operation.id,
+        message: `operation output schema mismatch: ${operation.id}`,
+        issues: parsedOutput.error.issues,
+      })
+    }
+    return parsedOutput.data
+  }
+
+  let parsedOutputData: unknown
   if (operation.confirmation.kind === 'billable_media') {
     if (!prepared.invocation) {
       if (params.returnApprovalRequired) {
@@ -258,12 +291,13 @@ export async function invokeProjectAgentOperation(params: {
         message: 'approve the immutable operation plan before execution',
       })
     }
-    result = await invokeApprovedOperationPlan({
+    const result = await invokeApprovedOperationPlan({
       operation,
       ctx: params.context,
       normalizedInput: parsedInput,
       invocation: prepared.invocation,
     })
+    parsedOutputData = parseOutput(result)
   } else {
     if (prepared.invocation) {
       throw new ApiError('INVALID_PARAMS', {
@@ -274,25 +308,67 @@ export async function invokeProjectAgentOperation(params: {
     }
     const executeInTransaction = operation.executeInTransaction
     if (executeInTransaction) {
+      if (params.transaction && operation.prepareTransaction) {
+        throw new Error(`OPERATION_EXTERNAL_PREPARE_OUTER_TRANSACTION_FORBIDDEN:${operation.id}`)
+      }
+      const preparedTransaction = operation.prepareTransaction
+        ? await operation.prepareTransaction(params.context, parsedInput)
+        : undefined
+      let transactionOutput: unknown
+      let hasTransactionOutput = false
       const executeTransaction = async (tx: Prisma.TransactionClient): Promise<unknown> => {
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
-        const output = await executeInTransaction(params.context, parsedInput, tx)
+        const output = await executeInTransaction(params.context, parsedInput, tx, preparedTransaction)
+        transactionOutput = output
+        hasTransactionOutput = true
         if (executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, executionFence)
         }
-        return output
+        const parsed = parseOutput(output)
+        if (affectedResources.length > 0) {
+          await createWorkspaceResourceBroadcastsInTransaction({
+            tx,
+            invocationId: resourceInvocationId,
+            affectedResources,
+            userId: params.context.userId,
+            operationId: operation.id,
+          })
+        }
+        return parsed
       }
-      result = params.transaction
-        ? await executeTransaction(params.transaction)
-        : await prisma.$transaction(executeTransaction)
+      if (params.transaction) {
+        parsedOutputData = await executeTransaction(params.transaction)
+      } else {
+        try {
+          parsedOutputData = await prisma.$transaction(executeTransaction)
+        } catch (error) {
+          if (operation.compensateTransactionFailure) {
+            try {
+              await operation.compensateTransactionFailure(
+                params.context,
+                parsedInput,
+                preparedTransaction,
+                hasTransactionOutput ? transactionOutput : null,
+                error,
+              )
+            } catch (compensationError) {
+              throw new AggregateError(
+                [error, compensationError],
+                `OPERATION_TRANSACTION_COMPENSATION_FAILED:${operation.id}`,
+              )
+            }
+          }
+          throw error
+        }
+      }
     } else {
       const execute = operation.execute
       if (!execute) {
         throw new Error(`DIRECT_OPERATION_EXECUTOR_MISSING:${operation.id}`)
       }
-      result = await execute(params.context, parsedInput)
+      const result = await execute(params.context, parsedInput)
       if (
         params.channel === 'tool'
         && operation.effects.writes
@@ -301,17 +377,8 @@ export async function invokeProjectAgentOperation(params: {
       ) {
         throw new Error(`PROJECT_AGENT_OPERATION_TASK_SUBMISSION_NOT_COMMITTED:${operation.id}`)
       }
+      parsedOutputData = parseOutput(result)
     }
-  }
-
-  const parsedOutput = operation.outputSchema.safeParse(result)
-  if (!parsedOutput.success) {
-    throw new ApiError('EXTERNAL_ERROR', {
-      code: 'OPERATION_OUTPUT_INVALID',
-      operationId: operation.id,
-      message: `operation output schema mismatch: ${operation.id}`,
-      issues: parsedOutput.error.issues,
-    })
   }
   const choiceHandoff = executionFence && operation.agentFlow?.suspendsFor === 'choice'
     ? requireProjectAgentChoiceHandoffReceipt({
@@ -321,30 +388,17 @@ export async function invokeProjectAgentOperation(params: {
     : null
   const taskSuspension = params.context.taskBatchBinding?.getCommittedSuspension() ?? null
   const outcome: Exclude<ProjectAgentOperationOutcome, { kind: 'wait_approval' } | { kind: 'failed' }> = choiceHandoff
-    ? { kind: 'wait_choice', data: parsedOutput.data, choiceHandoff }
+    ? { kind: 'wait_choice', data: parsedOutputData, choiceHandoff }
     : taskSuspension
-      ? { kind: 'submitted_tasks', data: parsedOutput.data, suspension: taskSuspension }
+      ? { kind: 'submitted_tasks', data: parsedOutputData, suspension: taskSuspension }
       : params.channel === 'tool' && operationMayCompleteWithoutTasks(operation)
-        ? { kind: 'noop', data: parsedOutput.data }
-        : { kind: 'completed', data: parsedOutput.data }
-  let resourceChangesPublished = false
-  const publishResourceChanges = async (): Promise<void> => {
-    if (resourceChangesPublished) return
-    resourceChangesPublished = true
-    await publishWorkspaceResourceChangedEventsFromWriteResult({
-      result: parsedOutput.data,
-      fallbackProjectId: params.context.projectId,
-      userId: params.context.userId,
-      fallbackEpisodeId: prepared.effectiveEpisodeId || null,
-    })
-  }
-  if (!params.deferResourceChangePublication) await publishResourceChanges()
+        ? { kind: 'noop', data: parsedOutputData }
+        : { kind: 'completed', data: parsedOutputData }
   return {
     kind: 'executed',
-    data: parsedOutput.data,
+    data: parsedOutputData,
     operation,
     outcome,
-    publishResourceChanges,
   }
   }
 

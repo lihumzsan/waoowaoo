@@ -200,9 +200,9 @@ export async function createProjectLocationBackedAsset(input: {
   summary: string
   initialDescription?: string
   kind: LocationBackedAssetKind
-}): Promise<{ id: string }> {
+}, transaction: Prisma.TransactionClient): Promise<{ id: string }> {
   const id = randomUUID()
-  await prisma.$executeRaw(Prisma.sql`
+  await transaction.$executeRaw(Prisma.sql`
     INSERT INTO project_locations (
       id,
       projectId,
@@ -229,6 +229,7 @@ export async function createProjectLocationBackedAsset(input: {
     locationId: id,
     fallbackDescription: input.initialDescription ?? input.summary,
     descriptions: [input.initialDescription ?? input.summary],
+    locationImageModel: transaction.locationImage,
   })
   return { id }
 }
@@ -240,9 +241,9 @@ export async function createGlobalLocationBackedAsset(input: {
   summary: string
   initialDescription?: string
   kind: LocationBackedAssetKind
-}): Promise<{ id: string }> {
+}, transaction: Prisma.TransactionClient): Promise<{ id: string }> {
   const id = randomUUID()
-  await prisma.$executeRaw(Prisma.sql`
+  await transaction.$executeRaw(Prisma.sql`
     INSERT INTO global_locations (
       id,
       userId,
@@ -267,7 +268,7 @@ export async function createGlobalLocationBackedAsset(input: {
     locationId: id,
     fallbackDescription: input.initialDescription ?? input.summary,
     descriptions: [input.initialDescription ?? input.summary],
-  })
+  }, transaction)
   return { id }
 }
 
@@ -304,13 +305,13 @@ export async function seedGlobalLocationBackedImageSlots(input: {
   locationId: string
   fallbackDescription: string
   descriptions?: string[]
-}): Promise<void> {
+}, client: Pick<Prisma.TransactionClient, 'globalLocationImage'> = prisma): Promise<void> {
   const descriptions = normalizeSeedDescriptions(input)
   if (descriptions.length === 0) {
     return
   }
 
-  await prisma.globalLocationImage.createMany({
+  await client.globalLocationImage.createMany({
     data: descriptions.map((description, imageIndex) => ({
       locationId: input.locationId,
       imageIndex,
@@ -319,16 +320,18 @@ export async function seedGlobalLocationBackedImageSlots(input: {
   })
 }
 
-export async function deleteProjectLocationBackedAsset(assetId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.$executeRaw(Prisma.sql`DELETE FROM location_images WHERE locationId = ${assetId}`),
-    prisma.$executeRaw(Prisma.sql`DELETE FROM project_locations WHERE id = ${assetId}`),
-  ])
+export async function deleteProjectLocationBackedAsset(
+  assetId: string,
+  transaction: Prisma.TransactionClient,
+): Promise<void> {
+  await transaction.$executeRaw(Prisma.sql`DELETE FROM location_images WHERE locationId = ${assetId}`)
+  await transaction.$executeRaw(Prisma.sql`DELETE FROM project_locations WHERE id = ${assetId}`)
 }
 
-export async function deleteGlobalLocationBackedAsset(assetId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.$executeRaw(Prisma.sql`DELETE FROM global_location_images WHERE locationId = ${assetId}`),
-    prisma.$executeRaw(Prisma.sql`DELETE FROM global_locations WHERE id = ${assetId}`),
-  ])
+export async function deleteGlobalLocationBackedAsset(
+  assetId: string,
+  transaction: Prisma.TransactionClient,
+): Promise<void> {
+  await transaction.$executeRaw(Prisma.sql`DELETE FROM global_location_images WHERE locationId = ${assetId}`)
+  await transaction.$executeRaw(Prisma.sql`DELETE FROM global_locations WHERE id = ${assetId}`)
 }

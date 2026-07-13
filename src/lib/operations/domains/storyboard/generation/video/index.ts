@@ -194,6 +194,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       channels: { tool: false, api: true },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -230,6 +231,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -268,6 +270,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -305,6 +308,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -342,6 +346,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -379,6 +384,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,
@@ -416,6 +422,7 @@ export function createVideoGenerationOperations(): ProjectAgentOperationRegistry
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: true,

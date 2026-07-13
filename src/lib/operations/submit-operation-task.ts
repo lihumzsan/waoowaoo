@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { getRequestId } from '@/lib/api-errors'
 import { ApiError } from '@/lib/api-errors'
 import { prepareTaskSubmissionInput, type SubmitTaskResult } from '@/lib/task/submitter'
-import { type TaskBillingInfo, type TaskType } from '@/lib/task/types'
+import { isTaskType, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
 import { buildDefaultTaskBillingInfo, isBillableTaskType } from '@/lib/billing'
 import type { Locale } from '@/i18n/routing'
 import type { Prisma } from '@prisma/client'
@@ -137,15 +137,19 @@ export async function submitOperationTaskBatch(
     throw error
   }
   executionFence?.taskBatchBinding?.markCommitted()
-  return await Promise.all(persisted.map(async ({ task, deduped }) => ({
-    success: true,
-    async: true,
-    taskId: task.id,
-    runId: null,
-    status: task.status,
-    deduped,
-    billingReceiptView: await buildBillingReceiptView((task.billingInfo || null) as TaskBillingInfo | null),
-  } satisfies SubmitTaskResult)))
+  return await Promise.all(persisted.map(async ({ task, deduped }) => {
+    if (!isTaskType(task.type)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.type}`)
+    return {
+      success: true,
+      async: true,
+      taskId: task.id,
+      taskType: task.type,
+      runId: null,
+      status: task.status,
+      deduped,
+      billingReceiptView: await buildBillingReceiptView((task.billingInfo || null) as TaskBillingInfo | null),
+    } satisfies SubmitTaskResult
+  }))
 }
 
 export async function submitOperationTask(params: OperationTaskSubmissionParams): Promise<SubmitTaskResult> {

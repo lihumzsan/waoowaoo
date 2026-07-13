@@ -11,6 +11,16 @@ import { pathToFileURL } from 'node:url'
 function readTerminalProjectors(source) {
   const result = new Map()
   const file = ts.createSourceFile('definition.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const definitionDeclaration = file.statements.find((statement) => (
+    ts.isFunctionDeclaration(statement)
+    && statement.name?.text === 'definition'
+  ))
+  const parameterNames = definitionDeclaration?.parameters.map((parameter) => (
+    ts.isIdentifier(parameter.name) ? parameter.name.text : ''
+  )) ?? []
+  const failureIndex = parameterNames.indexOf('terminalFailureProjector')
+  const cancelIndex = parameterNames.indexOf('terminalCancelProjector')
+  if (failureIndex < 0 || cancelIndex < 0) return result
   function visit(node) {
     if (
       ts.isPropertyAssignment(node)
@@ -22,8 +32,8 @@ function readTerminalProjectors(source) {
       && ts.isIdentifier(node.initializer.expression)
       && node.initializer.expression.text === 'definition'
     ) {
-      const failure = node.initializer.arguments[4]
-      const cancel = node.initializer.arguments[5]
+      const failure = node.initializer.arguments[failureIndex]
+      const cancel = node.initializer.arguments[cancelIndex]
       if (failure && cancel && ts.isStringLiteral(failure) && ts.isStringLiteral(cancel)) {
         result.set(node.name.expression.name.text, { failure: failure.text, cancel: cancel.text })
       }

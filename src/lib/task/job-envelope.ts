@@ -1,13 +1,11 @@
 import { resolveTaskLocaleFromBody } from './resolve-locale'
 import { parseTaskBillingInfo } from './billing-info'
 import {
-  TASK_TYPE,
+  isTaskType,
   type TaskJobData,
   type TaskJobEnvelope,
   type TaskType,
 } from './types'
-
-const TASK_TYPES: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
 
 export type TaskJobEnvelopeSource = {
   id: string
@@ -31,10 +29,10 @@ export type TaskJobEnvelopeSource = {
 }
 
 function requireTaskType(value: string): TaskType {
-  if (!TASK_TYPES.has(value)) {
+  if (!isTaskType(value)) {
     throw new Error(`invalid task type: ${value}`)
   }
-  return value as TaskType
+  return value
 }
 
 function parsePayload(value: unknown): Record<string, unknown> | null {

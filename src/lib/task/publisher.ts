@@ -8,10 +8,10 @@ import {
   type TaskEventType,
   type TaskLifecycleEventType,
   type TaskSSEEvent,
+  type WorkspaceResourceRef,
 } from './types'
 import { coerceTaskIntent, resolveTaskIntent } from './intent'
 import { withTaskCoveredTargetsPayload } from './covered-targets'
-import { extractWorkspaceResourceRefsFromTaskLifecycleEvent } from '@/lib/workspace-resource/resource-impact'
 
 const CHANNEL_PREFIX = 'task-events:project:'
 const STREAM_EPHEMERAL_ENABLED = process.env.LLM_STREAM_EPHEMERAL_ENABLED !== 'false'
@@ -287,6 +287,7 @@ export function buildTaskLifecycleEventPayload(params: {
   episodeId?: string | null
   payload?: Record<string, unknown> | null
   coveragePayload?: unknown
+  affectedResources?: readonly WorkspaceResourceRef[]
 }): Record<string, unknown> {
   const normalizedType = normalizeLifecycleType(params.lifecycleType)
   const normalizedPayload = withTaskCoveredTargetsPayload({
@@ -300,17 +301,16 @@ export function buildTaskLifecycleEventPayload(params: {
     ),
     coveragePayload: params.coveragePayload ?? params.payload ?? null,
   })
-  if (!isTaskTerminalEventType(normalizedType)) return normalizedPayload
-  const affectedResources = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-    taskType: params.taskType,
-    lifecycleType: normalizedType,
-    projectId: params.projectId,
-    targetType: params.targetType,
-    targetId: params.targetId,
-    episodeId: params.episodeId || null,
-    payload: normalizedPayload,
-  })
-  return { ...normalizedPayload, affectedResources }
+  if (!isTaskTerminalEventType(normalizedType)) {
+    if (params.affectedResources !== undefined) {
+      throw new Error(`TASK_NON_TERMINAL_AFFECTED_RESOURCES_FORBIDDEN:${params.taskId}`)
+    }
+    return normalizedPayload
+  }
+  if (!params.affectedResources) {
+    throw new Error(`TASK_TERMINAL_AFFECTED_RESOURCES_REQUIRED:${params.taskId}`)
+  }
+  return { ...normalizedPayload, affectedResources: [...params.affectedResources] }
 }
 
 export async function publishPersistedTaskEventById(eventId: number, expectedTaskId?: string): Promise<TaskSSEEvent> {

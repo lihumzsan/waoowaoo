@@ -104,8 +104,6 @@ export {
     useUpdateProjectPanelVideoPrompt,
     useConfirmProjectCharacterSelection,
     useConfirmProjectLocationSelection,
-    useBatchGenerateCharacterImages,
-    useBatchGenerateLocationImages,
     useUpdateProjectPanelActingNotes,
     useDownloadRemoteBlob,
     useClearProjectStoryboardError,

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isTaskType, type TaskType } from '@/lib/task/types'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -9,6 +10,7 @@ export const taskSubmitOperationOutputSchemaBase = z.object({
   success: z.boolean(),
   async: z.boolean(),
   taskId: z.string().min(1),
+  taskType: z.custom<TaskType>(isTaskType, { message: 'TASK_SUBMIT_OUTPUT_TASK_TYPE_INVALID' }),
   status: z.string().min(1),
   runId: z.string().nullable(),
   deduped: z.boolean(),

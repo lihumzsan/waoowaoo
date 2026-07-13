@@ -8,9 +8,9 @@ import {
 } from '@/lib/task/types'
 import {
   getWorkspaceSseEventIdentity,
+  isWorkspaceSseEvent,
 } from '@/lib/sse/protocol'
 import {
-  isWorkspaceSSEEvent,
   readNumericWorkspaceSSEEventId,
 } from './workspace-sse-event-sync'
 
@@ -139,7 +139,7 @@ export class WorkspaceSSEEventSequence {
   }
 
   process(value: unknown, apply: (event: SSEEvent) => void): WorkspaceSSEEventDecision {
-    if (!isWorkspaceSSEEvent(value)) return 'invalid'
+    if (!isWorkspaceSseEvent(value)) return 'invalid'
     const identity = getWorkspaceSseEventIdentity(value)
     const existingFingerprint = this.processedEventFingerprints.get(identity.key)
     if (existingFingerprint === identity.fingerprint) return 'duplicate'

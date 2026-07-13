@@ -155,6 +155,7 @@ const EFFECTS_QUERY = {
 
 const EFFECTS_BIBLE_GENERATE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: true,
   destructive: false,
   overwrite: true,
@@ -165,6 +166,7 @@ const EFFECTS_BIBLE_GENERATE = {
 
 const EFFECTS_BIBLE_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'edit_pipeline',
   billable: false,
   destructive: false,
   overwrite: true,

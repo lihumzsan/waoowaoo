@@ -1,13 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import {
-  clearTaskTargetOverlay,
-  upsertTaskTargetOverlay,
-} from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalLocation } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
+  requireTaskSubmissionReceipt,
   requestJsonWithError,
   requestVoidWithError,
 } from './mutation-shared'
@@ -145,7 +143,7 @@ export function useGenerateLocationImage() {
         count,
       }
       const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-      return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
+      const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,20 +151,16 @@ export function useGenerateLocationImage() {
           ...confirmation,
         }),
       }, 'Failed to generate image')
+      return requireTaskSubmissionReceipt(result)
     },
-    onMutate: ({ locationId }) => {
+    onSuccess: (receipt, { locationId }) => {
       upsertTaskTargetOverlay(queryClient, {
         projectId: GLOBAL_ASSET_PROJECT_ID,
         targetType: 'GlobalLocation',
         targetId: locationId,
+        runningTaskId: receipt.taskId,
+        runningTaskType: receipt.taskType,
         intent: 'generate',
-      })
-    },
-    onError: (_error, { locationId }) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalLocation',
-        targetId: locationId,
       })
     },
     onSettled: invalidateLocations,

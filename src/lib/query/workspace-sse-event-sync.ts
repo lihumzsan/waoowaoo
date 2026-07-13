@@ -1,13 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, TASK_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
+import { TASK_EVENT_TYPE, TASK_SSE_EVENT_TYPE, WORKSPACE_SSE_EVENT_TYPE, type SSEEvent } from '@/lib/task/types'
 import { isTaskIntent, resolveTaskIntent } from '@/lib/task/intent'
 import { readTaskCoveredTargets, type TaskCoveredTarget } from '@/lib/task/covered-targets'
 import { queryKeys } from './keys'
-import { invalidateByTarget } from './invalidation/invalidate-by-target'
 import { applyTaskLifecycleToOverlay } from './task-target-overlay'
 import { applyTaskTargetTerminalStateToCache } from './task-target-state-cache'
 import { syncWorkspaceResourceChanges } from './resource-change-sync'
-import { readWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
+import { requireWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -25,15 +24,6 @@ function resolveLifecycleTargets(input: {
     : []
 }
 
-export function isWorkspaceSSEEvent(value: unknown): value is SSEEvent {
-  if (!isRecord(value)) return false
-  return typeof value.id === 'string'
-    && typeof value.type === 'string'
-    && typeof value.projectId === 'string'
-    && typeof value.userId === 'string'
-    && typeof value.ts === 'string'
-}
-
 export function readNumericWorkspaceSSEEventId(value: unknown): number | null {
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return null
   const parsed = Number.parseInt(value, 10)
@@ -44,11 +34,8 @@ export function applyWorkspaceSSEEvent(params: {
   queryClient: QueryClient
   event: SSEEvent
   projectId: string
-  episodeId?: string | null
-  isGlobalAssetProject: boolean
-  scheduleTargetStatesInvalidation: () => void
 }) {
-  const { event, queryClient, projectId, episodeId, isGlobalAssetProject } = params
+  const { event, queryClient, projectId } = params
 
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.ASSISTANT_SESSION_CHANGED) {
     queryClient.invalidateQueries({
@@ -59,25 +46,11 @@ export function applyWorkspaceSSEEvent(params: {
   }
 
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.MUTATION_BATCH) {
-    const batchEpisodeId = typeof event.episodeId === 'string' ? event.episodeId : null
-    const resolvedEpisodeId = batchEpisodeId || episodeId || null
-    const seenTargetTypes = new Set<string>()
-    for (const target of event.targets) {
-      if (seenTargetTypes.has(target.targetType)) continue
-      seenTargetTypes.add(target.targetType)
-      invalidateByTarget({
-        queryClient,
-        projectId,
-        targetType: target.targetType,
-        episodeId: resolvedEpisodeId,
-        isGlobalAssetProject,
-      })
-    }
     return
   }
 
   if (event.type === WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED) {
-    const changes = readWorkspaceResourceRefs(event.affectedResources)
+    const changes = requireWorkspaceResourceRefs(event.affectedResources)
     void syncWorkspaceResourceChanges({ queryClient, changes })
     return
   }
@@ -93,13 +66,6 @@ export function applyWorkspaceSSEEvent(params: {
     : typeof payloadRecord?.targetId === 'string'
       ? payloadRecord.targetId
       : null
-  const eventEpisodeId = typeof event.episodeId === 'string'
-    ? event.episodeId
-    : typeof payloadRecord?.episodeId === 'string'
-      ? payloadRecord.episodeId
-      : null
-  const resolvedEpisodeId = eventEpisodeId || episodeId || null
-
   const rawLifecycleType: string | null =
     event.type === TASK_SSE_EVENT_TYPE.LIFECYCLE
       ? typeof payloadRecord?.lifecycleType === 'string'
@@ -127,7 +93,10 @@ export function applyWorkspaceSSEEvent(params: {
     queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId) })
   }
   if (isLifecycleEvent && shouldInvalidateTargetStates) {
-    params.scheduleTargetStatesInvalidation()
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.tasks.targetStatesAll(projectId),
+      exact: false,
+    })
   }
 
   const payloadIntent = isTaskIntent(payloadRecord?.intent)
@@ -210,14 +179,6 @@ export function applyWorkspaceSSEEvent(params: {
   }
 
   if (
-    normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING &&
-    event.taskType === TASK_TYPE.EDIT_SCRIPT_GENERATE &&
-    resolvedEpisodeId
-  ) {
-    queryClient.invalidateQueries({ queryKey: queryKeys.project.editScript(projectId, resolvedEpisodeId) })
-  }
-
-  if (
     normalizedLifecycleType === TASK_EVENT_TYPE.CREATED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.PROCESSING
   ) {
@@ -229,7 +190,7 @@ export function applyWorkspaceSSEEvent(params: {
     normalizedLifecycleType === TASK_EVENT_TYPE.FAILED ||
     normalizedLifecycleType === TASK_EVENT_TYPE.CANCELED
   ) {
-    const resourceChanges = readWorkspaceResourceRefs(payloadRecord?.affectedResources)
+    const resourceChanges = requireWorkspaceResourceRefs(payloadRecord?.affectedResources)
     if (resourceChanges.length > 0) {
       void syncWorkspaceResourceChanges({ queryClient, changes: resourceChanges })
     }

@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
  * 
  * 重构说明 v2:
  * - 角色和场景操作函数已提取到 hooks/useCharacterActions 和 hooks/useLocationActions
- * - 批量生成逻辑已提取到 hooks/useBatchGeneration
+ * - 生成活动只合并提交窗口与正式 Task 状态
  * - 弹窗状态已提取到 hooks/useAssetModals
  * - UI已拆分为 CharacterSection, LocationSection, AssetToolbar, AssetModals 组件
  */
@@ -25,7 +25,7 @@ import {
 // Hooks
 import { useCharacterActions } from './assets/hooks/useCharacterActions'
 import { useLocationActions } from './assets/hooks/useLocationActions'
-import { useBatchGeneration } from './assets/hooks/useBatchGeneration'
+import { useAssetGenerationActivity } from './assets/hooks/useAssetGenerationActivity'
 import { useAssetModals } from './assets/hooks/useAssetModals'
 import { useAssetsCopyFromHub } from './assets/hooks/useAssetsCopyFromHub'
 import { useAssetImageMaintenance } from './assets/hooks/useAssetImageMaintenance'
@@ -140,15 +140,11 @@ export default function ProjectAssetLibrary({
 
   // 🔥 V6.5 重构：hooks 现在内部订阅 useProjectAssets，不再需要传 characters/locations
 
-  // 批量生成
   const {
     activeTaskKeys,
-    registerTransientTaskKey,
-    clearTransientTaskKey,
-  } = useBatchGeneration({
-    projectId,
-    handleGenerateImage
-  })
+    registerSubmittingTaskKey,
+    clearSubmittingTaskKey,
+  } = useAssetGenerationActivity(projectId)
 
   const {
     copyFromGlobalTarget,
@@ -274,8 +270,8 @@ export default function ProjectAssetLibrary({
             focusCharacterId={focusCharacterId}
             focusCharacterRequestId={focusCharacterRequestId}
             activeTaskKeys={activeTaskKeys}
-            onClearTaskKey={clearTransientTaskKey}
-            onRegisterTransientTaskKey={registerTransientTaskKey}
+            onClearSubmittingTaskKey={clearSubmittingTaskKey}
+            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddCharacter={() => setShowAddCharacter(true)}
             onDeleteCharacter={handleDeleteCharacter}
             onDeleteAppearance={handleDeleteAppearance}
@@ -297,8 +293,8 @@ export default function ProjectAssetLibrary({
             key="location"
             projectId={projectId}
             activeTaskKeys={activeTaskKeys}
-            onClearTaskKey={clearTransientTaskKey}
-            onRegisterTransientTaskKey={registerTransientTaskKey}
+            onClearSubmittingTaskKey={clearSubmittingTaskKey}
+            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddLocation={() => setShowAddLocation(true)}
             onDeleteLocation={handleDeleteLocation}
             onEditLocation={handleEditLocation}
@@ -319,8 +315,8 @@ export default function ProjectAssetLibrary({
             projectId={projectId}
             assetType="prop"
             activeTaskKeys={activeTaskKeys}
-            onClearTaskKey={clearTransientTaskKey}
-            onRegisterTransientTaskKey={registerTransientTaskKey}
+            onClearSubmittingTaskKey={clearSubmittingTaskKey}
+            onRegisterSubmittingTaskKey={registerSubmittingTaskKey}
             onAddLocation={() => setShowAddProp(true)}
             onDeleteLocation={handleDeleteProp}
             onEditLocation={handleEditProp}

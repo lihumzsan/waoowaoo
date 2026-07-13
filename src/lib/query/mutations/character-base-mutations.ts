@@ -3,12 +3,10 @@ import { useRef } from 'react'
 import type { Character, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import {
-    clearTaskTargetOverlay,
-    upsertTaskTargetOverlay,
-} from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
+    requireTaskSubmissionReceipt,
     requestJsonWithError,
     requestVoidWithError,
 } from './mutation-shared'
@@ -126,7 +124,7 @@ export function useGenerateProjectCharacterImage(projectId: string) {
                 count,
             }
             const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -134,20 +132,16 @@ export function useGenerateProjectCharacterImage(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to generate image')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ appearanceId }) => {
+        onSuccess: (receipt, { appearanceId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'CharacterAppearance',
                 targetId: appearanceId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'generate',
-            })
-        },
-        onError: (_error, { appearanceId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
             })
         },
         onSettled: invalidateProjectAssets,

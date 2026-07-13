@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+import { NextRequest } from 'next/server'
 import {
   acceptOutboxCommand,
   claimOutboxCommand,
@@ -18,6 +20,13 @@ import { prisma } from '../../helpers/prisma'
 import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
 import { getImageQueue } from '@/lib/task/queues'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
+import {
+  createWorkspaceResourceBroadcastsInTransaction,
+  listWorkspaceResourceReplayEvents,
+} from '@/lib/workspace-resource/resource-change-events'
+import { invokeProjectAgentOperation } from '@/lib/operations/invocation'
+import type { ProjectAgentOperationContext } from '@/lib/operations/types'
+import { makeTestOperation } from '../../helpers/project-agent-operations'
 
 async function createValidCommand(idempotencyKey: string) {
   return await prisma.$transaction(async (tx) => await createOutboxCommandInTransaction(tx, {
@@ -149,6 +158,111 @@ describe('durable Outbox delivery lifecycle', () => {
     } finally {
       await worker.close()
     }
+  })
+
+  it('commits resource replay with the business transaction and drops rolled-back notifications', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+
+    await prisma.$transaction(async (tx) => {
+      await createWorkspaceResourceBroadcastsInTransaction({
+        tx,
+        invocationId: 'resource-commit',
+        userId: user.id,
+        operationId: 'update_project_data',
+        affectedResources: [{ kind: 'projectData', projectId: project.id }],
+      })
+    })
+
+    await expect(prisma.$transaction(async (tx) => {
+      await createWorkspaceResourceBroadcastsInTransaction({
+        tx,
+        invocationId: 'resource-rollback',
+        userId: user.id,
+        operationId: 'update_project_data',
+        affectedResources: [{ kind: 'projectData', projectId: project.id }],
+      })
+      throw new Error('ROLLBACK_RESOURCE_NOTIFICATION')
+    })).rejects.toThrow('ROLLBACK_RESOURCE_NOTIFICATION')
+
+    const replay = await listWorkspaceResourceReplayEvents({
+      projectId: project.id,
+      userId: user.id,
+      after: { createdAt: new Date(0), outboxId: '' },
+    })
+    expect(replay).toHaveLength(1)
+    expect(replay[0]).toMatchObject({
+      type: 'resource.changed',
+      projectId: project.id,
+      userId: user.id,
+      affectedResources: [{ kind: 'projectData', projectId: project.id }],
+    })
+  })
+
+  it('rolls back a resource write and compensates its prepared external artifact when execution fails before output', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const originalName = project.name
+    let compensation: {
+      prepared: unknown
+      output: unknown
+      error: unknown
+    } | null = null
+    const operation = makeTestOperation({
+      id: 'test_external_resource_transaction_failure',
+      channels: { tool: false, api: true },
+      intent: 'act',
+      effects: {
+        writes: true,
+        workspaceResourceImpact: 'project_data',
+        billable: false,
+        destructive: false,
+        overwrite: true,
+        bulk: false,
+        externalSideEffects: true,
+        longRunning: false,
+      },
+      inputSchema: z.object({}).strict(),
+      outputSchema: z.object({ success: z.literal(true) }).strict(),
+      prepareTransaction: async () => ({ uniqueTemporaryKey: 'prepared-only-key' }),
+      executeInTransaction: async (_ctx, _input, transaction, prepared) => {
+        expect(prepared).toEqual({ uniqueTemporaryKey: 'prepared-only-key' })
+        await transaction.project.update({
+          where: { id: project.id },
+          data: { name: 'must-roll-back' },
+        })
+        throw new Error('CONTROLLED_TRANSACTION_FAILURE')
+      },
+      compensateTransactionFailure: async (_ctx, _input, prepared, output, error) => {
+        compensation = { prepared, output, error }
+      },
+    })
+    const context = {
+      request: new NextRequest('http://localhost/api/test-operation', { method: 'POST' }),
+      userId: user.id,
+      projectId: project.id,
+      context: {},
+      source: 'test',
+      writer: null,
+      toolCallId: null,
+    } as unknown as ProjectAgentOperationContext
+
+    await expect(invokeProjectAgentOperation({
+      registry: { [operation.id]: operation },
+      channel: 'api',
+      operationId: operation.id,
+      context,
+      input: {},
+    })).rejects.toThrow('CONTROLLED_TRANSACTION_FAILURE')
+
+    await expect(prisma.project.findUniqueOrThrow({ where: { id: project.id } }))
+      .resolves.toMatchObject({ name: originalName })
+    await expect(prisma.outboxCommand.count()).resolves.toBe(0)
+    expect(compensation).toMatchObject({
+      prepared: { uniqueTemporaryKey: 'prepared-only-key' },
+      output: null,
+      error: expect.objectContaining({ message: 'CONTROLLED_TRANSACTION_FAILURE' }),
+    })
   })
 
 })

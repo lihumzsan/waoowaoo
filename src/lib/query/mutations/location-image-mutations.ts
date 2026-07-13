@@ -3,12 +3,10 @@ import { useRef } from 'react'
 import type { Location, Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
-import {
-    clearTaskTargetOverlay,
-    upsertTaskTargetOverlay,
-} from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
+    requireTaskSubmissionReceipt,
     requestJsonWithError,
 } from './mutation-shared'
 import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
@@ -90,7 +88,7 @@ export function useGenerateProjectLocationImage(projectId: string) {
                 count,
             })
             const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -98,20 +96,16 @@ export function useGenerateProjectLocationImage(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to generate image')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ locationId }) => {
+        onSuccess: (receipt, { locationId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'LocationImage',
                 targetId: locationId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'generate',
-            })
-        },
-        onError: (_error, { locationId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
             })
         },
         onSettled: invalidateProjectAssets,
@@ -181,7 +175,7 @@ export function useRegenerateLocationGroup(projectId: string) {
                 count,
             }
             const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -189,20 +183,16 @@ export function useRegenerateLocationGroup(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to regenerate group')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ locationId }) => {
+        onSuccess: (receipt, { locationId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'LocationImage',
                 targetId: locationId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'regenerate',
-            })
-        },
-        onError: (_error, { locationId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
             })
         },
         onSettled: invalidateProjectAssets,
@@ -228,7 +218,7 @@ export function useRegenerateSingleLocationImage(projectId: string) {
                 imageIndex,
             }
             const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${locationId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${locationId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -236,20 +226,16 @@ export function useRegenerateSingleLocationImage(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to regenerate image')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ locationId }) => {
+        onSuccess: (receipt, { locationId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'LocationImage',
                 targetId: locationId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'regenerate',
-            })
-        },
-        onError: (_error, { locationId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'LocationImage',
-                targetId: locationId,
             })
         },
         onSettled: invalidateProjectAssets,

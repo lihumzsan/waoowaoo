@@ -1,14 +1,9 @@
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
 
 export type MutationRevertResult = {
   ok: true
   reverted: number
-} | {
-  ok: false
-  reverted: number
-  error: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -65,14 +60,6 @@ function readOptionalNullableNumberField(record: Record<string, unknown>, key: s
   const value = record[key]
   if (value === null) return null
   if (typeof value === 'number' && Number.isFinite(value)) return value
-  throw new Error(`MUTATION_PANEL_RESTORE_INVALID_${key}`)
-}
-
-function readOptionalNullableIntegerField(record: Record<string, unknown>, key: string): number | null | undefined {
-  if (!hasOwnField(record, key)) return undefined
-  const value = record[key]
-  if (value === null) return null
-  if (typeof value === 'number' && Number.isInteger(value)) return value
   throw new Error(`MUTATION_PANEL_RESTORE_INVALID_${key}`)
 }
 
@@ -172,6 +159,7 @@ function buildPanelRestoreData(payload: Record<string, unknown>, targetStoryboar
 }
 
 async function restoreDeletedPanel(params: {
+  transaction: Prisma.TransactionClient
   entry: {
     targetType: string
     targetId: string
@@ -185,7 +173,7 @@ async function restoreDeletedPanel(params: {
   }
 
   const panelData = buildPanelRestoreData(params.payload, params.entry.targetId)
-  const storyboard = await prisma.projectStoryboard.findFirst({
+  const storyboard = await params.transaction.projectStoryboard.findFirst({
     where: {
       id: panelData.storyboardId,
       episode: {
@@ -201,57 +189,56 @@ async function restoreDeletedPanel(params: {
     throw new Error('MUTATION_PANEL_RESTORE_STORYBOARD_NOT_FOUND')
   }
 
-  await prisma.$transaction(async (tx) => {
-    const existingPanel = await tx.projectPanel.findUnique({
+  const existingPanel = await params.transaction.projectPanel.findUnique({
       where: { id: panelData.id },
       select: { id: true },
-    })
-    if (existingPanel) {
-      throw new Error('MUTATION_PANEL_RESTORE_PANEL_ALREADY_EXISTS')
-    }
+  })
+  if (existingPanel) {
+    throw new Error('MUTATION_PANEL_RESTORE_PANEL_ALREADY_EXISTS')
+  }
 
-    const maxPanel = await tx.projectPanel.findFirst({
-      where: { storyboardId: panelData.storyboardId },
-      orderBy: { panelIndex: 'desc' },
-      select: { panelIndex: true },
-    })
-    const offset = (maxPanel?.panelIndex ?? -1) + 1000
+  const maxPanel = await params.transaction.projectPanel.findFirst({
+    where: { storyboardId: panelData.storyboardId },
+    orderBy: { panelIndex: 'desc' },
+    select: { panelIndex: true },
+  })
+  const offset = (maxPanel?.panelIndex ?? -1) + 1000
 
-    await tx.projectPanel.updateMany({
-      where: {
-        storyboardId: panelData.storyboardId,
-        panelIndex: { gte: panelData.panelIndex },
-      },
-      data: {
-        panelIndex: { increment: offset },
-        panelNumber: { increment: offset },
-      },
-    })
+  await params.transaction.projectPanel.updateMany({
+    where: {
+      storyboardId: panelData.storyboardId,
+      panelIndex: { gte: panelData.panelIndex },
+    },
+    data: {
+      panelIndex: { increment: offset },
+      panelNumber: { increment: offset },
+    },
+  })
 
-    await tx.projectPanel.updateMany({
-      where: {
-        storyboardId: panelData.storyboardId,
-        panelIndex: { gte: panelData.panelIndex + offset },
-      },
-      data: {
-        panelIndex: { decrement: offset - 1 },
-        panelNumber: { decrement: offset - 1 },
-      },
-    })
+  await params.transaction.projectPanel.updateMany({
+    where: {
+      storyboardId: panelData.storyboardId,
+      panelIndex: { gte: panelData.panelIndex + offset },
+    },
+    data: {
+      panelIndex: { decrement: offset - 1 },
+      panelNumber: { decrement: offset - 1 },
+    },
+  })
 
-    await tx.projectPanel.create({ data: panelData })
+  await params.transaction.projectPanel.create({ data: panelData })
 
-    const panelCount = await tx.projectPanel.count({
-      where: { storyboardId: panelData.storyboardId },
-    })
-    await tx.projectStoryboard.update({
-      where: { id: panelData.storyboardId },
-      data: { panelCount },
-    })
+  const panelCount = await params.transaction.projectPanel.count({
+    where: { storyboardId: panelData.storyboardId },
+  })
+  await params.transaction.projectStoryboard.update({
+    where: { id: panelData.storyboardId },
+    data: { panelCount },
   })
 }
 
 export async function revertMutationEntry(entry: {
+  transaction: Prisma.TransactionClient
   kind: string
   targetType: string
   targetId: string
@@ -280,12 +267,12 @@ export async function revertMutationEntry(entry: {
           userId: entry.userId,
           projectId: entry.projectId,
         },
-      })
+      }, entry.transaction)
       return
     }
     case 'panel_candidate_cancel': {
       const panelId = entry.targetId
-      await prisma.projectPanel.update({
+      await entry.transaction.projectPanel.update({
         where: { id: panelId },
         data: {
           candidateImages: null,
@@ -301,7 +288,7 @@ export async function revertMutationEntry(entry: {
         ? payload.previousImagePrompt
         : undefined
 
-      await prisma.projectPanel.update({
+      await entry.transaction.projectPanel.update({
         where: { id: entry.targetId },
         data: {
           ...(previousVideoPrompt !== undefined ? { videoPrompt: previousVideoPrompt } : {}),
@@ -314,7 +301,7 @@ export async function revertMutationEntry(entry: {
       const previousCandidateImages = payload.previousCandidateImages === null || typeof payload.previousCandidateImages === 'string'
         ? payload.previousCandidateImages
         : null
-      await prisma.projectPanel.update({
+      await entry.transaction.projectPanel.update({
         where: { id: entry.targetId },
         data: {
           candidateImages: previousCandidateImages,
@@ -329,7 +316,7 @@ export async function revertMutationEntry(entry: {
       const previousCandidateImages = payload.previousCandidateImages === null || typeof payload.previousCandidateImages === 'string'
         ? payload.previousCandidateImages
         : null
-      await prisma.projectPanel.update({
+      await entry.transaction.projectPanel.update({
         where: { id: entry.targetId },
         data: {
           imageUrl: previousImageUrl,
@@ -348,7 +335,7 @@ export async function revertMutationEntry(entry: {
           : (typeof payload.previousLastVideoGenerationOptions === 'object' && !Array.isArray(payload.previousLastVideoGenerationOptions))
             ? payload.previousLastVideoGenerationOptions as Prisma.InputJsonObject
             : undefined
-      await prisma.projectPanel.update({
+      await entry.transaction.projectPanel.update({
         where: { id: entry.targetId },
         data: {
           videoUrl: previousVideoUrl,
@@ -361,6 +348,7 @@ export async function revertMutationEntry(entry: {
     }
     case 'panel_delete_restore': {
       await restoreDeletedPanel({
+        transaction: entry.transaction,
         entry,
         payload,
       })
@@ -372,11 +360,12 @@ export async function revertMutationEntry(entry: {
 }
 
 export async function revertMutationBatch(params: {
+  transaction: Prisma.TransactionClient
   batchId: string
   projectId: string
   userId: string
 }): Promise<MutationRevertResult> {
-  const batch = await prisma.mutationBatch.findFirst({
+  const batch = await params.transaction.mutationBatch.findFirst({
     where: {
       id: params.batchId,
       projectId: params.projectId,
@@ -389,7 +378,7 @@ export async function revertMutationBatch(params: {
     },
   })
   if (!batch) {
-    return { ok: false, reverted: 0, error: 'MUTATION_BATCH_NOT_FOUND' }
+    throw new Error('MUTATION_BATCH_NOT_FOUND')
   }
 
   if (batch.status === 'reverted') {
@@ -397,29 +386,21 @@ export async function revertMutationBatch(params: {
   }
 
   let reverted = 0
-  try {
-    for (const entry of batch.entries) {
-      await revertMutationEntry({
-        kind: entry.kind,
-        targetType: entry.targetType,
-        targetId: entry.targetId,
-        payload: entry.payload,
-        projectId: params.projectId,
-        userId: params.userId,
-      })
-      reverted += 1
-    }
-    await prisma.mutationBatch.update({
-      where: { id: batch.id },
-      data: { status: 'reverted', revertedAt: new Date(), revertError: null },
+  for (const entry of batch.entries) {
+    await revertMutationEntry({
+      transaction: params.transaction,
+      kind: entry.kind,
+      targetType: entry.targetType,
+      targetId: entry.targetId,
+      payload: entry.payload,
+      projectId: params.projectId,
+      userId: params.userId,
     })
-    return { ok: true, reverted }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await prisma.mutationBatch.update({
-      where: { id: batch.id },
-      data: { status: 'failed', revertError: message },
-    })
-    return { ok: false, reverted, error: message }
+    reverted += 1
   }
+  await params.transaction.mutationBatch.update({
+    where: { id: batch.id },
+    data: { status: 'reverted', revertedAt: new Date(), revertError: null },
+  })
+  return { ok: true, reverted }
 }

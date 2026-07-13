@@ -77,6 +77,7 @@ export function createProjectDataOperations(): ProjectAgentOperationRegistryDraf
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'project_assets',
         billable: false,
         destructive: false,
         overwrite: false,

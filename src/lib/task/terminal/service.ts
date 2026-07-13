@@ -11,12 +11,12 @@ import {
   type TaskHandlerCheckpointOutput,
 } from '@/lib/task/execution-checkpoint'
 import { buildTaskLifecycleEventPayload } from '@/lib/task/publisher'
-import { TASK_EVENT_TYPE, TASK_STATUS, TASK_TYPE, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
+import { getTaskDefinition } from '@/lib/task/definition'
+import { isTaskType, TASK_EVENT_TYPE, TASK_STATUS, type TaskBillingInfo, type TaskType } from '@/lib/task/types'
+import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import type { TaskTerminalCommitIntent, TaskTerminalCommitResult } from './types'
 
 const ACTIVE_STATUSES = [TASK_STATUS.QUEUED, TASK_STATUS.PROCESSING] as const
-const TASK_TYPES = new Set<string>(Object.values(TASK_TYPE))
-
 type TerminalTaskRow = {
   id: string
   userId: string
@@ -37,8 +37,8 @@ function isActiveStatus(status: string): boolean {
 }
 
 function requireTaskType(value: string): TaskType {
-  if (!TASK_TYPES.has(value)) throw new Error(`TASK_TYPE_UNSUPPORTED:${value}`)
-  return value as TaskType
+  if (!isTaskType(value)) throw new Error(`TASK_TYPE_UNSUPPORTED:${value}`)
+  return value
 }
 
 function toObject(value: unknown): Record<string, unknown> {
@@ -231,6 +231,11 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
       if (updated.count !== 1) throw new Error(`TASK_TERMINAL_CAS_FAILED:${task.id}`)
 
       const eventType = lifecycleType(intent)
+      const affectedResources = resolveWorkspaceResourceRefs({
+        impact: getTaskDefinition(taskType).terminalResourceImpact,
+        projectId: task.projectId,
+        episodeId: task.episodeId,
+      })
       const eventPayload = buildTaskLifecycleEventPayload({
         taskId: task.id,
         projectId: task.projectId,
@@ -240,6 +245,7 @@ export async function commitTaskTerminal(intent: TaskTerminalCommitIntent): Prom
         targetId: task.targetId,
         episodeId: task.episodeId,
         coveragePayload: task.payload,
+        affectedResources,
         payload: {
           ...toObject(intent.eventPayload),
           ...(completedOutput?.result ?? {}),

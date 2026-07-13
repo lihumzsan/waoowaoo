@@ -1,15 +1,13 @@
 import { z } from 'zod'
-import { prisma } from '@/lib/prisma'
 import { removeLocationPromptSuffix } from '@/lib/constants'
 import { selectAssetRender } from '@/lib/assets/services/asset-actions'
-import { deleteObject } from '@/lib/storage'
 import { decodeImageUrlsFromDb, encodeImageUrls } from '@/lib/contracts/image-urls-contract'
-import { resolveStorageKeyFromMediaValue } from '@/lib/media/service'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { defineOperation } from '@/lib/operations/define-operation'
 
 const EFFECTS_OVERWRITE = {
   writes: true,
+  workspaceResourceImpact: 'project_assets',
   billable: false,
   destructive: false,
   overwrite: false,
@@ -18,14 +16,15 @@ const EFFECTS_OVERWRITE = {
   longRunning: false,
 } as const
 
-const EFFECTS_DESTRUCTIVE_BULK_LONG_RUNNING = {
+const EFFECTS_DESTRUCTIVE_BULK = {
   writes: true,
+  workspaceResourceImpact: 'project_assets',
   billable: false,
   destructive: true,
   overwrite: false,
   bulk: true,
-  externalSideEffects: true,
-  longRunning: true,
+  externalSideEffects: false,
+  longRunning: false,
 } as const
 
 export function createEditOperations(): ProjectAgentOperationRegistryDraft {
@@ -151,13 +150,13 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
     }),
     cleanup_unselected_images: defineOperation({
       id: 'cleanup_unselected_images',
-      summary: 'Clean up unselected images for characters/locations by deleting unchosen objects and normalizing indices.',
+      summary: 'Remove unselected character/location image relations and normalize selected indices.',
       intent: 'act',
       channels: { tool: false, api: true },
-      effects: EFFECTS_DESTRUCTIVE_BULK_LONG_RUNNING,
+      effects: EFFECTS_DESTRUCTIVE_BULK,
       confirmation: {
         required: true,
-        summary: '将清理未选中的图片（会删除存储对象且不可逆）。系统会在获得明确批准后执行同一份已审核请求。',
+        summary: '将移除未选中的图片关系并规范索引；共享媒体对象由独立生命周期管理。系统会在获得明确批准后执行同一份已审核请求。',
       },
       inputSchema: z.object({
       }),
@@ -165,45 +164,37 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
         success: z.boolean(),
         deletedCount: z.number().int().nonnegative(),
       }),
-      execute: async (ctx) => {
+      executeInTransaction: async (ctx, _input, transaction) => {
         let deletedCount = 0
 
-        const appearances = await prisma.characterAppearance.findMany({
+        const appearances = await transaction.characterAppearance.findMany({
           where: { character: { projectId: ctx.projectId } },
           include: { character: true },
         })
 
         for (const appearance of appearances) {
           if (appearance.selectedIndex === null) continue
-          try {
-            const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'characterAppearance.imageUrls')
-            if (imageUrls.length <= 1) continue
+          const imageUrls = decodeImageUrlsFromDb(appearance.imageUrls, 'characterAppearance.imageUrls')
+          if (imageUrls.length <= 1) continue
 
-            for (let i = 0; i < imageUrls.length; i++) {
-              if (i !== appearance.selectedIndex && imageUrls[i]) {
-                try {
-                  const key = await resolveStorageKeyFromMediaValue(imageUrls[i]!)
-                  if (key) {
-                    await deleteObject(key)
-                    deletedCount++
-                  }
-                } catch {}
-              }
+          for (let i = 0; i < imageUrls.length; i++) {
+            if (i !== appearance.selectedIndex && imageUrls[i]) {
+              deletedCount += 1
             }
+          }
 
-            const selectedUrl = imageUrls[appearance.selectedIndex]
-            if (!selectedUrl) continue
-            await prisma.characterAppearance.update({
-              where: { id: appearance.id },
-              data: {
-                imageUrls: encodeImageUrls([selectedUrl]),
-                selectedIndex: 0,
-              },
-            })
-          } catch {}
+          const selectedUrl = imageUrls[appearance.selectedIndex]
+          if (!selectedUrl) throw new Error(`CHARACTER_APPEARANCE_SELECTED_IMAGE_MISSING:${appearance.id}`)
+          await transaction.characterAppearance.update({
+            where: { id: appearance.id },
+            data: {
+              imageUrls: encodeImageUrls([selectedUrl]),
+              selectedIndex: 0,
+            },
+          })
         }
 
-        const locations = await prisma.projectLocation.findMany({
+        const locations = await transaction.projectLocation.findMany({
           where: { projectId: ctx.projectId },
           include: { images: true },
         })
@@ -215,23 +206,17 @@ export function createEditOperations(): ProjectAgentOperationRegistryDraft {
           if (!selectedImage) continue
 
           for (const img of location.images) {
-            if (!img.isSelected && img.imageUrl) {
-              try {
-                const key = await resolveStorageKeyFromMediaValue(img.imageUrl)
-                if (key) {
-                  await deleteObject(key)
-                  deletedCount++
-                }
-              } catch {}
-              await prisma.locationImage.delete({ where: { id: img.id } })
+            if (img.id !== selectedImage.id && img.imageUrl) {
+              deletedCount += 1
+              await transaction.locationImage.delete({ where: { id: img.id } })
             }
           }
 
-          await prisma.locationImage.update({
+          await transaction.locationImage.update({
             where: { id: selectedImage.id },
             data: { imageIndex: 0 },
           })
-          await prisma.projectLocation.update({
+          await transaction.projectLocation.update({
             where: { id: location.id },
             data: { selectedImageId: selectedImage.id },
           })

@@ -2,6 +2,8 @@ import type { NextRequest } from 'next/server'
 import { ApiError } from '@/lib/api-errors'
 import { buildDefaultTaskBillingInfo, getBillingMode } from '@/lib/billing'
 import type { BillingMode, TaskBillingInfo, TaskType } from '@/lib/task/types'
+import { getTaskDefinition } from '@/lib/task/definition'
+import { resolveWorkspaceResourceRefs } from '@/lib/workspace-resource/resource-impact'
 import type { Locale } from '@/i18n/routing'
 import { shouldExposeBillingCredits } from '@/lib/billing/task-billing-view'
 import {
@@ -167,6 +169,7 @@ function toPositiveMoney(value: number): number {
 }
 
 export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQuoteView> {
+  assertOperationPlanTaskResourceScopes(plan)
   const showCredits = shouldExposeCredits()
   const billingMode = await getBillingMode()
   const mediaTasks = plan.tasks.filter((task) => isQuoteVisibleMediaBillingInfo(task.billingInfo))
@@ -201,6 +204,16 @@ export async function quoteOperationPlan(plan: OperationPlan): Promise<BillingQu
         ...(showCredits ? { maxFrozenCost: info.maxFrozenCost } : {}),
       }
     }),
+  }
+}
+
+export function assertOperationPlanTaskResourceScopes(plan: OperationPlan): void {
+  for (const task of plan.tasks) {
+    resolveWorkspaceResourceRefs({
+      impact: getTaskDefinition(task.taskType).terminalResourceImpact,
+      projectId: plan.projectId,
+      episodeId: task.episodeId ?? null,
+    })
   }
 }
 

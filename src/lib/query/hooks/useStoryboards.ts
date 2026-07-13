@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
 import { checkApiResponse } from '@/lib/error-handler'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
-import { clearTaskTargetOverlay, upsertTaskTargetOverlay } from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import type { MediaRef } from '@/types/project'
 import { apiFetch } from '@/lib/api-fetch'
+import { requireTaskSubmissionReceipt } from '@/lib/query/mutations/mutation-shared'
 
 // ============ 类型定义 ============
 export interface PanelCandidate {
@@ -84,27 +85,20 @@ export function useRenderFinalVideo(projectId: string | null, episodeId: string 
                 }),
             })
             await checkApiResponse(res)
-            return res.json()
+            return requireTaskSubmissionReceipt(await res.json())
         },
-        onMutate: async () => {
+        onSuccess: async (receipt) => {
             if (!projectId || !episodeId) return
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'ProjectEpisode',
                 targetId: episodeId,
-                runningTaskType: 'final_video_render',
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'process',
                 stage: 'final_render_prepare',
             })
             await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
-        },
-        onError: () => {
-            if (!projectId || !episodeId) return
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectEpisode',
-                targetId: episodeId,
-            })
         },
         onSettled: () => {
             if (episodeId && projectId) {
@@ -129,27 +123,20 @@ export function usePlanBgmScore(projectId: string | null, episodeId: string | nu
                 body: JSON.stringify({ episodeId }),
             })
             await checkApiResponse(res)
-            return res.json()
+            return requireTaskSubmissionReceipt(await res.json())
         },
-        onMutate: async () => {
+        onSuccess: async (receipt) => {
             if (!projectId || !episodeId) return
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'ProjectEpisode',
                 targetId: episodeId,
-                runningTaskType: 'music_score_plan',
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'generate',
                 stage: 'bgm_score_prepare',
             })
             await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
-        },
-        onError: () => {
-            if (!projectId || !episodeId) return
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectEpisode',
-                targetId: episodeId,
-            })
         },
         onSettled: () => {
             if (episodeId && projectId) {
@@ -177,27 +164,20 @@ export function usePlanSoundscape(projectId: string | null, episodeId: string | 
                 body: JSON.stringify({ episodeId }),
             })
             await checkApiResponse(res)
-            return res.json()
+            return requireTaskSubmissionReceipt(await res.json())
         },
-        onMutate: async () => {
+        onSuccess: async (receipt) => {
             if (!projectId || !episodeId) return
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'ProjectEpisode',
                 targetId: episodeId,
-                runningTaskType: 'soundscape_plan',
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'generate',
                 stage: 'soundscape_prepare',
             })
             await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
-        },
-        onError: () => {
-            if (!projectId || !episodeId) return
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'ProjectEpisode',
-                targetId: episodeId,
-            })
         },
         onSettled: () => {
             if (episodeId && projectId) {

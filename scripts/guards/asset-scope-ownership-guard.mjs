@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Architecture contract: docs/architecture/modules/asset-scope-ownership.md (ASO-01..06).
+// Architecture contract: docs/architecture/modules/asset-scope-ownership.md (ASO-01..08).
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -25,11 +25,10 @@ export function inspectAssetScopeOwnershipContract(input) {
   }
 
   for (const required of [
-    'await requireAssetBodyVariantOwnership(input)',
     'await requireAssetBodyVariantOwnership(input, client)',
-    'await requireOwnedAssetTarget(input)',
-    'await requireOwnedAssetVariant(input)',
-    'await requireOwnedAssetProject(input.access)',
+    'await requireOwnedAssetTarget(input, transaction)',
+    'await requireOwnedAssetVariant(input, transaction)',
+    'await requireOwnedAssetProject(input.access, transaction)',
   ]) {
     requireText(violations, input.actions, required, `asset action bypasses scoped authority: ${required}`)
   }
@@ -66,13 +65,25 @@ export function inspectAssetScopeOwnershipContract(input) {
   }
 
   for (const destructiveEntry of [
-    'deleteProjectLocationBackedAsset(input.assetId)',
-    'deleteGlobalLocationBackedAsset(input.assetId)',
+    'deleteProjectLocationBackedAsset(input.assetId, transaction)',
+    'deleteGlobalLocationBackedAsset(input.assetId, transaction)',
   ]) {
     requireText(violations, input.actions, destructiveEntry, `destructive asset entry missing: ${destructiveEntry}`)
   }
   if (input.locationBackedCallers.some((file) => !file.endsWith('src/lib/assets/services/asset-actions.ts'))) {
     violations.push('location-backed destructive helpers must only be called through scoped asset actions')
+  }
+  for (const [label, source] of [
+    ['asset actions', input.actions],
+    ['project selection', input.projectSelection],
+    ['location-backed assets', input.locationBackedAssets],
+    ['project deletion', input.projectCrud],
+  ]) {
+    for (const forbidden of ['deleteObject(', 'deleteObjects(', 'resolveStorageKeyFromMediaValue']) {
+      if (source.includes(forbidden)) {
+        violations.push(`${label} restores domain-owned physical media deletion: ${forbidden}`)
+      }
+    }
   }
 
   return violations
@@ -109,8 +120,11 @@ function runCli() {
   const violations = inspectAssetScopeOwnershipContract({
     authority: read('src/lib/assets/services/asset-scope-ownership.ts'),
     actions: read('src/lib/assets/services/asset-actions.ts'),
+    projectSelection: read('src/lib/assets/services/project-location-backed-selection.ts'),
+    locationBackedAssets: read('src/lib/assets/services/location-backed-assets.ts'),
     upload: read('src/lib/assets/services/project-upload-render.ts'),
     apiOperations: read('src/lib/operations/api-only/assets-api-ops.ts'),
+    projectCrud: read('src/lib/operations/domains/project/project-crud-ops.ts'),
     locationBackedCallers,
   })
   if (violations.length > 0) {
@@ -123,4 +137,3 @@ function runCli() {
 
 const entryHref = process.argv[1] ? pathToFileURL(process.argv[1]).href : null
 if (entryHref && import.meta.url === entryHref) runCli()
-

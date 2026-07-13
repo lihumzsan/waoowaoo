@@ -28,6 +28,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
       groupPath: ['asset', 'character'],
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,
@@ -62,6 +63,7 @@ export function createAssetImageOperations(): ProjectAgentOperationRegistryDraft
       groupPath: ['asset', 'location'],
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: true,
         destructive: false,
         overwrite: false,

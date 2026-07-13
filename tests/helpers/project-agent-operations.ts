@@ -27,6 +27,7 @@ export const EFFECTS_NONE: OperationEffects = {
 export const EFFECTS_WRITE: OperationEffects = {
   ...EFFECTS_NONE,
   writes: true,
+  workspaceResourceImpact: 'none',
 }
 
 export const EFFECTS_BILLABLE: OperationEffects = {
@@ -55,7 +56,19 @@ export function makeTestOperation<Input, Output>(params: {
     ctx: ProjectAgentOperationContext,
     input: Input,
     transaction: Prisma.TransactionClient,
+    prepared: unknown,
   ) => Promise<Output>
+  prepareTransaction?: (
+    ctx: ProjectAgentOperationContext,
+    input: Input,
+  ) => Promise<unknown>
+  compensateTransactionFailure?: (
+    ctx: ProjectAgentOperationContext,
+    input: Input,
+    prepared: unknown,
+    output: Output | null,
+    transactionError: unknown,
+  ) => Promise<void>
   assistantWriteAuthority?: AssistantOperationWriteAuthority
 }): ProjectAgentOperationDefinition<Input, Output> {
   const confirmation = params.confirmation ?? {
@@ -92,9 +105,18 @@ export function makeTestOperation<Input, Output>(params: {
   }
   if (params.executeInTransaction) {
     if (params.execute) throw new Error(`TEST_DIRECT_OPERATION_EXECUTOR_AMBIGUOUS:${params.id}`)
+    if (Boolean(params.prepareTransaction) !== Boolean(params.compensateTransactionFailure)) {
+      throw new Error(`TEST_TRANSACTION_PREPARE_COMPENSATION_PAIR_REQUIRED:${params.id}`)
+    }
     return {
       ...common,
       executeInTransaction: params.executeInTransaction,
+      ...(params.prepareTransaction && params.compensateTransactionFailure
+        ? {
+            prepareTransaction: params.prepareTransaction,
+            compensateTransactionFailure: params.compensateTransactionFailure,
+          }
+        : {}),
     } as ProjectAgentOperationDefinition<Input, Output>
   }
   if (!params.execute) throw new Error(`TEST_DIRECT_OPERATION_EXECUTOR_REQUIRED:${params.id}`)

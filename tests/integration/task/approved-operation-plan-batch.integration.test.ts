@@ -37,6 +37,9 @@ function billingInfo(id: string): TaskBillingInfo {
 async function seedExecution(balance: number) {
   const user = await createTestUser()
   const project = await createTestProject(user.id)
+  const episode = await prisma.projectEpisode.create({
+    data: { projectId: project.id, episodeNumber: 1, name: 'Approved preview episode' },
+  })
   await seedBalance(user.id, balance)
   const plan: OperationPlan = {
     kind: 'task_submission',
@@ -49,7 +52,7 @@ async function seedExecution(balance: number) {
       payload: { stylePreviewId: id, imageModel: 'fal::gpt-image-2' },
       billingInfo: billingInfo(id),
       locale: 'en',
-      episodeId: null,
+      episodeId: episode.id,
       dedupeKey: `style-preview:${id}`,
       priority: 0,
     })),
@@ -57,8 +60,9 @@ async function seedExecution(balance: number) {
   const quote = await quoteOperationPlan(plan)
   const snapshot = await persistOperationPlanSnapshot({
     plan,
-    normalizedInput: { episodeId: null },
+    normalizedInput: { episodeId: episode.id },
     quote,
+    episodeId: episode.id,
   })
   const issued = await issueApprovalGrant({
     userId: user.id,
@@ -79,7 +83,7 @@ async function seedExecution(balance: number) {
       status: 'committing',
     },
   })
-  return { user, project, plan, snapshot, issued, execution }
+  return { user, project, episode, plan, snapshot, issued, execution }
 }
 function createApprovedBatchOperation(plan: OperationPlan, afterSubmit?: () => Promise<void>) {
   return makeTestOperation({
@@ -88,7 +92,7 @@ function createApprovedBatchOperation(plan: OperationPlan, afterSubmit?: () => P
     intent: 'act',
     effects: EFFECTS_BILLABLE,
     confirmation: { kind: 'billable_media', required: true },
-    inputSchema: z.object({ episodeId: z.null() }),
+    inputSchema: z.object({ episodeId: z.string().min(1) }),
     outputSchema: z.object({ taskIds: z.array(z.string()) }),
     plan: async () => plan,
     commit: async (ctx) => {
@@ -337,7 +341,7 @@ describe('approved operation plan Task batch integration', () => {
         source: 'assistant-panel',
         writer: null,
       },
-      normalizedInput: { episodeId: null },
+      normalizedInput: { episodeId: seeded.episode.id },
       invocation: {
         approvalGrantId: seeded.issued.approvalGrantId,
         requestId: seeded.issued.operationRequestId,

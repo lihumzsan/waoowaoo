@@ -1,22 +1,31 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { invalidateByTarget } from '../invalidation/invalidate-by-target'
+import { syncWorkspaceResourceChanges } from '../resource-change-sync'
+import {
+  GLOBAL_ASSET_PROJECT_ID,
+  resolveWorkspaceResourceRefs,
+  WORKSPACE_RESOURCE_IMPACT,
+} from '@/lib/workspace-resource/resource-impact'
 
-export const GLOBAL_ASSET_PROJECT_ID = 'global-asset-hub'
+export { GLOBAL_ASSET_PROJECT_ID }
 
 export function invalidateGlobalCharacters(queryClient: QueryClient) {
-  invalidateByTarget({
+  return syncWorkspaceResourceChanges({
     queryClient,
-    projectId: GLOBAL_ASSET_PROJECT_ID,
-    targetType: 'GlobalCharacter',
-    episodeId: null,
+    changes: resolveWorkspaceResourceRefs({
+      impact: WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS,
+      projectId: GLOBAL_ASSET_PROJECT_ID,
+      episodeId: null,
+    }),
   })
 }
 
 export function invalidateGlobalLocations(queryClient: QueryClient) {
-  invalidateByTarget({
+  return syncWorkspaceResourceChanges({
     queryClient,
-    projectId: GLOBAL_ASSET_PROJECT_ID,
-    targetType: 'GlobalLocation',
-    episodeId: null,
+    changes: resolveWorkspaceResourceRefs({
+      impact: WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS,
+      projectId: GLOBAL_ASSET_PROJECT_ID,
+      episodeId: null,
+    }),
   })
 }

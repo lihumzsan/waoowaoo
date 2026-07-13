@@ -34,7 +34,6 @@ interface LocationCardProps {
   onSelectImage?: (locationId: string, imageIndex: number | null) => void
   onCopyFromGlobal?: () => void
   activeTaskKeys?: Set<string>
-  onClearTaskKey?: (key: string) => void
   projectId: string
   onConfirmSelection?: (locationId: string) => Promise<void> | void
 }

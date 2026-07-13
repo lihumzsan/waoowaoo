@@ -28,7 +28,6 @@ import {
   TASK_RUNTIME_TARGETS,
 } from '@/lib/task/runtime-targets'
 import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
-import { useTaskTargetTerminalInvalidation } from '@/lib/query/hooks/useTaskTargetTerminalInvalidation'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useProjectAssets, useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -509,25 +508,12 @@ function ProjectWorkspaceCanvasContent({
     enabled: Boolean(projectId && workspaceRuntimeTargets.length > 0),
     staleTime: 1000,
   })
-  const terminalInvalidationStates = useMemo(
-    () => [
-      ...editScriptGenerationTaskStateMap.data,
-      ...workspaceTaskStateMap.data,
-    ],
-    [editScriptGenerationTaskStateMap.data, workspaceTaskStateMap.data],
-  )
-  useTaskTargetTerminalInvalidation({
-    projectId,
-    episodeId,
-    states: terminalInvalidationStates,
-    enabled: terminalInvalidationStates.length > 0,
-  })
-
   const streamPatchByNodeId = useMemo(
     () => new Map(structuredStreamRuntime.patches.map((patch) => [patch.nodeId, patch])),
     [structuredStreamRuntime.patches],
   )
   const attachNodeUiState = useCallback((inputNodes: readonly WorkspaceCanvasFlowNode[]) => {
+    void focusHighlightRevision
     return inputNodes.map((node) => {
       const resolvedData = resolveWorkspaceCanvasNodeData({
         node,

@@ -1,64 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { TASK_EVENT_TYPE, TASK_TYPE } from '@/lib/task/types'
 import {
-  extractWorkspaceResourceRefsFromWriteResult,
-  extractWorkspaceResourceRefsFromTaskLifecycleEvent,
+  requireWorkspaceResourceRefs,
+  resolveWorkspaceResourceRefs,
+  WORKSPACE_RESOURCE_IMPACT,
   WORKSPACE_RESOURCE_KIND,
 } from '@/lib/workspace-resource/resource-impact'
 
-function kindsForTask(input: {
-  taskType: string | null
-  targetType: string | null
-  episodeId?: string | null
-}) {
-  return extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-    taskType: input.taskType,
-    lifecycleType: TASK_EVENT_TYPE.COMPLETED,
+function kindsForImpact(
+  impact: Parameters<typeof resolveWorkspaceResourceRefs>[0]['impact'],
+  episodeId: string | null = 'episode-1',
+) {
+  return resolveWorkspaceResourceRefs({
+    impact,
     projectId: 'project-1',
-    targetType: input.targetType,
-    targetId: 'target-1',
-    episodeId: input.episodeId ?? 'episode-1',
-    payload: null,
+    episodeId,
   }).map((ref) => ref.kind)
 }
 
 describe('resource-impact', () => {
-  it('invalidates the edit Bible when style preview submission or confirmation writes a target result', () => {
-    for (const result of [
-      {
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        targetType: 'ProjectEditStylePreview',
-        targetId: 'preview-1',
-        taskIds: ['task-1', 'task-2', 'task-3'],
-      },
-      {
-        id: 'preview-1',
-        projectId: 'project-1',
-        episodeId: 'episode-1',
-        status: 'confirmed',
-        targetType: 'ProjectEditStylePreview',
-        targetId: 'preview-1',
-      },
-    ]) {
-      expect(extractWorkspaceResourceRefsFromWriteResult({
-        result,
-        fallbackProjectId: 'project-1',
-        fallbackEpisodeId: 'episode-1',
-      })).toEqual([
-        { kind: WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId: 'project-1', episodeId: 'episode-1' },
-        { kind: WORKSPACE_RESOURCE_KIND.EPISODE_DATA, projectId: 'project-1', episodeId: 'episode-1' },
-        { kind: WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT, projectId: 'project-1', episodeId: 'episode-1' },
-        { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
-      ])
-    }
-  })
-
-  it('declares edit pipeline resources for edit generation tasks', () => {
-    expect(kindsForTask({
-      taskType: TASK_TYPE.EDIT_SCRIPT_GENERATE,
-      targetType: 'ProjectEditScript',
-    })).toEqual([
+  it('projects every declared episode resource domain without inspecting a Task, target, or output', () => {
+    expect(kindsForImpact(WORKSPACE_RESOURCE_IMPACT.EDIT_PIPELINE)).toEqual([
       WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       WORKSPACE_RESOURCE_KIND.EDIT_SHOT_EXECUTION_PLAN,
@@ -67,90 +28,94 @@ describe('resource-impact', () => {
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
     ])
-  })
-
-  it('declares project asset resources for asset image tasks', () => {
-    expect(kindsForTask({
-      taskType: TASK_TYPE.IMAGE_CHARACTER,
-      targetType: 'CharacterAppearance',
-    })).toEqual([
-      WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS,
-      WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
+    expect(kindsForImpact(WORKSPACE_RESOURCE_IMPACT.EDIT_STYLE_PREVIEW)).toEqual([
+      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
     ])
-  })
-
-  it('declares storyboard resources for panel image tasks', () => {
-    expect(kindsForTask({
-      taskType: TASK_TYPE.IMAGE_PANEL,
-      targetType: 'ProjectPanel',
-    })).toEqual([
+    expect(kindsForImpact(WORKSPACE_RESOURCE_IMPACT.STORYBOARDS)).toEqual([
       WORKSPACE_RESOURCE_KIND.STORYBOARDS,
       WORKSPACE_RESOURCE_KIND.EDIT_SCRIPT,
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
     ])
-  })
-
-  it('declares media resources for panel video, group video, final render, and BGM score tasks', () => {
-    for (const taskType of [
-      TASK_TYPE.VIDEO_PANEL,
-      TASK_TYPE.VIDEO_GROUP,
-      TASK_TYPE.FINAL_VIDEO_RENDER,
-      TASK_TYPE.MUSIC_SCORE_PLAN,
-      TASK_TYPE.MUSIC_SCORE_GENERATE,
-    ]) {
-      expect(kindsForTask({ taskType, targetType: 'ProjectVideoGroup' })).toEqual([
-        WORKSPACE_RESOURCE_KIND.VIDEOS,
-        WORKSPACE_RESOURCE_KIND.STORYBOARDS,
-        WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
-        WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
-        WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
-      ])
-    }
-  })
-
-  it('declares style preview resources for style preview image tasks', () => {
-    expect(kindsForTask({
-      taskType: TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE,
-      targetType: 'ProjectEditStylePreview',
-    })).toEqual([
-      WORKSPACE_RESOURCE_KIND.EDIT_BIBLE,
+    expect(kindsForImpact(WORKSPACE_RESOURCE_IMPACT.VIDEOS)).toEqual([
+      WORKSPACE_RESOURCE_KIND.VIDEOS,
+      WORKSPACE_RESOURCE_KIND.STORYBOARDS,
+      WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
+      WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
+      WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
+    ])
+    expect(kindsForImpact(WORKSPACE_RESOURCE_IMPACT.EPISODE)).toEqual([
       WORKSPACE_RESOURCE_KIND.EPISODE_DATA,
       WORKSPACE_RESOURCE_KIND.PROJECT_CONTEXT,
       WORKSPACE_RESOURCE_KIND.PROJECT_DATA,
     ])
   })
 
-  it('declares global asset resources for asset hub image tasks', () => {
-    const refs = extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-      taskType: TASK_TYPE.ASSET_HUB_IMAGE,
-      lifecycleType: TASK_EVENT_TYPE.COMPLETED,
-      projectId: 'global-asset-hub',
-      targetType: 'GlobalCharacterAppearance',
-      targetId: 'appearance-1',
-      episodeId: null,
-      payload: null,
-    })
-
-    expect(refs).toEqual([
-      { kind: WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS, projectId: 'global-asset-hub' },
-      { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'global-asset-hub' },
+  it('supports project and global scope without inventing an episode identity', () => {
+    expect(
+      resolveWorkspaceResourceRefs({
+        impact: WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS,
+        projectId: 'project-1',
+        episodeId: null,
+      }),
+    ).toEqual([
+      {
+        kind: WORKSPACE_RESOURCE_KIND.PROJECT_ASSETS,
+        projectId: 'project-1',
+        episodeId: null,
+      },
+      { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
     ])
+    expect(
+      resolveWorkspaceResourceRefs({
+        impact: WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS,
+        projectId: 'global-asset-hub',
+        episodeId: null,
+      }),
+    ).toEqual([
+      {
+        kind: WORKSPACE_RESOURCE_KIND.GLOBAL_ASSETS,
+        projectId: 'global-asset-hub',
+      },
+    ])
+    expect(
+      resolveWorkspaceResourceRefs({
+        impact: WORKSPACE_RESOURCE_IMPACT.NONE,
+        projectId: 'project-1',
+        episodeId: null,
+      }),
+    ).toEqual([])
   })
 
-  it('does not declare resources for non-terminal lifecycle events', () => {
-    expect(extractWorkspaceResourceRefsFromTaskLifecycleEvent({
-      taskType: TASK_TYPE.IMAGE_PANEL,
-      lifecycleType: TASK_EVENT_TYPE.PROCESSING,
-      projectId: 'project-1',
-      targetType: 'ProjectPanel',
-      targetId: 'panel-1',
-      episodeId: 'episode-1',
-      payload: null,
-    })).toEqual([])
+  it('fails closed when an episode-scoped declaration has no episode identity', () => {
+    for (const impact of [
+      WORKSPACE_RESOURCE_IMPACT.EDIT_PIPELINE,
+      WORKSPACE_RESOURCE_IMPACT.EDIT_STYLE_PREVIEW,
+      WORKSPACE_RESOURCE_IMPACT.STORYBOARDS,
+      WORKSPACE_RESOURCE_IMPACT.VIDEOS,
+      WORKSPACE_RESOURCE_IMPACT.EPISODE,
+    ]) {
+      expect(() =>
+        resolveWorkspaceResourceRefs({
+          impact,
+          projectId: 'project-1',
+          episodeId: null,
+        }),
+      ).toThrow(`WORKSPACE_RESOURCE_IMPACT_EPISODE_REQUIRED:${impact}`)
+    }
+  })
+
+  it('rejects malformed or duplicate explicit wire refs', () => {
+    expect(() => requireWorkspaceResourceRefs([
+      { kind: WORKSPACE_RESOURCE_KIND.EDIT_BIBLE, projectId: 'project-1', episodeId: 1 },
+    ])).toThrow('WORKSPACE_RESOURCE_REFS_INVALID')
+    expect(() => requireWorkspaceResourceRefs([
+      { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
+      { kind: WORKSPACE_RESOURCE_KIND.PROJECT_DATA, projectId: 'project-1' },
+    ])).toThrow('WORKSPACE_RESOURCE_REFS_INVALID')
   })
 })

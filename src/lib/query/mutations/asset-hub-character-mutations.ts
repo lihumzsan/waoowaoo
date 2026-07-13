@@ -1,13 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import {
-  clearTaskTargetOverlay,
-  upsertTaskTargetOverlay,
-} from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import { queryKeys } from '../keys'
 import type { GlobalCharacter } from '../hooks/useGlobalAssets'
 import type { AssetSummary } from '@/lib/assets/contracts'
 import {
+  requireTaskSubmissionReceipt,
   requestJsonWithError,
   requestVoidWithError,
 } from './mutation-shared'
@@ -28,21 +26,6 @@ interface SelectCharacterImageContext {
   }>
   targetKey: string
   requestId: number
-}
-
-interface GenerateCharacterImageContext {
-  previousQueries: Array<{
-    queryKey: readonly unknown[]
-    data: GlobalCharacter[] | undefined
-  }>
-  previousUnifiedQueries: Array<{
-    queryKey: readonly unknown[]
-    data: AssetSummary[] | undefined
-  }>
-}
-
-type GenerateCharacterImageResponse = {
-  taskId?: string | null
 }
 
 interface DeleteCharacterContext {
@@ -173,7 +156,7 @@ export function useGenerateCharacterImage() {
         count,
       }
       const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-      return await requestJsonWithError<GenerateCharacterImageResponse>(`/api/assets/${characterId}/generate`, {
+      const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,52 +164,17 @@ export function useGenerateCharacterImage() {
           ...confirmation,
         }),
       }, 'Failed to generate image')
+      return requireTaskSubmissionReceipt(result)
     },
-    onMutate: async ({ appearanceId }): Promise<GenerateCharacterImageContext> => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.globalAssets.characters(),
-        exact: false,
-      })
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.assets.all('global'),
-        exact: false,
-      })
-      const previousQueries = captureCharacterQuerySnapshots(queryClient)
-      const previousUnifiedQueries = captureUnifiedQuerySnapshots(queryClient)
-
+    onSuccess: (receipt, { appearanceId }) => {
       upsertTaskTargetOverlay(queryClient, {
         projectId: GLOBAL_ASSET_PROJECT_ID,
         targetType: 'GlobalCharacterAppearance',
         targetId: appearanceId,
-        runningTaskType: 'asset_hub_image',
+        runningTaskId: receipt.taskId,
+        runningTaskType: receipt.taskType,
         intent: 'generate',
       })
-
-      return {
-        previousQueries,
-        previousUnifiedQueries,
-      }
-    },
-    onSuccess: (data, { appearanceId }) => {
-      upsertTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-        runningTaskId: data.taskId ?? null,
-        runningTaskType: 'asset_hub_image',
-        intent: 'generate',
-      })
-    },
-    onError: (_error, { appearanceId }, context) => {
-      clearTaskTargetOverlay(queryClient, {
-        projectId: GLOBAL_ASSET_PROJECT_ID,
-        targetType: 'GlobalCharacterAppearance',
-        targetId: appearanceId,
-      })
-      if (context) {
-        restoreCharacterQuerySnapshots(queryClient, context.previousQueries)
-        restoreUnifiedQuerySnapshots(queryClient, context.previousUnifiedQueries)
-      }
     },
     onSettled: invalidateCharacters,
   })

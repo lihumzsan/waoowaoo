@@ -1,6 +1,7 @@
 import { createProjectAgentOperationRegistry as createRawProjectAgentOperationRegistry } from './project-agent'
 import { createApiOnlyOperationRegistry } from './api-only'
 import { assertAssistantToolWriteAuthority } from './write-authority'
+import { WORKSPACE_RESOURCE_IMPACT } from '@/lib/workspace-resource/resource-impact'
 export type { ProjectAgentOperationContext, ProjectAgentOperationDefinition, ProjectAgentOperationRegistry } from './types'
 
 function mustTrimmedString(value: unknown, label: string): string {
@@ -54,6 +55,17 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       if (effects[key] !== true && effects[key] !== false) {
         throw new Error(`PROJECT_AGENT_OPERATION_EFFECTS_INVALID:${operationId}:${key}`)
       }
+    }
+    const workspaceResourceImpacts = new Set<string>(Object.values(WORKSPACE_RESOURCE_IMPACT))
+    if (effects.writes === true) {
+      if (
+        typeof effects.workspaceResourceImpact !== 'string'
+        || !workspaceResourceImpacts.has(effects.workspaceResourceImpact)
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_IMPACT_INVALID:${operationId}`)
+      }
+    } else if (effects.workspaceResourceImpact !== undefined) {
+      throw new Error(`PROJECT_AGENT_OPERATION_RESOURCE_IMPACT_FORBIDDEN:${operationId}`)
     }
     const agentFlow = op.agentFlow as
       | {
@@ -123,6 +135,31 @@ function validateOperationRegistry(registry: Record<string, unknown>) {
       }
       if (op.plan !== undefined || op.commit !== undefined) {
         throw new Error(`PROJECT_AGENT_DIRECT_OPERATION_PLAN_COMMIT_FORBIDDEN:${operationId}`)
+      }
+      if (
+        (op.prepareTransaction !== undefined || op.compensateTransactionFailure !== undefined)
+        && (
+          typeof op.prepareTransaction !== 'function'
+          ||
+          typeof op.compensateTransactionFailure !== 'function'
+          ||
+          !hasTransactionalExecutor
+          || effects.externalSideEffects !== true
+          || channels.tool !== false
+        )
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_COMPENSATION_INVALID:${operationId}`)
+      }
+      if (
+        effects.writes === true
+        && effects.workspaceResourceImpact !== WORKSPACE_RESOURCE_IMPACT.NONE
+        && effects.externalSideEffects === true
+        && (
+          typeof op.prepareTransaction !== 'function'
+          || typeof op.compensateTransactionFailure !== 'function'
+        )
+      ) {
+        throw new Error(`PROJECT_AGENT_OPERATION_TRANSACTION_COMPENSATION_REQUIRED:${operationId}`)
       }
     }
     assertAssistantToolWriteAuthority(operationId, op)

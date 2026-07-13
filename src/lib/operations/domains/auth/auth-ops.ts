@@ -43,6 +43,7 @@ export function createAuthOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: false,

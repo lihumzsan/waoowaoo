@@ -11,19 +11,21 @@ const valid = {
     'assetKind: input.kind',
   ].join('\n'),
   actions: [
-    'await requireAssetBodyVariantOwnership(input)',
     'await requireAssetBodyVariantOwnership(input, client)',
-    'await requireOwnedAssetTarget(input)',
-    'await requireOwnedAssetVariant(input)',
-    'await requireOwnedAssetProject(input.access)',
+    'await requireOwnedAssetTarget(input, transaction)',
+    'await requireOwnedAssetVariant(input, transaction)',
+    'await requireOwnedAssetProject(input.access, transaction)',
     'export async function copyAssetFromGlobal() {',
     'requireOwnedAssetTarget(source)',
     'requireOwnedAssetTarget(target)',
     '}',
     'async function copyCharacterFromGlobal() {}',
-    'deleteProjectLocationBackedAsset(input.assetId)',
-    'deleteGlobalLocationBackedAsset(input.assetId)',
+    'deleteProjectLocationBackedAsset(input.assetId, transaction)',
+    'deleteGlobalLocationBackedAsset(input.assetId, transaction)',
   ].join('\n'),
+  projectSelection: 'delete relation only',
+  locationBackedAssets: 'delete relation only',
+  projectCrud: 'delete project relations only',
   upload: 'await requireOwnedAssetTarget(target)\nawait uploadObject(bytes)',
   apiOperations: [
     'api_assets_copy_from_global: defineOperation({',
@@ -43,6 +45,8 @@ describe('asset scope ownership architecture guard', () => {
     const violations = inspectAssetScopeOwnershipContract({
       ...valid,
       actions: valid.actions.replace('requireOwnedAssetTarget(target)', 'rawTargetLookup(target)'),
+      projectSelection: 'await deleteObject(storageKey)',
+      projectCrud: 'await deleteObjects(storageKeys)',
       apiOperations: valid.apiOperations.replace('executeInTransaction:', 'execute:'),
       locationBackedCallers: [
         'src/lib/assets/services/asset-actions.ts',
@@ -52,6 +56,7 @@ describe('asset scope ownership architecture guard', () => {
     expect(violations).toContain('copyAssetFromGlobal must authorize exactly one global source and one project target')
     expect(violations).toContain('copy operation must validate and replace inside one transaction')
     expect(violations).toContain('location-backed destructive helpers must only be called through scoped asset actions')
+    expect(violations).toContain('project selection restores domain-owned physical media deletion: deleteObject(')
+    expect(violations).toContain('project deletion restores domain-owned physical media deletion: deleteObjects(')
   })
 })
-

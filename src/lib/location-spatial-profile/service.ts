@@ -35,7 +35,7 @@ interface AnalyzeGlobalLocationImageInput {
   readonly locale: Locale
 }
 
-function profileToJson(profile: LocationSpatialProfile): Prisma.InputJsonValue {
+export function locationSpatialProfileToJson(profile: LocationSpatialProfile): Prisma.InputJsonValue {
   return profile as unknown as Prisma.InputJsonObject
 }
 
@@ -93,8 +93,9 @@ export async function analyzeLocationSpatialProfile(
 
 export async function analyzeAndPersistProjectLocationImageSpatialProfile(
   input: AnalyzeProjectLocationImageInput,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<LocationSpatialProfile> {
-  const image = await prisma.locationImage.findUnique({
+  const image = await client.locationImage.findUnique({
     where: { id: input.imageId },
     include: {
       location: {
@@ -110,7 +111,7 @@ export async function analyzeAndPersistProjectLocationImageSpatialProfile(
     throw new Error(`LOCATION_SPATIAL_PROFILE_IMAGE_NOT_FOUND:${input.imageId}`)
   }
 
-  await prisma.locationImage.update({
+  await client.locationImage.update({
     where: { id: input.imageId },
     data: {
       spatialProfileStatus: 'analyzing',
@@ -128,10 +129,10 @@ export async function analyzeAndPersistProjectLocationImageSpatialProfile(
       locationDescription: image.description,
       imageUrl: image.imageUrl,
     })
-    await prisma.locationImage.update({
+    await client.locationImage.update({
       where: { id: input.imageId },
       data: {
-        spatialProfileJson: profileToJson(profile),
+        spatialProfileJson: locationSpatialProfileToJson(profile),
         spatialProfileStatus: 'ready',
         spatialProfileError: null,
         spatialProfileAnalyzedAt: new Date(),
@@ -140,7 +141,7 @@ export async function analyzeAndPersistProjectLocationImageSpatialProfile(
     })
     return profile
   } catch (error) {
-    await prisma.locationImage.update({
+    await client.locationImage.update({
       where: { id: input.imageId },
       data: {
         spatialProfileStatus: 'failed',
@@ -153,8 +154,9 @@ export async function analyzeAndPersistProjectLocationImageSpatialProfile(
 
 export async function analyzeAndPersistGlobalLocationImageSpatialProfile(
   input: AnalyzeGlobalLocationImageInput,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<LocationSpatialProfile> {
-  const image = await prisma.globalLocationImage.findUnique({
+  const image = await client.globalLocationImage.findUnique({
     where: { id: input.imageId },
     include: {
       location: {
@@ -170,7 +172,7 @@ export async function analyzeAndPersistGlobalLocationImageSpatialProfile(
     throw new Error(`GLOBAL_LOCATION_SPATIAL_PROFILE_IMAGE_NOT_FOUND:${input.imageId}`)
   }
 
-  await prisma.globalLocationImage.update({
+  await client.globalLocationImage.update({
     where: { id: input.imageId },
     data: {
       spatialProfileStatus: 'analyzing',
@@ -187,10 +189,10 @@ export async function analyzeAndPersistGlobalLocationImageSpatialProfile(
       locationDescription: image.description,
       imageUrl: image.imageUrl,
     })
-    await prisma.globalLocationImage.update({
+    await client.globalLocationImage.update({
       where: { id: input.imageId },
       data: {
-        spatialProfileJson: profileToJson(profile),
+        spatialProfileJson: locationSpatialProfileToJson(profile),
         spatialProfileStatus: 'ready',
         spatialProfileError: null,
         spatialProfileAnalyzedAt: new Date(),
@@ -199,7 +201,7 @@ export async function analyzeAndPersistGlobalLocationImageSpatialProfile(
     })
     return profile
   } catch (error) {
-    await prisma.globalLocationImage.update({
+    await client.globalLocationImage.update({
       where: { id: input.imageId },
       data: {
         spatialProfileStatus: 'failed',

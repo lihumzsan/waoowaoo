@@ -1,6 +1,7 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { resolveTaskErrorMessage } from '@/lib/task/error-message'
+import { isTaskType, type TaskType } from '@/lib/task/types'
 
 export { getPageLocale } from '@/lib/api-fetch'
 
@@ -8,6 +9,22 @@ export type MutationRequestError = Error & {
   status?: number
   payload?: Record<string, unknown>
   detail?: string
+}
+
+export type TaskSubmissionReceipt = {
+  taskId: string
+  taskType: TaskType
+}
+
+export function requireTaskSubmissionReceipt(value: unknown): TaskSubmissionReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('TASK_SUBMISSION_RECEIPT_INVALID')
+  }
+  const record = value as Record<string, unknown>
+  const taskId = typeof record.taskId === 'string' ? record.taskId.trim() : ''
+  const taskType = typeof record.taskType === 'string' ? record.taskType.trim() : ''
+  if (!taskId || !isTaskType(taskType)) throw new Error('TASK_SUBMISSION_RECEIPT_INVALID')
+  return { taskId, taskType }
 }
 
 async function parseJsonSafe(response: Response): Promise<Record<string, unknown>> {

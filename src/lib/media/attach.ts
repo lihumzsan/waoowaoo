@@ -1,5 +1,9 @@
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { resolveMediaRef, resolveMediaRefFromLegacyValue } from './service'
+import {
+  resolveMediaRef,
+  resolveMediaRefFromLegacyValue,
+  type MediaClient,
+} from './service'
 import type { MediaRef } from './types'
 
 function parseStringArray(value: unknown): string[] {
@@ -14,20 +18,27 @@ function parseStringArray(value: unknown): string[] {
   }
 }
 
-async function resolveAppearanceImageArray(raw: unknown, fieldName: string): Promise<{ urls: string[]; medias: MediaRef[] }> {
+async function resolveAppearanceImageArray(
+  raw: unknown,
+  fieldName: string,
+  client?: MediaClient,
+): Promise<{ urls: string[]; medias: MediaRef[] }> {
   const values = decodeImageUrlsFromDb(raw as string | null | undefined, fieldName)
-  const refs = await Promise.all(values.map((value) => resolveMediaRefFromLegacyValue(value)))
+  const refs = await Promise.all(values.map((value) => resolveMediaRefFromLegacyValue(value, client)))
   return {
     urls: values.map((value, index) => refs[index]?.url || value),
     medias: refs.filter((ref): ref is MediaRef => !!ref),
   }
 }
 
-async function attachMediaFieldsToAppearance<T extends Record<string, unknown>>(appearance: T) {
-  const imageMedia = await resolveMediaRef(appearance.imageMediaId, appearance.imageUrl)
-  const previousImageMedia = await resolveMediaRef(appearance.previousImageMediaId, appearance.previousImageUrl)
-  const imageResult = await resolveAppearanceImageArray(appearance.imageUrls, 'appearance.imageUrls')
-  const previousImageResult = await resolveAppearanceImageArray(appearance.previousImageUrls, 'appearance.previousImageUrls')
+async function attachMediaFieldsToAppearance<T extends Record<string, unknown>>(
+  appearance: T,
+  client?: MediaClient,
+) {
+  const imageMedia = await resolveMediaRef(appearance.imageMediaId, appearance.imageUrl, client)
+  const previousImageMedia = await resolveMediaRef(appearance.previousImageMediaId, appearance.previousImageUrl, client)
+  const imageResult = await resolveAppearanceImageArray(appearance.imageUrls, 'appearance.imageUrls', client)
+  const previousImageResult = await resolveAppearanceImageArray(appearance.previousImageUrls, 'appearance.previousImageUrls', client)
 
   return {
     ...appearance,
@@ -43,9 +54,13 @@ async function attachMediaFieldsToAppearance<T extends Record<string, unknown>>(
   }
 }
 
-export async function attachMediaFieldsToGlobalCharacter<T extends Record<string, unknown>>(character: T) {
+export async function attachMediaFieldsToGlobalCharacter<T extends Record<string, unknown>>(
+  character: T,
+  client?: MediaClient,
+) {
   const appearances = await Promise.all(
-    ((character.appearances as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToAppearance),
+    ((character.appearances as Array<Record<string, unknown>>) || [])
+      .map((appearance) => attachMediaFieldsToAppearance(appearance, client)),
   )
 
   return {
@@ -54,11 +69,14 @@ export async function attachMediaFieldsToGlobalCharacter<T extends Record<string
   }
 }
 
-export async function attachMediaFieldsToGlobalLocation<T extends Record<string, unknown>>(location: T) {
+export async function attachMediaFieldsToGlobalLocation<T extends Record<string, unknown>>(
+  location: T,
+  client?: MediaClient,
+) {
   const images = await Promise.all(
     ((location.images as Array<Record<string, unknown>>) || []).map(async (img) => {
-    const imageMedia = await resolveMediaRef(img.imageMediaId, img.imageUrl)
-    const previousImageMedia = await resolveMediaRef(img.previousImageMediaId, img.previousImageUrl)
+    const imageMedia = await resolveMediaRef(img.imageMediaId, img.imageUrl, client)
+    const previousImageMedia = await resolveMediaRef(img.previousImageMediaId, img.previousImageUrl, client)
     return {
       ...img,
       media: imageMedia,
@@ -119,7 +137,8 @@ async function attachMediaFieldsToStoryboard<T extends Record<string, unknown>>(
 
 async function attachMediaFieldsToProjectCharacter<T extends Record<string, unknown>>(character: T) {
   const appearances = await Promise.all(
-    ((character.appearances as Array<Record<string, unknown>>) || []).map(attachMediaFieldsToAppearance),
+    ((character.appearances as Array<Record<string, unknown>>) || [])
+      .map((appearance) => attachMediaFieldsToAppearance(appearance)),
   )
   return {
     ...character,

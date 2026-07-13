@@ -1,12 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '../keys'
-import { apiFetch } from '@/lib/api-fetch'
-import {
-    clearTaskTargetOverlay,
-    upsertTaskTargetOverlay,
-} from '../task-target-overlay'
+import { upsertTaskTargetOverlay } from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
+    requireTaskSubmissionReceipt,
     requestJsonWithError,
 } from './mutation-shared'
 import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
@@ -35,7 +32,7 @@ export function useRegenerateCharacterGroup(projectId: string) {
                 count,
             }
             const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -43,20 +40,16 @@ export function useRegenerateCharacterGroup(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to regenerate group')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ appearanceId }) => {
+        onSuccess: (receipt, { appearanceId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'CharacterAppearance',
                 targetId: appearanceId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'regenerate',
-            })
-        },
-        onError: (_error, { appearanceId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
             })
         },
         onSettled: invalidateProjectAssets,
@@ -91,7 +84,7 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
                 imageIndex,
             }
             const confirmation = await assetOperationBillingPlan(characterId, 'generate', requestBody)
-            return await requestJsonWithError(`/api/assets/${characterId}/generate`, {
+            const result = await requestJsonWithError<unknown>(`/api/assets/${characterId}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -99,20 +92,16 @@ export function useRegenerateSingleCharacterImage(projectId: string) {
                     ...confirmation,
                 })
             }, 'Failed to regenerate image')
+            return requireTaskSubmissionReceipt(result)
         },
-        onMutate: ({ appearanceId }) => {
+        onSuccess: (receipt, { appearanceId }) => {
             upsertTaskTargetOverlay(queryClient, {
                 projectId,
                 targetType: 'CharacterAppearance',
                 targetId: appearanceId,
+                runningTaskId: receipt.taskId,
+                runningTaskType: receipt.taskType,
                 intent: 'regenerate',
-            })
-        },
-        onError: (_error, { appearanceId }) => {
-            clearTaskTargetOverlay(queryClient, {
-                projectId,
-                targetType: 'CharacterAppearance',
-                targetId: appearanceId,
             })
         },
         onSettled: invalidateProjectAssets,
@@ -153,57 +142,5 @@ export function useUpdateProjectAppearanceDescription(projectId: string) {
             }, 'Failed to update appearance description')
         },
         onSuccess: invalidateProjectAssets,
-    })
-}
-
-export function useBatchGenerateCharacterImages(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-
-    return useMutation({
-        mutationFn: async (items: Array<{ characterId: string; appearanceId: string }>) => {
-            const results = await Promise.allSettled(
-                items.map(async (item) => {
-                    const requestBody = {
-                        scope: 'project',
-                        kind: 'character',
-                        projectId,
-                        appearanceId: item.appearanceId,
-                    }
-                    const confirmation = await assetOperationBillingPlan(item.characterId, 'generate', requestBody)
-                    return await apiFetch(`/api/assets/${item.characterId}/generate`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            ...requestBody,
-                            ...confirmation,
-                        })
-                    })
-                })
-            )
-            return results
-        },
-        onMutate: (items) => {
-            for (const item of items) {
-                upsertTaskTargetOverlay(queryClient, {
-                    projectId,
-                    targetType: 'CharacterAppearance',
-                    targetId: item.appearanceId,
-                    intent: 'generate',
-                })
-            }
-        },
-        onError: (_error, items) => {
-            for (const item of items) {
-                clearTaskTargetOverlay(queryClient, {
-                    projectId,
-                    targetType: 'CharacterAppearance',
-                    targetId: item.appearanceId,
-                })
-            }
-        },
-        onSettled: () => {
-            invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-        }
     })
 }

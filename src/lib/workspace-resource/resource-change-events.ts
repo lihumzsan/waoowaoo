@@ -1,31 +1,39 @@
+import { createHash } from 'node:crypto'
+import type { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { redis } from '@/lib/redis'
-import { createScopedLogger } from '@/lib/logging/core'
+import { createOutboxCommandInTransaction } from '@/lib/outbox/repository'
+import {
+  OUTBOX_COMMAND_KIND,
+  parseOutboxCommandPayload,
+  type WorkspaceResourceBroadcastCommand,
+} from '@/lib/outbox/types'
 import { getProjectChannel } from '@/lib/task/publisher'
 import {
   WORKSPACE_SSE_EVENT_TYPE,
   type ResourceChangedSSEEvent,
   type WorkspaceResourceRef,
 } from '@/lib/task/types'
-import {
-  dedupeWorkspaceResourceRefs,
-  extractWorkspaceResourceRefsFromWriteResult,
-} from './resource-impact'
+import { dedupeWorkspaceResourceRefs } from './resource-impact'
+
+const WORKSPACE_RESOURCE_AGGREGATE_TYPE = 'workspace_resource'
+
+function workspaceResourceAggregateId(projectId: string, userId: string): string {
+  return createHash('sha256')
+    .update(projectId)
+    .update('\0')
+    .update(userId)
+    .digest('hex')
+}
 
 export function extractWorkspaceResourceChangeEventSpecs(params: {
-  result: unknown
-  fallbackProjectId: string
-  fallbackEpisodeId?: string | null
+  affectedResources: readonly WorkspaceResourceRef[]
 }): Array<{
   projectId: string
   affectedResources: WorkspaceResourceRef[]
 }> {
-  const refs = extractWorkspaceResourceRefsFromWriteResult({
-    result: params.result,
-    fallbackProjectId: params.fallbackProjectId,
-    fallbackEpisodeId: params.fallbackEpisodeId,
-  })
   const refsByProjectId = new Map<string, WorkspaceResourceRef[]>()
-  for (const ref of refs) {
+  for (const ref of dedupeWorkspaceResourceRefs(params.affectedResources)) {
     refsByProjectId.set(ref.projectId, [...(refsByProjectId.get(ref.projectId) ?? []), ref])
   }
   return Array.from(refsByProjectId.entries()).map(([projectId, projectRefs]) => ({
@@ -34,41 +42,103 @@ export function extractWorkspaceResourceChangeEventSpecs(params: {
   }))
 }
 
-export async function publishWorkspaceResourceChangedEventsFromWriteResult(params: {
-  result: unknown
-  fallbackProjectId: string
+export async function createWorkspaceResourceBroadcastsInTransaction(params: {
+  tx: Prisma.TransactionClient
+  invocationId: string
+  affectedResources: readonly WorkspaceResourceRef[]
   userId: string
-  fallbackEpisodeId?: string | null
-}) {
+  operationId: string
+}): Promise<void> {
   const specs = extractWorkspaceResourceChangeEventSpecs(params)
-  if (specs.length === 0) return
-  const now = new Date()
-  try {
-    await Promise.all(specs.map(async (spec, index) => {
-      const event: ResourceChangedSSEEvent = {
-        id: `resource:${now.getTime()}:${index}:${spec.projectId}`,
-        type: WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
+  for (const spec of specs) {
+    await createOutboxCommandInTransaction(params.tx, {
+      idempotencyKey: `workspace-resource:${params.invocationId}:${spec.projectId}`,
+      aggregateType: WORKSPACE_RESOURCE_AGGREGATE_TYPE,
+      aggregateId: workspaceResourceAggregateId(spec.projectId, params.userId),
+      payload: {
+        kind: OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST,
         projectId: spec.projectId,
         userId: params.userId,
-        ts: now.toISOString(),
+        operationId: params.operationId,
         affectedResources: spec.affectedResources,
-      }
-      await redis.publish(getProjectChannel(spec.projectId), JSON.stringify(event))
-    }))
-  } catch (error) {
-    createScopedLogger({
-      module: 'workspace-resource',
-      action: 'resource_change.sse_publish_failed',
-      projectId: params.fallbackProjectId,
-      userId: params.userId,
-    }).error({
-      message: 'failed to publish resource change sse event',
-      details: {
-        specCount: specs.length,
       },
-      error: error instanceof Error
-        ? { name: error.name, message: error.message, stack: error.stack }
-        : { message: String(error) },
     })
   }
+}
+
+export function buildWorkspaceResourceChangedEvent(params: {
+  outboxId: string
+  createdAt: Date
+  payload: WorkspaceResourceBroadcastCommand
+}): ResourceChangedSSEEvent {
+  return {
+    id: `wr:${params.createdAt.getTime()}:${params.outboxId}`,
+    type: WORKSPACE_SSE_EVENT_TYPE.RESOURCE_CHANGED,
+    projectId: params.payload.projectId,
+    userId: params.payload.userId,
+    ts: params.createdAt.toISOString(),
+    affectedResources: params.payload.affectedResources,
+  }
+}
+
+function requireWorkspaceResourceBroadcastRow(row: {
+  id: string
+  kind: string
+  aggregateType: string
+  aggregateId: string
+  payload: unknown
+  createdAt: Date
+}, projectId?: string, userId?: string): ResourceChangedSSEEvent {
+  const payload = parseOutboxCommandPayload(row.payload)
+  if (
+    payload.kind !== OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST
+    || row.kind !== payload.kind
+    || row.aggregateType !== WORKSPACE_RESOURCE_AGGREGATE_TYPE
+    || row.aggregateId !== workspaceResourceAggregateId(payload.projectId, payload.userId)
+    || (projectId !== undefined && payload.projectId !== projectId)
+    || (userId !== undefined && payload.userId !== userId)
+  ) {
+    throw new Error(`WORKSPACE_RESOURCE_OUTBOX_CONTRACT_MISMATCH:${row.id}`)
+  }
+  return buildWorkspaceResourceChangedEvent({
+    outboxId: row.id,
+    createdAt: row.createdAt,
+    payload,
+  })
+}
+
+export async function publishPersistedWorkspaceResourceEventByOutboxId(outboxId: string): Promise<void> {
+  const row = await prisma.outboxCommand.findUnique({ where: { id: outboxId } })
+  if (!row) throw new Error(`WORKSPACE_RESOURCE_OUTBOX_MISSING:${outboxId}`)
+  const event = requireWorkspaceResourceBroadcastRow(row)
+  await redis.publish(getProjectChannel(event.projectId), JSON.stringify(event))
+}
+
+export async function listWorkspaceResourceReplayEvents(params: {
+  projectId: string
+  userId: string
+  after: {
+    createdAt: Date
+    outboxId: string
+  }
+  limit?: number
+}): Promise<ResourceChangedSSEEvent[]> {
+  const limit = Math.max(1, Math.min(5000, params.limit ?? 500))
+  const rows = await prisma.outboxCommand.findMany({
+    where: {
+      aggregateType: WORKSPACE_RESOURCE_AGGREGATE_TYPE,
+      aggregateId: workspaceResourceAggregateId(params.projectId, params.userId),
+      kind: OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST,
+      OR: [
+        { createdAt: { gt: params.after.createdAt } },
+        {
+          createdAt: params.after.createdAt,
+          id: { gt: params.after.outboxId },
+        },
+      ],
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  })
+  return rows.map((row) => requireWorkspaceResourceBroadcastRow(row, params.projectId, params.userId))
 }

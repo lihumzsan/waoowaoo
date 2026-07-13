@@ -19,6 +19,7 @@ describe('TaskDefinition conformance', () => {
       expect(definition.executionProtocol).toBe('handler_result_checkpoint')
       expect(definition.terminalSuccessHandoff).toBe('handler_result_checkpoint')
       expect(['none', 'chapter_render', 'final_video_render']).toContain(definition.submissionTargetOwnership)
+      expect(['none', 'edit_pipeline', 'edit_style_preview', 'storyboards', 'project_assets', 'global_assets', 'videos', 'episode']).toContain(definition.terminalResourceImpact)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalFailureProjector)
       expect(['none', 'edit_bible', 'edit_style_preview', 'video_group', 'chapter_render', 'final_video_render', 'music_score', 'soundscape', 'edit_script', 'edit_shot_execution_plan']).toContain(definition.terminalCancelProjector)
     }
@@ -47,5 +48,15 @@ describe('TaskDefinition conformance', () => {
     expect(TASK_DEFINITIONS.edit_script_generate.terminalCancelProjector).toBe('edit_script')
     expect(TASK_DEFINITIONS.edit_shot_execution_plan_generate.terminalFailureProjector).toBe('edit_shot_execution_plan')
     expect(TASK_DEFINITIONS.edit_shot_execution_plan_generate.terminalCancelProjector).toBe('edit_shot_execution_plan')
+  })
+
+  it('declares terminal resource impact for write-producing and extraction-only Tasks', () => {
+    expect(TASK_DEFINITIONS.image_panel.terminalResourceImpact).toBe('storyboards')
+    expect(TASK_DEFINITIONS.image_character.terminalResourceImpact).toBe('project_assets')
+    expect(TASK_DEFINITIONS.asset_hub_image.terminalResourceImpact).toBe('global_assets')
+    expect(TASK_DEFINITIONS.edit_script_generate.terminalResourceImpact).toBe('edit_pipeline')
+    expect(TASK_DEFINITIONS.final_video_render.terminalResourceImpact).toBe('videos')
+    expect(TASK_DEFINITIONS.reference_character_description_extract.terminalResourceImpact).toBe('none')
+    expect(TASK_DEFINITIONS.asset_hub_reference_character_description_extract.terminalResourceImpact).toBe('none')
   })
 })

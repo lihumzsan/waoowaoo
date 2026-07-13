@@ -2,12 +2,10 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { logError } from '@/lib/logging/core'
-import { resolveMediaRefFromLegacyValue, resolveStorageKeyFromMediaValue } from '@/lib/media/service'
+import { resolveMediaRefFromLegacyValue } from '@/lib/media/service'
 import { attachMediaFieldsToProject } from '@/lib/media/attach'
 import { createDefaultEditChapter } from '@/lib/edit-chapter'
 import { encodeImageUrls, decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
-import { deleteObject } from '@/lib/storage'
 import { PRIMARY_APPEARANCE_INDEX, removeLocationPromptSuffix } from '@/lib/constants'
 import { normalizeImageGenerationCount } from '@/lib/image-generation/count'
 import { revertAssetRender } from '@/lib/assets/services/asset-actions'
@@ -27,6 +25,7 @@ const EFFECTS_QUERY = {
 
 const EFFECTS_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: false,
   destructive: false,
   overwrite: false,
@@ -113,8 +112,10 @@ async function assertProjectLocationNameAvailable(input: {
   readonly projectId: string
   readonly name: string
   readonly assetKind: string
+  readonly client?: Pick<Prisma.TransactionClient, 'projectLocation'>
 }): Promise<void> {
-  const existing = await prisma.projectLocation.findFirst({
+  const client = input.client ?? prisma
+  const existing = await client.projectLocation.findFirst({
     where: {
       projectId: input.projectId,
       assetKind: input.assetKind,
@@ -131,7 +132,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       id: 'create_character',
       summary: 'Create a project character and its primary appearance.',
       intent: 'act',
-      effects: EFFECTS_WRITE,
+      effects: { ...EFFECTS_WRITE, workspaceResourceImpact: 'project_assets' },
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional(),
@@ -189,26 +190,26 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       id: 'update_character',
       summary: 'Update a character name/introduction.',
       intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
+      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'project_assets' },
       inputSchema: z.object({
         characterId: z.string().min(1),
         name: z.string().optional(),
         introduction: z.string().optional().nullable(),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const updateData: { name?: string; introduction?: string } = {}
         if (input.name) updateData.name = input.name.trim()
         if (input.introduction !== undefined && input.introduction !== null) updateData.introduction = input.introduction.trim()
         if (Object.keys(updateData).length === 0) throw new ApiError('INVALID_PARAMS')
 
-        const character = await prisma.projectCharacter.findFirst({
+        const character = await transaction.projectCharacter.findFirst({
           where: { id: input.characterId, projectId: ctx.projectId },
           select: { id: true },
         })
         if (!character) throw new ApiError('NOT_FOUND')
 
-        const updated = await prisma.projectCharacter.update({
+        const updated = await transaction.projectCharacter.update({
           where: { id: input.characterId },
           data: updateData,
 	        })
@@ -221,6 +222,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      intent: 'act',
 	      effects: {
 	        ...EFFECTS_WRITE_DESTRUCTIVE,
+        workspaceResourceImpact: 'project_assets',
 	      },
 	      confirmation: {
 	        required: true,
@@ -230,8 +232,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        characterId: z.string().min(1),
 	      }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const character = await prisma.projectCharacter.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const character = await transaction.projectCharacter.findFirst({
           where: {
             id: input.characterId,
             projectId: ctx.projectId,
@@ -240,7 +242,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         })
         if (!character) throw new ApiError('NOT_FOUND')
 
-	        await prisma.projectCharacter.delete({
+	        await transaction.projectCharacter.delete({
 	          where: { id: input.characterId },
 	        })
 	        return { success: true }
@@ -250,15 +252,15 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'create_character_appearance',
 	      summary: 'Add a new character appearance record.',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE,
+	      effects: { ...EFFECTS_WRITE, workspaceResourceImpact: 'project_assets' },
 	      inputSchema: z.object({
 	        characterId: z.string().min(1),
 	        changeReason: z.string().min(1),
 	        description: z.string().min(1),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const character = await prisma.projectCharacter.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const character = await transaction.projectCharacter.findUnique({
           where: { id: input.characterId },
           include: {
             appearances: { orderBy: { appearanceIndex: 'asc' } },
@@ -270,7 +272,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         const newIndex = maxIndex + 1
         const trimmed = input.description.trim()
 
-        const appearance = await prisma.characterAppearance.create({
+        const appearance = await transaction.characterAppearance.create({
           data: {
             characterId: input.characterId,
             appearanceIndex: newIndex,
@@ -289,7 +291,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'update_character_appearance',
 	      summary: 'Update a character appearance description list.',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
+	      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'project_assets' },
 	      inputSchema: z.object({
 	        characterId: z.string().min(1),
 	        appearanceId: z.string().min(1),
@@ -297,8 +299,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        descriptionIndex: z.number().int().min(0).optional(),
       }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const appearance = await prisma.characterAppearance.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const appearance = await transaction.characterAppearance.findUnique({
           where: { id: input.appearanceId },
           include: { character: true },
         })
@@ -321,7 +323,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           descriptions.push(trimmedDesc)
         }
 
-        await prisma.characterAppearance.update({
+        await transaction.characterAppearance.update({
           where: { id: input.appearanceId },
           data: {
             description: trimmedDesc,
@@ -333,28 +335,29 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	    }),
 	    delete_character_appearance: defineOperation({
 	      id: 'delete_character_appearance',
-	      summary: 'Delete a character appearance and cleanup stored images; then reindex appearanceIndex.',
+	      summary: 'Delete a character appearance relation and then reindex appearanceIndex.',
 	      intent: 'act',
 	      effects: {
 	        writes: true,
+	        workspaceResourceImpact: 'project_assets',
 	        billable: false,
 	        destructive: true,
 	        overwrite: true,
 	        bulk: true,
-	        externalSideEffects: true,
+	        externalSideEffects: false,
 	        longRunning: false,
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将删除该角色形象及其图片。系统会在获得明确批准后执行同一份已审核请求。',
+	        summary: '将删除该角色形象关系并重排索引；共享媒体对象由独立生命周期管理。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 			      inputSchema: z.object({
 			        characterId: z.string().min(1),
 			        appearanceId: z.string().min(1),
 		      }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const appearance = await prisma.characterAppearance.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const appearance = await transaction.characterAppearance.findUnique({
           where: { id: input.appearanceId },
           include: { character: true },
         })
@@ -362,69 +365,55 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         if (appearance.characterId !== input.characterId) throw new ApiError('INVALID_PARAMS')
         if (appearance.character.projectId !== ctx.projectId) throw new ApiError('INVALID_PARAMS')
 
-        const appearanceCount = await prisma.characterAppearance.count({
+        const appearanceCount = await transaction.characterAppearance.count({
           where: { characterId: input.characterId },
         })
         if (appearanceCount <= 1) {
           throw new ApiError('INVALID_PARAMS')
         }
 
-        const deletedKeys = new Set<string>()
-        if (appearance.imageUrl) {
-          const key = await resolveStorageKeyFromMediaValue(appearance.imageUrl)
-          if (key) deletedKeys.add(key)
-        }
-        try {
-          const urls = decodeImageUrlsFromDb(appearance.imageUrls, 'characterAppearance.imageUrls')
-          for (const url of urls) {
-            if (!url) continue
-            const key = await resolveStorageKeyFromMediaValue(url)
-            if (key) deletedKeys.add(key)
-          }
-        } catch {}
+        const deletedImageCount = decodeImageUrlsFromDb(
+          appearance.imageUrls,
+          'characterAppearance.imageUrls',
+        ).filter(Boolean).length
 
-        for (const key of deletedKeys) {
-          try {
-            await deleteObject(key)
-          } catch {}
-        }
-
-        await prisma.characterAppearance.delete({
+        await transaction.characterAppearance.delete({
           where: { id: input.appearanceId },
         })
 
-        const remaining = await prisma.characterAppearance.findMany({
+        const remaining = await transaction.characterAppearance.findMany({
           where: { characterId: input.characterId },
           orderBy: { appearanceIndex: 'asc' },
         })
         for (let i = 0; i < remaining.length; i++) {
           if (remaining[i].appearanceIndex !== i) {
-            await prisma.characterAppearance.update({
+            await transaction.characterAppearance.update({
               where: { id: remaining[i].id },
               data: { appearanceIndex: i },
             })
           }
         }
 
-	        return { success: true, deletedImages: deletedKeys.size }
+	        return { success: true, deletedImages: deletedImageCount }
 	      },
 	    }),
 	    confirm_character_appearance_selection: defineOperation({
 	      id: 'confirm_character_appearance_selection',
-	      summary: 'Confirm a chosen character appearance image selection and delete other candidates.',
+	      summary: 'Confirm a chosen character appearance image and remove other candidate relations.',
 	      intent: 'act',
 	      effects: {
 	        writes: true,
+	        workspaceResourceImpact: 'project_assets',
 	        billable: false,
 	        destructive: true,
 	        overwrite: true,
 	        bulk: true,
-	        externalSideEffects: true,
+	        externalSideEffects: false,
 	        longRunning: false,
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将确认角色形象选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
+	        summary: '将确认角色形象选择并移除其他候选关系；共享媒体对象由独立生命周期管理。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
 		        characterId: z.string().min(1),
@@ -432,8 +421,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 		        selectedIndex: z.number().int().min(0).optional(),
 	      }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const appearance = await prisma.characterAppearance.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const appearance = await transaction.characterAppearance.findUnique({
           where: { id: input.appearanceId },
           include: { character: true },
         })
@@ -449,7 +438,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	        const selectedImageUrl = imageUrls[selectedIndex]
 	        if (!selectedImageUrl) throw new ApiError('NOT_FOUND')
 	        if (imageUrls.length <= 1) {
-	          await prisma.characterAppearance.update({
+	          await transaction.characterAppearance.update({
 	            where: { id: appearance.id },
 	            data: { imageUrl: selectedImageUrl, selectedIndex: 0 },
 	          })
@@ -459,13 +448,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         let deletedCount = 0
         for (let i = 0; i < imageUrls.length; i++) {
           if (i === selectedIndex || !imageUrls[i]) continue
-          const key = await resolveStorageKeyFromMediaValue(imageUrls[i]!)
-          if (key) {
-            try {
-              await deleteObject(key)
-              deletedCount++
-            } catch {}
-          }
+          deletedCount += 1
         }
 
         let descriptions: string[] = []
@@ -474,7 +457,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         }
         const selectedDescription = descriptions[selectedIndex] || appearance.description || ''
 
-        await prisma.characterAppearance.update({
+        await transaction.characterAppearance.update({
           where: { id: appearance.id },
           data: {
             imageUrl: selectedImageUrl,
@@ -492,7 +475,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'create_location',
 	      summary: 'Create a project location and its initial locationImage records.',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE,
+	      effects: { ...EFFECTS_WRITE, workspaceResourceImpact: 'project_assets' },
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().min(1),
@@ -500,7 +483,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         count: z.number().int().positive().max(6).optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         assertNoLegacyArtStyle(input as unknown as Record<string, unknown>)
         const name = normalizeString(input.name)
         const description = normalizeString(input.description)
@@ -519,8 +502,9 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           projectId: ctx.projectId,
           name: name.trim(),
           assetKind,
+          client: transaction,
         })
-        const location = await prisma.projectLocation.create({
+        const location = await transaction.projectLocation.create({
           data: {
             projectId: ctx.projectId,
             name: name.trim(),
@@ -532,7 +516,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           throw error
         })
 
-        await prisma.locationImage.createMany({
+        await transaction.locationImage.createMany({
           data: Array.from({ length: count }, (_value, imageIndex) => ({
             locationId: location.id,
             imageIndex,
@@ -540,7 +524,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           })),
         })
 
-        const locationWithImages = await prisma.projectLocation.findUnique({
+        const locationWithImages = await transaction.projectLocation.findUnique({
           where: { id: location.id },
           include: { images: true },
         })
@@ -552,7 +536,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'patch_location',
 	      summary: 'Update a location name/summary or update locationImage description.',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
+	      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'project_assets' },
 	      inputSchema: z.object({
 	        locationId: z.string().min(1),
 	        name: z.string().optional(),
@@ -561,8 +545,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         description: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const location = await prisma.projectLocation.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const location = await transaction.projectLocation.findFirst({
           where: { id: input.locationId, projectId: ctx.projectId },
           select: { id: true },
         })
@@ -576,7 +560,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
               ? String((input as Record<string, unknown>).summary).trim()
               : null
           }
-          const updated = await prisma.projectLocation.update({
+          const updated = await transaction.projectLocation.update({
             where: { id: input.locationId },
             data: updateData,
           })
@@ -585,7 +569,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 
         if (input.imageIndex !== undefined && input.description) {
           const cleanDescription = removeLocationPromptSuffix(input.description.trim())
-          const image = await prisma.locationImage.update({
+          const image = await transaction.locationImage.update({
             where: {
               locationId_imageIndex: { locationId: input.locationId, imageIndex: input.imageIndex },
             },
@@ -603,7 +587,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'delete_location',
 	      summary: 'Delete a project location (cascades images).',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE_DESTRUCTIVE,
+	      effects: { ...EFFECTS_WRITE_DESTRUCTIVE, workspaceResourceImpact: 'project_assets' },
 	      confirmation: {
 	        required: true,
 	        summary: '将删除场景及其图片记录。系统会在获得明确批准后执行同一份已审核请求。',
@@ -612,13 +596,13 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 			        locationId: z.string().min(1),
 		      }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const location = await prisma.projectLocation.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const location = await transaction.projectLocation.findFirst({
           where: { id: input.locationId, projectId: ctx.projectId },
           select: { id: true },
         })
         if (!location) throw new ApiError('NOT_FOUND')
-	        await prisma.projectLocation.delete({
+	        await transaction.projectLocation.delete({
 	          where: { id: input.locationId },
 	        })
 	        return { success: true }
@@ -626,25 +610,26 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	    }),
 	    confirm_location_selection: defineOperation({
 	      id: 'confirm_location_selection',
-	      summary: 'Confirm selected location image and delete other candidates.',
+	      summary: 'Confirm the selected location image and remove other candidate relations.',
 	      intent: 'act',
 	      effects: {
 	        ...EFFECTS_WRITE_DESTRUCTIVE,
+        workspaceResourceImpact: 'project_assets',
 	        overwrite: true,
 	        bulk: true,
-	        externalSideEffects: true,
+	        externalSideEffects: false,
 	      },
 	      confirmation: {
 	        required: true,
-	        summary: '将确认场景选择并删除未选中的候选图片。系统会在获得明确批准后执行同一份已审核请求。',
+	        summary: '将确认场景选择并移除其他候选关系；共享媒体对象由独立生命周期管理。系统会在获得明确批准后执行同一份已审核请求。',
 	      },
 	      inputSchema: z.object({
 		        locationId: z.string().min(1),
 		        selectedIndex: z.number().int().min(0).optional(),
 	      }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const location = await prisma.projectLocation.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const location = await transaction.projectLocation.findFirst({
           where: { id: input.locationId, projectId: ctx.projectId },
           include: { images: { orderBy: { imageIndex: 'asc' } } },
         })
@@ -667,30 +652,22 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         let deletedCount = 0
         for (const img of imagesToDelete) {
           if (!img.imageUrl) continue
-          const key = await resolveStorageKeyFromMediaValue(img.imageUrl)
-          if (key) {
-            try {
-              await deleteObject(key)
-              deletedCount++
-            } catch {}
-          }
+          deletedCount += 1
         }
 
-        await prisma.$transaction(async (tx) => {
-          await tx.locationImage.deleteMany({
+        await transaction.locationImage.deleteMany({
             where: {
               locationId: input.locationId,
               id: { not: selectedImage.id },
             },
           })
-	          await tx.locationImage.update({
+	        await transaction.locationImage.update({
 	            where: { id: selectedImage.id },
 	            data: { imageIndex: 0, isSelected: true },
 	          })
-          await tx.projectLocation.update({
+        await transaction.projectLocation.update({
             where: { id: input.locationId },
             data: { selectedImageId: selectedImage.id },
-          })
         })
 
 	        return { success: true, message: '已确认选择，其他候选图片已删除', deletedCount }
@@ -700,18 +677,18 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
 	      id: 'clear_storyboard_error',
 	      summary: 'Clear storyboard lastError field.',
 	      intent: 'act',
-	      effects: EFFECTS_WRITE_OVERWRITE,
+	      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'storyboards' },
 	      inputSchema: z.object({
 	        storyboardId: z.string().min(1),
 	      }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const storyboard = await prisma.projectStoryboard.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const storyboard = await transaction.projectStoryboard.findFirst({
           where: { id: input.storyboardId, episode: { projectId: ctx.projectId } },
           select: { id: true },
         })
         if (!storyboard) throw new ApiError('NOT_FOUND')
-        await prisma.projectStoryboard.update({
+        await transaction.projectStoryboard.update({
           where: { id: input.storyboardId },
           data: { lastError: null },
 	        })
@@ -753,6 +730,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         ...EFFECTS_WRITE_DESTRUCTIVE,
+        workspaceResourceImpact: 'project_assets',
         overwrite: true,
       },
       confirmation: {
@@ -764,7 +742,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         id: z.string().min(1),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => revertAssetRender({
+      executeInTransaction: async (ctx, input, transaction) => revertAssetRender({
         kind: input.type,
         assetId: input.id,
         body: input as unknown as Record<string, unknown>,
@@ -773,27 +751,27 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           userId: ctx.userId,
           projectId: ctx.projectId,
         },
-      }),
+      }, transaction),
     }),
     create_episode: defineOperation({
       id: 'create_episode',
       summary: 'Create a new episode in a project and update lastEpisodeId.',
       intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
+      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'project_data' },
       inputSchema: z.object({
         name: z.string().min(1),
         description: z.string().optional().nullable(),
         novelText: z.string().optional(),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const project = await prisma.project.findUnique({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const project = await transaction.project.findUnique({
           where: { id: ctx.projectId },
           select: { id: true },
         })
         if (!project) throw new ApiError('NOT_FOUND')
 
-        const lastEpisode = await prisma.projectEpisode.findFirst({
+        const lastEpisode = await transaction.projectEpisode.findFirst({
           where: { projectId: ctx.projectId },
           orderBy: { episodeNumber: 'desc' },
         })
@@ -809,15 +787,15 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
           createData.novelText = input.novelText
         }
 
-        const episode = await prisma.$transaction(async (tx) => {
-          const createdEpisode = await tx.projectEpisode.create({ data: createData })
-          await createDefaultEditChapter(createdEpisode.id, tx)
-          await tx.project.update({
+        const episode = await (async () => {
+          const createdEpisode = await transaction.projectEpisode.create({ data: createData })
+          await createDefaultEditChapter(createdEpisode.id, transaction)
+          await transaction.project.update({
             where: { id: ctx.projectId },
             data: { lastEpisodeId: createdEpisode.id },
           })
           return createdEpisode
-        })
+        })()
         return { episode }
       },
     }),
@@ -839,18 +817,14 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
     }),
     get_episode_detail: defineOperation({
       id: 'get_episode_detail',
-      summary: 'Get full episode data with storyboards and update project.lastEpisodeId.',
-      intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
+      summary: 'Get full episode data with storyboards.',
+      intent: 'query',
+      effects: EFFECTS_QUERY,
       inputSchema: z.object({
         episodeId: z.string().min(1),
       }),
       outputSchema: z.unknown(),
       execute: async (ctx, input) => {
-        prisma.project.update({
-          where: { id: ctx.projectId },
-          data: { lastEpisodeId: input.episodeId },
-        }).catch((error: unknown) => logError('update lastEpisodeId failed', error))
         return {
           episode: await readProjectEpisodeDetail({
             projectId: ctx.projectId,
@@ -863,7 +837,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       id: 'update_episode',
       summary: 'Update an episode fields including audio media ref.',
       intent: 'act',
-      effects: EFFECTS_WRITE_OVERWRITE,
+      effects: { ...EFFECTS_WRITE_OVERWRITE, workspaceResourceImpact: 'episode' },
       inputSchema: z.object({
         episodeId: z.string().min(1),
         name: z.string().optional(),
@@ -873,8 +847,8 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         srtContent: z.unknown().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const episode = await transaction.projectEpisode.findFirst({
           where: { id: input.episodeId, projectId: ctx.projectId },
           select: { id: true },
         })
@@ -888,12 +862,12 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         if (Object.prototype.hasOwnProperty.call(input, 'novelText')) updateData.novelText = (input as Record<string, unknown>).novelText as string
         if (Object.prototype.hasOwnProperty.call(input, 'audioUrl')) {
           updateData.audioUrl = (input as Record<string, unknown>).audioUrl as string | null
-          const media = await resolveMediaRefFromLegacyValue((input as Record<string, unknown>).audioUrl)
+          const media = await resolveMediaRefFromLegacyValue((input as Record<string, unknown>).audioUrl, transaction)
           updateData.audioMediaId = media?.id || null
         }
         if (Object.prototype.hasOwnProperty.call(input, 'srtContent')) updateData.srtContent = (input as Record<string, unknown>).srtContent as string
 
-        const updated = await prisma.projectEpisode.update({
+        const updated = await transaction.projectEpisode.update({
           where: { id: input.episodeId },
           data: updateData,
         })
@@ -906,6 +880,7 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
       intent: 'act',
       effects: {
         ...EFFECTS_WRITE_DESTRUCTIVE,
+        workspaceResourceImpact: 'project_data',
         overwrite: true,
         bulk: true,
       },
@@ -917,25 +892,25 @@ export function createGuiOperations(): ProjectAgentOperationRegistryDraft {
         episodeId: z.string().min(1),
       }),
       outputSchema: z.object({ success: z.boolean() }),
-      execute: async (ctx, input) => {
-        const episode = await prisma.projectEpisode.findFirst({
+      executeInTransaction: async (ctx, input, transaction) => {
+        const episode = await transaction.projectEpisode.findFirst({
           where: { id: input.episodeId, projectId: ctx.projectId },
           select: { id: true },
         })
         if (!episode) throw new ApiError('NOT_FOUND')
 
-        await prisma.projectEpisode.delete({ where: { id: input.episodeId } })
+        await transaction.projectEpisode.delete({ where: { id: input.episodeId } })
 
-        const project = await prisma.project.findUnique({
+        const project = await transaction.project.findUnique({
           where: { id: ctx.projectId },
           select: { lastEpisodeId: true },
         })
         if (project?.lastEpisodeId === input.episodeId) {
-          const anotherEpisode = await prisma.projectEpisode.findFirst({
+          const anotherEpisode = await transaction.projectEpisode.findFirst({
             where: { projectId: ctx.projectId },
             orderBy: { episodeNumber: 'asc' },
           })
-          await prisma.project.update({
+          await transaction.project.update({
             where: { id: ctx.projectId },
             data: { lastEpisodeId: anotherEpisode?.id || null },
           })

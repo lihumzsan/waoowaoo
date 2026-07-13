@@ -4,14 +4,19 @@ import { useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api-fetch'
 import { useAssetOperationBillingPlan } from '@/lib/query/use-asset-operation-billing-plan'
+import { requireTaskSubmissionReceipt } from '@/lib/query/mutations/mutation-shared'
 import { queryKeys } from '@/lib/query/keys'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
 import {
-  clearTaskTargetOverlay,
   upsertTaskTargetOverlay,
 } from '@/lib/query/task-target-overlay'
 import { isTaskRuntimeRunningPhase, taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
-import { invalidateByTarget } from '@/lib/query/invalidation/invalidate-by-target'
+import { syncWorkspaceResourceChanges } from '@/lib/query/resource-change-sync'
+import {
+  GLOBAL_ASSET_PROJECT_ID,
+  resolveWorkspaceResourceRefs,
+  WORKSPACE_RESOURCE_IMPACT,
+} from '@/lib/workspace-resource/resource-impact'
 import type {
   AssetKind,
   AssetQueryInput,
@@ -227,41 +232,32 @@ function resolveGenerateOverlayTarget(
   }
 }
 
-function resolveAssetTargetType(input: AssetActionScopeInput): string {
-  if (input.scope === 'global') {
-    if (input.kind === 'character') return 'GlobalCharacter'
-    if (input.kind === 'location') return 'GlobalLocation'
-    return 'GlobalAsset'
-  }
-  if (input.kind === 'character') return 'ProjectCharacter'
-  if (input.kind === 'location') return 'ProjectLocation'
-  return 'ProjectAsset'
-}
-
 function invalidateScopeQueries(queryClient: ReturnType<typeof useQueryClient>, input: AssetActionScopeInput) {
-  invalidateByTarget({
+  return syncWorkspaceResourceChanges({
     queryClient,
-    projectId: input.scope === 'global' ? 'global-asset-hub' : input.projectId ?? '',
-    targetType: resolveAssetTargetType(input),
-    episodeId: null,
+    changes: resolveWorkspaceResourceRefs({
+      impact: input.scope === 'global'
+        ? WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS
+        : WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS,
+      projectId: input.scope === 'global' ? GLOBAL_ASSET_PROJECT_ID : input.projectId ?? '',
+      episodeId: null,
+    }),
   })
-  if (input.scope === 'project' && input.projectId) {
-    queryClient.invalidateQueries({ queryKey: queryKeys.projectData(input.projectId) })
-  }
 }
 
 export function useRefreshAssets(input: { scope: 'global' | 'project'; projectId?: string | null }) {
   const queryClient = useQueryClient()
   return () => {
-    invalidateByTarget({
+    return syncWorkspaceResourceChanges({
       queryClient,
-      projectId: input.scope === 'global' ? 'global-asset-hub' : input.projectId ?? '',
-      targetType: input.scope === 'global' ? 'GlobalAsset' : 'ProjectAsset',
-      episodeId: null,
+      changes: resolveWorkspaceResourceRefs({
+        impact: input.scope === 'global'
+          ? WORKSPACE_RESOURCE_IMPACT.GLOBAL_ASSETS
+          : WORKSPACE_RESOURCE_IMPACT.PROJECT_ASSETS,
+        projectId: input.scope === 'global' ? GLOBAL_ASSET_PROJECT_ID : input.projectId ?? '',
+        episodeId: null,
+      }),
     })
-    if (input.scope === 'project' && input.projectId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.projectData(input.projectId) })
-    }
   }
 }
 
@@ -283,7 +279,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to create asset')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -300,7 +296,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to delete asset')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -318,7 +314,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to update asset')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -333,39 +329,29 @@ export function useAssetActions(input: AssetActionScopeInput) {
     const confirmation = await assetOperationBillingPlan(assetId, 'generate', requestBody)
     const overlayTarget = resolveGenerateOverlayTarget(input, payload)
 
-    try {
-      const response = await apiFetch(`/api/assets/${assetId}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...requestBody,
-          ...confirmation,
-        }),
-      })
-      if (!response.ok) {
-        throw new Error('Failed to generate asset render')
-      }
-      const result: unknown = await response.json()
-      const resultRecord = result && typeof result === 'object' && !Array.isArray(result)
-        ? result as Record<string, unknown>
-        : null
-      const taskId = typeof resultRecord?.taskId === 'string' ? resultRecord.taskId.trim() : ''
-      if (overlayTarget && taskId) {
-        upsertTaskTargetOverlay(queryClient, {
-          ...overlayTarget,
-          runningTaskId: taskId,
-          runningTaskType: typeof resultRecord?.taskType === 'string' ? resultRecord.taskType : null,
-          intent: 'generate',
-        })
-      }
-      invalidateScopeQueries(queryClient, input)
-      return result
-    } catch (error) {
-      if (overlayTarget) {
-        clearTaskTargetOverlay(queryClient, overlayTarget)
-      }
-      throw error
+    const response = await apiFetch(`/api/assets/${assetId}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...requestBody,
+        ...confirmation,
+      }),
+    })
+    if (!response.ok) {
+      throw new Error('Failed to generate asset render')
     }
+    const result: unknown = await response.json()
+    const receipt = requireTaskSubmissionReceipt(result)
+    if (overlayTarget) {
+      upsertTaskTargetOverlay(queryClient, {
+        ...overlayTarget,
+        runningTaskId: receipt.taskId,
+        runningTaskType: receipt.taskType,
+        intent: 'generate',
+      })
+    }
+    await invalidateScopeQueries(queryClient, input)
+    return result
   }
 
   const selectRender = async (payload: Record<string, unknown>) => {
@@ -382,7 +368,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to select asset render')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -400,7 +386,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to revert asset render')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -420,7 +406,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to copy asset from global library')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 
@@ -438,7 +424,7 @@ export function useAssetActions(input: AssetActionScopeInput) {
     if (!response.ok) {
       throw new Error('Failed to update asset variant')
     }
-    invalidateScopeQueries(queryClient, input)
+    await invalidateScopeQueries(queryClient, input)
     return response.json()
   }
 

@@ -33,17 +33,6 @@ type MutationBatchWithEntries = {
   entries: Array<{ targetType: string; targetId: string }>
 }
 
-function hasMutationBatchModel(client: unknown): client is {
-  mutationBatch: {
-    create: (args: unknown) => Promise<unknown>
-    findMany: (args: unknown) => Promise<unknown>
-    update: (args: unknown) => Promise<unknown>
-  }
-} {
-  const candidate = client as { mutationBatch?: unknown } | null
-  return !!candidate?.mutationBatch
-}
-
 export function buildMutationBatchSSEEvent(params: {
   batchId: string
   projectId: string
@@ -108,7 +97,6 @@ export async function listMutationBatchReplayEvents(params: {
   episodeId?: string | null
   limit?: number
 }): Promise<MutationBatchSSEEvent[]> {
-  if (!hasMutationBatchModel(prisma)) return []
   const limit = Math.max(1, Math.min(500, params.limit ?? 200))
   const batches = (await prisma.mutationBatch.findMany({
     where: {
@@ -169,45 +157,6 @@ export async function createMutationBatchInTransaction(tx: Prisma.TransactionCli
 }
 
 export async function createMutationBatch(params: CreateMutationBatchParams) {
-  // In tests, `prisma` may be mocked with only a subset of models.
-  // Fall back to a minimal shape to avoid crashing route-level tests.
-  if (!hasMutationBatchModel(prisma)) {
-    const now = new Date()
-    const batchId = `mutation-batch-mock-${Date.now().toString(36)}`
-    const mockBatch = {
-      id: batchId,
-      projectId: params.projectId,
-      userId: params.userId,
-      source: params.source,
-      operationId: params.operationId ?? null,
-      summary: params.summary ?? null,
-      status: 'active' as const,
-      revertError: null as string | null,
-      revertedAt: null as Date | null,
-      createdAt: now,
-      updatedAt: now,
-      entries: params.entries.map((entry, idx) => ({
-        id: `${batchId}-entry-${idx}`,
-        batchId,
-        kind: entry.kind,
-        targetType: entry.targetType,
-        targetId: entry.targetId,
-        payload: entry.payload ?? null,
-        createdAt: now,
-      })),
-    }
-    await publishMutationBatchEvent({
-      batchId,
-      projectId: params.projectId,
-      userId: params.userId,
-      operationId: params.operationId ?? null,
-      episodeId: params.episodeId ?? null,
-      entries: params.entries,
-      createdAt: now,
-    })
-    return mockBatch
-  }
-
   const batch = await prisma.$transaction(async (tx) => await createMutationBatchInTransaction(tx, params))
 
   await publishMutationBatchEvent({
@@ -225,7 +174,6 @@ export async function createMutationBatch(params: CreateMutationBatchParams) {
 
 export async function listRecentMutationBatches(params: { projectId: string; userId: string; limit?: number }) {
   const limit = Math.max(1, Math.min(20, params.limit ?? 10))
-  if (!hasMutationBatchModel(prisma)) return []
   return prisma.mutationBatch.findMany({
     where: {
       projectId: params.projectId,
@@ -242,14 +190,6 @@ export async function listRecentMutationBatches(params: { projectId: string; use
 }
 
 export async function markMutationBatchReverted(params: { batchId: string; status: MutationBatchStatus; revertError?: string | null }) {
-  if (!hasMutationBatchModel(prisma)) {
-    return {
-      id: params.batchId,
-      status: params.status,
-      revertError: params.revertError ?? null,
-      revertedAt: params.status === 'reverted' ? new Date() : null,
-    }
-  }
   return prisma.mutationBatch.update({
     where: { id: params.batchId },
     data: {

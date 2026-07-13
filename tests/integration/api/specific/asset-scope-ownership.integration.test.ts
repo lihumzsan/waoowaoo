@@ -5,6 +5,7 @@ import {
   requireOwnedAssetVariant,
 } from '@/lib/assets/services/asset-scope-ownership'
 import { copyAssetFromGlobal } from '@/lib/assets/services/asset-actions'
+import { commitProjectAssetRenderUpload } from '@/lib/assets/services/project-upload-render'
 import { resetSystemState } from '../../../helpers/db-reset'
 import { createTestProject, createTestUser } from '../../../helpers/billing-fixtures'
 import { prisma } from '../../../helpers/prisma'
@@ -214,5 +215,43 @@ describe('asset scope ownership real-MySQL conformance', () => {
       sourceGlobalCharacterId: graph.ownerGlobalCharacter.id,
       appearances: [{ description: 'owner global description' }],
     })
+  })
+
+  it('rejects a stale prepared upload instead of overwriting a newer character render', async () => {
+    const graph = await seedScopeGraph()
+    const input = {
+      userId: graph.owner.id,
+      projectId: graph.ownerProject.id,
+      kind: 'character' as const,
+      assetId: graph.ownerCharacter.id,
+      appearanceId: graph.ownerAppearance.id,
+      imageIndex: 0,
+    }
+    const preparedVersion = graph.ownerAppearance.updatedAt.getTime()
+
+    await expect(prisma.$transaction(async (transaction) => (
+      await commitProjectAssetRenderUpload(input, {
+        kind: 'character',
+        imageKey: 'uploads/first-render.jpg',
+        appearanceId: graph.ownerAppearance.id,
+        appearanceUpdatedAtMs: preparedVersion,
+      }, transaction)
+    ))).resolves.toMatchObject({ success: true, imageKey: 'uploads/first-render.jpg' })
+
+    await expect(prisma.$transaction(async (transaction) => (
+      await commitProjectAssetRenderUpload(input, {
+        kind: 'character',
+        imageKey: 'uploads/stale-render.jpg',
+        appearanceId: graph.ownerAppearance.id,
+        appearanceUpdatedAtMs: preparedVersion,
+      }, transaction)
+    ))).rejects.toThrow('PROJECT_CHARACTER_APPEARANCE_CHANGED_DURING_UPLOAD')
+
+    const persisted = await prisma.characterAppearance.findUniqueOrThrow({
+      where: { id: graph.ownerAppearance.id },
+      select: { imageUrl: true, imageUrls: true },
+    })
+    expect(persisted.imageUrl).toBe('uploads/first-render.jpg')
+    expect(JSON.parse(persisted.imageUrls ?? '[]')).toEqual(['uploads/first-render.jpg'])
   })
 })

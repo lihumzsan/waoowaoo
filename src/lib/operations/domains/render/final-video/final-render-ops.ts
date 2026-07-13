@@ -114,6 +114,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: true,
@@ -198,6 +199,7 @@ export function createFinalRenderOperations(): ProjectAgentOperationRegistryDraf
       prerequisites: { episodeId: 'required' },
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: true,

@@ -2,10 +2,15 @@ import { z } from 'zod'
 import { ApiError } from '@/lib/api-errors'
 import { createAsset, copyAssetFromGlobal, ensureAssetGenerateCommitReady, planAssetGenerateTask, removeAsset, revertAssetRender, selectAssetRender, updateAsset, updateAssetVariant } from '@/lib/assets/services/asset-actions'
 import { readAssets } from '@/lib/assets/services/read-assets'
-import { uploadProjectAssetRender } from '@/lib/assets/services/project-upload-render'
+import {
+  commitProjectAssetRenderUpload,
+  compensatePreparedProjectAssetRenderUpload,
+  prepareProjectAssetRenderUpload,
+} from '@/lib/assets/services/project-upload-render'
 import type { ProjectUploadRenderInput } from '@/lib/assets/upload-render-form'
 import type { AssetKind, AssetScope } from '@/lib/assets/contracts'
 import type { ProjectAgentOperationContext, ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
+import { taskSubmitOperationOutputSchema } from '@/lib/operations/output-schemas'
 import { defineOperation } from '@/lib/operations/define-operation'
 import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import {
@@ -35,6 +40,7 @@ const EFFECTS_QUERY = {
 
 const EFFECTS_WRITE = {
   writes: true,
+  workspaceResourceImpact: 'scoped_assets',
   billable: false,
   destructive: false,
   overwrite: false,
@@ -45,6 +51,7 @@ const EFFECTS_WRITE = {
 
 const EFFECTS_WRITE_OVERWRITE = {
   writes: true,
+  workspaceResourceImpact: 'scoped_assets',
   billable: false,
   destructive: false,
   overwrite: true,
@@ -55,6 +62,7 @@ const EFFECTS_WRITE_OVERWRITE = {
 
 const EFFECTS_LONG_RUNNING = {
   writes: true,
+  workspaceResourceImpact: 'none',
   billable: true,
   destructive: false,
   overwrite: false,
@@ -65,6 +73,7 @@ const EFFECTS_LONG_RUNNING = {
 
 const EFFECTS_UPLOAD_OVERWRITE = {
   writes: true,
+  workspaceResourceImpact: 'scoped_assets',
   billable: false,
   destructive: false,
   overwrite: true,
@@ -72,6 +81,12 @@ const EFFECTS_UPLOAD_OVERWRITE = {
   externalSideEffects: true,
   longRunning: true,
 } as const
+
+const uploadRenderOutputSchema = z.object({
+  success: z.literal(true),
+  imageKey: z.string().min(1),
+  imageIndex: z.number().int().nonnegative(),
+})
 
 function requireProjectId(scope: AssetScope, projectId: unknown): string {
   if (scope !== 'project') return ''
@@ -205,7 +220,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const scope = input.scope
         const projectId = requireProjectId(scope, input.projectId)
         return await createAsset({
@@ -214,7 +229,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
 
@@ -230,7 +245,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         const body = omitBodyKeys(input, ['assetId'])
         return await updateAsset({
@@ -240,7 +255,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
 
@@ -259,7 +274,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         return await removeAsset({
           kind: input.kind,
@@ -267,7 +282,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
 
@@ -278,7 +293,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       effects: EFFECTS_LONG_RUNNING,
       confirmation: { kind: 'billable_media', required: true },
       inputSchema: buildAssetGenerateSchema(),
-      outputSchema: z.unknown(),
+      outputSchema: taskSubmitOperationOutputSchema,
       plan: async (ctx, input) => planAssetGenerateOperation(ctx, input),
       commit: async (ctx, input, plan) => commitAssetGenerateOperation(ctx, input, plan),
     }),
@@ -289,11 +304,11 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
       intent: 'act',
       effects: EFFECTS_UPLOAD_OVERWRITE,
       inputSchema: z.custom<ProjectUploadRenderInput>(isProjectUploadRenderInput),
-      outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      outputSchema: uploadRenderOutputSchema,
+      prepareTransaction: async (ctx, input) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         const imageBuffer = Buffer.from(await input.file.arrayBuffer())
-        return await uploadProjectAssetRender({
+        return await prepareProjectAssetRenderUpload({
           userId: ctx.userId,
           projectId,
           kind: input.kind,
@@ -303,6 +318,28 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
           ...(input.imageIndex !== undefined ? { imageIndex: input.imageIndex } : {}),
         })
+      },
+      executeInTransaction: async (ctx, input, transaction, prepared) => {
+        const projectId = requireProjectId(input.scope, input.projectId)
+        return await commitProjectAssetRenderUpload({
+          userId: ctx.userId,
+          projectId,
+          kind: input.kind,
+          assetId: input.assetId,
+          ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
+          ...(input.imageIndex !== undefined ? { imageIndex: input.imageIndex } : {}),
+        }, prepared, transaction)
+      },
+      compensateTransactionFailure: async (ctx, input, prepared) => {
+        const projectId = requireProjectId(input.scope, input.projectId)
+        await compensatePreparedProjectAssetRenderUpload({
+          userId: ctx.userId,
+          projectId,
+          kind: input.kind,
+          assetId: input.assetId,
+          ...(input.appearanceId ? { appearanceId: input.appearanceId } : {}),
+          ...(input.imageIndex !== undefined ? { imageIndex: input.imageIndex } : {}),
+        }, prepared)
       },
     }),
 
@@ -318,7 +355,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         const body = omitBodyKeys(input, ['assetId'])
         return await selectAssetRender({
@@ -328,7 +365,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
 
@@ -344,7 +381,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         const body = omitBodyKeys(input, ['assetId'])
         return await revertAssetRender({
@@ -354,7 +391,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
 
@@ -396,7 +433,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
         projectId: z.string().optional(),
       }).passthrough(),
       outputSchema: z.unknown(),
-      execute: async (ctx, input) => {
+      executeInTransaction: async (ctx, input, transaction) => {
         const projectId = requireProjectId(input.scope, input.projectId)
         const body = omitBodyKeys(input, ['assetId', 'variantId'])
         return await updateAssetVariant({
@@ -407,7 +444,7 @@ export function createAssetsApiOperations(): ProjectAgentOperationRegistryDraft 
           access: input.scope === 'project'
             ? { scope: 'project', userId: ctx.userId, projectId }
             : { scope: 'global', userId: ctx.userId },
-        })
+        }, transaction)
       },
     }),
   }

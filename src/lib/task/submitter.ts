@@ -1,6 +1,6 @@
 import { createScopedLogger } from '@/lib/logging/core'
 import { prisma } from '@/lib/prisma'
-import { TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
+import { isTaskType, TASK_STATUS, type CreateTaskInput, type TaskBillingInfo, type TaskType } from './types'
 import {
   buildDefaultTaskBillingInfo,
   getBillingMode,
@@ -34,6 +34,7 @@ export interface SubmitTaskResult {
   success: boolean
   async: boolean
   taskId: string
+  taskType: TaskType
   runId: string | null
   status: string
   deduped: boolean
@@ -238,6 +239,7 @@ export async function submitTask(params: SubmitTaskParams): Promise<SubmitTaskRe
   const first = created[0]
   if (!first || created.length !== 1) throw new Error('TASK_SINGLE_BATCH_RESULT_INVALID')
   const { task, deduped } = first
+  if (!isTaskType(task.type)) throw new Error(`TASK_TYPE_UNSUPPORTED:${task.type}`)
   const preparedBillingInfo = (task.billingInfo || null) as TaskBillingInfo | null
   logger.info({
     action: deduped ? 'task.submit.deduped' : 'task.submit.persisted',
@@ -254,6 +256,7 @@ export async function submitTask(params: SubmitTaskParams): Promise<SubmitTaskRe
     success: true,
     async: true,
     taskId: task.id,
+    taskType: task.type,
     runId: null,
     status: task.status,
     deduped,

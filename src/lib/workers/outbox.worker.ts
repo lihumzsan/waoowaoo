@@ -21,6 +21,7 @@ import {
   settleProjectAgentWaitContinuationDeliveryExhausted,
 } from '@/lib/project-agent/server-follow-up'
 import { publishPersistedProjectAgentSessionChangedById } from '@/lib/project-agent/session-event'
+import { publishPersistedWorkspaceResourceEventByOutboxId } from '@/lib/workspace-resource/resource-change-events'
 import { getOutboxRuntimeConfig, getWorkerConcurrency } from './runtime-config'
 
 const logger = createScopedLogger({ module: 'worker.outbox' })
@@ -77,6 +78,9 @@ async function deliverOutboxCommand(job: Job<OutboxJobData>): Promise<void> {
         break
       case OUTBOX_COMMAND_KIND.PROJECT_AGENT_SESSION_BROADCAST:
         await publishPersistedProjectAgentSessionChangedById(payload.projectAgentEventId)
+        break
+      case OUTBOX_COMMAND_KIND.WORKSPACE_RESOURCE_BROADCAST:
+        await publishPersistedWorkspaceResourceEventByOutboxId(outboxId)
         break
     }
     if (leaseLost) throw new Error(`OUTBOX_LEASE_LOST:${outboxId}`)

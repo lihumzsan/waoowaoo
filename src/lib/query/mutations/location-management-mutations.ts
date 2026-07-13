@@ -3,18 +3,12 @@ import type { Project } from '@/types/project'
 import { queryKeys } from '../keys'
 import type { ProjectAssetsData } from '../hooks/useProjectAssets'
 import { resolveTaskResponse } from '@/lib/task/client'
-import { apiFetch } from '@/lib/api-fetch'
-import {
-    clearTaskTargetOverlay,
-    upsertTaskTargetOverlay,
-} from '../task-target-overlay'
 import {
     invalidateQueryTemplates,
     requestJsonWithError,
     requestTaskResponseWithError,
     requestVoidWithError,
 } from './mutation-shared'
-import { useAssetOperationBillingPlan } from '../use-asset-operation-billing-plan'
 
 interface DeleteProjectLocationContext {
     previousAssets: ProjectAssetsData | undefined
@@ -298,54 +292,3 @@ export function useConfirmProjectLocationSelection(
 /**
  * 批量生成项目场景图片
  */
-
-export function useBatchGenerateLocationImages(projectId: string) {
-    const queryClient = useQueryClient()
-    const assetOperationBillingPlan = useAssetOperationBillingPlan()
-
-    return useMutation({
-        mutationFn: async (locationIds: string[]) => {
-            const results = await Promise.allSettled(
-                locationIds.map(async (locationId) => {
-                    const requestBody = {
-                        scope: 'project',
-                        kind: 'location',
-                        projectId,
-                    }
-                    const confirmation = await assetOperationBillingPlan(locationId, 'generate', requestBody)
-                    return await apiFetch(`/api/assets/${locationId}/generate`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            ...requestBody,
-                            ...confirmation,
-                        })
-                    })
-                })
-            )
-            return results
-        },
-        onMutate: (locationIds) => {
-            for (const locationId of locationIds) {
-                upsertTaskTargetOverlay(queryClient, {
-                    projectId,
-                    targetType: 'LocationImage',
-                    targetId: locationId,
-                    intent: 'generate',
-                })
-            }
-        },
-        onError: (_error, locationIds) => {
-            for (const locationId of locationIds) {
-                clearTaskTargetOverlay(queryClient, {
-                    projectId,
-                    targetType: 'LocationImage',
-                    targetId: locationId,
-                })
-            }
-        },
-        onSettled: () => {
-            invalidateQueryTemplates(queryClient, [queryKeys.projectAssets.all(projectId)])
-        }
-    })
-}

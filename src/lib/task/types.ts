@@ -102,6 +102,12 @@ export const TASK_TYPE = {
 
 export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE]
 
+const TASK_TYPE_VALUES: ReadonlySet<string> = new Set(Object.values(TASK_TYPE))
+
+export function isTaskType(value: unknown): value is TaskType {
+  return typeof value === 'string' && TASK_TYPE_VALUES.has(value)
+}
+
 export type QueueType = 'image' | 'video' | 'music' | 'text'
 
 export type BillingMode = 'OFF' | 'SHADOW' | 'ENFORCE'

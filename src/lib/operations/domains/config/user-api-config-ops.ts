@@ -28,6 +28,7 @@ export function createUserApiConfigOperations(): ProjectAgentOperationRegistryDr
       intent: 'act',
       effects: {
         writes: true,
+        workspaceResourceImpact: 'none',
         billable: false,
         destructive: false,
         overwrite: true,

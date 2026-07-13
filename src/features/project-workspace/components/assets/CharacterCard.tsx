@@ -35,7 +35,6 @@ interface CharacterCardProps {
   appearanceCount?: number  // 该角色的形象数量
   onSelectImage?: (characterId: string, appearanceId: string, imageIndex: number | null) => void
   activeTaskKeys?: Set<string>
-  onClearTaskKey?: (key: string) => void
   isPrimaryAppearance?: boolean
   primaryAppearanceSelected?: boolean
   projectId: string

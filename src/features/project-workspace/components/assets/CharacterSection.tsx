@@ -22,8 +22,8 @@ interface CharacterSectionProps {
     focusCharacterId?: string | null
     focusCharacterRequestId?: number
     activeTaskKeys: Set<string>
-    onClearTaskKey: (key: string) => void
-    onRegisterTransientTaskKey: (key: string) => void
+    onClearSubmittingTaskKey: (key: string) => void
+    onRegisterSubmittingTaskKey: (key: string) => void
     // 回调函数
     onAddCharacter: () => void
     onDeleteCharacter: (characterId: string) => void
@@ -50,8 +50,8 @@ export default function CharacterSection({
     focusCharacterId = null,
     focusCharacterRequestId = 0,
     activeTaskKeys,
-    onClearTaskKey,
-    onRegisterTransientTaskKey,
+    onClearSubmittingTaskKey,
+    onRegisterSubmittingTaskKey,
     onAddCharacter,
     onDeleteCharacter,
     onDeleteAppearance,
@@ -229,27 +229,27 @@ export default function CharacterSection({
                                                     const selectedIndex = appearance.selectedIndex ?? 0
                                                     const taskKey = `character-${character.id}-${appearance.appearanceIndex}-${selectedIndex}`
                                                     _ulogInfo('[CharacterSection] 调用单张重新生成, imageIndex:', selectedIndex)
-                                                    onRegisterTransientTaskKey(taskKey)
-                                                    void onRegenerateSingle(character.id, appearance.id, selectedIndex).catch(() => {
-                                                        onClearTaskKey(taskKey)
-                                                    })
+                                                    onRegisterSubmittingTaskKey(taskKey)
+                                                    void onRegenerateSingle(character.id, appearance.id, selectedIndex)
+                                                        .catch(() => undefined)
+                                                        .finally(() => onClearSubmittingTaskKey(taskKey))
                                                 }
                                                 // 多图或无图：重新生成整组
                                                 else {
                                                     const taskKey = `character-${character.id}-${appearance.appearanceIndex}-group`
                                                     _ulogInfo('[CharacterSection] 调用整组重新生成')
-                                                    onRegisterTransientTaskKey(taskKey)
-                                                    void onRegenerateGroup(character.id, appearance.id, count).catch(() => {
-                                                        onClearTaskKey(taskKey)
-                                                    })
+                                                    onRegisterSubmittingTaskKey(taskKey)
+                                                    void onRegenerateGroup(character.id, appearance.id, count)
+                                                        .catch(() => undefined)
+                                                        .finally(() => onClearSubmittingTaskKey(taskKey))
                                                 }
                                             }}
                                             onGenerate={(count) => {
                                                 const taskKey = `character-${character.id}-${appearance.appearanceIndex}-group`
-                                                onRegisterTransientTaskKey(taskKey)
-                                                void handleGenerateImage('character', character.id, appearance.id, count).catch(() => {
-                                                    onClearTaskKey(taskKey)
-                                                })
+                                                onRegisterSubmittingTaskKey(taskKey)
+                                                void handleGenerateImage('character', character.id, appearance.id, count)
+                                                    .catch(() => undefined)
+                                                    .finally(() => onClearSubmittingTaskKey(taskKey))
                                             }}
                                             onUndo={() => onUndo(character.id, appearance.id)}
                                             onImageClick={onImageClick}
@@ -257,7 +257,6 @@ export default function CharacterSection({
                                             appearanceCount={sortedAppearances.length}
                                             onSelectImage={onSelectImage}
                                             activeTaskKeys={activeTaskKeys}
-                                            onClearTaskKey={onClearTaskKey}
                                             isPrimaryAppearance={isPrimary}
                                             primaryAppearanceSelected={primarySelected}
                                             projectId={projectId}
