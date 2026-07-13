@@ -44,6 +44,7 @@ export const TASK_TYPE = {
   VIDEO_PANEL: 'video_panel',
   LIP_SYNC: 'lip_sync',
   VOICE_LINE: 'voice_line',
+  FREE_VOICE: 'free_voice',
   VOICE_DESIGN: 'voice_design',
   ASSET_HUB_VOICE_DESIGN: 'asset_hub_voice_design',
   REGENERATE_STORYBOARD_TEXT: 'regenerate_storyboard_text',

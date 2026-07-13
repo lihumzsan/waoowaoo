@@ -28,6 +28,7 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.VIDEO_PANEL]: 'generate',
   [TASK_TYPE.LIP_SYNC]: 'process',
   [TASK_TYPE.VOICE_LINE]: 'generate',
+  [TASK_TYPE.FREE_VOICE]: 'generate',
   [TASK_TYPE.VOICE_DESIGN]: 'generate',
   [TASK_TYPE.ASSET_HUB_VOICE_DESIGN]: 'generate',
   [TASK_TYPE.REGENERATE_STORYBOARD_TEXT]: 'regenerate',
