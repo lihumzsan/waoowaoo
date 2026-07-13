@@ -247,6 +247,7 @@ export interface ProjectEditBible {
   version?: number
   status: string
   lockedAt?: string | Date | null
+  generationTaskId?: string | null
   bible?: unknown | null
   beatSheet?: unknown | null
   ledger?: unknown | null
@@ -303,6 +304,7 @@ export interface ProjectEditShotExecutionPlan {
   chapterId?: string
   editScriptId: string
   status: string
+  generationTaskId?: string | null
   shots: {
     shotId: string
     shotNumber: number
@@ -361,6 +363,7 @@ export interface ProjectEditScript {
   durationSec: number
   shotCount: number
   status: string
+  generationTaskId?: string | null
   assetReviewStatus: 'pending' | 'approved'
   shots: ProjectEditScriptShot[]
   generationSegments: ProjectEditScriptGenerationSegment[]

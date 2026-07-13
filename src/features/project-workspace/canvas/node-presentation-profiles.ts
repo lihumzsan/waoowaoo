@@ -244,6 +244,7 @@ export function resolveWorkspaceCanvasNodeDisclosure(input: {
   readonly userExpandedOverride?: boolean
   readonly defaultExpanded?: boolean
   readonly isStreaming: boolean
+  readonly hasStreamPresentation: boolean
 }): WorkspaceCanvasNodeDisclosureState {
   const profile = getWorkspaceCanvasNodePresentationProfile(input.kind)
   const disclosure = profile.disclosure
@@ -252,33 +253,33 @@ export function resolveWorkspaceCanvasNodeDisclosure(input: {
       canToggle: false,
       effectiveExpanded: true,
       mode: 'expanded',
-      isStreamingExpanded: false,
+      isStreamPresentationExpanded: false,
       collapseWhenStreamCompletes: false,
     }
   }
 
-  const isStreamingExpanded = input.isStreaming && disclosure.forceExpandedWhileStreaming
+  const isStreamPresentationExpanded = input.hasStreamPresentation && disclosure.forceExpandedWhileStreaming
   const userExpanded = input.userExpandedOverride ?? input.defaultExpanded ?? profile.defaultExpanded
-  const effectiveExpanded = isStreamingExpanded || userExpanded
-  const mode = isStreamingExpanded
+  const effectiveExpanded = isStreamPresentationExpanded || userExpanded
+  const mode = input.isStreaming
     ? 'streaming'
     : effectiveExpanded
       ? 'expanded'
       : 'collapsed'
 
   return {
-    canToggle: !isStreamingExpanded,
+    canToggle: !isStreamPresentationExpanded,
     effectiveExpanded,
     mode,
-    isStreamingExpanded,
+    isStreamPresentationExpanded,
     collapseWhenStreamCompletes: disclosure.collapseWhenStreamCompletes,
   }
 }
 
-export function resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds(input: {
-  readonly previousStreamingNodeIds: ReadonlySet<string>
-  readonly currentStreamingNodeIds: ReadonlySet<string>
+export function resolveCompletedWorkspaceCanvasStreamPresentationNodeIds(input: {
+  readonly previousStreamPresentationNodeIds: ReadonlySet<string>
+  readonly currentStreamPresentationNodeIds: ReadonlySet<string>
 }): readonly string[] {
-  return Array.from(input.previousStreamingNodeIds)
-    .filter((nodeId) => !input.currentStreamingNodeIds.has(nodeId))
+  return Array.from(input.previousStreamPresentationNodeIds)
+    .filter((nodeId) => !input.currentStreamPresentationNodeIds.has(nodeId))
 }

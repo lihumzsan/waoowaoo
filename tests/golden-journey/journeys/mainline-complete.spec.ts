@@ -60,18 +60,29 @@ async function installCanvasStreamContinuityObserver(page: import('@playwright/t
     interface ContinuityState {
       readonly seenIds: string[]
       readonly missingIds: string[]
+      readonly presentationGapIds: string[]
+      readonly prematureCollapseIds: string[]
+      readonly ownershipMismatchIds: string[]
     }
+    const emptyState = (): ContinuityState => ({
+      seenIds: [],
+      missingIds: [],
+      presentationGapIds: [],
+      prematureCollapseIds: [],
+      ownershipMismatchIds: [],
+    })
     const readState = (): ContinuityState => {
       const raw = window.sessionStorage.getItem(storageKey)
-      if (!raw) return { seenIds: [], missingIds: [] }
+      if (!raw) return emptyState()
       try {
-        return JSON.parse(raw) as ContinuityState
+        return { ...emptyState(), ...JSON.parse(raw) as Partial<ContinuityState> }
       } catch {
-        return { seenIds: [], missingIds: [] }
+        return emptyState()
       }
     }
     let unloading = false
     const documentSeenIds = new Set<string>()
+    const documentPendingHandoffTaskIdsByNodeId = new Map<string, string>()
     window.addEventListener('pagehide', () => { unloading = true }, { once: true })
     const observe = (): void => {
       const check = (): void => {
@@ -79,32 +90,68 @@ async function installCanvasStreamContinuityObserver(page: import('@playwright/t
         const state = readState()
         const seenIds = new Set(state.seenIds)
         const missingIds = new Set(state.missingIds)
+        const presentationGapIds = new Set(state.presentationGapIds)
+        const prematureCollapseIds = new Set(state.prematureCollapseIds)
+        const ownershipMismatchIds = new Set(state.ownershipMismatchIds)
         document.querySelectorAll('article[data-node-id][data-lifecycle-phase="streaming"]').forEach((node) => {
           const nodeId = node.getAttribute('data-node-id')
           if (nodeId) {
             seenIds.add(nodeId)
             documentSeenIds.add(nodeId)
+            const taskId = node.getAttribute('data-lifecycle-task-id')
+            if (taskId) documentPendingHandoffTaskIdsByNodeId.set(nodeId, taskId)
           }
         })
-        const currentIds = new Set(Array.from(
+        const currentNodes = new Map(Array.from(
           document.querySelectorAll('article[data-node-id]'),
-          (node) => node.getAttribute('data-node-id'),
-        ).filter((nodeId): nodeId is string => Boolean(nodeId)))
+          (node) => [node.getAttribute('data-node-id'), node] as const,
+        ).filter((entry): entry is readonly [string, Element] => Boolean(entry[0])))
         seenIds.forEach((nodeId) => {
-          if (currentIds.has(nodeId)) documentSeenIds.add(nodeId)
+          if (currentNodes.has(nodeId)) documentSeenIds.add(nodeId)
         })
         documentSeenIds.forEach((nodeId) => {
-          if (!currentIds.has(nodeId)) missingIds.add(nodeId)
+          const node = currentNodes.get(nodeId)
+          if (!node) {
+            missingIds.add(nodeId)
+            return
+          }
+          const phase = node.getAttribute('data-lifecycle-phase')
+          const streamPresentation = node.getAttribute('data-stream-presentation')
+          const disclosureMode = node.getAttribute('data-disclosure-mode')
+          const pendingHandoffTaskId = documentPendingHandoffTaskIdsByNodeId.get(nodeId)
+          if (!pendingHandoffTaskId) return
+          const isTerminal = phase === 'succeeded' || phase === 'failed' || phase === 'canceled'
+          if (!isTerminal && streamPresentation === 'none') presentationGapIds.add(nodeId)
+          if (!isTerminal && disclosureMode === 'collapsed') prematureCollapseIds.add(nodeId)
+          if (phase === 'succeeded' && streamPresentation === 'none') {
+            const resourceTaskId = node.getAttribute('data-terminal-handoff-task-id')
+            if (resourceTaskId === pendingHandoffTaskId) {
+              documentPendingHandoffTaskIdsByNodeId.delete(nodeId)
+            } else {
+              ownershipMismatchIds.add(nodeId)
+            }
+          } else if ((phase === 'failed' || phase === 'canceled') && streamPresentation === 'none') {
+            documentPendingHandoffTaskIdsByNodeId.delete(nodeId)
+          }
         })
         window.sessionStorage.setItem(storageKey, JSON.stringify({
           seenIds: [...seenIds],
           missingIds: [...missingIds],
+          presentationGapIds: [...presentationGapIds],
+          prematureCollapseIds: [...prematureCollapseIds],
+          ownershipMismatchIds: [...ownershipMismatchIds],
         }))
       }
       check()
       new MutationObserver(check).observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['data-lifecycle-phase'],
+        attributeFilter: [
+          'data-lifecycle-phase',
+          'data-lifecycle-task-id',
+          'data-terminal-handoff-task-id',
+          'data-stream-presentation',
+          'data-disclosure-mode',
+        ],
         childList: true,
         subtree: true,
       })
@@ -120,12 +167,27 @@ async function installCanvasStreamContinuityObserver(page: import('@playwright/t
 async function readCanvasStreamContinuity(page: import('@playwright/test').Page): Promise<{
   readonly seenIds: string[]
   readonly missingIds: string[]
+  readonly presentationGapIds: string[]
+  readonly prematureCollapseIds: string[]
+  readonly ownershipMismatchIds: string[]
 }> {
   return await page.evaluate((storageKey) => {
     const raw = window.sessionStorage.getItem(storageKey)
     return raw
-      ? JSON.parse(raw) as { seenIds: string[]; missingIds: string[] }
-      : { seenIds: [], missingIds: [] }
+      ? JSON.parse(raw) as {
+          seenIds: string[]
+          missingIds: string[]
+          presentationGapIds: string[]
+          prematureCollapseIds: string[]
+          ownershipMismatchIds: string[]
+        }
+      : {
+          seenIds: [],
+          missingIds: [],
+          presentationGapIds: [],
+          prematureCollapseIds: [],
+          ownershipMismatchIds: [],
+        }
   }, CANVAS_STREAM_CONTINUITY_KEY)
 }
 
@@ -327,10 +389,14 @@ async function submitObservedBoundary(input: {
   if (input.boundary === 'style_choice') {
     const bibleId = await readGoldenEditBibleId(input.scope)
     const styleBibleNode = input.page.locator(`article[data-node-id="${workspaceNodeId.editStyleBible(bibleId)}"]`)
-    await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'pending')
+    await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded')
     await expect(input.page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true })).toHaveCount(1)
     await expect(input.page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true })).toHaveCount(0)
     await submitGoldenBoundary(input.page, input.boundary)
+    await expect.poll(async () => await readGoldenWorkflowStage(input.page, input.scope), {
+      timeout: 60_000,
+      message: 'style choice must be durably consumed before the Journey reloads the boundary',
+    }).not.toBe('needs_style_choice')
     await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded', { timeout: 30_000 })
     await input.page.reload({ waitUntil: 'domcontentloaded' })
     await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded')
@@ -527,6 +593,9 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       const streamContinuity = await readCanvasStreamContinuity(page)
       expect(streamContinuity.seenIds.length, 'main Journey must observe at least one structured-stream Canvas node').toBeGreaterThan(0)
       expect(streamContinuity.missingIds, 'a streamed canonical node must never disappear before formal Query handoff').toEqual([])
+      expect(streamContinuity.presentationGapIds, 'stream presentation must remain until the exact formal Query resource takes over').toEqual([])
+      expect(streamContinuity.prematureCollapseIds, 'stream disclosure must stay expanded throughout terminal handoff').toEqual([])
+      expect(streamContinuity.ownershipMismatchIds, 'formal Query takeover must belong to the same Task as the observed stream').toEqual([])
       expect(oracle.identities.duplicateMessageIds).toHaveLength(0)
       expect(oracle.identities.duplicateToolCallIds).toHaveLength(0)
       browserObservations.assertClean()

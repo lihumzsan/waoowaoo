@@ -163,6 +163,7 @@ export interface PersistedEditBibleBundle {
   readonly version: number
   readonly status: EditBibleStatus
   readonly lockedAt: Date | null
+  readonly generationTaskId: string | null
   readonly updatedAt: Date
   readonly bible: EditBible | null
   readonly beatSheet: EditBibleBeatSheet | null
@@ -320,6 +321,7 @@ function mapPersistedBible(record: {
   readonly version: number
   readonly status: string
   readonly lockedAt: Date | null
+  readonly generationTaskId: string | null
   readonly updatedAt: Date
   readonly sourceDocument: {
     readonly sourceKind: string
@@ -344,6 +346,7 @@ function mapPersistedBible(record: {
     version: record.version,
     status: normalizeBibleStatus(record.status),
     lockedAt: record.lockedAt,
+    generationTaskId: record.generationTaskId,
     updatedAt: record.updatedAt,
     bible: parseBundlePart(record.bibleJson, (value) => editBibleSchema.parse(value)),
     beatSheet: parseBundlePart(record.beatSheetJson, (value) => editBibleBeatSheetSchema.parse(value)),

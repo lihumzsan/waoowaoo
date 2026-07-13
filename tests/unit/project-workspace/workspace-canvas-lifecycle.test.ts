@@ -150,7 +150,7 @@ describe('workspace Canvas lifecycle resolver', () => {
 
   it('makes contract errors authoritative while retaining the best available identity', () => {
     const contractError = { code: 'CANVAS_CONTRACT_INVALID', message: 'Missing capability' }
-    const stream = { taskId: 'stream-task', taskType: 'stream-type', presentation }
+    const stream = { taskId: 'stream-task', taskType: 'stream-type', terminalHandoff: false, presentation }
 
     expect(resolveWorkspaceCanvasLifecycle(facts({
       contractError,
@@ -174,7 +174,7 @@ describe('workspace Canvas lifecycle resolver', () => {
   })
 
   it('uses stream facts only when they belong to the active processing task', () => {
-    const matchingStream = { taskId: 'task-1', taskType: 'stream-type', presentation }
+    const matchingStream = { taskId: 'task-1', taskType: 'stream-type', terminalHandoff: false, presentation }
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'processing', taskId: 'task-1', runningTaskType: null, progress: 25 },
       stream: matchingStream,
@@ -216,7 +216,7 @@ describe('workspace Canvas lifecycle resolver', () => {
 
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'failed', taskId: 'task-3', lastError: { code: 5 as unknown as string, message: ' ' } },
-      stream: { taskId: 'task-3', taskType: null, presentation },
+      stream: { taskId: 'task-3', taskType: null, terminalHandoff: false, presentation },
     }))).toMatchObject({ error: { code: 'TASK_FAILED', message: 'Task failed' } })
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: { phase: 'failed', taskId: 'task-4', lastError: null },
@@ -243,7 +243,7 @@ describe('workspace Canvas lifecycle resolver', () => {
 
   it('orders standalone stream, submission, and persisted facts without merging them', () => {
     expect(resolveWorkspaceCanvasLifecycle(facts({
-      stream: { taskId: 'stream-only', taskType: 'text_stream', presentation },
+      stream: { taskId: 'stream-only', taskType: 'text_stream', terminalHandoff: false, presentation },
       submitting: true,
     }))).toEqual({
       phase: 'streaming', taskId: 'stream-only', taskType: 'text_stream', progress: null,

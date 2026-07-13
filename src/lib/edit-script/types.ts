@@ -187,6 +187,7 @@ export interface EditScriptPayload {
   readonly durationSec: number
   readonly shotCount: number
   readonly status?: string
+  readonly generationTaskId?: string | null
   readonly assetReviewStatus: EditScriptAssetReviewStatus
   readonly shots: readonly EditScriptShot[]
   readonly generationSegments: readonly EditGenerationSegment[]
@@ -282,6 +283,7 @@ export interface EditShotExecutionPlanPayload {
   readonly chapterId: string
   readonly editScriptId: string
   readonly status: string
+  readonly generationTaskId?: string | null
   readonly shots: readonly EditShotExecution[]
   readonly generationSegmentExecutions: readonly EditGenerationSegmentExecution[]
 }

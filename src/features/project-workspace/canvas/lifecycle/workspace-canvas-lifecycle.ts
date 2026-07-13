@@ -33,6 +33,7 @@ export interface WorkspaceCanvasLifecycleFacts {
   readonly stream: {
     readonly taskId: string
     readonly taskType: string | null
+    readonly terminalHandoff: boolean
     readonly presentation: WorkspaceCanvasStreamPresentation
   } | null
   readonly submitting: boolean
@@ -167,10 +168,21 @@ export function resolveWorkspaceCanvasLifecycle(
       taskType,
       progress: readTaskProgress(facts.task),
       error: null,
+      stream: facts.stream?.terminalHandoff === true ? facts.stream.presentation : null,
     })
   }
 
   if (facts.stream) {
+    if (facts.stream.terminalHandoff) {
+      return lifecycle({
+        phase: facts.persistedPhase,
+        taskId: facts.stream.taskId,
+        taskType: facts.stream.taskType,
+        progress: readTaskProgress(facts.task),
+        error: null,
+        stream: facts.stream.presentation,
+      })
+    }
     return lifecycle({
       phase: 'streaming',
       taskId: facts.stream.taskId,

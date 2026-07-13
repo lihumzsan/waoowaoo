@@ -355,7 +355,7 @@ function createStreamRuntimeEntry(input: {
       taskId: input.taskId,
       taskType: input.taskType,
       terminalHandoff: input.terminalHandoff,
-      presentation: input.presentation,
+      presentation: input.terminalHandoff ? { ...input.presentation, isStreaming: false } : input.presentation,
       data: input.data,
     },
   }

@@ -405,7 +405,7 @@ export interface WorkspaceCanvasNodeDisclosureState {
   readonly canToggle: boolean
   readonly effectiveExpanded: boolean
   readonly mode: WorkspaceCanvasNodeDisclosureMode
-  readonly isStreamingExpanded: boolean
+  readonly isStreamPresentationExpanded: boolean
   readonly collapseWhenStreamCompletes: boolean
 }
 
@@ -424,6 +424,7 @@ export interface WorkspaceCanvasNodeData {
   readonly body: string
   readonly meta: string
   readonly lifecycle: WorkspaceCanvasLifecycle
+  readonly terminalHandoffTaskId?: string | null
   readonly focusHighlighted?: boolean
   readonly disclosure?: WorkspaceCanvasNodeDisclosureState
   readonly runtimeTargets?: readonly TaskRuntimeTarget[]

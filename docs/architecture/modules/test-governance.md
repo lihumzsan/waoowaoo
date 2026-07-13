@@ -64,6 +64,8 @@
 - 旧体系拥有大量 mock、分阶段和变体测试，却经常在更早阶段失败或从未运行到目标阶段；文件存在与场景名称被误当成覆盖，真实多章节组合仍漏测。
 - Workflow Lab 克隆的是历史状态，不是用户从空项目走出的真实因果链。克隆需要重写 run、Approval、Task target、领域 identity 与未来事实，形成第二套状态解释和长期维护源，因此已整体删除。
 - 旧 Golden 主要证明终态 stage，没有在多章节 processing + reload 中观察每个 Task target 对应的 Canvas node，导致逐章计划缺节点、半成品被正式 Query 解析等问题未被发现。当前主 Journey 直接要求至少两个运行 target、稳定节点和刷新恢复。
+- Canvas terminal handoff 首版 Golden 只分别看见 streaming 端点、正式终态端点，并记录整个 node shell 是否曾移除；内部 presentation 先清空、disclosure 先折叠以及旧 succeeded 资源接管新 Task 都不会让 shell count 变成零，因此场景错误通过。当前主 Journey 的同一连续 observer 同时记录 stream Task identity、presentation、disclosure 与正式资源 owner identity，任一中间空窗或非同 Task 接管都直接失败。
+- Style Bible 集合在 `985d1524e` 改为“已有可用候选即 succeeded”，Logic/Conformance 已同步，主 Journey 却仍要求选择前为 pending，导致完整主链在风格选择处产生假失败并永远到不了后续 Canvas/SSE 阶段。改正 phase 后又暴露旧 driver 用固定 500ms 代替选择持久化确认：下一轮 reload 会中断仍在上传的 choice POST，服务端收到截断 JSON，测试再原地循环到超时。当前 Journey 对齐生产集合 View 的 succeeded 语义，并在一次点击后以权威 Workflow 离开 `needs_style_choice` 作为提交 Oracle，随后才验证同 node identity 与 reload；不再用 phase 不变或 timer 猜测完成。
 - 旧 Journey 与本地开发进程共享 `.next`，多个 Next/Turbopack 进程会互相覆盖 manifest，出现源码页面存在但运行时报 `PageNotFoundError`。当前 Harness 用 runtime identity 隔离 `NEXT_DIST_DIR`、上传和报告目录。
 - Golden 环境曾共享 Compose identity、固定端口和全局 teardown。当前每次运行拥有独立 scope 和 loopback endpoint，停止一个 scope 不得影响另一个。
 

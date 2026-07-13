@@ -118,6 +118,7 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
     const stream = {
       taskId: 'task-1',
       taskType: 'conformance_task',
+      terminalHandoff: false,
       presentation: {
         isStreaming: true,
         activeItemKey: 'item-1',

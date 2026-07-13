@@ -842,6 +842,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: sourceText || translate('nodes.editSourceScript.pendingBody'),
         meta: sourceScriptRunning ? translate('nodes.editSourceScript.pendingMeta') : '',
         ...sourceScriptPresentation,
+        terminalHandoffTaskId: editBible?.generationTaskId ?? null,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditSourceScript(sourceScriptRuntimeTargetId)),
         sourceScriptDetails: {
           sourceDocumentId: editBible?.sourceDocumentId ?? null,
@@ -879,6 +880,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: editBiblePreviewText(editBible) || translate('nodes.editBible.pendingBody'),
         meta: '',
         ...biblePresentation,
+        terminalHandoffTaskId: editBible?.generationTaskId ?? null,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditBible(editBibleRuntimeTargetId)),
         editBibleDetails: editBible
           ? {
@@ -1047,6 +1049,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
               completed: countCompletedEditAssetRequirements(script.requirements),
             }),
             ...editScriptPresentation,
+            terminalHandoffTaskId: script.generationTaskId ?? null,
             runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditChapterScriptGeneration(scriptChapterId)),
             editScriptDetails,
             onAction,
@@ -1383,6 +1386,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           ? translate('nodes.editShotExecutionPlan.meta', { shots: matchingExecutionPlan.shots.length })
           : '',
         ...(executionPresentation ?? workspaceCanvasPendingResourcePresentation()),
+        terminalHandoffTaskId: matchingExecutionPlan?.generationTaskId ?? null,
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEditShotExecutionPlan(script.id)),
         actionLabel: matchingExecutionPlan ? undefined : translate('actions.generateShotExecutionPlan'),
         action: matchingExecutionPlan ? undefined : { type: 'generate_edit_shot_execution_plan', editScriptId: script.id },
@@ -1599,6 +1603,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         body: bgmDetails?.scoreOverview ?? translate('nodes.bgmScore.body', { videos: videoGroups.length }),
         meta: bgmDetails?.musicModel ?? '',
         ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
+        terminalHandoffTaskId: finalVideo?.musicScore?.taskId ?? null,
         ...(bgmActionAvailable ? {
           actionLabel: translate(
             bgmReadyForGeneration
@@ -1664,6 +1669,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           : translate('nodes.soundscape.body', { videos: videoGroups.length }),
         meta: details?.soundEffectModel ?? '',
         ...(soundscapePresentation ?? workspaceCanvasPendingResourcePresentation()),
+        terminalHandoffTaskId: finalVideo?.soundscape?.taskId ?? null,
         ...(soundscapeActionAvailable ? {
           actionLabel: translate(
             soundscapeReadyForGeneration

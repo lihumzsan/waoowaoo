@@ -24,7 +24,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-05 — 展开态一致。** 展开/折叠与布局必须使用统一 disclosure/profile 机制；节点不能各自发明局部状态协议。
 - **CN-06 — 同类触点对齐。** 新节点必须先选权威参照物，覆盖其 route、task、worker、stream、projection、presentation、focus、i18n、失败和测试触点，或记录不适用原因。
 - **CN-07 — 生命周期单一写入者。** Resource、Task、structured stream、submission 与 UI 只提供事实快照；`workspace-node-runtime.ts` 调用纯生命周期 resolver 生成最终 `lifecycle`。structured stream 只提供可丢弃的 presentation/content，预览解析失败只能跳过该预览项，绝不能写入节点业务失败；运行中的失败只来自真实 Task `failed` 终态，持久资源失败只来自正式 Query。组合节点必须由同一个 runtime target collector 穷尽收集父节点和子项声明的 target，再由同一个 resolver 同时投影组与子项；多个 target 的终态聚合策略必须由节点 registry 显式声明，单资源使用失败优先，资源集合在无运行 Task 后由正式 Query 的集合成功/失败事实裁决，禁止让一个非权威子项失败覆盖已有可用集合或正式成功资源。projection 不得把 `generating`、`taskRunning` 或缺少预览图解释成失败。节点数据不得保存 `artifactPhase`、`isRunning`、`statusLabel`、`taskProgress` 或独立 stream 状态，renderer 不得读取 Task/stream runtime 或从内容推断阶段。
-- **CN-08 — 终态通知后读取正式资源。** Canvas Task 必须先持久化业务资源，再由 Terminal Service 提交 completed/failed/canceled Event。终态 Event 只通过显式 `affectedResources` 通知客户端；客户端不得从 Task payload 直接写业务 Query Cache，而应由 `resource-change-sync.ts` invalidate 并 refetch active Query。Query fetch 是 Canvas 稳定内容的唯一 Cache writer。completed structured stream 只可转成有界、同 task identity 的 terminal presentation handoff；在对应正式 Query 投影出 succeeded/failed/canceled 内容后必须立即释放，失败/取消和新 retry 必须拒绝旧 stream。该 handoff 无权改变业务 lifecycle，也不得依赖 timer。缺少 `affectedResources` 时不得按 TaskType 猜测资源；网络失败保持 Query stale/invalidated 与最后 presentation，交给正常重试或刷新，不得伪造成 Task 失败。
+- **CN-08 — 终态通知后精确接力正式资源。** Canvas Task 必须先持久化业务资源及其 owner task identity，再由 Terminal Service 提交 completed/failed/canceled Event。终态 Event 只通过显式 `affectedResources` 通知客户端；客户端不得从 Task payload 直接写业务 Query Cache，而应由 `resource-change-sync.ts` invalidate 并 refetch active Query。Query fetch 是 Canvas 稳定内容和 owner task identity 的唯一 Cache writer。completed structured stream 只可转成有界、同 task identity 的 terminal presentation handoff；该 presentation 必须保持内容和展开态，直到正式 Query 同时满足 `resource.ownerTaskId === stream.taskId` 与 succeeded/failed/canceled，才由唯一 handoff resolver 原子接管并立即释放。仅凭相同 node identity、Workflow 阶段或旧资源已成功不得释放；失败/取消和新 retry 必须拒绝旧 stream。该 handoff 无权把 Task payload 变成持久资源、不得建立第二 lifecycle，也不得依赖 timer。缺少 `affectedResources` 时不得按 TaskType 猜测资源；网络失败保持 Query stale/invalidated 与最后 presentation，交给正常重试或刷新，不得伪造成 Task 失败。
 - **CN-09 — Registry 与 conformance 穷尽。** 每个 `WorkspaceCanvasNodeKind` 必须同时存在 definition、renderer 和 conformance fixture，三个 registry 都以 `satisfies Record<WorkspaceCanvasNodeKind, ...>` 穷尽。新增 kind 缺任一层必须在 TypeScript 或 CI 失败。
 - **CN-10 — 源剧本场景级单一事实。** Prompt 输出仅允许 `{ title, summary, segments }`；scene segment 的稳定 key 是 `episodeIndex:actIndex:sceneIndex`。共享 normalizer 同时派生 `normalizedText` 与现有嵌套 `scriptStructureJson`，并拒绝重复/跳号索引和父级元数据冲突。单一 raw/final 形状不得携带没有 parser 分流语义的固定版本标记；不得恢复重复的 `scriptText + structure` 输出。
 - **CN-11 — Stream identity 与 UI 瞬时事实有界。** Structured stream chunk 必须携带 `streamRunId + stepAttempt + seq`；consumer 只接受当前 attempt 的连续 seq，拒绝重复、缺口和旧 attempt。Task 终态只封锁已经结束的 streamRunId，新 retry 的 streamRunId 不得被旧 taskId 永久屏蔽。accumulator、terminal run 与 SSE `identity → canonical fingerprint` 均须显式有界；同 identity 不同 fingerprint 不是 duplicate，必须 conflict 并重建 snapshot。Optimistic overlay 只能由 created/processing 建立并由 completed/failed/canceled 清除，不得依赖 TTL；mutation settle 后必须使正式 Query 失效，不得把 optimistic snapshot 当作长期内容权威。
@@ -42,6 +42,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 流式 schema 与 adapter：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`。
 - 增量 JSON 边界：`src/lib/structured-stream/incremental-json.ts` 只提取完整 raw item，字段合法性仍由 adapter 复用的生产 raw schema 裁决。
 - 流式事实收集：`src/features/project-workspace/canvas/structured-stream/useWorkspaceStructuredStreamRuntime.ts`；该模块无权合并最终节点生命周期。
+- 正式资源 owner task identity：`src/lib/edit-bible/service.ts`、`src/lib/edit-script/service.ts`、Music Score 与 Soundscape Project Data View；projector 只把该持久事实传给唯一 runtime handoff resolver。
 - renderer 运行态只读取最终 `data.lifecycle`；禁止恢复 `__running`、operationId pending switch 或把 DB `generating` 本地改写为 `ready`。
 - DB 到节点的内容投影：`src/features/project-workspace/canvas/hooks/useWorkspaceNodeCanvasProjection.ts`。
 - Task/Mutation 受影响资源契约：`src/lib/workspace-resource/resource-impact.ts`；禁止从 TaskType 或 target 文案猜测 Query。
@@ -59,7 +60,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 ## 验证
 
 - `tests/golden-journey/**` 在真实 ReactFlow、streaming、Task terminal、SSE 和刷新组合中观察 Canvas；console/page error、重复 identity、终态缺口、reload divergence 或稳定展开内容仍持有 animation/transform/will-change 都是场景失败。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，证明它不含媒体 loading surface，并验证资产审核只保留整组确认动作；只检查终态正式 Query 不构成 structured preview 覆盖。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 必须在真实核心剪辑 Task 仍运行时观察 `edit-script` 节点进入 `streaming`，证明它不含媒体 loading surface，并验证资产审核只保留整组确认动作；对每个已观察到的 structured-stream canonical node，还必须连续拒绝节点移除、非终态 presentation 空窗、terminal handoff 提前折叠，以及与本次 stream Task 不同 owner 的正式资源接管。只检查流式与正式 Query 两个端点不构成终态接力覆盖。
 - `tests/unit/project-workspace/{structured-stream-runtime,workspace-canvas-lifecycle,workspace-canvas-motion-presence,canvas-projection-signature}.test.ts` 只验证纯 runtime merge、lifecycle resolver、Presence transition 和 canonical projection signature。
 - `tests/contracts/canvas-node-conformance.test.ts` 从生产 node registry 穷尽验证 definition、renderer、fixture、capability 与统一生命周期。
 - `tests/unit/edit-bible/source-script-segments.test.ts` 与 `tests/integration/provider/source-script-scene-stream.contract.test.ts` 验证 scene-level 单一输出及逐场增量协议。
@@ -70,7 +71,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 
 - Soundscape 新实例曾先后补齐 structured stream adapter、展开态和防旧 patch 覆盖；这说明仅实现主路径会漏掉同类节点的生命周期触点。
 - `6ef1a201e` 修复 SSE replay 的重复刷新；事件 cursor、快照和 replay 必须视为节点协议的一部分。
-- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后暴露生命周期与内容读取竞争。本阶段选择明确的最终一致性语义：终态立即清 runtime，内容只从正式 Query 重新读取；不得恢复 timer 或 terminal payload Cache writer。
+- `931ab59c3` 曾用终态后保留 stream 8 秒掩盖 Query 刷新空窗；`d31a5615b` 删除 timer 后又采用终态立即清 runtime，使内容读取正确性依赖 Query 返回速度。两者都不是有效交接：不得恢复 timer 或 terminal payload Cache writer，completed stream 只保留为由精确持久 owner task identity 结束的 presentation handoff。
 - `931ab59c3` 引入制作规划 structured preview 时误用持久化 final schema；`ac3708a9b` 又把 ledger raw 输出切换为 `beatId`，浏览器 adapter 没有同步，导致真实 Task 仍在 processing 时 Canvas 短暂显示失败。修复后 preview 与 worker 共用 `rawEditBible*Schema`，且 preview diagnostics 不再进入业务 lifecycle。
 - `BUG-CN-002` 证明 renderer 的本地动画也不能把 React children identity 当作状态变化；`WorkspaceCanvasMotionPresence` 必须在稳定可见时零 state write。
 - `BUG-CN-003` 证明零 state write 仍不足以保证清晰渲染：entered animation 的 fill state 与永久 `will-change` 会在 React Flow zoom 下把展开文字留在嵌套合成层；修复后 active window 是唯一动画事实，稳定态不得持有 compositor hint。
@@ -86,7 +87,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 分镜面板生成后、图片审批前，18 个镜头节点曾全部显示“成功 / 任务已完成但媒体结果缺失”。真实浏览器证明图片 Operation 仍为待处理且没有图片 Task；projector 却沿用“无 panel error 即 succeeded”的旧分支，把面板记录存在误当成媒体成功，统一 lifecycle resolver 只能忠实消费这个错误 persisted fact。当前防线改为 error → failed、正式图片 URL → succeeded、否则 pending；面板只物化节点，runtime target 独占运行态。按本次明确范围未修改测试，审批前刷新组合仍作为验证盲区记录。
 - 多章节主 Journey 首次完整到达成片时，刷新窗口内项目资产尚未返回，projector 回退到各章节 requirement；同一个 canonical 角色/场景因此出现两次，并被绑定成相同 requirement key，React 持续报错。旧单章节 Journey 未触发该组合。当前 projector 在正式资产和 requirement fallback 两条输入上都按 `kind + persistent asset id` 唯一化，章节 requirement 只负责绑定镜头与运行 target，不再决定资产卡实例数量；主 Journey 的 browser observation 必须保持零 console error。
 - Canvas 尾部节点最初只有视频、BGM 和最终渲染，BGM 因而直接以 `ready_to_generate_videos` 为可见阈值；后续加入章节渲染和独立 Soundscape 阶段时沿用了该阈值，导致音乐与音效早于真实能力阶段出现。现在两者统一从 `ready_to_plan_audio_layers` 开始普通投影，并以 active episode Task 作为 context 滞后时的稳定物化事实；规划 Task 流式结束后继续由同一资源节点承接 `planned`，付费生成 Task 再覆盖其运行态，不创建第二节点。主 Journey 在视频批准前断言两者不存在，在音频规划阶段断言两者各有且仅有一个节点。
-- structured stream 终态曾先后采用 8 秒保留和立即清除两种策略；前者依赖 timer，后者又让 active Task、stream 与正式 Query 的到达顺序决定节点是否短暂消失。Task-start materialization 只修复了入口空窗，现补齐终态另一端：持久 identity/单调 Workflow 保持 canonical 节点，completed accumulator 转为有界 presentation handoff，正式 Query 到达即由同一 runtime 明确释放。Logic 规格反证 completed→Query 窗口的节点/内容丢失，主 Journey 记录所有进入 streaming 的 node identity 并拒绝同页终态交接中的移除。
+- structured stream 终态曾先后采用 8 秒保留和立即清除两种策略；前者依赖 timer，后者又让 active Task、stream 与正式 Query 的到达顺序决定节点是否短暂消失。`4150ff928` 首次引入 terminal handoff，但只保留 accumulator 正文和节点 identity：最终 lifecycle 仍排除了 terminal stream，disclosure 因此先折叠；释放条件又只检查“同 node 已有任意 terminal 资源”，重生成时旧 succeeded 资源可以提前释放新 stream。旧 Logic 只断言 body，Golden 只记录整个 `article` 是否移除，所以两条防线都接受了真实闪烁。当前防线是持久 identity/单调 Workflow 保持 canonical 节点，completed accumulator 作为非业务的 presentation handoff 继续展开，正式 Query 必须以相同 owner task identity 和终态一次性接管；Logic 直接反证旧资源接管与提前折叠，主 Journey 连续观察节点、presentation、disclosure 和 owner identity 四个维度。
 
 ## 修改检查表
 

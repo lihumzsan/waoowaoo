@@ -11,6 +11,22 @@ interface TargetedTerminalHandoffEntry extends TerminalHandoffEntry {
   readonly targetId: string | null
 }
 
+export function isTerminalHandoffResourceCurrent(input: {
+  readonly terminalHandoff: boolean
+  readonly streamTaskId: string
+  readonly resourceTaskId: string | null | undefined
+  readonly resourcePhase: string
+}): boolean {
+  return input.terminalHandoff
+    && input.streamTaskId.trim().length > 0
+    && input.resourceTaskId === input.streamTaskId
+    && (
+      input.resourcePhase === 'succeeded'
+      || input.resourcePhase === 'failed'
+      || input.resourcePhase === 'canceled'
+    )
+}
+
 export function removeTaskEntries<T extends TaskOwnedEntry>(
   current: ReadonlyMap<string, T>,
   taskIds: string | ReadonlySet<string>,

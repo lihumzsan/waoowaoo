@@ -22,6 +22,7 @@ import type {
   WorkspaceCanvasNodeData,
 } from './node-canvas-types'
 import type { WorkspaceCanvasStreamPatch } from './structured-stream/workspace-structured-stream-runtime-types'
+import { isTerminalHandoffResourceCurrent } from './structured-stream/workspace-structured-stream-handoff'
 
 export function collectWorkspaceNodeRuntimeTargets(
   nodes: readonly WorkspaceCanvasFlowNode[],
@@ -88,9 +89,10 @@ function persistedPhase(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasPer
 }
 
 function streamFact(patch: WorkspaceCanvasStreamPatch | null) {
-  return patch && patch.terminalHandoff !== true ? {
+  return patch ? {
     taskId: patch.taskId,
     taskType: patch.taskType,
+    terminalHandoff: patch.terminalHandoff === true,
     presentation: patch.presentation,
   } : null
 }
@@ -140,25 +142,34 @@ export function resolveWorkspaceCanvasNodeData(input: {
 }): WorkspaceCanvasNodeData {
   const states = orderedRuntimeStates(input.node, input.statesByQueryKey)
   const task = authoritativeTaskState(states, runtimeAggregation(input.node))
-  const basePhase = persistedPhase(input.node.data.lifecycle)
+  const persistedResourcePhase = persistedPhase(input.node.data.lifecycle)
+  const resourceOwnsTerminalHandoff = input.streamPatch
+    ? isTerminalHandoffResourceCurrent({
+        terminalHandoff: input.streamPatch.terminalHandoff === true,
+        streamTaskId: input.streamPatch.taskId,
+        resourceTaskId: input.node.data.terminalHandoffTaskId,
+        resourcePhase: persistedResourcePhase,
+      })
+    : false
+  const terminalHandoffPending = input.streamPatch?.terminalHandoff === true
+    && !resourceOwnsTerminalHandoff
+  const basePhase = terminalHandoffPending ? 'pending' : persistedResourcePhase
+  const effectiveStreamPatch = resourceOwnsTerminalHandoff ? null : input.streamPatch
   const lifecycle = resolveWorkspaceCanvasLifecycle({
     persistedPhase: basePhase,
     task,
-    stream: streamFact(input.streamPatch),
+    stream: streamFact(effectiveStreamPatch),
     submitting: input.submitting,
   })
-  const acceptsStreamContent = lifecycle.phase === 'streaming'
-    || Boolean(
-      input.streamPatch?.terminalHandoff === true
-      && basePhase === 'pending'
-      && lifecycle.phase !== 'failed'
-      && lifecycle.phase !== 'canceled',
-    )
+  const acceptsStreamContent = Boolean(effectiveStreamPatch)
+    && lifecycle.stream !== null
+    && lifecycle.phase !== 'failed'
+    && lifecycle.phase !== 'canceled'
   const editAssetGroupDetails = resolveEditAssetGroupRuntimeDetails(input)
 
   return {
     ...input.node.data,
-    ...(acceptsStreamContent ? input.streamPatch?.data ?? {} : {}),
+    ...(acceptsStreamContent ? effectiveStreamPatch?.data ?? {} : {}),
     lifecycle,
     ...(editAssetGroupDetails ? { editAssetGroupDetails } : {}),
   }

@@ -75,6 +75,12 @@ export default function WorkspaceNode({ data }: NodeProps<WorkspaceCanvasFlowNod
           className={`workspace-canvas-node-shell relative ${shellLayoutClass} rounded-[24px] border bg-white/92 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl ${isVisuallyEmphasized ? 'workspace-node-running-breathing border-sky-300' : 'border-slate-200'}`}
           data-node-id={data.nodeId}
           data-lifecycle-phase={data.lifecycle.phase}
+          data-lifecycle-task-id={data.lifecycle.taskId ?? ''}
+          data-terminal-handoff-task-id={data.terminalHandoffTaskId ?? ''}
+          data-stream-presentation={data.lifecycle.stream
+            ? data.lifecycle.stream.isStreaming ? 'active' : 'handoff'
+            : 'none'}
+          data-disclosure-mode={data.disclosure?.mode ?? 'none'}
           data-expanded={expanded ? 'true' : 'false'}
         >
           <div>

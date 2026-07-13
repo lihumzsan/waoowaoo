@@ -74,7 +74,7 @@ import type {
 } from './node-canvas-types'
 import {
   getWorkspaceCanvasNodePresentationProfile,
-  resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds,
+  resolveCompletedWorkspaceCanvasStreamPresentationNodeIds,
   resolveWorkspaceCanvasNodeDisclosure,
   resolveWorkspaceCanvasNodeSize,
 } from './node-presentation-profiles'
@@ -83,6 +83,7 @@ import {
   resolveWorkspaceCanvasNodeData,
 } from './workspace-node-runtime'
 import { useWorkspaceStructuredStreamRuntime } from './structured-stream/useWorkspaceStructuredStreamRuntime'
+import { isTerminalHandoffResourceCurrent } from './structured-stream/workspace-structured-stream-handoff'
 
 const EMPTY_SAVED_NODE_LAYOUTS: readonly CanvasNodeLayout[] = []
 const EMPTY_ACTIVE_TASK_TARGETS: NonNullable<WorkspaceAssistantActiveFocusRequest['taskTargets']> = []
@@ -277,7 +278,7 @@ function ProjectWorkspaceCanvasContent({
   const [focusHighlightRevision, setFocusHighlightRevision] = useState(0)
   const [reactFlowReady, setReactFlowReady] = useState(false)
   const nodeDisclosureOverridesRef = useRef<ReadonlyMap<string, WorkspaceCanvasNodeDisclosureOverride>>(new Map())
-  const streamingDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const streamPresentationDisclosureNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const focusHighlightClearTimersRef = useRef<Map<string, number>>(new Map())
   const assistantSelectionSignatureRef = useRef<string | null>(null)
@@ -483,18 +484,18 @@ function ProjectWorkspaceCanvasContent({
   const projectedNodes = projection.nodes
   const projectionEdges = projection.edges
   const releasableTerminalStreamTaskIds = useMemo(() => {
-    const formalNodeIds = new Set(projectedNodes.flatMap((node) => (
-      node.data.lifecycle.phase === 'succeeded'
-      || node.data.lifecycle.phase === 'failed'
-      || node.data.lifecycle.phase === 'canceled'
-        ? [node.id]
-        : []
-    )))
-    return structuredStreamRuntime.patches.flatMap((patch) => (
-      patch.terminalHandoff === true && formalNodeIds.has(patch.nodeId)
+    const projectedNodeById = new Map(projectedNodes.map((node) => [node.id, node] as const))
+    return structuredStreamRuntime.patches.flatMap((patch) => {
+      const projectedNode = projectedNodeById.get(patch.nodeId)
+      return projectedNode && isTerminalHandoffResourceCurrent({
+        terminalHandoff: patch.terminalHandoff === true,
+        streamTaskId: patch.taskId,
+        resourceTaskId: projectedNode.data.terminalHandoffTaskId,
+        resourcePhase: projectedNode.data.lifecycle.phase,
+      })
         ? [patch.taskId]
         : []
-    ))
+    })
   }, [projectedNodes, structuredStreamRuntime.patches])
   useEffect(() => {
     if (releasableTerminalStreamTaskIds.length === 0) return
@@ -537,7 +538,8 @@ function ProjectWorkspaceCanvasContent({
       const profile = getWorkspaceCanvasNodePresentationProfile(resolvedData.kind)
       const isStreaming = resolvedData.lifecycle.phase === 'streaming'
       const shouldCollapseCompletedStream = !isStreaming
-        && streamingDisclosureNodeIdsRef.current.has(node.id)
+        && resolvedData.lifecycle.stream === null
+        && streamPresentationDisclosureNodeIdsRef.current.has(node.id)
         && profile.disclosure.kind === 'collapsible'
         && profile.disclosure.collapseWhenStreamCompletes
       const disclosureOverride = nodeDisclosureOverrides.get(node.id)
@@ -546,6 +548,7 @@ function ProjectWorkspaceCanvasContent({
         userExpandedOverride: shouldCollapseCompletedStream ? false : disclosureOverride?.expanded,
         defaultExpanded: resolvedData.defaultExpanded,
         isStreaming,
+        hasStreamPresentation: resolvedData.lifecycle.stream !== null,
       })
       const expanded = disclosure.effectiveExpanded
       const size = resolveWorkspaceCanvasNodeSize({
@@ -682,18 +685,18 @@ function ProjectWorkspaceCanvasContent({
   }, [])
 
   useEffect(() => {
-    const currentStreamingNodeIds = new Set<string>()
+    const currentStreamPresentationNodeIds = new Set<string>()
     flowNodes.forEach((node) => {
       const disclosure = node.data.disclosure
-      if (disclosure?.isStreamingExpanded === true && disclosure.collapseWhenStreamCompletes) {
-        currentStreamingNodeIds.add(node.id)
+      if (disclosure?.isStreamPresentationExpanded === true && disclosure.collapseWhenStreamCompletes) {
+        currentStreamPresentationNodeIds.add(node.id)
       }
     })
-    const completedStreamingNodeIds = resolveCompletedWorkspaceCanvasStreamingDisclosureNodeIds({
-      previousStreamingNodeIds: streamingDisclosureNodeIdsRef.current,
-      currentStreamingNodeIds,
+    const completedStreamingNodeIds = resolveCompletedWorkspaceCanvasStreamPresentationNodeIds({
+      previousStreamPresentationNodeIds: streamPresentationDisclosureNodeIdsRef.current,
+      currentStreamPresentationNodeIds,
     })
-    streamingDisclosureNodeIdsRef.current = currentStreamingNodeIds
+    streamPresentationDisclosureNodeIdsRef.current = currentStreamPresentationNodeIds
     if (completedStreamingNodeIds.length === 0) return
 
     updateNodeDisclosureOverrides((current) => {

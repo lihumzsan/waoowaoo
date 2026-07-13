@@ -160,6 +160,7 @@ interface PersistedEditScript {
   readonly shotCount: number
   readonly status: string
   readonly assetReviewStatus: string
+  readonly generationTaskId: string | null
   readonly requirements: readonly PersistedEditScriptRequirement[]
 }
 
@@ -189,6 +190,7 @@ interface PersistedEditShotExecutionPlan {
   readonly editScriptId: string
   readonly executionPlanJson: Prisma.JsonValue
   readonly status: string
+  readonly generationTaskId: string | null
 }
 
 type ChapterEditScriptSource = AssembledChapterPlanInput
@@ -747,6 +749,7 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     durationSec: core.durationSec,
     shotCount: core.shotCount,
     status: script.status,
+    generationTaskId: script.generationTaskId,
     assetReviewStatus: normalizeAssetReviewStatus(script.assetReviewStatus),
     shots: core.shots,
     generationSegments: core.generationSegments,
@@ -766,6 +769,7 @@ async function mapPersistedEditShotExecutionPlan(plan: PersistedEditShotExecutio
     chapterId: plan.chapterId,
     editScriptId: plan.editScriptId,
     status: plan.status,
+    generationTaskId: plan.generationTaskId,
     shots: parsed.shots,
     generationSegmentExecutions: parsed.generationSegmentExecutions,
   }
