@@ -47,7 +47,7 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('bible_ready_for_review'),
+      workflow: workflow('episode_plan', 'needs_user_choice'),
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
     })
@@ -88,10 +88,10 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow('script_intake', 'ready'),
       choiceType: 'bible_review',
       toolCallId: 'tool-call-1',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=ready_to_ingest_script')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:step=script_intake:status=ready')
   })
 
   it('builds a script review card after prompt script expansion', async () => {
@@ -115,7 +115,7 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('script_ready_for_review'),
+      workflow: workflow('source_script', 'needs_user_choice'),
       choiceType: 'script_review',
       toolCallId: 'tool-call-script',
     })
@@ -144,10 +144,10 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('ready_to_generate_bible'),
+      workflow: workflow('episode_plan', 'ready'),
       choiceType: 'script_review',
       toolCallId: 'tool-call-script',
-    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:stage=ready_to_generate_bible')
+    })).rejects.toThrow('EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:step=episode_plan:status=ready')
   })
 
   it('builds a style card from the available completed style previews', async () => {
@@ -195,7 +195,7 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('needs_style_choice'),
+      workflow: workflow('visual_style', 'needs_user_choice'),
       choiceType: 'style',
       toolCallId: 'tool-call-1',
     })
@@ -266,7 +266,7 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('needs_style_choice'),
+      workflow: workflow('visual_style', 'needs_user_choice'),
       choiceType: 'style',
       toolCallId: 'tool-call-1',
     })
@@ -312,7 +312,7 @@ describe('edit-first assistant choice cards', () => {
       userId: 'user-1',
       episodeId: 'episode-1',
       locale: 'zh',
-      workflow: workflow('assets_ready_for_review'),
+      workflow: workflow('planned_assets', 'needs_user_choice'),
       choiceType: 'asset_review',
       toolCallId: 'tool-call-assets',
     })

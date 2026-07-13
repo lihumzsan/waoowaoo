@@ -6,7 +6,7 @@ import { EpisodeSelector } from '@/components/ui/CapsuleNav'
 import { SettingsModal, WorldContextModal } from '@/components/ui/ConfigModals'
 import type { ProjectEditChapter, ProjectPanel } from '@/types/project'
 import type { CapabilitySelections, ModelCapabilities } from '@/lib/ai-registry/types'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import { resolveEpisodeArtifactReadiness } from '@/lib/project-workflow/episode-artifact-readiness'
 import {
   WORKSPACE_SCOPE_ALL_ID,
@@ -86,7 +86,7 @@ interface WorkspaceHeaderShellProps {
   onProjectRename?: (newName: string) => void | Promise<void>
   projectConfigurable: boolean
   currentEditBible?: EpisodePlanningBibleSource | null
-  currentWorkflow?: EditFirstWorkflowState | null
+  currentWorkflow?: EditFirstWorkflowView | null
   workspaceChapters?: readonly ProjectEditChapter[]
   currentWorkspaceScopeId?: WorkspaceScopeId
   onWorkspaceScopeSelect?: (scopeId: WorkspaceScopeId) => void
@@ -121,10 +121,10 @@ interface EpisodeSelectorOverview {
 }
 
 function resolveOverviewTone(overview: EpisodePlanningOverview): EpisodeSelectorOverview['statusTone'] {
-  if (overview.failedChapterCount > 0 || overview.blockingKind === 'failed') return 'danger'
-  if (overview.blockingKind === 'processing' || overview.processingChapterCount > 0) return 'processing'
-  if (overview.blockingKind === 'needs_user_choice' || overview.blockingKind === 'needs_confirmation') return 'warning'
-  if (overview.workflowStage === 'completed') return 'success'
+  if (overview.failedChapterCount > 0 || overview.workflowStatus === 'failed') return 'danger'
+  if (overview.workflowStatus === 'processing' || overview.processingChapterCount > 0) return 'processing'
+  if (overview.workflowStatus === 'needs_user_choice') return 'warning'
+  if (overview.workflowStatus === 'completed') return 'success'
   if (overview.chapterCount > 0 || overview.bibleStatus) return 'ready'
   return 'muted'
 }
@@ -175,7 +175,8 @@ export default function WorkspaceHeaderShell({
   onWorkspaceScopeSelect,
 }: WorkspaceHeaderShellProps) {
   const overviewT = useTranslations('projectWorkflow.episodeOverview')
-  const workflowStageT = useTranslations('projectWorkflow.workflowStages')
+  const workflowStepT = useTranslations('projectWorkflow.workflowSteps')
+  const workflowStatusT = useTranslations('projectWorkflow.workflowStatuses')
   const handleCapabilityOverridesChange = useCallback((value: CapabilitySelections) => {
     void onUpdateConfig('capabilityOverrides', value)
   }, [onUpdateConfig])
@@ -209,7 +210,7 @@ export default function WorkspaceHeaderShell({
 
   const toEpisodeSelectorOverview = useCallback((overview: EpisodePlanningOverview): EpisodeSelectorOverview => ({
     title: overview.bible.title ? overviewT('titleWithBible', { title: overview.bible.title }) : overviewT('title'),
-    stageLabel: workflowStageT(overview.workflowStage),
+    stageLabel: `${workflowStepT(overview.workflowStep)} · ${workflowStatusT(overview.workflowStatus)}`,
     statusTone: resolveOverviewTone(overview),
     metrics: [
       { label: overviewT('chapters'), value: String(overview.chapterCount) },
@@ -240,7 +241,7 @@ export default function WorkspaceHeaderShell({
       ],
     })),
     emptyChaptersLabel: overviewT('emptyChapters'),
-  }), [chapterPlanStatusLabel, chapterRenderStatusLabel, overviewT, workflowStageT])
+  }), [chapterPlanStatusLabel, chapterRenderStatusLabel, overviewT, workflowStatusT, workflowStepT])
 
   return (
     <>

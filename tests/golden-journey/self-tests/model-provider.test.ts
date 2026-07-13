@@ -473,7 +473,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'system',
-          content: '[project_state_snapshot]\nworkflowStage=needs_style_choice\n[/project_state_snapshot]',
+          content: '[project_state_snapshot]\nworkflowStep=visual_style\nworkflowStatus=needs_user_choice\nworkflowStatusReason=choose and confirm one completed style preview\nworkflowRecommendedOperation=none\n[/project_state_snapshot]',
         }],
         tools: [
           {
@@ -537,7 +537,7 @@ describe('Golden local model provider', () => {
         model: 'golden-model',
         messages: [{
           role: 'system',
-          content: '[project_state_snapshot]\nworkflowStage=ready_to_generate_edit_script\nworkflowOperationGroupIds=generate_edit_script_assets,plan_chapters\n[/project_state_snapshot]',
+          content: '[project_state_snapshot]\nworkflowStep=chapter_plan\nworkflowStatus=ready\nworkflowRecommendedOperation=generate_edit_script_assets\nworkflowOperationGroupIds=generate_edit_script_assets,plan_chapters\n[/project_state_snapshot]',
         }],
         tools: [
           { type: 'function', function: { name: 'generate_edit_script_assets', parameters: { type: 'object' } } },

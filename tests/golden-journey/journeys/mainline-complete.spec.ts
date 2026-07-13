@@ -3,18 +3,18 @@ import { registerGoldenUser } from '../browser/pages/auth'
 import { launchGoldenStoryFromHome } from '../browser/pages/home'
 import {
   readGoldenMainlineBoundary,
-  readGoldenWorkflowStage,
+  readGoldenPendingInteractionOperationId,
+  readGoldenWorkflowProjection,
   reloadGoldenBoundary,
   submitGoldenBoundary,
   type GoldenMainlineBoundary,
 } from '../browser/pages/workspace'
-import { GOLDEN_EDIT_FIRST_WORKFLOW_STAGES } from '../contracts/stages'
+import { GOLDEN_EDIT_FIRST_WORKFLOW_STEPS } from '../contracts/stages'
 import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import type { GoldenOracleSnapshot } from '../oracle/types'
 import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
 import { TASK_TYPE } from '@/lib/task/types'
 
 const USER_BOUNDARIES = new Set<GoldenMainlineBoundary>([
@@ -396,8 +396,10 @@ async function submitObservedBoundary(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
   readonly boundary: GoldenMainlineBoundary
-  readonly workflowStage: EditFirstWorkflowStage
 }): Promise<void> {
+  const pendingOperationId = input.boundary === 'approval'
+    ? await readGoldenPendingInteractionOperationId(input.page, input.scope)
+    : null
   if (input.boundary === 'bible_review') {
     await setGoldenStreamPacing({ chunkSize: 5, delayMs: 15 })
     try {
@@ -416,10 +418,13 @@ async function submitObservedBoundary(input: {
     await expect(input.page.getByRole('button', { name: '选择这个风格', exact: true }).filter({ visible: true })).toHaveCount(1)
     await expect(input.page.getByRole('button', { name: '确认并继续', exact: true }).filter({ visible: true })).toHaveCount(0)
     await submitGoldenBoundary(input.page, input.boundary)
-    await expect.poll(async () => await readGoldenWorkflowStage(input.page, input.scope), {
+    await expect.poll(async () => {
+      const workflow = await readGoldenWorkflowProjection(input.page, input.scope)
+      return `${workflow.step}:${workflow.status}`
+    }, {
       timeout: 60_000,
       message: 'style choice must be durably consumed before the Journey reloads the boundary',
-    }).not.toBe('needs_style_choice')
+    }).not.toBe('visual_style:needs_user_choice')
     await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded', { timeout: 30_000 })
     await input.page.reload({ waitUntil: 'domcontentloaded' })
     await expect(styleBibleNode).toHaveAttribute('data-lifecycle-phase', 'succeeded')
@@ -439,7 +444,10 @@ async function submitObservedBoundary(input: {
     return
   }
 
-  if (input.boundary === 'approval' && input.workflowStage === 'ready_to_generate_style_previews') {
+  if (
+    input.boundary === 'approval'
+    && pendingOperationId === 'generate_edit_style_preview_images'
+  ) {
     await setGoldenMediaStatusDelay(15_000)
     try {
       await submitGoldenBoundary(input.page, input.boundary)
@@ -450,7 +458,7 @@ async function submitObservedBoundary(input: {
     return
   }
 
-  if (input.boundary === 'approval' && input.workflowStage === 'ready_to_generate_edit_script') {
+  if (input.boundary === 'approval' && pendingOperationId === 'generate_edit_script_assets') {
     await setGoldenMediaStatusDelay(15_000)
     await setGoldenStreamPacing({ chunkSize: 5, delayMs: 10 })
     try {
@@ -463,7 +471,7 @@ async function submitObservedBoundary(input: {
     return
   }
 
-  if (input.boundary === 'approval' && input.workflowStage === 'ready_to_generate_storyboard_images') {
+  if (input.boundary === 'approval' && pendingOperationId === 'generate_edit_script_storyboard_images') {
     await setGoldenMediaStatusDelay(15_000)
     try {
       await submitGoldenBoundary(input.page, input.boundary)
@@ -489,9 +497,9 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   })
   const scope = await launchGoldenStoryFromHome(page, '恐怖故事')
   const visitedBoundaries: GoldenMainlineBoundary[] = []
-  const visitedStages: EditFirstWorkflowStage[] = []
-  const reloadedTaskStages = new Set<EditFirstWorkflowStage>()
-  let reloadedCompletedStage = false
+  const visitedPositions: string[] = []
+  const reloadedProcessingPositions = new Set<string>()
+  let reloadedCompletedPosition = false
   let observedAudioHiddenBeforeVideos = false
   let observedAudioVisibleAtAudioStage = false
   let observedFinalTimelineHiddenBeforeAudioCompletion = false
@@ -499,52 +507,46 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   const deadline = Date.now() + 25 * 60_000
 
   while (Date.now() < deadline) {
-    const workflowStage = await readGoldenWorkflowStage(page, scope)
-    if (workflowStage === 'failed') {
-      await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-failed-stage')
-      throw new Error(`GOLDEN_MAINLINE_FAILED_STAGE:boundaries=${visitedBoundaries.join(',')}:stages=${visitedStages.join(',')}`)
+    const workflow = await readGoldenWorkflowProjection(page, scope)
+    const workflowPosition = `${workflow.step}:${workflow.status}`
+    if (workflow.status === 'failed') {
+      await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-failed-position')
+      throw new Error(`GOLDEN_MAINLINE_FAILED_POSITION:boundaries=${visitedBoundaries.join(',')}:positions=${visitedPositions.join(',')}`)
     }
-    if (workflowStage === 'completed' && !reloadedCompletedStage) {
-      reloadedCompletedStage = true
+    if (workflow.status === 'completed' && !reloadedCompletedPosition) {
+      reloadedCompletedPosition = true
       await page.reload({ waitUntil: 'domcontentloaded' })
       await expect.poll(async () => await readGoldenMainlineBoundary(page), {
         timeout: 30_000,
         message: 'final output must survive reload',
       }).toBe('final_output')
     }
-    if (visitedStages.at(-1) !== workflowStage) {
-      visitedStages.push(workflowStage)
-      await testInfo.attach(`stage-${String(visitedStages.length)}-${workflowStage}`, {
+    if (visitedPositions.at(-1) !== workflowPosition) {
+      visitedPositions.push(workflowPosition)
+      await testInfo.attach(`position-${String(visitedPositions.length)}-${workflowPosition}`, {
         body: Buffer.from(JSON.stringify(await readGoldenOracleSnapshot(scope), null, 2)),
         contentType: 'application/json',
       })
-      if (workflowStage === 'ready_to_generate_videos') {
+      if (workflow.step === 'video_segments') {
         await assertAudioNodeVisibility(page, 0)
         observedAudioHiddenBeforeVideos = true
       }
-      if (workflowStage === 'ready_to_plan_audio_layers' || workflowStage === 'audio_layers_planning') {
+      if (workflow.step === 'audio_plan') {
         await assertAudioNodeVisibility(page, 1)
         await assertFinalTimelineVisibility(page, 0)
         observedAudioVisibleAtAudioStage = true
         observedFinalTimelineHiddenBeforeAudioCompletion = true
       }
-      if (
-        (
-          workflowStage.endsWith('_generating')
-          || workflowStage.endsWith('_planning')
-          || workflowStage.endsWith('_rendering')
-        )
-        && !reloadedTaskStages.has(workflowStage)
-      ) {
-        reloadedTaskStages.add(workflowStage)
-        const minimumIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(workflowStage)
+      if (workflow.status === 'processing' && !reloadedProcessingPositions.has(workflowPosition)) {
+        reloadedProcessingPositions.add(workflowPosition)
+        const minimumIndex = GOLDEN_EDIT_FIRST_WORKFLOW_STEPS.indexOf(workflow.step)
         await page.reload({ waitUntil: 'domcontentloaded' })
         await expect.poll(async () => {
-          const restored = await readGoldenWorkflowStage(page, scope)
-          return restored !== 'failed' && GOLDEN_EDIT_FIRST_WORKFLOW_STAGES.indexOf(restored) >= minimumIndex
+          const restored = await readGoldenWorkflowProjection(page, scope)
+          return restored.status !== 'failed' && GOLDEN_EDIT_FIRST_WORKFLOW_STEPS.indexOf(restored.step) >= minimumIndex
         }, {
           timeout: 30_000,
-          message: `processing stage ${workflowStage} must recover or advance after reload`,
+          message: `processing position ${workflowPosition} must recover or advance after reload`,
         }).toBe(true)
       }
     }
@@ -635,11 +637,11 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
     }
     if (boundary === 'assistant_failure' || boundary === 'interaction_failure' || boundary === 'render_failure') {
       await attachGoldenOracleEvidence(testInfo, scope, `golden-oracle-${boundary}`)
-      throw new Error(`GOLDEN_MAINLINE_BLOCKED:${boundary}:boundaries=${visitedBoundaries.join(',')}:stages=${visitedStages.join(',')}`)
+      throw new Error(`GOLDEN_MAINLINE_BLOCKED:${boundary}:boundaries=${visitedBoundaries.join(',')}:positions=${visitedPositions.join(',')}`)
     }
     if (USER_BOUNDARIES.has(boundary)) {
       await reloadGoldenBoundary(page, boundary)
-      await submitObservedBoundary({ page, scope, boundary, workflowStage })
+      await submitObservedBoundary({ page, scope, boundary })
       await page.waitForTimeout(500)
       continue
     }
@@ -647,5 +649,5 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   }
 
   await attachGoldenOracleEvidence(testInfo, scope, 'golden-oracle-timeout')
-  throw new Error(`GOLDEN_MAINLINE_TIMEOUT:boundaries=${visitedBoundaries.join(',')}:stages=${visitedStages.join(',')}`)
+  throw new Error(`GOLDEN_MAINLINE_TIMEOUT:boundaries=${visitedBoundaries.join(',')}:positions=${visitedPositions.join(',')}`)
 })

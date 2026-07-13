@@ -17,7 +17,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
 - **CN-02D — Task 启动即物化稳定节点。** 当 active Task target 已携带足以派生 canonical node identity 的持久资源 ID 时，节点 registry 必须声明该 Task materialization capability，projector 必须在 workflow context 刷新和首个 structured stream item 之前投影同一节点。需要先产生持久子资源才能确定 identity 的 kind 必须显式声明不适用，禁止伪造临时 ID。Task target 只提供节点存在与运行事实，最终业务状态仍由 CN-07 的唯一 lifecycle resolver 裁决；不得用 timer、refetch 或 workflow 到达顺序承担正确性。
 - **CN-02F — 节点物化单调。** canonical identity 已由持久记录、单调 Workflow 阶段、Task target 或 stream 任一事实建立后，终态交接不得因 active Task 与 stream 先于正式 Query 消失而撤销节点。持久记录存在与最终内容成功必须分别进入 materialization 与 lifecycle，不得把“内容未完成”解释成“节点不存在”。
-- **CN-02E — 下游节点按真实能力阶段出现。** BGM 与 Soundscape 节点只在视频片段和章节渲染完成、Workflow 进入 `ready_to_plan_audio_layers` 后进入普通 Canvas 投影；最终时间线只在音频层满足、Workflow 进入 `ready_to_render_final` 后进入普通投影。不得在 `ready_to_generate_videos` 或章节渲染阶段提前展示。若音频/最终渲染 Task、正式资源或 stream 已经存在，则仍由 CN-02D 的统一 materialization resolver 以 episode identity 投影同一节点，但只有当前 Workflow 明确允许的动作才可执行；每个音频节点的规划与生成 TaskType 必须聚合到同一个 episode target，禁止为阶段拆分复制节点或重新引入 Task 启动空窗。
+- **CN-02E — 下游节点只消费 Workflow 能力。** BGM 与 Soundscape 节点只在规范化 Workflow step 到达 `audio_plan` 后进入普通 Canvas 投影；最终时间线只在 step 到达 `final_render` 后进入普通投影。Canvas 只能读取 `WorkflowView.capabilities`，不得维护 stage rank、operation-id 列表或从 recommended action 反推节点可见性。若音频/最终渲染 Task、正式资源或 stream 已经存在，则仍由 CN-02D 的统一 materialization resolver 以 episode identity 投影同一节点，但动作只能读取 `WorkflowView.operationPolicy.allowedOperationIds`；每个音频节点的规划与生成 TaskType 必须聚合到同一个 episode target，禁止为阶段拆分复制节点或重新引入 Task 启动空窗。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
 - **CN-03A — Canvas 不解释或展示领域 ID。** Structured preview 只能展示 raw 协议中的名称、短 ref 对应的顺序或 clip order；正式节点只消费服务端已投影的 current-name View。renderer 不得维护资产映射、按名称反查 identity，也不得用 characterId/locationId/shotId/sourceId 等内部标识作为缺失文案 fallback。引用缺失必须由 projector 明确拒绝。
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
@@ -37,6 +37,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 ## 权威入口
 
 - 节点稳定 ID：`src/features/project-workspace/canvas/workspace-canvas-node-ids.ts`。
+- Workflow 到 Canvas 的唯一边界：`src/lib/project-workflow/edit-first-view.ts` 生成 `WorkflowView.capabilities` 与 `operationPolicy`；projector 不再解释 workflow 位置，也不得导入服务端事实装配器。
 - 节点能力总契约：`src/features/project-workspace/canvas/registry/workspace-canvas-node-registry.ts`。
 - 生命周期状态机：`src/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle.ts`；最终节点解析：`src/features/project-workspace/canvas/workspace-node-runtime.ts`。
 - 流式 schema 与 adapter：`src/features/project-workspace/canvas/structured-stream/structured-stream-adapters.ts`。

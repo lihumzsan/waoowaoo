@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
+import {
+  isEditFirstWorkflowPosition,
+  type EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 import { buildEditStylePreviewSetView } from '@/lib/edit-script/style-preview-set-view'
 import { TASK_RUNTIME_TARGETS, type TaskRuntimeTarget } from '@/lib/task/runtime-targets'
 import type {
@@ -96,7 +98,7 @@ export interface BuildWorkspaceNodeCanvasProjectionInput {
   readonly episodeId: string
   readonly episodeName?: string
   readonly storyboards: readonly ProjectStoryboard[]
-  readonly editFirstWorkflow: EditFirstWorkflowState
+  readonly editFirstWorkflow: EditFirstWorkflowView
   readonly editBible?: ProjectEditBible | null
   readonly editScript?: ProjectEditScript | null
   readonly editScripts?: readonly ProjectEditScript[]
@@ -751,7 +753,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   const chapterIndexById = new Map(
     (editBible?.chapters ?? []).map((chapter) => [chapter.id, chapter.chapterIndex] as const),
   )
-  const editFirstCanvasVisibility = resolveEditFirstCanvasVisibility(editFirstWorkflow)
+  const editFirstCanvasVisibility = editFirstWorkflow.capabilities
   const styleBibleDetails = buildStyleBibleDetails(editBible?.styleBible)
   const stylePreviewSetView = buildEditStylePreviewSetView({
     previews: editBible?.stylePreviews ?? [],
@@ -916,14 +918,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   let styleBibleNodeId: string | null = null
   const styleBibleProjection = resolveWorkspaceCanvasNodeMaterialization('editStyleBible', activeTaskTargets, {
     identityAvailable: Boolean(editBible),
-    workflowVisible: editFirstWorkflow.stage === 'style_preview_generating',
+    workflowVisible: isEditFirstWorkflowPosition(editFirstWorkflow, 'visual_style', 'processing'),
     resourceAvailable: Boolean(styleBibleDetails || stylePreviewSetView),
     streamAvailable: false,
     submissionAvailable: false,
     targetId: editBible?.id ?? null,
   })
   const stylePreviewOptionsRunning = styleBibleProjection.activeTaskTargets.length > 0
-    || (editFirstWorkflow.stage === 'style_preview_generating' && !stylePreviewSetView)
+    || (isEditFirstWorkflowPosition(editFirstWorkflow, 'visual_style', 'processing') && !stylePreviewSetView)
   if (editBible && styleBibleProjection.materialized) {
     styleBibleNodeId = workspaceNodeId.editStyleBible(editBible.id)
     const stylePreviewRuntimeTargets = stylePreviewSetView?.allCandidates.flatMap((candidate) => {
@@ -1593,8 +1595,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       && bgmDetails.status !== 'planning'
       && bgmDetails.status !== 'generating'
     const bgmActionAvailable = bgmReadyForGeneration
-      || editFirstWorkflow.allowedOperationIds.includes('plan_episode_bgm_score')
-      || editFirstWorkflow.allowedOperationIds.includes('generate_episode_bgm_score')
+      || editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_bgm_score')
+      || editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_bgm_score')
     nodes.push(createMediaNode({
       id: bgmNodeId,
       position: layoutPosition(savedLayouts, bgmNodeId, { x: SHOT_GRID_START_X, y: bgmScoreDefaultY }),
@@ -1654,8 +1656,8 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ?? workspaceCanvasPendingResourcePresentation()
       : null
     const soundscapeActionAvailable = Boolean(details)
-      || editFirstWorkflow.allowedOperationIds.includes('plan_episode_soundscape')
-      || editFirstWorkflow.allowedOperationIds.includes('generate_episode_soundscape')
+      || editFirstWorkflow.operationPolicy.allowedOperationIds.includes('plan_episode_soundscape')
+      || editFirstWorkflow.operationPolicy.allowedOperationIds.includes('generate_episode_soundscape')
     nodes.push(createMediaNode({
       id: soundscapeNodeId,
       position: layoutPosition(savedLayouts, soundscapeNodeId, {
@@ -1722,7 +1724,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         ? resourcePresentationFromStatus(finalVideo.renderStatus)
           ?? workspaceCanvasPendingResourcePresentation()
         : null
-    const finalRenderActionAvailable = editFirstWorkflow.allowedOperationIds.includes('render_final_video')
+    const finalRenderActionAvailable = editFirstWorkflow.operationPolicy.allowedOperationIds.includes('render_final_video')
     nodes.push(createMediaNode({
       id: finalNodeId,
       position: layoutPosition(savedLayouts, finalNodeId, { x: SHOT_GRID_START_X, y: bgmStageBottomY + FINAL_TIMELINE_GAP_Y }),

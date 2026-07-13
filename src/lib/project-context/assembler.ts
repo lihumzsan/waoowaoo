@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getProjectModelConfig } from '@/lib/config-service'
 import { normalizeTaskOperationResult, type OperationResultTaskRow } from '@/lib/task/operation-result-normalizer'
-import { resolveEditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 import { editScriptStructureSchema } from '@/lib/edit-script/types'
 import { readEpisodeEditChapters } from '@/lib/edit-bible/service'
 import { resolveProjectContextPolicy } from './policy'
@@ -155,7 +155,7 @@ export async function assembleProjectContext(params: {
       statuses: ['completed', 'failed', 'canceled'],
       limit: 10,
     }),
-    resolveEditFirstWorkflowState({
+    resolveEditFirstWorkflowView({
       projectId: params.projectId,
       userId: params.userId,
       episodeId: params.episodeId || null,

@@ -26,9 +26,9 @@ import {
   type ProjectAgentActivitySnapshot,
 } from './event'
 import {
-  resolveEditFirstWorkflowState,
-  type EditFirstWorkflowState,
-} from '@/lib/project-workflow/edit-first'
+  type EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
+import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 import { TASK_STATUS, type TaskStatus } from '@/lib/task/types'
 import type { OperationPlanView } from '@/lib/operations/planning'
 import { buildProjectAssistantScopeRef } from './persistence'
@@ -88,7 +88,7 @@ export interface ProjectAgentSessionState {
   pendingInteraction: ProjectAgentSessionPendingInteraction | null
   activeWaits: ProjectAgentSessionWait[]
   activeTasks: ProjectAgentSessionTask[]
-  editFirstWorkflow: EditFirstWorkflowState
+  editFirstWorkflow: EditFirstWorkflowView
 }
 
 export interface ProjectAgentSessionSnapshot {
@@ -320,7 +320,7 @@ async function buildPendingChoiceInteraction(params: {
 
 async function buildPendingInteraction(params: {
   scope: ProjectAgentSessionScopeInput
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   interruption: ProjectAgentInterruptionSnapshot | null
 }): Promise<ProjectAgentSessionPendingInteraction | null> {
   if (!params.interruption) return null
@@ -390,7 +390,7 @@ async function buildProjectAgentSessionState(
     assistantId,
   }
   const [workflow, activeRun, recentRuns, waits, pendingInterruption, openFacts] = await Promise.all([
-    resolveEditFirstWorkflowState({
+    resolveEditFirstWorkflowView({
       projectId: input.projectId,
       userId: input.userId,
       episodeId: input.episodeId ?? null,

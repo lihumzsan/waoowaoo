@@ -1,6 +1,10 @@
 import { assembleProjectProjectionLite } from '@/lib/project-projection/lite'
 import { prisma } from '@/lib/prisma'
-import { resolveEditFirstWorkflowState, type EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import {
+  isEditFirstWorkflowPosition,
+  type EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
+import { resolveEditFirstWorkflowView } from '@/lib/project-workflow/edit-first'
 
 export const PROJECT_PHASE = {
   DRAFT: 'draft',
@@ -24,7 +28,7 @@ export interface ProjectPhaseSnapshot {
   }
   staleArtifacts: string[]
   availableActions: string[]
-  editFirstWorkflow: EditFirstWorkflowState
+  editFirstWorkflow: EditFirstWorkflowView
 }
 
 async function resolveEpisodePlanningState(episodeId: string | null): Promise<ProjectPhaseSnapshot['planning']> {
@@ -155,7 +159,7 @@ export async function resolveProjectPhase(params: {
           progress,
         })
       : Promise.resolve([] as string[]),
-    resolveEditFirstWorkflowState({
+    resolveEditFirstWorkflowView({
       projectId: params.projectId,
       userId: params.userId,
       episodeId: projection.episodeId || null,
@@ -167,9 +171,9 @@ export async function resolveProjectPhase(params: {
   if (progress.storyboardCount > 0 || progress.panelCount > 0) {
     phase = PROJECT_PHASE.STORYBOARD_READY
   } else if (
-    editFirstWorkflow.stage !== 'not_started'
-    && editFirstWorkflow.stage !== 'ready_to_ingest_script'
-    && editFirstWorkflow.stage !== 'bible_ready_for_review'
+    editFirstWorkflow.step !== 'unavailable'
+    && editFirstWorkflow.step !== 'script_intake'
+    && !isEditFirstWorkflowPosition(editFirstWorkflow, 'episode_plan', 'needs_user_choice')
   ) {
     phase = PROJECT_PHASE.SCRIPT_READY
   }

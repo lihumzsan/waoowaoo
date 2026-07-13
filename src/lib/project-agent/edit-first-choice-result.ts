@@ -1,6 +1,6 @@
 import type { AgentInputItem } from '@openai/agents'
 import type { EditScriptVideoRatio } from '@/lib/edit-script/types'
-import type { EditFirstWorkflowChoiceDecision } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowChoiceDecision } from '@/lib/project-workflow/edit-first-view'
 import {
   getEditFirstChoiceDefinition,
   type EditFirstChoiceType,

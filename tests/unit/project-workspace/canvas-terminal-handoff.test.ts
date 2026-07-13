@@ -7,6 +7,7 @@ import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/can
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { taskRuntimeTargetQueryKey } from '@/lib/task/runtime-targets'
 import type { ProjectEditBible } from '@/types/project'
+import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
 /**
  * Logic Specification
@@ -74,14 +75,10 @@ describe('Canvas terminal handoff', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'script_generating',
-        blocking: { kind: 'processing', reason: 'source generation is running' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'source_script',
+        status: { kind: 'processing', reason: 'source generation is running' },
+      }),
       editBible: editBible('generating', 'prompt_generated_outline'),
       savedLayouts: [],
       translate: (key) => key,
@@ -92,14 +89,10 @@ describe('Canvas terminal handoff', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'bible_generating',
-        blocking: { kind: 'processing', reason: 'planning is running' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'episode_plan',
+        status: { kind: 'processing', reason: 'planning is running' },
+      }),
       editBible: editBible('generating', 'prompt_generated_script'),
       savedLayouts: [],
       translate: (key) => key,

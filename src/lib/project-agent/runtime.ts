@@ -98,9 +98,9 @@ import {
 import { resolveProjectAgentTaskFollowUpTurnPolicy } from './task-follow-up-turn-policy'
 import {
   resolveEditFirstWorkflowChoice,
-  resolveEditFirstWorkflowState,
-  type EditFirstWorkflowState,
+  resolveEditFirstWorkflowView,
 } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import { createProjectAgentOperationTool } from './agents-tool-adapter'
 import {
   PROJECT_AGENT_MAX_TURNS,
@@ -433,10 +433,10 @@ function buildProjectStateVersion(params: {
   const workflow = params.phase.editFirstWorkflow
   return [
     params.phase.phase,
-    workflow.stage,
-    workflow.blocking.kind,
-    workflow.nextAction?.operationId ?? 'none',
-    workflow.operationGroup?.id ?? 'none',
+    workflow.step,
+    workflow.status.kind,
+    workflow.operationPolicy.recommendedAction?.operationId ?? 'none',
+    workflow.operationPolicy.group?.id ?? 'none',
     params.phase.planning.editBibleStatus ?? 'none',
     String(params.phase.planning.chapterCount),
     String(params.phase.progress.storyboardCount),
@@ -452,9 +452,7 @@ function buildProjectStateInputItem(params: {
   enabledOperationIds: readonly string[]
 }): AgentInputItem {
   const workflow = params.phase.editFirstWorkflow
-  const blockingReason = workflow.blocking.reason
-    ? `${workflow.blocking.kind}:${formatRuntimeStateValue(workflow.blocking.reason)}`
-    : workflow.blocking.kind
+  const operationGroup = workflow.operationPolicy.group
   const lines = [
     '[project_state_snapshot]',
     `version=${buildProjectStateVersion({
@@ -464,14 +462,15 @@ function buildProjectStateInputItem(params: {
     `projectId=${formatRuntimeStateValue(params.projectId)}`,
     `episodeId=${formatRuntimeStateValue(params.episodeId)}`,
     `phase=${formatRuntimeStateValue(params.phase.phase)}`,
-    `workflowActive=${String(workflow.active)}`,
-    `workflowStage=${formatRuntimeStateValue(workflow.stage)}`,
-    `workflowBlocking=${blockingReason}`,
-    `workflowNextAction=${formatRuntimeStateValue(workflow.nextAction?.operationId)}`,
-    `workflowOperationGroup=${formatRuntimeStateValue(workflow.operationGroup?.id)}`,
-    `workflowOperationGroupIds=${formatRuntimeStateList(workflow.operationGroup?.operationIds ?? [])}`,
-    `workflowApprovalOperationIds=${formatRuntimeStateList(workflow.operationGroup?.approvalOperationIds ?? [])}`,
-    `allowedOperationIds=${formatRuntimeStateList(workflow.allowedOperationIds)}`,
+    `workflowAvailable=${String(workflow.status.kind !== 'inactive')}`,
+    `workflowStep=${formatRuntimeStateValue(workflow.step)}`,
+    `workflowStatus=${workflow.status.kind}`,
+    `workflowStatusReason=${formatRuntimeStateValue(workflow.status.reason)}`,
+    `workflowRecommendedOperation=${formatRuntimeStateValue(workflow.operationPolicy.recommendedAction?.operationId)}`,
+    `workflowOperationGroup=${formatRuntimeStateValue(operationGroup?.id)}`,
+    `workflowOperationGroupIds=${formatRuntimeStateList(operationGroup?.operationIds ?? [])}`,
+    `workflowApprovalOperationIds=${formatRuntimeStateList(operationGroup?.approvalOperationIds ?? [])}`,
+    `allowedOperationIds=${formatRuntimeStateList(workflow.operationPolicy.allowedOperationIds)}`,
     `enabledOperationIds=${formatRuntimeStateList(params.enabledOperationIds)}`,
     `planning.editBibleStatus=${formatRuntimeStateValue(params.phase.planning.editBibleStatus)}`,
     `planning.chapterCount=${String(params.phase.planning.chapterCount)}`,
@@ -748,14 +747,14 @@ function requireProjectAgentChoiceSuspensionReceipt(params: {
 }
 
 interface ProjectAgentLiveWorkflowState {
-  get(): Promise<EditFirstWorkflowState>
+  get(): Promise<EditFirstWorkflowView>
   invalidate(): void
 }
 
 /**
  * Live view of the edit-first workflow state for one run. Tool isEnabled
  * predicates read it before every model turn; every operation execution
- * invalidates it, so a stage advanced by a completed operation is visible to
+ * invalidates it, so a step advanced by a completed operation is visible to
  * the very next turn's tool surface. Lookups are deduplicated; refresh
  * failures must fail the run because stale workflow state would expose the
  * wrong tool surface.
@@ -765,15 +764,15 @@ function createProjectAgentLiveWorkflowState(params: {
   projectId: string
   userId: string
   episodeId: string | null
-  initial: EditFirstWorkflowState
+  initial: EditFirstWorkflowView
 }): ProjectAgentLiveWorkflowState {
   let current = params.initial
   let stale = false
-  let pending: Promise<EditFirstWorkflowState> | null = null
+  let pending: Promise<EditFirstWorkflowView> | null = null
   return {
     async get() {
       if (!stale) return current
-      pending ??= resolveEditFirstWorkflowState({
+      pending ??= resolveEditFirstWorkflowView({
         projectId: params.projectId,
         userId: params.userId,
         episodeId: params.episodeId,
@@ -993,7 +992,7 @@ export async function createProjectAgentChatResponse(input: {
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
-  const workflowOperationGroup = phase.editFirstWorkflow.operationGroup
+  const workflowOperationGroup = phase.editFirstWorkflow.operationPolicy.group
   const workflowGroupOperationIds = workflowOperationGroup?.operationIds ?? []
   const workflowApprovalOperationIds = workflowOperationGroup?.approvalOperationIds ?? []
   const approvalGroupOperationIds = approvalInterruption
@@ -1049,7 +1048,7 @@ export async function createProjectAgentChatResponse(input: {
       })
   })
   const initialChoiceContinuationOperationId = control.kind === 'choice'
-    ? phase.editFirstWorkflow.nextAction?.operationId ?? null
+    ? phase.editFirstWorkflow.operationPolicy.recommendedAction?.operationId ?? null
     : null
   if (
     initialChoiceContinuationOperationId
@@ -1166,7 +1165,8 @@ export async function createProjectAgentChatResponse(input: {
       `workflowTools=${String(toolset.workflowOperationIds.length)}`,
       `tools=${String(operationIds.length)}`,
       `enabledTools=${String(initialEnabledOperationIds.length)}`,
-      `editFirstStage=${phase.editFirstWorkflow.stage}`,
+      `editFirstStep=${phase.editFirstWorkflow.step}`,
+      `editFirstStatus=${phase.editFirstWorkflow.status.kind}`,
     ].join('\n')))
     initialChunks.push(createDataChunk('data-agent-debug', {
       requestId,
@@ -1487,7 +1487,7 @@ export async function createProjectAgentChatResponse(input: {
                 operationPlan,
               }
             }))
-            const expectedGroupIds = phase.editFirstWorkflow.operationGroup?.operationIds ?? []
+            const expectedGroupIds = phase.editFirstWorkflow.operationPolicy.group?.operationIds ?? []
             if (expectedGroupIds.length > 0) {
               const expected = Array.from(new Set(expectedGroupIds)).sort()
               const actual = Array.from(new Set(members.map((member) => member.operationId))).sort()
@@ -1764,7 +1764,8 @@ export async function createProjectAgentChatResponse(input: {
             runId: input.run.id,
             episodeId: context.episodeId || null,
             error: errorMessage,
-            workflowStage: phase.editFirstWorkflow.stage,
+            workflowStep: phase.editFirstWorkflow.step,
+            workflowStatus: phase.editFirstWorkflow.status.kind,
             stopReason: latestStopPart?.reason ?? null,
             runStatusFinalized,
           },

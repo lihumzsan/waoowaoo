@@ -2,41 +2,40 @@ import {
   describe,
   expect,
   it,
-  resolveEditFirstWorkflowStateFromSnapshot,
+  resolveEditFirstWorkflowViewFromSnapshot,
   snapshot,
 } from './edit-first-workflow.fixture'
-import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
-import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import {
+  createEditFirstWorkflowOperationPolicy,
+  createEditFirstWorkflowView,
+  type EditFirstWorkflowStep,
+} from '@/lib/project-workflow/edit-first-view'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 
-function visibilityAt(stage: EditFirstWorkflowStage) {
-  return resolveEditFirstCanvasVisibility({
-    active: true,
-    stage,
-    blocking: { kind: 'none', reason: null },
-    nextAction: null,
-    allowedOperationIds: [],
-    operationGroup: null,
-  })
+function capabilitiesAt(step: EditFirstWorkflowStep) {
+  return createEditFirstWorkflowView({
+    step,
+    status: { kind: 'ready', reason: null },
+  }).capabilities
 }
 
 describe('edit-first workflow state', () => {
   /**
    * Logic Specification
-   * Authority: CN-02/CN-07 and the canonical edit-first stage order.
+   * Authority: CN-02/CN-07 and the canonical edit-first semantic step order.
    * Rejects: showing BGM or soundscape nodes before video and chapter rendering finish.
-   * Production entry: resolveEditFirstCanvasVisibility.
+   * Production entry: createEditFirstWorkflowView.
    * Oracle: audio nodes are hidden through chapter rendering and visible when audio planning starts.
    * Command: npx vitest run tests/unit/project-workflow/edit-first-render-audio.test.ts
    */
   it('reveals audio nodes only when the workflow reaches audio planning', () => {
-    expect(visibilityAt('ready_to_generate_videos')).toMatchObject({ bgmScore: false, soundscape: false })
-    expect(visibilityAt('chapters_rendering')).toMatchObject({ bgmScore: false, soundscape: false })
-    expect(visibilityAt('ready_to_plan_audio_layers')).toMatchObject({ bgmScore: true, soundscape: true })
-    expect(visibilityAt('ready_to_render_chapters').finalTimeline).toBe(false)
-    expect(visibilityAt('ready_to_plan_audio_layers').finalTimeline).toBe(false)
-    expect(visibilityAt('ready_to_render_final').finalTimeline).toBe(true)
+    expect(capabilitiesAt('video_segments')).toMatchObject({ bgmScore: false, soundscape: false })
+    expect(capabilitiesAt('chapter_render')).toMatchObject({ bgmScore: false, soundscape: false })
+    expect(capabilitiesAt('audio_plan')).toMatchObject({ bgmScore: true, soundscape: true })
+    expect(capabilitiesAt('chapter_render').finalTimeline).toBe(false)
+    expect(capabilitiesAt('audio_plan').finalTimeline).toBe(false)
+    expect(capabilitiesAt('final_render').finalTimeline).toBe(true)
   })
 
   it('materializes active audio Tasks while the workflow context catches up', () => {
@@ -44,14 +43,10 @@ describe('edit-first workflow state', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'chapters_rendering',
-        blocking: { kind: 'processing', reason: 'chapter renders are still running' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'chapter_render',
+        status: { kind: 'processing', reason: 'chapter renders are still running' },
+      }),
       activeTaskTargets: [
         {
           taskId: 'bgm-task-1',
@@ -79,7 +74,7 @@ describe('edit-first workflow state', () => {
   })
 
   it('renders chapters after all video segments are ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -98,13 +93,13 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 0,
     }))
 
-    expect(state.stage).toBe('ready_to_render_chapters')
-    expect(state.nextAction?.operationId).toBe('render_chapters')
-    expect(state.allowedOperationIds).toEqual(['render_chapters'])
+    expect(state.step).toBe('chapter_render')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_chapters')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['render_chapters'])
   })
 
   it('keeps a stale final-render failure behind missing chapter and audio prerequisites', () => {
-    const beforeChapterRender = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const beforeChapterRender = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -123,10 +118,10 @@ describe('edit-first workflow state', () => {
       finalRenderStatus: 'failed',
     }))
 
-    expect(beforeChapterRender.stage).toBe('ready_to_render_chapters')
-    expect(beforeChapterRender.allowedOperationIds).toEqual(['render_chapters'])
+    expect(beforeChapterRender.step).toBe('chapter_render')
+    expect(beforeChapterRender.operationPolicy.allowedOperationIds).toEqual(['render_chapters'])
 
-    const beforeAudioPlanning = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const beforeAudioPlanning = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -145,8 +140,8 @@ describe('edit-first workflow state', () => {
       finalRenderStatus: 'failed',
     }))
 
-    expect(beforeAudioPlanning.stage).toBe('ready_to_plan_audio_layers')
-    expect(beforeAudioPlanning.allowedOperationIds).toEqual([
+    expect(beforeAudioPlanning.step).toBe('audio_plan')
+    expect(beforeAudioPlanning.operationPolicy.allowedOperationIds).toEqual([
       'plan_episode_bgm_score',
       'plan_episode_soundscape',
     ])
@@ -165,18 +160,17 @@ describe('edit-first workflow state', () => {
         outputUrl: null,
         updatedAt: '2026-07-13T00:00:00.000Z',
       },
-      editFirstWorkflow: {
-        active: true,
-        stage: 'ready_to_render_chapters',
-        blocking: { kind: 'none', reason: null },
-        nextAction: {
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'chapter_render',
+        status: { kind: 'ready', reason: null },
+        operationPolicy: createEditFirstWorkflowOperationPolicy({
+          recommendedAction: {
           id: 'render_chapters',
           operationId: 'render_chapters',
           title: 'Render chapter videos',
-        },
-        allowedOperationIds: ['render_chapters'],
-        operationGroup: null,
-      },
+          },
+        }),
+      }),
       savedLayouts: [],
       translate: (key) => key,
     })
@@ -187,7 +181,7 @@ describe('edit-first workflow state', () => {
   })
 
   it('prioritizes rendering ready chapters while later episode video segments are still missing', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -207,16 +201,16 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 0,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_videos')
-    expect(state.nextAction?.operationId).toBe('render_chapters')
-    expect(state.allowedOperationIds).toEqual([
+    expect(state.step).toBe('video_segments')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_chapters')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([
       'render_chapters',
       'generate_episode_videos',
     ])
   })
 
   it('groups music and soundscape planning after all chapter renders are ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -235,13 +229,13 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 1,
     }))
 
-    expect(state.stage).toBe('ready_to_plan_audio_layers')
-    expect(state.nextAction?.operationId).toBe('plan_episode_bgm_score')
-    expect(state.allowedOperationIds).toEqual([
+    expect(state.step).toBe('audio_plan')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('plan_episode_bgm_score')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([
       'plan_episode_bgm_score',
       'plan_episode_soundscape',
     ])
-    expect(state.operationGroup).toEqual({
+    expect(state.operationPolicy.group).toEqual({
       id: 'edit_first_audio_layer_planning',
       operationIds: ['plan_episode_bgm_score', 'plan_episode_soundscape'],
       approvalOperationIds: [],
@@ -249,7 +243,7 @@ describe('edit-first workflow state', () => {
   })
 
   it('blocks final render while required BGM is generating', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -273,14 +267,14 @@ describe('edit-first workflow state', () => {
       soundscapeDecision: 'none_needed',
     }))
 
-    expect(state.stage).toBe('audio_layers_generating')
-    expect(state.nextAction).toBeNull()
-    expect(state.blocking.kind).toBe('processing')
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('audio_generation')
+    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.status.kind).toBe('processing')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -301,13 +295,14 @@ describe('edit-first workflow state', () => {
       bgmScoreStatus: 'failed',
     }))
 
-    expect(state.stage).toBe('failed')
-    expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
-    expect(state.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
+    expect(state.step).toBe('audio_generation')
+    expect(state.status.kind).toBe('failed')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_episode_bgm_score')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
   })
 
   it('groups the two paid audio generators after both plans are durable', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -330,12 +325,12 @@ describe('edit-first workflow state', () => {
       soundscapeDecision: 'soundscape',
     }))
 
-    expect(state.stage).toBe('ready_to_generate_audio_layers')
-    expect(state.allowedOperationIds).toEqual([
+    expect(state.step).toBe('audio_generation')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([
       'generate_episode_bgm_score',
       'generate_episode_soundscape',
     ])
-    expect(state.operationGroup).toEqual({
+    expect(state.operationPolicy.group).toEqual({
       id: 'edit_first_audio_layer_generation',
       operationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
       approvalOperationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
@@ -343,7 +338,7 @@ describe('edit-first workflow state', () => {
   })
 
   it('allows final render after videos, chapters, and required BGM are ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -367,13 +362,13 @@ describe('edit-first workflow state', () => {
       soundscapeDecision: 'none_needed',
     }))
 
-    expect(state.stage).toBe('ready_to_render_final')
-    expect(state.nextAction?.operationId).toBe('render_final_video')
-    expect(state.allowedOperationIds).toEqual(['render_final_video'])
+    expect(state.step).toBe('final_render')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('render_final_video')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['render_final_video'])
   })
 
   it('tracks final render processing before completion', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -394,12 +389,12 @@ describe('edit-first workflow state', () => {
       activeFinalRenderTaskCount: 1,
     }))
 
-    expect(state.stage).toBe('final_rendering')
-    expect(state.blocking.kind).toBe('processing')
+    expect(state.step).toBe('final_render')
+    expect(state.status.kind).toBe('processing')
   })
 
   it('marks the workflow completed only when final render has output', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -420,7 +415,8 @@ describe('edit-first workflow state', () => {
       finalRenderHasOutput: true,
     }))
 
-    expect(state.stage).toBe('completed')
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('final_render')
+    expect(state.status.kind).toBe('completed')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 })

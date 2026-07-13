@@ -1,13 +1,16 @@
 import type { GoldenScenarioContract } from './types'
-export { GOLDEN_EDIT_FIRST_WORKFLOW_STAGES } from './stages'
+export {
+  GOLDEN_EDIT_FIRST_WORKFLOW_STATUSES,
+  GOLDEN_EDIT_FIRST_WORKFLOW_STEPS,
+} from './stages'
 
 export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-MAIN-STORY-TO-FINAL-DELIVERABLE',
     kind: 'mainline',
     title: 'an empty project reaches one durable final video through a real multi-chapter browser workflow',
-    startStage: 'not_started',
-    expectedTerminal: 'completed',
+    startStep: 'unavailable',
+    expectedTerminal: { step: 'final_render', status: 'completed' },
     requiresWorkers: true,
     zeroPaidProviderCalls: true,
   },
@@ -15,7 +18,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     id: 'GJ-AUTH-UNAUTHENTICATED-DENIAL',
     kind: 'security',
     title: 'an unauthenticated browser cannot open a workspace or read project data',
-    startStage: 'outside_workflow',
+    startStep: 'outside_workflow',
     expectedTerminal: 'unauthenticated_workspace_access_denied',
     requiresWorkers: false,
     zeroPaidProviderCalls: true,
@@ -24,7 +27,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     id: 'GJ-PROJECT-CROSS-USER-ISOLATION',
     kind: 'security',
     title: 'a second user cannot read or mutate the owner project',
-    startStage: 'outside_workflow',
+    startStep: 'outside_workflow',
     expectedTerminal: 'cross_user_project_access_denied',
     requiresWorkers: false,
     zeroPaidProviderCalls: true,
@@ -33,7 +36,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
     id: 'GJ-ASSET-HUB-CROSS-PROJECT-DENIAL',
     kind: 'security',
     title: 'one project cannot overwrite an asset owned by another project',
-    startStage: 'outside_workflow',
+    startStep: 'outside_workflow',
     expectedTerminal: 'cross_project_asset_mutation_denied',
     requiresWorkers: false,
     zeroPaidProviderCalls: true,

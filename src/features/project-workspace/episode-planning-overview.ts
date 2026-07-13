@@ -1,4 +1,8 @@
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type {
+  EditFirstWorkflowStatusKind,
+  EditFirstWorkflowStep,
+  EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 import type { ProjectEditChapter } from '@/types/project'
 
 export interface EpisodePlanningBibleSource {
@@ -32,8 +36,8 @@ export interface EpisodePlanningChapterOverview {
 }
 
 export interface EpisodePlanningOverview {
-  readonly workflowStage: EditFirstWorkflowState['stage']
-  readonly blockingKind: EditFirstWorkflowState['blocking']['kind']
+  readonly workflowStep: EditFirstWorkflowStep
+  readonly workflowStatus: EditFirstWorkflowStatusKind
   readonly bibleStatus: string | null
   readonly bible: EpisodePlanningBibleStats
   readonly chapterCount: number
@@ -48,7 +52,7 @@ export interface EpisodePlanningOverview {
 export interface BuildEpisodePlanningOverviewInput {
   readonly editBible?: EpisodePlanningBibleSource | null
   readonly chapters?: readonly ProjectEditChapter[] | null
-  readonly workflow?: EditFirstWorkflowState | null
+  readonly workflow?: EditFirstWorkflowView | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,8 +116,8 @@ export function buildEpisodePlanningOverview(input: BuildEpisodePlanningOverview
   const bible = readEpisodePlanningBibleStats(input.editBible)
 
   return {
-    workflowStage: input.workflow?.stage ?? 'not_started',
-    blockingKind: input.workflow?.blocking.kind ?? 'none',
+    workflowStep: input.workflow?.step ?? 'unavailable',
+    workflowStatus: input.workflow?.status.kind ?? 'inactive',
     bibleStatus: input.editBible?.status ?? null,
     bible,
     chapterCount: chapters.length,

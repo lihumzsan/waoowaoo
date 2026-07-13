@@ -29,7 +29,7 @@ describe('project agent session-state', () => {
         status: 'processing',
       },
     ])
-    workflowMock.resolveEditFirstWorkflowState.mockResolvedValue(workflow)
+    workflowMock.resolveEditFirstWorkflowView.mockResolvedValue(workflow)
     runsMock.listRecentProjectAgentRunsForScope.mockResolvedValue([
       {
         id: 'run-1',

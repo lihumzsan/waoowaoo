@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import type { ProjectEditScript, ProjectVideoGroup } from '@/types/project'
+import {
+  createEditFirstWorkflowOperationPolicy,
+  createEditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 
 /**
  * Logic Specification
@@ -103,14 +107,10 @@ describe('multi-chapter shot execution Canvas projection', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'assets_ready_for_review',
-        blocking: { kind: 'needs_user_choice', reason: 'cached workflow has not observed the submitted Tasks' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'planned_assets',
+        status: { kind: 'needs_user_choice', reason: 'cached workflow has not observed the submitted Tasks' },
+      }),
       editScripts: scripts,
       editShotExecutionPlans: [],
       activeTaskTargets: scripts.map((script) => ({
@@ -157,14 +157,13 @@ describe('multi-chapter shot execution Canvas projection', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'ready_to_render_final',
-        blocking: { kind: 'none', reason: null },
-        nextAction: null,
-        allowedOperationIds: ['render_final_video'],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'final_render',
+        status: { kind: 'ready', reason: null },
+        operationPolicy: createEditFirstWorkflowOperationPolicy({
+          allowedOperationIds: ['render_final_video'],
+        }),
+      }),
       editScript: null,
       editScripts: scripts,
       editShotExecutionPlans: [],

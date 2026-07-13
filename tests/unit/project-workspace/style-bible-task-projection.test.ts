@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import type { ProjectEditBible, ProjectEditStylePreview } from '@/types/project'
+import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 
 /**
  * Logic Specification
@@ -51,14 +52,10 @@ describe('Style Bible text Task Canvas projection', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'style_preview_generating',
-        blocking: { kind: 'processing', reason: 'visual style generation is still running' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'visual_style',
+        status: { kind: 'processing', reason: 'visual style generation is still running' },
+      }),
       editBible,
       activeTaskTargets: [{
         taskId: 'style-options-task-1',
@@ -91,14 +88,10 @@ describe('Style Bible text Task Canvas projection', () => {
       projectId: 'project-1',
       episodeId: 'episode-1',
       storyboards: [],
-      editFirstWorkflow: {
-        active: true,
-        stage: 'needs_style_choice',
-        blocking: { kind: 'needs_user_choice', reason: 'visual style choice is required' },
-        nextAction: null,
-        allowedOperationIds: [],
-        operationGroup: null,
-      },
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'visual_style',
+        status: { kind: 'needs_user_choice', reason: 'visual style choice is required' },
+      }),
       editBible: {
         ...editBible,
         stylePreviews: [

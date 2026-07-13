@@ -85,7 +85,8 @@ export function inspectChoiceRegistryAuthority(input) {
   for (const marker of [
     'EDIT_FIRST_CHOICE_REGISTRY',
     'satisfies Record<EditFirstChoiceType, EditFirstChoiceDefinition>',
-    'workflowStage:',
+    'workflowStep:',
+    'workflowStatus:',
     'offerBuilder:',
     'parseDecision:',
   ]) {

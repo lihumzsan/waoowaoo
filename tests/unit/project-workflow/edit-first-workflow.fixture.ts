@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  resolveEditFirstWorkflowStateFromSnapshot,
+  resolveEditFirstWorkflowViewFromSnapshot,
   type EditFirstWorkflowSnapshot,
-} from '@/lib/project-workflow/edit-first'
+} from '@/lib/project-workflow/edit-first-view'
 
 function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirstWorkflowSnapshot {
   return {
@@ -68,6 +68,6 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
 }
 
 export { describe, expect, it } from 'vitest'
-export { resolveEditFirstWorkflowStateFromSnapshot } from '@/lib/project-workflow/edit-first'
-export type { EditFirstWorkflowSnapshot } from '@/lib/project-workflow/edit-first'
+export { resolveEditFirstWorkflowViewFromSnapshot } from '@/lib/project-workflow/edit-first-view'
+export type { EditFirstWorkflowSnapshot } from '@/lib/project-workflow/edit-first-view'
 export { snapshot }

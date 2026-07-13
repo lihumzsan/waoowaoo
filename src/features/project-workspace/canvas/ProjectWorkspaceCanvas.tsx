@@ -27,7 +27,7 @@ import {
   isTaskRuntimeRunningPhase,
   TASK_RUNTIME_TARGETS,
 } from '@/lib/task/runtime-targets'
-import { EDIT_FIRST_CANVAS_PENDING_WORKFLOW } from '@/lib/project-workflow/edit-first-canvas-visibility'
+import { EDIT_FIRST_WORKFLOW_EMPTY_VIEW } from '@/lib/project-workflow/edit-first-view'
 import type { CanvasNodeLayout } from '@/lib/project-canvas/layout/canvas-layout.types'
 import { useProjectAssets, useProjectContext, useProjectEditBibleResponse } from '@/lib/query/hooks'
 import { useTaskTargetStateMap } from '@/lib/query/hooks/useTaskTargetStateMap'
@@ -240,7 +240,7 @@ function ProjectWorkspaceCanvasContent({
   const { data: editBibleResponse } = useProjectEditBibleResponse(projectId, episodeId ?? null)
   const editBible = editBibleResponse?.editBible ?? null
   const editBibleChapters = useMemo(() => editBibleResponse?.chapters ?? [], [editBibleResponse?.chapters])
-  const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_CANVAS_PENDING_WORKFLOW
+  const editFirstWorkflow = projectContext?.editFirstWorkflow ?? EDIT_FIRST_WORKFLOW_EMPTY_VIEW
   const workspaceScope = readWorkspaceScopeId(workspaceScopeId ?? 'all')
   const scopedStoryboards = useMemo(() => (
     workspaceScope.kind === 'chapter'

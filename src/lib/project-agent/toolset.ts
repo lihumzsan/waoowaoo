@@ -1,6 +1,6 @@
 import type { ProjectAgentOperationRegistry } from '@/lib/operations/types'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
-import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
+import { EDIT_FIRST_WORKFLOW_OPERATION_IDS } from '@/lib/project-workflow/edit-first-view'
 import {
   EDIT_FIRST_CHOICE_OPERATION_IDS,
   isEditFirstChoiceToolEnabled,
@@ -164,7 +164,7 @@ export function isProjectAgentOperationAlwaysEnabled(
  */
 export function isProjectAgentOperationEnabled(params: {
   toolset: ProjectAgentToolset
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   operationId: string
 }): boolean {
   if (params.toolset.disabledOperationIds.includes(params.operationId)) return false
@@ -175,5 +175,7 @@ export function isProjectAgentOperationEnabled(params: {
       operationId: params.operationId,
     })
   }
-  return params.workflow.allowedOperationIds.some((operationId) => operationId === params.operationId)
+  return params.workflow.operationPolicy.allowedOperationIds.some(
+    (operationId) => operationId === params.operationId,
+  )
 }

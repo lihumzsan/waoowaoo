@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import { createEditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import {
   buildScriptIntakeChoiceCard,
   buildScriptIntakeChoiceOfferCandidate,
@@ -9,15 +9,11 @@ import {
 } from '@/lib/project-agent/script-intake'
 import { AI_PROMPT_IDS, buildAiPrompt } from '@/lib/ai-prompts'
 
-function workflow(stage: EditFirstWorkflowState['stage']): EditFirstWorkflowState {
-  return {
-    active: true,
-    stage,
-    blocking: { kind: 'none', reason: null },
-    nextAction: null,
-    allowedOperationIds: [],
-    operationGroup: null,
-  }
+function workflow() {
+  return createEditFirstWorkflowView({
+    step: 'script_intake',
+    status: { kind: 'ready', reason: null },
+  })
 }
 
 const plan: ScriptIntakePlannerOutput = {
@@ -76,7 +72,7 @@ describe('script intake choice', () => {
   it('builds a persisted choice card from validated planner questions', () => {
     const card = buildScriptIntakeChoiceCard({
       locale: 'zh',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: '恐怖故事',
       plan,
@@ -92,7 +88,7 @@ describe('script intake choice', () => {
     expect(card.groups[0]?.options.some((option) => option.value === 'ai_fill')).toBe(false)
     const candidate = buildScriptIntakeChoiceOfferCandidate({
       locale: 'zh',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: '恐怖故事',
       plan,
@@ -104,7 +100,7 @@ describe('script intake choice', () => {
   it('normalizes model-provided runtime questions to the fixed runtime options', () => {
     const card = buildScriptIntakeChoiceCard({
       locale: 'en',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: 'A haunted elevator story',
       plan: {
@@ -146,7 +142,7 @@ describe('script intake choice', () => {
 
     const card = buildScriptIntakeChoiceCard({
       locale: 'zh',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: '恐怖故事',
       plan: sevenQuestionPlan,
@@ -160,14 +156,14 @@ describe('script intake choice', () => {
   it('does not ask target runtime again when the seed already states one', () => {
     const zhCard = buildScriptIntakeChoiceCard({
       locale: 'zh',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: '两分钟科幻短片，民科发现超光速方法后看见过去。',
       plan,
     })
     const enCard = buildScriptIntakeChoiceCard({
       locale: 'en',
-      workflow: workflow('ready_to_ingest_script'),
+      workflow: workflow(),
       toolCallId: 'tool-call-1',
       seedText: 'A two-minute sci-fi short about faster-than-light travel revealing the past.',
       plan,

@@ -1,47 +1,54 @@
-import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import type {
+  EditFirstWorkflowStatusKind,
+  EditFirstWorkflowStep,
+} from '@/lib/project-workflow/edit-first-view'
 
-export const GOLDEN_EDIT_FIRST_WORKFLOW_STAGES = [
-  'not_started',
-  'ready_to_ingest_script',
-  'script_generating',
-  'script_ready_for_review',
-  'ready_to_generate_bible',
-  'bible_generating',
-  'bible_ready_for_review',
-  'ready_to_generate_style_previews',
-  'style_preview_generating',
-  'needs_style_choice',
-  'ready_to_generate_edit_script',
-  'edit_script_generating',
-  'ready_to_generate_assets',
-  'assets_generating',
-  'assets_ready_for_review',
-  'ready_to_generate_shot_execution_plan',
-  'ready_to_generate_storyboard_images',
-  'storyboard_images_generating',
-  'ready_to_generate_videos',
-  'videos_generating',
-  'ready_to_render_chapters',
-  'chapters_rendering',
-  'ready_to_plan_audio_layers',
-  'audio_layers_planning',
-  'ready_to_generate_audio_layers',
-  'audio_layers_generating',
-  'ready_to_render_final',
-  'final_rendering',
-  'completed',
+export const GOLDEN_EDIT_FIRST_WORKFLOW_STEPS = [
+  'unavailable',
+  'script_intake',
+  'source_script',
+  'episode_plan',
+  'visual_style',
+  'chapter_plan',
+  'planned_assets',
+  'shot_execution',
+  'storyboard_images',
+  'video_segments',
+  'chapter_render',
+  'audio_plan',
+  'audio_generation',
+  'final_render',
+] as const satisfies readonly EditFirstWorkflowStep[]
+
+export const GOLDEN_EDIT_FIRST_WORKFLOW_STATUSES = [
+  'inactive',
+  'ready',
+  'processing',
+  'needs_user_choice',
   'failed',
-] as const satisfies readonly EditFirstWorkflowStage[]
+  'completed',
+] as const satisfies readonly EditFirstWorkflowStatusKind[]
 
-type MissingProductionStage = Exclude<
-  EditFirstWorkflowStage,
-  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STAGES)[number]
+type MissingProductionStep = Exclude<
+  EditFirstWorkflowStep,
+  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STEPS)[number]
 >
-type UnknownGoldenStage = Exclude<
-  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STAGES)[number],
-  EditFirstWorkflowStage
+type UnknownGoldenStep = Exclude<
+  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STEPS)[number],
+  EditFirstWorkflowStep
 >
-const GOLDEN_STAGE_LIST_IS_EXHAUSTIVE: [MissingProductionStage, UnknownGoldenStage] extends [never, never]
-  ? true
-  : never = true
-void GOLDEN_STAGE_LIST_IS_EXHAUSTIVE
+type MissingProductionStatus = Exclude<
+  EditFirstWorkflowStatusKind,
+  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STATUSES)[number]
+>
+type UnknownGoldenStatus = Exclude<
+  (typeof GOLDEN_EDIT_FIRST_WORKFLOW_STATUSES)[number],
+  EditFirstWorkflowStatusKind
+>
+const GOLDEN_WORKFLOW_LISTS_ARE_EXHAUSTIVE: [
+  MissingProductionStep,
+  UnknownGoldenStep,
+  MissingProductionStatus,
+  UnknownGoldenStatus,
+] extends [never, never, never, never] ? true : never = true
+void GOLDEN_WORKFLOW_LISTS_ARE_EXHAUSTIVE

@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EDIT_FIRST_CHOICE_TOOL_IDS } from '@/lib/project-agent/edit-first-choice-tools'
+import {
+  createEditFirstWorkflowOperationPolicy,
+  createEditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 
-const workflow = {
-  active: true,
-  stage: 'ready_to_generate_assets',
-  blocking: {
-    kind: 'needs_confirmation',
-    reason: null,
-  },
-  nextAction: null,
-  allowedOperationIds: ['generate_edit_script_assets'],
-}
+const workflow = createEditFirstWorkflowView({
+  step: 'planned_assets',
+  status: { kind: 'ready', reason: null },
+  operationPolicy: createEditFirstWorkflowOperationPolicy({
+    allowedOperationIds: ['generate_edit_script_assets'],
+  }),
+})
 
 type MockInterruption = {
   id: string
@@ -76,7 +77,7 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const workflowMock = vi.hoisted(() => ({
-  resolveEditFirstWorkflowState: vi.fn(async () => workflow),
+  resolveEditFirstWorkflowView: vi.fn(async () => workflow),
 }))
 
 const runsMock = vi.hoisted(() => ({
@@ -169,7 +170,10 @@ const choiceCardMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-vi.mock('@/lib/project-workflow/edit-first', () => workflowMock)
+vi.mock('@/lib/project-workflow/edit-first', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/project-workflow/edit-first')>(),
+  ...workflowMock,
+}))
 
 vi.mock('@/lib/project-agent/runs', () => runsMock)
 

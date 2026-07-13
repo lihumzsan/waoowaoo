@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import {
+  createEditFirstWorkflowView,
+  type EditFirstWorkflowStatusKind,
+  type EditFirstWorkflowStep,
+  type EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 
 const prismaState = vi.hoisted(() => ({
   projectFindFirst: vi.fn(),
@@ -32,23 +37,18 @@ import {
 } from '@/lib/project-agent/choice-card'
 
 function workflow(
-  stage: EditFirstWorkflowState['stage'],
-  nextAction: EditFirstWorkflowState['nextAction'] = null,
-): EditFirstWorkflowState {
-  return {
-    active: true,
-    stage,
-    blocking: {
-      kind: stage === 'needs_style_choice' || stage === 'assets_ready_for_review' ? 'needs_user_choice' : 'needs_confirmation',
-      reason: null,
-    },
-    nextAction,
-    allowedOperationIds: nextAction ? [nextAction.operationId] : [],
-    operationGroup: null,
-  }
+  step: EditFirstWorkflowStep,
+  status: EditFirstWorkflowStatusKind,
+): EditFirstWorkflowView {
+  return createEditFirstWorkflowView({
+    step,
+    status: status === 'processing' || status === 'needs_user_choice' || status === 'failed'
+      ? { kind: status, reason: 'test workflow position' }
+      : { kind: status, reason: null },
+  })
 }
 
 export { beforeEach, describe, expect, it, vi } from 'vitest'
-export type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+export type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 export { buildEditFirstAssistantChoiceCard, readEditFirstAspectRatio } from '@/lib/project-agent/choice-card'
 export { prismaState, workflow }

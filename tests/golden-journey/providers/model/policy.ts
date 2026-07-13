@@ -36,12 +36,12 @@ const WRITE_TOOL_PRIORITY = [
   'render_final_video',
 ] as const
 
-const WORKFLOW_STAGE_TOOL: Readonly<Record<string, string>> = {
-  needs_script_intake: 'request_script_intake_choice',
-  script_ready_for_review: 'request_edit_script_review_choice',
-  bible_ready_for_review: 'request_edit_bible_review_choice',
-  needs_style_choice: 'request_edit_style_choice',
-  assets_ready_for_review: 'request_edit_asset_review_choice',
+const WORKFLOW_POSITION_CHOICE_TOOL: Readonly<Record<string, string>> = {
+  'script_intake:ready': 'request_script_intake_choice',
+  'source_script:needs_user_choice': 'request_edit_script_review_choice',
+  'episode_plan:needs_user_choice': 'request_edit_bible_review_choice',
+  'visual_style:needs_user_choice': 'request_edit_style_choice',
+  'planned_assets:needs_user_choice': 'request_edit_asset_review_choice',
 }
 
 const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
@@ -734,18 +734,30 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
       if (typeof fn?.name === 'string') alreadyCalled.add(fn.name)
     }
   }
-  const workflowStage = readWorkflowStage(request)
-  const stageTool = workflowStage ? WORKFLOW_STAGE_TOOL[workflowStage] : undefined
-  if (stageTool && available.has(stageTool) && !alreadyCalled.has(stageTool)) {
-    return stageTool
+  const workflowPosition = readWorkflowPosition(request)
+  const choiceTool = workflowPosition ? WORKFLOW_POSITION_CHOICE_TOOL[workflowPosition] : undefined
+  if (choiceTool && available.has(choiceTool) && !alreadyCalled.has(choiceTool)) {
+    return choiceTool
+  }
+  const recommendedOperation = readWorkflowRecommendedOperation(request)
+  if (recommendedOperation && available.has(recommendedOperation) && !alreadyCalled.has(recommendedOperation)) {
+    return recommendedOperation
   }
   return WRITE_TOOL_PRIORITY.find((toolName) => (
     available.has(toolName) && !alreadyCalled.has(toolName)
   )) ?? null
 }
 
-function readWorkflowStage(request: GoldenChatCompletionRequest): string | null {
-  return messageText(request).match(/(?:^|\n)workflowStage=([^\n]+)/)?.[1]?.trim() ?? null
+function readWorkflowPosition(request: GoldenChatCompletionRequest): string | null {
+  const text = messageText(request)
+  const step = text.match(/(?:^|\n)workflowStep=([^\n]+)/)?.[1]?.trim() ?? null
+  const status = text.match(/(?:^|\n)workflowStatus=([^\n]+)/)?.[1]?.trim() ?? null
+  return step && status ? `${step}:${status}` : null
+}
+
+function readWorkflowRecommendedOperation(request: GoldenChatCompletionRequest): string | null {
+  const operation = messageText(request).match(/(?:^|\n)workflowRecommendedOperation=([^\n]+)/)?.[1]?.trim() ?? null
+  return operation && operation !== 'none' ? operation : null
 }
 
 function readWorkflowOperationGroupIds(request: GoldenChatCompletionRequest): readonly string[] {

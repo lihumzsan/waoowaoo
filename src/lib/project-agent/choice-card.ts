@@ -6,7 +6,10 @@ import type {
   ProjectAgentChoiceCardDefinition,
   ProjectAgentChoiceCardOption,
 } from './types'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import {
+  isEditFirstWorkflowPosition,
+  type EditFirstWorkflowView,
+} from '@/lib/project-workflow/edit-first-view'
 import { EDIT_SCRIPT_VIDEO_RATIOS, type EditScriptVideoRatio } from '@/lib/edit-script/types'
 export {
   EDIT_FIRST_CHOICE_REGISTRY,
@@ -54,14 +57,16 @@ export async function buildStyleAndRatioChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (params.workflow.stage === 'style_preview_generating') {
-    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:stage=style_preview_generating')
+  if (isEditFirstWorkflowPosition(params.workflow, 'visual_style', 'processing')) {
+    throw new Error('EDIT_FIRST_STYLE_PREVIEW_NOT_READY:step=visual_style:status=processing')
   }
-  if (params.workflow.stage !== 'needs_style_choice') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:stage=${params.workflow.stage}`)
+  if (!isEditFirstWorkflowPosition(params.workflow, 'visual_style', 'needs_user_choice')) {
+    throw new Error(
+      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=style:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
+    )
   }
   const [project, editBible] = await Promise.all([
     prisma.project.findFirst({
@@ -174,11 +179,13 @@ export async function buildScriptReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (params.workflow.stage !== 'script_ready_for_review') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:stage=${params.workflow.stage}`)
+  if (!isEditFirstWorkflowPosition(params.workflow, 'source_script', 'needs_user_choice')) {
+    throw new Error(
+      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=script_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
+    )
   }
   const editBible = await prisma.projectEditBible.findFirst({
     where: {
@@ -269,11 +276,13 @@ export async function buildBibleReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (params.workflow.stage !== 'bible_ready_for_review') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:stage=${params.workflow.stage}`)
+  if (!isEditFirstWorkflowPosition(params.workflow, 'episode_plan', 'needs_user_choice')) {
+    throw new Error(
+      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=bible_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
+    )
   }
   const editBible = await prisma.projectEditBible.findFirst({
     where: {
@@ -373,11 +382,13 @@ export async function buildAssetReviewChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {
-  if (params.workflow.stage !== 'assets_ready_for_review') {
-    throw new Error(`EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:stage=${params.workflow.stage}`)
+  if (!isEditFirstWorkflowPosition(params.workflow, 'planned_assets', 'needs_user_choice')) {
+    throw new Error(
+      `EDIT_FIRST_CHOICE_NOT_ALLOWED:choiceType=asset_review:step=${params.workflow.step}:status=${params.workflow.status.kind}`,
+    )
   }
   const editScripts = await prisma.projectEditScript.findMany({
     where: {
@@ -458,7 +469,7 @@ export async function buildEditFirstAssistantChoiceCard(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceCardDefinition> {
@@ -470,7 +481,7 @@ export async function buildEditFirstAssistantChoiceOfferCandidate(params: {
   userId: string
   episodeId: string
   locale: ProjectAgentLocale
-  workflow: EditFirstWorkflowState
+  workflow: EditFirstWorkflowView
   choiceType: EditFirstChoiceType
   toolCallId: string
 }): Promise<ProjectAgentChoiceOfferCandidate> {

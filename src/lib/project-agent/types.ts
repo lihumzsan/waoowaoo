@@ -4,7 +4,7 @@ import type {
   ProjectContextEditScriptSnapshot,
   ProjectContextSnapshot,
 } from '@/lib/project-context/types'
-import type { EditFirstWorkflowState } from '@/lib/project-workflow/edit-first'
+import type { EditFirstWorkflowView } from '@/lib/project-workflow/edit-first-view'
 import type { EditFirstChoiceDecision } from './edit-first-choice-result'
 import type { ProjectPhase, ProjectPhaseSnapshot } from './project-phase'
 import type { AssistantPermissionMode } from './permission-mode'
@@ -167,7 +167,7 @@ export interface AgentRuntimeContextPartData {
     resumeOperationId: string | null
     includeChoiceOperation: boolean
   }
-  editFirstWorkflow: EditFirstWorkflowState
+  editFirstWorkflow: EditFirstWorkflowView
   selectedTools: Array<{
     operationId: string
     description: string
@@ -271,7 +271,7 @@ export interface ProjectAssistantContextSnapshot {
   editBible?: ProjectContextEditBibleSnapshot | null
   editScript?: ProjectContextEditScriptSnapshot | null
   editScripts?: ProjectContextEditScriptSnapshot[]
-  editFirstWorkflow: EditFirstWorkflowState
+  editFirstWorkflow: EditFirstWorkflowView
   config: {
     analysisModel?: string | null
     videoRatio: string

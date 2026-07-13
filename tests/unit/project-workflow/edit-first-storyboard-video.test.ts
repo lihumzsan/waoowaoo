@@ -2,13 +2,13 @@ import {
   describe,
   expect,
   it,
-  resolveEditFirstWorkflowStateFromSnapshot,
+  resolveEditFirstWorkflowViewFromSnapshot,
   snapshot,
 } from './edit-first-workflow.fixture'
 
 describe('edit-first workflow state', () => {
   it('fails closed when a ready shot plan is missing its automatic storyboard projection', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -20,14 +20,15 @@ describe('edit-first workflow state', () => {
       panelCount: 0,
     }))
 
-    expect(state.stage).toBe('failed')
-    expect(state.blocking.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
-    expect(state.nextAction).toBeNull()
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('shot_execution')
+    expect(state.status.kind).toBe('failed')
+    expect(state.status.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
+    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('does not advance to video generation when some chapters have no storyboard', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -47,14 +48,15 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
     }))
 
-    expect(state.stage).toBe('failed')
-    expect(state.blocking.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
-    expect(state.nextAction).toBeNull()
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('shot_execution')
+    expect(state.status.kind).toBe('failed')
+    expect(state.status.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
+    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('fails explicitly when generated storyboard panels are missing deterministic prompts', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -70,14 +72,15 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 2,
     }))
 
-    expect(state.stage).toBe('failed')
-    expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
-    expect(state.nextAction).toBeNull()
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('storyboard_images')
+    expect(state.status.kind).toBe('failed')
+    expect(state.status.reason).toBe('storyboard panel prompt facts are incomplete')
+    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('offers billable storyboard images immediately after automatic panels are materialized', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -93,12 +96,12 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 2,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_storyboard_images')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard_images')
+    expect(state.step).toBe('storyboard_images')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_edit_script_storyboard_images')
   })
 
   it('fails explicitly when generated storyboard panels are missing video prompts', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -115,14 +118,15 @@ describe('edit-first workflow state', () => {
       storyboardPanelImageMissingCount: 0,
     }))
 
-    expect(state.stage).toBe('failed')
-    expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
-    expect(state.nextAction).toBeNull()
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('storyboard_images')
+    expect(state.status.kind).toBe('failed')
+    expect(state.status.reason).toBe('storyboard panel prompt facts are incomplete')
+    expect(state.operationPolicy.recommendedAction).toBeNull()
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('allows video generation only after image and video prompts are ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -140,13 +144,13 @@ describe('edit-first workflow state', () => {
       videoPlanSegmentCount: 1,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_videos')
-    expect(state.nextAction?.operationId).toBe('generate_episode_videos')
-    expect(state.allowedOperationIds).toEqual(['generate_episode_videos'])
+    expect(state.step).toBe('video_segments')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_episode_videos')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_videos'])
   })
 
   it('does not expose BGM while video segments are generating because chapter renders are not ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -164,13 +168,13 @@ describe('edit-first workflow state', () => {
       activeVideoTaskCount: 1,
     }))
 
-    expect(state.stage).toBe('videos_generating')
-    expect(state.blocking.kind).toBe('processing')
-    expect(state.allowedOperationIds).toEqual([])
+    expect(state.step).toBe('video_segments')
+    expect(state.status.kind).toBe('processing')
+    expect(state.operationPolicy.allowedOperationIds).toEqual([])
   })
 
   it('does not allow final render until every video segment has output even when BGM is ready', () => {
-    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+    const state = resolveEditFirstWorkflowViewFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
       stylePreviewCount: 1,
@@ -189,8 +193,8 @@ describe('edit-first workflow state', () => {
       bgmScoreHasMix: true,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_videos')
-    expect(state.nextAction?.operationId).toBe('generate_episode_videos')
-    expect(state.allowedOperationIds).toEqual(['generate_episode_videos'])
+    expect(state.step).toBe('video_segments')
+    expect(state.operationPolicy.recommendedAction?.operationId).toBe('generate_episode_videos')
+    expect(state.operationPolicy.allowedOperationIds).toEqual(['generate_episode_videos'])
   })
 })

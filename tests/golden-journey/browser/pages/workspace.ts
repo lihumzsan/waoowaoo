@@ -1,22 +1,33 @@
 import type { Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
-import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import {
+  EDIT_FIRST_WORKFLOW_STATUSES,
+  EDIT_FIRST_WORKFLOW_STEPS,
+  type EditFirstWorkflowStatusKind,
+  type EditFirstWorkflowStep,
+} from '@/lib/project-workflow/edit-first-view'
 import type { GoldenWorkspaceScope } from './home'
 
-export async function readGoldenWorkflowStage(
-  page: Page,
-  scope: GoldenWorkspaceScope,
-): Promise<EditFirstWorkflowStage> {
-  return (await readGoldenWorkflowProjection(page, scope)).stage
+export interface GoldenWorkflowProjection {
+  readonly step: EditFirstWorkflowStep
+  readonly status: EditFirstWorkflowStatusKind
+  readonly recommendedActionId: string | null
+}
+
+function isGoldenWorkflowStep(value: unknown): value is EditFirstWorkflowStep {
+  return typeof value === 'string'
+    && (EDIT_FIRST_WORKFLOW_STEPS as readonly string[]).includes(value)
+}
+
+function isGoldenWorkflowStatus(value: unknown): value is EditFirstWorkflowStatusKind {
+  return typeof value === 'string'
+    && (EDIT_FIRST_WORKFLOW_STATUSES as readonly string[]).includes(value)
 }
 
 export async function readGoldenWorkflowProjection(
   page: Page,
   scope: GoldenWorkspaceScope,
-): Promise<{
-  readonly stage: EditFirstWorkflowStage
-  readonly nextActionId: string | null
-}> {
+): Promise<GoldenWorkflowProjection> {
   const response = await page.request.get(
     `/api/projects/${encodeURIComponent(scope.projectId)}/context?episodeId=${encodeURIComponent(scope.episodeId)}`,
   )
@@ -28,19 +39,34 @@ export async function readGoldenWorkflowProjection(
   const workflow = context && typeof context === 'object' && !Array.isArray(context)
     ? (context as Record<string, unknown>).editFirstWorkflow
     : null
-  const value = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
-    ? (workflow as Record<string, unknown>).stage
+  const step = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).step
     : null
-  if (!value) throw new Error('GOLDEN_CONTEXT_WORKFLOW_STAGE_MISSING')
-  const nextAction = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
-    ? (workflow as Record<string, unknown>).nextAction
+  const statusValue = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).status
     : null
-  const nextActionId = nextAction && typeof nextAction === 'object' && !Array.isArray(nextAction)
-    ? (nextAction as Record<string, unknown>).id
+  const status = statusValue && typeof statusValue === 'object' && !Array.isArray(statusValue)
+    ? (statusValue as Record<string, unknown>).kind
+    : null
+  if (!isGoldenWorkflowStep(step)) {
+    throw new Error('GOLDEN_CONTEXT_WORKFLOW_STEP_INVALID')
+  }
+  if (!isGoldenWorkflowStatus(status)) {
+    throw new Error('GOLDEN_CONTEXT_WORKFLOW_STATUS_INVALID')
+  }
+  const operationPolicy = workflow && typeof workflow === 'object' && !Array.isArray(workflow)
+    ? (workflow as Record<string, unknown>).operationPolicy
+    : null
+  const recommendedAction = operationPolicy && typeof operationPolicy === 'object' && !Array.isArray(operationPolicy)
+    ? (operationPolicy as Record<string, unknown>).recommendedAction
+    : null
+  const recommendedActionId = recommendedAction && typeof recommendedAction === 'object' && !Array.isArray(recommendedAction)
+    ? (recommendedAction as Record<string, unknown>).id
     : null
   return {
-    stage: value as EditFirstWorkflowStage,
-    nextActionId: typeof nextActionId === 'string' ? nextActionId : null,
+    step,
+    status,
+    recommendedActionId: typeof recommendedActionId === 'string' ? recommendedActionId : null,
   }
 }
 
@@ -63,6 +89,30 @@ export async function readGoldenAssistantRunStatus(
   if (!currentRun || typeof currentRun !== 'object' || Array.isArray(currentRun)) return null
   const status = (currentRun as Record<string, unknown>).status
   return typeof status === 'string' ? status : null
+}
+
+export async function readGoldenPendingInteractionOperationId(
+  page: Page,
+  scope: GoldenWorkspaceScope,
+): Promise<string | null> {
+  const response = await page.request.get(
+    `/api/projects/${encodeURIComponent(scope.projectId)}/assistant/session-state?episodeId=${encodeURIComponent(scope.episodeId)}`,
+  )
+  if (!response.ok()) {
+    const body = await response.text()
+    throw new Error(`GOLDEN_ASSISTANT_SESSION_HTTP_${String(response.status())}:${body}`)
+  }
+  const payload: unknown = await response.json()
+  const sessionState = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>).sessionState
+    : null
+  const pendingInteraction = sessionState && typeof sessionState === 'object' && !Array.isArray(sessionState)
+    ? (sessionState as Record<string, unknown>).pendingInteraction
+    : null
+  const operationId = pendingInteraction && typeof pendingInteraction === 'object' && !Array.isArray(pendingInteraction)
+    ? (pendingInteraction as Record<string, unknown>).operationId
+    : null
+  return typeof operationId === 'string' ? operationId : null
 }
 
 export async function expectGoldenIntakeChoice(page: Page): Promise<void> {

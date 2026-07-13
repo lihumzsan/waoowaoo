@@ -9,6 +9,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 ## 不变量
 
 - **AR-01 — 服务端权威。** thread/run 的 append、终态、锁和恢复由服务端管理；客户端和模型不得持有第二套 run 状态。
+- **AR-01A — WorkflowView 单一解释。** 正式领域事实只能由 `resolveEditFirstWorkflowView` 裁决成一个规范化 View：`step` 表示业务位置，`status` 表示 inactive/ready/processing/needs_user_choice/failed/completed，`operationPolicy` 同时给出 recommended action、allowed operations 与可选 group，`capabilities` 给出 UI 可见能力。失败必须保留所在语义 step，禁止再用全局 `failed` stage 丢失位置。Assistant、Choice、Canvas、Header 和 Golden 只能消费这个 View；不得分别保存 blocking、nextAction、stage rank、operation-id 可见性表或从文案/输出猜测流程。Choice 的短暂 decision 只能经 registry 变成一次命令，提交后必须重读正式 View，不能成为第二状态机。
 - **AR-02 — 每回合有结算语义。** 一个 turn 必须明确是完成、等待用户、等待 Task、继续 Agent 还是失败；合法的空输出或未发起新 Tool 可以结算为 `completed` 且不产生领域事实，只有 completion、Tool、持久化、ownership 或协议本身失败才可结算为失败。模型文案不得伪造领域完成。
 - **AR-02A — Choice 命令所有权显式。** 用户提交结构化 Choice 后，服务端必须在同一消费事务中锁定 current Run fence 与 pending interruption。registry 已声明且输入可由规范化 Decision 完整构造的确定性、非收费、事务型确认，是用户已经发起的命令：消费事务直接通过统一 Operation invocation 写入，不得再交给 AI 二次转发。其他创作/异步/收费 Decision 只恢复 AI 或正式 handoff，不得被服务端从 `nextAction` 猜测执行。事务提交后的 AI 只从刷新后的正式 Workflow 继续；后续 `nextAction` 仍是能力而非必须耗尽的义务。
 - **AR-02B — Choice Offer 单一权威。** Choice 工具必须先把完整且不可变的 Offer 持久化为不可见 `ProjectAgentExecutionHandoff(kind=choice)`；唯一 settlement 在同一事务中把它写入可见 `ProjectAgentInterruption.payload`、assistant message 与 Run 等待状态。可见 Offer 同时包含必填的 run/interruption/card/tool identity、完整卡片和受审资源 fingerprint。当前协议只有一个严格解析的 Offer 形状，不持久化无分流语义的固定版本标记；不兼容变更必须排空 active Run/Wait、一次性迁移数据并切换唯一 parser。首屏 stream 与刷新后的 Session 只能投影已提交的 Interruption Offer；不得刷新时重查资源重建卡片，也不得接受客户端提交的 `choiceType` 作为控制事实。
@@ -43,6 +44,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 - Project-agent runtime：`src/lib/project-agent/`。
 - Project phase 与 Assistant 输入投影：`src/lib/project-projection/**` 只从正式领域资源构造 project View；`src/app/api/assistant/text-attachments/**` 只解析受限附件并交给 project-agent 输入协议，二者都不得成为第二 Run/Workflow 状态机。
+- WorkflowView 纯状态机与构造不变量：`src/lib/project-workflow/edit-first-view.ts`；数据库事实装配与 Choice transition：`src/lib/project-workflow/edit-first.ts`。客户端只允许导入前者。模型输入只接收 `workflowStep + workflowStatus + workflowStatusReason + workflowRecommendedOperation + allowedOperationIds + operationGroup`；其中 `workflowStatus` 必须保持穷尽枚举，解释文本只能进入独立 `workflowStatusReason`，不得把两者拼接，也不得恢复旧 `workflowStage/workflowNextAction` 协议。
 - Task 终态续跑唯一执行入口：`src/lib/workers/outbox.worker.ts` → `runProjectAgentWaitContinuationCommand`。
 - Continuation 唯一交接：`beginProjectAgentWaitContinuationExecution` 建立 running fence；`execution-handoff` 原子结算 terminal 或 `awaiting_*` outcome，并在重放时只调用其 finalize/recovery 入口。
 - Choice Offer 契约、fingerprint 与严格解析：`src/lib/project-agent/choice-offer.ts`。
@@ -148,6 +150,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。
 - 镜头执行计划完成后曾把确定性的 Storyboard/Panel 数据投影暴露成新的 Workflow `nextAction`，迫使 continuation 再调用一次 AI Tool；该 Tool 实际没有 provider invocation，却产生第二个 Wait、Task 与“AI 生成分镜面板”文案。根因是旧 LLM 分镜阶段改为纯函数后只替换实现、没有删除执行入口。现由镜头计划 Task 在同一成功事务自动物化 Panel，Assistant 下一次只处理需要用户媒体授权的分镜图片 Approval；`nextAction` 不再代表系统内部投影。
 - 最终渲染失败分支早于章节成片、BGM 与 Soundscape 阶段建立；后续新增这些前置阶段时只追加在旧分支之后。真实恢复项目因此保留一个旧 failed FinalOutput 后，即使章节 `renderStatus/outputMediaId` 为空且两类音频资源不存在，Workflow 仍重新开放 `render_final_video`，Assistant 连续提交两个必然失败的 Task；快乐路径 Golden 从未构造“旧下游失败 + 上游缺失”的组合。当前唯一 Workflow 始终先裁决最早缺失的上游事实，只有全部前置满足后才解释最终失败并开放重试；最终 Operation 在创建 Task 前重新消费同一 Workflow 许可，worker 只保留最后一道产物契约防线。
+- Workflow 曾把约 30 个“位置 × 状态”组合编码成线性 stage，同时另外存 blocking、nextAction、allowedOperationIds 与 operationGroup；Canvas 又维护 stage rank 和 operation-id 可见性表。任何新 Operation 都要修改多个解释器，`render_chapters` 漏接一次便隐藏了已有产物。当前防线把位置与状态正交化为 14 个 step × 6 个穷尽 status，由同一构造器原子生成 operationPolicy/capabilities；删除 Canvas visibility resolver 和旧模型快照字段，Golden 以 step/status 组合验证刷新单调性。
+- 首次切换规范化 WorkflowView 时，模型快照仍把 `status.kind` 与解释文本拼成一个 `workflowStatus=needs_user_choice:reason` 字符串；模型消费者无法按穷尽枚举识别视觉风格 Choice，Task 终态续跑因此重新生成了一批风格方案并再次请求图片审批。旧防线只验证无 reason 的手写 provider fixture，主 Journey 则真实捕获了重复领域产物。当前协议把机器状态与解释分成 `workflowStatus`、`workflowStatusReason` 两个字段，provider self-test 带 reason 验证 Choice 路由，主 Journey 以持久 pending interaction identity 驱动审批并拒绝重复任务。
 
 ## 修改检查表
 
