@@ -352,8 +352,8 @@ describe('approved operation plan Task batch integration', () => {
       projectId: seeded.project.id,
       userId: seeded.user.id,
       assistantId: 'workspace-command',
-      operationId: 'generate_edit_script_assets',
-      operationIds: ['generate_edit_script_assets', 'plan_chapters'],
+      operationId: seeded.plan.operationId,
+      operationIds: [seeded.plan.operationId, 'plan_chapters'],
       taskIds: [],
       followUpMode: 'resume_agent',
     })
