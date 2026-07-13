@@ -12,6 +12,13 @@ interface WorkspaceCanvasTaskMaterialization {
   readonly taskTypes: readonly TaskType[]
 }
 
+export type WorkspaceCanvasRuntimeAggregation = 'failureDominant' | 'resourceAggregate'
+
+interface WorkspaceCanvasTaskRuntime {
+  readonly source: 'taskTarget'
+  readonly aggregation: WorkspaceCanvasRuntimeAggregation
+}
+
 interface WorkspaceCanvasMaterializationFacts {
   readonly identityAvailable: boolean
   readonly workflowVisible: boolean
@@ -30,7 +37,7 @@ export interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind
   readonly kind: K
   readonly identityScope: 'episode' | 'resource' | 'panel' | 'videoGroup' | 'aggregate'
   readonly resource: Capability<WorkspaceResourceName>
-  readonly runtime: Capability<'taskTarget'>
+  readonly runtime: Capability<WorkspaceCanvasTaskRuntime>
   readonly materializeFromTask: Capability<WorkspaceCanvasTaskMaterialization>
   readonly stream: Capability<WorkspaceCanvasStreamKind>
   readonly terminalHandoff: Capability<WorkspaceResourceName>
@@ -41,6 +48,9 @@ export interface WorkspaceCanvasNodeDefinition<K extends WorkspaceCanvasNodeKind
 
 const supported = <T>(value: T): Capability<T> => ({ kind: 'supported', value })
 const notApplicable = <T>(reason: string): Capability<T> => ({ kind: 'notApplicable', reason })
+const taskRuntime = (
+  aggregation: WorkspaceCanvasRuntimeAggregation = 'failureDominant',
+): Capability<WorkspaceCanvasTaskRuntime> => supported({ source: 'taskTarget', aggregation })
 const materializeFromTask = (
   targetType: string,
   ...taskTypes: readonly TaskType[]
@@ -49,49 +59,49 @@ const resourceRequired = (reason: string): Capability<WorkspaceCanvasTaskMateria
 
 export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
   shot: {
-    kind: 'shot', identityScope: 'panel', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'shot', identityScope: 'panel', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('A persisted panel is required before projecting a shot node.'),
     stream: notApplicable('Panel generation streams provider progress, not structured card content.'),
     terminalHandoff: supported('episodeData'), rendererKey: 'shot', focus: supported('operation'), conformanceFixture: 'shot',
   },
   imageAsset: {
-    kind: 'imageAsset', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'imageAsset', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('A persisted image asset is required before projecting its node.'),
     stream: notApplicable('Image assets have no structured text stream.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'imageAsset', focus: supported('operation'), conformanceFixture: 'imageAsset',
   },
   videoClip: {
-    kind: 'videoClip', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'videoClip', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('A persisted video clip is required before projecting its node.'),
     stream: notApplicable('Video clips have provider progress but no structured text stream.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'videoClip', focus: supported('operation'), conformanceFixture: 'videoClip',
   },
   finalTimeline: {
-    kind: 'finalTimeline', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'finalTimeline', identityScope: 'episode', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('The workflow materializes the final timeline before its render Task.'),
     stream: notApplicable('Final rendering has no structured text stream.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'finalTimeline', focus: supported('operation'), conformanceFixture: 'finalTimeline',
   },
   editSourceScript: {
-    kind: 'editSourceScript', identityScope: 'episode', resource: supported('editBible'), runtime: supported('taskTarget'),
+    kind: 'editSourceScript', identityScope: 'episode', resource: supported('editBible'), runtime: taskRuntime(),
     materializeFromTask: materializeFromTask('ProjectEditSourceScript', TASK_TYPE.EDIT_SOURCE_SCRIPT_GENERATE),
     stream: supported('editSourceScript'), terminalHandoff: supported('editBible'), rendererKey: 'editSourceScript',
     focus: supported('operation'), conformanceFixture: 'editSourceScript',
   },
   editBible: {
-    kind: 'editBible', identityScope: 'episode', resource: supported('editBible'), runtime: supported('taskTarget'),
+    kind: 'editBible', identityScope: 'episode', resource: supported('editBible'), runtime: taskRuntime(),
     materializeFromTask: materializeFromTask('ProjectEditBible', TASK_TYPE.EDIT_BIBLE_GENERATE),
     stream: supported('editBible'), terminalHandoff: supported('editBible'), rendererKey: 'editBible',
     focus: supported('operation'), conformanceFixture: 'editBible',
   },
   editStyleBible: {
-    kind: 'editStyleBible', identityScope: 'resource', resource: supported('editBible'), runtime: supported('taskTarget'),
+    kind: 'editStyleBible', identityScope: 'resource', resource: supported('editBible'), runtime: taskRuntime('resourceAggregate'),
     materializeFromTask: materializeFromTask('ProjectEditBible', TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE),
     stream: notApplicable('Style preview image tasks expose runtime state but no structured text items.'), terminalHandoff: supported('editBible'),
     rendererKey: 'editStyleBible', focus: supported('operation'), conformanceFixture: 'editStyleBible',
   },
   editPipelineStep: {
-    kind: 'editPipelineStep', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'editPipelineStep', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('Concrete pipeline node kinds own Task materialization.'),
     stream: notApplicable('Generic pipeline steps are represented by their concrete node kinds.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'editPipelineStep', focus: supported('operation'), conformanceFixture: 'editPipelineStep',
@@ -103,25 +113,25 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     rendererKey: 'editProcessGroup', focus: notApplicable('Focus follows concrete child artifacts.'), conformanceFixture: 'editProcessGroup',
   },
   editScript: {
-    kind: 'editScript', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'editScript', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('Confirmed chapter resources establish edit-script node identities before Tasks run.'),
     stream: supported('editScript'), terminalHandoff: supported('episodeData'), rendererKey: 'editScript',
     focus: supported('operation'), conformanceFixture: 'editScript',
   },
   editShotExecutionPlan: {
-    kind: 'editShotExecutionPlan', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'editShotExecutionPlan', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: materializeFromTask('ProjectEditScript', TASK_TYPE.EDIT_SHOT_EXECUTION_PLAN_GENERATE),
     stream: supported('editShotExecutionPlan'), terminalHandoff: supported('episodeData'), rendererKey: 'editShotExecutionPlan',
     focus: supported('operation'), conformanceFixture: 'editShotExecutionPlan',
   },
   videoPlan: {
-    kind: 'videoPlan', identityScope: 'videoGroup', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'videoPlan', identityScope: 'videoGroup', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('Generation segments establish video-plan nodes before video Tasks run.'),
     stream: notApplicable('Video generation has no structured text card stream.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'videoPlan', focus: supported('operation'), conformanceFixture: 'videoPlan',
   },
   bgmScore: {
-    kind: 'bgmScore', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'bgmScore', identityScope: 'episode', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: materializeFromTask(
       'ProjectEpisode',
       TASK_TYPE.MUSIC_SCORE_PLAN,
@@ -131,7 +141,7 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     focus: supported('operation'), conformanceFixture: 'bgmScore',
   },
   soundscape: {
-    kind: 'soundscape', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'soundscape', identityScope: 'episode', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: materializeFromTask(
       'ProjectEpisode',
       TASK_TYPE.SOUNDSCAPE_PLAN,
@@ -141,13 +151,13 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
     focus: supported('operation'), conformanceFixture: 'soundscape',
   },
   editRequiredAsset: {
-    kind: 'editRequiredAsset', identityScope: 'resource', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'editRequiredAsset', identityScope: 'resource', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('A persisted character or location establishes each asset item node.'),
     stream: notApplicable('Asset generation has no structured text card stream.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'editRequiredAsset', focus: supported('operation'), conformanceFixture: 'editRequiredAsset',
   },
   editAssetGroup: {
-    kind: 'editAssetGroup', identityScope: 'aggregate', resource: supported('episodeData'), runtime: supported('taskTarget'),
+    kind: 'editAssetGroup', identityScope: 'aggregate', resource: supported('episodeData'), runtime: taskRuntime(),
     materializeFromTask: resourceRequired('The asset group materializes from persisted asset children.'),
     stream: notApplicable('Asset groups aggregate task-backed asset items.'), terminalHandoff: supported('episodeData'),
     rendererKey: 'editAssetGroup', focus: supported('operation'), conformanceFixture: 'editAssetGroup',

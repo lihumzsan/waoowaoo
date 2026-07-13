@@ -11,6 +11,10 @@ import {
   type WorkspaceCanvasLifecycle,
   type WorkspaceCanvasPersistedPhase,
 } from './lifecycle/workspace-canvas-lifecycle'
+import {
+  getWorkspaceCanvasNodeDefinition,
+  type WorkspaceCanvasRuntimeAggregation,
+} from './registry/workspace-canvas-node-registry'
 import type {
   WorkspaceCanvasEditAssetGroupDetails,
   WorkspaceCanvasEditAssetGroupItem,
@@ -52,12 +56,28 @@ function orderedRuntimeStates(
   return states
 }
 
-function authoritativeTaskState(states: readonly TaskRuntimeStateLike[]): TaskRuntimeStateLike | null {
-  return states.find((state) => isTaskRuntimeStateRunning(state))
-    ?? states.find((state) => state.phase === 'failed')
-    ?? states.find((state) => state.phase === 'canceled' || state.phase === 'dismissed')
-    ?? states.find((state) => state.phase === 'completed')
-    ?? null
+function authoritativeTaskState(
+  states: readonly TaskRuntimeStateLike[],
+  aggregation: WorkspaceCanvasRuntimeAggregation,
+): TaskRuntimeStateLike | null {
+  const running = states.find((state) => isTaskRuntimeStateRunning(state))
+  if (running) return running
+
+  const failed = states.find((state) => state.phase === 'failed')
+  const canceled = states.find((state) => state.phase === 'canceled' || state.phase === 'dismissed')
+  const completed = states.find((state) => state.phase === 'completed')
+  return aggregation === 'resourceAggregate'
+    ? completed ?? failed ?? canceled ?? null
+    : failed ?? canceled ?? completed ?? null
+}
+
+function runtimeAggregation(node: WorkspaceCanvasFlowNode): WorkspaceCanvasRuntimeAggregation {
+  const capability = getWorkspaceCanvasNodeDefinition(node.data.kind).runtime
+  if (capability.kind === 'supported') return capability.value.aggregation
+  if ((node.data.runtimeTargets?.length ?? 0) > 0) {
+    throw new Error(`WORKSPACE_CANVAS_RUNTIME_NOT_APPLICABLE:${node.data.kind}`)
+  }
+  return 'failureDominant'
 }
 
 function persistedPhase(lifecycle: WorkspaceCanvasLifecycle): WorkspaceCanvasPersistedPhase {
@@ -119,7 +139,7 @@ export function resolveWorkspaceCanvasNodeData(input: {
   readonly submitting: boolean
 }): WorkspaceCanvasNodeData {
   const states = orderedRuntimeStates(input.node, input.statesByQueryKey)
-  const task = authoritativeTaskState(states)
+  const task = authoritativeTaskState(states, runtimeAggregation(input.node))
   const basePhase = persistedPhase(input.node.data.lifecycle)
   const lifecycle = resolveWorkspaceCanvasLifecycle({
     persistedPhase: basePhase,

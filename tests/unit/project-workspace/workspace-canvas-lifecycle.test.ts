@@ -8,6 +8,17 @@ import {
   type WorkspaceCanvasLifecycle,
   type WorkspaceCanvasLifecycleFacts,
 } from '@/features/project-workspace/canvas/lifecycle/workspace-canvas-lifecycle'
+import { resolveWorkspaceCanvasNodeData } from '@/features/project-workspace/canvas/workspace-node-runtime'
+import type {
+  WorkspaceCanvasFlowNode,
+  WorkspaceCanvasNodeKind,
+} from '@/features/project-workspace/canvas/node-canvas-types'
+import {
+  TASK_RUNTIME_TARGETS,
+  taskRuntimeTargetQueryKey,
+  type TaskRuntimeStateLike,
+  type TaskRuntimeTarget,
+} from '@/lib/task/runtime-targets'
 
 const presentation = {
   isStreaming: true,
@@ -27,7 +38,75 @@ function facts(overrides: Partial<WorkspaceCanvasLifecycleFacts> = {}): Workspac
   }
 }
 
+function runtimeNode(
+  kind: Extract<WorkspaceCanvasNodeKind, 'editStyleBible' | 'shot'>,
+  runtimeTargets: readonly TaskRuntimeTarget[],
+): WorkspaceCanvasFlowNode {
+  return {
+    id: `${kind}:resource-1`,
+    type: 'workspaceNode',
+    position: { x: 0, y: 0 },
+    data: {
+      nodeId: `${kind}:resource-1`,
+      kind,
+      layoutNodeType: kind,
+      targetType: kind === 'editStyleBible' ? 'editStyleBible' : 'panel',
+      targetId: 'resource-1',
+      title: 'Runtime node',
+      eyebrow: 'Runtime',
+      body: 'Runtime aggregation',
+      meta: '',
+      lifecycle: resolveWorkspaceCanvasLifecycle(facts({ persistedPhase: 'succeeded' })),
+      runtimeTargets,
+      width: 640,
+      height: 480,
+      mediaLoadingContext: { styleImageUrl: null },
+    },
+  }
+}
+
 describe('workspace Canvas lifecycle resolver', () => {
+  it('uses the registry aggregation policy for mixed terminal child Tasks', () => {
+    const runtimeTargets = ['preview-a', 'preview-b', 'preview-c'].flatMap((id) => {
+      const target = TASK_RUNTIME_TARGETS.projectEditStylePreviewImage(id)
+      return target ? [target] : []
+    })
+    const states = new Map<string, TaskRuntimeStateLike>(runtimeTargets.map((target, index) => [
+      taskRuntimeTargetQueryKey(target),
+      index === 0
+        ? {
+            phase: 'failed',
+            taskId: 'task-failed',
+            runningTaskType: 'edit_style_preview_image',
+            lastError: { code: 'PROVIDER_SUBMISSION_REJECTED', message: 'blocked' },
+          }
+        : {
+            phase: 'completed',
+            taskId: `task-completed-${index}`,
+            runningTaskType: 'edit_style_preview_image',
+          },
+    ]))
+
+    const aggregate = resolveWorkspaceCanvasNodeData({
+      node: runtimeNode('editStyleBible', runtimeTargets),
+      statesByQueryKey: states,
+      streamPatch: null,
+      submitting: false,
+    })
+    const failureDominant = resolveWorkspaceCanvasNodeData({
+      node: runtimeNode('shot', runtimeTargets),
+      statesByQueryKey: states,
+      streamPatch: null,
+      submitting: false,
+    })
+
+    expect(aggregate.lifecycle).toMatchObject({ phase: 'succeeded', error: null })
+    expect(failureDominant.lifecycle).toMatchObject({
+      phase: 'failed',
+      error: { code: 'PROVIDER_SUBMISSION_REJECTED', message: 'blocked' },
+    })
+  })
+
   it('normalizes task identity and prefers the durable task id over the running fallback', () => {
     expect(resolveWorkspaceCanvasLifecycle(facts({
       task: {

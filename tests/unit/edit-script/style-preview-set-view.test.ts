@@ -89,5 +89,22 @@ describe('style preview set view', () => {
 
     expect(view?.candidates.map((candidate) => candidate.id)).toEqual(['preview-b'])
     expect(view?.hasConfirmedPreview).toBe(true)
+    expect(view?.hasUsablePreview).toBe(true)
+  })
+
+  it('keeps the candidate set usable when one terminal candidate failed', () => {
+    const view = buildEditStylePreviewSetView({
+      previews: [
+        preview('preview-a', 'failed'),
+        preview('preview-b', 'completed', '/b.png'),
+        preview('preview-c', 'completed', '/c.png'),
+      ],
+    })
+
+    expect(view).toMatchObject({
+      hasUsablePreview: true,
+      hasGeneratingPreview: false,
+      hasFailedPreview: true,
+    })
   })
 })

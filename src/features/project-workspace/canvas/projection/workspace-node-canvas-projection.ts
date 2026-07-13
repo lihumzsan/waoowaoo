@@ -927,6 +927,7 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     }) ?? []
     const hasGeneratingPreview = stylePreviewOptionsRunning
       || (stylePreviewSetView?.hasGeneratingPreview ?? false)
+    const hasUsablePreview = stylePreviewSetView?.hasUsablePreview ?? false
     const hasFailedPreview = stylePreviewSetView?.hasFailedPreview ?? false
     nodes.push(createMediaNode({
       id: styleBibleNodeId,
@@ -948,17 +949,17 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
           ? 'nodes.editStyleBible.title'
           : hasGeneratingPreview
             ? 'nodes.editStyleBible.pendingTitle'
-            : hasFailedPreview
+            : hasFailedPreview && !hasUsablePreview
               ? 'nodes.editStyleBible.failedTitle'
               : 'nodes.editStyleBible.waitingTitle'),
         eyebrow: translate('nodes.editStyleBible.eyebrow'),
         body: styleBibleDetails?.styleSummary ?? translate(hasGeneratingPreview
           ? 'nodes.editStyleBible.pendingBody'
-          : hasFailedPreview
+          : hasFailedPreview && !hasUsablePreview
             ? 'nodes.editStyleBible.failedBody'
             : 'nodes.editStyleBible.waitingBody'),
         meta: styleBibleDetails ? translate('status.succeeded') : '',
-        ...(styleBibleDetails
+        ...(styleBibleDetails || hasUsablePreview
           ? workspaceCanvasSucceededResourcePresentation()
           : hasFailedPreview && !hasGeneratingPreview
             ? workspaceCanvasFailedResourcePresentation()

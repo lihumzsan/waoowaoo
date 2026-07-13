@@ -21,6 +21,7 @@ export interface EditStylePreviewSetView {
   readonly candidates: readonly EditStylePreviewCandidateView[]
   readonly allCandidates: readonly EditStylePreviewCandidateView[]
   readonly hasConfirmedPreview: boolean
+  readonly hasUsablePreview: boolean
   readonly hasGeneratingPreview: boolean
   readonly hasFailedPreview: boolean
 }
@@ -82,6 +83,9 @@ export function buildEditStylePreviewSetView(params: {
     candidates,
     allCandidates,
     hasConfirmedPreview: Boolean(confirmedCandidate),
+    hasUsablePreview: allCandidates.some((candidate) => (
+      candidate.status === 'completed' && Boolean(candidate.imageUrl)
+    )),
     hasGeneratingPreview: candidates.some((candidate) => candidate.status === 'generating'),
     hasFailedPreview: candidates.some((candidate) => candidate.status === 'failed'),
   }

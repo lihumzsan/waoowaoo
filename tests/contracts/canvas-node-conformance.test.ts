@@ -102,6 +102,12 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
     } else {
       expect(definition.materializeFromTask.reason.length).toBeGreaterThan(0)
     }
+    if (definition.runtime.kind === 'supported') {
+      expect(definition.runtime.value.source).toBe('taskTarget')
+      expect(['failureDominant', 'resourceAggregate']).toContain(definition.runtime.value.aggregation)
+    } else {
+      expect(definition.runtime.reason.length).toBeGreaterThan(0)
+    }
   })
 
   it('accepts matching stream facts and rejects the same stream after terminal handoff', () => {

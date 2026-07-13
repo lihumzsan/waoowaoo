@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import type { ProjectEditBible } from '@/types/project'
+import type { ProjectEditBible, ProjectEditStylePreview } from '@/types/project'
 
 /**
  * Logic Specification
@@ -19,6 +19,30 @@ const editBible: ProjectEditBible = {
   status: 'confirmed',
   styleBible: null,
   stylePreviews: [],
+}
+
+function stylePreview(
+  id: 'preview-a' | 'preview-b' | 'preview-c',
+  status: ProjectEditStylePreview['status'],
+  imageUrl: string | null,
+): ProjectEditStylePreview {
+  return {
+    id,
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    bibleId: 'edit-bible-1',
+    styleKey: id === 'preview-a' ? 'style_a' : id === 'preview-b' ? 'style_b' : 'style_c',
+    aspectRatio: '16:9',
+    title: id,
+    summary: `${id} summary`,
+    styleBible: {},
+    gridImagePrompt: `${id} grid`,
+    imageKey: imageUrl ? `${id}.png` : null,
+    imageUrl,
+    status,
+    taskId: `task-${id}`,
+    errorMessage: status === 'failed' ? 'provider blocked' : null,
+  }
 }
 
 describe('Style Bible text Task Canvas projection', () => {
@@ -58,6 +82,43 @@ describe('Style Bible text Task Canvas projection', () => {
           targetId: editBible.id,
           types: ['edit_style_preview_options_generate'],
         }],
+      },
+    })
+  })
+
+  it('projects a usable candidate set as succeeded when one sibling failed', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      editFirstWorkflow: {
+        active: true,
+        stage: 'needs_style_choice',
+        blocking: { kind: 'needs_user_choice', reason: 'visual style choice is required' },
+        nextAction: null,
+        allowedOperationIds: [],
+        operationGroup: null,
+      },
+      editBible: {
+        ...editBible,
+        stylePreviews: [
+          stylePreview('preview-a', 'failed', null),
+          stylePreview('preview-b', 'completed', '/b.png'),
+          stylePreview('preview-c', 'completed', '/c.png'),
+        ],
+      },
+      activeTaskTargets: [],
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+
+    const styleBibleNode = projection.nodes.find((node) => node.data.kind === 'editStyleBible')
+    expect(styleBibleNode).toMatchObject({
+      id: workspaceNodeId.editStyleBible(editBible.id),
+      data: {
+        title: 'nodes.editStyleBible.waitingTitle',
+        body: 'nodes.editStyleBible.waitingBody',
+        lifecycle: { phase: 'succeeded' },
       },
     })
   })
