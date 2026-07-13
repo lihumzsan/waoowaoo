@@ -21,7 +21,6 @@ export const AI_PROMPT_IDS = {
   EDIT_BIBLE_BEAT_SHEET: 'beat-sheet',
   EDIT_BIBLE_LEDGER: 'ledger',
   EDIT_BIBLE_EMOTIONAL_CURVE: 'emotional-curve',
-  CONTINUITY_EXPERIMENT_IMAGE: 'continuity-experiment-image',
 } as const
 
 export type AiPromptId = (typeof AI_PROMPT_IDS)[keyof typeof AI_PROMPT_IDS]

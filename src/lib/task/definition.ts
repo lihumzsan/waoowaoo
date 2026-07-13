@@ -21,7 +21,6 @@ export type ImageTaskHandlerKey =
   | 'modify_asset_image'
   | 'asset_hub_image'
   | 'asset_hub_modify'
-  | 'continuity_experiment_image'
 
 export type VideoTaskHandlerKey = 'video_panel' | 'video_group' | 'final_video_render' | 'chapter_render'
 export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate' | 'soundscape_plan' | 'soundscape_generate'
@@ -88,7 +87,6 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: definition('image', 'edit_style_preview', 'image', 3, 'edit_style_preview', 'edit_style_preview'),
   [TASK_TYPE.IMAGE_CHARACTER]: definition('image', 'image_character', 'image', 3, 'none', 'none'),
   [TASK_TYPE.IMAGE_LOCATION]: definition('image', 'image_location', 'image', 3, 'none', 'none'),
-  [TASK_TYPE.CONTINUITY_EXPERIMENT_IMAGE]: definition('image', 'continuity_experiment_image', 'image', 3, 'none', 'none'),
   [TASK_TYPE.MUSIC_GENERATE]: definition('music', 'music_generate', 'music', 3, 'none', 'none'),
   [TASK_TYPE.MUSIC_SCORE_PLAN]: definition('text', 'music_score_plan', 'text', 3, 'music_score', 'music_score'),
   [TASK_TYPE.MUSIC_SCORE_GENERATE]: definition('music', 'music_score_generate', 'music', 3, 'music_score', 'music_score'),

@@ -67,7 +67,6 @@ export const TASK_TYPE = {
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
-  CONTINUITY_EXPERIMENT_IMAGE: 'continuity_experiment_image',
   MUSIC_GENERATE: 'music_generate',
   MUSIC_SCORE_PLAN: 'music_score_plan',
   MUSIC_SCORE_GENERATE: 'music_score_generate',
