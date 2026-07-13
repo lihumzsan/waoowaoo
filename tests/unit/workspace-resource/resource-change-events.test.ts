@@ -29,6 +29,7 @@ describe('resource-change-events', () => {
         { kind: 'episodeData', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'projectContext', projectId: 'project-1', episodeId: 'episode-1' },
         { kind: 'projectData', projectId: 'project-1' },
+        { kind: 'projectAssets', projectId: 'project-1', episodeId: 'episode-1' },
       ],
     }])
   })
