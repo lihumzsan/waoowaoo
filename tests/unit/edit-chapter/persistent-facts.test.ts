@@ -33,14 +33,14 @@ describe('projectChapterPersistentFacts', () => {
     })
     const result = schema.safeParse({
       shots: [{
-        shotId: 'shot-001',
+        shotRef: 'shot-001',
         shotNumber: 1,
         shotPurpose: 'action',
         durationSec: 3,
-        scene: { locationId: 'location-1', subScene: '铁门内侧' },
+        scene: { locationName: '密室', subScene: '铁门内侧' },
         action: '阿杰推门进入。',
         characters: [{
-          characterId: 'character-1',
+          characterName: '阿杰',
           visibility: 'visible',
           role: 'focus',
           performance: '谨慎前进',
@@ -49,7 +49,7 @@ describe('projectChapterPersistentFacts', () => {
         dialogue: [],
         sound: '铁门摩擦声',
       }],
-      generationSegments: [{ shotIds: ['shot-001'], continuity: '同一进入动作' }],
+      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
       persistentFactsIntroduced: ['阿杰进入密室。'],
     })
 
@@ -64,14 +64,14 @@ describe('projectChapterPersistentFacts', () => {
 
     const result = schema.safeParse({
       shots: [{
-        shotId: 'shot-001',
+        shotRef: 'shot-001',
         shotNumber: 1,
         shotPurpose: 'action',
         durationSec: 3,
-        scene: { locationId: 'location-1', subScene: '铁门内侧' },
+        scene: { locationName: '密室', subScene: '铁门内侧' },
         action: '阿杰推门进入。',
         characters: [{
-          characterId: 'character-1',
+          characterName: '阿杰',
           visibility: 'visible',
           role: 'focus',
           performance: '',
@@ -80,7 +80,7 @@ describe('projectChapterPersistentFacts', () => {
         dialogue: [],
         sound: '铁门摩擦声',
       }],
-      generationSegments: [{ shotIds: ['shot-001'], continuity: '同一进入动作' }],
+      generationSegments: [{ shotRefs: ['shot-001'], continuity: '同一进入动作' }],
     })
 
     expect(result.success).toBe(true)
