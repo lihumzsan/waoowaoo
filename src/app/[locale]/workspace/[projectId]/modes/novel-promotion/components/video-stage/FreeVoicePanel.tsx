@@ -40,7 +40,7 @@ export default function FreeVoicePanel({ projectId }: { projectId: string }) {
   const keepMutation = useKeepFreeVoiceVersion(projectId)
   const deleteMutation = useDeleteFreeVoiceRecord(projectId)
 
-  const records = recordsQuery.data?.records || []
+  const records = useMemo(() => recordsQuery.data?.records || [], [recordsQuery.data?.records])
   const characters = charactersQuery.data || []
   const globalVoices = (voicesQuery.data || []).filter((voice) => !!voice.customVoiceUrl)
   const character = characters.find((item) => item.id === characterId) || null

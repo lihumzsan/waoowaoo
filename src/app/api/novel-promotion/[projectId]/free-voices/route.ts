@@ -24,7 +24,10 @@ export const POST = apiHandler(async (
   const body = await request.json().catch(() => null)
   const text = typeof body?.text === 'string' ? body.text : ''
   const characterId = typeof body?.characterId === 'string' ? body.characterId : ''
-  const voiceSourceType = body?.voiceSourceType === 'global_voice' ? 'global_voice' : 'character'
+  if (body?.voiceSourceType !== 'character' && body?.voiceSourceType !== 'global_voice') {
+    throw new ApiError('INVALID_PARAMS')
+  }
+  const voiceSourceType = body.voiceSourceType
   if (!text.trim() || !characterId) throw new ApiError('INVALID_PARAMS')
   const result = await createFreeVoiceRecord({
     projectId,

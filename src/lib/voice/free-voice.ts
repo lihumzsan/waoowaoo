@@ -398,6 +398,48 @@ async function deleteVersionStorage(versions: Array<{ audioUrl: string | null }>
   }
 }
 
+async function cleanupUnreferencedFreeVoiceMedia(mediaIds: Array<string | null>) {
+  const uniqueIds = [...new Set(mediaIds.filter((id): id is string => !!id))]
+  if (uniqueIds.length === 0) return
+  const candidates = await prisma.mediaObject.findMany({
+    where: { id: { in: uniqueIds } },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          characterAppearanceImages: true,
+          locationImages: true,
+          novelPromotionCharacterVoices: true,
+          novelPromotionEpisodeAudios: true,
+          novelPromotionPanelImages: true,
+          novelPromotionPanelVideos: true,
+          novelPromotionPanelLipSyncVideos: true,
+          novelPromotionPanelSketchImages: true,
+          novelPromotionPanelPreviousImages: true,
+          novelPromotionShotImages: true,
+          supplementaryPanelImages: true,
+          novelPromotionVoiceLineAudios: true,
+          novelPromotionFreeVoiceReferenceAudios: true,
+          novelPromotionFreeVoiceVersionAudios: true,
+          voicePresetAudios: true,
+          globalCharacterVoices: true,
+          globalCharacterAppearanceImages: true,
+          globalCharacterAppearancePreviousImgs: true,
+          globalLocationImageImages: true,
+          globalLocationImagePreviousImages: true,
+          globalVoiceCustomVoices: true,
+        },
+      },
+    },
+  })
+  const unreferencedIds = candidates
+    .filter((media) => Object.values(media._count).every((count) => count === 0))
+    .map((media) => media.id)
+  if (unreferencedIds.length > 0) {
+    await prisma.mediaObject.deleteMany({ where: { id: { in: unreferencedIds } } })
+  }
+}
+
 export async function keepOnlyFreeVoiceVersion(params: {
   projectId: string
   recordId: string
@@ -417,6 +459,7 @@ export async function keepOnlyFreeVoiceVersion(params: {
   await prisma.novelPromotionFreeVoiceVersion.deleteMany({
     where: { recordId: record.id, id: { not: kept.id } },
   })
+  await cleanupUnreferencedFreeVoiceMedia(removed.map((version) => version.audioMediaId))
   return prisma.novelPromotionFreeVoiceRecord.findUnique({
     where: { id: record.id },
     include: { versions: { orderBy: { versionNumber: 'desc' } } },
@@ -431,6 +474,8 @@ export async function deleteFreeVoiceRecord(params: { projectId: string; recordI
   if (!record) return { deleted: false }
   await assertNoActiveFreeVoiceTasks(record.id)
   await deleteVersionStorage(record.versions)
+  const audioMediaIds = record.versions.map((version) => version.audioMediaId)
   await prisma.novelPromotionFreeVoiceRecord.delete({ where: { id: record.id } })
+  await cleanupUnreferencedFreeVoiceMedia(audioMediaIds)
   return { deleted: true }
 }
