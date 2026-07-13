@@ -210,6 +210,29 @@
         "uploadFailed": "Upload failed",
         "uploadSuccess": "Upload successful"
     },
+    "freeVoice": {
+        "title": "Free voice",
+        "summary": "{records} records · {running} versions generating",
+        "character": "Character",
+        "selectCharacter": "Select a character",
+        "voice": "Voice",
+        "characterDefault": "{name}'s default voice",
+        "selectCharacterFirst": "Select a character first",
+        "referenceRequired": "This character has no reference voice. Configure one or choose another voice.",
+        "text": "Text to read",
+        "textPlaceholder": "Enter the text to read",
+        "generate": "Generate free voice",
+        "submitting": "Submitting...",
+        "loading": "Loading...",
+        "empty": "No free voice records yet",
+        "newVersion": "Generate new version",
+        "deleteRecord": "Delete record",
+        "download": "Download",
+        "keepOnly": "Keep only this version",
+        "confirmKeep": "Keep only the selected version? All other audio versions will be permanently deleted.",
+        "confirmDelete": "Delete this free voice record and all its versions? This cannot be undone.",
+        "actionFailed": "Action failed"
+    },
     "voiceDesign": {
         "presets": {
             "maleBroadcaster": "Male Broadcaster",
