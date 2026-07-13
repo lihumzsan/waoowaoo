@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type { ReactFlowInstance } from '@xyflow/react'
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
 import { isWorkspaceCanvasLifecycleRunning } from '../lifecycle/workspace-canvas-lifecycle'
+import {
+  getWorkspaceCanvasOperationFocusKindPriority,
+  WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY,
+} from '../registry/workspace-canvas-focus-policy'
 
 const FOCUS_FOLLOW_DEBOUNCE_MS = 240
 export const FOCUS_FOLLOW_MANUAL_PAUSE_MS = 3000
@@ -35,68 +39,23 @@ export interface CanvasFocusFollowResult {
   readonly notifyUserInteraction: () => void
 }
 
-export function buildWorkspaceCanvasFocusKey(
-  nodeIds: readonly string[],
-  focusRequestKey?: string | null,
-): string {
+export function buildWorkspaceCanvasFocusKey(nodeIds: readonly string[], focusRequestKey?: string | null): string {
   const nodeKey = [...nodeIds].sort().join('|')
   if (!nodeKey) return ''
   const normalizedRequestKey = focusRequestKey?.trim()
   return normalizedRequestKey ? `${normalizedRequestKey}:${nodeKey}` : nodeKey
 }
 
-type WorkspaceCanvasFocusNodeKind = WorkspaceCanvasFlowNode['data']['kind']
-
-const OPERATION_FOCUS_KIND_PRIORITY: Readonly<Record<string, readonly WorkspaceCanvasFocusNodeKind[]>> = {
-  ingest_script: ['editSourceScript'],
-  revise_script: ['editSourceScript'],
-  generate_bible_from_script: ['editBible'],
-  revise_bible: ['editBible'],
-  generate_edit_style_previews: ['editStyleBible', 'editBible'],
-  generate_edit_style_preview_images: ['editStyleBible'],
-  plan_chapters: ['editScript'],
-  generate_edit_script: ['editScript'],
-  generate_edit_script_assets: ['editAssetGroup'],
-  generate_edit_shot_execution_plan: ['editShotExecutionPlan'],
-  generate_edit_script_storyboard_images: ['shot'],
-  generate_episode_videos: ['videoPlan'],
-  generate_episode_videos_auto: ['videoPlan'],
-  generate_panel_video: ['videoPlan'],
-  generate_video_group: ['videoPlan'],
-  plan_episode_bgm_score: ['bgmScore'],
-  generate_episode_bgm_score: ['bgmScore'],
-  generate_episode_soundscape: ['soundscape'],
-  plan_episode_soundscape: ['soundscape'],
-  generate_project_music: ['bgmScore'],
-  render_chapters: ['finalTimeline', 'videoPlan'],
-  render_final_video: ['finalTimeline'],
-}
-
-const RUNNING_FOCUS_KIND_PRIORITY: readonly WorkspaceCanvasFocusNodeKind[] = [
-  'editSourceScript',
-  'editBible',
-  'editScript',
-  'editAssetGroup',
-  'editShotExecutionPlan',
-  'editPipelineStep',
-  'shot',
-  'videoPlan',
-  'bgmScore',
-  'soundscape',
-  'finalTimeline',
-  'editProcessGroup',
-]
-
 function firstNodeIdByKind(
   nodes: readonly WorkspaceCanvasFlowNode[],
-  kinds: readonly WorkspaceCanvasFocusNodeKind[],
+  kinds: readonly WorkspaceCanvasFlowNode['data']['kind'][],
   runningOnly: boolean,
 ): string | null {
   for (const kind of kinds) {
-    const node = nodes.find((candidate) => (
-      candidate.data.kind === kind
-      && (!runningOnly || isWorkspaceCanvasLifecycleRunning(candidate.data.lifecycle))
-    ))
+    const node = nodes.find(
+      (candidate) =>
+        candidate.data.kind === kind && (!runningOnly || isWorkspaceCanvasLifecycleRunning(candidate.data.lifecycle)),
+    )
     if (node) return node.id
   }
   return null
@@ -106,9 +65,7 @@ export function resolveWorkspaceCanvasFocusNodeIds(
   nodes: readonly WorkspaceCanvasFlowNode[],
   activeAssistantOperationId: string | null | undefined,
 ): string[] {
-  const operationKindPriority = activeAssistantOperationId
-    ? OPERATION_FOCUS_KIND_PRIORITY[activeAssistantOperationId]
-    : undefined
+  const operationKindPriority = getWorkspaceCanvasOperationFocusKindPriority(activeAssistantOperationId)
   if (operationKindPriority) {
     const runningOperationNodeId = firstNodeIdByKind(nodes, operationKindPriority, true)
     if (runningOperationNodeId) return [runningOperationNodeId]
@@ -117,16 +74,14 @@ export function resolveWorkspaceCanvasFocusNodeIds(
     return operationNodeId ? [operationNodeId] : []
   }
 
-  const runningPriorityNodeId = firstNodeIdByKind(nodes, RUNNING_FOCUS_KIND_PRIORITY, true)
+  const runningPriorityNodeId = firstNodeIdByKind(nodes, WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY, true)
   if (runningPriorityNodeId) return [runningPriorityNodeId]
 
   const runningNodeId = nodes.find((node) => isWorkspaceCanvasLifecycleRunning(node.data.lifecycle))?.id
   return runningNodeId ? [runningNodeId] : []
 }
 
-export function resolveWorkspaceCanvasStyleBibleFocusNodeIds(
-  nodes: readonly WorkspaceCanvasFlowNode[],
-): string[] {
+export function resolveWorkspaceCanvasStyleBibleFocusNodeIds(nodes: readonly WorkspaceCanvasFlowNode[]): string[] {
   const styleBibleNodeId = firstNodeIdByKind(nodes, ['editStyleBible'], false)
   return styleBibleNodeId ? [styleBibleNodeId] : []
 }
@@ -168,11 +123,9 @@ export function useCanvasFocusFollow({
   currentFocusKeyRef.current = focusKey
 
   const updatePendingFocusNodeIds = useCallback((next: readonly string[]) => {
-    setPendingFocusNodeIds((current) => (
-      current.length === next.length && current.every((id, index) => id === next[index])
-        ? current
-        : [...next]
-    ))
+    setPendingFocusNodeIds((current) =>
+      current.length === next.length && current.every((id, index) => id === next[index]) ? current : [...next],
+    )
   }, [])
 
   const collectFocusNodes = useCallback((): WorkspaceCanvasFlowNode[] => {
@@ -181,15 +134,18 @@ export function useCanvasFocusFollow({
     return reactFlow.getNodes().filter((node) => idSet.has(node.id))
   }, [reactFlow])
 
-  const runFitView = useCallback((focusNodes: readonly WorkspaceCanvasFlowNode[]) => {
-    if (focusNodes.length === 0) return
-    void reactFlow.fitView({
-      nodes: focusNodes.map((node) => ({ id: node.id })),
-      padding: FOCUS_FIT_PADDING,
-      maxZoom: FOCUS_FIT_MAX_ZOOM,
-      duration: FOCUS_FIT_DURATION_MS,
-    })
-  }, [reactFlow])
+  const runFitView = useCallback(
+    (focusNodes: readonly WorkspaceCanvasFlowNode[]) => {
+      if (focusNodes.length === 0) return
+      void reactFlow.fitView({
+        nodes: focusNodes.map((node) => ({ id: node.id })),
+        padding: FOCUS_FIT_PADDING,
+        maxZoom: FOCUS_FIT_MAX_ZOOM,
+        duration: FOCUS_FIT_DURATION_MS,
+      })
+    },
+    [reactFlow],
+  )
 
   const clearManualPauseTimer = useCallback(() => {
     if (manualPauseTimerRef.current === null) return
@@ -280,11 +236,24 @@ export function useCanvasFocusFollow({
         debounceTimerRef.current = null
       }
     }
-  }, [clearManualPause, collectFocusNodes, containerRef, enabled, focusKey, manualPauseRevision, onFocusComplete, runFitView, updatePendingFocusNodeIds])
+  }, [
+    clearManualPause,
+    collectFocusNodes,
+    containerRef,
+    enabled,
+    focusKey,
+    manualPauseRevision,
+    onFocusComplete,
+    runFitView,
+    updatePendingFocusNodeIds,
+  ])
 
-  useEffect(() => () => {
-    clearManualPauseTimer()
-  }, [clearManualPauseTimer])
+  useEffect(
+    () => () => {
+      clearManualPauseTimer()
+    },
+    [clearManualPauseTimer],
+  )
 
   return {
     pendingFocusNodeIds,

@@ -6,6 +6,10 @@ import {
 import { WORKSPACE_CANVAS_NODE_DEFINITIONS } from '@/features/project-workspace/canvas/registry/workspace-canvas-node-registry'
 import { WORKSPACE_CANVAS_CONFORMANCE_FIXTURES } from '@/features/project-workspace/canvas/conformance/workspace-canvas-conformance-fixtures'
 import { WORKSPACE_CANVAS_NODE_RENDERERS } from '@/features/project-workspace/canvas/nodes/workspace-node-renderer-registry'
+import {
+  WORKSPACE_CANVAS_OPERATION_FOCUS_KIND_PRIORITY,
+  WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY,
+} from '@/features/project-workspace/canvas/registry/workspace-canvas-focus-policy'
 
 const definitions = Object.values(WORKSPACE_CANVAS_NODE_DEFINITIONS)
 
@@ -16,14 +20,25 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
     expect(fixture.kind).toBe(definition.kind)
     expect(typeof WORKSPACE_CANVAS_NODE_RENDERERS[definition.rendererKey]).toBe('function')
     expect(fixture.canonicalNodeId).toContain(definition.kind)
+    const focusPolicyKinds = [
+      ...Object.values(WORKSPACE_CANVAS_OPERATION_FOCUS_KIND_PRIORITY).flat(),
+      ...WORKSPACE_CANVAS_RUNNING_FOCUS_KIND_PRIORITY,
+    ]
+    if (focusPolicyKinds.includes(definition.kind)) expect(definition.focus.kind).toBe('supported')
   })
 
   it('uses the unified pending, submission, queued, processing, and terminal phases', () => {
     const pending = resolveWorkspaceCanvasLifecycle({
-      persistedPhase: 'pending', task: null, stream: null, submitting: false,
+      persistedPhase: 'pending',
+      task: null,
+      stream: null,
+      submitting: false,
     })
     const submitting = resolveWorkspaceCanvasLifecycle({
-      persistedPhase: 'pending', task: null, stream: null, submitting: true,
+      persistedPhase: 'pending',
+      task: null,
+      stream: null,
+      submitting: true,
     })
     const queued = resolveWorkspaceCanvasLifecycle({
       persistedPhase: 'pending',
@@ -45,7 +60,11 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
     })
 
     expect([pending.phase, submitting.phase, queued.phase, processing.phase, succeeded.phase]).toEqual([
-      'pending', 'submitting', 'queued', 'processing', 'succeeded',
+      'pending',
+      'submitting',
+      'queued',
+      'processing',
+      'succeeded',
     ])
     expect(isWorkspaceCanvasLifecycleRunning(pending)).toBe(false)
     expect(isWorkspaceCanvasLifecycleRunning(submitting)).toBe(true)
@@ -96,6 +115,7 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
     expect(['supported', 'notApplicable']).toContain(definition.runtime.kind)
     expect(['supported', 'notApplicable']).toContain(definition.materializeFromTask.kind)
     expect(['supported', 'notApplicable']).toContain(definition.terminalHandoff.kind)
+    expect(['supported', 'notApplicable']).toContain(definition.projection.kind)
     if (definition.materializeFromTask.kind === 'supported') {
       expect(definition.materializeFromTask.value.targetType.length).toBeGreaterThan(0)
       expect(definition.materializeFromTask.value.taskTypes.length).toBeGreaterThan(0)
@@ -107,6 +127,11 @@ describe.each(definitions)('Canvas node conformance: $kind', (definition) => {
       expect(['failureDominant', 'resourceAggregate']).toContain(definition.runtime.value.aggregation)
     } else {
       expect(definition.runtime.reason.length).toBeGreaterThan(0)
+    }
+    if (definition.projection.kind === 'supported') {
+      expect(['planning', 'assetExecution', 'storyboardVideo', 'audioFinal']).toContain(definition.projection.value)
+    } else {
+      expect(definition.projection.reason.length).toBeGreaterThan(0)
     }
   })
 

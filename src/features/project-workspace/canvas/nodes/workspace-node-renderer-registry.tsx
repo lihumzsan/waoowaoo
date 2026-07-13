@@ -1,46 +1,38 @@
 import type { WorkspaceCanvasFlowNode } from '../node-canvas-types'
-import { MediaPreview, nodeIsRunning } from './WorkspaceNodeRenderers'
-import { BgmScoreNodeRenderer } from './renderers/bgm-score'
-import { EditAssetGroupNodeRenderer } from './renderers/edit-asset-group'
-import { EditBibleNodeRenderer } from './renderers/edit-bible'
-import { EditPipelineStepNodeRenderer } from './renderers/edit-pipeline-step'
-import { EditProcessGroupNodeRenderer } from './renderers/edit-process-group'
-import { EditRequiredAssetNodeRenderer } from './renderers/edit-required-asset'
-import { EditScriptNodeRenderer } from './renderers/edit-script'
-import { EditShotExecutionPlanNodeRenderer } from './renderers/edit-shot-execution-plan'
-import { EditSourceScriptNodeRenderer } from './renderers/edit-source-script'
-import { EditStyleBibleNodeRenderer } from './renderers/edit-style-bible'
-import { FinalTimelineNodeRenderer } from './renderers/final-timeline'
-import { ImageAssetNodeRenderer } from './renderers/image-asset'
-import { ShotNodeRenderer } from './renderers/shot'
-import { SoundscapeNodeRenderer } from './renderers/soundscape'
+import { EditAssetContent, EditAssetGroupContent, StyleBibleContent } from './renderers/assets-style'
+import { BgmScoreContent, FinalContent, SoundscapeContent } from './renderers/audio-final'
+import { EditBibleContent, SourceScriptContent } from './renderers/bible'
+import { EditScriptContent, EditShotExecutionPlanContent } from './renderers/edit-plans'
+import { ImageContent, MediaPreview, ShotContent, VideoContent } from './renderers/media'
+import { EditPipelineStepContent, ProcessGroupContent } from './renderers/pipeline'
+import { nodeIsRunning } from './renderers/renderer-shared'
 import type { WorkspaceCanvasNodeRenderer, WorkspaceCanvasNodeRendererProps } from './renderers/types'
-import { VideoClipNodeRenderer } from './renderers/video-clip'
-import { VideoPlanNodeRenderer } from './renderers/video-plan'
+import { VideoPlanContent } from './renderers/video-plan'
+import { getWorkspaceCanvasNodeDefinition } from '../registry/workspace-canvas-node-registry'
 
 export const WORKSPACE_CANVAS_NODE_RENDERERS = {
-  shot: ShotNodeRenderer,
-  imageAsset: ImageAssetNodeRenderer,
-  videoClip: VideoClipNodeRenderer,
-  finalTimeline: FinalTimelineNodeRenderer,
-  editSourceScript: EditSourceScriptNodeRenderer,
-  editBible: EditBibleNodeRenderer,
-  editStyleBible: EditStyleBibleNodeRenderer,
-  editPipelineStep: EditPipelineStepNodeRenderer,
-  editProcessGroup: EditProcessGroupNodeRenderer,
-  editScript: EditScriptNodeRenderer,
-  editShotExecutionPlan: EditShotExecutionPlanNodeRenderer,
-  videoPlan: VideoPlanNodeRenderer,
-  bgmScore: BgmScoreNodeRenderer,
-  soundscape: SoundscapeNodeRenderer,
-  editRequiredAsset: EditRequiredAssetNodeRenderer,
-  editAssetGroup: EditAssetGroupNodeRenderer,
+  shot: ShotContent,
+  imageAsset: ImageContent,
+  videoClip: VideoContent,
+  finalTimeline: FinalContent,
+  editSourceScript: SourceScriptContent,
+  editBible: EditBibleContent,
+  editStyleBible: StyleBibleContent,
+  editPipelineStep: EditPipelineStepContent,
+  editProcessGroup: ProcessGroupContent,
+  editScript: EditScriptContent,
+  editShotExecutionPlan: EditShotExecutionPlanContent,
+  videoPlan: VideoPlanContent,
+  bgmScore: BgmScoreContent,
+  soundscape: SoundscapeContent,
+  editRequiredAsset: EditAssetContent,
+  editAssetGroup: EditAssetGroupContent,
 } satisfies Record<WorkspaceCanvasFlowNode['data']['kind'], WorkspaceCanvasNodeRenderer>
 
 export function NodeContent({ data, labels, expanded }: WorkspaceCanvasNodeRendererProps) {
   if (
-    nodeIsRunning(data)
-    && (data.kind === 'imageAsset' || data.kind === 'videoClip' || data.kind === 'editRequiredAsset')
+    nodeIsRunning(data) &&
+    getWorkspaceCanvasNodeDefinition(data.kind).presentation.runningRenderer === 'mediaPreview'
   ) {
     return <MediaPreview data={data} />
   }
