@@ -6,6 +6,7 @@ import { createScopedLogger } from '@/lib/logging/core'
 import { getLogContext } from '@/lib/logging/context'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import type { ProviderChatMessageContent } from '@/lib/ai-providers/shared/llm-support'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export const llmLogger = createScopedLogger({
   module: 'llm.client',
@@ -80,7 +81,7 @@ export function logLlmRawInput(params: {
   modelKey: string
   stream: boolean
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort: ReasoningEffort
   temperature: number
   action?: string
   openRouterSessionId?: string

@@ -11,6 +11,7 @@ import type {
   ProviderChatCompletionStreamCallbacks,
   ProviderChatMessage,
 } from '@/lib/ai-providers/shared/llm-support'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export type GenerateResult = {
   success: boolean
@@ -44,7 +45,7 @@ export type AiProviderLlmStreamContext = {
   }
   providerConfig: AiLlmProviderConfig
   messages: ProviderChatMessage[]
-  options: ProviderChatCompletionOptions
+  options: ProviderChatCompletionOptions & { reasoningEffort: ReasoningEffort }
   callbacks?: ProviderChatCompletionStreamCallbacks
 }
 
@@ -57,6 +58,7 @@ export type AiProviderVisionExecutionContext = {
   imageUrls: string[]
   temperature: number
   reasoning: boolean
+  reasoningEffort: ReasoningEffort
   options?: ProviderChatCompletionOptions
 }
 
@@ -68,6 +70,7 @@ export type AiProviderLanguageModelContext = {
     modelKey: string
   }
   providerConfig: AiLlmProviderConfig
+  reasoningEffort: ReasoningEffort
   openRouterSessionId?: string
 }
 

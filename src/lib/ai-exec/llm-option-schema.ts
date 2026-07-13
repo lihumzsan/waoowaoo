@@ -1,4 +1,8 @@
 import type { AiOptionSchema, AiOptionValidationResult, AiOptionValidator } from '@/lib/ai-registry/types'
+import {
+  REASONING_EFFORT_VALUES,
+  type ReasoningEffort,
+} from '@/lib/ai-registry/reasoning-effort'
 
 function ok(): AiOptionValidationResult {
   return { ok: true }
@@ -70,7 +74,9 @@ const LLM_ALLOWED_KEYS = [
   '__skipAutoStream',
  ] as const
 
-export function buildLlmOptionSchema(): AiOptionSchema {
+export function buildLlmOptionSchema(
+  reasoningEffortOptions: readonly ReasoningEffort[] = REASONING_EFFORT_VALUES,
+): AiOptionSchema {
   const allowedKeys = new Set<string>(LLM_ALLOWED_KEYS)
   const validators = Object.fromEntries(
     Array.from(allowedKeys).map((key) => [key, passthroughValidator]),
@@ -78,7 +84,7 @@ export function buildLlmOptionSchema(): AiOptionSchema {
 
   validators.temperature = numberRangeValidator({ min: 0, max: 2 })
   validators.reasoning = booleanValidator()
-  validators.reasoningEffort = enumValidator(['minimal', 'low', 'medium', 'high'])
+  validators.reasoningEffort = enumValidator(reasoningEffortOptions)
 
   validators.projectId = nonEmptyStringValidator()
   validators.action = nonEmptyStringValidator()

@@ -6,6 +6,7 @@ import { getUserModelConfig } from '@/lib/config-service'
 import { getProviderConfig } from '@/lib/user-api/runtime-config'
 import { resolveLlmRuntimeModel } from '@/lib/ai-exec/llm-runtime'
 import { createAiLanguageModel } from '@/lib/ai-exec/language-model'
+import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 
 export const DEFAULT_PROJECT_AGENT_ASSISTANT_MODEL_KEY = PLATFORM_DEFAULT_ASSISTANT_MODEL_KEY
 
@@ -46,11 +47,17 @@ export async function resolveProjectAgentLanguageModel(input: {
   const selection = await resolveLlmRuntimeModel(input.userId, input.assistantModelKey)
   const providerConfig = await getProviderConfig(input.userId, selection.provider)
   const providerKey = getProviderKey(selection.provider)
+  const reasoningEffort = await resolveReasoningEffort({
+    userId: input.userId,
+    modelKey: selection.modelKey,
+    purpose: 'assistant',
+  })
   return {
     languageModel: createAiLanguageModel({
       providerKey,
       selection,
       providerConfig,
+      reasoningEffort,
       openRouterSessionId: input.openRouterSessionId,
     }),
   }

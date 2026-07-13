@@ -14,6 +14,7 @@ import type {
   AiProviderVisionExecutionContext,
 } from '@/lib/ai-providers/runtime-types'
 import type { ProviderChatMessage } from '@/lib/ai-providers/shared/llm-support'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 type OpenRouterVisionContentPart =
   | { type: 'text'; text: string }
@@ -28,7 +29,7 @@ export async function runOpenRouterLlmCompletion(input: {
   messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort: ReasoningEffort
   openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
   if (!input.providerConfig.baseUrl) {
@@ -82,6 +83,10 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
     fetch: fetchWithProviderProxy,
   })
   const openRouterSessionId = normalizeOpenRouterSessionId(input.options?.openRouterSessionId)
+  const extraParams: { [key: string]: unknown } = {}
+  if (input.reasoning) {
+    extraParams.reasoning = { effort: input.reasoningEffort }
+  }
   const completion = await client.chat.completions.create({
     model: input.selection.modelId,
     messages: [{
@@ -89,7 +94,8 @@ export async function runOpenRouterVisionCompletion(input: AiProviderVisionExecu
       content,
     }],
     temperature: input.temperature,
-  }, buildOpenRouterRequestOptions(openRouterSessionId))
+    ...extraParams,
+  } as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, buildOpenRouterRequestOptions(openRouterSessionId))
   const normalizedCompletion = completion as OpenAI.Chat.Completions.ChatCompletion
   const completionParts = getCompletionParts(normalizedCompletion)
   return buildAiProviderLlmResult({

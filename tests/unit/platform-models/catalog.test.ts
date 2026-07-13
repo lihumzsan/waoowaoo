@@ -33,7 +33,9 @@ describe('platform model catalog', () => {
     expect(modelKeys).toContain('ark::doubao-seedance-2-0-260128')
     expect(modelKeys).toContain('openrouter::anthropic/claude-sonnet-4.6')
     expect(modelKeys).toContain('openrouter::openai/gpt-5.5')
+    expect(modelKeys).toContain('openrouter::openai/gpt-5.6-luna')
     expect(modelKeys).toContain('openrouter::openai/gpt-5.6-terra')
+    expect(modelKeys).toContain('openrouter::openai/gpt-5.6-sol')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0')
     expect(modelKeys).toContain('openrouter::bytedance/seedance-2.0-fast')
     expect(modelKeys).toContain('elevenlabs::eleven_text_to_sound_v2')
@@ -57,9 +59,11 @@ describe('platform model catalog', () => {
     expect(() => getPlatformDefaultModels()).toThrow('PLATFORM_DEFAULT_MODEL_NOT_FOUND')
   })
 
-  it('accepts GPT-5.6 Terra as the platform assistant model override', () => {
-    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = 'openrouter::openai/gpt-5.6-terra'
+  it('accepts GPT-5.6 Luna and Sol as separate platform model overrides', () => {
+    process.env.PLATFORM_DEFAULT_ASSISTANT_MODEL = 'openrouter::openai/gpt-5.6-sol'
+    process.env.PLATFORM_DEFAULT_ANALYSIS_MODEL = 'openrouter::openai/gpt-5.6-luna'
 
-    expect(getPlatformDefaultModels().assistantModel).toBe('openrouter::openai/gpt-5.6-terra')
+    expect(getPlatformDefaultModels().assistantModel).toBe('openrouter::openai/gpt-5.6-sol')
+    expect(getPlatformDefaultModels().analysisModel).toBe('openrouter::openai/gpt-5.6-luna')
   })
 })

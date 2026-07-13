@@ -18,6 +18,7 @@ import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { normalizeToBase64ForGeneration } from '@/lib/media/outbound-image'
 import type { AiProviderLlmResult, AiProviderVisionExecutionContext } from '@/lib/ai-providers/runtime-types'
+import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 
 ensureAiCatalogsRegistered()
 
@@ -71,19 +72,27 @@ export async function runChatCompletionWithVision(
   const resolvedModelId = selection.modelId
   const provider = selection.provider
   const providerKey = getProviderKey(provider).toLowerCase()
+  const projectId =
+    typeof options.projectId === 'string' && options.projectId.trim().length > 0
+      ? options.projectId.trim()
+      : undefined
+  const reasoningEffort = await resolveReasoningEffort({
+    userId,
+    modelKey: selection.modelKey,
+    purpose: 'analysis',
+    projectId,
+    explicit: options.reasoningEffort,
+  })
+  const resolvedOptions = { ...options, reasoningEffort }
 
   validateAiOptions({
     schema: describeLlmVariantBase({ modality: 'vision', selection, executionMode: 'sync' }).optionSchema,
-    options,
+    options: resolvedOptions,
     context: `vision:${selection.modelKey}`,
   })
 
   const { temperature = 0.7, reasoning = true } = options
   const normalizedImageUrls = await normalizeVisionImageUrls(imageUrls)
-  const projectId =
-    typeof options.projectId === 'string' && options.projectId.trim().length > 0
-      ? options.projectId.trim()
-      : undefined
   const openRouterSessionId = resolveAiProviderAdapter(provider).resolveLlmSessionId?.({
     kind: 'vision',
     userId,
@@ -108,7 +117,10 @@ export async function runChatCompletionWithVision(
         imageUrls: normalizedImageUrls,
         temperature,
         reasoning,
-        options: openRouterSessionId ? { ...options, openRouterSessionId } : options,
+        reasoningEffort,
+        options: openRouterSessionId
+          ? { ...resolvedOptions, openRouterSessionId }
+          : resolvedOptions,
       })
       recordCompletionUsage(resolvedModelId, result.completion)
       llmLogger.info({

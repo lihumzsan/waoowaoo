@@ -31,6 +31,7 @@ import type {
   AiProviderLlmStreamContext,
 } from '@/lib/ai-providers/runtime-types'
 import { AppError } from '@/lib/errors/app-error'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 type AISdkStreamChunk = {
   type?: string
@@ -100,7 +101,7 @@ export async function runOpenAIBaseUrlLlmCompletion(input: {
   messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort: ReasoningEffort
   isOpenRouter?: boolean
   openRouterSessionId?: string
 }): Promise<AiProviderLlmResult> {
@@ -223,7 +224,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
     const aiSdkProviderOptions = (input.options.reasoning ?? true) && isNativeOpenAIReasoning
       ? {
         openai: {
-          reasoningEffort: mapReasoningEffort(input.options.reasoningEffort || 'high'),
+          reasoningEffort: mapReasoningEffort(input.options.reasoningEffort),
           forceReasoning: true,
         },
       }
@@ -298,7 +299,7 @@ export async function runOpenAIBaseUrlLlmStream(input: AiProviderLlmStreamContex
   const openRouterSessionId = normalizeOpenRouterSessionId(input.options.openRouterSessionId)
   const extraParams: { [key: string]: unknown } = {}
   if (input.options.reasoning ?? true) {
-    extraParams.reasoning = { effort: input.options.reasoningEffort || 'high' }
+    extraParams.reasoning = { effort: input.options.reasoningEffort }
   }
   emitStreamStage(input.callbacks, stepMeta, 'streaming', input.providerName)
   const promptCacheRequest = buildOpenRouterPromptCacheRequest({

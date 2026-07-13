@@ -163,6 +163,15 @@
     "rate": "Rate",
     "mode": "Mode"
   },
+  "reasoningEffortOption": {
+    "none": "Off",
+    "minimal": "Minimal",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "xhigh": "Extra high",
+    "max": "Maximum"
+  },
   "unit": {
     "second": "s",
     "frame": "fps"

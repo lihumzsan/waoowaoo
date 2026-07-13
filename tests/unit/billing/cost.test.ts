@@ -21,6 +21,13 @@ describe('billing/cost provider catalog pricing', () => {
     expect(cost).toBeCloseTo(126, 8)
   })
 
+  it('charges GPT-5.6 Luna and Sol from their OpenRouter token tiers', () => {
+    expect(calcText('openrouter::openai/gpt-5.6-luna', 1_000_000, 1_000_000))
+      .toBeCloseTo(50.4, 8)
+    expect(calcText('openrouter::openai/gpt-5.6-sol', 1_000_000, 1_000_000))
+      .toBeCloseTo(252, 8)
+  })
+
   it('discounts Google implicit cache hit input tokens', () => {
     const cost = calcTextWithCache('google::gemini-3.5-flash', 1_000_000, 0, {
       cachedInputTokens: 400_000,

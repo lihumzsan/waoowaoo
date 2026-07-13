@@ -19,6 +19,7 @@ import { validateAiOptions } from '@/lib/ai-exec/normalize'
 import { resolveAiProviderAdapter } from '@/lib/ai-providers'
 import { emitStreamStage, resolveStreamStepMeta } from '@/lib/ai-providers/shared/llm-support'
 import type { AiLlmExecutionInput, AiLlmExecutionResult, ChatMessage } from '@/lib/ai-registry/types'
+import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 
 ensureAiCatalogsRegistered()
 
@@ -56,20 +57,27 @@ export async function chatCompletionStream(
   const provider = selection.provider
   const providerKey = getProviderKey(provider).toLowerCase()
   const providerConfig = await getProviderConfig(userId, provider)
+  const projectId =
+    typeof options.projectId === 'string' && options.projectId.trim().length > 0
+      ? options.projectId.trim()
+      : undefined
+  const reasoningEffort = await resolveReasoningEffort({
+    userId,
+    modelKey: selection.modelKey,
+    purpose: 'analysis',
+    projectId,
+    explicit: options.reasoningEffort,
+  })
+  const resolvedOptions = { ...options, reasoningEffort }
 
   validateAiOptions({
     schema: describeLlmVariantBase({ modality: 'llm', selection, executionMode: 'stream' }).optionSchema,
-    options,
+    options: resolvedOptions,
     context: `llm_stream:${selection.modelKey}`,
   })
 
   const temperature = options.temperature ?? 0.7
   const reasoning = options.reasoning ?? true
-  const reasoningEffort = options.reasoningEffort || 'high'
-  const projectId =
-    typeof options.projectId === 'string' && options.projectId.trim().length > 0
-      ? options.projectId.trim()
-      : undefined
   const providerRuntime = resolveAiProviderAdapter(provider)
   const openRouterSessionId = providerRuntime.resolveLlmSessionId?.({
     kind: 'llm',
@@ -113,7 +121,9 @@ export async function chatCompletionStream(
     : undefined
 
   try {
-    const streamOptions = openRouterSessionId ? { ...options, openRouterSessionId } : options
+    const streamOptions = openRouterSessionId
+      ? { ...resolvedOptions, openRouterSessionId }
+      : resolvedOptions
     const result = await withRetry({
       scope: `llm_stream:${selection.modelKey}`,
       policy: RETRY_POLICY.llmStream,
@@ -191,22 +201,29 @@ export async function runChatCompletion(
   const provider = selection.provider
   const providerKey = getProviderKey(provider).toLowerCase()
   const providerConfig = await getProviderConfig(userId, provider)
+  const projectId =
+    typeof options.projectId === 'string' && options.projectId.trim().length > 0
+      ? options.projectId.trim()
+      : undefined
+  const reasoningEffort = await resolveReasoningEffort({
+    userId,
+    modelKey: selection.modelKey,
+    purpose: 'analysis',
+    projectId,
+    explicit: options.reasoningEffort,
+  })
+  const resolvedOptions = { ...options, reasoningEffort }
 
   validateAiOptions({
     schema: describeLlmVariantBase({ modality: 'llm', selection, executionMode: 'sync' }).optionSchema,
-    options,
+    options: resolvedOptions,
     context: `llm:${selection.modelKey}`,
   })
 
   const {
     temperature = 0.7,
     reasoning = true,
-    reasoningEffort = 'high',
-  } = options
-  const projectId =
-    typeof options.projectId === 'string' && options.projectId.trim().length > 0
-      ? options.projectId.trim()
-      : undefined
+  } = resolvedOptions
   const openRouterSessionId = resolveAiProviderAdapter(provider).resolveLlmSessionId?.({
     kind: 'llm',
     userId,

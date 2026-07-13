@@ -25,6 +25,7 @@ import { AppError, toAppError } from '@/lib/errors/app-error'
 import { getLogContext } from '@/lib/logging/context'
 import { waitForAsyncProviderResult } from '@/lib/ai-exec/async-wait'
 import { ProviderPermanentFailureError, ProviderTerminalFailureError } from '@/lib/ai-exec/provider-errors'
+import { resolveReasoningEffort } from '@/lib/ai-exec/reasoning-effort'
 import {
   executeTaskDurableInvocation,
   executeTaskProviderInvocation,
@@ -502,10 +503,17 @@ async function executeTaskAwareLlmCompletion(input: {
 
 export async function executeAiTextStep(input: AiStepExecutionInput): Promise<AiStepExecutionResult> {
   try {
+    const reasoningEffort = await resolveReasoningEffort({
+      userId: input.userId,
+      modelKey: input.model,
+      purpose: 'analysis',
+      projectId: input.projectId,
+      explicit: input.reasoningEffort,
+    })
     const options = {
       temperature: input.temperature,
       reasoning: input.reasoning,
-      reasoningEffort: input.reasoningEffort,
+      reasoningEffort,
       projectId: input.projectId,
       action: input.action,
       streamStepId: input.meta.stepId,
@@ -538,10 +546,17 @@ export async function executeAiTextStep(input: AiStepExecutionInput): Promise<Ai
 
 export async function executeAiVisionStep(input: AiVisionStepExecutionInput): Promise<AiVisionStepExecutionResult> {
   try {
+    const reasoningEffort = await resolveReasoningEffort({
+      userId: input.userId,
+      modelKey: input.model,
+      purpose: 'analysis',
+      projectId: input.projectId,
+      explicit: input.reasoningEffort,
+    })
     const options = {
       temperature: input.temperature,
       reasoning: input.reasoning,
-      reasoningEffort: input.reasoningEffort,
+      reasoningEffort,
       projectId: input.projectId,
       action: input.action,
       streamStepId: input.meta?.stepId,

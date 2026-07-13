@@ -82,23 +82,33 @@ async function readFetchRequestBody(input: RequestInfo | URL, init?: RequestInit
   return null
 }
 
-async function withOpenRouterPromptCache(input: {
+async function withOpenRouterRequestOptions(input: {
   requestInput: RequestInfo | URL
   requestInit?: RequestInit
   modelId: string
+  reasoningEffort: AiProviderLanguageModelContext['reasoningEffort']
 }): Promise<{ requestInput: RequestInfo | URL; requestInit?: RequestInit }> {
   const bodyText = await readFetchRequestBody(input.requestInput, input.requestInit)
   const body = bodyText ? parseRequestBody(bodyText) : null
-  if (!body || body.cache_control) return input
+  if (!body) {
+    throw new Error('OPENROUTER_LANGUAGE_MODEL_REQUEST_BODY_INVALID')
+  }
   const modelId = typeof body.model === 'string' ? body.model : input.modelId
   const messages = toProviderMessages(body.messages)
-  if (!messages) return input
-  const promptCacheRequest = buildOpenRouterPromptCacheRequest({ modelId, messages })
-  if (!promptCacheRequest.cacheControl) return input
+  const promptCacheRequest = messages
+    ? buildOpenRouterPromptCacheRequest({ modelId, messages })
+    : null
+  const existingReasoning = asRecord(body.reasoning)
 
   const nextBody = JSON.stringify({
     ...body,
-    cache_control: promptCacheRequest.cacheControl,
+    reasoning: {
+      ...(existingReasoning || {}),
+      effort: input.reasoningEffort,
+    },
+    ...(!body.cache_control && promptCacheRequest?.cacheControl
+      ? { cache_control: promptCacheRequest.cacheControl }
+      : {}),
   })
   if (typeof input.requestInit?.body === 'string') {
     return {
@@ -121,13 +131,15 @@ async function withOpenRouterPromptCache(input: {
 function createOpenRouterLoggingFetch(input: {
   sessionId?: string
   modelId: string
+  reasoningEffort: AiProviderLanguageModelContext['reasoningEffort']
 }): typeof fetch {
   return async (requestInput, requestInit) => {
     const startedAt = Date.now()
-    const prepared = await withOpenRouterPromptCache({
+    const prepared = await withOpenRouterRequestOptions({
       requestInput,
       requestInit,
       modelId: input.modelId,
+      reasoningEffort: input.reasoningEffort,
     })
     const response = await fetchWithProviderProxy(prepared.requestInput, prepared.requestInit)
     const responseClone = response.clone()
@@ -175,6 +187,7 @@ export function createOpenRouterLanguageModel(input: AiProviderLanguageModelCont
     fetch: createOpenRouterLoggingFetch({
       sessionId: input.openRouterSessionId,
       modelId: input.selection.modelId,
+      reasoningEffort: input.reasoningEffort,
     }),
     ...(input.openRouterSessionId
       ? { headers: { 'x-session-id': input.openRouterSessionId } }

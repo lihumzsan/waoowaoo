@@ -104,6 +104,7 @@ function isValidRatioText(value: string): boolean {
 
 function shouldUseSelectControl(field: string, options: CapabilityValue[]): boolean {
     if (options.length <= 3) return false
+    if (field === 'reasoningEffort') return true
     if (field.toLowerCase().includes('duration')) return true
     if (field.toLowerCase().includes('fps')) return true
     return options.every((item) => typeof item === 'number')
@@ -242,11 +243,18 @@ export function ModelCapabilityDropdown({
     }, [tv])
 
     /** Format option value for display — converts booleans to localized On/Off */
-    const formatOptionLabel = useCallback((val: CapabilityValue): string => {
+    const formatOptionLabel = useCallback((field: string, val: CapabilityValue): string => {
         if (val === true || val === 'true') return t('boolOn')
         if (val === false || val === 'false') return t('boolOff')
+        if (field === 'reasoningEffort') {
+            try {
+                return tv(`reasoningEffortOption.${String(val)}` as never)
+            } catch {
+                return String(val)
+            }
+        }
         return String(val)
-    }, [t])
+    }, [t, tv])
 
     // Build summary text from capability overrides + defaults
     const paramSummary = visibleCapabilityFields
@@ -254,7 +262,7 @@ export function ModelCapabilityDropdown({
             const val = capabilityOverrides[def.field] !== undefined
                 ? capabilityOverrides[def.field]
                 : (def.options.length > 0 ? def.options[0] : '')
-            return formatOptionLabel(val)
+            return formatOptionLabel(def.field, val)
         })
         .concat(
             booleanToggles.map((toggle) => {
@@ -390,7 +398,7 @@ export function ModelCapabilityDropdown({
                                                                 const ratioValue = String(def.options[0])
                                                                 return isR && isValidRatioText(ratioValue) ? <RatioIcon ratio={ratioValue} size={10} /> : null
                                                             })()}
-                                                            {formatOptionLabel(def.options[0])}
+                                                            {formatOptionLabel(def.field, def.options[0])}
                                                             <span className="text-[var(--glass-text-tertiary)] text-[10px]">({t('fixed')})</span>
                                                         </span>
                                                     ) : useNumberStepper ? (
@@ -408,7 +416,7 @@ export function ModelCapabilityDropdown({
                                                             onValueChange={(nextValue) => onCapabilityChange(def.field, nextValue, def.options[0])}
                                                             options={def.options.map((opt) => ({
                                                                 value: String(opt),
-                                                                label: formatOptionLabel(opt),
+                                                                label: formatOptionLabel(def.field, opt),
                                                                 disabled: isOptionDisabled(def, opt),
                                                             }))}
                                                             ariaLabel={resolveCapabilityLabel(def)}
@@ -437,7 +445,7 @@ export function ModelCapabilityDropdown({
                                                                             }`}
                                                                     >
                                                                         {isR && isValidRatioText(s) && <RatioIcon ratio={s} size={10} selected={on} />}
-                                                                        {formatOptionLabel(opt)}
+                                                                        {formatOptionLabel(def.field, opt)}
                                                                     </button>
                                                                 )
                                                             })}

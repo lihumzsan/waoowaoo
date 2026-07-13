@@ -2,6 +2,7 @@ import type OpenAI from 'openai'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { ChatMessageContent } from '@/lib/ai-registry/message-content'
+import { isReasoningEffort, type ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 export type AiModality = 'llm' | 'vision' | 'image' | 'video' | 'music' | 'soundEffect'
 export type AiExecutionMode = 'sync' | 'async' | 'stream' | 'batch'
@@ -74,7 +75,7 @@ export type AiLlmMessage = {
 export interface ChatCompletionOptions {
   temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
   projectId?: string
   action?: string
   openRouterSessionId?: string
@@ -127,7 +128,7 @@ export type AiStepExecutionInput = {
   meta: AiStepMeta
   temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
 }
 
 export type AiStepExecutionResult = {
@@ -151,7 +152,7 @@ export type AiVisionStepExecutionInput = {
   meta?: AiStepMeta
   temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
 }
 
 export type AiVisionStepExecutionResult = {
@@ -180,7 +181,7 @@ export type AiLlmExecutionInput = {
   messages: AiLlmMessage[]
   temperature: number
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort: ReasoningEffort
   openRouterSessionId?: string
 }
 
@@ -235,7 +236,7 @@ export interface CapabilityFieldI18n {
 export type CapabilityFieldI18nMap = Record<string, CapabilityFieldI18n>
 
 export interface LLMCapabilities {
-  reasoningEffortOptions?: string[]
+  reasoningEffortOptions?: ReasoningEffort[]
   fieldI18n?: CapabilityFieldI18nMap
 }
 
@@ -338,6 +339,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.trim().length > 0)
+}
+
+function isReasoningEffortArray(value: unknown): value is ReasoningEffort[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isReasoningEffort)
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -481,16 +486,17 @@ function validateNamespaceAllowedFields(
 function validateLLMCapabilities(issues: CapabilityValidationIssue[], raw: unknown) {
   if (!isRecord(raw)) return
   const options = raw.reasoningEffortOptions
-  if (options !== undefined && !isStringArray(options)) {
+  const normalizedOptions = isReasoningEffortArray(options) ? options : undefined
+  if (options !== undefined && !normalizedOptions) {
     issues.push({
       code: 'CAPABILITY_FIELD_INVALID',
       field: 'capabilities.llm.reasoningEffortOptions',
-      message: 'reasoningEffortOptions must be a non-empty string array',
+      message: 'reasoningEffortOptions must contain only canonical reasoning effort values',
     })
   }
 
   validateFieldI18nMap(issues, 'llm', raw.fieldI18n, {
-    reasoningEffort: isStringArray(options) ? options : undefined,
+    reasoningEffort: normalizedOptions,
   })
 }
 

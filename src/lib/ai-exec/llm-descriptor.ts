@@ -29,7 +29,7 @@ export function describeLlmVariantBase(input: {
     },
     execution: { mode: input.executionMode },
     capabilities: contracts.capabilities,
-    optionSchema: buildLlmOptionSchema(),
+    optionSchema: buildLlmOptionSchema(contracts.capabilities.llm?.reasoningEffortOptions),
     ...(contracts.inputContracts ? { inputContracts: contracts.inputContracts } : {}),
   }
 }

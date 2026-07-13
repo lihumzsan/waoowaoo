@@ -26,6 +26,7 @@ import type {
 import { buildOpenAIChatCompletion } from '@/lib/ai-providers/shared/openai-chat-completion'
 import { getImageBase64Cached } from '@/lib/image-cache'
 import { logInternal } from '@/lib/logging/semantic'
+import type { ReasoningEffort } from '@/lib/ai-registry/reasoning-effort'
 
 type GoogleVisionPart = { inlineData: { mimeType: string; data: string } } | { text: string }
 type GoogleModelClient = { generateContentStream?: (params: unknown) => Promise<unknown> }
@@ -161,7 +162,7 @@ export async function runGoogleLlmCompletion(input: {
   messages: ProviderChatMessage[]
   temperature: number
   reasoning: boolean
-  reasoningEffort: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort: ReasoningEffort
   logProvider: string
 }): Promise<AiProviderLlmResult> {
   const googleAiOptions = input.baseUrl
@@ -245,7 +246,7 @@ export async function runGoogleLlmStream(input: AiProviderLlmStreamContext): Pro
     : undefined
   const supportsThinkingLevel = input.selection.modelId.startsWith('gemini-3')
   const thinkingConfig = (input.options.reasoning ?? true) && supportsThinkingLevel
-    ? { thinkingLevel: input.options.reasoningEffort || 'high', includeThoughts: true }
+    ? { thinkingLevel: input.options.reasoningEffort, includeThoughts: true }
     : undefined
 
   const stepMeta = resolveStreamStepMeta(input.options)

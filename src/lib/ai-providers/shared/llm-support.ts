@@ -2,6 +2,10 @@ import type { LLMStreamKind } from '@/lib/llm-observe/types'
 import type { InternalLLMStreamStepMeta } from '@/lib/llm-observe/internal-stream-context'
 import { usdToCredits } from '@/lib/ai-registry/pricing-currency'
 import {
+  DEFAULT_REASONING_EFFORT,
+  type ReasoningEffort,
+} from '@/lib/ai-registry/reasoning-effort'
+import {
   chatMessageHasCacheControl,
   flattenChatMessageContent,
   normalizeChatMessageContentParts,
@@ -14,7 +18,7 @@ import {
 export interface ProviderChatCompletionOptions {
   temperature?: number
   reasoning?: boolean
-  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+  reasoningEffort?: ReasoningEffort
   projectId?: string
   action?: string
   openRouterSessionId?: string
@@ -206,10 +210,10 @@ export function getConversationMessages(messages: ProviderChatMessage[]) {
     .map((message) => ({ role: message.role, content: flattenProviderMessageContent(message.content) }))
 }
 
-export function mapReasoningEffort(effort: 'minimal' | 'low' | 'medium' | 'high' | undefined) {
+export function mapReasoningEffort(effort: ReasoningEffort | undefined) {
   if (effort === 'low' || effort === 'medium' || effort === 'high') return effort
-  if (effort === 'minimal') return 'low'
-  return 'high'
+  if (effort === undefined) return DEFAULT_REASONING_EFFORT
+  throw new Error(`REASONING_EFFORT_UNSUPPORTED_BY_OPENAI_SDK:${effort}`)
 }
 
 export function buildReasoningAwareContent(text: string, reasoning: string) {
