@@ -92,6 +92,9 @@ async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
       locations: {
         include: { images: true },
       },
+      freeVoiceRecords: {
+        include: { versions: true },
+      },
       episodes: {
         include: {
           storyboards: {
@@ -114,6 +117,13 @@ async function collectProjectCOSKeys(projectId: string): Promise<string[]> {
   for (const location of novelPromotion.locations) {
     for (const image of location.images) {
       const key = await resolveStorageKeyFromMediaValue(image.imageUrl)
+      if (key) keys.push(key)
+    }
+  }
+
+  for (const record of novelPromotion.freeVoiceRecords) {
+    for (const version of record.versions) {
+      const key = await resolveStorageKeyFromMediaValue(version.audioUrl)
       if (key) keys.push(key)
     }
   }
