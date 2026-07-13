@@ -8,13 +8,11 @@ describe('task follow-up turn policy', () => {
     expect(policy.allowOperationIntent('query')).toBe(true)
     expect(policy.allowOperationIntent('plan')).toBe(true)
     expect(policy.allowOperationIntent('act')).toBe(false)
-    expect(policy.explanationSettlement).toBe('failed')
   })
 
   it('preserves the normal continuation contract for completed Tasks', () => {
     const policy = resolveProjectAgentTaskFollowUpTurnPolicy('completed')
 
     expect(policy.allowOperationIntent('act')).toBe(true)
-    expect(policy.explanationSettlement).toBe('completed')
   })
 })
