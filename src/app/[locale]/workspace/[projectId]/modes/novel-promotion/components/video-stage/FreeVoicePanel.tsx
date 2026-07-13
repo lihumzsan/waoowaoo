@@ -127,13 +127,13 @@ export default function FreeVoicePanel({ projectId }: { projectId: string }) {
 
       {expanded && (
         <div className="border-t border-[var(--glass-stroke-base)] p-5 space-y-5">
-          <div className="glass-surface-soft rounded-xl p-4 grid gap-4 md:grid-cols-2">
+          <div className="glass-surface-soft rounded-xl border border-[var(--glass-stroke-strong)] p-4 grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5">
               <span className="text-sm font-medium">{t('character')}</span>
               <select
                 value={characterId}
                 onChange={(event) => { setCharacterId(event.target.value); setVoiceKey('character') }}
-                className="glass-input w-full px-3 py-2.5"
+                className="glass-select-base w-full px-3 py-2.5"
               >
                 <option value="">{t('selectCharacter')}</option>
                 {characters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -145,7 +145,7 @@ export default function FreeVoicePanel({ projectId }: { projectId: string }) {
                 value={voiceKey}
                 disabled={!character}
                 onChange={(event) => setVoiceKey(event.target.value)}
-                className="glass-input w-full px-3 py-2.5 disabled:opacity-50"
+                className="glass-select-base w-full px-3 py-2.5 disabled:opacity-50"
               >
                 <option value="character">{character ? t('characterDefault', { name: character.name }) : t('selectCharacterFirst')}</option>
                 {globalVoices.map((item) => <option key={item.id} value={`global:${item.id}`}>{item.name}</option>)}
@@ -162,7 +162,7 @@ export default function FreeVoicePanel({ projectId }: { projectId: string }) {
                 rows={4}
                 maxLength={5000}
                 placeholder={t('textPlaceholder')}
-                className="glass-input w-full px-3 py-2.5 resize-y"
+                className="glass-textarea-base w-full px-3 py-2.5 resize-y"
               />
             </label>
             <div className="md:col-span-2 flex items-center justify-between gap-3">
