@@ -122,13 +122,17 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
   },
   bgmScore: {
     kind: 'bgmScore', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
-    materializeFromTask: resourceRequired('The video workflow materializes the BGM node before its planning Task.'),
+    materializeFromTask: materializeFromTask('ProjectEpisode', TASK_TYPE.MUSIC_SCORE_PLAN),
     stream: supported('bgmScore'), terminalHandoff: supported('episodeData'), rendererKey: 'bgmScore',
     focus: supported('operation'), conformanceFixture: 'bgmScore',
   },
   soundscape: {
     kind: 'soundscape', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
-    materializeFromTask: resourceRequired('The video workflow materializes the soundscape node before its Tasks.'),
+    materializeFromTask: materializeFromTask(
+      'ProjectEpisode',
+      TASK_TYPE.SOUNDSCAPE_PLAN,
+      TASK_TYPE.SOUNDSCAPE_GENERATE,
+    ),
     stream: supported('soundscape'), terminalHandoff: supported('episodeData'), rendererKey: 'soundscape',
     focus: supported('operation'), conformanceFixture: 'soundscape',
   },

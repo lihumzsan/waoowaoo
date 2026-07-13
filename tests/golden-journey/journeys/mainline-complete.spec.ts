@@ -195,6 +195,14 @@ async function assertRunningShotMediaSurfaces(page: import('@playwright/test').P
   }).toBe(true)
 }
 
+async function assertAudioNodeVisibility(
+  page: import('@playwright/test').Page,
+  expectedCount: 0 | 1,
+): Promise<void> {
+  await expect(page.locator('article[data-node-id^="bgm-score:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+  await expect(page.locator('article[data-node-id^="soundscape:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
+}
+
 async function submitObservedBoundary(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
@@ -290,6 +298,8 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   const visitedStages: EditFirstWorkflowStage[] = []
   const reloadedTaskStages = new Set<EditFirstWorkflowStage>()
   let reloadedCompletedStage = false
+  let observedAudioHiddenBeforeVideos = false
+  let observedAudioVisibleAtAudioStage = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
   const deadline = Date.now() + 25 * 60_000
 
@@ -313,6 +323,14 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
         body: Buffer.from(JSON.stringify(await readGoldenOracleSnapshot(scope), null, 2)),
         contentType: 'application/json',
       })
+      if (workflowStage === 'ready_to_generate_videos') {
+        await assertAudioNodeVisibility(page, 0)
+        observedAudioHiddenBeforeVideos = true
+      }
+      if (workflowStage === 'ready_to_generate_audio_layers') {
+        await assertAudioNodeVisibility(page, 1)
+        observedAudioVisibleAtAudioStage = true
+      }
       if (
         (workflowStage.endsWith('_generating') || workflowStage.endsWith('_rendering'))
         && !reloadedTaskStages.has(workflowStage)
@@ -346,6 +364,8 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(oracle.domain.shotExecutionPlans.length, 'each chapter must have a durable shot plan').toBe(oracle.domain.chapters.length)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
+      expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)
+      expect(observedAudioVisibleAtAudioStage, 'main Journey must observe audio nodes at the audio stage').toBe(true)
       expect(oracle.identities.duplicateMessageIds).toHaveLength(0)
       expect(oracle.identities.duplicateToolCallIds).toHaveLength(0)
       browserObservations.assertClean()

@@ -5,8 +5,76 @@ import {
   resolveEditFirstWorkflowStateFromSnapshot,
   snapshot,
 } from './edit-first-workflow.fixture'
+import { resolveEditFirstCanvasVisibility } from '@/lib/project-workflow/edit-first-canvas-visibility'
+import type { EditFirstWorkflowStage } from '@/lib/project-workflow/edit-first'
+import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
+import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
+
+function visibilityAt(stage: EditFirstWorkflowStage) {
+  return resolveEditFirstCanvasVisibility({
+    active: true,
+    stage,
+    blocking: { kind: 'none', reason: null },
+    nextAction: null,
+    allowedOperationIds: [],
+    operationGroup: null,
+  })
+}
 
 describe('edit-first workflow state', () => {
+  /**
+   * Logic Specification
+   * Authority: CN-02/CN-07 and the canonical edit-first stage order.
+   * Rejects: showing BGM or soundscape nodes before video and chapter rendering finish.
+   * Production entry: resolveEditFirstCanvasVisibility.
+   * Oracle: audio nodes are hidden through chapter rendering and visible at the audio-layer stage.
+   * Command: npx vitest run tests/unit/project-workflow/edit-first-render-audio.test.ts
+   */
+  it('reveals audio nodes only when the workflow reaches audio generation', () => {
+    expect(visibilityAt('ready_to_generate_videos')).toMatchObject({ bgmScore: false, soundscape: false })
+    expect(visibilityAt('chapters_rendering')).toMatchObject({ bgmScore: false, soundscape: false })
+    expect(visibilityAt('ready_to_generate_audio_layers')).toMatchObject({ bgmScore: true, soundscape: true })
+  })
+
+  it('materializes active audio Tasks while the workflow context catches up', () => {
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      editFirstWorkflow: {
+        active: true,
+        stage: 'chapters_rendering',
+        blocking: { kind: 'processing', reason: 'chapter renders are still running' },
+        nextAction: null,
+        allowedOperationIds: [],
+        operationGroup: null,
+      },
+      activeTaskTargets: [
+        {
+          taskId: 'bgm-task-1',
+          targetType: 'ProjectEpisode',
+          targetId: 'episode-1',
+          types: ['music_score_plan'],
+        },
+        {
+          taskId: 'soundscape-task-1',
+          targetType: 'ProjectEpisode',
+          targetId: 'episode-1',
+          types: ['soundscape_plan'],
+        },
+      ],
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+
+    expect(projection.nodes.filter((node) => (
+      node.data.kind === 'bgmScore' || node.data.kind === 'soundscape'
+    )).map((node) => node.id)).toEqual([
+      workspaceNodeId.bgmScore('episode-1'),
+      workspaceNodeId.soundscape('episode-1'),
+    ])
+  })
+
   it('renders chapters after all video segments are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,

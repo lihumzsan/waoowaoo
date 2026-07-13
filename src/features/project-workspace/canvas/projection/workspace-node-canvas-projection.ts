@@ -1551,9 +1551,17 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   ))
 
   let bgmNodeId: string | null = null
-  if (editFirstCanvasVisibility.bgmScore) {
+  const bgmDetails = bgmScoreDetails(finalVideo)
+  const bgmProjection = resolveWorkspaceCanvasNodeMaterialization('bgmScore', activeTaskTargets, {
+    identityAvailable: true,
+    workflowVisible: editFirstCanvasVisibility.bgmScore,
+    resourceAvailable: Boolean(bgmDetails),
+    streamAvailable: hasStreamTarget(streamTargets, 'bgmScore', episodeId),
+    submissionAvailable: false,
+    targetId: episodeId,
+  })
+  if (bgmProjection.materialized) {
     bgmNodeId = workspaceNodeId.bgmScore(episodeId)
-    const bgmDetails = bgmScoreDetails(finalVideo)
     const bgmPresentation = bgmDetails
       ? resourcePresentationFromStatus(bgmDetails.status)
         ?? workspaceCanvasPendingResourcePresentation()
@@ -1589,12 +1597,21 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     }))
   }
   let soundscapeNodeId: string | null = null
-  if (editFirstCanvasVisibility.soundscape) {
+  const projectedSoundscapeDetails = soundscapeDetails(
+    finalVideo,
+    editScripts.length > 0 ? editScripts : editScript ? [editScript] : [],
+  )
+  const soundscapeProjection = resolveWorkspaceCanvasNodeMaterialization('soundscape', activeTaskTargets, {
+    identityAvailable: true,
+    workflowVisible: editFirstCanvasVisibility.soundscape,
+    resourceAvailable: Boolean(projectedSoundscapeDetails),
+    streamAvailable: hasStreamTarget(streamTargets, 'soundscape', episodeId),
+    submissionAvailable: false,
+    targetId: episodeId,
+  })
+  if (soundscapeProjection.materialized) {
     soundscapeNodeId = workspaceNodeId.soundscape(episodeId)
-    const details = soundscapeDetails(
-      finalVideo,
-      editScripts.length > 0 ? editScripts : editScript ? [editScript] : [],
-    )
+    const details = projectedSoundscapeDetails
     const soundscapeReadyForGeneration = details?.decision === 'soundscape'
       && details.status !== 'planning'
       && details.status !== 'generating'

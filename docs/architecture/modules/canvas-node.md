@@ -16,6 +16,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - **CN-02B — Style Bible 单一 Canvas 身份。** 视觉风格候选图片只在 Assistant 中展示，不是 Canvas 业务节点。方案文本 Task 提交后 Canvas 必须立即投影 `editStyleBible:${ProjectEditBible.id}`，不得等待候选行落库；同一节点继续聚合候选图片 Task，全部成功且未确认时为等待选择，确认后原地消费正式 `styleBibleJson`。禁止恢复 `editStylePreview` node kind、候选 node/edge、数组位置 identity 或确认后另建最终节点。
 - **CN-02C — 规划资产节点身份稳定。** 制作规划确认后，Canvas 立即从正式 ProjectCharacter/ProjectLocation Query 投影 episode 级 `edit-asset-group:${episodeId}`，即使图片为空、核心剪辑尚未生成也必须可见。核心剪辑生成后只把 requirement 的镜头绑定信息合并进同一节点，不得改用 editScriptId 创建替代节点或让布局跳变；图片、空间档案、错误和运行中状态仍分别来自正式资产 Query 与 Task target View。
 - **CN-02D — Task 启动即物化稳定节点。** 当 active Task target 已携带足以派生 canonical node identity 的持久资源 ID 时，节点 registry 必须声明该 Task materialization capability，projector 必须在 workflow context 刷新和首个 structured stream item 之前投影同一节点。需要先产生持久子资源才能确定 identity 的 kind 必须显式声明不适用，禁止伪造临时 ID。Task target 只提供节点存在与运行事实，最终业务状态仍由 CN-07 的唯一 lifecycle resolver 裁决；不得用 timer、refetch 或 workflow 到达顺序承担正确性。
+- **CN-02E — 下游节点按真实能力阶段出现。** BGM 与 Soundscape 节点只在视频片段和章节渲染完成、Workflow 进入 `ready_to_generate_audio_layers` 后进入普通 Canvas 投影；不得在 `ready_to_generate_videos` 或章节渲染阶段提前展示。若音频 Task、正式资源或 stream 已经存在，则仍由 CN-02D 的统一 materialization resolver 以 episode identity 投影同一节点，禁止为延后展示重新引入 Task 启动空窗。
 - **CN-03 — 流式协议显式。** 每种流式 payload 必须有 schema、adapter、稳定 item key 和归并规则。预览 adapter 必须直接复用 worker 接收的 raw model schema；浏览器不得拿持久化后的 final schema 校验 raw stream，也不得自行补造只有服务端 normalizer 才能推导的字段。新节点不得自行解析未声明的 stream 形状。
 - **CN-03A — Canvas 不解释或展示领域 ID。** Structured preview 只能展示 raw 协议中的名称、短 ref 对应的顺序或 clip order；正式节点只消费服务端已投影的 current-name View。renderer 不得维护资产映射、按名称反查 identity，也不得用 characterId/locationId/shotId/sourceId 等内部标识作为缺失文案 fallback。引用缺失必须由 projector 明确拒绝。
 - **CN-04 — 乱序与重放安全。** patch 可在节点挂载前到达、可重复到达、可晚于终态到达；这些合法时序不得导致崩溃、重复节点或用旧运行态覆盖终态。
@@ -78,6 +79,7 @@ Canvas 节点是业务资源与任务生命周期的投影，不是独立的状�
 - 视觉风格方案迁入 `ProjectEditBible` 文本 Task 后，Assistant 已显示通用运行卡，但 Canvas 建节点条件仍只认已落库候选，导致文本生成成功前没有 Style Bible 占位节点。上一版只扩展了图片 processing Golden，没有把新文本 target 纳入同一 projector。当前防线从生产 runtime target registry 订阅方案 Task，并在真实文本 processing 窗口断言同一 canonical Style Bible identity 已出现。
 - 媒体生成 UI 曾以 `MediaGenerationLoading` 统一品牌圆环和估算进度，却把空态背景、普通占位、重生成和失败组合留给各 renderer；镜头卡随后用 `showBackground=false` 保留自己的占位层，导致生成时普通图片图标与品牌 Logo 重叠，而规划资产卡另行隐藏普通图标。旧组件测试只证明共享 overlay 自身 markup，Canvas conformance/Golden 只观察 lifecycle 和节点身份，没有执行真实镜头/资产 processing 的视觉状态组合。当前防线把最终 lifecycle 与媒体事实收敛进唯一 Surface，删除 renderer 的第二解释权，并在真实 processing 窗口断言普通占位已隐藏。
 - 多章节主 Journey 首次完整到达成片时，刷新窗口内项目资产尚未返回，projector 回退到各章节 requirement；同一个 canonical 角色/场景因此出现两次，并被绑定成相同 requirement key，React 持续报错。旧单章节 Journey 未触发该组合。当前 projector 在正式资产和 requirement fallback 两条输入上都按 `kind + persistent asset id` 唯一化，章节 requirement 只负责绑定镜头与运行 target，不再决定资产卡实例数量；主 Journey 的 browser observation 必须保持零 console error。
+- Canvas 尾部节点最初只有视频、BGM 和最终渲染，BGM 因而直接以 `ready_to_generate_videos` 为可见阈值；后续加入章节渲染和独立 Soundscape 阶段时沿用了该阈值，导致音乐与音效早于真实能力阶段出现。现在两者统一从 `ready_to_generate_audio_layers` 开始普通投影，并以 active episode Task 作为 context 滞后时的稳定物化事实；主 Journey 在视频批准前断言两者不存在，在音频批准前断言两者各有且仅有一个节点。
 
 ## 修改检查表
 

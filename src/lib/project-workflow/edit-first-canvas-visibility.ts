@@ -143,7 +143,7 @@ export function resolveEditFirstCanvasVisibility(
       'render_final_video',
     ])
 
-  const bgmScore = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
+  const bgmScore = stageAtLeast(workflow.stage, 'ready_to_generate_audio_layers')
     || canRunAnyOperation(operations, [
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
@@ -151,7 +151,7 @@ export function resolveEditFirstCanvasVisibility(
       'render_final_video',
     ])
 
-  const soundscape = stageAtLeast(workflow.stage, 'ready_to_generate_videos')
+  const soundscape = stageAtLeast(workflow.stage, 'ready_to_generate_audio_layers')
     || canRunAnyOperation(operations, [
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
