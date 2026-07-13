@@ -246,6 +246,34 @@ function pickSelectionForModel(
   return normalized
 }
 
+function autofillSingletonCapabilityOptions(input: {
+  modelType: UnifiedModelType
+  modelKey: string
+  capabilities: ModelCapabilities
+  selection: Record<string, CapabilityValue>
+  precheckIssues: CapabilitySelectionValidationIssue[]
+}): Record<string, CapabilityValue> {
+  const missingFields = new Set(
+    input.precheckIssues
+      .filter((issue) => issue.code === 'CAPABILITY_REQUIRED')
+      .map((issue) => issue.field),
+  )
+  if (missingFields.size === 0) return input.selection
+
+  const optionFields = getCapabilityOptionFields(input.modelType, input.capabilities)
+  let next = input.selection
+  for (const [field, allowedValues] of Object.entries(optionFields)) {
+    if (Object.prototype.hasOwnProperty.call(next, field)) continue
+    if (allowedValues.length !== 1) continue
+    if (!missingFields.has(`capabilities.${input.modelKey}.${field}`)) continue
+    next = {
+      ...next,
+      [field]: allowedValues[0],
+    }
+  }
+  return next
+}
+
 export function resolveGenerationOptionsForModel(input: {
   modelType: UnifiedModelType
   modelKey: string
@@ -277,6 +305,13 @@ export function resolveGenerationOptionsForModel(input: {
 
   let normalizedSelection = { ...selection }
   const autofillIssues: CapabilitySelectionValidationIssue[] = []
+  normalizedSelection = autofillSingletonCapabilityOptions({
+    modelType: input.modelType,
+    modelKey: input.modelKey,
+    capabilities: input.capabilities,
+    selection: normalizedSelection,
+    precheckIssues,
+  })
 
   // V7: 针对 image 模型缺少 resolution 的情况，如果 catalog 中声明了 resolutionOptions，
   // 且用户在配置中完全未设置该字段，则自动使用第一个可选值作为默认值，提升 UI/UX。

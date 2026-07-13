@@ -19,6 +19,13 @@ const prismaMock = vi.hoisted(() => ({
           type: 'video',
           provider: 'comfyui',
         },
+        {
+          modelId: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+          modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+          name: 'Old smooth first/last frame',
+          type: 'video',
+          provider: 'comfyui',
+        },
       ]),
       customProviders: JSON.stringify([
         {
@@ -40,14 +47,14 @@ vi.mock('@/lib/model-pricing/catalog', () => ({
   findBuiltinPricingCatalogEntry: vi.fn(() => undefined),
 }))
 
-describe('api specific - user models ComfyUI legacy LTX2.3 filter', () => {
+describe('api specific - user models ComfyUI LTX2.3 filter', () => {
   const routeContext = { params: Promise.resolve({}) }
 
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('hides old LTX2.3 custom video models and keeps current profile helpers', async () => {
+  it('hides removed LTX2.3 models and keeps Goon as the only first-last-frame helper', async () => {
     const mod = await import('@/app/api/user/models/route')
     const req = buildMockRequest({
       path: '/api/user/models',
@@ -62,6 +69,9 @@ describe('api specific - user models ComfyUI legacy LTX2.3 filter', () => {
     const values = body.video.map((item) => item.value)
 
     expect(values).not.toContain('comfyui::basevideo/demo/LTX2.3-fast')
+    expect(values).not.toContain('comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame')
+    expect(values).toContain('comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage')
     expect(values).toContain('comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2')
+    expect(values).toContain('comfyui::basevideo/seedance2/bernini-480p-i2v')
   })
 })

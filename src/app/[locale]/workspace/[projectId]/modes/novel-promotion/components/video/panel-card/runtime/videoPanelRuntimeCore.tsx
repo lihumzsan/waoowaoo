@@ -60,8 +60,8 @@ export function useVideoPanelActions({
   flGenerationOptions,
   flCapabilityFields,
   flMissingCapabilityFields,
-  flCustomPrompt,
-  defaultFlPrompt,
+  flPromptEntry,
+  flDurationStatus,
   localPrompt,
   isSavingPrompt,
   onUpdateLocalPrompt,
@@ -73,8 +73,9 @@ export function useVideoPanelActions({
   onToggleLink,
   onFlModelChange,
   onFlCapabilityChange,
-  onFlCustomPromptChange,
-  onResetFlPrompt,
+  onRestoreFlSmartDuration,
+  onFlPromptChange,
+  onRegenerateFlPrompt,
   onGenerateFirstLastFrame,
   onPreviewImage,
 }: VideoPanelCardShellProps) {
@@ -84,7 +85,6 @@ export function useVideoPanelActions({
   const isFirstLastFrameOutput = panel.videoGenerationMode === 'firstlastframe' && !!panel.videoUrl
   const visibleBaseVideoUrl = (() => {
     if (isLinked) return isFirstLastFrameOutput ? panel.videoUrl : undefined
-    if (isLastFrame) return undefined
     return panel.videoUrl
   })()
   const hasVisibleBaseVideo = !!visibleBaseVideoUrl
@@ -98,10 +98,13 @@ export function useVideoPanelActions({
 
   const effectiveShowLipSyncVideo = lipSyncEnabled ? showLipSyncVideo : false
 
+  const effectiveDefaultVideoModel = panel.videoModel?.trim() || defaultVideoModel
+
   const videoModel = usePanelVideoModel({
-    defaultVideoModel,
+    defaultVideoModel: effectiveDefaultVideoModel,
     capabilityOverrides,
     userVideoModels,
+    recommendedDuration: panel.textPanel?.duration,
   })
 
   const player = usePanelPlayer({
@@ -118,6 +121,10 @@ export function useVideoPanelActions({
     localPrompt,
     onUpdateLocalPrompt,
     onSavePrompt,
+    ...(isLinked ? {
+      controlledValue: flPromptEntry?.value || '',
+      onControlledValueChange: (value: string) => onFlPromptChange(panelKey, value),
+    } : {}),
   })
 
   const voiceManager = usePanelVoiceManager({
@@ -139,6 +146,7 @@ export function useVideoPanelActions({
     matchedVoiceLines,
     selectedModel: videoModel.selectedModel,
     durationOptions: videoModel.selectedVideoCapabilities?.durationOptions,
+    fpsOptions: videoModel.selectedVideoCapabilities?.fpsOptions,
     context: {
       shotType: panel.textPanel?.shot_type ?? null,
       cameraMove: panel.textPanel?.camera_move ?? null,
@@ -214,8 +222,8 @@ export function useVideoPanelActions({
       flGenerationOptions,
       flCapabilityFields,
       flMissingCapabilityFields,
-      flCustomPrompt,
-      defaultFlPrompt,
+      flPromptEntry,
+      flDurationStatus,
       videoRatio,
     },
     actions: {
@@ -227,8 +235,9 @@ export function useVideoPanelActions({
       onToggleLink,
       onFlModelChange,
       onFlCapabilityChange,
-      onFlCustomPromptChange,
-      onResetFlPrompt,
+      onRestoreFlSmartDuration,
+      onFlPromptChange,
+      onRegenerateFlPrompt,
       onGenerateFirstLastFrame,
     },
     computed: {

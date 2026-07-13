@@ -164,11 +164,13 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             generationOptions?: VideoGenerationOptions
             videoDurationBinding?: VideoDurationBinding
             customPrompt?: string
+            customPromptEditedByUser?: boolean
             firstLastFrame?: {
                 lastFrameStoryboardId: string
                 lastFramePanelIndex: number
                 flModel: string
                 customPrompt?: string
+                customPromptEditedByUser?: boolean
             }
         }) => {
             if (!projectId) throw new Error('Project ID is required')
@@ -182,11 +184,13 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
                     lastFramePanelIndex: number
                     flModel: string
                     customPrompt?: string
+                    customPromptEditedByUser?: boolean
                 }
                 videoModel: string
                 generationOptions?: VideoGenerationOptions
                 videoDurationBinding?: VideoDurationBinding
                 customPrompt?: string
+                customPromptEditedByUser?: boolean
             } = {
                 storyboardId: params.storyboardId,
                 panelIndex: params.panelIndex,
@@ -206,6 +210,9 @@ export function useGenerateVideo(projectId: string | null, episodeId: string | n
             }
             if (typeof params.customPrompt === 'string' && params.customPrompt.trim()) {
                 requestBody.customPrompt = params.customPrompt.trim()
+            }
+            if (typeof params.customPromptEditedByUser === 'boolean') {
+                requestBody.customPromptEditedByUser = params.customPromptEditedByUser
             }
 
             const res = await apiFetch(`/api/novel-promotion/${projectId}/generate-video`, {

@@ -29,6 +29,8 @@ function getPromptRelayNodes(workflow: ReturnType<typeof resolveComfyUiWorkflow>
 
 describe('comfyui workflow registry', () => {
   let workflowRoot: string | null = null
+  const BERNINI_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v'
+  const BERNINI_AUDIO_WORKFLOW_KEY = 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
 
   afterEach(() => {
     delete process.env.COMFYUI_WORKFLOW_ROOT
@@ -452,8 +454,229 @@ describe('comfyui workflow registry', () => {
       : ''
 
     expect(workflow[globalPromptSourceId]?.inputs.prompt).toBe('office scene with two men at a desk.')
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+    expect(smartPrompt).toContain('the doctor leans forward and speaks calmly.')
+    expect(smartPrompt).toContain('Audio-backed talking-head:')
+    expect(smartPrompt).toContain('same visible subject count')
+    expect(smartPrompt.toLowerCase()).not.toContain('no profile turn')
+    expect(smartPrompt.toLowerCase()).not.toContain('no subtitles')
+    expect(smartPrompt).toContain('[113-150]')
+    expect(smartPrompt).not.toContain('same single visible subject')
+  })
+
+  it('locks Smart VBVR image, audio, frame count, and trim duration controls', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: 'GLOBAL: office scene\nLOCAL: person speaks calmly to camera',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 6,
+      targetFrameCount: 150,
+    })
+
+    expect(workflow['620']?.class_type).toBe('LoadImage')
+    expect(workflow['620']?.inputs.image).toBe('source.png')
+    expect(workflow['627']?.class_type).toBe('LoadAudio')
+    expect(workflow['627']?.inputs.audio).toBe('voice.wav')
+    expect(workflow['623']?.inputs.value).toBe(150)
+    expect(workflow['628']?.class_type).toBe('TrimAudioDuration')
+    expect(workflow['628']?.inputs.duration).toBe(6)
+    expect(workflow['604']?.class_type).toBe('VHS_VideoCombine')
+    expect(workflow['604']?.inputs.audio).toEqual(['550', 0])
+  })
+
+  it('builds repeated positive talking-head Smart VBVR stages for audio-backed single-local prompts', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: '中年男子坐在书桌后方靠墙的办公椅上微微前倾，镜片反着白炽灯冷光，嘴唇开合正在说话，办公室压抑安静，镜头缓缓推近',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 10.34,
+      targetFrameCount: 259,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+
+    expect(smartPrompt).toContain('[0-65]')
+    expect(smartPrompt).toContain('[195-259]')
+    expect(smartPrompt).toContain('requested head and gaze direction')
+    expect(smartPrompt).toContain('lower portion of the frame stays clean')
+    expect(smartPrompt.toLowerCase()).not.toContain('no profile turn')
+    expect(smartPrompt.toLowerCase()).not.toContain('no new people')
+    expect(smartPrompt.toLowerCase()).not.toContain('no subtitles')
+    expect(smartPrompt.toLowerCase()).not.toContain('rotation')
+    expect(smartPrompt.toLowerCase()).not.toContain('crowd')
+    expect(new Set(smartPrompt.split(' | ').map((segment) => segment.replace(/\s*\[\d+-\d+\]$/, '').trim())).size).toBe(1)
+  })
+
+  it('keeps Chinese speaking action but strips subtitle and dialogue-text instructions from Smart VBVR audio prompts', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: '中年医生坐在办公室里正在说话，嘴唇开合，画面无字幕，不显示台词文字，字幕不能出现',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 10,
+      targetFrameCount: 250,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+
+    expect(smartPrompt).toContain('正在说话')
+    expect(smartPrompt).toContain('Audio-backed talking-head')
+    expect(smartPrompt).not.toMatch(/字幕|台词|文字/)
+  })
+
+  it('uses real negative text conditioning for audio-backed Smart VBVR subtitle suppression', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: [
+        'GLOBAL: night office, Chen Ji, same source-frame composition, stable lighting.',
+        'LOCAL: Chen Ji sits near the right-side window, turns his face toward the window, and speaks softly.',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 6,
+      targetFrameCount: 150,
+    })
+
+    const negativeSourceId = Array.isArray(workflow['164']?.inputs.negative)
+      ? String(workflow['164'].inputs.negative[0])
+      : ''
+    const negativeNode = workflow[negativeSourceId]
+    const negativeText = String(negativeNode?.inputs.text ?? '')
+
+    expect(negativeNode?.class_type).toBe('CLIPTextEncode')
+    expect(negativeNode?.inputs.clip).toEqual(['416', 0])
+    expect(negativeText.toLowerCase()).toContain('subtitle')
+    expect(negativeText.toLowerCase()).toContain('caption')
+    expect(negativeText.toLowerCase()).toContain('lower third')
+    expect(negativeText).toContain('Chinese characters')
+    expect(Object.values(workflow).some((node) => node.class_type === 'ConditioningZeroOut')).toBe(false)
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+
+    expect(smartPrompt).toContain('turns his face toward the window')
+    expect(smartPrompt).toContain('requested head and gaze direction')
+    expect(smartPrompt).toContain('lower portion of the frame stays clean')
+    expect(smartPrompt.toLowerCase()).not.toContain('subtitle')
+    expect(smartPrompt.toLowerCase()).not.toContain('caption')
+    expect(smartPrompt.toLowerCase()).not.toContain('text overlay')
+  })
+
+  it('does not inject continuity packet or negative concepts into Smart VBVR positive prompts', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: [
+        'GLOBAL: night office, Doctor, same source-frame composition, frontal close-up, stable lighting.',
+        'LOCAL: Doctor sits behind the desk, leans slightly forward, and speaks calmly to camera.',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const globalPromptSourceId = Array.isArray(relay?.inputs.global_prompt)
+      ? String(relay.inputs.global_prompt[0])
+      : ''
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const globalPrompt = String(workflow[globalPromptSourceId]?.inputs.prompt ?? '')
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+    const combined = `${globalPrompt}\n${smartPrompt}`.toLowerCase()
+
+    expect(globalPrompt).toContain('night office')
+    expect(smartPrompt).toContain('[0-75]')
+    expect(smartPrompt).toContain('[225-300]')
+    expect(combined).not.toContain('panel continuity packet')
+    expect(combined).not.toContain('hard constraints')
+    expect(combined).not.toContain('crowd')
+    expect(combined).not.toContain('guards')
+    expect(combined).not.toContain('police')
+    expect(combined).not.toContain('subtitles')
+    expect(combined).not.toContain('profile turn')
+    expect(combined).not.toContain('new people')
+  })
+
+  it('sanitizes raw continuity packet fallback before Smart VBVR injection', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: [
+        'Panel continuity packet:',
+        'Current shot action: Doctor sits behind the desk, leans slightly forward, and speaks calmly to camera.',
+        'Hard constraints:',
+        'Do not add new people, crowds, guards, police, subtitles, or profile turns.',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 12,
+      targetFrameCount: 300,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+    const smartPrompt = String(workflow[smartPromptSourceId]?.inputs.prompt ?? '')
+    const normalized = smartPrompt.toLowerCase()
+
+    expect(smartPrompt).toContain('Doctor sits behind the desk')
+    expect(normalized).not.toContain('panel continuity packet')
+    expect(normalized).not.toContain('hard constraints')
+    expect(normalized).not.toContain('crowd')
+    expect(normalized).not.toContain('guards')
+    expect(normalized).not.toContain('police')
+    expect(normalized).not.toContain('subtitles')
+    expect(normalized).not.toContain('profile')
+    expect(normalized).not.toContain('new people')
+  })
+
+  it('maps Smart VBVR content segments across the requested audio-backed duration', () => {
+    const workflow = resolveComfyUiWorkflow(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise, {
+      prompt: [
+        'GLOBAL: same subject as the reference image, preserve identity and lighting',
+        'LOCAL: subject walks in rain [0-120] | camera moves up toward the face [120-240] | subject turns naturally [240-360] | subject waves once [360-420] | camera pulls back [420-489]',
+      ].join('\n'),
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice.wav'],
+      fps: 25,
+      durationSeconds: 19.56,
+      targetFrameCount: 489,
+    })
+
+    const relay = getPromptRelayNodes(workflow).find((node) => node.class_type === 'PromptRelaySmartEncode')
+    expect(relay).toBeTruthy()
+
+    const smartPromptSourceId = Array.isArray(relay?.inputs.smart_prompt)
+      ? String(relay.inputs.smart_prompt[0])
+      : ''
+
+    expect(workflow['623']?.inputs.value).toBe(489)
+    expect(workflow['628']?.inputs.duration).toBe(19.56)
     expect(workflow[smartPromptSourceId]?.inputs.prompt).toBe(
-      'the doctor leans forward and speaks calmly. [0-38] | the doctor leans forward and speaks calmly. [38-76] | the doctor leans forward and speaks calmly. [76-113] | the doctor leans forward and speaks calmly. [113-150]',
+      'subject walks in rain [0-98] | camera moves up toward the face [98-196] | subject turns naturally [196-294] | subject waves once [294-392] | camera pulls back [392-489]',
     )
   })
 
@@ -472,5 +695,238 @@ describe('comfyui workflow registry', () => {
       .map(([nodeId, node]) => ({ nodeId, saveOutput: node.inputs.save_output }))
 
     expect(videoOutputs).toEqual([{ nodeId: '280', saveOutput: true }])
+  })
+
+  it('locks Seedance2 Bernini 480p workflow controls for a 10 second intense motion shot', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_WORKFLOW_KEY, {
+      prompt: 'hero punches forward through rain',
+      imageFilenames: ['source.png'],
+      width: 480,
+      height: 848,
+      durationSeconds: 10,
+      fps: 24,
+      motionStrength: 3,
+    })
+
+    expect(workflow['408']?.inputs.image).toBe('source.png')
+    expect(workflow['390']?.inputs.value).toBe(241)
+    expect(workflow['374']?.inputs.fps).toBe(24)
+    expect(workflow['399']?.inputs.strength_model).toBe(3)
+    expect(workflow['402']?.inputs.strength_model).toBe(1)
+    expect(workflow['400']?.inputs.strength_model).toBe(1)
+    expect(workflow['398']?.inputs.strength_model).toBe(1)
+    expect(workflow['409']?.inputs.video_frames).toBe(3)
+    expect(workflow['417']?.inputs.value).toBe(848)
+
+    const rolePrompt = String(workflow['421']?.inputs.prompt || '')
+    const userPrompt = String(workflow['422']?.inputs.prompt || '')
+    expect(rolePrompt).toContain('10-second')
+    expect(rolePrompt).toContain('241 frames')
+    expect(rolePrompt).toContain('24 fps')
+    expect(rolePrompt).toContain('strong motion')
+    expect(userPrompt).toContain('hero punches forward through rain')
+    expect(userPrompt).toContain('motion strength: 3')
+    expect(rolePrompt).not.toBe('hero punches forward through rain')
+    expect(userPrompt).not.toBe('hero punches forward through rain')
+  })
+
+  it('renders Seedance2 Bernini calm 5 second prompts without stale 10 second wording', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_WORKFLOW_KEY, {
+      prompt: 'woman sits quietly by the window',
+      imageFilenames: ['source.png'],
+      width: 480,
+      height: 848,
+      durationSeconds: 5,
+      fps: 24,
+    })
+
+    expect(workflow['390']?.inputs.value).toBe(121)
+    expect(workflow['399']?.inputs.strength_model).toBe(1)
+
+    const renderedPrompt = [
+      String(workflow['421']?.inputs.prompt || ''),
+      String(workflow['422']?.inputs.prompt || ''),
+    ].join('\n')
+    expect(renderedPrompt).toContain('5-second')
+    expect(renderedPrompt).toContain('121 frames')
+    expect(renderedPrompt).toContain('calm')
+    expect(renderedPrompt).not.toContain('10-second')
+  })
+
+  it('locks Seedance2 Bernini audio lipsync workflow controls when audio is injected', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_AUDIO_WORKFLOW_KEY, {
+      prompt: 'doctor speaks calmly to camera',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice-line.wav'],
+      width: 480,
+      height: 848,
+      durationSeconds: 5,
+      fps: 24,
+      motionStrength: 1,
+    })
+
+    expect(workflow['408']?.inputs.image).toBe('source.png')
+    expect(workflow['1449']?.inputs.audio).toBe('voice-line.wav')
+    expect(workflow['1449']?.inputs.audioUI).toBeUndefined()
+    expect(workflow['1449']?.inputs.upload).toBeUndefined()
+    expect(workflow['390']?.inputs.value).toBe(121)
+    expect(workflow['374']?.inputs.fps).toBe(24)
+    expect(workflow['399']?.inputs.strength_model).toBe(1)
+    expect(workflow['417']?.inputs.value).toBe(848)
+
+    expect(workflow['1503']?.class_type).toBe('VHS_VideoCombine')
+    expect(workflow['1503']?.inputs.save_output).toBe(true)
+    expect(workflow['1503']?.inputs.filename_prefix).toBe('video/Bernini-T10-lipsync')
+    expect(workflow['1503']?.inputs.audio).toEqual(['2524', 0])
+    expect(workflow['2523']).toBeUndefined()
+
+    expect(workflow['1510']?.class_type).toBe('DapaoPainterAV2VLatentNode')
+    expect(workflow['1510']?.inputs.latent).toEqual(['2530', 0])
+    expect(workflow['1510']?.inputs.audio_encoder).toEqual(['1505', 0])
+    expect(workflow['2530']?.class_type).toBe('DapaoTemporalLatentSliceNode')
+    expect(workflow['2530']?.inputs.latent).toEqual(['377', 0])
+    expect(workflow['2530']?.inputs.length).toBe(13)
+    expect(workflow['2530']?.inputs.wait_for).toEqual(['2541', 0])
+    expect(workflow['1507']?.inputs.end_frame).toEqual(['390', 0])
+
+    const renderedPrompt = [
+      String(workflow['378']?.inputs.text || ''),
+      String(workflow['1490']?.inputs.text || ''),
+    ].join('\n')
+    expect(renderedPrompt).toContain('5-second')
+    expect(renderedPrompt).toContain('121 frames')
+    expect(renderedPrompt).toContain('mouth')
+    expect(renderedPrompt).toContain('doctor speaks calmly to camera')
+    expect(renderedPrompt).not.toContain('10-second')
+  })
+
+  it('keeps the generated Foley branch mixed into Seedance2 Bernini audio lipsync outputs', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_AUDIO_WORKFLOW_KEY, {
+      prompt: 'doctor speaks calmly to camera',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice-line.wav'],
+      width: 480,
+      height: 848,
+      durationSeconds: 5,
+      fps: 24,
+      motionStrength: 1,
+    })
+
+    expect(workflow['1503']?.inputs.audio).toEqual(['2524', 0])
+    expect(workflow['2524']?.class_type).toBe('SoundFlow_Mixer')
+    expect(workflow['2524']?.inputs.audio1).toEqual(['1507', 0])
+    expect(workflow['2524']?.inputs.audio2).toEqual(['2541', 0])
+    expect(workflow['2524']?.inputs.mix_value).toBe(0.2)
+    expect(workflow['2541']?.inputs.audio).toEqual(['2476', 0])
+    expect(workflow['2476']?.inputs.audio).toEqual(['2520', 2])
+    expect(workflow['2520']?.class_type).toBe('HunyuanVideoFoley')
+    expect(workflow['2520']?.inputs.enabled).toBe(true)
+    expect(workflow['2467']).toBeUndefined()
+    expect(workflow['2523']).toBeUndefined()
+  })
+
+  it('routes Seedance2 Bernini audio lipsync final prompt through app-controlled no-subtitle instructions', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_AUDIO_WORKFLOW_KEY, {
+      prompt: 'doctor says "Please answer clearly." while explaining the diagnosis to camera. No subtitles, no caption, no text overlay.',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice-line.wav'],
+      width: 480,
+      height: 848,
+      durationSeconds: 5,
+      fps: 24,
+      motionStrength: 1,
+    })
+
+    expect(typeof workflow['378']?.inputs.text).toBe('string')
+    expect(workflow['386']).toBeUndefined()
+    expect(workflow['412']).toBeUndefined()
+    expect(workflow['532']).toBeUndefined()
+    expect(workflow['409']).toBeUndefined()
+
+    const finalPositivePrompt = String(workflow['378']?.inputs.text || '').toLowerCase()
+    expect(finalPositivePrompt).toContain('clean unmarked cinematic frame')
+    expect(finalPositivePrompt).toContain('5-second')
+    expect(finalPositivePrompt).toContain('121 frames')
+    expect(finalPositivePrompt).toContain('mouth')
+    expect(finalPositivePrompt).toContain('doctor says')
+    expect(finalPositivePrompt).toContain('explaining the diagnosis to camera')
+    expect(finalPositivePrompt).not.toContain('please answer clearly')
+    expect(finalPositivePrompt).not.toContain('lip sync')
+    expect(finalPositivePrompt).not.toContain('speech')
+    expect(finalPositivePrompt).not.toContain('speaking')
+    expect(finalPositivePrompt).not.toContain('subtitle')
+    expect(finalPositivePrompt).not.toContain('caption')
+    expect(finalPositivePrompt).not.toContain('text overlay')
+    expect(finalPositivePrompt).not.toContain('readable text')
+
+    const berniniNegativePrompt = String(workflow['373']?.inputs.text || '').toLowerCase()
+    const berniniNegativeTerms = berniniNegativePrompt.split(',').map((term) => term.trim())
+    expect(berniniNegativeTerms).toContain('font')
+    expect(berniniNegativeTerms).toContain('text')
+    expect(berniniNegativeTerms).toContain('signage')
+    expect(berniniNegativeTerms).toContain('writing')
+    expect(berniniNegativeTerms).toContain('lower third')
+    expect(berniniNegativeTerms).toContain('incorrect dialogue')
+    expect(berniniNegativeTerms).toContain('added dialogue')
+    expect(berniniNegativeTerms).toContain('unreadable text on shirt or hat')
+    expect(berniniNegativePrompt).toContain('subtitles')
+    expect(berniniNegativePrompt).toContain('chinese subtitles')
+    expect(berniniNegativePrompt).toContain('white subtitle line')
+    expect(berniniNegativePrompt).toContain('text overlay')
+    expect(berniniNegativePrompt).toContain('readable text')
+
+    const lipsyncPositivePrompt = String(workflow['1490']?.inputs.text || '').toLowerCase()
+    expect(lipsyncPositivePrompt).toContain('clean cinematic frame')
+    expect(lipsyncPositivePrompt).toContain('natural mouth movement')
+    expect(lipsyncPositivePrompt).toContain('unmarked background surfaces')
+    expect(lipsyncPositivePrompt).not.toContain('lip sync')
+    expect(lipsyncPositivePrompt).not.toContain('speech')
+    expect(lipsyncPositivePrompt).not.toContain('subtitle')
+    expect(lipsyncPositivePrompt).not.toContain('caption')
+    expect(lipsyncPositivePrompt).not.toContain('text overlay')
+    expect(lipsyncPositivePrompt).not.toContain('readable text')
+
+    expect(workflow['1492']?.class_type).toBe('CLIPTextEncode')
+    expect(workflow['1492']?.inputs.clip).toEqual(['1491', 0])
+    const lipsyncNegativePrompt = String(workflow['1492']?.inputs.text || '').toLowerCase()
+    const lipsyncNegativeTerms = lipsyncNegativePrompt.split(',').map((term) => term.trim())
+    expect(lipsyncNegativeTerms).toContain('font')
+    expect(lipsyncNegativeTerms).toContain('text')
+    expect(lipsyncNegativeTerms).toContain('signage')
+    expect(lipsyncNegativeTerms).toContain('writing')
+    expect(lipsyncNegativeTerms).toContain('lower third')
+    expect(lipsyncNegativeTerms).toContain('incorrect dialogue')
+    expect(lipsyncNegativeTerms).toContain('added dialogue')
+    expect(lipsyncNegativeTerms).toContain('unreadable text on shirt or hat')
+    expect(lipsyncNegativePrompt).toContain('subtitles')
+    expect(lipsyncNegativePrompt).toContain('chinese subtitles')
+    expect(lipsyncNegativePrompt).toContain('white subtitle line')
+    expect(lipsyncNegativePrompt).toContain('dialogue text')
+    expect(lipsyncNegativePrompt).toContain('watermark')
+  })
+
+  it('keeps CJK creator text out of the Seedance2 Bernini audio positive prompt', () => {
+    const workflow = resolveComfyUiWorkflow(BERNINI_AUDIO_WORKFLOW_KEY, {
+      prompt: '中年男子坐在书桌后方靠墙的办公椅上微微前倾，镜片反着白炽灯冷光，嘴唇开合正在说话，办公室压抑安静，镜头缓缓推近',
+      imageFilenames: ['source.png'],
+      audioFilenames: ['voice-line.wav'],
+      width: 480,
+      height: 848,
+      durationSeconds: 5,
+      fps: 24,
+      motionStrength: 2,
+    })
+
+    const finalPositivePrompt = String(workflow['378']?.inputs.text || '')
+    expect(finalPositivePrompt).toContain('quiet office')
+    expect(finalPositivePrompt).toContain('slow gentle push-in')
+    expect(finalPositivePrompt).not.toContain('speaking')
+    expect(finalPositivePrompt).not.toContain('lip sync')
+    expect(finalPositivePrompt).not.toMatch(/[\u3400-\u9fff]/)
+
+    const berniniNegativePrompt = String(workflow['373']?.inputs.text || '').toLowerCase()
+    expect(berniniNegativePrompt).toContain('white outlined glyphs')
+    expect(berniniNegativePrompt).toContain('bottom-center subtitles')
+    expect(berniniNegativePrompt).toContain('garbled chinese glyphs')
   })
 })

@@ -58,7 +58,18 @@ describe('api contract - novel promotion episode profiles', () => {
     vi.resetModules()
     authState.authenticated = true
     updateProjectMock.mockResolvedValue({ projectId: 'project-1', lastEpisodeId: 'episode-1' })
-    findManyTaskMock.mockResolvedValue([])
+    findManyTaskMock.mockResolvedValue([
+      {
+        id: 'task-current',
+        targetId: 'panel-1',
+        payload: {
+          videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        },
+        result: {
+          videoUrl: '/m/video',
+        },
+      },
+    ])
     findManyMediaObjectMock.mockResolvedValue([])
   })
 
@@ -258,7 +269,18 @@ describe('api contract - novel promotion episode profiles', () => {
         },
       ],
     })
-    findManyTaskMock.mockResolvedValue([])
+    findManyTaskMock.mockResolvedValue([
+      {
+        id: 'task-current',
+        targetId: 'panel-1',
+        payload: {
+          videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+        },
+        result: {
+          videoUrl: '/m/video',
+        },
+      },
+    ])
 
     const route = await import('@/app/api/novel-promotion/[projectId]/episodes/[episodeId]/route')
     const req = buildMockRequest({
@@ -273,6 +295,7 @@ describe('api contract - novel promotion episode profiles', () => {
 
     expect(res.status).toBe(200)
     expect(body.episode.storyboards[0].panels[0].hasPreviousVideoVersion).toBe(false)
+    expect(body.episode.storyboards[0].panels[0].videoModel).toBe('comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2')
     expect(findManyTaskMock).toHaveBeenCalledTimes(1)
   })
 

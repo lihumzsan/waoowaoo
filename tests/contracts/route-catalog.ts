@@ -101,6 +101,7 @@ const ROUTE_FILES = [
   'src/app/api/novel-promotion/[projectId]/generate-character-image/route.ts',
   'src/app/api/novel-promotion/[projectId]/generate-image/route.ts',
   'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+  'src/app/api/novel-promotion/[projectId]/first-last-frame-prompt/route.ts',
   'src/app/api/novel-promotion/[projectId]/insert-panel/route.ts',
   'src/app/api/novel-promotion/[projectId]/lip-sync/route.ts',
   'src/app/api/novel-promotion/[projectId]/location/confirm-selection/route.ts',
@@ -201,6 +202,7 @@ function resolveContractGroup(routeFile: string): RouteContractGroup {
     || routeFile.endsWith('/clips/route.ts')
     || routeFile.endsWith('/episodes/split/route.ts')
     || routeFile.endsWith('/voice-analyze/route.ts')
+    || routeFile.endsWith('/first-last-frame-prompt/route.ts')
   ) {
     return 'llm-observe-routes'
   }

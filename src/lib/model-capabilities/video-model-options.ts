@@ -1,6 +1,8 @@
 import type { ModelCapabilities } from '@/lib/model-config-contract'
+import { isBerniniAudioLipsyncVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 
 interface VideoModelCapabilityCarrier {
+  value?: string
   capabilities?: ModelCapabilities
 }
 
@@ -21,5 +23,8 @@ export function isFirstLastFrameOnlyModel(model: VideoModelCapabilityCarrier): b
 }
 
 export function filterNormalVideoModelOptions<T extends VideoModelCapabilityCarrier>(models: T[]): T[] {
-  return models.filter((model) => !isFirstLastFrameOnlyModel(model))
+  return models.filter((model) => (
+    !isFirstLastFrameOnlyModel(model)
+    && !isBerniniAudioLipsyncVideoModelKey(model.value)
+  ))
 }

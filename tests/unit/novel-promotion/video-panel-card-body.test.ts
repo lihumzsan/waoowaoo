@@ -9,7 +9,9 @@ vi.mock('@/components/task/TaskStatusInline', () => ({
 }))
 
 vi.mock('@/components/ui/config-modals/ModelCapabilityDropdown', () => ({
-  ModelCapabilityDropdown: () => React.createElement('div', null, 'model-dropdown'),
+  ModelCapabilityDropdown: (props: {
+    capabilityFields: Array<{ field: string; recommendedValue?: unknown }>
+  }) => React.createElement('div', null, `model-dropdown${JSON.stringify(props.capabilityFields)}`),
 }))
 
 vi.mock('@/components/ui/icons', () => ({
@@ -18,6 +20,7 @@ vi.mock('@/components/ui/icons', () => ({
 
 function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRuntime {
   const translate = (key: string, values?: Record<string, unknown>) => {
+    if (key === 'firstLastFrame.regenerateVideo') return 'regenerate-first-last-video'
     if (key === 'firstLastFrame.asLastFrameFor') {
       return `作为镜头 ${String(values?.number ?? '')} 的尾帧`
     }
@@ -134,8 +137,13 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       flGenerationOptions: {},
       flCapabilityFields: [],
       flMissingCapabilityFields: [],
-      flCustomPrompt: '',
-      defaultFlPrompt: '',
+      flPromptEntry: {
+        value: 'Visible transition prompt',
+        origin: 'generated',
+        dirty: false,
+        status: 'idle',
+        ready: true,
+      },
       videoRatio: '9:16',
     },
     actions: {
@@ -147,8 +155,8 @@ function createRuntime(overrides: Partial<VideoPanelRuntime> = {}): VideoPanelRu
       onToggleLink: () => undefined,
       onFlModelChange: () => undefined,
       onFlCapabilityChange: () => undefined,
-      onFlCustomPromptChange: () => undefined,
-      onResetFlPrompt: () => undefined,
+      onFlPromptChange: () => undefined,
+      onRegenerateFlPrompt: async () => undefined,
       onGenerateFirstLastFrame: () => undefined,
     },
     computed: {
@@ -177,6 +185,151 @@ describe('VideoPanelCardBody', () => {
     expect(markup).toContain('视频提示词')
     expect(markup).toContain('生成首尾帧视频')
   })
+
+  it('keeps normal-video controls visible for an incoming-only last frame', () => {
+    const runtime = createRuntime()
+    runtime.layout = {
+      ...runtime.layout,
+      isLinked: false,
+      isLastFrame: true,
+      nextPanel: null,
+      flPromptEntry: undefined,
+    }
+    runtime.promptEditor.localPrompt = 'own-normal-video-prompt'
+    runtime.t = ((key: string) => key === 'panelCard.generateVideo'
+      ? 'generate-normal-video'
+      : key) as typeof runtime.t
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('own-normal-video-prompt')
+    expect(markup).toContain('generate-normal-video')
+    expect(markup).toContain('model-dropdown')
+    expect(markup).not.toContain('firstLastFrame.generate')
+  })
+
+  it('passes the recommended duration metadata to the dropdown', () => {
+    const runtime = createRuntime()
+    runtime.layout = {
+      ...runtime.layout,
+      isLinked: false,
+      isLastFrame: false,
+      nextPanel: null,
+    }
+    runtime.videoModel.capabilityFields = [{
+      field: 'duration',
+      label: '视频时长',
+      options: [9, 5, 10],
+      disabledOptions: [],
+      value: 9,
+      recommendedValue: 9,
+    }]
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('&quot;recommendedValue&quot;:9')
+  })
+
+  it('keeps an existing first-last-frame video eligible for regeneration', () => {
+    const runtime = createRuntime()
+    runtime.panel.videoGenerationMode = 'firstlastframe'
+    runtime.panel.videoUrl = 'https://example.com/existing-first-last.mp4'
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toMatch(/<button(?![^>]*disabled="")[^>]*>regenerate-first-last-video<\/button>/)
+  })
+  it('shows prompt task state and disables editing and video submission while generation is active', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Keep visible text',
+      origin: 'generated',
+      dirty: false,
+      status: 'processing',
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('firstLastFrame.promptProcessing')
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>edit<\/span><\/button>/)
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>生成首尾帧视频<\/button>/)
+  })
+
+  it('shows fallback warning and retry without blocking video submission', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Fallback transition',
+      origin: 'generated',
+      dirty: false,
+      status: 'idle',
+      fallbackUsed: true,
+      ready: true,
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('firstLastFrame.promptFallbackWarning')
+    expect(markup).toContain('firstLastFrame.retryPrompt')
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>生成首尾帧视频<\/button>/)
+  })
+
+  it('blocks video submission for a hard prompt error that is not ready', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Stale prompt',
+      origin: 'generated',
+      dirty: false,
+      status: 'error',
+      ready: false,
+      errorMessage: 'Prompt generation failed',
+    }
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toMatch(/<button disabled="" class="flex-shrink-0/)
+  })
+
+  it('drives linked editing from the prompt entry and disables edit actions while active', () => {
+    const runtime = createRuntime()
+    runtime.layout.flPromptEntry = {
+      value: 'Entry value being edited',
+      origin: 'user',
+      dirty: true,
+      status: 'processing',
+    }
+    runtime.promptEditor.isEditing = true
+    runtime.promptEditor.editingPrompt = 'stale editor copy'
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime }),
+    )
+
+    expect(markup).toContain('Entry value being edited')
+    expect(markup).not.toContain('stale editor copy')
+    expect(markup).not.toContain('panelCard.cancel')
+    expect(markup).toContain('data-prompt-config-disabled="true"')
+    expect(markup.match(/<button[^>]*disabled=""/g)?.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('offers manual regenerate for an idle linked prompt', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardBody, { runtime: createRuntime() }),
+    )
+
+    expect(markup).toContain('firstLastFrame.regeneratePrompt')
+  })
   it('shows long-video guidance and disables generation when linked audio is too long for the selected workflow', () => {
     const markup = renderToStaticMarkup(
       React.createElement(VideoPanelCardBody, {
@@ -192,8 +345,7 @@ describe('VideoPanelCardBody', () => {
             flGenerationOptions: {},
             flCapabilityFields: [],
             flMissingCapabilityFields: [],
-            flCustomPrompt: '',
-            defaultFlPrompt: '',
+            flPromptEntry: undefined,
             videoRatio: '9:16',
           },
           durationBinding: {

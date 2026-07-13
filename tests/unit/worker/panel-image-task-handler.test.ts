@@ -368,7 +368,7 @@ describe('worker panel-image-task-handler behavior', () => {
     }))
   })
 
-  it('blocks candidate persistence when vision audit detects wrong content', async () => {
+  it('records audit report and persists candidate when vision audit detects wrong content', async () => {
     utilsMock.resolveImageSourceFromGeneration.mockReset()
     utilsMock.resolveImageSourceFromGeneration.mockResolvedValueOnce('generated-wrong-content-source')
     mockImageUploads('cos/panel-wrong-content.png')
@@ -379,21 +379,27 @@ describe('worker panel-image-task-handler behavior', () => {
       }),
     })
 
-    await expect(handlePanelImageTask(buildJob({ candidateCount: 1 }))).rejects.toThrow(
-      'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
-    )
+    const result = await handlePanelImageTask(buildJob({ candidateCount: 1 }))
 
-    expect(prismaMock.novelPromotionPanel.update).not.toHaveBeenCalled()
-    expect(prismaMock.task.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'task-panel-image-1' },
-      data: expect.objectContaining({
-        result: expect.objectContaining({
-          panelImageAudit: expect.objectContaining({
-            code: 'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
-          }),
+    expect(result).toEqual(expect.objectContaining({
+      panelId: 'panel-1',
+      candidateCount: 1,
+      imageUrl: 'cos/panel-wrong-content.png',
+      panelImageAuditReports: [
+        expect.objectContaining({
+          ok: false,
+          code: 'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
+          issues: ['wrong people', 'wrong scene'],
         }),
+      ],
+    }))
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        imageUrl: 'cos/panel-wrong-content.png',
       }),
     }))
+    expect(prismaMock.task.update).not.toHaveBeenCalled()
   })
 
   it('records audit report and persists candidate when vision runtime is unavailable', async () => {

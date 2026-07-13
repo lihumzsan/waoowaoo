@@ -286,7 +286,6 @@
         "noVoice": "无音色",
         "previewFailed": "预览失败: {error}",
         "uploadFailed": "上传音频失败: {error}",
-        "uploadQwenHint": "上传的音色后续只可使用 IndexTTS 合成，不可用于 QwenTTS。QwenTTS 必须使用 AI 设计音色。",
         "uploading": "上传中...",
         "uploaded": "已上传",
         "uploadAudio": "上传音频",

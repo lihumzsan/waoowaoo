@@ -111,6 +111,9 @@ export function useVoiceGenerationActions({
   }, [analyzeVoiceMutation, episodeId, loadData, notifyVoiceLinesChanged, t])
 
   const handleGenerateLine = useCallback(async (lineId: string) => {
+    const line = voiceLines.find((item) => item.id === lineId)
+    const hasOutputAtStart = !!line?.audioUrl
+    const intent = hasOutputAtStart ? 'regenerate' : 'generate'
     const pendingGeneration = buildPendingGenerationMap([lineId])
     setPendingVoiceGenerationByLineId((prev) => ({
       ...prev,
@@ -139,8 +142,8 @@ export function useVoiceGenerationActions({
           phase: 'queued',
           runningTaskId: data.taskId,
           runningTaskType: 'voice_line',
-          intent: 'generate',
-          hasOutputAtStart: false,
+          intent,
+          hasOutputAtStart,
         })
         handoffToTaskState = true
       }
@@ -172,6 +175,7 @@ export function useVoiceGenerationActions({
     setPendingVoiceGenerationByLineId,
     selectedAudioModel,
     t,
+    voiceLines,
     withTaskState,
   ])
 

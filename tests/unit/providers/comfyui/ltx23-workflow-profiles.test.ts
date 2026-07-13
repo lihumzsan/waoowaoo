@@ -6,6 +6,9 @@ import {
   getLtx23WorkflowProfile,
   getLtx23WorkflowProfiles,
   isComfyUiLtx23LongVideoWorkflow,
+  normalizeLtx23GoonDurationSeconds,
+  resolveLtx23GoonFinalFrameIndex,
+  resolveLtx23GoonFrameCount,
 } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 describe('ltx23 workflow profiles', () => {
@@ -16,8 +19,9 @@ describe('ltx23 workflow profiles', () => {
       category: 'single_image_precise',
       promptPolicy: 'stable_single_image',
       imageSlotPolicy: 'single',
-      maxDurationSeconds: 12,
-      durationOptions: [4, 5, 6, 8, 10, 12],
+      maxDurationSeconds: 20,
+      defaultDurationSeconds: 19.56,
+      durationOptions: [4, 5, 6, 8, 10, 12, 16, 20],
       selectableInPanel: true,
     })
   })
@@ -27,7 +31,7 @@ describe('ltx23 workflow profiles', () => {
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise,
       COMFYUI_LTX23_WORKFLOW_KEYS.microDetail,
       COMFYUI_LTX23_WORKFLOW_KEYS.singleImageLargeMotion,
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaLongPromptRelay,
       COMFYUI_LTX23_WORKFLOW_KEYS.damaichaAioV2,
@@ -41,18 +45,59 @@ describe('ltx23 workflow profiles', () => {
     )).toEqual(['first.png', 'first.png', 'first.png', 'first.png'])
   })
 
-  it('keeps first and last images distinct for smooth first-last-frame slots', () => {
+  it('registers Goon as the fixed 24 fps first-last-frame profile', () => {
+    expect(getLtx23WorkflowProfile(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)).toMatchObject({
+      workflowKey: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      category: 'first_last_frame',
+      promptPolicy: 'first_last_frame',
+      imageSlotPolicy: 'first_last',
+      maxDurationSeconds: 15,
+      defaultDurationSeconds: 10,
+      durationOptions: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      fps: 24,
+      selectableInPanel: true,
+    })
+  })
+
+  it.each([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])(
+    'accepts %s seconds for Goon first-last-frame normalization',
+    (duration) => {
+      expect(normalizeLtx23GoonDurationSeconds(duration)).toBe(duration)
+    },
+  )
+
+  it.each([
+    [3, 10],
+    [15.5, 10],
+    [16, 10],
+    ['8', 10],
+    [Number.NaN, 10],
+  ])('falls invalid Goon duration %j back to default %s', (input, expected) => {
+    expect(normalizeLtx23GoonDurationSeconds(input)).toBe(expected)
+  })
+
+  it.each([
+    [4, 97],
+    [8, 193],
+    [10, 241],
+    [15, 361],
+  ])('computes the Goon 8n+1 frame count for %ss', (duration, frameCount) => {
+    expect(resolveLtx23GoonFrameCount(duration)).toBe(frameCount)
+    expect(resolveLtx23GoonFinalFrameIndex(duration)).toBe(frameCount - 1)
+  })
+
+  it('keeps exactly the first and last images for Goon slots', () => {
     expect(expandLtx23WorkflowImageFilenames(
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       ['first.png', 'last.png'],
-    )).toEqual(['first.png', 'last.png', 'last.png'])
+    )).toEqual(['first.png', 'last.png'])
   })
 
   it('uses the final uploaded image as the last frame when references sit between first and last', () => {
     expect(expandLtx23WorkflowImageFilenames(
-      COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame,
+      COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame,
       ['first.png', 'reference.png', 'last.png'],
-    )).toEqual(['first.png', 'last.png', 'last.png'])
+    )).toEqual(['first.png', 'last.png'])
   })
 
   it('marks long-video workflows separately', () => {

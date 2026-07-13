@@ -1,5 +1,8 @@
 import { config as loadEnv } from 'dotenv'
-import type { TaskType } from '@/lib/task/types'
+import {
+  buildQueuedTaskRecoveryCutoff,
+  recoverQueuedTaskCandidate,
+} from '@/lib/task/watchdog-recovery'
 
 // Force local scripts to honor the checked-in .env even when the parent shell
 // still carries an older DATABASE_URL (for example a prisma:// proxy URL).
@@ -14,61 +17,65 @@ type Logger = {
 let logger: Logger
 let prisma: typeof import('@/lib/prisma')['prisma']
 let addTaskJob: typeof import('@/lib/task/queues')['addTaskJob']
-let resolveTaskLocaleFromBody: typeof import('@/lib/task/resolve-locale')['resolveTaskLocaleFromBody']
 let markTaskFailed: typeof import('@/lib/task/service')['markTaskFailed']
 let publishTaskEvent: typeof import('@/lib/task/publisher')['publishTaskEvent']
 let TASK_EVENT_TYPE: typeof import('@/lib/task/types')['TASK_EVENT_TYPE']
-let TASK_TYPE: typeof import('@/lib/task/types')['TASK_TYPE']
 let cleanupAllProjectLogs: typeof import('@/lib/logging/file-writer')['cleanupAllProjectLogs']
+let reconcileActiveRunsFromTasks: typeof import('@/lib/run-runtime/reconcile')['reconcileActiveRunsFromTasks']
 
 const INTERVAL_MS = Number.parseInt(process.env.WATCHDOG_INTERVAL_MS || '30000', 10) || 30000
 const HEARTBEAT_TIMEOUT_MS = Number.parseInt(process.env.TASK_HEARTBEAT_TIMEOUT_MS || '90000', 10) || 90000
-let TASK_TYPE_SET: ReadonlySet<string> = new Set()
 // 姣忓皬鏃舵墽琛屼竴娆℃棩蹇楁竻鐞?
 const LOG_CLEANUP_INTERVAL_TICKS = Math.ceil(3600_000 / INTERVAL_MS)
 let tickCount = 0
-
-function toTaskType(value: string): TaskType | null {
-  if (TASK_TYPE_SET.has(value)) {
-    return value as TaskType
-  }
-  return null
-}
-
-function toTaskPayload(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>
-  }
-  return null
-}
 
 async function recoverQueuedTasks() {
   const rows = await prisma.task.findMany({
     where: {
       status: 'queued',
       enqueuedAt: null,
+      createdAt: { lte: buildQueuedTaskRecoveryCutoff(new Date()) },
     },
+    select: { id: true },
     take: 100,
     orderBy: { createdAt: 'asc' },
   })
 
-  for (const task of rows) {
-    const taskType = toTaskType(task.type)
-    if (!taskType) {
-      logger.error({
-        action: 'watchdog.reenqueue_invalid_type',
-        message: `invalid task type: ${task.type}`,
-        taskId: task.id,
-        projectId: task.projectId,
-        userId: task.userId,
-        errorCode: 'INVALID_PARAMS',
-        retryable: false,
-      })
-      continue
-    }
+  let enqueued = 0
+  for (const candidate of rows) {
     try {
-      const locale = resolveTaskLocaleFromBody(task.payload)
-      if (!locale) {
+      const result = await recoverQueuedTaskCandidate({
+        taskId: candidate.id,
+        loadTask: async (taskId) => await prisma.task.findUnique({ where: { id: taskId } }),
+        enqueue: async (data, options) => await addTaskJob(data, options),
+        markEnqueued: async (taskId) => {
+          await prisma.task.update({
+            where: { id: taskId },
+            data: {
+              enqueuedAt: new Date(),
+              enqueueAttempts: { increment: 1 },
+              lastEnqueueError: null,
+            },
+          })
+        },
+      })
+
+      if (result.status === 'skipped') continue
+      const task = result.task
+      if (result.status === 'invalid_type') {
+        logger.error({
+          action: 'watchdog.reenqueue_invalid_type',
+          message: `invalid task type: ${task.type}`,
+          taskId: task.id,
+          projectId: task.projectId,
+          userId: task.userId,
+          errorCode: 'INVALID_PARAMS',
+          retryable: false,
+        })
+        continue
+      }
+
+      if (result.status === 'locale_missing') {
         await markTaskFailed(task.id, 'TASK_LOCALE_REQUIRED', 'task locale is missing')
         logger.error({
           action: 'watchdog.reenqueue_locale_missing',
@@ -82,25 +89,7 @@ async function recoverQueuedTasks() {
         continue
       }
 
-      await addTaskJob({
-        taskId: task.id,
-        type: taskType,
-        locale,
-        projectId: task.projectId,
-        episodeId: task.episodeId,
-        targetType: task.targetType,
-        targetId: task.targetId,
-        payload: toTaskPayload(task.payload),
-        userId: task.userId,
-      })
-      await prisma.task.update({
-        where: { id: task.id },
-        data: {
-          enqueuedAt: new Date(),
-          enqueueAttempts: { increment: 1 },
-          lastEnqueueError: null,
-        },
-      })
+      enqueued += 1
       logger.info({
         action: 'watchdog.reenqueue',
         message: 'watchdog re-enqueued queued task',
@@ -116,7 +105,7 @@ async function recoverQueuedTasks() {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 're-enqueue failed'
       await prisma.task.update({
-        where: { id: task.id },
+        where: { id: candidate.id },
         data: {
           enqueueAttempts: { increment: 1 },
           lastEnqueueError: message,
@@ -125,14 +114,13 @@ async function recoverQueuedTasks() {
       logger.error({
         action: 'watchdog.reenqueue_failed',
         message,
-        taskId: task.id,
-        projectId: task.projectId,
-        userId: task.userId,
+        taskId: candidate.id,
         errorCode: 'EXTERNAL_ERROR',
         retryable: true,
       })
     }
   }
+  return enqueued
 }
 
 async function cleanupZombieProcessingTasks() {
@@ -198,8 +186,9 @@ async function tick() {
   tickCount += 1
   const startedAt = Date.now()
   try {
-    await recoverQueuedTasks()
+    const reEnqueued = await recoverQueuedTasks()
     await cleanupZombieProcessingTasks()
+    const reconciledRuns = await reconcileActiveRunsFromTasks()
     if (tickCount % LOG_CLEANUP_INTERVAL_TICKS === 0) {
       void cleanupAllProjectLogs()
     }
@@ -207,6 +196,10 @@ async function tick() {
       action: 'watchdog.tick.ok',
       message: 'watchdog tick completed',
       durationMs: Date.now() - startedAt,
+      details: {
+        reEnqueued,
+        reconciledRuns: reconciledRuns.length,
+      },
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'watchdog tick failed'
@@ -225,20 +218,20 @@ async function bootstrap() {
     loggingCore,
     prismaModule,
     taskQueues,
-    resolveLocaleModule,
     taskService,
     taskPublisher,
     taskTypes,
     fileWriter,
+    runRuntimeReconcile,
   ] = await Promise.all([
     import('@/lib/logging/core'),
     import('@/lib/prisma'),
     import('@/lib/task/queues'),
-    import('@/lib/task/resolve-locale'),
     import('@/lib/task/service'),
     import('@/lib/task/publisher'),
     import('@/lib/task/types'),
     import('@/lib/logging/file-writer'),
+    import('@/lib/run-runtime/reconcile'),
   ])
 
   logger = loggingCore.createScopedLogger({
@@ -247,13 +240,11 @@ async function bootstrap() {
   })
   prisma = prismaModule.prisma
   addTaskJob = taskQueues.addTaskJob
-  resolveTaskLocaleFromBody = resolveLocaleModule.resolveTaskLocaleFromBody
   markTaskFailed = taskService.markTaskFailed
   publishTaskEvent = taskPublisher.publishTaskEvent
   TASK_EVENT_TYPE = taskTypes.TASK_EVENT_TYPE
-  TASK_TYPE = taskTypes.TASK_TYPE
-  TASK_TYPE_SET = new Set(Object.values(TASK_TYPE))
   cleanupAllProjectLogs = fileWriter.cleanupAllProjectLogs
+  reconcileActiveRunsFromTasks = runRuntimeReconcile.reconcileActiveRunsFromTasks
 
   logger.info({
     action: 'watchdog.started',

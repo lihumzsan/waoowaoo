@@ -116,9 +116,9 @@ describe('useProviders provider order merge', () => {
   it('auto-selects codex for analysis only on the migration pass', () => {
     const result = applyCodexTextPresetDefault({
       models: [{
-        modelId: 'gpt-5.4',
+        modelId: 'gpt-5.5',
         modelKey: CODEX_DEFAULT_MODEL_KEY,
-        name: 'Codex GPT-5.4',
+        name: 'Codex GPT-5.5',
         type: 'llm',
         provider: CODEX_PROVIDER_KEY,
         price: 0,
@@ -230,9 +230,9 @@ describe('useProviders provider order merge', () => {
           enabled: false,
         },
         {
-          modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-          modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-          name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
+          modelId: 'basevideo/seedance2/bernini-480p-i2v',
+          modelKey: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+          name: 'ComfyUI · Seedance2.0 Bernini 480p I2V',
           type: 'video',
           provider: 'comfyui',
           price: 0,
@@ -266,11 +266,13 @@ describe('useProviders provider order merge', () => {
       locationModel: 'comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe',
       storyboardModel: 'comfyui::baseimage/\u56fe\u7247\u5206\u955c/Qwen\u5267\u60c5\u5206\u955c\u5236\u4f5c',
       editModel: 'comfyui::baseimage/\u56fe\u7247\u7f16\u8f91/qwen\u5355\u56fe\u7f16\u8f91',
-      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
       audioModel: 'comfyui::baseaudio/单人/LongCat-one',
       voiceDesignModel: 'comfyui::baseaudio/\u97f3\u8272/s2-se',
     })
-    expect(result.models.every((model) => model.enabled)).toBe(true)
+    const enabledByKey = new Map(result.models.map((model) => [model.modelKey, model.enabled]))
+    expect(enabledByKey.get('comfyui::basevideo/seedance2/bernini-480p-i2v')).toBe(true)
+    expect(enabledByKey.get('comfyui::baseimage/\u56fe\u7247\u751f\u6210/Flux2Klein\u6587\u751f\u56fe')).toBe(true)
   })
 
   it('does not overwrite an existing explicit default model selection', () => {

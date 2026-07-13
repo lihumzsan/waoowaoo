@@ -116,6 +116,7 @@
     "unknownError": "未知错误"
   },
   "firstLastFrame": {
+    "regenerateVideo": "重新生成首尾帧视频",
     "title": "首尾帧设置",
     "firstFrame": "首帧",
     "lastFrame": "尾帧",
@@ -136,7 +137,13 @@
     "audioOff": "关",
     "linkToNext": "链接到下一镜头（首尾帧）",
     "asLastFrame": "作为镜头 {number} 的尾帧",
-    "thenTransitionTo": "然后镜头转换到"
+    "promptQueued": "转场提示词已排队...",
+    "promptProcessing": "正在生成转场提示词...",
+    "promptSaving": "正在保存转场提示词...",
+    "promptError": "转场提示词生成失败。",
+    "promptFallbackWarning": "当前显示确定性回退提示词，可重试生成或继续生成视频。",
+    "retryPrompt": "重试转场提示词",
+    "regeneratePrompt": "重新生成转场提示词"
   },
   "editor": {
     "alert": {
@@ -195,6 +202,12 @@
     "duration": "时长",
     "fps": "帧率",
     "resolution": "分辨率",
+    "motionStrength": "运动强度",
+    "motionStrengthOption": {
+      "1": "平静/微动",
+      "2": "常规动作",
+      "3": "强动作/激烈"
+    },
     "aspectRatio": "画幅比例",
     "reasoningEffort": "推理强度",
     "voice": "音色",

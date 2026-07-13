@@ -47,9 +47,9 @@ describe('api config filters', () => {
         enabled: true,
       },
       {
-        modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-        modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-        name: 'ComfyUI · LTX 2.3 T8 Smart VBVR',
+        modelId: 'basevideo/seedance2/bernini-480p-i2v',
+        modelKey: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        name: 'ComfyUI · Seedance2.0 Bernini 480p I2V',
         type: 'video',
         provider: 'comfyui',
         price: 0,
@@ -119,9 +119,9 @@ describe('api config filters', () => {
     ]
     const models: CustomModel[] = [
       {
-        modelId: 'gpt-5.4',
+        modelId: 'gpt-5.5',
         modelKey: CODEX_DEFAULT_MODEL_KEY,
-        name: 'Codex GPT-5.4',
+        name: 'Codex GPT-5.5',
         type: 'llm',
         provider: CODEX_PROVIDER_KEY,
         price: 0,

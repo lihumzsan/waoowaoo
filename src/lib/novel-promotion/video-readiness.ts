@@ -100,6 +100,7 @@ export function resolvePanelVideoReadinessIssue(
     payload?: unknown
     modelKey?: string | null
     durationOptions?: readonly number[] | null
+    fpsOptions?: readonly number[] | null
   },
 ): VideoReadinessIssue | null {
   if (!panel.imageUrl) {
@@ -153,6 +154,7 @@ export function resolvePanelVideoReadinessIssue(
     })),
     modelKey: options?.modelKey,
     durationOptions: options?.durationOptions,
+    fpsOptions: options?.fpsOptions,
     context: {
       shotType: panel.shotType,
       cameraMove: panel.cameraMove,

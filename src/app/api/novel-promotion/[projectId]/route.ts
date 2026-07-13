@@ -10,6 +10,7 @@ import {
   parseModelKeyStrict,
   type CapabilitySelections,
   type UnifiedModelType} from '@/lib/model-config-contract'
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 import {
   resolveBuiltinModelContext,
   getCapabilityOptionFields,
@@ -320,17 +321,21 @@ export const PATCH = apiHandler(async (
   for (const field of allowedProjectFields) {
     if (body[field] === undefined) continue
 
+    const fieldValue = field === 'videoModel' && typeof body[field] === 'string'
+      ? normalizeVideoModelKey(body[field])
+      : body[field]
+
     if ((MODEL_FIELDS as readonly string[]).includes(field)) {
-      validateModelKeyField(field as typeof MODEL_FIELDS[number], body[field])
+      validateModelKeyField(field as typeof MODEL_FIELDS[number], fieldValue)
       await validateEnabledProjectModelField({
         userId: session.user.id,
         field: field as typeof MODEL_FIELDS[number],
-        value: body[field],
+        value: fieldValue,
       })
     }
 
     if (field === 'artStyle') {
-      updateData[field] = validateArtStyleField(body[field])
+      updateData[field] = validateArtStyleField(fieldValue)
       continue
     }
 
@@ -343,7 +348,7 @@ export const PATCH = apiHandler(async (
       continue
     }
 
-    updateData[field] = body[field]
+    updateData[field] = fieldValue
   }
 
   const updatedNovelPromotionData = await prisma.novelPromotionProject.update({

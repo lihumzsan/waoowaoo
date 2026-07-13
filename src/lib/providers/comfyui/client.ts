@@ -795,11 +795,19 @@ export async function runComfyUiWorkflow(params: {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 1000))
 
     const now = Date.now()
-    const historyResponse = await fetch(`${base}/history/${encodeURIComponent(promptId)}`, {
-      signal: AbortSignal.timeout(30_000),
-    })
-    if (historyResponse.ok) {
-      const history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
+    let history: Record<string, ComfyHistoryEntry> | null = null
+    try {
+      const historyResponse = await fetch(`${base}/history/${encodeURIComponent(promptId)}`, {
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (historyResponse.ok) {
+        history = await historyResponse.json() as Record<string, ComfyHistoryEntry>
+      }
+    } catch {
+      history = null
+    }
+
+    if (history) {
       const entry = history[promptId]
       if (entry) {
         mediaRef = pickPreferredMediaRefFromOutputs(entry.outputs, params.expect, workflow)
@@ -949,6 +957,7 @@ export async function runComfyUiVideoWorkflow(params: {
   height?: number
   durationSeconds?: number
   fps?: number
+  motionStrength?: number
   llmApi?: ComfyUiWorkflowLlmApiInject
 }): Promise<{ videoBase64: string; mimeType: string }> {
   const base = normalizeComfyBaseUrl(params.baseUrl)
@@ -992,6 +1001,7 @@ export async function runComfyUiVideoWorkflow(params: {
       fps,
       durationSeconds,
       targetFrameCount,
+      motionStrength: params.motionStrength,
       llmApi: params.llmApi,
     },
   )

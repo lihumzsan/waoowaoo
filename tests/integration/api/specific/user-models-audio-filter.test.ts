@@ -71,13 +71,9 @@ describe('api specific - user models audio filter', () => {
       'comfyui::baseaudio/单人/LongCat-one',
     ])
     expect(body.video.map((item) => item.value)).toEqual([
+      'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync',
       'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
-      'comfyui::basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
-      'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-      'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
-      'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-      'comfyui::basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
-      'comfyui::basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles',
     ])
   })
 })

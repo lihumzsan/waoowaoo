@@ -1,6 +1,8 @@
 // 视频阶段共享类型定义
 import type { ModelCapabilities } from '@/lib/model-config-contract'
 import type { VideoPricingTier } from '@/lib/model-pricing/video-tier'
+import type { FirstLastFrameFingerprintPanel } from '@/lib/novel-promotion/first-last-frame-prompt-fingerprint'
+import type { VideoDurationBinding as CoreVideoDurationBinding } from '@/lib/video-duration/audio-binding'
 
 // 用户视频模型选项
 export interface VideoModelOption {
@@ -16,11 +18,7 @@ export interface VideoModelOption {
 export type VideoGenerationMode = 'normal' | 'firstlastframe' | 'split'
 export type VideoDurationMode = 'manual' | 'match_audio'
 
-export interface VideoDurationBinding {
-  mode?: VideoDurationMode
-  voiceLineIds?: string[]
-  targetDurationSeconds?: number | null
-}
+export type VideoDurationBinding = CoreVideoDurationBinding
 
 export interface TextPanel {
   panel_number: number
@@ -44,14 +42,20 @@ export interface Panel {
   cameraMove?: string | null
   description?: string | null
   characters?: string | null
+  props?: string | null
+  sceneType?: string | null
   location?: string | null
   textSegment?: string | null
   srtSegment?: string | null  // SRT 原文片段
   duration?: number | null
   imagePrompt?: string | null
+  media?: FirstLastFrameFingerprintPanel['imageMedia']
   imageUrl?: string | null  // 图片URL
   videoPrompt?: string | null
+  videoPromptEditedByUser?: boolean | null
   firstLastFramePrompt?: string | null
+  firstLastFramePromptEditedByUser?: boolean | null
+  firstLastFramePromptSourceFingerprint?: string | null
   videoDurationBinding?: VideoDurationBinding | string | null
   videoUrl?: string | null
   videoGenerationMode?: VideoGenerationMode | null
@@ -93,6 +97,10 @@ export interface VideoPanel {
   panelIndex: number
   textPanel?: TextPanel
   firstLastFramePrompt?: string
+  videoPromptEditedByUser?: boolean
+  firstLastFramePromptEditedByUser?: boolean
+  firstLastFramePromptSourceFingerprint?: string
+  firstLastFramePromptFingerprintSource?: FirstLastFrameFingerprintPanel
   videoDurationBinding?: VideoDurationBinding
   imageUrl?: string
   videoUrl?: string
@@ -129,6 +137,7 @@ export interface FirstLastFrameParams {
   lastFramePanelIndex: number
   flModel: string
   customPrompt?: string
+  customPromptEditedByUser?: boolean
 }
 
 export type VideoGenerationOptionValue = string | number | boolean

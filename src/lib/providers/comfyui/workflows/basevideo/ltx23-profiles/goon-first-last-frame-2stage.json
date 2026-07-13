@@ -1,0 +1,588 @@
+{
+  "75": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "122",
+        0
+      ],
+      "filename_prefix": "DeepWhite/video/LTX-2.3",
+      "format": "mp4",
+      "codec": "auto"
+    }
+  },
+  "100": {
+    "class_type": "ManualSigmas",
+    "inputs": {
+      "sigmas": "0.85, 0.7250, 0.4219, 0.0"
+    }
+  },
+  "101": {
+    "class_type": "LatentUpscaleModelLoader",
+    "inputs": {
+      "model_name": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+    }
+  },
+  "103": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": [
+        "297",
+        0
+      ],
+      "positive": [
+        "107",
+        0
+      ],
+      "negative": [
+        "107",
+        1
+      ],
+      "cfg": 1
+    }
+  },
+  "104": {
+    "class_type": "ImageScaleBy",
+    "inputs": {
+      "image": [
+        "111",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "scale_by": 0.5
+    }
+  },
+  "105": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "104",
+        0
+      ]
+    }
+  },
+  "107": {
+    "class_type": "LTXVConditioning",
+    "inputs": {
+      "positive": [
+        "121",
+        0
+      ],
+      "negative": [
+        "110",
+        0
+      ],
+      "frame_rate": [
+        "233",
+        0
+      ]
+    }
+  },
+  "108": {
+    "class_type": "EmptyLTXVLatentVideo",
+    "inputs": {
+      "width": [
+        "105",
+        0
+      ],
+      "height": [
+        "105",
+        1
+      ],
+      "length": [
+        "235",
+        1
+      ],
+      "batch_size": 1
+    }
+  },
+  "109": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "265",
+        0
+      ],
+      "audio_latent": [
+        "171",
+        0
+      ]
+    }
+  },
+  "110": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "279",
+        0
+      ],
+      "text": "watermark, logo, signature, text, subtitles, hardcoded subtitles, closed captions, Chinese characters, translated text, lyrics, UI, HUD, visible drone in frame, drone propellers in shot, visible camera equipment, CGI, 3D render, video game, cartoon, anime, deformed, distorted, morphing, flickering, jittering, temporal inconsistency, blurry, low resolution, bad anatomy, extra limbs, melted face, asymmetrical eyes, bad teeth, lip-sync mismatch, over-smoothed skin, plastic,fpv,字幕"
+    }
+  },
+  "111": {
+    "class_type": "EmptyImage",
+    "inputs": {
+      "width": [
+        "237",
+        0
+      ],
+      "height": [
+        "238",
+        0
+      ],
+      "batch_size": 1,
+      "color": 0
+    }
+  },
+  "114": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 732185017912966
+    }
+  },
+  "115": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 178742904567063
+    }
+  },
+  "116": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "172",
+        0
+      ]
+    }
+  },
+  "117": {
+    "class_type": "LTXVConcatAVLatent",
+    "inputs": {
+      "video_latent": [
+        "275",
+        0
+      ],
+      "audio_latent": [
+        "116",
+        1
+      ]
+    }
+  },
+  "118": {
+    "class_type": "LTXVLatentUpsampler",
+    "inputs": {
+      "samples": [
+        "116",
+        0
+      ],
+      "upscale_model": [
+        "101",
+        0
+      ],
+      "vae": [
+        "278",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "spatial"
+    }
+  },
+  "119": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "114",
+        0
+      ],
+      "guider": [
+        "103",
+        0
+      ],
+      "sampler": [
+        "281",
+        0
+      ],
+      "sigmas": [
+        "100",
+        0
+      ],
+      "latent_image": [
+        "117",
+        0
+      ]
+    }
+  },
+  "121": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "279",
+        0
+      ],
+      "text": "The scene begins with the woman in green initiating a sudden, aggressive lunge, her glowing sword cutting through the air with a faint trail of light. The woman in white reacts by shifting her weight back, attempting to use her red umbrella as a shield, but the momentum of the attack is too great. As the woman in green steps forward, her long hair and translucent sleeves flow dynamically behind her. The camera tracks the forward motion, tightening the frame on the two combatants. In a swift, decisive arc, the woman in green maneuvers her blade past the umbrella, ending the duel by pressing the glowing edge against the neck of the woman in white. The woman in white halts her movement, her posture tensing as she slowly lowers her umbrella toward the ground. The transition concludes with both figures locked in a tense standoff, featuring stable motion, cinematic motion blur, coherent movement, and avoid flicker."
+    }
+  },
+  "122": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "126",
+        0
+      ],
+      "audio": [
+        "127",
+        0
+      ],
+      "fps": [
+        "233",
+        0
+      ],
+      "bit_depth": 8
+    }
+  },
+  "124": {
+    "class_type": "LTXVSeparateAVLatent",
+    "inputs": {
+      "av_latent": [
+        "119",
+        0
+      ]
+    }
+  },
+  "126": {
+    "class_type": "VAEDecodeTiled",
+    "inputs": {
+      "samples": [
+        "124",
+        0
+      ],
+      "vae": [
+        "278",
+        2
+      ],
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 2048,
+      "temporal_overlap": 8
+    }
+  },
+  "127": {
+    "class_type": "LTXVAudioVAEDecode",
+    "inputs": {
+      "samples": [
+        "124",
+        1
+      ],
+      "audio_vae": [
+        "277",
+        0
+      ]
+    }
+  },
+  "128": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": [
+        "297",
+        0
+      ],
+      "positive": [
+        "107",
+        0
+      ],
+      "negative": [
+        "107",
+        1
+      ],
+      "cfg": 1
+    }
+  },
+  "135": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "136": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "149": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "ComfyUI_00581_.png"
+    }
+  },
+  "151": {
+    "class_type": "ResizeImagesByLongerEdge",
+    "inputs": {
+      "images": [
+        "149",
+        0
+      ],
+      "longer_edge": 1536
+    }
+  },
+  "152": {
+    "class_type": "LTXVPreprocess",
+    "inputs": {
+      "image": [
+        "151",
+        0
+      ],
+      "img_compression": 18
+    }
+  },
+  "171": {
+    "class_type": "LTXVEmptyLatentAudio",
+    "inputs": {
+      "audio_vae": [
+        "277",
+        0
+      ],
+      "frames_number": [
+        "235",
+        1
+      ],
+      "frame_rate": [
+        "295",
+        0
+      ],
+      "batch_size": 1
+    }
+  },
+  "172": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "115",
+        0
+      ],
+      "guider": [
+        "128",
+        0
+      ],
+      "sampler": [
+        "135",
+        0
+      ],
+      "sigmas": [
+        "204",
+        0
+      ],
+      "latent_image": [
+        "109",
+        0
+      ]
+    }
+  },
+  "204": {
+    "class_type": "ManualSigmas",
+    "inputs": {
+      "sigmas": "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    }
+  },
+  "233": {
+    "class_type": "PrimitiveFloat",
+    "inputs": {
+      "value": 24
+    },
+    "_meta": {
+      "title": "FPS"
+    }
+  },
+  "235": {
+    "class_type": "SimpleCalculatorKJ",
+    "inputs": {
+      "expression": "1+ 8*(round(a*b)/8)",
+      "a": [
+        "236",
+        0
+      ],
+      "b": [
+        "233",
+        0
+      ]
+    }
+  },
+  "236": {
+    "class_type": "INTConstant",
+    "inputs": {
+      "value": 10
+    }
+  },
+  "237": {
+    "class_type": "INTConstant",
+    "inputs": {
+      "value": 1280
+    }
+  },
+  "238": {
+    "class_type": "INTConstant",
+    "inputs": {
+      "value": 736
+    }
+  },
+  "265": {
+    "class_type": "LTXVImgToVideoInplaceKJ",
+    "inputs": {
+      "vae": [
+        "278",
+        2
+      ],
+      "latent": [
+        "108",
+        0
+      ],
+      "num_images": "2",
+      "num_images.strength_1": 1,
+      "num_images.strength_2": 1,
+      "num_images.image_1": [
+        "152",
+        0
+      ],
+      "num_images.index_1": 0,
+      "num_images.image_2": [
+        "271",
+        0
+      ],
+      "num_images.index_2": -1
+    }
+  },
+  "269": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "ComfyUI_00579_.png"
+    }
+  },
+  "271": {
+    "class_type": "LTXVPreprocess",
+    "inputs": {
+      "image": [
+        "272",
+        0
+      ],
+      "img_compression": 18
+    }
+  },
+  "272": {
+    "class_type": "ResizeImagesByLongerEdge",
+    "inputs": {
+      "images": [
+        "269",
+        0
+      ],
+      "longer_edge": 1536
+    }
+  },
+  "275": {
+    "class_type": "LTXVImgToVideoInplaceKJ",
+    "inputs": {
+      "vae": [
+        "278",
+        2
+      ],
+      "latent": [
+        "118",
+        0
+      ],
+      "num_images": "2",
+      "num_images.strength_1": 1,
+      "num_images.strength_2": 1,
+      "num_images.image_1": [
+        "152",
+        0
+      ],
+      "num_images.index_1": 0,
+      "num_images.image_2": [
+        "271",
+        0
+      ],
+      "num_images.index_2": -1
+    }
+  },
+  "276": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "278",
+        0
+      ],
+      "lora_name": "ltx\\ltx-2.3-22b-distilled-lora-384.safetensors",
+      "strength_model": 0.5
+    }
+  },
+  "277": {
+    "class_type": "LTXVAudioVAELoader",
+    "inputs": {
+      "ckpt_name": "ltx\\ltx-2.3-22b-dev-fp8.safetensors"
+    }
+  },
+  "278": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "ltx\\ltx-2.3-22b-dev-fp8.safetensors"
+    }
+  },
+  "279": {
+    "class_type": "LTXAVTextEncoderLoader",
+    "inputs": {
+      "text_encoder": "ltx\\gemma_3_12B_it_fp8_e4m3fn.safetensors",
+      "ckpt_name": "ltx\\ltx-2.3-22b-dev-fp8.safetensors",
+      "device": "default"
+    }
+  },
+  "281": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "295": {
+    "class_type": "CM_FloatToInt",
+    "inputs": {
+      "a": [
+        "233",
+        0
+      ]
+    }
+  },
+  "297": {
+    "class_type": "LTXVChunkFeedForward",
+    "inputs": {
+      "model": [
+        "299",
+        0
+      ],
+      "chunks": 4,
+      "dim_threshold": 4096
+    },
+    "_meta": {
+      "title": "LTXV Chunk FeedForward (optional)"
+    }
+  },
+  "298": {
+    "class_type": "PathchSageAttentionKJ",
+    "inputs": {
+      "model": [
+        "276",
+        0
+      ],
+      "sage_attention": "auto",
+      "allow_compile": false
+    }
+  },
+  "299": {
+    "class_type": "ModelPatchTorchSettings",
+    "inputs": {
+      "model": [
+        "298",
+        0
+      ],
+      "enable_fp16_accumulation": true
+    }
+  }
+}

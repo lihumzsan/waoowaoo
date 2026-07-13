@@ -61,7 +61,7 @@ export function createImageWorker() {
     }),
     {
       connection: queueRedis,
-      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_IMAGE || '20', 10) || 20,
+      concurrency: Number.parseInt(process.env.QUEUE_CONCURRENCY_IMAGE || '10', 10) || 10,
     },
   )
 }

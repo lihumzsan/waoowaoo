@@ -95,7 +95,7 @@ codex/ltx23-workflow-profiles
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2.json`
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro.json`
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-single-image-large-motion-4stage.json`
-- Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-smooth-first-last-frame.json`
+- Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/<removed-legacy-first-last-frame-workflow>.json`
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-image-to-30s-long-video.json`
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-long-video-promptrelay.json`
 - Create: `/Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles.json`
@@ -111,7 +111,7 @@ mkdir -p /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/w
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-t8-workflows/workflows/2054480431743021058-Ltx2-3-Prompt-Relay-Smart-VBVR-390K-V2.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2.json
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-t8-workflows/workflows/2054743040564178946-Ltx2-3-Sulphur-2-Prompt-Relay.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro.json
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-t8-workflows/workflows/2052622530854301697-ltx2-3-VBVR-transition-Prompt-Relay-V1.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-single-image-large-motion-4stage.json
-cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-t8-workflows/workflows/2052425175639052290-LTX2-3-V1.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/t8-smooth-first-last-frame.json
+cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-t8-workflows/workflows/2052425175639052290-LTX2-3-V1.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/<removed-legacy-first-last-frame-workflow>.json
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-damaicha-workflows/workflows/2043904012268871681-LTX2-3-image-to-30s-long-video.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-image-to-30s-long-video.json
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-damaicha-workflows/workflows/2049157702005297154-LTX2-3-long-video-PromptRelay.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-long-video-promptrelay.json
 cp /Users/tigli/Documents/Codex/2026-05-21/hyperframes-plugin-hyperframes-openai-curated/analysis/runninghub-ltx23-damaicha-workflows/workflows/2050758511885332481-LTX2-3-AIO-V2-no-subtitles.json /Users/tigli/workspace/work/github/waoowaoo/src/lib/providers/comfyui/workflows/basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles.json
@@ -242,7 +242,7 @@ export const COMFYUI_LTX23_WORKFLOW_KEYS = {
   singleImagePrecise: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
   microDetail: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro',
   singleImageLargeMotion: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage',
-  smoothFirstLastFrame: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+  smoothFirstLastFrame: 'basevideo/ltx23-profiles/<removed-legacy-first-last-frame-workflow>',
   existingFirstLastFrame: 'basevideo/首尾帧/ltx2.3首尾帧',
   damaichaImageTo30s: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
   damaichaLongPromptRelay: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay',
@@ -1022,7 +1022,7 @@ Modify `/Users/tigli/workspace/work/github/waoowaoo/standards/capabilities/image
 basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2 -> durationOptions [4, 5, 6, 8, 10, 12], generationModeOptions ["normal"]
 basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro -> durationOptions [4, 5, 6, 8, 10, 12], generationModeOptions ["normal"]
 basevideo/ltx23-profiles/t8-single-image-large-motion-4stage -> durationOptions [12, 16, 20], generationModeOptions ["normal"]
-basevideo/ltx23-profiles/t8-smooth-first-last-frame -> durationOptions [4, 5, 6, 8, 10, 12], generationModeOptions ["firstlastframe"], firstlastframe true
+basevideo/ltx23-profiles/<removed-legacy-first-last-frame-workflow> -> durationOptions [4, 5, 6, 8, 10, 12], generationModeOptions ["firstlastframe"], firstlastframe true
 basevideo/ltx23-profiles/damaicha-image-to-30s-long-video -> durationOptions [12, 16, 20, 24, 30], generationModeOptions ["normal"]
 basevideo/ltx23-profiles/damaicha-long-video-promptrelay -> durationOptions [12, 16, 20, 24], generationModeOptions ["normal"]
 basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles -> durationOptions [6, 8, 10, 12], generationModeOptions ["normal"]
@@ -1053,7 +1053,7 @@ In `/Users/tigli/workspace/work/github/waoowaoo/src/app/[locale]/profile/compone
 { modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', name: 'ComfyUI · LTX2.3 单图精准 Smart VBVR', type: 'video', provider: 'comfyui' },
 { modelId: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro', name: 'ComfyUI · LTX2.3 微表情 Sulphur2', type: 'video', provider: 'comfyui' },
 { modelId: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage', name: 'ComfyUI · LTX2.3 单图大幅变化四段控制', type: 'video', provider: 'comfyui' },
-{ modelId: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame', name: 'ComfyUI · LTX2.3 丝滑首尾帧', type: 'video', provider: 'comfyui' },
+{ modelId: 'basevideo/ltx23-profiles/<removed-legacy-first-last-frame-workflow>', name: 'ComfyUI · LTX2.3 丝滑首尾帧', type: 'video', provider: 'comfyui' },
 { modelId: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video', name: 'ComfyUI · LTX2.3 大麦茶图生30秒', type: 'video', provider: 'comfyui' },
 { modelId: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay', name: 'ComfyUI · LTX2.3 大麦茶长视频 PromptRelay', type: 'video', provider: 'comfyui' },
 { modelId: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles', name: 'ComfyUI · LTX2.3 大麦茶 AIO V2 无字幕', type: 'video', provider: 'comfyui' },

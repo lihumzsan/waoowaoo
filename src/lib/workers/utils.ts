@@ -9,12 +9,14 @@ import { getSignedUrl, toFetchableUrl } from '@/lib/storage'
 import { initializeFonts, createLabelSVG } from '@/lib/fonts'
 import { processMediaResult, processMediaResultWithMetadata } from '@/lib/media-process'
 import { renderStaticCameraMotionVideo } from '@/lib/video/static-camera-motion'
+import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 import {
   getProjectModelConfig,
   getUserModelConfig,
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/model-capabilities/lookup'
+import { resolveBerniniCapabilityValidationDuration } from '@/lib/model-capabilities/video-recommended-duration'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
@@ -421,6 +423,14 @@ export async function resolveImageSourcesFromGeneration(
 
 function resolveCapabilityValidationDuration(modelId: string, requestedDuration: number): number {
   const durationOptions = resolveBuiltinCapabilitiesByModelKey('video', modelId)?.video?.durationOptions
+    ?? getLtx23WorkflowProfile(modelId)?.durationOptions
+  const berniniDuration = resolveBerniniCapabilityValidationDuration(
+    modelId,
+    requestedDuration,
+    durationOptions,
+  )
+  if (berniniDuration !== requestedDuration) return berniniDuration
+
   const sortedOptions = Array.isArray(durationOptions)
     ? durationOptions
       .filter((option): option is number => typeof option === 'number' && Number.isFinite(option) && option > 0)
@@ -500,8 +510,17 @@ export async function resolveVideoSourceFromGeneration(
       ? resolveCapabilityValidationDuration(params.modelId, requestedDuration)
       : requestedDuration
   }
+  if (typeof params.options?.fps === 'number' && Number.isFinite(params.options.fps) && params.options.fps > 0) {
+    runtimeSelections.fps = params.options.fps
+  }
   if (typeof params.options?.resolution === 'string') {
     runtimeSelections.resolution = params.options.resolution
+  }
+  if (
+    typeof params.options?.motionStrength === 'number'
+    && Number.isFinite(params.options.motionStrength)
+  ) {
+    runtimeSelections.motionStrength = params.options.motionStrength
   }
   if (
     params.options?.generationMode === 'normal'
@@ -521,15 +540,16 @@ export async function resolveVideoSourceFromGeneration(
     runtimeSelections,
   })
   const projectModelConfig = await getProjectModelConfig(job.data.projectId, params.userId)
+  const isComfyUiVideo = parseModelKeyStrict(params.modelId)?.provider === 'comfyui'
 
   const providerCapabilityOptions: Record<string, string | number | boolean> = { ...capabilityOptions }
-  delete providerCapabilityOptions.generationMode
+  if (!isComfyUiVideo) delete providerCapabilityOptions.generationMode
   if (allowCustomDuration) {
     delete providerCapabilityOptions.duration
   }
   const providerRequestOptions: Record<string, string | number | boolean | string[]> = {}
   for (const [key, value] of Object.entries(params.options || {})) {
-    if (key === 'generationMode' || value === undefined) continue
+    if ((key === 'generationMode' && !isComfyUiVideo) || value === undefined) continue
     if (key === 'referenceAudioUrls' || key === 'referenceImageUrls') {
       providerRequestOptions[key] = Array.isArray(value)
         ? value.map((item) => typeof item === 'string' ? toFetchableUrl(item) : item)

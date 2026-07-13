@@ -48,6 +48,21 @@ describe('ltx23 workflow router', () => {
     expect(result?.reasons).toContain('large_motion_or_camera_movement')
   })
 
+  it('keeps audio-backed Smart VBVR requests on the Smart VBVR workflow up to its profile max', () => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: DEFAULT_MODEL,
+      selectionMode: 'auto',
+      audioDurationSeconds: 19.56,
+      panel: {
+        videoPrompt: 'GLOBAL: rainy street. LOCAL: Scene 1: subject walks | Scene 2: camera moves up | Scene 3: subject turns | Scene 4: camera pulls back',
+      },
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise)
+    expect(result?.durationSeconds).toBe(19.56)
+    expect(result?.reasons).toContain('audio_backed_smart_vbvr')
+  })
+
   it('keeps slow Chinese push-in camera prompts on the single-image profile for 12s', () => {
     const result = resolveLtx23WorkflowRoute({
       modelKey: DEFAULT_MODEL,
@@ -78,7 +93,7 @@ describe('ltx23 workflow router', () => {
     expect(result?.reasons).toContain('large_motion_or_camera_movement')
   })
 
-  it('routes first-last-frame generation to the smooth first-last-frame profile', () => {
+  it('routes first-last-frame generation to Goon with its default duration and fixed fps', () => {
     const result = resolveLtx23WorkflowRoute({
       modelKey: DEFAULT_MODEL,
       selectionMode: 'auto',
@@ -86,13 +101,41 @@ describe('ltx23 workflow router', () => {
       panel: { description: 'bridge two frames' },
     })
 
-    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame)
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)
+    expect(result?.durationSeconds).toBe(10)
+    expect(result?.fps).toBe(24)
     expect(result?.confidence).toBe(1)
+  })
+
+  it('routes manual LTX2.3 first-last-frame requests to Goon', () => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: DEFAULT_MODEL,
+      selectionMode: 'manual',
+      generationMode: 'firstlastframe',
+      requestedDurationSeconds: 5,
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)
+    expect(result?.durationSeconds).toBe(5)
+    expect(result?.fps).toBe(24)
+    expect(result?.reasons).toContain('first_last_frame_generation')
+  })
+
+  it.each([7, 15])('routes supported %s-second first-last-frame requests to Goon without fallback', (duration) => {
+    const result = resolveLtx23WorkflowRoute({
+      modelKey: DEFAULT_MODEL,
+      generationMode: 'firstlastframe',
+      requestedDurationSeconds: duration,
+    })
+
+    expect(result?.selectedWorkflowKey).toBe(COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame)
+    expect(result?.durationSeconds).toBe(duration)
+    expect(result?.fps).toBe(24)
   })
 
   it('falls back from a first-last-frame-only model when the request is normal generation', () => {
     const result = resolveLtx23WorkflowRoute({
-      modelKey: `comfyui::${COMFYUI_LTX23_WORKFLOW_KEYS.smoothFirstLastFrame}`,
+      modelKey: `comfyui::${COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame}`,
       generationMode: 'normal',
       requestedDurationSeconds: 6,
       panel: { description: 'two people sit still in an office' },

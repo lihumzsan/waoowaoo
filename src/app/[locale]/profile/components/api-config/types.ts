@@ -97,7 +97,7 @@ type PresetModel = Omit<CustomModel, 'enabled' | 'modelKey' | 'price'>
 // 预设模型
 export const PRESET_MODELS: PresetModel[] = [
     // 文本模型
-    { modelId: CODEX_DEFAULT_MODEL_ID, name: 'Codex GPT-5.4', type: 'llm', provider: CODEX_PROVIDER_KEY },
+    { modelId: CODEX_DEFAULT_MODEL_ID, name: 'Codex GPT-5.5', type: 'llm', provider: CODEX_PROVIDER_KEY },
     { modelId: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast', type: 'llm', provider: 'openrouter' },
     { modelId: '~openai/gpt-latest', name: 'OpenAI GPT Latest', type: 'llm', provider: 'openrouter' },
     { modelId: 'openai/gpt-5.5-pro', name: 'GPT-5.5 Pro', type: 'llm', provider: 'openrouter' },
@@ -154,13 +154,10 @@ export const PRESET_MODELS: PresetModel[] = [
     { modelId: 'baseimage/图片编辑/qwen三图编辑', name: 'ComfyUI · Qwen 三图编辑', type: 'image', provider: 'comfyui' },
     { modelId: 'baseimage/图片编辑/Flux2多图编辑', name: 'ComfyUI · Flux2 多图编辑', type: 'image', provider: 'comfyui' },
     // 视频模型
-    { modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', name: 'ComfyUI · LTX 2.3 T8 Smart VBVR', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/t8-sulphur2-promptrelay-micro', name: 'ComfyUI · LTX 2.3 T8 微动 PromptRelay', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/t8-single-image-large-motion-4stage', name: 'ComfyUI · LTX 2.3 T8 单图大幅变化', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/t8-smooth-first-last-frame', name: 'ComfyUI · LTX 2.3 T8 平滑首尾帧', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/damaicha-image-to-30s-long-video', name: 'ComfyUI · LTX 2.3 大麦茶 30 秒长视频', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/damaicha-long-video-promptrelay', name: 'ComfyUI · LTX 2.3 大麦茶长视频 PromptRelay', type: 'video', provider: 'comfyui' },
-    { modelId: 'basevideo/ltx23-profiles/damaicha-aio-v2-no-subtitles', name: 'ComfyUI · LTX 2.3 大麦茶 AIO 无字幕', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/seedance2/bernini-480p-i2v', name: 'ComfyUI · Seedance2.0 Bernini 480p I2V', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/seedance2/bernini-480p-i2v-audio-lipsync', name: 'ComfyUI · Seedance2.0 Bernini 480p I2V Audio LipSync', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/ltx23-profiles/goon-first-last-frame-2stage', name: 'ComfyUI · LTX2.3 Goon First/Last Frame', type: 'video', provider: 'comfyui' },
+    { modelId: 'basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2', name: 'ComfyUI · LTX2.3 Smart VBVR I2V Audio', type: 'video', provider: 'comfyui' },
     { modelId: 'doubao-seedance-1-0-pro-fast-251015', name: 'Seedance 1.0 Pro Fast', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-0-lite-i2v-250428', name: 'Seedance 1.0 Lite', type: 'video', provider: 'ark' },
     { modelId: 'doubao-seedance-1-5-pro-251215', name: 'Seedance 1.5 Pro', type: 'video', provider: 'ark' },

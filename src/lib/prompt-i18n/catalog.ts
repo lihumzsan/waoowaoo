@@ -179,4 +179,14 @@ export const PROMPT_CATALOG: Record<PromptId, PromptCatalogEntry> = {
     pathStem: 'novel-promotion/voice_analysis',
     variableKeys: ['input', 'characters_lib_name', 'characters_introduction', 'storyboard_json'],
   },
+  [PROMPT_IDS.NP_FIRST_LAST_FRAME_TRANSITION]: {
+    pathStem: 'novel-promotion/first_last_frame_transition',
+    variableKeys: [
+      'first_panel_context',
+      'last_panel_context',
+      'duration_seconds',
+      'fps',
+      'goon_key',
+    ],
+  },
 }

@@ -1,0 +1,20 @@
+请为 Goon 首尾帧视频工作流编写一个连续镜头的转场提示词。
+
+Image 1 是 START，必须作为精确起始画面。
+Image 2 是 END，必须作为精确结束画面。
+
+START 画面上下文：
+{first_panel_context}
+
+END 画面上下文：
+{last_panel_context}
+
+时长：{duration_seconds} 秒，{fps} fps。
+规范工作流：{goon_key}
+
+只返回严格 JSON：
+{"transition_prompt":"...","duration_analysis":{"motion_beats":[{"type":"body_action","order":1,"parallel_group":"optional"}],"pacing":"normal","continuity":"good","confidence":0.8,"reason":"简短中文依据"},"warnings":["..."]}
+
+transition_prompt 必须使用 English，约 70-160 个英文单词，并描述从 START 到 END 的单个物理连续镜头。保持可见人物身份、服装、地点、光线、道具和构图一致。禁止剪切、场景变化、新增人物、新增道具、新增地点、新增剧情、字幕或可读文字。只描述能够合理连接两张输入画面的动作与镜头运动。warnings 可省略；若提供，必须是简短英文字符串数组。
+
+duration_analysis 必须提供，但不要直接输出秒数。motion_beats[].type 只能使用：micro_motion、gesture、body_action、locomotion、environment_change、transformation、camera_standard、camera_large。order 表示串行阶段；同一时间发生的动作使用相同 parallel_group。pacing 只能是 fast、normal 或 slow。continuity 只能是 good、challenging 或 discontinuous。confidence 必须是 0 到 1 的数字。reason 是给用户看的简短中文依据。

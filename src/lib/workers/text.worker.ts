@@ -36,6 +36,7 @@ import { handleAssetHubAIModifyTask } from './handlers/asset-hub-ai-modify'
 import { handleReferenceToCharacterTask } from './handlers/reference-to-character'
 import { handleShotAITask } from './handlers/shot-ai-tasks'
 import { handleCharacterProfileTask } from './handlers/character-profile'
+import { handleFirstLastFramePromptTask } from './handlers/first-last-frame-prompt'
 
 function readAssetKind(value: Record<string, unknown>): string {
   return typeof value.assetKind === 'string' ? value.assetKind : 'location'
@@ -697,6 +698,8 @@ async function processTextTask(job: Job<TaskJobData>) {
       return await handleRegenerateStoryboardTextTask(job)
     case TASK_TYPE.INSERT_PANEL:
       return await handleInsertPanelTask(job)
+    case TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT:
+      return await handleFirstLastFramePromptTask(job)
     default:
       throw new Error(`Unsupported text task type: ${job.data.type}`)
   }

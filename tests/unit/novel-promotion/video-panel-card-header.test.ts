@@ -151,4 +151,17 @@ describe('VideoPanelCardHeader', () => {
 
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*><span>refresh<\/span><\/button>/)
   })
+
+  it('shows an enabled normal-video regenerate action for an incoming last frame', () => {
+    const runtime = createRuntime()
+    runtime.layout.isLastFrame = true
+
+    const markup = renderToStaticMarkup(
+      React.createElement(VideoPanelCardHeader, { runtime }),
+    )
+
+    expect(markup).toMatch(
+      /<button(?![^>]*disabled="")[^>]*><span>refresh<\/span><\/button>/,
+    )
+  })
 })

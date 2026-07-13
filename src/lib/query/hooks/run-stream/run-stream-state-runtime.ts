@@ -9,6 +9,7 @@ import { deriveRunStreamView } from './run-stream-view'
 import type { RunResult, RunState, RunStreamView, UseRunStreamStateOptions } from './types'
 import { apiFetch } from '@/lib/api-fetch'
 import { startRecoveryProbe } from './recovery-probe'
+import { shouldTickRunStreamClock } from './run-stream-clock'
 
 export type {
   RunResult,
@@ -276,10 +277,18 @@ export function useRunStreamState<TParams extends Record<string, unknown>>(
     setIsRecoveredRunning(false)
   }, [stop])
 
+  const shouldTickClock = shouldTickRunStreamClock({
+    isLiveRunning,
+    isRecoveredRunning,
+    status: runState?.status || 'idle',
+  })
+
   useEffect(() => {
+    if (!shouldTickClock) return
+    setClock(Date.now())
     const timer = window.setInterval(() => setClock(Date.now()), 500)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [shouldTickClock])
 
   const view = useMemo(() => {
     return deriveRunStreamView({

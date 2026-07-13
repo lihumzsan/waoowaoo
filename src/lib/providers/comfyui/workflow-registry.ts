@@ -1,15 +1,27 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import {
-  COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID,
+  COMFYUI_LTX23_GOON_FPS,
   COMFYUI_LTX23_WORKFLOW_KEYS,
   expandLtx23WorkflowImageFilenames,
   getLtx23WorkflowProfile,
+  isComfyUiLtx23GoonFirstLastFrameWorkflow,
+  normalizeLtx23GoonDurationSeconds,
   normalizeLtx23WorkflowKey,
+  resolveLtx23GoonFinalFrameIndex,
 } from './ltx23-workflow-profiles'
+import {
+  COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID,
+  SEEDANCE2_BERNINI_DEFAULT_DURATION_SECONDS,
+  SEEDANCE2_BERNINI_DEFAULT_FPS,
+  isSeedance2BerniniAudioWorkflowKey,
+  isSeedance2BerniniWorkflowKey,
+  normalizeSeedance2BerniniMotionStrength,
+  resolveSeedance2BerniniMotionStrengthLabel,
+} from './seedance2-bernini-workflow'
 
 export const COMFYUI_DEFAULT_IMAGE_WORKFLOW_ID = 'baseimage/图片生成/Flux2Klein文生图'
-export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_LTX23_DEFAULT_VIDEO_WORKFLOW_ID
+export const COMFYUI_DEFAULT_VIDEO_WORKFLOW_ID = COMFYUI_SEEDANCE2_BERNINI_WORKFLOW_ID
 
 const LEGACY_BUNDLED_ROOT = join(process.cwd(), 'src', 'lib', 'providers', 'comfyui', 'workflows')
 const EXTERNAL_WORKFLOW_TOOL_DIR = 'tool'
@@ -53,7 +65,7 @@ const PREVIEW_OUTPUT_NODE_TYPES = new Set([
 export type ComfyUiWorkflowGraphNode = {
   class_type: string
   inputs: Record<string, unknown>
-  _meta?: {
+  _meta?: Record<string, unknown> & {
     title?: string
   }
 }
@@ -71,6 +83,7 @@ export type ComfyUiWorkflowInject = {
   fps?: number
   durationSeconds?: number
   targetFrameCount?: number
+  motionStrength?: number
 }
 
 export type ComfyUiWorkflowLlmApiInject = {
@@ -1657,7 +1670,7 @@ function applyKjResizeHeuristics(graph: ComfyUiWorkflowGraph): void {
 function setNumericValueOnNode(node: ComfyUiWorkflowGraphNode | undefined, value: number): boolean {
   if (!node || !isRecord(node.inputs)) return false
 
-  for (const field of ['value', 'length', 'a', 'number']) {
+  for (const field of ['value', 'length', 'duration', 'a', 'number']) {
     if (!Object.prototype.hasOwnProperty.call(node.inputs, field)) continue
     if (isConnectionValue(node.inputs[field])) continue
     node.inputs[field] = value
@@ -1736,6 +1749,7 @@ function applyTemporalHeuristics(
 
 type Ltx23WorkflowNodeContract = {
   durationNodeIds?: string[]
+  audioTrimDurationNodeIds?: string[]
   fpsNodeIds?: string[]
   frameCountNodeIds?: string[]
   promptRelaySegmentCount?: number
@@ -1744,6 +1758,7 @@ type Ltx23WorkflowNodeContract = {
 
 const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> = {
   [COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise]: {
+    audioTrimDurationNodeIds: ['628'],
     promptRelaySmartSegmentCount: 4,
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.microDetail]: {
@@ -1753,6 +1768,10 @@ const LTX23_WORKFLOW_NODE_CONTRACTS: Record<string, Ltx23WorkflowNodeContract> =
     frameCountNodeIds: ['1372'],
     fpsNodeIds: ['1375'],
     promptRelaySegmentCount: 4,
+  },
+  [COMFYUI_LTX23_WORKFLOW_KEYS.goonFirstLastFrame]: {
+    durationNodeIds: ['236'],
+    fpsNodeIds: ['233'],
   },
   [COMFYUI_LTX23_WORKFLOW_KEYS.damaichaImageTo30s]: {
     durationNodeIds: ['164'],
@@ -1833,14 +1852,624 @@ const SLOW_CAMERA_STAGE_SUFFIXES = [
   'Stage 3: maintain the same slow restrained push-in speed; do not increase motion intensity or reframe the subjects.',
   'Stage 4: gently settle while keeping the final frame close to the source composition and visible subject count.',
 ]
+const AUDIO_TALKING_HEAD_PATTERNS = [
+  /\b(?:speak|speaks|speaking|talk|talks|talking|say|says|dialogue|voice|mouth|lip|lips|lip[-\s]?sync)\b/i,
+  /(?:\u8bf4\u8bdd|\u8bb2\u8bdd|\u53d1\u8a00|\u5f00\u53e3|\u53e3\u578b|\u5634\u5507|\u5634\u5df4|\u53f0\u8bcd|\u914d\u97f3|\u56de\u7b54|\u63d0\u95ee|\u95ee\u8bdd)/u,
+]
+const AUDIO_TALKING_HEAD_CLEAN_FRAME_PROMPT =
+  'The lower portion of the frame stays clean and unobstructed, with clothing, desk edge, and room background remaining visible and free of glyph-like marks.'
+const AUDIO_TALKING_HEAD_STABILITY_PROMPT = [
+  'Audio-backed talking-head:',
+  'same source-frame composition and same visible subject count throughout.',
+  'The speaker follows the requested head and gaze direction with stable identity, clothing, lighting, desk, and room layout.',
+  'Use subtle reference audio mouth movement, tiny facial motion, and a restrained slow push-in.',
+  AUDIO_TALKING_HEAD_CLEAN_FRAME_PROMPT,
+].join(' ')
+const AUDIO_TALKING_HEAD_TEXT_ARTIFACT_NEGATIVE_PROMPT = [
+  'subtitles',
+  'caption',
+  'captions',
+  'closed captions',
+  'lower third',
+  'text overlay',
+  'on-screen text',
+  'readable text',
+  'dialogue text',
+  'speech text',
+  'Chinese characters',
+  'English letters',
+  'glyph-like marks',
+  'signage',
+  'watermark',
+  'logo',
+  'blurry text',
+  'distorted text',
+  'artifacts around text',
+].join(', ')
+const AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN =
+  /^\s*(?:Panel continuity packet|Mode|Source text|Current shot action|Visible characters|Location lock|Shot\/camera lock|Props lock|Previous shot context|Next shot context|Dialogue lines|Target duration|Creator prompt intent|Hard constraints|Source-frame continuity lock|Allowed visible subjects|Forbidden additions)\s*:/i
+const AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN =
+  /\b(?:do\s+not|don't|must\s+not|cannot|can't|without|avoid|never|forbidden|no\s+(?:subtitles?|captions?|readable\s+text|new\s+people|new\s+characters|extra\s+people|rotation|profile\s+turns?|head\s+turns?|crowds?|guards?|police|scene\s+cuts?|scene\s+changes?))\b|(?:\u4e0d\u8981|\u4e0d\u5f97|\u4e0d\u80fd|\u7981\u6b62|\u907f\u514d)/iu
+const AUDIO_TALKING_HEAD_UNSTABLE_TERM_PATTERN =
+  /\b(?:subtitles?|captions?|watermarks?|crowds?|guards?|police|profile\s+turns?|head\s+turns?|extra\s+people|new\s+people|new\s+characters|rotation|rotating|orbiting|spinning|scene\s+cuts?|scene\s+changes?)\b/i
+const AUDIO_TALKING_HEAD_TEXT_CONTENT_TERM_PATTERN =
+  /(?:字幕|台词|对白字幕|对白文字|画面文字|屏幕文字|可读文字|可读文本|中文字符|英文字符|\bsubtitles?\b|\bcaptions?\b|\bclosed captions?\b|\btext overlays?\b|\breadable text\b|\bdialogue text\b|\bspeech text\b|\bon-screen text\b)/iu
+
+function stripAudioTalkingHeadTextContentClauses(value: string): string {
+  const pieces = value.split(/([，,。；;|])/u)
+  const kept: string[] = []
+
+  for (let index = 0; index < pieces.length; index += 2) {
+    const clause = readTrimmedString(pieces[index])
+    const separator = pieces[index + 1] || ''
+    if (!clause) continue
+    if (AUDIO_TALKING_HEAD_TEXT_CONTENT_TERM_PATTERN.test(clause)) continue
+    kept.push(`${clause}${separator}`)
+  }
+
+  return kept.join('')
+    .replace(/[，,。；;|]\s*$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractAudioTalkingHeadPositiveIntent(value: string): string {
+  const preferred = [
+    /^\s*Current shot action\s*:\s*(.+)$/im,
+    /^\s*Creator prompt intent\s*:\s*(.+)$/im,
+    /^\s*Source text\s*:\s*(.+)$/im,
+  ]
+
+  for (const pattern of preferred) {
+    const match = value.match(pattern)
+    const text = readTrimmedString(match?.[1])
+    if (text && !AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN.test(text)) {
+      return text
+    }
+  }
+
+  return ''
+}
+
+function sanitizeAudioTalkingHeadPrompt(value: string): string {
+  const text = readTrimmedString(value)
+  if (!text) return ''
+  const intent = extractAudioTalkingHeadPositiveIntent(text)
+  const source = intent || text
+  const sanitizedIntent = intent ? stripAudioTalkingHeadTextContentClauses(intent) : ''
+
+  const cleaned = source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map(stripAudioTalkingHeadTextContentClauses)
+    .filter((line) =>
+      line.length > 0
+      && !AUDIO_TALKING_HEAD_PACKET_LINE_PATTERN.test(line)
+      && !AUDIO_TALKING_HEAD_NEGATIVE_LINE_PATTERN.test(line)
+      && !AUDIO_TALKING_HEAD_UNSTABLE_TERM_PATTERN.test(line))
+    .join('\n')
+    .trim()
+
+  return cleaned || sanitizedIntent
+}
+
+function derivePromptRelayPositiveInput(
+  prompt: string,
+  field: 'global_prompt' | 'local_prompts',
+  audioTalkingHeadStages: boolean,
+): string {
+  const value = derivePromptRelayInput(prompt, field)
+  return audioTalkingHeadStages ? sanitizeAudioTalkingHeadPrompt(value) : value
+}
+
+function shouldUseAudioTalkingHeadStages(prompt: string): boolean {
+  return AUDIO_TALKING_HEAD_PATTERNS.some((pattern) => pattern.test(prompt))
+}
+
+function alignToMultiple(value: number, multiple: number): number {
+  return Math.max(multiple, Math.round(value / multiple) * multiple)
+}
+
+function resolveSeedance2BerniniSize(width?: number, height?: number): { width: number; height: number; longestSide: number } {
+  const inputWidth = clampDimension(width) ?? 480
+  const inputHeight = clampDimension(height) ?? 848
+  const ratio = inputWidth > 0 && inputHeight > 0 ? inputWidth / inputHeight : 480 / 848
+  const shortSide = 480
+  const maxLongSide = 848
+
+  if (ratio >= 1) {
+    const resolvedWidth = Math.min(maxLongSide, alignToMultiple(shortSide * ratio, 16))
+    return {
+      width: resolvedWidth,
+      height: shortSide,
+      longestSide: Math.max(resolvedWidth, shortSide),
+    }
+  }
+
+  const resolvedHeight = Math.min(maxLongSide, alignToMultiple(shortSide / ratio, 16))
+  return {
+    width: shortSide,
+    height: resolvedHeight,
+    longestSide: Math.max(shortSide, resolvedHeight),
+  }
+}
+
+function formatSeedance2BerniniDuration(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/g, '').replace(/\.$/, '')
+}
+
+const SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES = [
+  'Hard visual constraint: Do not render subtitles, captions, lyrics, dialogue text, speech bubbles, lower thirds, karaoke text, UI text, signs, labels, watermarks, logos, Chinese characters, English letters, or any readable text.',
+  'Dialogue must stay in audio and lip movement only; never convert spoken words, prompt text, or narration into on-screen text.',
+]
+
+const SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS = [
+  'bad video',
+  'Font',
+  'Chinese characters',
+  'Subtitles',
+  'subtitle',
+  'subtitles',
+  'caption',
+  'captions',
+  'closed captions',
+  'text',
+  'watermark',
+  'logo',
+  'signage',
+  'writing',
+  'letters',
+  'blurry text',
+  'distorted text',
+  'overlay',
+  'lower third',
+  'burned-in subtitles',
+  'hardcoded subtitles',
+  'bottom subtitles',
+  'bottom-center subtitles',
+  'large white subtitles',
+  'Chinese subtitles',
+  'white subtitle line',
+  'white subtitle text',
+  'white outlined glyphs',
+  'white text with black shadow',
+  'SRT subtitles',
+  'incorrect dialogue',
+  'added dialogue',
+  'karaoke lyrics',
+  'lyrics text',
+  'dialogue text',
+  'spoken dialogue text',
+  'transcribed speech text',
+  'onscreen transcript',
+  'speaker labels',
+  'speech bubbles',
+  'lower thirds',
+  'lower-third text',
+  'text overlay',
+  'UI text',
+  'readable text',
+  'unreadable text on shirt or hat',
+  'garbled Chinese glyphs',
+  'floating Chinese glyphs',
+  'English letters',
+  '字幕',
+  '中文字幕',
+  '对白字幕',
+  '文字',
+]
+
+const SEEDANCE2_BERNINI_VISUAL_NEGATIVE_PROMPT =
+  SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS.join(', ')
+
+const SEEDANCE2_BERNINI_LIPSYNC_POSITIVE_PROMPT = [
+  'natural mouth movement',
+  'stable facial identity',
+  'clear mouth articulation',
+  'subtle head movement',
+  'consistent lighting',
+  'clean cinematic frame',
+  'unmarked background surfaces',
+  'plain natural image details',
+  'no scene change',
+].join(', ')
+
+const SEEDANCE2_BERNINI_LIPSYNC_NEGATIVE_PROMPT =
+  SEEDANCE2_BERNINI_LTX_STYLE_TEXT_NEGATIVE_TERMS.join(', ')
+
+const SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE = 'clean unmarked cinematic frame with plain surfaces and natural visual detail only'
+const CJK_TEXT_PATTERN = /[\u3400-\u9fff\uf900-\ufaff]/
+const SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK =
+  'the reference-image subject sits in a quiet office behind a desk, leans slightly forward, glasses reflecting cool overhead light, performs natural rhythmic mouth movement with restrained head and eye motion, and the camera makes a slow gentle push-in'
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_QUOTED_DIALOGUE_PATTERNS = [
+  /"[^"\n]{1,320}"/g,
+  /\u201c[^\u201d\n]{1,320}\u201d/g,
+  /\u300c[^\u300d\n]{1,320}\u300d/g,
+  /\u300e[^\u300f\n]{1,320}\u300f/g,
+]
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_SPEECH_CUE_PATTERNS = [
+  /\b(says?|speaks?|talks?|asks?|answers?|utters?)\s*[:\uff1a]\s*[^.\n]+/gi,
+  /((?:\u5bf9[^\n:\uff1a]{0,32})?[\u8bf4\u95ee\u7b54]\u9053?)\s*[:\uff1a]\s*[^.\u3002\n]+/g,
+]
+
+const SEEDANCE2_BERNINI_AUDIO_INTENT_TEXT_TERM_PATTERNS = [
+  /\b(?:no|without|avoid|never render|do not render|do not add)\s+(?:subtitles?|captions?|closed captions?|text overlays?|watermarks?|logos?|signs?|labels?|ui text|readable text|chinese characters|english letters|lower thirds?)\b/gi,
+  /\b(?:subtitles?|captions?|closed captions?|text overlays?|watermarks?|logos?|ui text|readable text|chinese characters|english letters|lower thirds?|karaoke text|lyrics text|dialogue text|speech bubbles|on-screen text)\b/gi,
+]
+
+function sanitizeSeedance2BerniniAudioVisualIntent(prompt: string): string {
+  let next = prompt.trim()
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_QUOTED_DIALOGUE_PATTERNS) {
+    next = next.replace(pattern, '')
+  }
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_SPEECH_CUE_PATTERNS) {
+    next = next.replace(pattern, '$1')
+  }
+  for (const pattern of SEEDANCE2_BERNINI_AUDIO_INTENT_TEXT_TERM_PATTERNS) {
+    next = next.replace(pattern, '')
+  }
+
+  return next
+    .replace(/\blip[- ]sync\b/gi, 'mouth movement')
+    .replace(/\bspeech\b/gi, 'mouth movement')
+    .replace(/\bspeaking\b/gi, 'natural mouth movement')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/[ \t]*,[ \t]*(?=[,.;:\n])/g, '')
+    .replace(/(?:,[ \t]*){2,}/g, ', ')
+    .replace(/[ \t]+([,.;:])/g, '$1')
+    .replace(/^[\s,.;:-]+$/gm, '')
+    .trim()
+}
+
+function buildSeedance2BerniniAudioVisualIntent(prompt: string): string {
+  const trimmedPrompt = prompt.trim()
+  if (!trimmedPrompt || CJK_TEXT_PATTERN.test(trimmedPrompt)) {
+    return SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK
+  }
+  return sanitizeSeedance2BerniniAudioVisualIntent(trimmedPrompt) || SEEDANCE2_BERNINI_AUDIO_INTENT_FALLBACK
+}
+
+function buildSeedance2BerniniRolePrompt(params: {
+  durationSeconds: number
+  fps: number
+  frameCount: number
+  motionStrength: number
+  motionLabel: string
+  audioDriven: boolean
+}): string {
+  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  if (params.audioDriven) {
+    return [
+      `You are writing a Seedance2.0 Bernini image-to-video prompt for a ${durationText}-second 480p talking-head shot with lip sync.`,
+      `Target timing: ${params.frameCount} frames at ${params.fps} fps.`,
+      `Motion policy: motion strength ${params.motionStrength} (${params.motionLabel}); keep motion restrained enough for stable mouth articulation.`,
+      'Use the reference image as the visual authority: preserve identity, face, clothing, location, lighting, and composition.',
+      'Keep the subject facing camera when possible, with the mouth clearly visible, natural speech motion, small blinks, subtle head movement, and no hand or prop blocking the lips.',
+      'Avoid scene cuts, face changes, wardrobe changes, and fast camera movement.',
+      ...SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES,
+      'Return one concise cinematic video prompt in English, optimized for Bernini i2v followed by audio-driven lip sync.',
+    ].join('\n')
+  }
+
+  return [
+    `You are writing a Seedance2.0 Bernini image-to-video prompt for a ${durationText}-second 480p shot.`,
+    `Target timing: ${params.frameCount} frames at ${params.fps} fps.`,
+    `Motion policy: motion strength ${params.motionStrength} (${params.motionLabel}).`,
+    'Use the reference image as the visual authority: preserve identity, face, clothing, location, lighting, and composition.',
+    'Describe one continuous shot with natural motion and no scene cuts.',
+    ...SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES,
+    'Return a concise cinematic video prompt in English, optimized for Bernini i2v.',
+  ].join('\n')
+}
+
+function buildSeedance2BerniniUserPrompt(params: {
+  prompt: string
+  durationSeconds: number
+  fps: number
+  frameCount: number
+  motionStrength: number
+  motionLabel: string
+  width: number
+  height: number
+  audioDriven: boolean
+}): string {
+  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  if (params.audioDriven) {
+    return [
+      `Write the Bernini i2v prompt for this ${durationText}-second audio-driven lip sync shot.`,
+      `Canvas: ${params.width}x${params.height}, ${params.frameCount} frames, ${params.fps} fps.`,
+      `motion strength: ${params.motionStrength} (${params.motionLabel}).`,
+      'The subject should naturally speak to camera with a visible mouth, clear facial articulation, stable identity, stable lighting, and no mouth occlusion.',
+      ...SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES,
+      'Creator prompt intent:',
+      params.prompt || 'animate the source image as a stable talking-head shot for lip sync',
+    ].join('\n')
+  }
+
+  return [
+    `Write the Bernini i2v prompt for this ${durationText}-second shot.`,
+    `Canvas: ${params.width}x${params.height}, ${params.frameCount} frames, ${params.fps} fps.`,
+    `motion strength: ${params.motionStrength} (${params.motionLabel}).`,
+    ...SEEDANCE2_BERNINI_NO_ONSCREEN_TEXT_RULES,
+    'Creator prompt intent:',
+    params.prompt || 'animate the source image with stable identity and natural motion',
+  ].join('\n')
+}
+
+function buildSeedance2BerniniAudioFinalPositivePrompt(params: {
+  prompt: string
+  durationSeconds: number
+  fps: number
+  frameCount: number
+  motionLabel: string
+}): string {
+  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  const intent = buildSeedance2BerniniAudioVisualIntent(params.prompt)
+  return [
+    `A ${durationText}-second vertical 480p image-to-video portrait shot, ${params.frameCount} frames at ${params.fps} fps.`,
+    `Creator visual intent: ${intent}.`,
+    'Preserve the reference image identity, face, clothing, office room, cool overhead lighting, desk, wall clock, blinds, and camera composition.',
+    `Use restrained ${params.motionLabel} with natural mouth articulation, slight breathing, subtle blinks, stable facial detail, and a gentle slow push-in when compatible with the scene.`,
+    'The lower frame stays clean, showing only natural clothing, desk edge, and shadow detail.',
+    SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE,
+  ].join(' ')
+}
+
+function buildSeedance2BerniniFoleyRolePrompt(params: {
+  durationSeconds: number
+  fps: number
+  frameCount: number
+}): string {
+  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  return [
+    `You are writing a concise English Foley prompt for a ${durationText}-second, ${params.frameCount}-frame, ${params.fps} fps talking-head video.`,
+    'Describe only natural environmental sound effects and room tone that can mix under voice audio.',
+    'Do not include dialogue, lyrics, music, captions, or commentary.',
+  ].join('\n')
+}
+
+function buildSeedance2BerniniFoleyUserPrompt(params: {
+  prompt: string
+  durationSeconds: number
+}): string {
+  const durationText = formatSeedance2BerniniDuration(params.durationSeconds)
+  return [
+    `Write one Foley prompt under 100 English words for this ${durationText}-second lip sync video.`,
+    'Keep the voice line dominant; add only subtle ambience, clothing rustle, breathing, and scene-appropriate small sounds.',
+    'Video intent:',
+    params.prompt || 'stable talking-head lip sync shot',
+  ].join('\n')
+}
+
+function applySeedance2BerniniVisualTextGuards(
+  graph: ComfyUiWorkflowGraph,
+  audioDriven: boolean,
+): void {
+  const berniniNegativeNode = graph['373']
+  if (berniniNegativeNode && isRecord(berniniNegativeNode.inputs)) {
+    assignStringInputValue(graph, berniniNegativeNode, 'text', SEEDANCE2_BERNINI_VISUAL_NEGATIVE_PROMPT)
+  }
+
+  if (!audioDriven) return
+
+  const lipsyncPositiveNode = graph['1490']
+  if (lipsyncPositiveNode && isRecord(lipsyncPositiveNode.inputs)) {
+    assignStringInputValue(graph, lipsyncPositiveNode, 'text', SEEDANCE2_BERNINI_LIPSYNC_POSITIVE_PROMPT)
+  }
+
+  const lipsyncNegativeNode = graph['1492']
+  if (lipsyncNegativeNode && isRecord(lipsyncNegativeNode.inputs)) {
+    lipsyncNegativeNode.class_type = 'CLIPTextEncode'
+    lipsyncNegativeNode.inputs = {
+      clip: ['1491', 0],
+      text: SEEDANCE2_BERNINI_LIPSYNC_NEGATIVE_PROMPT,
+    }
+    lipsyncNegativeNode._meta = {
+      ...(lipsyncNegativeNode._meta || {}),
+      title: lipsyncNegativeNode._meta?.title || 'Lipsync negative prompt',
+    }
+  }
+}
+
+function applySeedance2BerniniAudioFinalPromptControls(
+  graph: ComfyUiWorkflowGraph,
+  params: {
+    prompt: string
+    durationSeconds: number
+    fps: number
+    frameCount: number
+    motionStrength: number
+    motionLabel: string
+    width: number
+    height: number
+  },
+): void {
+  const finalPositiveNode = graph['378']
+  if (finalPositiveNode && isRecord(finalPositiveNode.inputs)) {
+    finalPositiveNode.inputs.text = buildSeedance2BerniniAudioFinalPositivePrompt(params)
+    finalPositiveNode._meta = {
+      ...(finalPositiveNode._meta || {}),
+      title: finalPositiveNode._meta?.title || 'Bernini final positive prompt',
+      waoowaooPromptTrace: {
+        stage: 'audio_lipsync_final_positive_prompt',
+        source: 'app-controlled-direct',
+        cleanFramePhrase: SEEDANCE2_BERNINI_CLEAN_FRAME_PHRASE,
+      },
+    }
+  }
+
+  for (const nodeId of ['386', '412', '532', '409']) {
+    delete graph[nodeId]
+  }
+}
+
+function applySeedance2BerniniWorkflowControls(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  inject: ComfyUiWorkflowInject,
+): void {
+  if (!isSeedance2BerniniWorkflowKey(workflowKey)) return
+
+  const fps = clampPositiveFloat(inject.fps) ?? SEEDANCE2_BERNINI_DEFAULT_FPS
+  const durationSeconds = clampPositiveFloat(inject.durationSeconds) ?? SEEDANCE2_BERNINI_DEFAULT_DURATION_SECONDS
+  const frameCount = Math.max(1, Math.round(durationSeconds * fps) + 1)
+  const motionStrength = normalizeSeedance2BerniniMotionStrength(inject.motionStrength)
+  const motionLabel = resolveSeedance2BerniniMotionStrengthLabel(motionStrength)
+  const size = resolveSeedance2BerniniSize(inject.width, inject.height)
+  const audioDriven = isSeedance2BerniniAudioWorkflowKey(workflowKey)
+
+  setNumericNodeValue(graph, '390', frameCount)
+  if (graph['384'] && !isConnectionValue(graph['384'].inputs.length)) {
+    graph['384'].inputs.length = frameCount
+  }
+
+  const createVideoNode = graph['374']
+  if (createVideoNode && isRecord(createVideoNode.inputs)) {
+    createVideoNode.inputs.fps = fps
+  }
+
+  const motionLoraNode = graph['399']
+  if (motionLoraNode && isRecord(motionLoraNode.inputs)) {
+    motionLoraNode.inputs.strength_model = motionStrength
+  }
+  for (const nodeId of ['398', '400', '402']) {
+    const loraNode = graph[nodeId]
+    if (loraNode && isRecord(loraNode.inputs)) {
+      loraNode.inputs.strength_model = 1
+    }
+  }
+
+  setNumericNodeValue(graph, '417', size.longestSide)
+  const resizeNode = graph['416']
+  if (resizeNode && isRecord(resizeNode.inputs)) {
+    resizeNode.inputs.aspect_ratio = formatAspectRatio(size.width, size.height)
+    resizeNode.inputs.fit = 'crop'
+    resizeNode.inputs.method = 'lanczos'
+    resizeNode.inputs.round_to_multiple = '16'
+    resizeNode.inputs.scale_to_side = 'longest'
+  }
+
+  const conditioningNode = graph['384']
+  if (conditioningNode && isRecord(conditioningNode.inputs)) {
+    if (!isConnectionValue(conditioningNode.inputs.width)) conditioningNode.inputs.width = size.width
+    if (!isConnectionValue(conditioningNode.inputs.height)) conditioningNode.inputs.height = size.height
+  }
+
+  const promptParams = {
+    prompt: readTrimmedString(inject.prompt),
+    durationSeconds,
+    fps,
+    frameCount,
+    motionStrength,
+    motionLabel,
+    width: size.width,
+    height: size.height,
+    audioDriven,
+  }
+  const roleNode = graph['421']
+  if (roleNode && isRecord(roleNode.inputs)) {
+    assignStringInputValue(graph, roleNode, 'prompt', buildSeedance2BerniniRolePrompt(promptParams))
+  }
+  const userNode = graph['422']
+  if (userNode && isRecord(userNode.inputs)) {
+    assignStringInputValue(graph, userNode, 'prompt', buildSeedance2BerniniUserPrompt(promptParams))
+  }
+
+  applySeedance2BerniniVisualTextGuards(graph, audioDriven)
+
+  if (!audioDriven) return
+
+  applySeedance2BerniniAudioFinalPromptControls(graph, promptParams)
+
+  const foleyMixNode = graph['2524']
+  const finalVideoNode = graph['1503']
+  if (finalVideoNode && isRecord(finalVideoNode.inputs)) {
+    finalVideoNode.inputs.save_output = true
+    if (foleyMixNode) {
+      finalVideoNode.inputs.audio = ['2524', 0]
+    } else if (graph['1507']) {
+      finalVideoNode.inputs.audio = ['1507', 0]
+    }
+    if (!isConnectionValue(finalVideoNode.inputs.filename_prefix)) {
+      finalVideoNode.inputs.filename_prefix = 'video/Bernini-T10-lipsync'
+    }
+  }
+
+  const foleyPreviewNode = graph['2523']
+  if (foleyPreviewNode && isRecord(foleyPreviewNode.inputs)) {
+    foleyPreviewNode.inputs.save_output = false
+  }
+  delete graph['2467']
+
+  const foleyRoleNode = graph['2463']
+  if (foleyRoleNode && isRecord(foleyRoleNode.inputs)) {
+    assignStringInputValue(graph, foleyRoleNode, 'prompt', buildSeedance2BerniniFoleyRolePrompt({
+      durationSeconds,
+      fps,
+      frameCount,
+    }))
+  }
+
+  const foleyPromptNode = graph['2458']
+  if (foleyPromptNode && isRecord(foleyPromptNode.inputs)) {
+    assignStringInputValue(graph, foleyPromptNode, 'prompt', buildSeedance2BerniniFoleyUserPrompt({
+      prompt: promptParams.prompt,
+      durationSeconds,
+    }))
+  }
+}
 
 function shouldUseSlowCameraStages(prompt: string): boolean {
   return SLOW_CAMERA_MOTION_PATTERNS.some((pattern) => pattern.test(prompt))
 }
 
-function buildPromptRelaySegmentPrompts(prompt: string, segmentCount: number, largeMotionStages: boolean): string[] {
+function stripPromptRelayFrameRange(value: string): string {
+  return value.replace(/\s*\[\s*\d+\s*-\s*\d+\s*\]\s*$/g, '').trim()
+}
+
+function splitPromptRelayLocalSegments(prompt: string): string[] {
   const localPrompt = derivePromptRelayInput(prompt, 'local_prompts')
-  const fallbackPrompt = localPrompt || derivePromptRelayInput(prompt, 'global_prompt') || prompt
+  const segments = localPrompt
+    .split('|')
+    .map((segment) => stripPromptRelayFrameRange(segment))
+    .filter((segment) => segment.length > 0)
+  return segments.length > 1 ? segments : []
+}
+
+function countPromptRelayLocalSegments(prompt: string): number | null {
+  const count = splitPromptRelayLocalSegments(prompt).length
+  return count > 1 ? count : null
+}
+
+function buildPromptRelaySegmentPrompts(
+  prompt: string,
+  segmentCount: number,
+  largeMotionStages: boolean,
+  audioTalkingHeadStages: boolean = false,
+): string[] {
+  const explicitSegments = splitPromptRelayLocalSegments(prompt)
+  if (explicitSegments.length > 0) {
+    return Array.from({ length: segmentCount }, (_, index) => {
+      const segment = explicitSegments[index] || explicitSegments[explicitSegments.length - 1] || ''
+      if (!audioTalkingHeadStages || !shouldUseAudioTalkingHeadStages(segment)) return segment
+      return [
+        sanitizeAudioTalkingHeadPrompt(segment),
+        AUDIO_TALKING_HEAD_STABILITY_PROMPT,
+      ].filter(Boolean).join('\n')
+    })
+  }
+
+  const localPrompt = derivePromptRelayPositiveInput(prompt, 'local_prompts', audioTalkingHeadStages)
+  const fallbackPrompt = localPrompt || derivePromptRelayPositiveInput(prompt, 'global_prompt', audioTalkingHeadStages) || prompt
+  if (audioTalkingHeadStages && shouldUseAudioTalkingHeadStages(fallbackPrompt)) {
+    const stablePrompt = [
+      sanitizeAudioTalkingHeadPrompt(fallbackPrompt),
+      AUDIO_TALKING_HEAD_STABILITY_PROMPT,
+    ].filter(Boolean).join('\n')
+    return Array.from({ length: segmentCount }, () => stablePrompt)
+  }
   if (!largeMotionStages) {
     return Array.from({ length: segmentCount }, () => fallbackPrompt)
   }
@@ -1870,9 +2499,10 @@ function buildPromptRelaySmartPrompt(
   targetFrameCount: number,
   segmentCount: number,
   largeMotionStages: boolean,
+  audioTalkingHeadStages: boolean = false,
 ): string {
   const lengths = splitFramesEvenly(targetFrameCount, segmentCount)
-  const segmentPrompts = buildPromptRelaySegmentPrompts(prompt, lengths.length, largeMotionStages)
+  const segmentPrompts = buildPromptRelaySegmentPrompts(prompt, lengths.length, largeMotionStages, audioTalkingHeadStages)
   let startFrame = 0
 
   return lengths.map((length, index) => {
@@ -1892,6 +2522,7 @@ function applyPromptRelayTimelineControls(
     targetFrameCount: number | null
     segmentCount?: number
     largeMotionStages?: boolean
+    audioTalkingHeadStages?: boolean
   },
 ): void {
   if (!params.prompt || params.targetFrameCount === null) return
@@ -1899,14 +2530,25 @@ function applyPromptRelayTimelineControls(
   for (const node of Object.values(graph)) {
     if (!isRecord(node.inputs) || !isPromptRelayEncodeNode(node)) continue
 
-    const segmentCount = params.segmentCount
+    const segmentCount = countPromptRelayLocalSegments(params.prompt)
+      || params.segmentCount
       || parsePromptRelaySegmentCount(node.inputs.segment_lengths)
       || 1
     const lengths = splitFramesEvenly(params.targetFrameCount, segmentCount)
-    const segmentPrompts = buildPromptRelaySegmentPrompts(params.prompt, lengths.length, params.largeMotionStages === true)
+    const segmentPrompts = buildPromptRelaySegmentPrompts(
+      params.prompt,
+      lengths.length,
+      params.largeMotionStages === true,
+      params.audioTalkingHeadStages === true,
+    )
 
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
-      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+      assignStringInputValue(
+        graph,
+        node,
+        'global_prompt',
+        derivePromptRelayPositiveInput(params.prompt, 'global_prompt', params.audioTalkingHeadStages === true),
+      )
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'local_prompts')) {
       assignStringInputValue(graph, node, 'local_prompts', segmentPrompts.join(' | '))
@@ -1939,6 +2581,7 @@ function applyPromptRelaySmartControls(
     targetFrameCount: number | null
     segmentCount?: number
     largeMotionStages?: boolean
+    audioTalkingHeadStages?: boolean
   },
 ): void {
   if (!params.prompt || params.targetFrameCount === null) return
@@ -1947,12 +2590,18 @@ function applyPromptRelaySmartControls(
     if (!isRecord(node.inputs) || !isPromptRelaySmartEncodeNode(node)) continue
 
     const currentSmartPrompt = readStaticInputValue(graph, node.inputs.smart_prompt, new Set())
-    const segmentCount = params.segmentCount
+    const segmentCount = countPromptRelayLocalSegments(params.prompt)
+      || params.segmentCount
       || parsePromptRelaySmartSegmentCount(currentSmartPrompt)
       || 1
 
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'global_prompt')) {
-      assignStringInputValue(graph, node, 'global_prompt', derivePromptRelayInput(params.prompt, 'global_prompt'))
+      assignStringInputValue(
+        graph,
+        node,
+        'global_prompt',
+        derivePromptRelayPositiveInput(params.prompt, 'global_prompt', params.audioTalkingHeadStages === true),
+      )
     }
     if (Object.prototype.hasOwnProperty.call(node.inputs, 'smart_prompt')) {
       assignStringInputValue(
@@ -1964,8 +2613,43 @@ function applyPromptRelaySmartControls(
           params.targetFrameCount,
           segmentCount,
           params.largeMotionStages === true,
+          params.audioTalkingHeadStages === true,
         ),
       )
+    }
+  }
+}
+
+function isConditioningZeroOutNode(node: ComfyUiWorkflowGraphNode): boolean {
+  return normalizeUiDecorationNodeType(node.class_type) === 'conditioningzeroout'
+}
+
+function applyAudioTalkingHeadTextArtifactNegativeConditioning(graph: ComfyUiWorkflowGraph): void {
+  const promptRelayClipByNodeId = new Map<string, unknown>()
+
+  for (const [nodeId, node] of Object.entries(graph)) {
+    if (!isRecord(node.inputs) || !isPromptRelaySmartEncodeNode(node)) continue
+    if (!isConnectionValue(node.inputs.clip)) continue
+    promptRelayClipByNodeId.set(normalizeNodeId(nodeId), cloneConnectionValue(node.inputs.clip))
+  }
+
+  if (promptRelayClipByNodeId.size === 0) return
+
+  for (const node of Object.values(graph)) {
+    if (!isRecord(node.inputs) || !isConditioningZeroOutNode(node)) continue
+    const sourceNodeId = readConnectionNodeId(node.inputs.conditioning)
+    if (!sourceNodeId) continue
+    const clipConnection = promptRelayClipByNodeId.get(sourceNodeId)
+    if (!clipConnection) continue
+
+    node.class_type = 'CLIPTextEncode'
+    node.inputs = {
+      clip: cloneConnectionValue(clipConnection),
+      text: AUDIO_TALKING_HEAD_TEXT_ARTIFACT_NEGATIVE_PROMPT,
+    }
+    node._meta = {
+      ...(isRecord(node._meta) ? node._meta : {}),
+      title: 'Smart VBVR text artifact negative prompt',
     }
   }
 }
@@ -1984,8 +2668,14 @@ function applyLtx23WorkflowProfileControls(
   const durationSeconds = clampPositiveFloat(inject.durationSeconds) ?? profile.defaultDurationSeconds
   const targetFrameCount = clampPositiveInteger(inject.targetFrameCount)
     ?? Math.max(1, Math.round(durationSeconds * fps))
+  const audioTalkingHeadStages = normalizedKey === COMFYUI_LTX23_WORKFLOW_KEYS.singleImagePrecise
+    && Array.isArray(inject.audioFilenames)
+    && inject.audioFilenames.some((filename) => typeof filename === 'string' && filename.trim().length > 0)
 
   for (const nodeId of contract?.durationNodeIds || []) {
+    setNumericNodeValue(graph, nodeId, durationSeconds)
+  }
+  for (const nodeId of contract?.audioTrimDurationNodeIds || []) {
     setNumericNodeValue(graph, nodeId, durationSeconds)
   }
   for (const nodeId of contract?.fpsNodeIds || []) {
@@ -2001,13 +2691,85 @@ function applyLtx23WorkflowProfileControls(
     targetFrameCount,
     segmentCount: contract?.promptRelaySegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+    audioTalkingHeadStages,
   })
   applyPromptRelaySmartControls(graph, {
     prompt: readTrimmedString(inject.prompt),
     targetFrameCount,
     segmentCount: contract?.promptRelaySmartSegmentCount,
     largeMotionStages: profile.promptPolicy === 'large_motion_single_image',
+    audioTalkingHeadStages,
   })
+  if (audioTalkingHeadStages) {
+    applyAudioTalkingHeadTextArtifactNegativeConditioning(graph)
+  }
+}
+
+const GOON_FIRST_LAST_FRAME_NODE_CONTRACT = {
+  positivePrompt: '121',
+  firstImage: '149',
+  lastImage: '269',
+  width: '237',
+  height: '238',
+  duration: '236',
+  fps: '233',
+  frameFormula: '235',
+  imageConditioning: ['265', '275'],
+  output: '75',
+} as const
+
+const GOON_FIRST_LAST_FRAME_FORMULA = '1+ 8*(round(a*b)/8)'
+
+function applyGoonFirstLastFrameWorkflowControls(
+  graph: ComfyUiWorkflowGraph,
+  workflowKey: string,
+  inject: ComfyUiWorkflowInject,
+): void {
+  if (!isComfyUiLtx23GoonFirstLastFrameWorkflow(workflowKey)) return
+
+  const prompt = readTrimmedString(inject.prompt)
+  const positivePromptNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.positivePrompt]
+  if (prompt && positivePromptNode && isRecord(positivePromptNode.inputs)) {
+    positivePromptNode.inputs.text = prompt
+  }
+
+  const imageFilenames = Array.isArray(inject.imageFilenames)
+    ? inject.imageFilenames.filter(
+        (filename): filename is string => typeof filename === 'string' && filename.trim().length > 0,
+      )
+    : []
+  const firstImage = imageFilenames[0]
+  const lastImage = imageFilenames[imageFilenames.length - 1] ?? firstImage
+  const firstImageNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.firstImage]
+  const lastImageNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.lastImage]
+  if (firstImage && firstImageNode && isRecord(firstImageNode.inputs)) {
+    firstImageNode.inputs.image = firstImage
+  }
+  if (lastImage && lastImageNode && isRecord(lastImageNode.inputs)) {
+    lastImageNode.inputs.image = lastImage
+  }
+
+  const width = clampDimension(inject.width)
+  const height = clampDimension(inject.height)
+  if (width !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.width, width)
+  if (height !== null) setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.height, height)
+
+  const durationSeconds = normalizeLtx23GoonDurationSeconds(inject.durationSeconds)
+  setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.duration, durationSeconds)
+  setNumericNodeValue(graph, GOON_FIRST_LAST_FRAME_NODE_CONTRACT.fps, COMFYUI_LTX23_GOON_FPS)
+
+  const finalPixelFrameIndex = resolveLtx23GoonFinalFrameIndex(durationSeconds)
+  for (const nodeId of GOON_FIRST_LAST_FRAME_NODE_CONTRACT.imageConditioning) {
+    const conditioningNode = graph[nodeId]
+    if (conditioningNode && isRecord(conditioningNode.inputs)) {
+      conditioningNode.inputs['num_images.index_2'] = finalPixelFrameIndex
+    }
+  }
+
+  const formulaNode = graph[GOON_FIRST_LAST_FRAME_NODE_CONTRACT.frameFormula]
+  if (formulaNode && isRecord(formulaNode.inputs)) {
+    formulaNode.inputs.expression = GOON_FIRST_LAST_FRAME_FORMULA
+  }
 }
 
 function formatDateSegment(date: Date): string {
@@ -2289,8 +3051,12 @@ export function resolveComfyUiWorkflow(
   }
 
   const graph = cloneWorkflow(readWorkflowGraphFromFile(filePath))
+  const isBerniniWorkflow = isSeedance2BerniniWorkflowKey(workflowKey)
+  const isGoonFirstLastFrameWorkflow = isComfyUiLtx23GoonFirstLastFrameWorkflow(workflowKey)
   bypassOptionalModelNodes(graph)
-  applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
+  if (!isBerniniWorkflow && !isGoonFirstLastFrameWorkflow) {
+    applyPromptHeuristics(graph, inject.prompt, inject.negativePrompt)
+  }
   applyDimensionHeuristics(graph, inject.width, inject.height)
   const imageFilenames = expandLtx23WorkflowImageFilenames(workflowKey, inject.imageFilenames)
   applyImageInjection(graph, imageFilenames)
@@ -2299,6 +3065,11 @@ export function resolveComfyUiWorkflow(
   applyKjResizeHeuristics(graph)
   applyTemporalHeuristics(graph, inject.fps, inject.targetFrameCount, inject.durationSeconds)
   applyLtx23WorkflowProfileControls(graph, workflowKey, inject)
+  applyGoonFirstLastFrameWorkflowControls(graph, workflowKey, {
+    ...inject,
+    imageFilenames,
+  })
+  applySeedance2BerniniWorkflowControls(graph, workflowKey, inject)
   applySaveOutputHeuristics(graph)
   inlineValueHelperNodes(graph)
   bypassPassthroughOutputNodes(graph)

@@ -203,6 +203,8 @@ model NovelPromotionPanel {
   videoPromptEditedByUser Boolean             @default(false)
   firstLastFramePrompt String?
   firstLastFramePromptEditedByUser Boolean    @default(false)
+  firstLastFramePromptSourceFingerprint String?
+  videoModel        String?
   videoUrl          String?
   videoGenerationMode String?                 // 视频生成方式：normal | firstlastframe
   videoMediaId      String?

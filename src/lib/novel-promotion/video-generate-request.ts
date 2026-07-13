@@ -1,4 +1,5 @@
 import type { VideoDurationBinding } from '@/app/[locale]/workspace/[projectId]/modes/novel-promotion/components/video'
+import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
 
 type VideoGenerationOptionValue = string | number | boolean
 type VideoGenerationOptions = Record<string, VideoGenerationOptionValue>
@@ -41,11 +42,14 @@ export function buildGenerateVideoRequestBody(params: GenerateVideoRequestParams
   const requestBody: GenerateVideoRequestBody = {
     storyboardId: params.storyboardId,
     panelIndex: params.panelIndex,
-    videoModel: params.videoModel,
+    videoModel: normalizeVideoModelKey(params.videoModel),
   }
 
   if (params.firstLastFrame) {
-    requestBody.firstLastFrame = params.firstLastFrame
+    requestBody.firstLastFrame = {
+      ...params.firstLastFrame,
+      flModel: normalizeVideoModelKey(params.firstLastFrame.flModel),
+    }
   }
   if (params.generationOptions && typeof params.generationOptions === 'object') {
     requestBody.generationOptions = params.generationOptions

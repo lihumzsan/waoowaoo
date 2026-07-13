@@ -1,11 +1,18 @@
 import { getLtx23WorkflowProfile } from '@/lib/providers/comfyui/ltx23-workflow-profiles'
 
 export type VideoDurationMode = 'manual' | 'match_audio'
+export type VideoDurationSource = 'smart' | 'manual'
 
 export type VideoDurationBinding = {
   mode?: VideoDurationMode
   voiceLineIds?: string[]
   targetDurationSeconds?: number | null
+  recommendedDurationSeconds?: number
+  durationSource?: VideoDurationSource
+  recommendationConfidence?: number
+  recommendationReason?: string
+  recommendationFingerprint?: string
+  recommendationAlgorithmVersion?: string
 }
 
 export type AudioDurationCandidate = {
@@ -77,14 +84,42 @@ function normalizeTargetDurationSeconds(value: unknown): number | null {
   return Number(value.toFixed(2))
 }
 
+function normalizeDurationSource(value: unknown): VideoDurationSource | undefined {
+  return value === 'smart' || value === 'manual' ? value : undefined
+}
+
+function normalizeConfidence(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) return undefined
+  return Number(value.toFixed(2))
+}
+
+function normalizeShortString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed.slice(0, maxLength) : undefined
+}
+
 export function normalizeVideoDurationBinding(value: unknown): VideoDurationBinding {
   if (!isRecord(value)) return { mode: 'manual', voiceLineIds: [] }
   const mode = value.mode === 'match_audio' ? 'match_audio' : 'manual'
   const targetDurationSeconds = normalizeTargetDurationSeconds(value.targetDurationSeconds)
+  const recommendedDurationSeconds = normalizeTargetDurationSeconds(value.recommendedDurationSeconds)
+  const durationSource = normalizeDurationSource(value.durationSource)
+    ?? (mode === 'manual' && targetDurationSeconds !== null ? 'manual' : undefined)
+  const recommendationConfidence = normalizeConfidence(value.recommendationConfidence)
+  const recommendationReason = normalizeShortString(value.recommendationReason, 120)
+  const recommendationFingerprint = normalizeShortString(value.recommendationFingerprint, 128)
+  const recommendationAlgorithmVersion = normalizeShortString(value.recommendationAlgorithmVersion, 32)
   return {
     mode,
     voiceLineIds: normalizeVoiceLineIds(value.voiceLineIds),
     ...(targetDurationSeconds !== null ? { targetDurationSeconds } : {}),
+    ...(recommendedDurationSeconds !== null ? { recommendedDurationSeconds } : {}),
+    ...(durationSource ? { durationSource } : {}),
+    ...(recommendationConfidence !== undefined ? { recommendationConfidence } : {}),
+    ...(recommendationReason ? { recommendationReason } : {}),
+    ...(recommendationFingerprint ? { recommendationFingerprint } : {}),
+    ...(recommendationAlgorithmVersion ? { recommendationAlgorithmVersion } : {}),
   }
 }
 
@@ -106,6 +141,12 @@ function normalizeDurationOptions(value: unknown): number[] {
     .sort((left, right) => left - right)
 }
 
+function normalizeFpsOptions(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0)
+}
+
 function clampToProductMaxDuration(value: number | null): number {
   if (value === null) return PRODUCT_VIDEO_MAX_DURATION_SECONDS
   return Math.min(value, PRODUCT_VIDEO_MAX_DURATION_SECONDS)
@@ -114,6 +155,7 @@ function clampToProductMaxDuration(value: number | null): number {
 export function getVideoTimingProfile(
   modelKey: string | null | undefined,
   durationOptions?: readonly number[] | null,
+  fpsOptions?: readonly number[] | null,
 ): VideoTimingProfile {
   const workflowProfile = getLtx23WorkflowProfile(modelKey)
   if (workflowProfile) {
@@ -128,16 +170,17 @@ export function getVideoTimingProfile(
   const configuredMaxDuration = configuredDurations.length > 0
     ? configuredDurations[configuredDurations.length - 1]
     : null
+  const configuredFps = normalizeFpsOptions(fpsOptions)[0] ?? COMFYUI_LTX23_DEFAULT_FPS
 
   if (normalized.includes('ltx2.3') || normalized.includes('ltx-2.3') || normalized.includes('/ltx')) {
     return {
-      fps: COMFYUI_LTX23_DEFAULT_FPS,
+      fps: configuredFps,
       maxDurationSeconds: clampToProductMaxDuration(configuredMaxDuration ?? COMFYUI_LTX23_MAX_DURATION_SECONDS),
     }
   }
 
   return {
-    fps: COMFYUI_LTX23_DEFAULT_FPS,
+    fps: configuredFps,
     maxDurationSeconds: clampToProductMaxDuration(configuredMaxDuration),
   }
 }
@@ -308,6 +351,7 @@ export function resolveAudioDrivenVideoTiming(params: {
   candidates: AudioDurationCandidate[]
   modelKey?: string | null
   durationOptions?: readonly number[] | null
+  fpsOptions?: readonly number[] | null
   context?: AudioDrivenVideoTimingContext | null
 }): ResolvedAudioDrivenVideoTiming | null {
   const binding = normalizeVideoDurationBinding(params.binding)
@@ -334,7 +378,7 @@ export function resolveAudioDrivenVideoTiming(params: {
 
   if (matchedVoiceLineIds.length === 0 || sourceDurationMs <= 0) return null
 
-  const profile = getVideoTimingProfile(params.modelKey, params.durationOptions)
+  const profile = getVideoTimingProfile(params.modelKey, params.durationOptions, params.fpsOptions)
   const audioDurationSeconds = Number((sourceDurationMs / 1000).toFixed(2))
   const padding = resolveContextAwarePadding(audioDurationSeconds, matchedVoiceLineIds.length, params.context)
   const requestedTargetDurationSeconds = normalizeTargetDurationSeconds(binding.targetDurationSeconds)

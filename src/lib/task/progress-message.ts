@@ -41,6 +41,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_LOCATION]: 'progress.taskType.assetHubAiModifyLocation',
   [TASK_TYPE.ASSET_HUB_AI_MODIFY_PROP]: 'progress.taskType.assetHubAiModifyProp',
   [TASK_TYPE.ASSET_HUB_REFERENCE_TO_CHARACTER]: 'progress.taskType.assetHubReferenceToCharacter',
+  [TASK_TYPE.GENERATE_FIRST_LAST_FRAME_PROMPT]: 'progress.taskType.generateFirstLastFramePrompt',
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -75,6 +76,9 @@ const STAGE_LABELS: Record<string, string> = {
   llm_proxy_submit: 'progress.stage.llmProxySubmit',
   llm_proxy_execute: 'progress.stage.llmProxyExecute',
   llm_proxy_persist: 'progress.stage.llmProxyPersist',
+  first_last_frame_prompt_prepare: 'progress.stage.firstLastFramePromptPrepare',
+  first_last_frame_prompt_generate: 'progress.stage.firstLastFramePromptGenerate',
+  first_last_frame_prompt_persist: 'progress.stage.firstLastFramePromptPersist',
 }
 
 function asString(value: unknown): string | null {

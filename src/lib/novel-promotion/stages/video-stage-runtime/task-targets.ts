@@ -57,6 +57,24 @@ export function buildPanelLipTargets(storyboards: Storyboard[]): VideoTaskTarget
   return targets
 }
 
+export function buildFirstLastFramePromptTargets(storyboards: Storyboard[]): VideoTaskTarget[] {
+  const targets: VideoTaskTarget[] = []
+  for (const storyboard of storyboards) {
+    for (const panel of storyboard.panels || []) {
+      if (!panel.id || !panel.linkedToNextPanel) continue
+      targets.push({
+        key: `panel-first-last-prompt:${panel.id}`,
+        targetType: 'NovelPromotionPanel',
+        targetId: panel.id,
+        types: ['generate_first_last_frame_prompt'],
+        resource: 'video',
+        hasOutput: !!panel.firstLastFramePrompt,
+      })
+    }
+  }
+  return targets
+}
+
 export function buildVoiceLineTargets(voiceLines: VoiceLine[]): VoiceTaskTarget[] {
   return voiceLines
     .filter((line) => line.matchedStoryboardId && line.matchedPanelIndex !== null)

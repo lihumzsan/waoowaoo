@@ -16,6 +16,7 @@ type PanelRow = {
   firstLastFramePrompt: string | null
   firstLastFramePromptEditedByUser?: boolean
   duration: number | null
+  videoDurationBinding?: string | null
   shotType: string | null
   cameraMove: string | null
   location: string | null
@@ -36,8 +37,11 @@ const workerState = vi.hoisted(() => ({
 }))
 
 const LTX23_DEFAULT_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
-const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
+const LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage'
+const LEGACY_LTX23_FIRST_LAST_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame'
 const LTX23_LARGE_MOTION_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-single-image-large-motion-4stage'
+const BERNINI_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v'
+const BERNINI_AUDIO_MODEL = 'comfyui::basevideo/seedance2/bernini-480p-i2v-audio-lipsync'
 
 const reportTaskProgressMock = vi.hoisted(() => vi.fn(async () => undefined))
 const withTaskLifecycleMock = vi.hoisted(() =>
@@ -144,7 +148,18 @@ vi.mock('@/lib/media/outbound-image', () => ({
   normalizeToBase64ForGeneration: vi.fn(async (input: string) => input),
 }))
 vi.mock('@/lib/model-capabilities/lookup', () => ({
-  resolveBuiltinCapabilitiesByModelKey: vi.fn(() => ({ video: { firstlastframe: true } })),
+  resolveBuiltinCapabilitiesByModelKey: vi.fn((_modelType: string, modelKey: string) => {
+    if (modelKey === 'comfyui::basevideo/seedance2/bernini-480p-i2v') {
+      return {
+        video: {
+          durationOptions: [5, 10],
+          fpsOptions: [24],
+          firstlastframe: false,
+        },
+      }
+    }
+    return { video: { firstlastframe: true } }
+  }),
 }))
 vi.mock('@/lib/model-config-contract', () => ({
   parseModelKeyStrict: vi.fn(() => ({ provider: 'fal' })),
@@ -310,10 +325,16 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    const result = await processor!(job) as { panelId: string; videoUrl: string; actualVideoTokens: number }
+    const result = await processor!(job) as {
+      panelId: string
+      videoUrl: string
+      videoModel: string
+      actualVideoTokens: number
+    }
     expect(result).toEqual({
       panelId: 'panel-1',
       videoUrl: 'cos/lip-sync/video.mp4',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
       actualVideoTokens: 108000,
     })
   })
@@ -370,14 +391,14 @@ describe('worker video processor behavior', () => {
     await processor!(job)
 
     expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      durationSeconds: 6,
+      durationSeconds: 19.56,
       fps: 25,
     }))
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
-          duration: 6,
+          duration: 19.56,
           fps: 25,
           generationMode: 'normal',
         }),
@@ -385,7 +406,75 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: auto-routes default LTX2.3 long linked audio to the long-video profile', async () => {
+  it('VIDEO_PANEL: normalizes Bernini audio-lipsync payloads and stale fps before generation', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: 'Doctor says "Please answer clearly so the lip sync can follow the voice." while leaning forward. No subtitles, no caption, no text overlay.',
+      srtSegment: 'Spoken subtitle text that must remain audio-only.',
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'Please answer clearly so the lip sync can follow the voice.',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 4_800,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_AUDIO_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 5,
+          fps: 25,
+          resolution: '480p',
+          motionStrength: 2,
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 4.8,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 2,
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+          resolution: '480p',
+        }),
+      }),
+    )
+
+    const generationCall = utilsMock.resolveVideoSourceFromGeneration.mock.calls[0]?.[1] as {
+      options?: { prompt?: string }
+    }
+    const prompt = generationCall.options?.prompt || ''
+    expect(prompt).toContain('Dialogue lines: none')
+    expect(prompt.toLowerCase()).toContain('natural rhythmic mouth movement')
+    expect(prompt).not.toContain('Please answer clearly so the lip sync can follow the voice.')
+    expect(prompt).not.toContain('Spoken subtitle text that must remain audio-only.')
+    expect(prompt).not.toContain('If dialogue is listed')
+    expect(prompt.toLowerCase()).not.toContain('subtitles')
+    expect(prompt.toLowerCase()).not.toContain('caption')
+    expect(prompt.toLowerCase()).not.toContain('text overlay')
+    expect(prompt.toLowerCase()).not.toContain('readable text')
+  })
+
+  it('VIDEO_PANEL: blocks overlong audio-backed Smart VBVR requests instead of routing away', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
@@ -413,23 +502,10 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    await processor!(job)
+    await expect(processor!(job)).rejects.toThrow('VIDEO_AUDIO_DURATION_EXCEEDS_WORKFLOW_MAX')
 
-    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      modelKey: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-    }))
-    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        modelId: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
-        allowCustomDuration: true,
-        options: expect.objectContaining({
-          duration: 23.7,
-          fps: 25,
-          generationMode: 'normal',
-        }),
-      }),
-    )
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).not.toHaveBeenCalled()
   })
 
   it('VIDEO_PANEL: preserves exact routed LTX2.3 duration while keeping capability duration bucket in payload', async () => {
@@ -475,25 +551,25 @@ describe('worker video processor behavior', () => {
     )
   })
 
-  it('VIDEO_PANEL: submits slow stable camera routed shots to the video generator', async () => {
+  it('VIDEO_PANEL: canonicalizes the legacy first-last-frame key to Goon', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
 
     const job = buildJob({
       type: TASK_TYPE.VIDEO_PANEL,
       payload: {
-        videoModel: LTX23_FIRST_LAST_MODEL,
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
         firstLastFrame: {
-          flModel: LTX23_FIRST_LAST_MODEL,
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
           lastFrameStoryboardId: 'storyboard-1',
           lastFramePanelIndex: 0,
         },
         ltx23WorkflowRouting: {
-          selectedModelKey: LTX23_FIRST_LAST_MODEL,
+          selectedModelKey: LEGACY_LTX23_FIRST_LAST_MODEL,
           category: 'first_last_frame',
           reasons: ['slow_stable_camera_movement'],
           durationSeconds: 12,
-          fps: 25,
+          fps: 24,
         },
         generationOptions: {
           duration: 12,
@@ -513,7 +589,7 @@ describe('worker video processor behavior', () => {
         allowCustomDuration: true,
         options: expect.objectContaining({
           duration: 12,
-          fps: 25,
+          fps: 24,
           generationMode: 'firstlastframe',
           lastFrameImageUrl: 'https://signed.example/cos/panel-image.png',
         }),
@@ -532,6 +608,104 @@ describe('worker video processor behavior', () => {
         videoGenerationMode: 'firstlastframe',
       }),
     })
+  })
+
+  it('VIDEO_PANEL: uses first-last duration binding when payload dropdown duration is stale', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 0,
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          targetDurationSeconds: 6,
+          recommendedDurationSeconds: 8,
+          durationSource: 'manual',
+          recommendationFingerprint: 'smart-fp',
+        },
+        generationOptions: {
+          duration: 10,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_FIRST_LAST_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 6,
+          fps: 24,
+          generationMode: 'firstlastframe',
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: uses saved first-last duration binding when payload omits binding', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoDurationBinding: JSON.stringify({
+        mode: 'manual',
+        targetDurationSeconds: 7,
+        recommendedDurationSeconds: 9,
+        durationSource: 'smart',
+        recommendationFingerprint: 'saved-smart-fp',
+      }),
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-auto',
+        speaker: 'Doctor',
+        content: 'This automatically matched audio should not override first-last duration binding.',
+        audioUrl: 'cos/line-auto.mp3',
+        audioDuration: 11_200,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LEGACY_LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 0,
+        },
+        generationOptions: {
+          duration: 10,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_FIRST_LAST_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 7,
+          fps: 24,
+          generationMode: 'firstlastframe',
+        }),
+      }),
+    )
   })
 
   it('VIDEO_PANEL: allows exact audio-driven LTX2.3 duration to bypass enum duration options downstream', async () => {
@@ -579,6 +753,132 @@ describe('worker video processor behavior', () => {
     )
   })
 
+  it('VIDEO_PANEL: uses the selected duration as the Smart VBVR target when linked audio is shorter', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      videoPrompt: 'middle-aged doctor faces the camera and speaks with subtle mouth movement',
+      srtSegment: 'Please answer clearly so the visual prompt should not contain this transcript.',
+    }))
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: 'Doctor',
+        content: 'Please answer clearly so the visual prompt should not contain this transcript.',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 10_342,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_DEFAULT_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 12,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      durationSeconds: 12,
+      audioTiming: expect.objectContaining({
+        audioDurationSeconds: 10.34,
+        targetDurationSeconds: 12,
+      }),
+    }))
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: LTX23_DEFAULT_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 12,
+          fps: 25,
+          generationMode: 'normal',
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+        }),
+      }),
+    )
+
+    const generationCall = utilsMock.resolveVideoSourceFromGeneration.mock.calls[0]?.[1] as {
+      options?: { prompt?: string }
+    }
+    const prompt = generationCall.options?.prompt || ''
+    expect(prompt).toContain('Dialogue lines: none')
+    expect(prompt).not.toContain('Please answer clearly so the visual prompt should not contain this transcript.')
+  })
+
+  it('VIDEO_PANEL: does not treat the unchanged card prompt as user-edited for Smart VBVR audio shots', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    ltxPromptEnhanceMock.enhanceLtx23VideoPrompt.mockResolvedValueOnce({
+      prompt: [
+        'GLOBAL: clinical office, middle-aged doctor seated behind the desk, frontal close-up, cool white light, same source-frame composition.',
+        'LOCAL: middle-aged doctor speaks calmly to camera with subtle mouth movement and tiny facial motion.',
+      ].join('\n'),
+      enhanced: true,
+      textModel: 'test-model',
+    })
+
+    const panel = buildPanel({
+      id: 'panel-smart-vbvr-edit-intent',
+      panelIndex: 2,
+      videoPrompt: 'middle-aged doctor sits behind the desk and speaks calmly to camera',
+      videoPromptEditedByUser: false,
+      videoDurationBinding: JSON.stringify({
+        mode: 'match_audio',
+        voiceLineIds: ['voice-line-1'],
+        targetDurationSeconds: 12,
+      }),
+    })
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(panel)
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'voice-line-1',
+        speaker: 'Doctor',
+        content: 'Hello Chen Ji, I need to ask you some questions.',
+        audioUrl: 'cos/voice-line-1.mp3',
+        audioDuration: 10_342,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      targetId: panel.id,
+      payload: {
+        videoModel: LTX23_DEFAULT_MODEL,
+        customPrompt: panel.videoPrompt,
+        customPromptEditedByUser: false,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['voice-line-1'],
+          targetDurationSeconds: 12,
+        },
+        generationOptions: {
+          duration: 12,
+          resolution: '720p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      userEdited: false,
+      originalPrompt: expect.stringContaining('Panel continuity packet:'),
+    }))
+  })
+
   it('VIDEO_PANEL: sends long linked audio to selected long-video workflow without split segments', async () => {
     const processor = workerState.processor
     expect(processor).toBeTruthy()
@@ -607,11 +907,16 @@ describe('worker video processor behavior', () => {
       },
     })
 
-    const result = await processor!(job) as { panelId: string; videoUrl: string }
+    const result = await processor!(job) as {
+      panelId: string
+      videoUrl: string
+      videoModel: string
+    }
 
     expect(result).toEqual({
       panelId: 'panel-1',
       videoUrl: 'cos/lip-sync/video.mp4',
+      videoModel: 'comfyui::basevideo/ltx23-profiles/damaicha-image-to-30s-long-video',
     })
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledTimes(1)
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
@@ -633,6 +938,93 @@ describe('worker video processor behavior', () => {
         videoGenerationMode: 'normal',
       }),
     })
+  })
+
+  it('VIDEO_PANEL: sends Seedance2 Bernini motion strength and exact timing without LTX prompt enhancement', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_MODEL,
+        generationOptions: {
+          duration: 5,
+          fps: 24,
+          motionStrength: 1,
+          resolution: '480p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        imageUrl: 'https://signed.example/cos/panel-image.png',
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 5,
+          fps: 24,
+          motionStrength: 1,
+          resolution: '480p',
+          generationMode: 'normal',
+          prompt: expect.stringContaining('panel prompt'),
+        }),
+      }),
+    )
+  })
+
+  it('VIDEO_PANEL: uses Bernini capability fps for audio-matched timing', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+
+    prismaMock.novelPromotionVoiceLine.findMany.mockResolvedValue([
+      {
+        id: 'line-1',
+        speaker: '中年医生',
+        content: '陈迹你好，我现在需要问你一些问题。',
+        audioUrl: 'cos/line-1.mp3',
+        audioDuration: 3600,
+      },
+    ])
+
+    const job = buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: BERNINI_MODEL,
+        videoDurationBinding: {
+          mode: 'match_audio',
+          voiceLineIds: ['line-1'],
+        },
+        generationOptions: {
+          duration: 5,
+          motionStrength: 2,
+          resolution: '480p',
+        },
+      },
+    })
+
+    await processor!(job)
+
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        modelId: BERNINI_MODEL,
+        allowCustomDuration: true,
+        options: expect.objectContaining({
+          duration: 3.6,
+          fps: 24,
+          motionStrength: 2,
+          resolution: '480p',
+          generationMode: 'normal',
+          referenceAudioUrls: ['https://signed.example/cos/line-1.mp3'],
+        }),
+      }),
+    )
   })
 
   it('VIDEO_PANEL: ignores stale structured multi-shot prompts when saved prompt was not user edited', async () => {
@@ -748,14 +1140,12 @@ describe('worker video processor behavior', () => {
 
     await processor!(job)
 
-    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).toHaveBeenCalledWith(expect.objectContaining({
-      originalPrompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
-      generationMode: 'firstlastframe',
-    }))
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
     expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         options: expect.objectContaining({
+          prompt: expect.stringContaining('Bridge naturally into the last frame: doctor raises one hand and pushes his glasses'),
           generationMode: 'firstlastframe',
           lastFrameImageUrl: 'https://signed.example/cos/last-frame.png',
         }),
@@ -765,7 +1155,54 @@ describe('worker video processor behavior', () => {
       where: { id: 'panel-1' },
       data: expect.objectContaining({
         firstLastFramePrompt: expect.stringContaining('Bridge naturally into the last frame'),
+        firstLastFramePromptEditedByUser: false,
         videoGenerationMode: 'firstlastframe',
+      }),
+    })
+  })
+
+  it('VIDEO_PANEL: forwards the visible first-last custom prompt and edited flag without enhancement', async () => {
+    const processor = workerState.processor
+    expect(processor).toBeTruthy()
+    const customPrompt = 'A single continuous tracking shot carries the same woman from the doorway to the window while her coat, face, room, lighting, and visible furniture remain unchanged, ending precisely in the supplied final composition.'
+
+    prismaMock.novelPromotionPanel.findUnique.mockResolvedValueOnce(buildPanel({
+      firstLastFramePrompt: 'older persisted prompt',
+      firstLastFramePromptEditedByUser: false,
+    }))
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValue(buildPanel({
+      id: 'panel-2',
+      panelIndex: 1,
+      imageUrl: 'cos/last-frame.png',
+    }))
+
+    await processor!(buildJob({
+      type: TASK_TYPE.VIDEO_PANEL,
+      payload: {
+        videoModel: LTX23_FIRST_LAST_MODEL,
+        firstLastFrame: {
+          flModel: LTX23_FIRST_LAST_MODEL,
+          lastFrameStoryboardId: 'storyboard-1',
+          lastFramePanelIndex: 1,
+          customPrompt,
+          customPromptEditedByUser: true,
+        },
+        generationOptions: { duration: 8 },
+      },
+    }))
+
+    expect(ltxPromptEnhanceMock.enhanceLtx23VideoPrompt).not.toHaveBeenCalled()
+    expect(utilsMock.resolveVideoSourceFromGeneration).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        options: expect.objectContaining({ prompt: customPrompt }),
+      }),
+    )
+    expect(prismaMock.novelPromotionPanel.update).toHaveBeenCalledWith({
+      where: { id: 'panel-1' },
+      data: expect.objectContaining({
+        firstLastFramePrompt: customPrompt,
+        firstLastFramePromptEditedByUser: true,
       }),
     })
   })

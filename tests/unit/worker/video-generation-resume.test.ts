@@ -126,6 +126,41 @@ describe('worker utils video generation resume', () => {
     expect(generatorApiMock.generateVideo).toHaveBeenCalledTimes(1)
   })
 
+  it('preserves ComfyUI first-last routing and the tail image for provider submission', async () => {
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockResolvedValueOnce({
+      duration: 10,
+      fps: 24,
+      generationMode: 'firstlastframe',
+    })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/first-last.mp4',
+    })
+
+    await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      imageUrl: 'data:image/png;base64,RklSU1Q=',
+      options: {
+        prompt: 'transition into the supplied tail frame',
+        duration: 10,
+        fps: 24,
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'data:image/png;base64,TEFTVA==',
+      },
+    })
+
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
+      'data:image/png;base64,RklSU1Q=',
+      expect.objectContaining({
+        generationMode: 'firstlastframe',
+        lastFrameImageUrl: 'data:image/png;base64,TEFTVA==',
+      }),
+    )
+  })
+
   it('validates custom audio-driven ComfyUI durations against the next allowed duration but submits the exact duration', async () => {
     configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
       runtimeSelections?: Record<string, unknown>
@@ -173,6 +208,116 @@ describe('worker utils video generation resume', () => {
         duration: 11.43,
         resolution: '720p',
         prompt: 'animate this frame',
+      }),
+    )
+  })
+
+  it.each([6, 16])(
+    'validates exact Bernini duration %ss with a catalog preset but submits the exact duration',
+    async (duration) => {
+      configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
+        runtimeSelections?: Record<string, unknown>
+      }) => {
+        expect(input.runtimeSelections).toEqual(expect.objectContaining({
+          duration: 10,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        }))
+        return {
+          duration: 10,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        }
+      })
+      generatorApiMock.generateVideo.mockResolvedValueOnce({
+        success: true,
+        videoUrl: `https://comfy.test/seedance2-bernini-${duration}s.mp4`,
+      })
+
+      const result = await resolveVideoSourceFromGeneration(buildJob(), {
+        userId: 'user-1',
+        modelId: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        imageUrl: 'data:image/png;base64,QQ==',
+        allowCustomDuration: true,
+        options: {
+          prompt: 'animate this frame',
+          duration,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        },
+      })
+
+      expect(result).toEqual({ url: `https://comfy.test/seedance2-bernini-${duration}s.mp4` })
+      expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+        'user-1',
+        'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        'data:image/png;base64,QQ==',
+        expect.objectContaining({
+          duration,
+          fps: 24,
+          motionStrength: 1,
+          prompt: 'animate this frame',
+          resolution: '480p',
+        }),
+      )
+    },
+  )
+
+  it('passes Seedance2 Bernini fps and motion strength into worker capability validation', async () => {
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
+      runtimeSelections?: Record<string, unknown>
+    }) => {
+      expect(input.runtimeSelections).toEqual(expect.objectContaining({
+        duration: 5,
+        fps: 24,
+        generationMode: 'normal',
+        motionStrength: 2,
+        resolution: '480p',
+      }))
+      return {
+        duration: 5,
+        fps: 24,
+        generationMode: 'normal',
+        motionStrength: 2,
+        resolution: '480p',
+      }
+    })
+    generatorApiMock.generateVideo.mockResolvedValueOnce({
+      success: true,
+      videoUrl: 'https://comfy.test/seedance2-bernini.mp4',
+    })
+
+    const result = await resolveVideoSourceFromGeneration(buildJob(), {
+      userId: 'user-1',
+      modelId: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      imageUrl: 'data:image/png;base64,QQ==',
+      options: {
+        prompt: 'animate this frame',
+        duration: 5,
+        fps: 24,
+        generationMode: 'normal',
+        motionStrength: 2,
+        resolution: '480p',
+      },
+    })
+
+    expect(result).toEqual({ url: 'https://comfy.test/seedance2-bernini.mp4' })
+    expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+      'user-1',
+      'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      'data:image/png;base64,QQ==',
+      expect.objectContaining({
+        duration: 5,
+        fps: 24,
+        motionStrength: 2,
+        prompt: 'animate this frame',
+        resolution: '480p',
       }),
     )
   })

@@ -1,13 +1,49 @@
 'use client'
 
 import { useCallback, useMemo } from 'react'
-import { useTaskList } from '@/lib/query/hooks/useTaskStatus'
+import { useTaskList, type TaskItem } from '@/lib/query/hooks/useTaskStatus'
 import { resolveErrorDisplay } from '@/lib/errors/display'
 import { useDismissFailedTasks } from '@/lib/query/mutations/task-mutations'
 
 interface UseStoryboardGroupTaskErrorsParams {
   projectId: string
   episodeId: string
+  panelOutputById?: Map<string, PanelOutputState>
+}
+
+type PanelOutputState = {
+  imageUrl?: string | null
+  updatedAt?: string | null
+}
+
+function parseTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function isStaleFailedImageTask(task: TaskItem, panelOutput: PanelOutputState | undefined): boolean {
+  if (!panelOutput?.imageUrl) return false
+  const taskUpdatedAt = parseTimestamp(task.updatedAt)
+  const panelUpdatedAt = parseTimestamp(panelOutput.updatedAt)
+  if (taskUpdatedAt === null || panelUpdatedAt === null) return false
+  return panelUpdatedAt > taskUpdatedAt
+}
+
+export function buildPanelTaskErrorMap(
+  tasks: TaskItem[],
+  panelOutputById: Map<string, PanelOutputState> = new Map(),
+) {
+  const map = new Map<string, { taskId: string; message: string }>()
+  for (const task of tasks) {
+    if (isStaleFailedImageTask(task, panelOutputById.get(task.targetId))) continue
+    const display = resolveErrorDisplay(task.error || null)
+    if (!display) continue
+    if (!map.has(task.targetId)) {
+      map.set(task.targetId, { taskId: task.id, message: display.message })
+    }
+  }
+  return map
 }
 
 /**
@@ -16,6 +52,7 @@ interface UseStoryboardGroupTaskErrorsParams {
  */
 export function useStoryboardGroupTaskErrors({
   projectId,
+  panelOutputById,
 }: UseStoryboardGroupTaskErrorsParams) {
   const panelFailedTasksQuery = useTaskList({
     projectId,
@@ -28,16 +65,8 @@ export function useStoryboardGroupTaskErrors({
   const dismissMutation = useDismissFailedTasks(projectId)
 
   const panelTaskErrorMap = useMemo(() => {
-    const map = new Map<string, { taskId: string; message: string }>()
-    for (const task of panelFailedTasksQuery.data || []) {
-      const display = resolveErrorDisplay(task.error || null)
-      if (!display) continue
-      if (!map.has(task.targetId)) {
-        map.set(task.targetId, { taskId: task.id, message: display.message })
-      }
-    }
-    return map
-  }, [panelFailedTasksQuery.data])
+    return buildPanelTaskErrorMap(panelFailedTasksQuery.data || [], panelOutputById)
+  }, [panelFailedTasksQuery.data, panelOutputById])
 
   const clearPanelTaskError = useCallback((panelId: string) => {
     const taskIds = (panelFailedTasksQuery.data || [])

@@ -1,0 +1,20 @@
+You write one continuous-shot transition prompt for the Goon first/last-frame video workflow.
+
+Image 1 is START. Treat it as the exact opening frame.
+Image 2 is END. Treat it as the exact closing frame.
+
+START panel context:
+{first_panel_context}
+
+END panel context:
+{last_panel_context}
+
+Timing: {duration_seconds} seconds at {fps} fps.
+Canonical workflow: {goon_key}
+
+Return strict JSON only:
+{"transition_prompt":"...","duration_analysis":{"motion_beats":[{"type":"body_action","order":1,"parallel_group":"optional"}],"pacing":"normal","continuity":"good","confidence":0.8,"reason":"short Chinese reason"},"warnings":["..."]}
+
+The transition_prompt must be English, roughly 70-160 words, and describe one physically continuous shot from START to END. Preserve visible identities, clothing, location, lighting, props, and framing. Do not use cuts or scene changes. Do not invent people, characters, props, locations, plot events, captions, or readable text. Mention only motion and camera behavior that can plausibly connect the supplied frames. warnings is optional and must be an array of short English strings.
+
+duration_analysis is required and describes the motion complexity only; do not output a duration in seconds. motion_beats[].type must be one of: micro_motion, gesture, body_action, locomotion, environment_change, transformation, camera_standard, camera_large. Use order for serial stages and the same parallel_group for actions that happen at the same time. pacing must be fast, normal, or slow. continuity must be good, challenging, or discontinuous. confidence must be a number from 0 to 1. reason must be concise Chinese text for the user.

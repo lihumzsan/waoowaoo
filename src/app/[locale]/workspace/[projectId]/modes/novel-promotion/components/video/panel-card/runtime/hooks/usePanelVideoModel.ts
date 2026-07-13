@@ -7,13 +7,20 @@ import {
   resolveEffectiveVideoCapabilityFields,
 } from '@/lib/model-capabilities/video-effective'
 import { projectVideoPricingTiersByFixedSelections } from '@/lib/model-pricing/video-tier'
-
-const DEFAULT_VIDEO_MODEL = 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2'
+import { normalizeDefaultVideoModel } from '@/lib/novel-promotion/video-model-defaults'
+import { retainEqualJsonState } from './video-state-sync'
+import {
+  applyRecommendedVideoDurationSelection,
+  normalizeRecommendedVideoDuration,
+  withRecommendedVideoDuration,
+} from '@/lib/model-capabilities/video-recommended-duration'
+import { isSeedance2BerniniWorkflowKey } from '@/lib/providers/comfyui/seedance2-bernini-workflow'
 
 interface UsePanelVideoModelParams {
   defaultVideoModel: string
   capabilityOverrides?: CapabilitySelections
   userVideoModels?: VideoModelOption[]
+  recommendedDuration?: unknown
 }
 
 interface CapabilityField {
@@ -25,6 +32,7 @@ interface CapabilityField {
   options: VideoGenerationOptionValue[]
   disabledOptions?: VideoGenerationOptionValue[]
   value: VideoGenerationOptionValue | undefined
+  recommendedValue?: VideoGenerationOptionValue
 }
 
 function toFieldLabel(field: string): string {
@@ -65,20 +73,19 @@ function readSelectionForModel(
   return selection
 }
 
-function normalizeDefaultVideoModel(modelKey: string): string {
-  const value = modelKey.trim()
-  return value || DEFAULT_VIDEO_MODEL
-}
-
 export function usePanelVideoModel({
   defaultVideoModel,
   capabilityOverrides,
   userVideoModels,
+  recommendedDuration,
 }: UsePanelVideoModelParams) {
   const normalizedDefaultVideoModel = normalizeDefaultVideoModel(defaultVideoModel || '')
   const [selectedModel, setSelectedModel] = useState(normalizedDefaultVideoModel)
   const [generationOptions, setGenerationOptions] = useState<VideoGenerationOptions>(() =>
-    readSelectionForModel(capabilityOverrides, normalizedDefaultVideoModel),
+    applyRecommendedVideoDurationSelection(
+      readSelectionForModel(capabilityOverrides, normalizedDefaultVideoModel),
+      { modelKey: normalizedDefaultVideoModel, recommendedDuration },
+    ),
   )
   const videoModelOptions = useMemo(() => userVideoModels ?? [], [userVideoModels])
   const selectedOption = videoModelOptions.find((option) => option.value === selectedModel)
@@ -112,12 +119,18 @@ export function usePanelVideoModel({
     setSelectedModel(nextDefault)
   }, [normalizedDefaultVideoModel, selectedModel, videoModelOptions])
 
+  const recommendedDurationSeconds = normalizeRecommendedVideoDuration(recommendedDuration)
+  const usesRecommendedDuration = recommendedDurationSeconds !== null
+    && isSeedance2BerniniWorkflowKey(selectedModel)
   const capabilityDefinitions = useMemo(
-    () => resolveEffectiveVideoCapabilityDefinitions({
-      videoCapabilities: selectedOption?.capabilities?.video,
-      pricingTiers,
-    }),
-    [pricingTiers, selectedOption?.capabilities?.video],
+    () => withRecommendedVideoDuration(
+      resolveEffectiveVideoCapabilityDefinitions({
+        videoCapabilities: selectedOption?.capabilities?.video,
+        pricingTiers,
+      }),
+      { modelKey: selectedModel, recommendedDuration },
+    ),
+    [pricingTiers, recommendedDuration, selectedModel, selectedOption?.capabilities?.video],
   )
 
   const selectedModelOverrides = useMemo(
@@ -130,19 +143,28 @@ export function usePanelVideoModel({
   )
 
   useEffect(() => {
-    setGenerationOptions(normalizeVideoGenerationSelections({
-      definitions: capabilityDefinitions,
-      pricingTiers,
-      selection: selectedModelOverrides,
-    }))
-  }, [selectedModel, selectedModelOverridesSignature, capabilityDefinitions, pricingTiers, selectedModelOverrides])
+    setGenerationOptions((previous) => retainEqualJsonState(
+      previous,
+      normalizeVideoGenerationSelections({
+        definitions: capabilityDefinitions,
+        pricingTiers,
+        selection: applyRecommendedVideoDurationSelection(
+          selectedModelOverrides,
+          { modelKey: selectedModel, recommendedDuration },
+        ),
+      }),
+    ))
+  }, [selectedModel, selectedModelOverridesSignature, capabilityDefinitions, pricingTiers, selectedModelOverrides, recommendedDuration])
 
   useEffect(() => {
-    setGenerationOptions((previous) => normalizeVideoGenerationSelections({
-      definitions: capabilityDefinitions,
-      pricingTiers,
-      selection: previous,
-    }))
+    setGenerationOptions((previous) => retainEqualJsonState(
+      previous,
+      normalizeVideoGenerationSelections({
+        definitions: capabilityDefinitions,
+        pricingTiers,
+        selection: previous,
+      }),
+    ))
   }, [capabilityDefinitions, pricingTiers])
 
   const effectiveFields = useMemo(
@@ -181,9 +203,12 @@ export function usePanelVideoModel({
         disabledOptions: (definition.options as VideoGenerationOptionValue[])
           .filter((option) => !enabledOptions.includes(option)),
         value: effectiveField?.value as VideoGenerationOptionValue | undefined,
+        recommendedValue: definition.field === 'duration' && usesRecommendedDuration
+          ? recommendedDurationSeconds
+          : undefined,
       }
     })
-  }, [capabilityDefinitions, effectiveFieldMap])
+  }, [capabilityDefinitions, effectiveFieldMap, recommendedDurationSeconds, usesRecommendedDuration])
 
   const setCapabilityValue = (field: string, rawValue: string) => {
     const definitionField = definitionFieldMap.get(field)

@@ -1,13 +1,16 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { promises as fs } from 'node:fs'
+import { existsSync, promises as fs, readdirSync, statSync } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   CODEX_DEFAULT_EXECUTABLE_PATH,
+  CODEX_LEGACY_SANDBOX_EXECUTABLE_PATH,
   CODEX_DEFAULT_MODEL_ID,
+  CODEX_DEFAULT_REASONING_EFFORT,
+  CODEX_DEFAULT_SERVICE_TIER,
 } from './constants'
 
 export type CodexChatMessage = {
@@ -90,6 +93,14 @@ const DEFAULT_CODEX_EXEC_TIMEOUT_MS = 20 * 60 * 1000
 const CODEX_FORCE_KILL_GRACE_MS = 5000
 const OUTPUT_TRUNCATE_LIMIT = 4000
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
+const CODEX_RUNTIME_CONFIG_ARGS = [
+  '--config',
+  'approval_policy="never"',
+  '--config',
+  `model_reasoning_effort="${CODEX_DEFAULT_REASONING_EFFORT}"`,
+  '--config',
+  `service_tier="${CODEX_DEFAULT_SERVICE_TIER}"`,
+]
 
 function readTimeoutMs(raw: string | undefined): number {
   if (!raw) return DEFAULT_CODEX_EXEC_TIMEOUT_MS
@@ -110,9 +121,79 @@ function expandWindowsEnv(input: string): string {
   })
 }
 
+function normalizePathForCompare(input: string): string {
+  const resolved = path.resolve(input)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+function samePath(left: string, right: string): boolean {
+  return normalizePathForCompare(left) === normalizePathForCompare(right)
+}
+
+function isExistingFile(filePath: string): boolean {
+  try {
+    return existsSync(filePath) && statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+function readCurrentCodexCliPath(): string | undefined {
+  const configured = process.env.CODEX_CLI_PATH?.trim()
+  if (!configured) return undefined
+  return expandWindowsEnv(configured)
+}
+
+function listLocalCodexExecutableCandidates(): string[] {
+  const localAppData = process.env.LOCALAPPDATA
+  if (!localAppData) return []
+
+  const binDir = path.join(localAppData, 'OpenAI', 'Codex', 'bin')
+  const versionedCandidates: Array<{ filePath: string; mtimeMs: number }> = []
+  try {
+    for (const entry of readdirSync(binDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const filePath = path.join(binDir, entry.name, 'codex.exe')
+      if (!isExistingFile(filePath)) continue
+      versionedCandidates.push({ filePath, mtimeMs: statSync(filePath).mtimeMs })
+    }
+  } catch {
+    // The desktop Codex install path is optional; keep probing other candidates.
+  }
+
+  versionedCandidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
+  return [
+    ...versionedCandidates.map((candidate) => candidate.filePath),
+    path.join(binDir, 'codex.exe'),
+  ]
+}
+
+function firstExistingPath(paths: Array<string | undefined>): string | null {
+  for (const candidate of paths) {
+    if (!candidate) continue
+    if (isExistingFile(candidate)) return candidate
+  }
+  return null
+}
+
 export function resolveCodexExecutablePath(rawPath?: string): string {
   const configuredPath = (rawPath || CODEX_DEFAULT_EXECUTABLE_PATH).trim()
   const withEnv = expandWindowsEnv(configuredPath)
+  const autoPaths = [
+    CODEX_DEFAULT_EXECUTABLE_PATH,
+    CODEX_LEGACY_SANDBOX_EXECUTABLE_PATH,
+  ].map(expandWindowsEnv)
+  const shouldAutoResolve = !rawPath?.trim() || autoPaths.some((autoPath) => samePath(withEnv, autoPath))
+  if (shouldAutoResolve) {
+    const resolved = firstExistingPath([
+      readCurrentCodexCliPath(),
+      ...listLocalCodexExecutableCandidates(),
+      withEnv,
+      expandWindowsEnv(CODEX_LEGACY_SANDBOX_EXECUTABLE_PATH),
+    ])
+    if (resolved) return resolved
+  }
+
   if (withEnv === '~') return os.homedir()
   if (withEnv.startsWith('~/') || withEnv.startsWith('~\\')) {
     return path.join(os.homedir(), withEnv.slice(2))
@@ -138,8 +219,7 @@ export function buildCodexExecArgs(params: {
     'exec',
     '--ephemeral',
     '--json',
-    '--config',
-    'approval_policy="never"',
+    ...CODEX_RUNTIME_CONFIG_ARGS,
     '--color',
     'never',
     '--sandbox',
@@ -176,8 +256,7 @@ export function buildCodexImageExecArgs(params: {
     'exec',
     '--ephemeral',
     '--json',
-    '--config',
-    'approval_policy="never"',
+    ...CODEX_RUNTIME_CONFIG_ARGS,
     '--color',
     'never',
     '--enable',

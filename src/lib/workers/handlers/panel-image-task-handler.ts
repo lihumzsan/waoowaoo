@@ -1149,6 +1149,7 @@ async function recordPanelImageAuditFailure(params: {
 const NON_BLOCKING_PANEL_IMAGE_AUDIT_CODES = new Set([
   'PANEL_IMAGE_AUDIT_VISION_MODEL_MISSING',
   'PANEL_IMAGE_AUDIT_VISION_RUNTIME_FAILED',
+  'PANEL_IMAGE_AUDIT_CONTENT_MISMATCH',
 ])
 
 function isNonBlockingPanelImageAuditFailure(audit: PanelImageAuditResult): boolean {
@@ -1689,12 +1690,13 @@ export async function handlePanelImageTask(job: Job<TaskJobData>) {
     if (!audit.ok) {
       if (isNonBlockingPanelImageAuditFailure(audit)) {
         logger.warn({
-          message: 'panel image vision audit unavailable; accepting generated candidate',
+          message: 'panel image audit failed; accepting generated candidate with audit report',
           details: {
             panelId,
             candidateIndex: i,
             auditCode: audit.code,
             auditMessage: audit.message,
+            auditIssues: audit.issues,
             requestedModelKey,
             modelKey,
           },

@@ -116,6 +116,7 @@
     "unknownError": "Unknown error"
   },
   "firstLastFrame": {
+    "regenerateVideo": "Regenerate First/Last Frame Video",
     "title": "First/Last Frame Settings",
     "firstFrame": "First Frame",
     "lastFrame": "Last Frame",
@@ -136,7 +137,13 @@
     "audioOff": "Off",
     "linkToNext": "Link to next panel (First/Last Frame)",
     "asLastFrame": "As last frame for Panel {number}",
-    "thenTransitionTo": "then transition to"
+    "promptQueued": "Transition prompt queued...",
+    "promptProcessing": "Generating transition prompt...",
+    "promptSaving": "Saving transition prompt...",
+    "promptError": "Transition prompt generation failed.",
+    "promptFallbackWarning": "A deterministic fallback prompt is shown. You can retry generation or continue to video generation.",
+    "retryPrompt": "Retry transition prompt",
+    "regeneratePrompt": "Regenerate transition prompt"
   },
   "editor": {
     "alert": {
@@ -195,6 +202,12 @@
     "duration": "Duration",
     "fps": "Frame rate",
     "resolution": "Resolution",
+    "motionStrength": "Motion strength",
+    "motionStrengthOption": {
+      "1": "Calm",
+      "2": "Normal motion",
+      "3": "Strong action"
+    },
     "aspectRatio": "Aspect ratio",
     "reasoningEffort": "Reasoning effort",
     "voice": "Voice",

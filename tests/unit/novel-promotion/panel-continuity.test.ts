@@ -85,6 +85,21 @@ describe('panel continuity prompt inputs', () => {
     expect(prompt).not.toContain('GLOBAL:')
   })
 
+  it('does not recursively wrap an existing first-last-frame prompt', () => {
+    const prompt = buildDefaultFirstLastFramePrompt({
+      firstPanel: {
+        videoPrompt: 'the man raises his eyes toward the light',
+        firstLastFramePrompt: 'Start from the first frame: old bridge. Bridge naturally into the last frame: old ending.',
+      },
+      lastPanel: { videoPrompt: 'the blue figure becomes still' },
+    })
+
+    expect(prompt).toContain('the man raises his eyes toward the light')
+    expect(prompt).not.toContain('old bridge')
+    expect(prompt.match(/Start from the first frame:/g)).toHaveLength(1)
+    expect(prompt.match(/Bridge naturally into the last frame:/g)).toHaveLength(1)
+  })
+
   it('locks normal video prompts without explicit camera movement to source-frame composition', () => {
     const packet = buildPanelContinuityPacket({
       panel: {

@@ -1,6 +1,7 @@
 import { JobsOptions, Queue } from 'bullmq'
 import { queueRedis } from '@/lib/redis'
 import { QueueType, TaskType, TASK_TYPE, type TaskJobData } from './types'
+import { readImageQueueGlobalConcurrency } from './image-queue-concurrency'
 
 export const QUEUE_NAME = {
   IMAGE: 'waoowaoo-image',
@@ -23,6 +24,12 @@ export const imageQueue = new Queue<TaskJobData>(QUEUE_NAME.IMAGE, {
   connection: queueRedis,
   defaultJobOptions,
 })
+
+export async function configureImageQueueGlobalConcurrency() {
+  const concurrency = readImageQueueGlobalConcurrency(process.env.IMAGE_QUEUE_GLOBAL_CONCURRENCY)
+  await imageQueue.setGlobalConcurrency(concurrency)
+  return concurrency
+}
 
 export const videoQueue = new Queue<TaskJobData>(QUEUE_NAME.VIDEO, {
   connection: queueRedis,

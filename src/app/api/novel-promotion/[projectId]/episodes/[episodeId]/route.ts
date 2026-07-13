@@ -12,7 +12,11 @@ import {
   type EpisodeDataProfile,
 } from '@/lib/novel-promotion/episode-data-profile'
 import { resolveEpisodeStageArtifacts } from '@/lib/novel-promotion/stage-readiness'
-import { buildPanelPreviousVideoAvailabilityMap } from '@/lib/novel-promotion/video-restore-history'
+import {
+  buildPanelPreviousVideoAvailabilityMap,
+  readTaskVideoModel,
+  readTaskVideoUrl,
+} from '@/lib/novel-promotion/video-restore-history'
 import { TASK_STATUS, TASK_TYPE } from '@/lib/task/types'
 
 type ConfigEpisodePayload = {
@@ -35,6 +39,7 @@ type EpisodeWithStoryboardPanels = {
     panels?: Array<{
       id: string
       videoUrl?: string | null
+      videoModel?: string | null
       hasPreviousVideoVersion?: boolean
     }>
   }>
@@ -113,6 +118,35 @@ function parseStringArray(value: unknown): string[] {
   } catch {
     return []
   }
+}
+
+function buildPanelCurrentVideoModelMap(
+  panels: Array<{ id: string; videoUrl?: string | null }>,
+  tasks: Array<{
+    targetId: string
+    payload: unknown
+    result: unknown
+  }>,
+): Map<string, string> {
+  const currentVideoUrls = new Map(
+    panels.map((panel) => [
+      panel.id,
+      typeof panel.videoUrl === 'string' && panel.videoUrl.trim() ? panel.videoUrl.trim() : null,
+    ]),
+  )
+  const models = new Map<string, string>()
+
+  for (const task of tasks) {
+    if (models.has(task.targetId)) continue
+    const currentVideoUrl = currentVideoUrls.get(task.targetId)
+    if (!currentVideoUrl) continue
+    if (readTaskVideoUrl(task.result) !== currentVideoUrl) continue
+
+    const taskModel = readTaskVideoModel(task.payload, task.result)
+    if (taskModel) models.set(task.targetId, taskModel)
+  }
+
+  return models
 }
 
 async function resolveLegacyMediaUrl(value: unknown): Promise<unknown> {
@@ -199,6 +233,7 @@ async function attachPreviousVideoVersionFlags<T extends EpisodeWithStoryboardPa
     })),
     completedVideoTasks,
   )
+  const currentVideoModels = buildPanelCurrentVideoModelMap(panels, completedVideoTasks)
 
   return {
     ...episode,
@@ -206,6 +241,9 @@ async function attachPreviousVideoVersionFlags<T extends EpisodeWithStoryboardPa
       ...storyboard,
       panels: (storyboard.panels || []).map((panel) => ({
         ...panel,
+        videoModel: typeof panel.videoModel === 'string' && panel.videoModel.trim()
+          ? panel.videoModel
+          : currentVideoModels.get(panel.id) ?? panel.videoModel,
         hasPreviousVideoVersion: availability.get(panel.id) ?? false,
       })),
     })),
@@ -306,6 +344,7 @@ async function loadWorkspaceVisualEpisode(projectId: string, episodeId: string) 
               storyboardId: true,
               panelIndex: true,
               panelNumber: true,
+              updatedAt: true,
               shotType: true,
               cameraMove: true,
               description: true,

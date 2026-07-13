@@ -32,7 +32,7 @@ const aiRuntimeMock = vi.hoisted(() => ({
 
 const configServiceMock = vi.hoisted(() => ({
   getUserModelConfig: vi.fn(async () => ({
-    analysisModel: 'codex::gpt-5.4',
+    analysisModel: 'codex::gpt-5.5',
   })),
 }))
 
@@ -106,7 +106,7 @@ describe('worker episode-split', () => {
     })
     prismaMock.novelPromotionEpisode.findMany.mockResolvedValue([])
     configServiceMock.getUserModelConfig.mockResolvedValue({
-      analysisModel: 'codex::gpt-5.4',
+      analysisModel: 'codex::gpt-5.5',
     })
     aiRuntimeMock.executeAiTextStep.mockResolvedValue({
       text: JSON.stringify({
@@ -143,7 +143,7 @@ describe('worker episode-split', () => {
 
     expect(configServiceMock.getUserModelConfig).toHaveBeenCalledWith('user-1')
     expect(aiRuntimeMock.executeAiTextStep).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'codex::gpt-5.4',
+      model: 'codex::gpt-5.5',
     }))
   })
 

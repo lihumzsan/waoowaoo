@@ -43,11 +43,13 @@ interface UseWorkspaceStageRuntimeParams {
       lastFramePanelIndex: number
       flModel: string
       customPrompt?: string
+      customPromptEditedByUser?: boolean
     },
     generationOptions?: VideoGenerationOptions,
     panelId?: string,
     videoDurationBinding?: VideoDurationBinding,
     customPrompt?: string,
+    customPromptEditedByUser?: boolean,
   ) => Promise<void>
   handleGenerateAllVideos: (options?: BatchVideoGenerationParams) => Promise<void>
   handleUpdateVideoPrompt: (

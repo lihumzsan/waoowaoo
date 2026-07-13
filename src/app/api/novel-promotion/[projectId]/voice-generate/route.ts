@@ -250,6 +250,7 @@ export const POST = apiHandler(async (
 
   const results = await Promise.all(
     voiceLines.map(async (line) => {
+      const hasOutputAtStart = await hasVoiceLineAudioOutput(line.id)
       const payload = {
         episodeId,
         lineId: line.id,
@@ -265,7 +266,8 @@ export const POST = apiHandler(async (
         targetType: 'NovelPromotionVoiceLine',
         targetId: line.id,
         payload: withTaskUiPayload(payload, {
-          hasOutputAtStart: await hasVoiceLineAudioOutput(line.id)}),
+          intent: hasOutputAtStart ? 'regenerate' : 'generate',
+          hasOutputAtStart}),
         dedupeKey: `voice_line:${line.id}`})
 
       return {

@@ -63,10 +63,64 @@ interface CharacterImageDb {
     findUnique(args: Record<string, unknown>): Promise<CharacterAppearanceWithCharacter | null>
     findFirst(args: Record<string, unknown>): Promise<PrimaryAppearanceRecord | null>
     update(args: Record<string, unknown>): Promise<unknown>
+    updateMany(args: Record<string, unknown>): Promise<{ count: number }>
   }
   novelPromotionCharacter: {
     findUnique(args: Record<string, unknown>): Promise<CharacterRecord | null>
   }
+}
+
+const CHARACTER_IMAGE_MERGE_MAX_ATTEMPTS = 5
+
+async function persistSingleCharacterImage(params: {
+  db: CharacterImageDb
+  job: Job<TaskJobData>
+  appearanceId: string
+  imageIndex: number
+  imageKey: string
+}) {
+  for (let attempt = 0; attempt < CHARACTER_IMAGE_MERGE_MAX_ATTEMPTS; attempt += 1) {
+    const current = await params.db.characterAppearance.findUnique({
+      where: { id: params.appearanceId },
+      select: {
+        imageUrls: true,
+        selectedIndex: true,
+        imageUrl: true,
+      },
+    })
+    if (!current) throw new Error('Character appearance not found during image persistence')
+
+    const currentImageUrls = parseImageUrls(current.imageUrls, 'characterAppearance.imageUrls')
+    const nextImageUrls = [...currentImageUrls]
+    while (nextImageUrls.length <= params.imageIndex) nextImageUrls.push('')
+    nextImageUrls[params.imageIndex] = params.imageKey
+
+    const selectedIndex = current.selectedIndex
+    const fallbackMain = nextImageUrls.find((url) => typeof url === 'string' && url) || current.imageUrl
+    const mainImage = selectedIndex !== null && selectedIndex !== undefined && nextImageUrls[selectedIndex]
+      ? nextImageUrls[selectedIndex]
+      : fallbackMain
+
+    await assertTaskActive(params.job, 'persist_character_image')
+    const updated = await params.db.characterAppearance.updateMany({
+      where: {
+        id: params.appearanceId,
+        imageUrls: current.imageUrls,
+      },
+      data: {
+        imageUrls: encodeImageUrls(nextImageUrls),
+        imageUrl: mainImage || null,
+      },
+    })
+    if (updated.count > 0) {
+      return {
+        imageCount: nextImageUrls.filter(Boolean).length,
+        imageUrl: mainImage || null,
+      }
+    }
+  }
+
+  throw new Error('CHARACTER_IMAGE_PERSIST_CONFLICT')
 }
 
 export async function handleCharacterImageTask(job: Job<TaskJobData>) {
@@ -177,6 +231,24 @@ export async function handleCharacterImageTask(job: Job<TaskJobData>) {
       nextImageUrls.push('')
     }
     nextImageUrls[index] = imageKey
+  }
+
+  if (singleIndex !== undefined) {
+    const imageIndex = indexes[0]
+    const imageKey = nextImageUrls[imageIndex]
+    if (!imageKey) throw new Error('Character image result missing')
+    const persisted = await persistSingleCharacterImage({
+      db,
+      job,
+      appearanceId: appearance.id,
+      imageIndex,
+      imageKey,
+    })
+    return {
+      appearanceId: appearance.id,
+      imageCount: persisted.imageCount,
+      imageUrl: persisted.imageUrl,
+    }
   }
 
   const selectedIndex = appearance.selectedIndex

@@ -24,6 +24,46 @@ describe('video audio duration binding', () => {
     })
   })
 
+  it('normalizes smart duration metadata without dropping legacy fields', () => {
+    expect(normalizeVideoDurationBinding({
+      mode: 'manual',
+      voiceLineIds: ['a', 'a', ''],
+      targetDurationSeconds: 8,
+      durationSource: 'smart',
+      recommendationConfidence: 0.82,
+      recommendationReason: '包含转身和位置移动',
+      recommendationFingerprint: 'fp-1',
+      recommendationAlgorithmVersion: 'v1',
+    })).toEqual({
+      mode: 'manual',
+      voiceLineIds: ['a'],
+      targetDurationSeconds: 8,
+      durationSource: 'smart',
+      recommendationConfidence: 0.82,
+      recommendationReason: '包含转身和位置移动',
+      recommendationFingerprint: 'fp-1',
+      recommendationAlgorithmVersion: 'v1',
+    })
+  })
+
+  it('treats legacy manual target as manual source', () => {
+    expect(normalizeVideoDurationBinding({
+      mode: 'manual',
+      targetDurationSeconds: 6,
+    })).toMatchObject({
+      mode: 'manual',
+      targetDurationSeconds: 6,
+      durationSource: 'manual',
+    })
+  })
+
+  it('does not invent manual source for empty legacy manual binding', () => {
+    expect(normalizeVideoDurationBinding({ mode: 'manual' })).toEqual({
+      mode: 'manual',
+      voiceLineIds: [],
+    })
+  })
+
   it('defaults linked audio duration to the exact audio duration', () => {
     const timing = resolveAudioDrivenVideoTiming({
       binding: {

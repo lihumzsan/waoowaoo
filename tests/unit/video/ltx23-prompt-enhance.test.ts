@@ -235,6 +235,51 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt).toContain('never cut to another room, hallway, crowd, uniformed people')
   })
 
+  it('keeps exact dialogue out of the final Smart VBVR visual prompt when reference audio is linked', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: JSON.stringify({
+        enhanced_prompt: 'GLOBAL: The same middle-aged doctor remains seated in the same office source frame. LOCAL: The doctor faces the camera and speaks with subtle synchronized mouth motion.',
+      }),
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      originalPrompt: 'doctor faces forward and speaks with both hands on the desk',
+      panel: {
+        description: 'doctor faces forward and speaks with both hands on the desk',
+        location: 'office',
+        characters: 'Doctor',
+      },
+      linkedVoiceLines: [
+        {
+          id: 'line-1',
+          speaker: 'Doctor',
+          content: 'Hello Chen Ji, I need to ask you some questions.',
+          audioDuration: 3030,
+          audioUrl: 'voice.mp3',
+        },
+      ],
+      durationSeconds: 3.03,
+      fps: 25,
+      generationMode: 'normal',
+    })
+
+    expect(result.enhanced).toBe(true)
+    expect(result.prompt).toContain('reference audio')
+    expect(result.prompt).toContain('mouth movement')
+    expect(result.prompt).toContain('lower portion of the frame stays clean')
+    expect(result.prompt).not.toContain('Hello Chen Ji, I need to ask you some questions.')
+    expect(result.prompt).not.toContain('Do not add subtitles, captions, text overlays')
+    expect(result.prompt.toLowerCase()).not.toContain('subtitles')
+
+    const promptText = aiRuntimeMock.executeAiTextStep.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(promptText).toContain('reference audio')
+    expect(promptText).not.toContain('must say exactly')
+  })
+
   it('removes unsafe camera-travel wording from normal single-shot prompts', async () => {
     aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
       text: JSON.stringify({
@@ -591,7 +636,7 @@ describe('ltx23 video prompt enhance', () => {
       userId: 'user-1',
       locale: 'en',
       projectId: 'project-1',
-      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smooth-first-last-frame',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/goon-first-last-frame-2stage',
       originalPrompt: 'doctor moves from start frame to end frame',
       panel: {
         description: 'doctor moves from start frame to end frame',
@@ -637,5 +682,164 @@ describe('ltx23 video prompt enhance', () => {
     expect(result.prompt).toContain('doctor faces forward and speaks')
     expect(result.prompt).toContain('The spoken dialogue must match exactly "Hello Chen Ji, I need to ask you some questions."')
     expect(result.prompt).toContain('Source-frame continuity lock')
+  })
+
+  it('returns structured Smart VBVR fallback instead of raw continuity packet for audio-backed talking-head prompts', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: 'not-json',
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      originalPrompt: [
+        'Panel continuity packet:',
+        'Mode: single-shot image-to-video.',
+        'Current shot action: middle-aged doctor sits behind the desk, leans slightly forward, and speaks calmly to camera.',
+        'Hard constraints:',
+        'Do not add new people, crowds, guards, police, subtitles, or profile turns.',
+      ].join('\n'),
+      panel: {
+        panelIndex: 2,
+        shotType: 'frontal close-up',
+        cameraMove: 'slow push-in',
+        description: 'The doctor faces the camera and speaks with visible lips.',
+        location: 'night office',
+        characters: '[{"name":"Doctor"}]',
+        props: null,
+        srtSegment: null,
+        sceneType: null,
+        clipContent: null,
+      },
+      linkedVoiceLines: [
+        {
+          id: 'voice-line-1',
+          speaker: 'Doctor',
+          content: 'Hello Chen Ji, I need to ask you some questions.',
+          audioDuration: 10342,
+          audioUrl: 'audio/doctor.wav',
+        },
+      ],
+      durationSeconds: 12,
+      fps: 25,
+      audioTiming: {
+        mode: 'match_audio',
+        selectedVoiceLineIds: ['voice-line-1'],
+        matchedVoiceLineIds: ['voice-line-1'],
+        sourceDurationMs: 10342,
+        audioDurationSeconds: 10.34,
+        targetDurationSeconds: 12,
+        targetFrameCount: 300,
+        fps: 25,
+        maxDurationSeconds: 20,
+        preRollSeconds: 0.5,
+        postRollSeconds: 1.16,
+        dialogueStartSeconds: 0.5,
+        dialogueEndSeconds: 10.84,
+        timingStrategy: 'context_aware_audio',
+        reason: 'context-aware audio timing',
+        capped: false,
+        canGenerate: true,
+      },
+      generationMode: 'normal',
+      artStyle: 'realistic',
+      userEdited: false,
+      continuity: {
+        panelId: 'panel-3',
+        panelIndex: 2,
+        sourceText: 'The doctor faces the camera and speaks with visible lips.',
+        currentAction: 'middle-aged doctor sits behind the desk, leans slightly forward, and speaks calmly to camera.',
+        location: 'night office',
+        shotType: 'frontal close-up',
+        cameraMove: 'slow push-in',
+        sceneType: 'dialogue',
+        characters: [{ name: 'Doctor', appearance: 'default', slot: 'behind the desk' }],
+        props: 'desk',
+        previous: null,
+        next: null,
+        dialogueLines: [],
+        targetDurationSeconds: 12,
+        allowedActions: ['subtle mouth movement', 'tiny facial motion'],
+        forbiddenAdditions: ['new people', 'crowds', 'guards', 'police', 'subtitles', 'profile turns'],
+      },
+    })
+
+    expect(result.prompt).toContain('GLOBAL:')
+    expect(result.prompt).toContain('LOCAL:')
+    expect(result.prompt).not.toContain('Panel continuity packet')
+    expect(result.prompt).not.toContain('Hard constraints')
+    expect(result.prompt.toLowerCase()).not.toContain('crowd')
+    expect(result.prompt.toLowerCase()).not.toContain('guards')
+    expect(result.prompt.toLowerCase()).not.toContain('police')
+    expect(result.prompt.toLowerCase()).not.toContain('subtitles')
+    expect(result.prompt.toLowerCase()).not.toContain('profile')
+  })
+
+  it('preserves off-camera direction in Smart VBVR audio fallback prompts', async () => {
+    aiRuntimeMock.executeAiTextStep.mockResolvedValueOnce({
+      text: 'not-json',
+    })
+
+    const result = await enhanceLtx23VideoPrompt({
+      userId: 'user-1',
+      locale: 'en',
+      projectId: 'project-1',
+      modelKey: 'comfyui::basevideo/ltx23-profiles/t8-smart-vbvr-390k-v2',
+      originalPrompt: 'young man sits near the right-side window, looks toward the window, and speaks softly',
+      panel: {
+        panelIndex: 33,
+        shotType: 'right-side window close-up',
+        cameraMove: 'slow push-in',
+        description: 'young man looks toward the right-side window and speaks softly',
+        location: 'night office',
+        characters: '[{"name":"Chen Ji"}]',
+        props: '',
+        srtSegment: null,
+        sceneType: null,
+        clipContent: null,
+      },
+      linkedVoiceLines: [
+        {
+          id: 'voice-line-33',
+          speaker: 'Chen Ji',
+          content: 'That does sound like the case.',
+          audioDuration: 3900,
+          audioUrl: 'audio/chen-ji.wav',
+        },
+      ],
+      durationSeconds: 5,
+      fps: 25,
+      generationMode: 'normal',
+      continuity: {
+        panelId: 'panel-33',
+        panelIndex: 33,
+        sourceText: 'young man looks toward the right-side window and speaks softly',
+        currentAction: 'young man sits near the right-side window, looks toward the window, and speaks softly',
+        location: 'night office',
+        shotType: 'right-side window close-up',
+        cameraMove: 'slow push-in',
+        sceneType: 'dialogue',
+        characters: [{ name: 'Chen Ji', appearance: 'default', slot: 'near the right-side window' }],
+        props: '',
+        previous: null,
+        next: null,
+        dialogueLines: [],
+        targetDurationSeconds: 5,
+        allowedActions: ['subtle mouth movement', 'tiny facial motion'],
+        forbiddenAdditions: ['subtitles', 'captions'],
+      },
+    })
+
+    expect(result.prompt).toContain('GLOBAL:')
+    expect(result.prompt).toContain('LOCAL:')
+    expect(result.prompt).toContain('looks toward the window')
+    expect(result.prompt).toContain('requested head and gaze direction')
+    expect(result.prompt).toContain('lower portion of the frame stays clean')
+    expect(result.prompt).not.toContain('stays frontal to camera')
+    expect(result.prompt).not.toContain('That does sound like the case.')
+    expect(result.prompt.toLowerCase()).not.toContain('subtitles')
+    expect(result.prompt.toLowerCase()).not.toContain('captions')
   })
 })

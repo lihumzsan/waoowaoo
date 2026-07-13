@@ -40,7 +40,6 @@ export function useVideoPromptState({
         const panelKey = `${panel.storyboardId}-${panel.panelIndex}`
         const promptEntries: Array<[PromptField, string]> = [
           ['videoPrompt', panel.textPanel?.video_prompt || ''],
-          ['firstLastFramePrompt', panel.firstLastFramePrompt || ''],
         ]
         for (const [field, value] of promptEntries) {
           const stateKey = buildPromptStateKey(panelKey, field)
@@ -79,10 +78,6 @@ export function useVideoPromptState({
         externalPromptMap.set(
           buildPromptStateKey(panelKey, 'videoPrompt'),
           panel.textPanel?.video_prompt || '',
-        )
-        externalPromptMap.set(
-          buildPromptStateKey(panelKey, 'firstLastFramePrompt'),
-          panel.firstLastFramePrompt || '',
         )
       }
       const next = new Set(prev)
