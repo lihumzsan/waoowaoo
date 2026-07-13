@@ -1,0 +1,6 @@
+Create exactly one cinematic storyboard frame from the experiment packet below.
+
+Treat every named identity as singular. Preserve the fixed asset manifest exactly. Obey camera, composition, topology, spatial invariants and state fields that are present. Do not invent extra doors, rooms, characters, limbs, copies of props, text labels or alternate poses. The image must show one coherent physical instant, not a montage, model sheet, split screen, before-and-after comparison, or collage. No captions, borders or watermarks.
+
+EXPERIMENT PACKET
+{experiment_packet_json}

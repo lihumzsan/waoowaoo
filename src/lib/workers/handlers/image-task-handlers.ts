@@ -5,3 +5,4 @@ export { handleEditStylePreviewImageTask } from './edit-style-preview-image-task
 export { handleModifyAssetImageTask } from './modify-asset-image-task-handler'
 export { handleAssetHubImageTask } from './asset-hub-image-task-handler'
 export { handleAssetHubModifyTask } from './asset-hub-modify-task-handler'
+export { handleContinuityExperimentImageTask } from './continuity-experiment-image-task-handler'

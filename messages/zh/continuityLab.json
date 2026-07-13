@@ -1,0 +1,82 @@
+{
+  "eyebrow": "Storyboard Continuity Lab",
+  "title": "分镜连续性并行实验室",
+  "description": "固定故事、资产描述、模型和画幅，只替换空间与连续性字段。默认快速组合会同时测试三套故事、三种方案和每套两个关键镜头。",
+  "missingProjectTitle": "缺少项目范围",
+  "missingProjectBody": "请在地址后添加 projectId 参数。实验会读取该项目配置的分镜图片模型，并通过正式计费与任务链路执行。",
+  "difficulty": "难度 {level}/3",
+  "shotsUnit": "镜头",
+  "shotNumber": "镜头 {number}",
+  "quickSelection": "快速组合",
+  "allShots": "选择全部镜头",
+  "variantsTitle": "对比方案",
+  "variantsDescription": "基准组只描述单镜；空间组增加拓扑和机位；连续性组再增加人物实例、锚点和状态变化。",
+  "run": "生成 {count} 张",
+  "running": "正在并行生成",
+  "planning": "正在计算报价",
+  "quoteWithCredits": "{count} 张图片，最多 {cost} credits",
+  "quoteWithoutCredits": "{count} 张图片",
+  "planFailed": "实验报价失败",
+  "executionFailed": "实验提交失败",
+  "taskFailed": "图片生成失败",
+  "matrixShot": "镜头",
+  "notSelected": "未选择此方案",
+  "waiting": "等待生成",
+  "queued": "已进入队列",
+  "processing": "生成中 {progress}%",
+  "failed": "生成失败",
+  "promptDetails": "查看实际 Prompt",
+  "resultAlt": "{story} · {variant} 实验结果",
+  "variants": {
+    "baseline": {
+      "title": "A 当前基准",
+      "description": "独立单镜描述，不提供世界拓扑、正式机位或相邻状态。"
+    },
+    "spatial": {
+      "title": "B 空间拓扑",
+      "description": "增加摄影机无关的场景结构、正式机位、锚点和空间不变量。"
+    },
+    "continuity": {
+      "title": "C 完整连续性",
+      "description": "在空间协议上增加实例身份、参考用途、Before / Delta / After 和关键姿势。"
+    }
+  },
+  "stories": {
+    "elevator": {
+      "title": "电梯 · 单人移动",
+      "description": "验证门、后墙、控制面板、楼层数字、人物进出和按键动作的连续性。",
+      "shots": {
+        "e1": "门外建立",
+        "e2": "跨过门槛",
+        "e3": "转向面板",
+        "e4": "按下四楼",
+        "e5": "门即将关闭",
+        "e6": "抵达并离开"
+      }
+    },
+    "restaurant": {
+      "title": "餐厅 · 双人交接",
+      "description": "验证固定座位、左右手、单一道具所有权，以及第三人经过时的遮挡关系。",
+      "shots": {
+        "r1": "桌边建立",
+        "r2": "取出红包",
+        "r3": "推到桌中央",
+        "r4": "接过红包",
+        "r5": "藏进西装",
+        "r6": "恢复交谈"
+      }
+    },
+    "warehouse": {
+      "title": "仓库 · 多人追逐",
+      "description": "验证三人、多层空间、固定障碍物、遮挡、追逐顺序和唯一手提箱所有权。",
+      "shots": {
+        "w1": "三层建立",
+        "w2": "绕箱移动",
+        "w3": "三角追逐",
+        "w4": "闸门会合",
+        "w5": "交接手提箱",
+        "w6": "关门阻挡"
+      }
+    }
+  }
+}

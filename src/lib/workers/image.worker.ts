@@ -15,6 +15,7 @@ import {
   handleLocationImageTask,
   handleModifyAssetImageTask,
   handlePanelImageTask,
+  handleContinuityExperimentImageTask,
 } from './handlers/image-task-handlers'
 
 type AnyObj = Record<string, unknown>
@@ -36,6 +37,7 @@ const IMAGE_TASK_HANDLERS = {
   asset_hub_image: handleAssetHubImageTask,
   asset_hub_modify: handleAssetHubModifyTask,
   image_panel: handlePanelImageTask,
+  continuity_experiment_image: handleContinuityExperimentImageTask,
 } satisfies Record<ImageTaskHandlerKey, ImageTaskHandler>
 
 async function processImageTask(job: Job<TaskJobData>) {

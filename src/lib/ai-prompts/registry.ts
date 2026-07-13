@@ -116,6 +116,11 @@ export const AI_PROMPT_CATALOG: Record<AiPromptId, AiPromptCatalogEntry> = {
     pathStem: 'edit-bible/emotional-curve',
     variableKeys: ['source_document', 'source_length'],
   },
+  [AI_PROMPT_IDS.CONTINUITY_EXPERIMENT_IMAGE]: {
+    pathStem: 'experiments/continuity-image',
+    variableKeys: ['experiment_packet_json'],
+    operationIds: ['generate_continuity_experiment_images'],
+  },
 }
 
 const OPERATION_TO_AI_PROMPT_ID = new Map<string, AiPromptId>()

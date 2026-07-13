@@ -27,6 +27,7 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: 'generate',
   [TASK_TYPE.IMAGE_CHARACTER]: 'generate',
   [TASK_TYPE.IMAGE_LOCATION]: 'generate',
+  [TASK_TYPE.CONTINUITY_EXPERIMENT_IMAGE]: 'generate',
   [TASK_TYPE.MUSIC_GENERATE]: 'generate',
   [TASK_TYPE.MUSIC_SCORE_PLAN]: 'generate',
   [TASK_TYPE.SOUNDSCAPE_PLAN]: 'generate',

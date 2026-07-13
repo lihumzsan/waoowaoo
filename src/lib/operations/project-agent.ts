@@ -31,6 +31,7 @@ import { createUserModelsOperations } from './domains/config/user-models-ops'
 import { createUserBillingOperations } from './domains/billing/user-billing-ops'
 import { createUserApiConfigOperations } from './domains/config/user-api-config-ops'
 import { createAuthOperations } from './domains/auth/auth-ops'
+import { createContinuityExperimentOperations } from './domains/experiments'
 import { createAssetImageOperations } from './domains/asset/generation'
 import { withOperationPack } from './pack'
 import type { ProjectAgentOperationRegistry } from './types'
@@ -235,6 +236,12 @@ export function createProjectAgentOperationRegistry(): ProjectAgentOperationRegi
     ...withOperationPack(createAssetImageOperations(), {
       groupPath: ['asset'],
       channels: CHANNELS_TOOL_API,
+      prerequisites: PREREQ_EPISODE_OPTIONAL,
+      confirmation: CONFIRM_NONE,
+    }),
+    ...withOperationPack(createContinuityExperimentOperations(), {
+      groupPath: ['experiments', 'continuity'],
+      channels: CHANNELS_API_ONLY,
       prerequisites: PREREQ_EPISODE_OPTIONAL,
       confirmation: CONFIRM_NONE,
     }),
