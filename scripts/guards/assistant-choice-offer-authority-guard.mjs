@@ -157,6 +157,7 @@ function read(relativePath) {
 
 const violations = []
 const chatRoute = read('src/app/api/projects/[projectId]/assistant/chat/route.ts')
+const commandService = read('src/lib/project-agent/command-service.ts')
 const control = read('src/lib/project-agent/control.ts')
 const controlRoute = read('src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts')
 const sessionState = read('src/lib/project-agent/session-state.ts')
@@ -174,14 +175,15 @@ const toolset = read('src/lib/project-agent/toolset.ts')
 const editScriptOperations = read('src/lib/operations/domains/media/edit-script-ops.ts')
 const operationInvocation = read('src/lib/operations/invocation.ts')
 
+const commandEntrySources = `${chatRoute}\n${commandService}`
 for (const marker of [
   'getCurrentProjectAgentActivity',
   'PROJECT_AGENT_CHOICE_ACTIVITY_NOT_PENDING',
   'controlAction.choiceType',
   'controlAction.output.cardId',
 ]) {
-  if (chatRoute.includes(marker)) {
-    violations.push(`chat route restores client/activity choice authority via ${JSON.stringify(marker)}`)
+  if (commandEntrySources.includes(marker)) {
+    violations.push(`Assistant command entry restores client/activity choice authority via ${JSON.stringify(marker)}`)
   }
 }
 if (interruptions.includes('parseResponse:')) {

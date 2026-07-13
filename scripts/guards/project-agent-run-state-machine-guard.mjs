@@ -274,18 +274,56 @@ const chatRouteSource = fs.readFileSync(
   path.join(root, 'src/app/api/projects/[projectId]/assistant/chat/route.ts'),
   'utf8',
 )
-if (
-  chatRouteSource.includes('safelyUpdateProjectAgentRunStatus(')
-  || !chatRouteSource.includes('settleProjectAgentRunFailureWithMessage(')
-) {
-  violations.push('Assistant chat route must use atomic message + Run failure settlement')
+const controlRouteSource = fs.readFileSync(
+  path.join(root, 'src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts'),
+  'utf8',
+)
+const commandServiceSource = fs.readFileSync(
+  path.join(root, 'src/lib/project-agent/command-service.ts'),
+  'utf8',
+)
+for (const [label, source] of [
+  ['chat route', chatRouteSource],
+  ['run control route', controlRouteSource],
+]) {
+  for (const forbidden of [
+    'createProjectAgentChatResponse',
+    'acquireProjectAgentRunLock',
+    'createProjectAgentUserTurnRun',
+    'createProjectAgentConsumedControlRetryRun',
+    'consumeProjectAgentApprovalInterruption',
+    'consumeProjectAgentChoiceInterruption',
+    'settleProjectAgentRunFailureWithMessage',
+    'x-project-agent-run-control',
+    'new NextRequest(',
+  ]) {
+    if (source.includes(forbidden)) {
+      violations.push(`Assistant ${label} bypasses the command service via ${forbidden}`)
+    }
+  }
 }
 if (
-  !chatRouteSource.includes('readRetryableConsumedProjectAgentApprovalInterruption')
-  || !chatRouteSource.includes('readRetryableConsumedProjectAgentChoiceInterruption')
-  || !chatRouteSource.includes('createProjectAgentConsumedControlRetryRun')
+  !chatRouteSource.includes('executeProjectAgentCommand({')
+  || !controlRouteSource.includes('executeProjectAgentCommand({')
 ) {
-  violations.push('Assistant chat route must preserve consumed decisions and create a distinct guarded retry Run')
+  violations.push('Assistant HTTP user/control routes must use executeProjectAgentCommand')
+}
+if (
+  controlRouteSource.includes("from '../../chat/route'")
+  || chatRouteSource.includes('parseProjectAgentControlAction(')
+) {
+  violations.push('Assistant routes must not restore route-to-route control delegation or the private chat control body')
+}
+for (const required of [
+  'settleProjectAgentRunFailureWithMessage(',
+  'readRetryableConsumedProjectAgentApprovalInterruption',
+  'readRetryableConsumedProjectAgentChoiceInterruption',
+  'createProjectAgentConsumedControlRetryRun',
+  'createProjectAgentChatResponse({',
+]) {
+  if (!commandServiceSource.includes(required)) {
+    violations.push(`Assistant command service is missing required lifecycle composition ${required}`)
+  }
 }
 
 function functionBody(source, functionName) {
@@ -400,6 +438,34 @@ const sourceFiles = Object.fromEntries(collectTypeScriptFiles(sourceRoot).map((f
   fs.readFileSync(filePath, 'utf8'),
 ]))
 violations.push(...inspectExecutionHandoffConvergence(sourceFiles))
+const commandServiceCallers = Object.entries(sourceFiles)
+  .filter(([filePath, source]) => (
+    filePath !== 'src/lib/project-agent/command-service.ts'
+    && source.includes('executeProjectAgentCommand(')
+  ))
+  .map(([filePath]) => filePath)
+  .sort()
+const expectedCommandServiceCallers = [
+  'src/app/api/projects/[projectId]/assistant/chat/route.ts',
+  'src/app/api/projects/[projectId]/assistant/runs/[runId]/control.ts',
+]
+if (JSON.stringify(commandServiceCallers) !== JSON.stringify(expectedCommandServiceCallers)) {
+  violations.push(`Assistant command service callers must be exactly the user/control HTTP adapters: ${commandServiceCallers.join(', ') || '(none)'}`)
+}
+const runtimeCallers = Object.entries(sourceFiles)
+  .filter(([filePath, source]) => (
+    filePath !== 'src/lib/project-agent/runtime.ts'
+    && source.includes('createProjectAgentChatResponse(')
+  ))
+  .map(([filePath]) => filePath)
+  .sort()
+const expectedRuntimeCallers = [
+  'src/lib/project-agent/command-service.ts',
+  'src/lib/project-agent/server-follow-up.ts',
+]
+if (JSON.stringify(runtimeCallers) !== JSON.stringify(expectedRuntimeCallers)) {
+  violations.push(`Assistant runtime callers must be exactly Command Service and Task continuation: ${runtimeCallers.join(', ') || '(none)'}`)
+}
 
 const runSourceText = fs.readFileSync(runMaintenancePath, 'utf8')
 const runSource = ts.createSourceFile(runMaintenancePath, runSourceText, ts.ScriptTarget.Latest, true)

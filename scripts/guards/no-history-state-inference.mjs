@@ -77,8 +77,8 @@ const stylePreviewRenderer = fs.readFileSync(path.resolve(process.cwd(), stylePr
 const assistantRenderers = `${renderers}\n${stylePreviewRenderer}`
 const controlPath = 'src/lib/project-agent/control.ts'
 const control = fs.readFileSync(path.resolve(process.cwd(), controlPath), 'utf8')
-const chatRoutePath = 'src/app/api/projects/[projectId]/assistant/chat/route.ts'
-const chatRoute = fs.readFileSync(path.resolve(process.cwd(), chatRoutePath), 'utf8')
+const commandServicePath = 'src/lib/project-agent/command-service.ts'
+const commandService = fs.readFileSync(path.resolve(process.cwd(), commandServicePath), 'utf8')
 if (/activeControlRun\s*\?\?\s*serverOperationRun/.test(runtime)) {
   violations.push(`${runtimePath} lets client control state override an existing server run`)
 }
@@ -91,7 +91,7 @@ if (!control.includes('createProjectAgentControlVisibleUserMessageId')) {
 if (
   !runtime.includes('createWorkspaceAssistantControlVisibleUserMessage')
   || !runtimeState.includes('createProjectAgentControlVisibleUserMessageId({')
-  || !chatRoute.includes('createProjectAgentControlVisibleUserMessageId(params.controlAction)')
+  || !commandService.includes('createProjectAgentControlVisibleUserMessageId(params.controlAction)')
 ) {
   violations.push('client optimistic and server persisted control messages do not share one canonical identity authority')
 }

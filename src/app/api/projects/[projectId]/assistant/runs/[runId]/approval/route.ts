@@ -15,6 +15,7 @@ export const POST = apiHandler(async (
   return await handleProjectAgentRunControlRequest({
     request,
     projectId,
+    userId: authResult.session.user.id,
     runId,
     kind: 'approval_response',
   })
