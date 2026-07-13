@@ -42,7 +42,7 @@ describe('billing/task-policy', () => {
       if (!isBillableTaskType(taskType)) continue
       if (
         taskType === TASK_TYPE.MUSIC_GENERATE
-        || taskType === TASK_TYPE.MUSIC_SCORE_PLAN
+        || taskType === TASK_TYPE.MUSIC_SCORE_GENERATE
         || taskType === TASK_TYPE.SOUNDSCAPE_GENERATE
       ) {
         continue
@@ -96,6 +96,7 @@ describe('billing/task-policy', () => {
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.VIDEO_PANEL, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {})).toBeNull()
+    expect(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {})).toBeNull()
     expect(buildDefaultTaskBillingInfo(TASK_TYPE.SOUNDSCAPE_GENERATE, {})).toBeNull()
   })
 
@@ -110,13 +111,14 @@ describe('billing/task-policy', () => {
     expect(googleProInfo.unit).toBe('call')
     expect(googleProInfo.maxFrozenCost).toBeGreaterThan(0)
 
-    const proInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_PLAN, {
+    const proInfo = expectBillableInfo(buildDefaultTaskBillingInfo(TASK_TYPE.MUSIC_SCORE_GENERATE, {
       musicModel: 'google::lyria-3-pro-preview',
       durationSeconds: 60,
+      count: 3,
     }))
     expect(proInfo.apiType).toBe('music')
     expect(proInfo.model).toBe('google::lyria-3-pro-preview')
-    expect(proInfo.quantity).toBe(1)
+    expect(proInfo.quantity).toBe(3)
     expect(proInfo.unit).toBe('call')
     expect(proInfo.maxFrozenCost).toBeGreaterThan(0)
 

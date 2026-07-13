@@ -117,8 +117,11 @@ import {
 } from './text-attachments'
 import { appendProjectAssistantThreadMessages } from './persistence'
 import { resolveProjectPhase, type ProjectPhaseSnapshot } from './project-phase'
-import type { OperationPlanView } from '@/lib/operations/planning'
-import { issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
+import {
+  mergeOperationPlanViewsForApproval,
+  type OperationPlanView,
+} from '@/lib/operations/planning'
+import { issueApprovalGrantGroup } from '@/lib/operations/planned-operation-invocation'
 import {
   createProjectAgentApprovalPreflightStore,
   type ProjectAgentApprovalPreflightStore,
@@ -549,34 +552,52 @@ function readApprovalInput(item: RunToolApprovalItem): unknown {
   return null
 }
 
-function readPlanSnapshotIdFromInterruptionPayload(value: unknown): string | null {
-  if (!isRecord(value)) return null
-  const operationPlan = value.operationPlan
-  if (!isRecord(operationPlan)) return null
-  const planSnapshotId = operationPlan.planSnapshotId
-  return typeof planSnapshotId === 'string' && planSnapshotId.trim() ? planSnapshotId.trim() : null
-}
-
 interface PersistedApprovalGroupItem {
   readonly approvalId: string
   readonly operationId: string
   readonly toolCallId: string | null
+  readonly operationPlan: OperationPlanView | null
+}
+
+function readPersistedApprovalOperationPlan(
+  value: unknown,
+  operationId: string,
+): OperationPlanView | null {
+  if (value === null || value === undefined) return null
+  if (
+    !isRecord(value)
+    || value.kind !== 'task_submission'
+    || value.operationId !== operationId
+    || typeof value.planSnapshotId !== 'string'
+    || !value.planSnapshotId.trim()
+    || typeof value.taskCount !== 'number'
+    || !isRecord(value.quote)
+    || !Array.isArray(value.tasks)
+  ) {
+    throw new Error(`PROJECT_AGENT_APPROVAL_MEMBER_PLAN_INVALID:${operationId}`)
+  }
+  return value as unknown as OperationPlanView
 }
 
 function readApprovalGroupItems(value: unknown): readonly PersistedApprovalGroupItem[] {
   if (!isRecord(value) || !Array.isArray(value.approvalItems)) return []
-  return value.approvalItems.flatMap((item) => {
-    if (!isRecord(item)) return []
+  const items = value.approvalItems.map((item) => {
+    if (!isRecord(item)) throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_INVALID')
     const approvalId = typeof item.approvalId === 'string' ? item.approvalId.trim() : ''
     const operationId = typeof item.operationId === 'string' ? item.operationId.trim() : ''
     const toolCallId = typeof item.toolCallId === 'string' ? item.toolCallId.trim() || null : null
-    return approvalId && operationId ? [{ approvalId, operationId, toolCallId }] : []
+    if (!approvalId || !operationId) throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_IDENTITY_INVALID')
+    return {
+      approvalId,
+      operationId,
+      toolCallId,
+      operationPlan: readPersistedApprovalOperationPlan(item.operationPlan, operationId),
+    }
   })
-}
-
-function readApprovalGroupOperationIds(value: unknown): readonly string[] {
-  const items = readApprovalGroupItems(value)
-  return Array.from(new Set(items.map((item) => item.operationId))).sort()
+  if (new Set(items.map((item) => item.operationId)).size !== items.length) {
+    throw new Error('PROJECT_AGENT_APPROVAL_MEMBER_OPERATION_DUPLICATE')
+  }
+  return items
 }
 
 async function buildApprovalOperationPlanView(params: {
@@ -836,16 +857,27 @@ export async function createProjectAgentChatResponse(input: {
   const executionControlKind = executionSegment.controlKind
   const contextBase = normalizeProjectAgentContext(input.context)
   const locale = normalizeProjectAgentLocale(contextBase.locale)
-  const approvedPlanSnapshotId = control.kind === 'approval' && control.approved
-    ? readPlanSnapshotIdFromInterruptionPayload(control.interruption.payload)
-    : null
-  const approvedInvocation = approvedPlanSnapshotId && control.kind === 'approval'
-    ? await issueApprovalGrant({
+  const persistedApprovalItems = control.kind === 'approval'
+    ? readApprovalGroupItems(control.interruption.payload)
+    : []
+  const issuedApprovalGrants = control.kind === 'approval' && control.approved
+    ? await issueApprovalGrantGroup({
         userId: input.userId,
-        planSnapshotId: approvedPlanSnapshotId,
-        requestId: `assistant-approval:${control.interruption.id}`,
+        requests: persistedApprovalItems.flatMap((item) => item.operationPlan?.planSnapshotId
+          ? [{
+              planSnapshotId: item.operationPlan.planSnapshotId,
+              requestId: `assistant-approval:${control.interruption.id}`,
+            }]
+          : []),
       })
-    : null
+    : []
+  const approvedInvocationByOperationId = Object.fromEntries(issuedApprovalGrants.map((grant) => [
+    grant.operationId,
+    {
+      approvalGrantId: grant.approvalGrantId,
+      requestId: grant.requestId,
+    },
+  ]))
   const context: ProjectAgentContext = {
     ...contextBase,
     locale,
@@ -853,14 +885,9 @@ export async function createProjectAgentChatResponse(input: {
     runFence,
     executionSegmentId: executionSegment.id,
     choiceDecision: control.kind === 'choice' ? control.choiceResult.decision : null,
-    ...(approvedInvocation && control.kind === 'approval'
+    ...(issuedApprovalGrants.length > 0
       ? {
-          approvedInvocationByOperationId: {
-            [control.interruption.operationId]: {
-              approvalGrantId: approvedInvocation.approvalGrantId,
-              requestId: approvedInvocation.operationRequestId,
-            },
-          },
+          approvedInvocationByOperationId,
         }
       : {}),
   }
@@ -966,12 +993,18 @@ export async function createProjectAgentChatResponse(input: {
   const agentDebug = new URL(input.request.url).searchParams.get('agentDebug') === '1'
   const operations = createProjectAgentOperationRegistry()
   const approvalInterruption = control.kind === 'approval' ? control.interruption : null
+  const workflowOperationGroup = phase.editFirstWorkflow.operationGroup
+  const workflowGroupOperationIds = workflowOperationGroup?.operationIds ?? []
+  const workflowApprovalOperationIds = workflowOperationGroup?.approvalOperationIds ?? []
   const approvalGroupOperationIds = approvalInterruption
-    ? readApprovalGroupOperationIds(approvalInterruption.payload)
-    : phase.editFirstWorkflow.operationGroup?.operationIds ?? []
-  const collectingTaskWait = control.kind === 'approval'
-    && control.approved
-    && approvalGroupOperationIds.length > 1
+    ? persistedApprovalItems.map((item) => item.operationId).sort()
+    : workflowApprovalOperationIds.length > 0
+      ? workflowGroupOperationIds
+      : []
+  const collectingOperationIds = control.kind === 'approval'
+    ? control.approved ? approvalGroupOperationIds : []
+    : workflowApprovalOperationIds.length === 0 ? workflowGroupOperationIds : []
+  const collectingTaskWait = collectingOperationIds.length > 1
     ? await prepareProjectAgentCollectingTaskWait({
         runFence,
         runId: input.run.id,
@@ -981,10 +1014,10 @@ export async function createProjectAgentChatResponse(input: {
         episodeId: context.episodeId ?? null,
         locale,
         assistantId: 'workspace-command',
-        operationId: approvalGroupOperationIds[0] ?? 'operation_group',
-        operationIds: approvalGroupOperationIds,
+        operationId: collectingOperationIds[0] ?? 'operation_group',
+        operationIds: collectingOperationIds,
         taskIds: [],
-        followUpMode: resolveWaitFollowUpModeForOperations(operations, [...approvalGroupOperationIds]),
+        followUpMode: resolveWaitFollowUpModeForOperations(operations, [...collectingOperationIds]),
       })
     : null
   const liveWorkflow = createProjectAgentLiveWorkflowState({
@@ -1465,7 +1498,14 @@ export async function createProjectAgentChatResponse(input: {
             const primary = members.find((member) => member.operationPlan) ?? members[0]
             if (!primary) throw new Error('PROJECT_AGENT_APPROVAL_GROUP_EMPTY')
             return {
-              ...primary,
+              approvalId: primary.approvalId,
+              operationId: primary.operationId,
+              toolCallId: primary.toolCallId,
+              inputHash: primary.inputHash,
+              operationPlan: mergeOperationPlanViewsForApproval(
+                primary.operationId,
+                members.flatMap((member) => member.operationPlan ? [member.operationPlan] : []),
+              ),
               members,
               runState: result.state.toString(),
             }
@@ -1546,6 +1586,7 @@ export async function createProjectAgentChatResponse(input: {
                 operationId: member.operationId,
                 toolCallId: member.toolCallId,
                 inputHash: member.inputHash,
+                operationPlan: member.operationPlan,
               })),
               ...(pendingApprovalHandoff.operationPlan
                 ? { operationPlan: pendingApprovalHandoff.operationPlan }

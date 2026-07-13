@@ -110,7 +110,10 @@ export const TASK_RUNTIME_TARGETS = {
     return target('ProjectEpisode', episodeId, [TASK_TYPE.FINAL_VIDEO_RENDER])
   },
   projectEpisodeBgmScore(episodeId: string | null | undefined) {
-    return target('ProjectEpisode', episodeId, [TASK_TYPE.MUSIC_SCORE_PLAN])
+    return target('ProjectEpisode', episodeId, [
+      TASK_TYPE.MUSIC_SCORE_PLAN,
+      TASK_TYPE.MUSIC_SCORE_GENERATE,
+    ])
   },
   projectEpisodeSoundscape(episodeId: string | null | undefined) {
     return target('ProjectEpisode', episodeId, [

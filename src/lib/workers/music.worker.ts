@@ -158,7 +158,7 @@ type MusicTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknow
 
 const MUSIC_TASK_HANDLERS = {
   music_generate: handleMusicGenerateTask,
-  music_score: handleBgmScoreGenerateTask,
+  music_score_generate: handleBgmScoreGenerateTask,
   soundscape_plan: handleSoundscapePlanTask,
   soundscape_generate: handleSoundscapeGenerateTask,
 } satisfies Record<MusicTaskHandlerKey, MusicTaskHandler>

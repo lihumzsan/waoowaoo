@@ -92,6 +92,62 @@ export interface OperationPlanView {
   }>
 }
 
+/**
+ * Builds the one quote shown for a declared approval group. Member plan
+ * identities deliberately stay out of this display-only view: every member
+ * keeps its own immutable snapshot and approval grant.
+ */
+export function mergeOperationPlanViewsForApproval(
+  operationId: ProjectAgentOperationId,
+  plans: readonly OperationPlanView[],
+): OperationPlanView | null {
+  if (plans.length === 0) return null
+  const [first, ...rest] = plans
+  if (!first) return null
+  for (const plan of rest) {
+    if (
+      plan.quote.billingMode !== first.quote.billingMode
+      || plan.quote.showCredits !== first.quote.showCredits
+      || plan.quote.currency !== first.quote.currency
+    ) {
+      throw new Error('OPERATION_APPROVAL_GROUP_QUOTE_CONTRACT_MISMATCH')
+    }
+  }
+  const tasks = plans.flatMap((plan) => plan.tasks)
+  const taskIds = new Set(tasks.map((task) => task.id))
+  if (taskIds.size !== tasks.length) {
+    throw new Error('OPERATION_APPROVAL_GROUP_TASK_ID_DUPLICATE')
+  }
+  const quoteItems = plans.flatMap((plan) => plan.quote.items)
+  const quoteItemIds = new Set(quoteItems.map((item) => item.id))
+  if (quoteItemIds.size !== quoteItems.length) {
+    throw new Error('OPERATION_APPROVAL_GROUP_QUOTE_ITEM_ID_DUPLICATE')
+  }
+  const totalMaxFrozenCost = first.quote.showCredits
+    ? toPositiveMoney(plans.reduce((total, plan) => total + (plan.quote.totalMaxFrozenCost ?? 0), 0))
+    : undefined
+  return {
+    operationId,
+    kind: 'task_submission',
+    taskCount: tasks.length,
+    tasks,
+    quote: {
+      showCredits: first.quote.showCredits,
+      billingMode: first.quote.billingMode,
+      billable: plans.some((plan) => plan.quote.billable),
+      taskCount: plans.reduce((total, plan) => total + plan.quote.taskCount, 0),
+      mediaTaskCount: plans.reduce((total, plan) => total + plan.quote.mediaTaskCount, 0),
+      items: quoteItems,
+      ...(first.quote.showCredits
+        ? {
+            totalMaxFrozenCost,
+            currency: first.quote.currency,
+          }
+        : {}),
+    },
+  }
+}
+
 function shouldExposeCredits(): boolean {
   return shouldExposeBillingCredits()
 }

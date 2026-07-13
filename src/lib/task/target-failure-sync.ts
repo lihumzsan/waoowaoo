@@ -249,15 +249,20 @@ async function projectMusicScore(
   tx: Prisma.TransactionClient,
   input: TaskTargetTerminalProjection,
 ): Promise<TaskTargetTerminalProjectionResult> {
-  if (input.targetType !== 'ProjectEpisode' || input.type !== TASK_TYPE.MUSIC_SCORE_PLAN) {
+  if (
+    input.targetType !== 'ProjectEpisode'
+    || (input.type !== TASK_TYPE.MUSIC_SCORE_PLAN && input.type !== TASK_TYPE.MUSIC_SCORE_GENERATE)
+  ) {
     throw new Error(`MUSIC_SCORE_${input.kind.toUpperCase()}_TARGET_INVALID:${input.type}:${input.targetType}`)
   }
+  const activeStatus = input.type === TASK_TYPE.MUSIC_SCORE_PLAN ? 'planning' : 'generating'
+  const canceledStatus = input.type === TASK_TYPE.MUSIC_SCORE_PLAN ? 'pending' : 'planned'
   const failure = input.kind === 'failed' ? requireFailure(input) : null
   const projected = await tx.projectEditMusicScore.updateMany({
     where: {
       episodeId: input.targetId,
       taskId: input.taskId,
-      status: 'generating',
+      status: activeStatus,
     },
     data: failure
       ? {
@@ -268,7 +273,7 @@ async function projectMusicScore(
           } as Prisma.InputJsonValue,
         }
       : {
-          status: 'pending',
+          status: canceledStatus,
           taskId: null,
           diagnosticsJson: Prisma.JsonNull,
         },
@@ -279,8 +284,11 @@ async function projectMusicScore(
     select: { taskId: true, status: true },
   })
   if (owner?.taskId !== input.taskId) return 'stale_owner'
-  if (owner.status === 'completed') return 'success_materialized'
-  if (owner.status === 'generating') {
+  if (
+    owner.status === 'completed'
+    || (input.type === TASK_TYPE.MUSIC_SCORE_PLAN && owner.status === 'planned')
+  ) return 'success_materialized'
+  if (owner.status === activeStatus) {
     throw new Error(`MUSIC_SCORE_${input.kind.toUpperCase()}_PROJECTOR_CAS_FAILED:${input.targetId}:${input.taskId}`)
   }
   throw new Error(

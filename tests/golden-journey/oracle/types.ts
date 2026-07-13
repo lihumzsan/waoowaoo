@@ -35,6 +35,8 @@ export interface GoldenOracleSnapshot {
     readonly storyboards: readonly Record<string, unknown>[]
     readonly panels: readonly Record<string, unknown>[]
     readonly assetRequirements: readonly Record<string, unknown>[]
+    readonly musicScores: readonly Record<string, unknown>[]
+    readonly soundscapes: readonly Record<string, unknown>[]
     readonly finalOutputs: readonly Record<string, unknown>[]
   }
   readonly identities: GoldenOracleIdentitySummary

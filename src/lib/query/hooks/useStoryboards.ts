@@ -115,6 +115,51 @@ export function useRenderFinalVideo(projectId: string | null, episodeId: string 
     })
 }
 
+export function usePlanBgmScore(projectId: string | null, episodeId: string | null) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: async () => {
+            if (!projectId) throw new Error('Project ID is required')
+            if (!episodeId) throw new Error('Episode ID is required')
+
+            const res = await apiFetch(`/api/projects/${projectId}/plan-bgm-score`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId }),
+            })
+            await checkApiResponse(res)
+            return res.json()
+        },
+        onMutate: async () => {
+            if (!projectId || !episodeId) return
+            upsertTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+                runningTaskType: 'music_score_plan',
+                intent: 'generate',
+                stage: 'bgm_score_prepare',
+            })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+        },
+        onError: () => {
+            if (!projectId || !episodeId) return
+            clearTaskTargetOverlay(queryClient, {
+                projectId,
+                targetType: 'ProjectEpisode',
+                targetId: episodeId,
+            })
+        },
+        onSettled: () => {
+            if (episodeId && projectId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.episodeData(projectId, episodeId) })
+                queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all(projectId), exact: false })
+            }
+        },
+    })
+}
+
 /**
  * 规划连续环境音效层（仅 LLM 文本任务）
  */

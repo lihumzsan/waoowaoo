@@ -55,11 +55,11 @@ describe('tool input schema compatibility', () => {
     })
   })
 
-  it('accepts empty execution input for context-derived BGM generation', () => {
+  it('accepts empty execution input for context-derived BGM planning and generation', () => {
     const registry = createProjectAgentOperationRegistry()
-    const operation = registry.generate_episode_bgm_score
 
-    expect(operation.inputSchema.safeParse({}).success).toBe(true)
+    expect(registry.plan_episode_bgm_score.inputSchema.safeParse({}).success).toBe(true)
+    expect(registry.generate_episode_bgm_score.inputSchema.safeParse({}).success).toBe(true)
   })
 
   it('exposes only chapterId for chapter detail reads', () => {

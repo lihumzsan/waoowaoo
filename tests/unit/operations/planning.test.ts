@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  mergeOperationPlanViewsForApproval,
   planProjectAgentOperationFromApi,
   quoteOperationPlan,
   toOperationPlanView,
@@ -152,6 +153,42 @@ describe('operation planning billing quote', () => {
     expect(view.quote.mediaTaskCount).toBe(3)
     expect(Object.prototype.hasOwnProperty.call(view.quote, 'totalMaxFrozenCost')).toBe(false)
     expect(view.quote.items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'maxFrozenCost'))).toBe(true)
+  })
+
+  it('merges every member quote for one approval group without reusing a member snapshot identity', async () => {
+    const music = {
+      ...await toOperationPlanView(buildPlan()),
+      operationId: 'generate_episode_bgm_score' as const,
+      planSnapshotId: 'music-snapshot',
+    }
+    const soundscape = {
+      ...await toOperationPlanView(buildPlan()),
+      operationId: 'generate_episode_soundscape' as const,
+      planSnapshotId: 'soundscape-snapshot',
+      tasks: music.tasks.map((task) => ({ ...task, id: `soundscape:${task.id}` })),
+      quote: {
+        ...music.quote,
+        items: music.quote.items.map((item) => ({ ...item, id: `soundscape:${item.id}` })),
+      },
+    }
+
+    const approval = mergeOperationPlanViewsForApproval(
+      'generate_episode_bgm_score',
+      [music, soundscape],
+    )
+
+    expect(approval).toMatchObject({
+      operationId: 'generate_episode_bgm_score',
+      taskCount: 8,
+      quote: {
+        taskCount: 8,
+        mediaTaskCount: 6,
+        totalMaxFrozenCost: 24.5,
+      },
+    })
+    expect(approval?.tasks).toHaveLength(8)
+    expect(approval?.quote.items).toHaveLength(6)
+    expect(approval).not.toHaveProperty('planSnapshotId')
   })
 
   it('requires every billable_media operation to expose the immutable plan and commit contract', () => {

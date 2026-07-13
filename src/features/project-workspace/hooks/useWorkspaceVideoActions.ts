@@ -1,7 +1,7 @@
 'use client'
 
 import { logInfo as _ulogInfo, logError as _ulogError } from '@/lib/logging/core'
-import { usePlanSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
+import { usePlanBgmScore, usePlanSoundscape, useRenderFinalVideo } from '@/lib/query/hooks/useStoryboards'
 import { useUpdateProjectPanelVideoPrompt, useUpdateProjectConfig } from '@/lib/query/hooks'
 
 interface UseWorkspaceVideoActionsParams {
@@ -25,6 +25,7 @@ export function useWorkspaceVideoActions({
   episodeId,
   t,
 }: UseWorkspaceVideoActionsParams) {
+  const planBgmScoreMutation = usePlanBgmScore(projectId, episodeId || null)
   const planSoundscapeMutation = usePlanSoundscape(projectId, episodeId || null)
   const renderFinalVideoMutation = useRenderFinalVideo(projectId, episodeId || null)
   const updateProjectPanelVideoPromptMutation = useUpdateProjectPanelVideoPrompt(projectId, episodeId || null)
@@ -43,6 +44,23 @@ export function useWorkspaceVideoActions({
         return
       }
       alert(`${t('execution.finalRenderFailed')}: ${getErrorMessage(err)}`)
+      throw err
+    }
+  }
+
+  const handlePlanBgmScore = async () => {
+    if (!episodeId) {
+      alert(t('execution.selectEpisode'))
+      return
+    }
+    try {
+      await planBgmScoreMutation.mutateAsync()
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        _ulogInfo(t('execution.requestAborted'))
+        return
+      }
+      alert(`${t('execution.bgmPlanFailed')}: ${getErrorMessage(err)}`)
       throw err
     }
   }
@@ -87,6 +105,7 @@ export function useWorkspaceVideoActions({
   }
 
   return {
+    handlePlanBgmScore,
     handlePlanSoundscape,
     handleRenderFinalVideo,
     handleUpdateVideoPrompt,

@@ -190,7 +190,8 @@ function isMediaTaskType(taskType: string | null): boolean {
     taskType === TASK_TYPE.VIDEO_GROUP ||
     taskType === TASK_TYPE.CHAPTER_RENDER ||
     taskType === TASK_TYPE.FINAL_VIDEO_RENDER ||
-    taskType === TASK_TYPE.MUSIC_SCORE_PLAN
+    taskType === TASK_TYPE.MUSIC_SCORE_PLAN ||
+    taskType === TASK_TYPE.MUSIC_SCORE_GENERATE
 }
 
 function isStoryboardTargetType(targetType: string | null): boolean {

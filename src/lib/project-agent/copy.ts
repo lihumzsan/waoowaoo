@@ -261,9 +261,13 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
     zh: '生成分镜图片',
     en: 'Generate storyboard images',
   },
+  plan_episode_bgm_score: {
+    zh: '规划配乐',
+    en: 'Plan music score',
+  },
   generate_episode_bgm_score: {
-    zh: '生成配乐规划',
-    en: 'Generate music plan',
+    zh: '生成配乐',
+    en: 'Generate music score',
   },
   plan_episode_soundscape: {
     zh: '规划环境音层',

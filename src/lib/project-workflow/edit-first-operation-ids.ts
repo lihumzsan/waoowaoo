@@ -18,6 +18,7 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'generate_edit_script_storyboard_images',
   'generate_episode_videos',
   'render_chapters',
+  'plan_episode_bgm_score',
   'generate_episode_bgm_score',
   'plan_episode_soundscape',
   'generate_episode_soundscape',

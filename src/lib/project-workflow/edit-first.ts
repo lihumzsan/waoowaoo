@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/prisma'
-import { readCompletedMusicScoreMix, readMusicScoreStatus } from '@/lib/music-score/project-data'
+import {
+  readCompletedMusicScoreMix,
+  readMusicScoreStatus,
+  readPersistedMusicScorePlan,
+} from '@/lib/music-score/project-data'
 import {
   readCompletedSoundscapeMix,
   readSoundscapeDecision,
@@ -40,11 +44,9 @@ export type EditFirstWorkflowStage =
   | 'videos_generating'
   | 'ready_to_render_chapters'
   | 'chapters_rendering'
-  | 'ready_to_generate_bgm_score'
-  | 'bgm_score_generating'
+  | 'ready_to_plan_audio_layers'
+  | 'audio_layers_planning'
   | 'ready_to_generate_audio_layers'
-  | 'soundscape_planning'
-  | 'ready_to_generate_soundscape'
   | 'audio_layers_generating'
   | 'ready_to_render_final'
   | 'final_rendering'
@@ -134,8 +136,10 @@ export interface EditFirstWorkflowSnapshot {
   failedChapterRenderCount: number
   activeChapterRenderTaskCount: number
   bgmScoreStatus: string | null
+  bgmScoreHasPlan: boolean
   bgmScoreHasMix: boolean
-  activeBgmScoreTaskCount: number
+  activeBgmScorePlanTaskCount: number
+  activeBgmScoreGenerationTaskCount: number
   soundscapeStatus: string | null
   soundscapeHasMix: boolean
   soundscapeDecision: 'soundscape' | 'none_needed' | null
@@ -603,17 +607,13 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
   const videoReady = snapshot.completedVideoSegmentCount >= snapshot.videoPlanSegmentCount
   const chapterRenderReady = snapshot.chapterCount > 0 && snapshot.completedChapterRenderCount >= snapshot.chapterCount
   const chapterRenderRunning = snapshot.activeChapterRenderTaskCount > 0
+  const bgmPlanReady = snapshot.bgmScoreHasPlan
   const bgmReady = snapshot.bgmScoreHasMix
-  const bgmRunning = snapshot.activeBgmScoreTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
+  const bgmPlanning = snapshot.activeBgmScorePlanTaskCount > 0 || snapshot.bgmScoreStatus === 'planning'
+  const bgmGenerating = snapshot.activeBgmScoreGenerationTaskCount > 0 || snapshot.bgmScoreStatus === 'generating'
   const bgmFailed = snapshot.bgmScoreStatus === 'failed'
+  const soundscapePlanReady = snapshot.soundscapeDecision !== null
   const soundscapeSatisfied = snapshot.soundscapeDecision === 'none_needed' || snapshot.soundscapeHasMix
-  const soundscapeReadyForGeneration = snapshot.soundscapeDecision === 'soundscape'
-    && snapshot.soundscapeStatus !== 'planning'
-    && snapshot.soundscapeStatus !== 'generating'
-    && !snapshot.soundscapeHasMix
-  const soundscapeOperationId: EditFirstWorkflowOperationId = soundscapeReadyForGeneration
-    ? 'generate_episode_soundscape'
-    : 'plan_episode_soundscape'
   const soundscapePlanning = snapshot.activeSoundscapePlanTaskCount > 0
     || snapshot.soundscapeStatus === 'planning'
   const soundscapeGenerating = snapshot.activeSoundscapeGenerationTaskCount > 0
@@ -701,44 +701,26 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (bgmRunning) {
-    return state({
-      stage: 'bgm_score_generating',
-      blocking: { kind: 'processing', reason: 'audio layer generation is still running' },
-      allowedOperationIds: soundscapeSatisfied ? [] : [soundscapeOperationId],
-    })
-  }
-
-  if (soundscapePlanning) {
-    return state({
-      stage: 'soundscape_planning',
-      blocking: { kind: 'processing', reason: 'soundscape planning is still running' },
-      allowedOperationIds: bgmReady ? [] : ['generate_episode_bgm_score'],
-    })
-  }
-
-  if (soundscapeGenerating) {
-    return state({
-      stage: 'audio_layers_generating',
-      blocking: { kind: 'processing', reason: 'soundscape generation is still running' },
-      allowedOperationIds: bgmReady ? [] : ['generate_episode_bgm_score'],
-    })
-  }
-
   if (bgmFailed) {
-    const nextAction = workflowAction('generate_episode_bgm_score', 'Regenerate BGM score')
+    const operationId: EditFirstWorkflowOperationId = bgmPlanReady
+      ? 'generate_episode_bgm_score'
+      : 'plan_episode_bgm_score'
+    const nextAction = workflowAction(operationId, bgmPlanReady ? 'Regenerate BGM score' : 'Replan BGM score')
     return state({
       stage: 'failed',
-      blocking: { kind: 'failed', reason: 'BGM score generation failed' },
+      blocking: { kind: 'failed', reason: bgmPlanReady ? 'BGM score generation failed' : 'BGM score planning failed' },
       nextAction,
       allowedOperationIds: [nextAction.operationId],
     })
   }
 
   if (soundscapeFailed) {
+    const operationId: EditFirstWorkflowOperationId = soundscapePlanReady
+      ? 'generate_episode_soundscape'
+      : 'plan_episode_soundscape'
     const nextAction = workflowAction(
-      soundscapeOperationId,
-      soundscapeOperationId === 'generate_episode_soundscape'
+      operationId,
+      operationId === 'generate_episode_soundscape'
         ? 'Regenerate soundscape audio'
         : 'Replan soundscape',
     )
@@ -750,21 +732,49 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (bgmReady && soundscapeReadyForGeneration) {
+  if (!bgmPlanReady || !soundscapePlanReady) {
+    const missingPlanActions: EditFirstWorkflowOperationId[] = []
+    if (!bgmPlanReady) missingPlanActions.push('plan_episode_bgm_score')
+    if (!soundscapePlanReady) missingPlanActions.push('plan_episode_soundscape')
+    if (bgmPlanning || soundscapePlanning) {
+      return state({
+        stage: 'audio_layers_planning',
+        blocking: { kind: 'processing', reason: 'audio layer planning is still running' },
+      })
+    }
+    const nextOperationId = missingPlanActions[0]
+    if (!nextOperationId) throw new Error('EDIT_FIRST_AUDIO_LAYER_PLAN_ACTION_REQUIRED')
     return state({
-      stage: 'ready_to_generate_soundscape',
-      nextAction: workflowAction('generate_episode_soundscape', 'Generate soundscape audio'),
-      allowedOperationIds: ['generate_episode_soundscape'],
+      stage: 'ready_to_plan_audio_layers',
+      nextAction: workflowAction(
+        nextOperationId,
+        nextOperationId === 'plan_episode_bgm_score' ? 'Plan BGM score' : 'Plan soundscape',
+      ),
+      allowedOperationIds: missingPlanActions,
+      operationGroup: missingPlanActions.length > 1
+        ? {
+            id: 'edit_first_audio_layer_planning',
+            operationIds: missingPlanActions,
+            approvalOperationIds: [],
+          }
+        : null,
+    })
+  }
+
+  if (bgmGenerating || soundscapeGenerating) {
+    return state({
+      stage: 'audio_layers_generating',
+      blocking: { kind: 'processing', reason: 'audio layer generation is still running' },
     })
   }
 
   if (!bgmReady || !soundscapeSatisfied) {
-    const missingActions: EditFirstWorkflowOperationId[] = []
-    if (!bgmReady) missingActions.push('generate_episode_bgm_score')
-    if (!soundscapeSatisfied) missingActions.push(soundscapeOperationId)
-    const nextOperationId = missingActions[0]
+    const missingGenerationActions: EditFirstWorkflowOperationId[] = []
+    if (!bgmReady) missingGenerationActions.push('generate_episode_bgm_score')
+    if (!soundscapeSatisfied) missingGenerationActions.push('generate_episode_soundscape')
+    const nextOperationId = missingGenerationActions[0]
     if (!nextOperationId) {
-      throw new Error('EDIT_FIRST_AUDIO_LAYER_ACTION_REQUIRED')
+      throw new Error('EDIT_FIRST_AUDIO_LAYER_GENERATION_ACTION_REQUIRED')
     }
     const nextAction = workflowAction(
       nextOperationId,
@@ -777,7 +787,14 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     return state({
       stage: 'ready_to_generate_audio_layers',
       nextAction,
-      allowedOperationIds: missingActions,
+      allowedOperationIds: missingGenerationActions,
+      operationGroup: missingGenerationActions.length > 1
+        ? {
+            id: 'edit_first_audio_layer_generation',
+            operationIds: missingGenerationActions,
+            approvalOperationIds: missingGenerationActions,
+          }
+        : null,
     })
   }
 
@@ -820,7 +837,8 @@ export async function resolveEditFirstWorkflowState(params: {
     activeBibleTaskCount,
     activeEditScriptTaskCount,
     activeShotExecutionPlanTaskCount,
-    activeBgmScoreTaskCount,
+    activeBgmScorePlanTaskCount,
+    activeBgmScoreGenerationTaskCount,
     activeSoundscapePlanTaskCount,
     activeSoundscapeGenerationTaskCount,
     activeChapterRenderTaskCount,
@@ -958,6 +976,7 @@ export async function resolveEditFirstWorkflowState(params: {
       },
       select: {
         status: true,
+        cuesJson: true,
         mixJson: true,
       },
     }),
@@ -1010,6 +1029,16 @@ export async function resolveEditFirstWorkflowState(params: {
         targetType: 'ProjectEpisode',
         targetId: params.episodeId,
         type: TASK_TYPE.MUSIC_SCORE_PLAN,
+        status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
+      },
+    }),
+    prisma.task.count({
+      where: {
+        projectId: params.projectId,
+        episodeId: params.episodeId,
+        targetType: 'ProjectEpisode',
+        targetId: params.episodeId,
+        type: TASK_TYPE.MUSIC_SCORE_GENERATE,
         status: { in: [...ACTIVE_WORKFLOW_TASK_STATUSES] },
       },
     }),
@@ -1284,8 +1313,10 @@ export async function resolveEditFirstWorkflowState(params: {
     failedChapterRenderCount: chapters.filter((item) => item.renderStatus === 'failed').length,
     activeChapterRenderTaskCount,
     bgmScoreStatus,
+    bgmScoreHasPlan: Boolean(readPersistedMusicScorePlan(musicScore)),
     bgmScoreHasMix: Boolean(readCompletedMusicScoreMix(musicScore)),
-    activeBgmScoreTaskCount,
+    activeBgmScorePlanTaskCount,
+    activeBgmScoreGenerationTaskCount,
     soundscapeStatus,
     soundscapeHasMix: Boolean(readCompletedSoundscapeMix(soundscape)),
     soundscapeDecision: readSoundscapeDecision(soundscape),

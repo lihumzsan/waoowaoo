@@ -149,6 +149,7 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
   const genre = readString(payload?.genre)
   const mood = readString(payload?.mood)
   const bpm = readNumber(payload?.bpm)
+  const quantity = Math.max(1, Math.floor(toNumber(payload?.count, 1)))
   const metadata = {
     durationSeconds,
     ...(outputFormat ? { outputFormat } : {}),
@@ -163,9 +164,9 @@ function buildMusicTaskInfo(taskType: TaskType, payload: AnyPayload): TaskBillin
     taskType,
     apiType: 'music',
     model,
-    quantity: 1,
+    quantity,
     unit: 'call',
-    maxFrozenCost: calcMusic(model, 1, metadata),
+    maxFrozenCost: calcMusic(model, quantity, metadata),
     pricingVersion: BUILTIN_PRICING_VERSION,
     action: String(taskType),
     metadata,

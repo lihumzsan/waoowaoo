@@ -34,6 +34,7 @@ export interface WorkspaceRuntimeValue {
   onGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
   onGenerateEditScript: () => Promise<void>
   onOpenAssetLibrary: () => void
+  onPlanBgmScore: () => Promise<void>
   onPlanSoundscape: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>

@@ -32,6 +32,7 @@ interface UseWorkspaceRuntimeParams {
   handleGenerateEditBible: (input: WorkspaceEditBibleGenerationInput) => Promise<void>
   handleGenerateEditScript: () => Promise<void>
   openAssetLibrary: (characterId?: string | null, refreshAssets?: boolean) => void
+  handlePlanBgmScore: () => Promise<void>
   handlePlanSoundscape: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
@@ -62,6 +63,7 @@ export function useWorkspaceRuntime({
   handleGenerateEditBible,
   handleGenerateEditScript,
   openAssetLibrary,
+  handlePlanBgmScore,
   handlePlanSoundscape,
   handleRenderFinalVideo,
   handleGenerateEditShotExecutionPlan,
@@ -91,6 +93,7 @@ export function useWorkspaceRuntime({
     onGenerateEditBible: handleGenerateEditBible,
     onGenerateEditScript: handleGenerateEditScript,
     onOpenAssetLibrary: () => openAssetLibrary(),
+    onPlanBgmScore: handlePlanBgmScore,
     onPlanSoundscape: handlePlanSoundscape,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
@@ -100,6 +103,7 @@ export function useWorkspaceRuntime({
     onOpenAssetLibraryForCharacter: (characterId, refreshAssets) => openAssetLibrary(characterId, refreshAssets),
   }), [
     assetsLoading,
+    handlePlanBgmScore,
     handlePlanSoundscape,
     handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,

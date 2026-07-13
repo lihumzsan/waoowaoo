@@ -148,6 +148,7 @@ describe('tool input schema compatibility', () => {
       'request_edit_asset_review_choice',
       'generate_bible_from_script',
       'generate_edit_script_storyboard_images',
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'render_final_video',
     ]

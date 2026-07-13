@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 export const BGM_SCORE_STATUS = {
   PENDING: 'pending',
+  PLANNING: 'planning',
+  PLANNED: 'planned',
   GENERATING: 'generating',
   COMPLETED: 'completed',
   FAILED: 'failed',

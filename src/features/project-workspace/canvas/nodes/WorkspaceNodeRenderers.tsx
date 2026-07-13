@@ -431,6 +431,7 @@ export function nodeActionIconName(action: WorkspaceCanvasNodeAction): AppIconNa
     case 'generate_all_videos':
     case 'generate_asset_reference_video':
       return 'video'
+    case 'plan_bgm_score':
     case 'generate_bgm_score':
     case 'plan_soundscape':
     case 'generate_soundscape':

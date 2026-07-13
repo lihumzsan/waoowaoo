@@ -372,7 +372,7 @@ export interface ProjectEditScriptGenerationSegment {
   continuity: string
 }
 
-export type ProjectMusicScoreStatus = 'pending' | 'generating' | 'completed' | 'failed'
+export type ProjectMusicScoreStatus = 'pending' | 'planning' | 'planned' | 'generating' | 'completed' | 'failed'
 
 export interface ProjectMusicScoreTimedTextSection {
   category?: string | null

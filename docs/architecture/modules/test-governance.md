@@ -18,7 +18,7 @@
 - **TG-06 — 最小安全边界。** 未登录、跨用户项目、跨项目资产三个所有权边界保留为独立 Journey，因为创作主线无法自然反证它们；普通 CRUD、i18n、部署展示等不得各建一条浏览器产品线。
 - **TG-07 — Critical 负责故障语义。** 事务、幂等、并发、晚到、重复、断线、重试、补偿和 provider 故障使用真实基础设施与生产 owner，只开放一个明确故障 seam，不再通过阶段克隆驱动浏览器变体。
 - **TG-08 — Fast 只保留真实规格。** Logic 只允许有非平凡边界的纯函数、parser、resolver、reducer、policy、状态机、算法和 canonical identity；Conformance 必须从生产 registry 穷尽枚举，不维护第二份实例清单。
-- **TG-09 — Harness fail-closed。** 每次 Journey 运行必须拥有独立 runtime identity，并隔离 MySQL/Redis scope、端口、Next `distDir`、上传目录与报告目录。场景未挂载、依赖不可用、浏览器异常、外部付费调用或只读 Oracle 可写必须显式失败。
+- **TG-09 — Harness fail-closed。** 每次 Journey 运行必须拥有独立 runtime identity，并隔离 MySQL/Redis scope、端口、Next `distDir`、上传目录与报告目录；这些生成目录必须同时被 Git 与源码 lint 排除，使 `test:journey → verify:push` 的 canonical 顺序只验证源码且结果稳定。场景未挂载、依赖不可用、浏览器异常、外部付费调用或只读 Oracle 可写必须显式失败。
 - **TG-10 — Harness 不是产品旁路。** Harness 只启动隔离环境、协议兼容外部替身、网络限制、只读 Oracle 和报告器；不得提供生产 Workflow 克隆、阶段跳转、强制工具或写入业务事实的捷径。
 - **TG-11 — 纠正性反证。** 修复测试必须证明同一断言在 pre-fix 代码或真实受控语义故障下失败；把错误常量传入断言、mock X 再断言 X 不构成反证。
 - **TG-12 — 权威 Journey 同步。** 主 Journey 或安全 Journey 所覆盖的流程、入口、生命周期、终态或禁止副作用改变时，必须同步 scenario、真实驱动与 Oracle，并实际运行 `npm run test:journey`；未执行只能报告未验证。
@@ -58,6 +58,8 @@
 基础设施不可用、场景 skip/todo、浏览器崩溃或 paid provider 泄漏都属于失败，不得以“未发现产品错误”宣称通过。
 
 ## 历史回归
+
+- Golden 已使用独立 `.next-golden/<runtime>` 与 `artifacts/golden-journey/runs/<runtime>` 防止运行间竞争，但 ESLint 只排除了 `.next` 与 `.next-verify`；完整 Journey 通过后再运行 `verify:push` 会把数十万行 Turbopack 编译产物和 Playwright trace 当源码，先耗尽默认 heap，扩大 heap 后再报告生成代码错误。当前全局 lint ignore 与 Git ignore 共同排除这两类 Golden 运行产物，不放宽任何源码规则；防线是 canonical 顺序下 `test:journey` 后实际运行 `verify:push`。
 
 - 旧体系拥有大量 mock、分阶段和变体测试，却经常在更早阶段失败或从未运行到目标阶段；文件存在与场景名称被误当成覆盖，真实多章节组合仍漏测。
 - Workflow Lab 克隆的是历史状态，不是用户从空项目走出的真实因果链。克隆需要重写 run、Approval、Task target、领域 identity 与未来事实，形成第二套状态解释和长期维护源，因此已整体删除。

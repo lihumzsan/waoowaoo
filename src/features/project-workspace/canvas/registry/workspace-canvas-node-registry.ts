@@ -122,7 +122,11 @@ export const WORKSPACE_CANVAS_NODE_DEFINITIONS = {
   },
   bgmScore: {
     kind: 'bgmScore', identityScope: 'episode', resource: supported('episodeData'), runtime: supported('taskTarget'),
-    materializeFromTask: materializeFromTask('ProjectEpisode', TASK_TYPE.MUSIC_SCORE_PLAN),
+    materializeFromTask: materializeFromTask(
+      'ProjectEpisode',
+      TASK_TYPE.MUSIC_SCORE_PLAN,
+      TASK_TYPE.MUSIC_SCORE_GENERATE,
+    ),
     stream: supported('bgmScore'), terminalHandoff: supported('episodeData'), rendererKey: 'bgmScore',
     focus: supported('operation'), conformanceFixture: 'bgmScore',
   },

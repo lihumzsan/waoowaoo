@@ -27,13 +27,13 @@ describe('edit-first workflow state', () => {
    * Authority: CN-02/CN-07 and the canonical edit-first stage order.
    * Rejects: showing BGM or soundscape nodes before video and chapter rendering finish.
    * Production entry: resolveEditFirstCanvasVisibility.
-   * Oracle: audio nodes are hidden through chapter rendering and visible at the audio-layer stage.
+   * Oracle: audio nodes are hidden through chapter rendering and visible when audio planning starts.
    * Command: npx vitest run tests/unit/project-workflow/edit-first-render-audio.test.ts
    */
-  it('reveals audio nodes only when the workflow reaches audio generation', () => {
+  it('reveals audio nodes only when the workflow reaches audio planning', () => {
     expect(visibilityAt('ready_to_generate_videos')).toMatchObject({ bgmScore: false, soundscape: false })
     expect(visibilityAt('chapters_rendering')).toMatchObject({ bgmScore: false, soundscape: false })
-    expect(visibilityAt('ready_to_generate_audio_layers')).toMatchObject({ bgmScore: true, soundscape: true })
+    expect(visibilityAt('ready_to_plan_audio_layers')).toMatchObject({ bgmScore: true, soundscape: true })
   })
 
   it('materializes active audio Tasks while the workflow context catches up', () => {
@@ -129,7 +129,7 @@ describe('edit-first workflow state', () => {
     ])
   })
 
-  it('requires audio layer generation after all chapter renders are ready', () => {
+  it('groups music and soundscape planning after all chapter renders are ready', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -149,12 +149,17 @@ describe('edit-first workflow state', () => {
       completedChapterRenderCount: 1,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_audio_layers')
-    expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
+    expect(state.stage).toBe('ready_to_plan_audio_layers')
+    expect(state.nextAction?.operationId).toBe('plan_episode_bgm_score')
     expect(state.allowedOperationIds).toEqual([
-      'generate_episode_bgm_score',
+      'plan_episode_bgm_score',
       'plan_episode_soundscape',
     ])
+    expect(state.operationGroup).toEqual({
+      id: 'edit_first_audio_layer_planning',
+      operationIds: ['plan_episode_bgm_score', 'plan_episode_soundscape'],
+      approvalOperationIds: [],
+    })
   })
 
   it('blocks final render while required BGM is generating', () => {
@@ -175,14 +180,17 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
+      bgmScoreHasPlan: true,
       bgmScoreStatus: 'generating',
-      activeBgmScoreTaskCount: 1,
+      activeBgmScoreGenerationTaskCount: 1,
+      soundscapeStatus: 'completed',
+      soundscapeDecision: 'none_needed',
     }))
 
-    expect(state.stage).toBe('bgm_score_generating')
+    expect(state.stage).toBe('audio_layers_generating')
     expect(state.nextAction).toBeNull()
     expect(state.blocking.kind).toBe('processing')
-    expect(state.allowedOperationIds).toEqual(['plan_episode_soundscape'])
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('requires explicit BGM regeneration after a BGM task fails', () => {
@@ -203,12 +211,49 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
       chapterCount: 1,
       completedChapterRenderCount: 1,
+      bgmScoreHasPlan: true,
       bgmScoreStatus: 'failed',
     }))
 
     expect(state.stage).toBe('failed')
     expect(state.nextAction?.operationId).toBe('generate_episode_bgm_score')
     expect(state.allowedOperationIds).toEqual(['generate_episode_bgm_score'])
+  })
+
+  it('groups the two paid audio generators after both plans are durable', () => {
+    const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
+      hasBible: true,
+      bibleStatus: 'confirmed',
+      stylePreviewCount: 1,
+      confirmedStylePreviewCount: 1,
+      hasEditScript: true,
+      editScriptStatus: 'ready',
+      hasShotExecutionPlan: true,
+      shotExecutionPlanStatus: 'ready',
+      storyboardCount: 1,
+      panelCount: 3,
+      storyboardPanelImageReadyCount: 3,
+      storyboardPanelImageMissingCount: 0,
+      videoPlanSegmentCount: 2,
+      completedVideoSegmentCount: 2,
+      chapterCount: 1,
+      completedChapterRenderCount: 1,
+      bgmScoreStatus: 'planned',
+      bgmScoreHasPlan: true,
+      soundscapeStatus: 'planned',
+      soundscapeDecision: 'soundscape',
+    }))
+
+    expect(state.stage).toBe('ready_to_generate_audio_layers')
+    expect(state.allowedOperationIds).toEqual([
+      'generate_episode_bgm_score',
+      'generate_episode_soundscape',
+    ])
+    expect(state.operationGroup).toEqual({
+      id: 'edit_first_audio_layer_generation',
+      operationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
+      approvalOperationIds: ['generate_episode_bgm_score', 'generate_episode_soundscape'],
+    })
   })
 
   it('allows final render after videos, chapters, and required BGM are ready', () => {
@@ -230,6 +275,7 @@ describe('edit-first workflow state', () => {
       chapterCount: 1,
       completedChapterRenderCount: 1,
       bgmScoreStatus: 'completed',
+      bgmScoreHasPlan: true,
       bgmScoreHasMix: true,
       soundscapeStatus: 'completed',
       soundscapeDecision: 'none_needed',

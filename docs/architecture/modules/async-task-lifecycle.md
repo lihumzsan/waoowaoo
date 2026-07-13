@@ -98,6 +98,8 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 ## 历史回归
 
+- BGM 的 `music_score_plan` 曾同时在 music worker 内生成文本规划和付费音乐，TaskType、queue、billing policy 与终态回退都无法表达两个生命周期。现在文本 Task 只负责 `planning → planned`，媒体 Task 只负责 `generating → completed`；取消分别回到 `pending` 与 `planned`，两者通过同一 MusicScore owner fence 和 projector 仲裁。该 TaskDefinition 语义切换不兼容旧活动 job，发布前必须排空 active BGM Task。
+
 - 多章节主 Journey 并发持久化核心剪辑 requirement 时曾触发 Prisma `P2034` write conflict/deadlock；共享错误规范化遗漏该官方可重试事务错误，worker 因而把一次瞬时冲突写成业务最终失败。当前 `src/lib/prisma-error.ts` 将 `P2034` 归入统一 retryable 数据库错误，仍由 Task attempt owner 和既有 max-attempt/backoff 协议负责重试，业务 service 不增加局部循环或第二 retry owner。
 
 - `95254ae71` 尝试收敛 AI 与 Task 重试，但错误分类没有成为唯一来源时，重试仍会在多层复发。

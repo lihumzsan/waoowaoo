@@ -17,6 +17,10 @@ import { resolveOperationLocale } from '@/lib/operations/environment-input'
 import { createPlannedTask, requirePlannedTaskBillingInfo, submitPlannedOperationTask, type OperationPlan } from '@/lib/operations/planning'
 import { refineTaskSubmitOperationOutputSchema, taskSubmitOperationOutputSchemaBase } from '@/lib/operations/output-schemas'
 import { loadEpisodeChapterOutputClips } from '@/lib/video-compose/episode-chapter-clips'
+import { buildBgmScorePlanFingerprint } from '@/lib/bgm-score/plan-contract'
+import { buildBgmScoreCueWindows, buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
+import { readPersistedMusicScorePlan } from '@/lib/music-score/project-data'
+import { resolveMusicScoreMaxCueDurationSeconds } from '@/lib/music-score/constraints'
 import { SOUNDSCAPE_OUTPUT_FORMAT } from '@/lib/soundscape/types'
 import { buildSoundscapePlanFingerprint, parseSoundscapePlanStrict } from '@/lib/soundscape/plan-contract'
 import { buildSoundscapeTimelineSignature } from '@/lib/soundscape/timeline'
@@ -49,6 +53,7 @@ const bgmScoreGenerationInputSchema = z
   .passthrough()
 
 type BgmScoreGenerationInput = z.infer<typeof bgmScoreGenerationInputSchema>
+type BgmScorePlanningInput = BgmScoreGenerationInput
 
 const soundscapePlanningInputSchema = z
   .object({
@@ -303,30 +308,31 @@ async function commitGenerateProjectMusicOperation(ctx: ProjectAgentOperationCon
   }
 }
 
-async function planGenerateEpisodeBgmScoreOperation(
+async function planEpisodeBgmScoreOperation(
   ctx: ProjectAgentOperationContext,
-  input: BgmScoreGenerationInput,
+  input: BgmScorePlanningInput,
 ): Promise<OperationPlan> {
   const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
   if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
   const musicModel = await resolveBgmScoreMusicModel(input, ctx.projectId, ctx.userId)
+  const analysisModel = await resolveAnalysisModel(ctx.projectId, ctx.userId)
   const durationSeconds = await resolveBgmScoreEpisodeDurationSeconds(episodeId, ctx.projectId)
-  const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
   const payload: Record<string, unknown> = {
     episodeId,
     durationSeconds,
     musicModel,
-    ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
+    analysisModel,
+    maxInputTokens: 5000,
   }
 
   return {
     kind: 'task_submission',
-    operationId: 'generate_episode_bgm_score',
+    operationId: 'plan_episode_bgm_score',
     projectId: ctx.projectId,
     userId: ctx.userId,
     tasks: [
       createPlannedTask({
-        id: `generate_episode_bgm_score:${episodeId}`,
+        id: `plan_episode_bgm_score:${episodeId}`,
         taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
         targetType: 'ProjectEpisode',
         targetId: episodeId,
@@ -337,7 +343,7 @@ async function planGenerateEpisodeBgmScoreOperation(
         billingInfo: requirePlannedTaskBillingInfo({
           taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
           payload,
-          allowedApiTypes: ['music'],
+          allowedApiTypes: ['text'],
         }),
       }),
     ],
@@ -345,6 +351,80 @@ async function planGenerateEpisodeBgmScoreOperation(
       episodeId,
       musicModel,
     },
+  }
+}
+
+async function planGenerateEpisodeBgmScoreOperation(
+  ctx: ProjectAgentOperationContext,
+  input: BgmScoreGenerationInput,
+): Promise<OperationPlan> {
+  const episodeId = normalizeString(input.episodeId) || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const score = await prisma.projectEditMusicScore.findFirst({
+    where: {
+      episodeId,
+      episode: { projectId: ctx.projectId },
+    },
+    select: {
+      cuesJson: true,
+      timelineSignature: true,
+      musicModel: true,
+    },
+  })
+  if (!score) throw new Error('BGM_SCORE_PLAN_REQUIRED')
+  const plan = readPersistedMusicScorePlan(score)
+  if (!plan) throw new Error('BGM_SCORE_PERSISTED_PLAN_REQUIRED')
+  const timelineSignature = normalizeString(score.timelineSignature)
+  const musicModel = normalizeString(score.musicModel)
+  if (!timelineSignature) throw new Error('BGM_SCORE_TIMELINE_SIGNATURE_REQUIRED')
+  if (!musicModel) throw new Error('BGM_SCORE_MUSIC_MODEL_REQUIRED')
+  const requestedMusicModel = normalizeString(input.musicModel)
+  if (requestedMusicModel && requireModelKey(requestedMusicModel) !== musicModel) {
+    throw new Error(`BGM_SCORE_PLANNED_MODEL_MISMATCH:${musicModel}:${requestedMusicModel}`)
+  }
+  const clips = await loadEpisodeChapterOutputClips({ episodeId, projectId: ctx.projectId })
+  const currentTimelineSignature = buildBgmTimelineSignature(clips)
+  if (currentTimelineSignature !== timelineSignature) {
+    throw new Error(`BGM_SCORE_TIMELINE_STALE:${timelineSignature}:${currentTimelineSignature}`)
+  }
+  const cueCount = buildBgmScoreCueWindows(clips, resolveMusicScoreMaxCueDurationSeconds()).length
+  if (cueCount === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
+  const outputFormat = isCloudDeployment() ? resolveCloudMusicOption('outputFormat', input.outputFormat) : input.outputFormat
+  const bgmScorePlanHash = buildBgmScorePlanFingerprint({ plan, timelineSignature, musicModel })
+  const payload: Record<string, unknown> = {
+    episodeId,
+    musicModel,
+    bgmScorePlan: plan,
+    bgmScorePlanHash,
+    timelineSignature,
+    durationSeconds: plan.durationSeconds,
+    count: cueCount,
+    ...(typeof outputFormat === 'string' ? { outputFormat } : {}),
+  }
+
+  return {
+    kind: 'task_submission',
+    operationId: 'generate_episode_bgm_score',
+    projectId: ctx.projectId,
+    userId: ctx.userId,
+    tasks: [
+      createPlannedTask({
+        id: `generate_episode_bgm_score:${episodeId}:${bgmScorePlanHash}`,
+        taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
+        targetType: 'ProjectEpisode',
+        targetId: episodeId,
+        payload,
+        locale: resolveOperationLocale(ctx.context),
+        episodeId,
+        dedupeKey: `music_score_generate:${ctx.projectId}:${episodeId}:${bgmScorePlanHash}`,
+        billingInfo: requirePlannedTaskBillingInfo({
+          taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
+          payload,
+          allowedApiTypes: ['music'],
+        }),
+      }),
+    ],
+    metadata: { episodeId, musicModel, bgmScorePlanHash },
   }
 }
 
@@ -474,6 +554,60 @@ async function planGenerateEpisodeSoundscapeOperation(
   }
 }
 
+async function commitPlanEpisodeBgmScoreOperation(
+  ctx: ProjectAgentOperationContext,
+  input: BgmScorePlanningInput,
+  plan: OperationPlan,
+) {
+  const task = plan.tasks[0]
+  if (!task) throw new Error('PROJECT_AGENT_OPERATION_PLAN_EMPTY')
+  const musicModel = typeof plan.metadata?.musicModel === 'string' ? plan.metadata.musicModel : ''
+  const episodeId =
+    (typeof plan.metadata?.episodeId === 'string' ? plan.metadata.episodeId : '')
+    || normalizeString(input.episodeId)
+    || normalizeString(ctx.context.episodeId)
+  if (!episodeId) throw new Error('PROJECT_AGENT_EPISODE_REQUIRED')
+  const result = await submitOperationTask({
+    request: ctx.request,
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    episodeId: task.episodeId,
+    type: task.taskType,
+    targetType: task.target.targetType,
+    targetId: task.target.targetId,
+    operationId: 'plan_episode_bgm_score',
+    source: ctx.source,
+    payload: task.payload,
+    dedupeKey: task.dedupeKey,
+    priority: task.priority,
+    locale: task.locale,
+    billingInfo: task.billingInfo,
+    billingInfoSource: 'planned',
+  })
+
+  writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
+    operationId: 'plan_episode_bgm_score',
+    taskId: result.taskId,
+    status: result.status,
+    runId: result.runId || null,
+    deduped: result.deduped,
+    billingReceipt: result.billingReceiptView,
+    projectId: ctx.projectId,
+    episodeId,
+    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  })
+
+  return {
+    ...result,
+    musicModel,
+    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    targetType: 'ProjectEpisode',
+    targetId: episodeId,
+  }
+}
+
 async function commitGenerateEpisodeBgmScoreOperation(
   ctx: ProjectAgentOperationContext,
   input: BgmScoreGenerationInput,
@@ -502,7 +636,7 @@ async function commitGenerateEpisodeBgmScoreOperation(
     billingReceipt: result.billingReceiptView,
     projectId: ctx.projectId,
     episodeId,
-    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   })
@@ -510,7 +644,7 @@ async function commitGenerateEpisodeBgmScoreOperation(
   return {
     ...result,
     musicModel,
-    taskType: TASK_TYPE.MUSIC_SCORE_PLAN,
+    taskType: TASK_TYPE.MUSIC_SCORE_GENERATE,
     targetType: 'ProjectEpisode',
     targetId: episodeId,
   }
@@ -652,9 +786,36 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       plan: async (ctx, input) => planGenerateProjectMusicOperation(ctx, input),
       commit: async (ctx, input, plan) => commitGenerateProjectMusicOperation(ctx, input, plan),
     }),
+    plan_episode_bgm_score: defineOperation({
+      id: 'plan_episode_bgm_score',
+      summary: 'Plan the episode music score from rendered chapter outputs without submitting paid music generation.',
+      intent: 'act',
+      prerequisites: { episodeId: 'required' },
+      effects: {
+        writes: true,
+        billable: true,
+        destructive: false,
+        overwrite: true,
+        bulk: false,
+        externalSideEffects: true,
+        longRunning: true,
+      },
+      assistantWriteAuthority: { kind: 'transactional_task_submission' },
+      confirmation: {
+        kind: 'none',
+        required: false,
+      },
+      toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
+      inputSchema: bgmScoreGenerationInputSchema,
+      outputSchema: musicTaskSubmitOutput,
+      execute: async (ctx, input) => {
+        const plan = await planEpisodeBgmScoreOperation(ctx, input)
+        return await commitPlanEpisodeBgmScoreOperation(ctx, input, plan)
+      },
+    }),
     generate_episode_bgm_score: defineOperation({
       id: 'generate_episode_bgm_score',
-      summary: 'Generate the episode music score from rendered chapter outputs.',
+      summary: 'Generate the exact approved episode music-score plan using the configured paid music provider.',
       intent: 'act',
       prerequisites: { episodeId: 'required' },
       effects: {
@@ -669,7 +830,7 @@ export function createMusicGenerationOperations(): ProjectAgentOperationRegistry
       confirmation: {
         kind: 'billable_media',
         required: true,
-        summary: '将按当前集的声场计划提交付费环境音生成任务。',
+        summary: '将按当前集已确定的配乐规划提交付费音乐生成任务。',
       },
       toolInputSchema: EDIT_FIRST_EMPTY_TOOL_INPUT_SCHEMA,
       inputSchema: bgmScoreGenerationInputSchema,

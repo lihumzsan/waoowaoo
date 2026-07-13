@@ -3,7 +3,11 @@ import { prisma } from '../../helpers/prisma'
 import { resetBillingState } from '../../helpers/db-reset'
 import { createTestProject, createTestUser, seedBalance } from '../../helpers/billing-fixtures'
 import { persistOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
-import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
+import {
+  invokeApprovedOperationPlan,
+  issueApprovalGrant,
+  issueApprovalGrantGroup,
+} from '@/lib/operations/planned-operation-invocation'
 import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
 import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/planning'
@@ -217,6 +221,60 @@ describe('approved operation plan Task batch integration', () => {
 
     expect([...results]).toEqual([])
     await expect(prisma.task.count({ where: { operationExecutionId: execution.id } })).resolves.toBe(0)
+  })
+  /**
+   * Authority: BA-20 grouped approval grant atomicity.
+   * Rejects: issuing an earlier member Grant when a later member snapshot belongs to another user.
+   * Production entry: issueApprovalGrantGroup with real MySQL row locks and transaction rollback.
+   * Oracle: the request rejects and neither snapshot has a persisted Grant.
+   * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/approved-operation-plan-batch.integration.test.ts
+   */
+  it('rolls back every member Grant when one grouped approval snapshot is unauthorized', async () => {
+    const user = await createTestUser()
+    const project = await createTestProject(user.id)
+    const otherUser = await createTestUser()
+    const otherProject = await createTestProject(otherUser.id)
+    const persistEmptyPlan = async (input: {
+      operationId: string
+      projectId: string
+      userId: string
+    }) => {
+      const plan: OperationPlan = {
+        kind: 'task_submission',
+        operationId: input.operationId,
+        projectId: input.projectId,
+        userId: input.userId,
+        tasks: [],
+      }
+      return await persistOperationPlanSnapshot({
+        plan,
+        normalizedInput: { episodeId: null },
+        quote: await quoteOperationPlan(plan),
+      })
+    }
+    const owned = await persistEmptyPlan({
+      operationId: 'generate_episode_bgm_score',
+      projectId: project.id,
+      userId: user.id,
+    })
+    const unauthorized = await persistEmptyPlan({
+      operationId: 'generate_episode_soundscape',
+      projectId: otherProject.id,
+      userId: otherUser.id,
+    })
+
+    await expect(issueApprovalGrantGroup({
+      userId: user.id,
+      requests: [
+        { planSnapshotId: owned.id, requestId: 'audio-group-approval' },
+        { planSnapshotId: unauthorized.id, requestId: 'audio-group-approval' },
+      ],
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    await expect(prisma.approvalGrant.count({
+      where: { planSnapshotId: { in: [owned.id, unauthorized.id] } },
+    })).resolves.toBe(0)
   })
   it('rolls back the Task batch without mutating the already-consumed Grant when any freeze fails', async () => {
     const seeded = await seedExecution(1)

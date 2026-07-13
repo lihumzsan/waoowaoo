@@ -1574,7 +1574,11 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       ? resourcePresentationFromStatus(bgmDetails.status)
         ?? workspaceCanvasPendingResourcePresentation()
       : null
-    const bgmActionAvailable = Boolean(bgmDetails)
+    const bgmReadyForGeneration = bgmDetails?.hasPromptDesign === true
+      && bgmDetails.status !== 'planning'
+      && bgmDetails.status !== 'generating'
+    const bgmActionAvailable = bgmReadyForGeneration
+      || editFirstWorkflow.allowedOperationIds.includes('plan_episode_bgm_score')
       || editFirstWorkflow.allowedOperationIds.includes('generate_episode_bgm_score')
     nodes.push(createMediaNode({
       id: bgmNodeId,
@@ -1595,8 +1599,14 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
         meta: bgmDetails?.musicModel ?? '',
         ...(bgmPresentation ?? workspaceCanvasPendingResourcePresentation()),
         ...(bgmActionAvailable ? {
-          actionLabel: translate(bgmDetails?.mixUrl ? 'actions.regenerateBgmScore' : 'actions.generateBgmScore'),
-          action: { type: 'generate_bgm_score' as const },
+          actionLabel: translate(
+            bgmReadyForGeneration
+              ? bgmDetails?.mixUrl ? 'actions.regenerateBgmScore' : 'actions.generateBgmScore'
+              : 'actions.planBgmScore',
+          ),
+          action: bgmReadyForGeneration
+            ? { type: 'generate_bgm_score' as const }
+            : { type: 'plan_bgm_score' as const },
         } : {}),
         runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectEpisodeBgmScore(episodeId)),
         bgmScoreDetails: bgmDetails,

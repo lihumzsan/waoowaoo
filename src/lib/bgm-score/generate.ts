@@ -8,16 +8,14 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { generateMusic } from '@/lib/ai-exec/engine'
 import { executeAiStructuredTextStep } from '@/lib/ai-exec/structured-step'
-import { getProjectModelConfig } from '@/lib/config-service'
 import { prisma } from '@/lib/prisma'
 import { withInternalLLMStreamCallbacks } from '@/lib/llm-observe/internal-stream-context'
 import { ensureMediaObjectFromStorageKey } from '@/lib/media/service'
 import {
-  MUSIC_SCORE_MAX_CUE_DURATION_SECONDS,
   resolveMusicScoreMaxCueDurationSeconds,
   resolveMusicScoreRequestDurationSeconds,
 } from '@/lib/music-score/constraints'
-import { readCompletedMusicScoreMix } from '@/lib/music-score/project-data'
+import { readCompletedMusicScoreMix, readPersistedMusicScorePlan } from '@/lib/music-score/project-data'
 import { toFetchableUrl, uploadObject } from '@/lib/storage'
 import { buildTaskArtifactStorageKey } from '@/lib/task/artifact-storage'
 import type { TaskJobData } from '@/lib/task/types'
@@ -33,7 +31,12 @@ import {
 } from '@/lib/video-compose/ffmpeg-binaries'
 import { reportTaskProgress } from '@/lib/workers/shared'
 import { buildBgmScorePlanPrompt, buildFinalBgmMusicPrompt } from './prompt'
-import { buildBgmTimelineSignature } from './timeline'
+import { buildBgmScorePlanFingerprint, parseBgmScorePlanStrict } from './plan-contract'
+import {
+  buildBgmScoreCueWindows,
+  buildBgmTimelineSignature,
+  type BgmScoreCueWindow,
+} from './timeline'
 import {
   BGM_SCORE_STATUS,
   bgmScorePlanSchema,
@@ -50,6 +53,10 @@ type BgmScoreGeneratePayload = {
   readonly episodeId?: unknown
   readonly musicModel?: unknown
   readonly outputFormat?: unknown
+  readonly bgmScorePlan?: unknown
+  readonly bgmScorePlanHash?: unknown
+  readonly timelineSignature?: unknown
+  readonly analysisModel?: unknown
 }
 
 type GeneratedAudioBuffer = {
@@ -158,98 +165,6 @@ function ensureSchedulableTimeline(clips: readonly FinalRenderClipPlan[]): void 
   if (invalidClip) {
     throw new Error(`BGM_SCORE_VIDEO_TIMELINE_INCOMPLETE:${invalidClip.groupId ?? invalidClip.panelId}`)
   }
-}
-
-export type BgmScoreCueWindow = {
-  readonly cueId: string
-  readonly index: number
-  readonly startSeconds: number
-  readonly endSeconds: number
-  readonly durationSeconds: number
-  readonly clips: readonly FinalRenderClipPlan[]
-  readonly sourceClipOrders: readonly number[]
-  readonly shotIds: readonly string[]
-  readonly shotNumbers: readonly number[]
-}
-
-function cloneClipForCue(input: {
-  readonly clip: FinalRenderClipPlan
-  readonly durationSeconds: number
-}): FinalRenderClipPlan {
-  return {
-    ...input.clip,
-    durationSeconds: input.durationSeconds,
-  }
-}
-
-function pushCueWindow(
-  output: BgmScoreCueWindow[],
-  input: {
-    readonly startSeconds: number
-    readonly durationSeconds: number
-    readonly clips: readonly FinalRenderClipPlan[]
-  },
-): void {
-  if (input.durationSeconds <= 0) return
-  const cueIndex = output.length + 1
-  const sourceClipOrders = Array.from(new Set(input.clips.map((clip) => clip.order)))
-  const shotIds = Array.from(new Set(input.clips.flatMap((clip) => clip.shotIds)))
-  const shotNumbers = Array.from(new Set(input.clips.flatMap((clip) => clip.shotNumbers)))
-  output.push({
-    cueId: `cue-${String(cueIndex).padStart(3, '0')}`,
-    index: cueIndex,
-    startSeconds: input.startSeconds,
-    endSeconds: input.startSeconds + input.durationSeconds,
-    durationSeconds: input.durationSeconds,
-    clips: input.clips,
-    sourceClipOrders,
-    shotIds,
-    shotNumbers,
-  })
-}
-
-export function buildBgmScoreCueWindows(
-  clips: readonly FinalRenderClipPlan[],
-  maxCueDurationSeconds = MUSIC_SCORE_MAX_CUE_DURATION_SECONDS,
-): BgmScoreCueWindow[] {
-  if (!Number.isFinite(maxCueDurationSeconds) || maxCueDurationSeconds <= 0) {
-    throw new Error('BGM_SCORE_MAX_CUE_DURATION_INVALID')
-  }
-  const cues: BgmScoreCueWindow[] = []
-  let cueStartSeconds = 0
-  let cueDurationSeconds = 0
-  let timelineCursorSeconds = 0
-  let cueClips: FinalRenderClipPlan[] = []
-
-  for (const clip of clips) {
-    let remainingClipSeconds = clip.durationSeconds
-    while (remainingClipSeconds > 0) {
-      const capacitySeconds = maxCueDurationSeconds - cueDurationSeconds
-      const pieceSeconds = Math.min(remainingClipSeconds, capacitySeconds)
-      cueClips.push(cloneClipForCue({ clip, durationSeconds: pieceSeconds }))
-      cueDurationSeconds += pieceSeconds
-      timelineCursorSeconds += pieceSeconds
-      remainingClipSeconds -= pieceSeconds
-
-      if (cueDurationSeconds >= maxCueDurationSeconds - 0.001) {
-        pushCueWindow(cues, {
-          startSeconds: cueStartSeconds,
-          durationSeconds: cueDurationSeconds,
-          clips: cueClips,
-        })
-        cueStartSeconds = timelineCursorSeconds
-        cueDurationSeconds = 0
-        cueClips = []
-      }
-    }
-  }
-
-  pushCueWindow(cues, {
-    startSeconds: cueStartSeconds,
-    durationSeconds: cueDurationSeconds,
-    clips: cueClips,
-  })
-  return cues
 }
 
 function normalizePlanDuration(plan: BgmScorePlan, durationSeconds: number): BgmScorePlan {
@@ -444,12 +359,157 @@ function buildCueMusicPrompt(input: {
   }, { locale: input.locale })
 }
 
+export async function handleBgmScorePlanTask(job: Job<TaskJobData>) {
+  const payload = (job.data.payload || {}) as BgmScoreGeneratePayload
+  const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
+  const musicModel = readString(payload.musicModel)
+  const analysisModel = readString(payload.analysisModel)
+  if (!episodeId) throw new Error('BGM_SCORE_EPISODE_REQUIRED')
+  if (!musicModel) throw new Error('BGM_SCORE_MUSIC_MODEL_REQUIRED')
+  if (!analysisModel) throw new Error('BGM_SCORE_ANALYSIS_MODEL_REQUIRED')
+
+  const persisted = await prisma.projectEditMusicScore.findFirst({
+    where: {
+      episodeId,
+      taskId: job.data.taskId,
+      status: { in: [BGM_SCORE_STATUS.PLANNED, BGM_SCORE_STATUS.COMPLETED] },
+    },
+    select: { status: true, cuesJson: true },
+  })
+  const persistedPlan = readPersistedMusicScorePlan(persisted)
+  if (persistedPlan) {
+    return {
+      episodeId,
+      musicModel,
+      designSectionCount: persistedPlan.scoreDesign.sections.length,
+      promptSectionCount: persistedPlan.promptSections.length,
+      virtualLayerCount: persistedPlan.virtualLayers.length,
+    }
+  }
+
+  await reportTaskProgress(job, 8, { stage: 'bgm_score_prepare' })
+  const [project, episode, clips] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: job.data.projectId },
+      select: { videoRatio: true },
+    }),
+    prisma.projectEpisode.findFirst({
+      where: { id: episodeId, projectId: job.data.projectId },
+      select: { id: true },
+    }),
+    loadEpisodeChapterOutputClips({
+      episodeId,
+      projectId: job.data.projectId,
+    }),
+  ])
+  if (!project) throw new Error('BGM_SCORE_PROJECT_NOT_FOUND')
+  if (!episode) throw new Error('BGM_SCORE_EPISODE_NOT_FOUND')
+  ensureSchedulableTimeline(clips)
+  const editScriptId = `episode:${episodeId}`
+  const durationSeconds = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
+  const timelineSignature = buildBgmTimelineSignature(clips)
+
+  await writeBgmScoreProjectData({
+    episodeId,
+    bgmScore: {
+      status: BGM_SCORE_STATUS.PLANNING,
+      taskId: job.data.taskId,
+      editScriptId,
+      timelineSignature,
+      durationSeconds,
+      musicModel,
+    },
+  })
+
+  await reportTaskProgress(job, 25, { stage: 'bgm_score_plan' })
+  const streamContext = createWorkerLLMStreamContext(job, 'music_score_plan')
+  const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
+  const completion = await withInternalLLMStreamCallbacks(
+    streamCallbacks,
+    async () => {
+      try {
+        return await executeAiStructuredTextStep({
+          userId: job.data.userId,
+          model: analysisModel,
+          messages: [{
+            role: 'user',
+            content: buildBgmScorePlanPrompt({
+              editScript: null,
+              projectContext: { videoRatio: project.videoRatio },
+              clips,
+              totalDurationSeconds: durationSeconds,
+              locale: job.data.locale,
+            }),
+          }],
+          temperature: 0.35,
+          projectId: job.data.projectId,
+          action: 'bgm_score_plan',
+          locale: job.data.locale,
+          meta: {
+            stepId: 'bgm_score_plan',
+            stepTitle: 'bgm_score_plan',
+            stepIndex: 1,
+            stepTotal: 1,
+          },
+          schema: z.unknown(),
+          parse: { kind: 'object' },
+          validate: (raw) => parseBgmScorePlanValue(raw, durationSeconds),
+        })
+      } finally {
+        await streamCallbacks.flush()
+      }
+    },
+  )
+  const plan = completion.data
+  await writeBgmScoreProjectData({
+    episodeId,
+    bgmScore: {
+      status: BGM_SCORE_STATUS.PLANNED,
+      taskId: job.data.taskId,
+      editScriptId,
+      timelineSignature,
+      durationSeconds,
+      musicModel,
+      plan,
+    },
+  })
+  await reportTaskProgress(job, 95, { stage: 'bgm_score_plan_persisted' })
+
+  return {
+    episodeId,
+    musicModel,
+    designSectionCount: plan.scoreDesign.sections.length,
+    promptSectionCount: plan.promptSections.length,
+    virtualLayerCount: plan.virtualLayers.length,
+  }
+}
+
 export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
   const payload = (job.data.payload || {}) as BgmScoreGeneratePayload
   const episodeId = readString(payload.episodeId) || readString(job.data.episodeId)
   const musicModel = readString(payload.musicModel)
-  if (!episodeId) throw new Error('BGM_SCORE_EPISODE_REQUIRED')
-  if (!musicModel) throw new Error('BGM_SCORE_MUSIC_MODEL_REQUIRED')
+  const approvedTimelineSignature = readString(payload.timelineSignature)
+  const approvedPlanHash = readString(payload.bgmScorePlanHash)
+  if (!episodeId) throw new Error('BGM_SCORE_GENERATE_EPISODE_REQUIRED')
+  if (!musicModel) throw new Error('BGM_SCORE_GENERATE_MUSIC_MODEL_REQUIRED')
+  if (!approvedTimelineSignature) throw new Error('BGM_SCORE_GENERATE_TIMELINE_SIGNATURE_REQUIRED')
+  if (!approvedPlanHash) throw new Error('BGM_SCORE_GENERATE_PLAN_HASH_REQUIRED')
+  if (
+    job.data.operationId !== 'generate_episode_bgm_score'
+    || !job.data.approvalGrantId
+    || !job.data.operationExecutionId
+  ) {
+    throw new Error('BGM_SCORE_BILLABLE_MEDIA_APPROVAL_REQUIRED')
+  }
+  const approvedPlan = parseBgmScorePlanStrict(payload.bgmScorePlan)
+  const computedApprovedPlanHash = buildBgmScorePlanFingerprint({
+    plan: approvedPlan,
+    timelineSignature: approvedTimelineSignature,
+    musicModel,
+  })
+  if (computedApprovedPlanHash !== approvedPlanHash) {
+    throw new Error(`BGM_SCORE_APPROVED_PLAN_HASH_INVALID:${approvedPlanHash}:${computedApprovedPlanHash}`)
+  }
 
   const completed = await prisma.projectEditMusicScore.findFirst({
     where: { episodeId, taskId: job.data.taskId, status: BGM_SCORE_STATUS.COMPLETED },
@@ -468,189 +528,143 @@ export async function handleBgmScoreGenerateTask(job: Job<TaskJobData>) {
     }
   }
 
-  let editScriptId = ''
-  let signature = ''
-  let durationSeconds = 0
-
-  try {
-    await reportTaskProgress(job, 8, { stage: 'bgm_score_prepare' })
-    const [project, episode, projectModelConfig] = await Promise.all([
-      prisma.project.findUnique({
-        where: { id: job.data.projectId },
-        select: {
-          videoRatio: true,
-        },
-      }),
-      prisma.projectEpisode.findFirst({
-        where: { id: episodeId, projectId: job.data.projectId },
-        select: { id: true },
-      }),
-      getProjectModelConfig(job.data.projectId, job.data.userId),
-    ])
-    if (!project) throw new Error('BGM_SCORE_PROJECT_NOT_FOUND')
-    if (!episode) throw new Error('BGM_SCORE_EPISODE_NOT_FOUND')
-    const analysisModel = readString(projectModelConfig.analysisModel)
-    if (!analysisModel) throw new Error('BGM_SCORE_ANALYSIS_MODEL_REQUIRED')
-
-    const clips = await loadEpisodeChapterOutputClips({
+  await reportTaskProgress(job, 8, { stage: 'bgm_score_generate_prepare' })
+  const [persistedScore, clips] = await Promise.all([
+    prisma.projectEditMusicScore.findUnique({
+      where: { episodeId },
+      select: { cuesJson: true, timelineSignature: true, musicModel: true },
+    }),
+    loadEpisodeChapterOutputClips({
       episodeId,
       projectId: job.data.projectId,
-    })
-    ensureSchedulableTimeline(clips)
-    editScriptId = `episode:${episodeId}`
-    durationSeconds = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
-    signature = buildBgmTimelineSignature(clips)
-    const cueWindows = buildBgmScoreCueWindows(
-      clips,
-      resolveMusicScoreMaxCueDurationSeconds(),
-    )
-    if (cueWindows.length === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
+    }),
+  ])
+  if (!persistedScore) throw new Error('BGM_SCORE_PLAN_REQUIRED')
+  const persistedPlan = readPersistedMusicScorePlan(persistedScore)
+  if (!persistedPlan) throw new Error('BGM_SCORE_PERSISTED_PLAN_REQUIRED')
+  const persistedTimelineSignature = readString(persistedScore.timelineSignature)
+  const persistedMusicModel = readString(persistedScore.musicModel)
+  if (persistedMusicModel !== musicModel) {
+    throw new Error(`BGM_SCORE_APPROVED_MODEL_STALE:${musicModel}:${persistedMusicModel}`)
+  }
+  const persistedPlanHash = buildBgmScorePlanFingerprint({
+    plan: persistedPlan,
+    timelineSignature: persistedTimelineSignature,
+    musicModel: persistedMusicModel,
+  })
+  if (persistedPlanHash !== approvedPlanHash) {
+    throw new Error(`BGM_SCORE_APPROVED_PLAN_STALE:${approvedPlanHash}:${persistedPlanHash}`)
+  }
 
-    await writeBgmScoreProjectData({
-      episodeId,
-      bgmScore: {
-        status: BGM_SCORE_STATUS.GENERATING,
-        taskId: job.data.taskId,
-        editScriptId,
-        timelineSignature: signature,
-        durationSeconds,
-        musicModel,
-      },
-    })
-
-    await reportTaskProgress(job, 18, { stage: 'bgm_score_plan' })
-    const streamContext = createWorkerLLMStreamContext(job, 'music_score_plan')
-    const streamCallbacks = createWorkerLLMStreamCallbacks(job, streamContext)
-    const completion = await withInternalLLMStreamCallbacks(
-      streamCallbacks,
-      async () => {
-        try {
-          return await executeAiStructuredTextStep({
-            userId: job.data.userId,
-            model: analysisModel,
-            messages: [{
-              role: 'user',
-              content: buildBgmScorePlanPrompt({
-                editScript: null,
-                projectContext: {
-                  videoRatio: project.videoRatio,
-                },
-                clips,
-                totalDurationSeconds: durationSeconds,
-                locale: job.data.locale,
-              }),
-            }],
-            temperature: 0.35,
-            projectId: job.data.projectId,
-            action: 'bgm_score_plan',
-            locale: job.data.locale,
-            meta: {
-              stepId: 'bgm_score_plan',
-              stepTitle: 'bgm_score_plan',
-              stepIndex: 1,
-              stepTotal: 1,
-            },
-            schema: z.unknown(),
-            parse: { kind: 'object' },
-            validate: (raw) => parseBgmScorePlanValue(raw, durationSeconds),
-          })
-        } finally {
-          await streamCallbacks.flush()
-        }
-      },
-    )
-    const plan = completion.data
-
-    const outputFormat = readOutputFormat(payload.outputFormat)
-    const renderedCues: BgmScoreCue[] = []
-    const cueAudios: Array<{
-      readonly cueId: string
-      readonly audio: GeneratedAudioBuffer
-      readonly durationSeconds: number
-    }> = []
-    for (const cue of cueWindows) {
-      const progress = 45 + Math.round((cue.index - 1) / cueWindows.length * 38)
-      await reportTaskProgress(job, progress, {
-        stage: 'music_score_plan_generate_music',
-        cueId: cue.cueId,
-        cueIndex: cue.index,
-        cueCount: cueWindows.length,
-        designSectionCount: plan.scoreDesign.sections.length,
-        promptSectionCount: plan.promptSections.length,
-        virtualLayerCount: plan.virtualLayers.length,
-      })
-      const cuePrompt = buildCueMusicPrompt({
-        plan,
-        cue,
-        cueCount: cueWindows.length,
-        locale: job.data.locale,
-      })
-      const generated = await generateMusic(job.data.userId, musicModel, cuePrompt, {
-        durationSeconds: resolveMusicScoreRequestDurationSeconds({
-          targetDurationSeconds: cue.durationSeconds,
-        }),
-        vocalMode: 'instrumental',
-        outputFormat,
-      }, { key: `media:music:cue:${cue.cueId}` })
-      if (!generated.success) {
-        throw new Error(generated.error || `BGM_SCORE_PROVIDER_FAILED:${cue.cueId}`)
-      }
-      const audio = await loadAudioBuffer({
-        audioBase64: generated.audioBase64,
-        audioUrl: generated.audioUrl,
-        mimeType: generated.audioMimeType,
-      })
-      await assertGeneratedCueDuration({
-        audio,
-        durationSeconds: cue.durationSeconds,
-        cueId: cue.cueId,
-      })
-      cueAudios.push({
-        cueId: cue.cueId,
-        audio,
-        durationSeconds: cue.durationSeconds,
-      })
-      renderedCues.push({
-        cueId: cue.cueId,
-        index: cue.index,
-        startSeconds: cue.startSeconds,
-        endSeconds: cue.endSeconds,
-        durationSeconds: cue.durationSeconds,
-        sourceClipOrders: cue.sourceClipOrders,
-        shotIds: cue.shotIds,
-        shotNumbers: cue.shotNumbers,
-        prompt: cuePrompt,
-      })
-    }
-
-    await reportTaskProgress(job, 88, { stage: 'bgm_score_persist' })
-    const audio = await concatCueAudioBuffers({ cues: cueAudios })
-    const mix = await uploadGeneratedBgmMix({ audio, durationSeconds, taskId: job.data.taskId })
-    const bgmScore: BgmScoreProjectData = {
-      status: BGM_SCORE_STATUS.COMPLETED,
+  ensureSchedulableTimeline(clips)
+  const durationSeconds = clips.reduce((total, clip) => total + clip.durationSeconds, 0)
+  const timelineSignature = buildBgmTimelineSignature(clips)
+  if (timelineSignature !== approvedTimelineSignature) {
+    throw new Error(`BGM_SCORE_TIMELINE_STALE:${approvedTimelineSignature}:${timelineSignature}`)
+  }
+  const cueWindows = buildBgmScoreCueWindows(clips, resolveMusicScoreMaxCueDurationSeconds())
+  if (cueWindows.length === 0) throw new Error('BGM_SCORE_CUE_WINDOWS_EMPTY')
+  const editScriptId = `episode:${episodeId}`
+  await writeBgmScoreProjectData({
+    episodeId,
+    bgmScore: {
+      status: BGM_SCORE_STATUS.GENERATING,
       taskId: job.data.taskId,
       editScriptId,
-      timelineSignature: signature,
+      timelineSignature,
       durationSeconds,
       musicModel,
-      plan,
-      cues: renderedCues,
-      mix,
-    }
-    await writeBgmScoreProjectData({ episodeId, bgmScore })
+      plan: approvedPlan,
+    },
+  })
 
-    return {
-      episodeId,
-      mediaId: mix.mediaId,
-      audioUrl: mix.url,
-      storageKey: mix.storageKey,
-      musicModel,
-      designSectionCount: plan.scoreDesign.sections.length,
-      promptSectionCount: plan.promptSections.length,
-      virtualLayerCount: plan.virtualLayers.length,
-      durationMs: mix.durationMs,
+  const outputFormat = readOutputFormat(payload.outputFormat)
+  const renderedCues: BgmScoreCue[] = []
+  const cueAudios: Array<{
+    readonly cueId: string
+    readonly audio: GeneratedAudioBuffer
+    readonly durationSeconds: number
+  }> = []
+  for (const cue of cueWindows) {
+    const progress = 20 + Math.round((cue.index - 1) / cueWindows.length * 65)
+    await reportTaskProgress(job, progress, {
+      stage: 'bgm_score_generate_music',
+      cueId: cue.cueId,
+      cueIndex: cue.index,
+      cueCount: cueWindows.length,
+      designSectionCount: approvedPlan.scoreDesign.sections.length,
+      promptSectionCount: approvedPlan.promptSections.length,
+      virtualLayerCount: approvedPlan.virtualLayers.length,
+    })
+    const cuePrompt = buildCueMusicPrompt({
+      plan: approvedPlan,
+      cue,
+      cueCount: cueWindows.length,
+      locale: job.data.locale,
+    })
+    const generated = await generateMusic(job.data.userId, musicModel, cuePrompt, {
+      durationSeconds: resolveMusicScoreRequestDurationSeconds({
+        targetDurationSeconds: cue.durationSeconds,
+      }),
+      vocalMode: 'instrumental',
+      outputFormat,
+    }, { key: `media:music:cue:${cue.cueId}` })
+    if (!generated.success) {
+      throw new Error(generated.error || `BGM_SCORE_PROVIDER_FAILED:${cue.cueId}`)
     }
-  } catch (error) {
-    throw error
+    const audio = await loadAudioBuffer({
+      audioBase64: generated.audioBase64,
+      audioUrl: generated.audioUrl,
+      mimeType: generated.audioMimeType,
+    })
+    await assertGeneratedCueDuration({
+      audio,
+      durationSeconds: cue.durationSeconds,
+      cueId: cue.cueId,
+    })
+    cueAudios.push({
+      cueId: cue.cueId,
+      audio,
+      durationSeconds: cue.durationSeconds,
+    })
+    renderedCues.push({
+      cueId: cue.cueId,
+      index: cue.index,
+      startSeconds: cue.startSeconds,
+      endSeconds: cue.endSeconds,
+      durationSeconds: cue.durationSeconds,
+      sourceClipOrders: cue.sourceClipOrders,
+      shotIds: cue.shotIds,
+      shotNumbers: cue.shotNumbers,
+      prompt: cuePrompt,
+    })
+  }
+
+  await reportTaskProgress(job, 88, { stage: 'bgm_score_persist' })
+  const audio = await concatCueAudioBuffers({ cues: cueAudios })
+  const mix = await uploadGeneratedBgmMix({ audio, durationSeconds, taskId: job.data.taskId })
+  const bgmScore: BgmScoreProjectData = {
+    status: BGM_SCORE_STATUS.COMPLETED,
+    taskId: job.data.taskId,
+    editScriptId,
+    timelineSignature,
+    durationSeconds,
+    musicModel,
+    plan: approvedPlan,
+    cues: renderedCues,
+    mix,
+  }
+  await writeBgmScoreProjectData({ episodeId, bgmScore })
+
+  return {
+    episodeId,
+    mediaId: mix.mediaId,
+    audioUrl: mix.url,
+    storageKey: mix.storageKey,
+    musicModel,
+    designSectionCount: approvedPlan.scoreDesign.sections.length,
+    promptSectionCount: approvedPlan.promptSections.length,
+    virtualLayerCount: approvedPlan.virtualLayers.length,
+    durationMs: mix.durationMs,
   }
 }

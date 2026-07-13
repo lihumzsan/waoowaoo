@@ -329,6 +329,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       storyboards,
       panels,
       assetRequirements,
+      musicScores,
+      soundscapes,
       finalOutputs,
     ] = await Promise.all([
       queryRows(connection, 'SELECT id, userId, name, videoRatio, createdAt, updatedAt FROM projects WHERE id = ?', projectScope),
@@ -355,6 +357,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_storyboards WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT p.* FROM project_panels p JOIN project_storyboards s ON s.id = p.storyboardId WHERE s.episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_music_scores WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_edit_soundscapes WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
     ])
     const parsedThreads = threads.map((thread) => ({
@@ -389,6 +393,19 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         storyboards: sortOracleRows(storyboards, 'createdAt', 'id'),
         panels: sortOracleRows(panels, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
+        musicScores: musicScores.map((item) => ({
+          ...item,
+          cuesJson: parseJson(item.cuesJson),
+          mixJson: parseJson(item.mixJson),
+          diagnosticsJson: parseJson(item.diagnosticsJson),
+        })),
+        soundscapes: soundscapes.map((item) => ({
+          ...item,
+          planJson: parseJson(item.planJson),
+          sourcesJson: parseJson(item.sourcesJson),
+          mixJson: parseJson(item.mixJson),
+          diagnosticsJson: parseJson(item.diagnosticsJson),
+        })),
         finalOutputs: sortOracleRows(finalOutputs, 'createdAt', 'id'),
       },
       identities: collectIdentities(parsedThreads),

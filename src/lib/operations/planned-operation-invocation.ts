@@ -24,6 +24,16 @@ export interface OperationExecutionAuthorization {
   transaction: Prisma.TransactionClient
 }
 
+export interface ApprovalGrantRequest {
+  planSnapshotId: string
+  requestId: string
+}
+
+export interface IssuedApprovalGrant extends PlannedOperationInvocation {
+  planSnapshotId: string
+  operationId: string
+}
+
 export function requireOperationExecutionTransaction(ctx: ProjectAgentOperationContext): Prisma.TransactionClient {
   const transaction = ctx.executionAuthorization?.transaction
   if (!transaction) {
@@ -78,8 +88,77 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(serialized) as Prisma.InputJsonValue
 }
 
-function isUniqueConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+export async function issueApprovalGrantGroup(params: {
+  userId: string
+  requests: readonly ApprovalGrantRequest[]
+}): Promise<IssuedApprovalGrant[]> {
+  if (params.requests.length === 0) return []
+  const planSnapshotIds = params.requests.map((request) => request.planSnapshotId.trim())
+  if (planSnapshotIds.some((id) => !id) || new Set(planSnapshotIds).size !== planSnapshotIds.length) {
+    throw new ApiError('INVALID_PARAMS', { code: 'APPROVAL_GROUP_PLAN_SNAPSHOT_INVALID' })
+  }
+  return await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM operation_plan_snapshots
+      WHERE id IN (${Prisma.join([...planSnapshotIds].sort())})
+      ORDER BY id
+      FOR UPDATE
+    `)
+    if (locked.length !== planSnapshotIds.length) {
+      throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+    }
+    const issued: IssuedApprovalGrant[] = []
+    for (const request of params.requests) {
+      const snapshot = await loadOperationPlanSnapshot(request.planSnapshotId, tx)
+      if (!snapshot) {
+        throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+      }
+      if (snapshot.userId !== params.userId) {
+        throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
+      }
+      const existing = await tx.approvalGrant.findUnique({
+        where: { planSnapshotId: snapshot.id },
+      })
+      if (existing) {
+        if (existing.userId !== params.userId || existing.revokedAt) {
+          throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
+        }
+        issued.push({
+          planSnapshotId: snapshot.id,
+          operationId: snapshot.operationId,
+          approvalGrantId: existing.id,
+          requestId: existing.requestId,
+        })
+        continue
+      }
+      const grant = await tx.approvalGrant.create({
+        data: {
+          id: randomUUID(),
+          userId: snapshot.userId,
+          scopeKind: snapshot.scopeKind,
+          scopeId: snapshot.scopeId,
+          projectId: snapshot.projectId,
+          episodeId: snapshot.episodeId,
+          operationId: snapshot.operationId,
+          planSnapshotId: snapshot.id,
+          requestId: request.requestId,
+          inputHash: snapshot.inputHash,
+          planHash: snapshot.planHash,
+          quoteHash: snapshot.quoteHash,
+          quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
+          currency: snapshot.quote.currency ?? null,
+        },
+      })
+      issued.push({
+        planSnapshotId: snapshot.id,
+        operationId: snapshot.operationId,
+        approvalGrantId: grant.id,
+        requestId: grant.requestId,
+      })
+    }
+    return issued
+  })
 }
 
 export async function issueApprovalGrant(params: {
@@ -87,53 +166,17 @@ export async function issueApprovalGrant(params: {
   planSnapshotId: string
   requestId: string
 }): Promise<{ approvalGrantId: string; operationRequestId: string }> {
-  const snapshot = await loadOperationPlanSnapshot(params.planSnapshotId)
-  if (!snapshot)
-    throw new ApiError('NOT_FOUND', {
-      code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND',
-    })
-  if (snapshot.userId !== params.userId) {
-    throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
-  }
-  const existing = await prisma.approvalGrant.findUnique({
-    where: { planSnapshotId: snapshot.id },
+  const [issued] = await issueApprovalGrantGroup({
+    userId: params.userId,
+    requests: [{
+      planSnapshotId: params.planSnapshotId,
+      requestId: params.requestId,
+    }],
   })
-  if (existing) {
-    if (existing.userId !== params.userId || existing.revokedAt) {
-      throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
-    }
-    return {
-      approvalGrantId: existing.id,
-      operationRequestId: existing.requestId,
-    }
-  }
-  try {
-    const grant = await prisma.approvalGrant.create({
-      data: {
-        id: randomUUID(),
-        userId: snapshot.userId,
-        scopeKind: snapshot.scopeKind,
-        scopeId: snapshot.scopeId,
-        projectId: snapshot.projectId,
-        episodeId: snapshot.episodeId,
-        operationId: snapshot.operationId,
-        planSnapshotId: snapshot.id,
-        requestId: params.requestId,
-        inputHash: snapshot.inputHash,
-        planHash: snapshot.planHash,
-        quoteHash: snapshot.quoteHash,
-        quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
-        currency: snapshot.quote.currency ?? null,
-      },
-    })
-    return { approvalGrantId: grant.id, operationRequestId: grant.requestId }
-  } catch (error) {
-    if (!isUniqueConflict(error)) throw error
-    const raced = await prisma.approvalGrant.findUnique({
-      where: { planSnapshotId: snapshot.id },
-    })
-    if (!raced) throw error
-    return { approvalGrantId: raced.id, operationRequestId: raced.requestId }
+  if (!issued) throw new Error('APPROVAL_GRANT_ISSUANCE_EMPTY')
+  return {
+    approvalGrantId: issued.approvalGrantId,
+    operationRequestId: issued.requestId,
   }
 }
 

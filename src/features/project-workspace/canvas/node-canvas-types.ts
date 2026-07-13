@@ -97,6 +97,7 @@ export type WorkspaceCanvasNodeAction =
       readonly generationOptions?: Record<string, string | number | boolean>
     }
   | { readonly type: 'render_final_video' }
+  | { readonly type: 'plan_bgm_score' }
   | { readonly type: 'generate_bgm_score' }
   | { readonly type: 'plan_soundscape' }
   | { readonly type: 'generate_soundscape' }

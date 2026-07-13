@@ -71,5 +71,10 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
+    if (action.type === 'plan_bgm_score') {
+      await runtime.onPlanBgmScore()
+      return
+    }
+
   }, [runtime])
 }

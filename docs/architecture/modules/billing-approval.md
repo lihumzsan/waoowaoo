@@ -31,6 +31,7 @@
 - **BA-17 — 直接 UI 批准只能消费当前展示计划。** Canvas 等直接操作入口可以把用户点击已展示价格的按钮视为批准，但按钮必须持有完整 `OperationPlanView`，Grant 与 execute 必须消费该 View 的同一 `planSnapshotId`；Canvas 按钮正文只展示紧凑的“动作 + 格式化价格”，完整任务数与预计消耗通过同一 quote 的 title/可访问标签提供。禁止预览 plan A、点击后重新 plan B，或用不展示报价的普通按钮提交收费媒体。所有 Canvas 收费 action 只能经过 `CanvasActionButton`，免费规划与非计费合成不得伪装成收费按钮。
 - **BA-18 — Episode scope 由计划产物裁决。** planner 必须从经过 project ownership 校验的真实 target 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝同一计划包含多个 episode，并以计划 Task scope 为 canonical episode。execute 只校验 session、project、operation 与可选的显式 scope 限制，commit context 必须从已批准 snapshot 注入 episode；禁止要求客户端在批准后重复提交同一 episode 事实或从 route body 重建 scope。
 - **BA-19 — 计划只因内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验由 `invokeApprovedOperationPlan` 重新调用当前 registry definition 的纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才进入 Grant 锁事务消费，任一变化必须在该事务撤销 Grant，且不得创建 Execution、Task、冻结或 Outbox。已完成 Execution 的幂等重放直接返回同一持久 output，不得因后续计划变化重新执行。planner 必须对相同事实确定性输出；随机预留 identity、时间戳或调用顺序不得进入计划 Hash。
+- **BA-20 — 组批准不合并执行身份。** 一个 Approval 卡可以合计展示多个收费 Operation 的 quote，但每个 member 仍必须持有自己的 `OperationPlanSnapshot → ApprovalGrant → OperationExecution` 链；合计 View 不得携带或冒充任一 snapshot identity。用户批准后，全部 member Grant 必须在一个事务中签发，任一 snapshot 缺失、越权或不可用则整组零签发；Task/Wait 继续由各 member 的独立 plan commit 与通用 Operation Group barrier 原子汇合。
 
 ## 权威入口
 
@@ -73,7 +74,10 @@
 
 ## 历史回归
 
+- 音乐与声场首次组成同一付费审批组时，interruption 只持久化首成员的 `operationPlan`，runtime 也只调用一次 `issueApprovalGrant`。这使“一个 UI 批准”错误地等价于“只有一个 Operation 获得付费执行权”，真实 Golden 因声场始终停在 `planned` 而失败。当前 `approvalItems` 各自保存冻结计划，`issueApprovalGrantGroup` 锁定全部 snapshot 并在同一事务签发 Grant，展示层只消费合计 quote；Golden 对两个 Grant/Execution 独立断言。
+
 - Soundscape 曾使用“最多 12 个音源”的上限授权：审批时真实音效 Prompt、数量和最终 Task 尚未确定。这类测试即使通过，也是在固化错误策略。
+- Soundscape 已拆为文本规划与付费生成后，BGM 仍把 LLM 规划和多次付费音乐调用塞在 `music_score_plan` 一个 Task/Operation 中；主 Journey 只断言最终混音存在，因而没有反证审批前计划缺失和成本语义混合。现在 `plan_episode_bgm_score / MUSIC_SCORE_PLAN` 只持久化规划，`generate_episode_bgm_score / MUSIC_SCORE_GENERATE` 只消费已持久化规划、时间线指纹和精确 cue 数量；规划与生成分别同 Soundscape 组成声明式并行组。
 - `d8a1685dc` 收敛了 edit-first 的审批与任务生命周期契约，说明确认语义不能分散在 UI、operation 和 worker 中。
 - 制作规划确认曾在 `bible_review` 副作用中直接提交视觉风格任务：后端虽持有报价，UI 未清楚展示 credits，且 Task 未绑定 Agent Wait。免费结果确认与收费媒体授权必须保持两个显式边沿。
 - 视觉风格媒体 plan 曾为了得到精确图片 Prompt 而在 approval preflight 同步调用 LLM 并创建候选记录；虽然图片报价准确，却让 plan 成为第二个长任务执行器和领域 writer。现由普通文本 Task 先持久化方案，图片 plan 只读该 Task 的成功结果。

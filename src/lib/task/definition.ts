@@ -24,8 +24,9 @@ export type ImageTaskHandlerKey =
   | 'continuity_experiment_image'
 
 export type VideoTaskHandlerKey = 'video_panel' | 'video_group' | 'final_video_render' | 'chapter_render'
-export type MusicTaskHandlerKey = 'music_generate' | 'music_score' | 'soundscape_plan' | 'soundscape_generate'
+export type MusicTaskHandlerKey = 'music_generate' | 'music_score_generate' | 'soundscape_plan' | 'soundscape_generate'
 export type TextTaskHandlerKey =
+  | 'music_score_plan'
   | 'edit_bible_generate'
   | 'edit_style_preview_options_generate'
   | 'edit_script_generate'
@@ -89,7 +90,8 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.IMAGE_LOCATION]: definition('image', 'image_location', 'image', 3, 'none', 'none'),
   [TASK_TYPE.CONTINUITY_EXPERIMENT_IMAGE]: definition('image', 'continuity_experiment_image', 'image', 3, 'none', 'none'),
   [TASK_TYPE.MUSIC_GENERATE]: definition('music', 'music_generate', 'music', 3, 'none', 'none'),
-  [TASK_TYPE.MUSIC_SCORE_PLAN]: definition('music', 'music_score', 'music', 3, 'music_score', 'music_score'),
+  [TASK_TYPE.MUSIC_SCORE_PLAN]: definition('text', 'music_score_plan', 'text', 3, 'music_score', 'music_score'),
+  [TASK_TYPE.MUSIC_SCORE_GENERATE]: definition('music', 'music_score_generate', 'music', 3, 'music_score', 'music_score'),
   [TASK_TYPE.SOUNDSCAPE_PLAN]: definition('music', 'soundscape_plan', 'text', 3, 'soundscape', 'soundscape'),
   [TASK_TYPE.SOUNDSCAPE_GENERATE]: definition('music', 'soundscape_generate', 'sound_effect', 3, 'soundscape', 'soundscape'),
   [TASK_TYPE.FINAL_VIDEO_RENDER]: definition('video', 'final_video_render', 'none', 1, 'final_video_render', 'final_video_render', 'final_video_render'),

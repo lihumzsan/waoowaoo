@@ -30,6 +30,7 @@ const TASK_INTENT_BY_TYPE: Record<TaskType, TaskIntent> = {
   [TASK_TYPE.CONTINUITY_EXPERIMENT_IMAGE]: 'generate',
   [TASK_TYPE.MUSIC_GENERATE]: 'generate',
   [TASK_TYPE.MUSIC_SCORE_PLAN]: 'generate',
+  [TASK_TYPE.MUSIC_SCORE_GENERATE]: 'generate',
   [TASK_TYPE.SOUNDSCAPE_PLAN]: 'generate',
   [TASK_TYPE.SOUNDSCAPE_GENERATE]: 'generate',
   [TASK_TYPE.FINAL_VIDEO_RENDER]: 'process',

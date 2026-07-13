@@ -101,6 +101,7 @@ describe('resource-impact', () => {
       TASK_TYPE.VIDEO_GROUP,
       TASK_TYPE.FINAL_VIDEO_RENDER,
       TASK_TYPE.MUSIC_SCORE_PLAN,
+      TASK_TYPE.MUSIC_SCORE_GENERATE,
     ]) {
       expect(kindsForTask({ taskType, targetType: 'ProjectVideoGroup' })).toEqual([
         WORKSPACE_RESOURCE_KIND.VIDEOS,

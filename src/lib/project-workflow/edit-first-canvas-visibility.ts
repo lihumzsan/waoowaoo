@@ -54,15 +54,13 @@ const EDIT_FIRST_STAGE_RANK = {
   videos_generating: 19,
   ready_to_render_chapters: 20,
   chapters_rendering: 21,
-  ready_to_generate_bgm_score: 22,
-  bgm_score_generating: 23,
+  ready_to_plan_audio_layers: 22,
+  audio_layers_planning: 23,
   ready_to_generate_audio_layers: 24,
-  soundscape_planning: 25,
-  ready_to_generate_soundscape: 26,
-  audio_layers_generating: 27,
-  ready_to_render_final: 28,
-  final_rendering: 29,
-  completed: 30,
+  audio_layers_generating: 25,
+  ready_to_render_final: 26,
+  final_rendering: 27,
+  completed: 28,
 } as const satisfies Record<OrderedEditFirstWorkflowStage, number>
 
 function stageRank(stage: EditFirstWorkflowStage): number {
@@ -104,6 +102,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
       'render_chapters',
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',
@@ -116,6 +115,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
       'render_chapters',
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',
@@ -127,6 +127,7 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
       'render_chapters',
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',
@@ -137,22 +138,25 @@ export function resolveEditFirstCanvasVisibility(
     || canRunAnyOperation(operations, [
       'generate_episode_videos',
       'render_chapters',
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',
       'render_final_video',
     ])
 
-  const bgmScore = stageAtLeast(workflow.stage, 'ready_to_generate_audio_layers')
+  const bgmScore = stageAtLeast(workflow.stage, 'ready_to_plan_audio_layers')
     || canRunAnyOperation(operations, [
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',
       'render_final_video',
     ])
 
-  const soundscape = stageAtLeast(workflow.stage, 'ready_to_generate_audio_layers')
+  const soundscape = stageAtLeast(workflow.stage, 'ready_to_plan_audio_layers')
     || canRunAnyOperation(operations, [
+      'plan_episode_bgm_score',
       'generate_episode_bgm_score',
       'plan_episode_soundscape',
       'generate_episode_soundscape',

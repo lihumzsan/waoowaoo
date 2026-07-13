@@ -70,6 +70,7 @@ export const TASK_TYPE = {
   CONTINUITY_EXPERIMENT_IMAGE: 'continuity_experiment_image',
   MUSIC_GENERATE: 'music_generate',
   MUSIC_SCORE_PLAN: 'music_score_plan',
+  MUSIC_SCORE_GENERATE: 'music_score_generate',
   SOUNDSCAPE_PLAN: 'soundscape_plan',
   SOUNDSCAPE_GENERATE: 'soundscape_generate',
   FINAL_VIDEO_RENDER: 'final_video_render',
