@@ -1411,7 +1411,9 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
       const shotFailed = Boolean(panel.imageErrorMessage || panel.videoErrorMessage)
       const shotPresentation = shotFailed
         ? workspaceCanvasFailedResourcePresentation()
-        : workspaceCanvasSucceededResourcePresentation()
+        : previewImageUrl
+          ? workspaceCanvasSucceededResourcePresentation()
+          : workspaceCanvasPendingResourcePresentation()
       nodes.push(createMediaNode({
         id: nodeId,
         position: layoutPosition(savedLayouts, nodeId, gridPosition({
