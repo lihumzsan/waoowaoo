@@ -116,12 +116,8 @@ const SELECTABLE_TOOL_DESCRIPTION_COPY: Record<string, { zh: string; en: string 
     en: 'When asset review did not pass, rework the current required asset images according to the user\'s notes. The system decides which assets to rework based on the current review scope. Do not tell the user the tasks were resubmitted until this tool actually returns successfully.',
   },
   generate_edit_shot_execution_plan: {
-    zh: '生成镜头执行计划，它统一包含镜头语言、空间 blocking、轴线、光线，以及人物和物体的位置。',
-    en: 'Generate the shot execution plan, which covers cinematography, spatial blocking, the axis, lighting, and character and object positions in one place.',
-  },
-  generate_edit_script_storyboard: {
-    zh: '根据核心剪辑计划和镜头执行计划，生成正式的分镜面板。',
-    en: 'Generate the formal storyboard panels from the core edit plan and the shot execution plan.',
+    zh: '生成镜头执行计划；系统会在同一成功事务中自动构建对应的正式分镜面板。计划统一包含镜头语言、空间 blocking、轴线、光线，以及人物和物体的位置。',
+    en: 'Generate the shot execution plan and automatically materialize its formal storyboard panels in the same successful transaction. The plan covers cinematography, spatial blocking, the axis, lighting, and character and object positions.',
   },
   generate_edit_script_storyboard_images: {
     zh: '为已经生成、但还缺图片的分镜面板批量生成分镜图片。它只生成分镜图片，不要用 generate_episode_videos 来代替。',
@@ -260,10 +256,6 @@ const EDIT_FIRST_OPERATION_TITLE_COPY = {
   generate_edit_shot_execution_plan: {
     zh: '生成镜头执行计划',
     en: 'Generate shot execution plan',
-  },
-  generate_edit_script_storyboard: {
-    zh: '生成分镜面板',
-    en: 'Generate storyboard panels',
   },
   generate_edit_script_storyboard_images: {
     zh: '生成分镜图片',

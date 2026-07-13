@@ -14,7 +14,6 @@ import {
   submitProjectEditShotExecutionPlanTask,
 } from '@/lib/edit-script/task-submission'
 import { assertChapterReplanHasNoRunningVideoGroups } from '@/lib/edit-script/replan-guard'
-import { submitEditScriptStoryboardPanels } from '@/lib/edit-script/storyboard-consistency/service'
 import type { EditScriptPayload } from '@/lib/edit-script/types'
 import { editScriptAssetRequirementIdSchema } from '@/lib/edit-script/types'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -167,13 +166,6 @@ const generateEditShotExecutionPlanInputSchema = z
   })
   .passthrough()
 
-const generateEditScriptStoryboardInputSchema = z
-  .object({
-    ...scopedInputFields,
-    editScriptId: z.string().trim().min(1).optional(),
-  })
-  .passthrough()
-
 type GenerateEditStylePreviewsInput = z.infer<typeof generateEditStylePreviewsInputSchema>
 type GenerateEditStylePreviewImagesInput = z.infer<typeof generateEditStylePreviewImagesInputSchema>
 type ConfirmEditStylePreviewInput = z.infer<typeof confirmEditStylePreviewInputSchema>
@@ -185,7 +177,6 @@ type PlanChaptersInput = z.infer<typeof planChaptersInputSchema>
 type GenerateEditScriptAssetsInput = z.infer<typeof generateEditScriptAssetsInputSchema>
 type ReviseEditScriptAssetsInput = z.infer<typeof reviseEditScriptAssetsInputSchema>
 type GenerateEditShotExecutionPlanInput = z.infer<typeof generateEditShotExecutionPlanInputSchema>
-type GenerateEditScriptStoryboardInput = z.infer<typeof generateEditScriptStoryboardInputSchema>
 
 async function submitPlannedEditStylePreviewTasks(
   ctx: ProjectAgentOperationContext,
@@ -725,18 +716,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
     editShotExecutionPlanTaskSubmitOutputSchema,
     editShotExecutionPlanBatchTaskSubmitOutputSchema,
   ])
-  const editScriptStoryboardTaskSubmitOutputSchema = refineTaskSubmitOperationOutputSchema(
-    taskSubmitOperationOutputSchemaBase
-      .extend({
-        episodeId: z.string().min(1),
-        editScriptId: z.string().min(1),
-        taskType: z.literal(TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN),
-        targetType: z.literal('ProjectEditScript'),
-        targetId: z.string().min(1),
-      })
-      .passthrough(),
-  )
-
   return {
     generate_edit_style_previews: defineOperation({
       id: 'generate_edit_style_previews',
@@ -1297,57 +1276,6 @@ export function createEditScriptOperations(): ProjectAgentOperationRegistryDraft
         })
 
         return editShotExecutionPlanOperationOutputSchema.parse(result)
-      },
-    }),
-    generate_edit_script_storyboard: defineOperation({
-      id: 'generate_edit_script_storyboard',
-      summary:
-        'Generate storyboard panels from the ready core edit plan, shot execution plan, required assets, spatial profiles, and Style Bible.',
-      intent: 'act',
-      prerequisites: { episodeId: 'required' },
-      effects: EFFECTS_BULK_WRITE,
-      assistantWriteAuthority: { kind: 'transactional_task_submission' },
-      confirmation: {
-        kind: 'none',
-        required: false,
-      },
-      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
-      inputSchema: generateEditScriptStoryboardInputSchema,
-      outputSchema: editScriptStoryboardTaskSubmitOutputSchema,
-      execute: async (ctx, input: GenerateEditScriptStoryboardInput) => {
-        const episodeId = resolveEpisodeId(input, ctx.context.episodeId)
-        const result = await submitEditScriptStoryboardPanels({
-          projectId: ctx.projectId,
-          userId: ctx.userId,
-          episodeId,
-          chapterId: input.chapterId,
-          locale: resolveLocale(ctx.context.locale),
-          ...(input.editScriptId ? { editScriptId: input.editScriptId } : {}),
-          requestId: ctx.request.headers.get('x-request-id'),
-          request: ctx.request,
-          source: ctx.source,
-        })
-
-        writeOperationDataPart<TaskSubmittedPartData>(ctx.writer, 'data-task-submitted', {
-          operationId: 'generate_edit_script_storyboard',
-          taskId: result.taskId,
-          status: result.status,
-          runId: result.runId || null,
-          deduped: result.deduped,
-          projectId: ctx.projectId,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-          targetType: 'ProjectEditScript',
-          targetId: result.editScriptId,
-        })
-
-        return {
-          ...result,
-          episodeId,
-          taskType: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-          targetType: 'ProjectEditScript' as const,
-          targetId: result.editScriptId,
-        }
       },
     }),
   }

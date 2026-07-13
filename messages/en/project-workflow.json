@@ -70,8 +70,6 @@
     "assets_generating": "Generating Assets",
     "assets_ready_for_review": "Awaiting Asset Confirmation",
     "ready_to_generate_shot_execution_plan": "Ready To Generate Shot Execution Plan",
-    "ready_to_generate_storyboard": "Ready To Generate Storyboard Structure",
-    "storyboard_generating": "Generating Storyboard Structure",
     "ready_to_generate_storyboard_images": "Ready To Generate Storyboard Images",
     "storyboard_images_generating": "Generating Storyboard Images",
     "ready_to_generate_videos": "Ready To Generate Video Segments",

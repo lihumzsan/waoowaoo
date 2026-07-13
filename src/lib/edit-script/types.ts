@@ -580,9 +580,3 @@ export const generateEditAssetsRequestSchema = z.object({
   editScriptId: z.string().trim().min(1).optional(),
   requirementId: editScriptAssetRequirementIdSchema.optional(),
 })
-
-export const generateEditStoryboardRequestSchema = z.object({
-  episodeId: z.string().trim().min(1),
-  chapterId: z.string().trim().min(1).optional(),
-  editScriptId: z.string().trim().min(1).optional(),
-})

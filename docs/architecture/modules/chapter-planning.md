@@ -16,6 +16,7 @@
 - **CP-04 — 资产 identity 由服务端解析。** 模型只从已确认 asset menu 的动态名称枚举输出 `locationName`、`characterName` 与 `speakerName`，并用本次响应内的短 `shotRef` 组织分段；模型输入和输出都不携带数据库 UUID。服务端唯一 resolver 以精确名称映射 ProjectLocation/ProjectCharacter UUID、校验对白归属，再把短 shotRef 一次性重写为系统 shot identity。未知名称、重复名称、未知引用或覆盖/顺序不完整必须原地失败，禁止模糊匹配、ID 回显或兼容旧 UUID 协议。subScene、performance、keyObjects 等描述无权创建新资产 identity。`performance` 字段必须存在，但允许规范化为空字符串，不能因缺少表演描述阻断整章计划。
 - **CP-04A — UUID 是关联权威，名称只属于 View。** 持久化计划、资产 requirement、摄影执行计划、Storyboard、视频分组和 Soundscape 的业务关联只使用服务端生成或解析的 canonical identity。持久 JSON 中已有的名称字段不是关联或显示权威；服务端对外 View 必须按当前 UUID 重新投影人物/场景名称，因此重命名不得改变关联。消费者找不到 UUID 时必须显式失败，禁止退回历史名称 join、数组位置或直接显示 UUID。
 - **CP-05 — 成功写入受 Task owner 约束。** EditScript 正式资源与 provenance 在同一 owner-fenced 成功事务提交；失败 attempt 不得写最终章节事实或计划。
+- **CP-06 — 分镜面板是镜头执行计划的确定性投影。** 镜头执行计划模型只生成 `shots + generationSegmentExecutions`；服务端必须用核心镜头、ready 资产、Style Bible 与该执行计划确定性构造 Storyboard、Panel、图片 Prompt 和视频 Prompt。`ProjectEditShotExecutionPlan.status=ready`、Storyboard 与全部 Panel 必须在同一事务提交，任一物化失败都不得暴露 ready 计划。禁止独立 Assistant Tool、route、TaskType、worker 或 Workflow 阶段再次“生成分镜面板”；Task 重试只能重放同一镜头计划 provider checkpoint 后重试确定性物化。收费分镜图片仍由独立 `billable_media` 计划、报价和批准入口提交，不得把自动面板投影解释成媒体授权。
 
 ## 权威入口
 
@@ -23,6 +24,7 @@
 - 模型输出契约：`src/lib/edit-chapter/schemas.ts` 与 `src/lib/ai-prompts/templates/edit-script/structure/`。
 - 模型引用解析与系统 shot identity：`src/lib/edit-chapter/schemas.ts`、`src/lib/edit-script/model-references.ts` 与 `src/lib/edit-script/service.ts`。
 - 当前名称 View：`src/lib/edit-script/core-view.ts`；摄影执行计划的 raw 名称/短引用到 canonical identity 解析：`src/lib/edit-script/normalize.ts`。
+- 镜头计划与分镜面板的原子物化：`src/lib/edit-script/service.ts`、`src/lib/edit-script/storyboard-consistency/service.ts`、`model-generation.ts` 与 `persistence.ts`；唯一 Task handler 是 `src/lib/workers/handlers/edit-script-structured-generate.ts`。
 - 持久事实投影：`src/lib/edit-chapter/persistent-facts.ts`。
 - 核心计划生成与成功事务：`src/lib/edit-script/service.ts`。
 - Task lifecycle、provider invocation 与重试仍分别服从 `async-task-lifecycle` 和 `provider-gateway`。
@@ -31,12 +33,14 @@
 
 - `tests/unit/edit-chapter/persistent-facts.test.ts` 是 Logic Specification：验证 ledger event facts 的确定性顺序、去重和 exact projection。
 - `tests/golden-journey/self-tests/model-provider.test.ts` 验证协议替身输出可被生产 strict schema 消费；它不代替真实模型行为。
-- `tests/golden-journey/journeys/mainline-complete.spec.ts` 从空项目生成至少两个章节，验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见、逐章镜头计划稳定投影，以及最终资产审核没有章节选择语义。
+- `tests/golden-journey/journeys/mainline-complete.spec.ts` 从空项目生成至少两个章节，验证核心剪辑与规划资产共享一个 Wait 并真实并行、核心剪辑 structured preview 可见、逐章镜头计划稳定投影、每个 ready 计划自动拥有一个 Storyboard 与多个 Panel、没有独立面板 Task，以及最终资产审核没有章节选择语义。
 - `scripts/guards/chapter-plan-fact-authority-guard.mjs` 只反证模型事实字段、第二 provenance constructor 或旧自然语言 validator 被重新接回；它不证明用户行为。
 
 ## 历史回归
 
-- 多章节主 Journey 首次运行时，`generate_edit_script_storyboard(chapterId=null)` 每次都按 `updatedAt desc` 选择同一份 edit script；Task dedupe 成功返回第一章旧结果，Workflow 因 `storyboardCount < chapterCount` 永远停在同一阶段。旧单章节 Journey 无法反证。当前默认 scope 只选择最早缺少 storyboard 的章节；全部已存在时只允许选择 prompt 不完整或有错误的章节重试，否则显式失败，禁止再次提交已完成第一章。
+- `994b738981` 已把原先第二次 LLM 生成的分镜最终 Prompt 改成纯函数 `generateStoryboardPanelPrompts`，但旧 `generate_edit_script_storyboard` Operation、route、TaskType、worker 与 Workflow `nextAction` 没有删除。真实项目因此在镜头计划完成后再次唤醒 Assistant，提交一个约 220ms、只有 `__handler_result__` 而没有 provider checkpoint 的“生成分镜面板”Task；现有 Logic 还把这个两阶段残留固定成期望。当前防线把确定性 Panel 物化并入镜头计划 Task 的 owner-fenced 成功事务，删除全部旧入口与阶段；主 Journey 同时断言逐章 Storyboard/Panel 已存在且历史独立 operation 从未创建。
+
+- 多章节主 Journey 首次运行时，独立的 `generate_edit_script_storyboard(chapterId=null)` 每次都按 `updatedAt desc` 选择同一份 edit script；Task dedupe 成功返回第一章旧结果，Workflow 因 `storyboardCount < chapterCount` 永远停在同一阶段。旧单章节 Journey 无法反证。该独立 scope、Operation 与 Task 已删除；现在每个章节的镜头计划 Task 只在自己的 owner-fenced 成功事务物化同章 Storyboard，主 Journey 逐章断言 plan、Storyboard 与 Panel 数量。
 
 - `d14404a5c8` 引入模型事实字段与字符相似度 validator；中文改写与跨 event 合并在真实任务中触发误拒。
 - `0ad107b247` 让错误显式进入 `PLAN_VALIDATION_FAILED`，但显式失败没有消除 ledger 与模型的双 writer。

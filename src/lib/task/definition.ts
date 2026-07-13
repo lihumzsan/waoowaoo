@@ -25,7 +25,6 @@ export type ImageTaskHandlerKey =
 export type VideoTaskHandlerKey = 'video_panel' | 'video_group' | 'final_video_render' | 'chapter_render'
 export type MusicTaskHandlerKey = 'music_generate' | 'music_score' | 'soundscape_plan' | 'soundscape_generate'
 export type TextTaskHandlerKey =
-  | 'edit_script_camera_plan'
   | 'edit_bible_generate'
   | 'edit_style_preview_options_generate'
   | 'edit_script_generate'
@@ -85,7 +84,6 @@ export const TASK_DEFINITIONS = {
   [TASK_TYPE.IMAGE_PANEL]: definition('image', 'image_panel', 'image', 3, 'none', 'none'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_OPTIONS_GENERATE]: definition('text', 'edit_style_preview_options_generate', 'text', 3, 'none', 'none'),
   [TASK_TYPE.EDIT_STYLE_PREVIEW_IMAGE]: definition('image', 'edit_style_preview', 'image', 3, 'edit_style_preview', 'edit_style_preview'),
-  [TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN]: definition('text', 'edit_script_camera_plan', 'text', 3, 'none', 'none'),
   [TASK_TYPE.IMAGE_CHARACTER]: definition('image', 'image_character', 'image', 3, 'none', 'none'),
   [TASK_TYPE.IMAGE_LOCATION]: definition('image', 'image_location', 'image', 3, 'none', 'none'),
   [TASK_TYPE.MUSIC_GENERATE]: definition('music', 'music_generate', 'music', 3, 'none', 'none'),

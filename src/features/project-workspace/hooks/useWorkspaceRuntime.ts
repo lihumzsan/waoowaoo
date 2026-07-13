@@ -35,7 +35,6 @@ interface UseWorkspaceRuntimeParams {
   handlePlanSoundscape: () => Promise<void>
   handleRenderFinalVideo: () => Promise<void>
   handleGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
-  handleGenerateEditStoryboard: (editScriptId: string) => Promise<void>
   handleUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,
@@ -66,7 +65,6 @@ export function useWorkspaceRuntime({
   handlePlanSoundscape,
   handleRenderFinalVideo,
   handleGenerateEditShotExecutionPlan,
-  handleGenerateEditStoryboard,
   handleUpdateVideoPrompt,
   handleUpdateEditAssetRequirementDescription,
   handleUpdatePanelVideoModel,
@@ -96,7 +94,6 @@ export function useWorkspaceRuntime({
     onPlanSoundscape: handlePlanSoundscape,
     onRenderFinalVideo: handleRenderFinalVideo,
     onGenerateEditShotExecutionPlan: handleGenerateEditShotExecutionPlan,
-    onGenerateEditStoryboard: handleGenerateEditStoryboard,
     onUpdateVideoPrompt: handleUpdateVideoPrompt,
     onUpdateEditAssetRequirementDescription: handleUpdateEditAssetRequirementDescription,
     onUpdatePanelVideoModel: handleUpdatePanelVideoModel,
@@ -106,7 +103,6 @@ export function useWorkspaceRuntime({
     handlePlanSoundscape,
     handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
-    handleGenerateEditStoryboard,
     handleUpdateConfig,
     handleUpdateEpisode,
     handleGenerateEditBible,

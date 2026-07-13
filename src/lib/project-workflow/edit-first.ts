@@ -34,8 +34,6 @@ export type EditFirstWorkflowStage =
   | 'assets_generating'
   | 'assets_ready_for_review'
   | 'ready_to_generate_shot_execution_plan'
-  | 'ready_to_generate_storyboard'
-  | 'storyboard_generating'
   | 'ready_to_generate_storyboard_images'
   | 'storyboard_images_generating'
   | 'ready_to_generate_videos'
@@ -119,8 +117,6 @@ export interface EditFirstWorkflowSnapshot {
   activeShotExecutionPlanTaskCount: number
   shotExecutionPlanStatus: string | null
   storyboardCount: number
-  storyboardPanelPromptFailed: boolean
-  activeStoryboardPanelTaskCount: number
   panelCount: number
   storyboardPanelImagePromptMissingCount: number
   storyboardPanelVideoPromptMissingCount: number
@@ -220,7 +216,6 @@ export function resolveEditFirstWorkflowChoice(
 type StoryboardSpatialCandidate = {
   readonly id: string
   readonly editScriptId: string | null
-  readonly lastError: string | null
 }
 
 type WorkflowVideoGroupCandidate = {
@@ -311,7 +306,6 @@ function videoGroupHasOutput(group: WorkflowVideoGroupCandidate | null): boolean
 
 interface StoryboardPlanStageSummary {
   readonly matchingStoryboardIds: string[]
-  readonly storyboardPanelPromptFailed: boolean
 }
 
 function resolveStoryboardPlanStageSummary(input: {
@@ -321,19 +315,14 @@ function resolveStoryboardPlanStageSummary(input: {
   if (input.editScriptIds.size === 0) {
     return {
       matchingStoryboardIds: [],
-      storyboardPanelPromptFailed: false,
     }
   }
   const matching = input.storyboards.flatMap((storyboard) => {
     if (!storyboard.editScriptId || !input.editScriptIds.has(storyboard.editScriptId)) return []
-    return [{
-      id: storyboard.id,
-      hasError: hasText(storyboard.lastError),
-    }]
+    return [{ id: storyboard.id }]
   })
   return {
     matchingStoryboardIds: matching.map((storyboard) => storyboard.id),
-    storyboardPanelPromptFailed: matching.some((storyboard) => storyboard.hasError),
   }
 }
 
@@ -566,37 +555,19 @@ export function resolveEditFirstWorkflowStateFromSnapshot(
     })
   }
 
-  if (snapshot.activeStoryboardPanelTaskCount > 0) {
-    return state({
-      stage: 'storyboard_generating',
-      blocking: { kind: 'processing', reason: 'storyboard panels are still generating' },
-    })
-  }
-
-  if (snapshot.storyboardPanelPromptFailed) {
-    const nextAction = workflowAction('generate_edit_script_storyboard', 'Regenerate storyboard panels')
-    return state({
-      stage: 'failed',
-      blocking: { kind: 'failed', reason: 'storyboard panel prompt generation failed' },
-      nextAction,
-      allowedOperationIds: [nextAction.operationId],
-    })
-  }
-
   if (snapshot.panelCount === 0 || snapshot.storyboardCount < snapshot.chapterCount) {
     return state({
-      stage: 'ready_to_generate_storyboard',
-      nextAction: workflowAction('generate_edit_script_storyboard', 'Generate storyboard panels'),
+      stage: 'failed',
+      blocking: { kind: 'failed', reason: 'ready shot execution plan is missing its automatic storyboard projection' },
+      allowedOperationIds: [],
     })
   }
 
   if (snapshot.storyboardPanelImagePromptMissingCount > 0 || snapshot.storyboardPanelVideoPromptMissingCount > 0) {
-    const nextAction = workflowAction('generate_edit_script_storyboard', 'Regenerate storyboard panels')
     return state({
       stage: 'failed',
       blocking: { kind: 'failed', reason: 'storyboard panel prompt facts are incomplete' },
-      nextAction,
-      allowedOperationIds: [nextAction.operationId],
+      allowedOperationIds: [],
     })
   }
 
@@ -1222,18 +1193,6 @@ export async function resolveEditFirstWorkflowState(params: {
   const editScriptStoryboardIds = new Set(storyboardPlanStageSummary.matchingStoryboardIds)
   const editScriptPanels = panels.filter((panel) => editScriptStoryboardIds.has(panel.storyboardId))
   const storyboardImageReadiness = resolveStoryboardImageReadiness(editScriptPanels)
-  const activeStoryboardPanelTaskCount = editScriptIds.size > 0
-    ? await prisma.task.count({
-      where: {
-        projectId: params.projectId,
-        episodeId: params.episodeId,
-        targetType: 'ProjectEditScript',
-        targetId: { in: [...editScriptIds] },
-        type: TASK_TYPE.EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN,
-        status: { in: ['queued', 'processing'] },
-      },
-    })
-    : 0
   const activeStylePreviewTaskCount = editBible
     ? await prisma.task.count({
       where: {
@@ -1308,8 +1267,6 @@ export async function resolveEditFirstWorkflowState(params: {
     activeShotExecutionPlanTaskCount,
     shotExecutionPlanStatus,
     storyboardCount: editScriptStoryboardIds.size,
-    storyboardPanelPromptFailed: storyboardPlanStageSummary.storyboardPanelPromptFailed,
-    activeStoryboardPanelTaskCount,
     panelCount: storyboardImageReadiness.panelCount,
     storyboardPanelImagePromptMissingCount: editScriptPanels.filter((panel) => !hasText(panel.imagePrompt)).length,
     storyboardPanelVideoPromptMissingCount: editScriptPanels.filter((panel) => !hasText(panel.videoPrompt)).length,

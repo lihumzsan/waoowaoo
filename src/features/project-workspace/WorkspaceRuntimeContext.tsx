@@ -37,7 +37,6 @@ export interface WorkspaceRuntimeValue {
   onPlanSoundscape: () => Promise<void>
   onRenderFinalVideo: () => Promise<void>
   onGenerateEditShotExecutionPlan: (editScriptId: string) => Promise<void>
-  onGenerateEditStoryboard: (editScriptId: string) => Promise<void>
   onUpdateVideoPrompt: (
     storyboardId: string,
     panelIndex: number,

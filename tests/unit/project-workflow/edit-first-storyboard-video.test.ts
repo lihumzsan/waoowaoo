@@ -7,7 +7,7 @@ import {
 } from './edit-first-workflow.fixture'
 
 describe('edit-first workflow state', () => {
-  it('generates storyboard panels after shot execution plan is ready', () => {
+  it('fails closed when a ready shot plan is missing its automatic storyboard projection', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -20,9 +20,10 @@ describe('edit-first workflow state', () => {
       panelCount: 0,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_storyboard')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
-    expect(state.allowedOperationIds).toEqual(['generate_edit_script_storyboard'])
+    expect(state.stage).toBe('failed')
+    expect(state.blocking.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
+    expect(state.nextAction).toBeNull()
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('does not advance to video generation when some chapters have no storyboard', () => {
@@ -46,9 +47,10 @@ describe('edit-first workflow state', () => {
       completedVideoSegmentCount: 2,
     }))
 
-    expect(state.stage).toBe('ready_to_generate_storyboard')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
-    expect(state.allowedOperationIds).toEqual(['generate_edit_script_storyboard'])
+    expect(state.stage).toBe('failed')
+    expect(state.blocking.reason).toBe('ready shot execution plan is missing its automatic storyboard projection')
+    expect(state.nextAction).toBeNull()
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('fails explicitly when generated storyboard panels are missing deterministic prompts', () => {
@@ -70,10 +72,11 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('failed')
     expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
+    expect(state.nextAction).toBeNull()
+    expect(state.allowedOperationIds).toEqual([])
   })
 
-  it('generates storyboard images after image prompts are composed', () => {
+  it('offers billable storyboard images immediately after automatic panels are materialized', () => {
     const state = resolveEditFirstWorkflowStateFromSnapshot(snapshot({
       hasBible: true,
       bibleStatus: 'confirmed',
@@ -114,7 +117,8 @@ describe('edit-first workflow state', () => {
 
     expect(state.stage).toBe('failed')
     expect(state.blocking.reason).toBe('storyboard panel prompt facts are incomplete')
-    expect(state.nextAction?.operationId).toBe('generate_edit_script_storyboard')
+    expect(state.nextAction).toBeNull()
+    expect(state.allowedOperationIds).toEqual([])
   })
 
   it('allows video generation only after image and video prompts are ready', () => {

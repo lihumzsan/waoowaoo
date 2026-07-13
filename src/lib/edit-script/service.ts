@@ -59,7 +59,11 @@ import {
   EDIT_STYLE_PREVIEW_MAX_COUNT,
   editScriptStyleBibleSchema,
 } from './types'
-import { buildAssetSnapshots } from './storyboard-consistency/source-snapshot'
+import {
+  assembleStoryboardConsistencySourceSnapshot,
+  buildAssetSnapshots,
+} from './storyboard-consistency/source-snapshot'
+import { materializeEditScriptStoryboard } from './storyboard-consistency/service'
 import { EDIT_GENERATION_SEGMENT_MAX_DURATION_SEC } from './generation-segment-constraints'
 import { buildShotExecutionPlanPromptStructure } from './shot-execution-plan-prompt'
 import { projectEditScriptCoreNames } from './core-view'
@@ -1764,7 +1768,7 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     }),
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
-      select: { id: true },
+      select: { id: true, videoRatio: true },
     }),
     getProjectModelConfig(input.projectId, input.userId),
   ])
@@ -1861,22 +1865,36 @@ export async function generateProjectEditShotExecutionPlan(input: GenerateEditSh
     shots: parsed.shots,
     generationSegmentExecutions: parsed.generationSegmentExecutions,
   }
-  const projected = await prisma.projectEditShotExecutionPlan.updateMany({
-    where: {
-      chapterId,
-      editScriptId: editScript.id,
-      generationTaskId: input.taskId,
-      status: 'generating',
-    },
-    data: {
-      executionPlanJson: executionPlanJson as unknown as Prisma.InputJsonValue,
-      status: 'ready',
-      generationTaskId: input.taskId,
-    },
+  const sourceSnapshot = assembleStoryboardConsistencySourceSnapshot({
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    videoRatio: project.videoRatio,
+    editScript: mappedEditScript,
+    shotExecutionPlan: executionPlanJson,
+    assets,
   })
-  if (projected.count !== 1) {
-    throw new Error(`EDIT_SHOT_EXECUTION_PLAN_TASK_OWNERSHIP_STALE:${editScript.id}:${input.taskId}`)
-  }
+  await prisma.$transaction(async (tx) => {
+    const projected = await tx.projectEditShotExecutionPlan.updateMany({
+      where: {
+        chapterId,
+        editScriptId: editScript.id,
+        generationTaskId: input.taskId,
+        status: 'generating',
+      },
+      data: {
+        executionPlanJson: executionPlanJson as unknown as Prisma.InputJsonValue,
+        status: 'ready',
+        generationTaskId: input.taskId,
+      },
+    })
+    if (projected.count !== 1) {
+      throw new Error(`EDIT_SHOT_EXECUTION_PLAN_TASK_OWNERSHIP_STALE:${editScript.id}:${input.taskId}`)
+    }
+    await materializeEditScriptStoryboard({
+      client: tx,
+      sourceSnapshot,
+    })
+  })
   const saved = await prisma.projectEditShotExecutionPlan.findUniqueOrThrow({ where: { chapterId } })
   return await mapPersistedEditShotExecutionPlan(saved)
 }

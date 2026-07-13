@@ -326,6 +326,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       chapters,
       editScripts,
       shotExecutionPlans,
+      storyboards,
+      panels,
       assetRequirements,
       finalOutputs,
     ] = await Promise.all([
@@ -350,6 +352,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_chapters WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_scripts WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_storyboards WHERE episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT p.* FROM project_panels p JOIN project_storyboards s ON s.id = p.storyboardId WHERE s.episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_episode_final_outputs WHERE episodeId = ?', [scope.episodeId]),
     ])
@@ -382,6 +386,8 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         chapters: sortOracleRows(chapters, 'chapterIndex', 'id'),
         editScripts: sortOracleRows(editScripts, 'createdAt', 'id'),
         shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
+        storyboards: sortOracleRows(storyboards, 'createdAt', 'id'),
+        panels: sortOracleRows(panels, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
         finalOutputs: sortOracleRows(finalOutputs, 'createdAt', 'id'),
       },

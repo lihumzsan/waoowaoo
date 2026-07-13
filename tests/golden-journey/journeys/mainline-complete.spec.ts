@@ -362,6 +362,12 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(oracle.domain.chapters.length, 'main Journey must exercise multiple chapters').toBeGreaterThanOrEqual(2)
       expect(oracle.domain.editScripts.length, 'each chapter must have a durable edit script').toBe(oracle.domain.chapters.length)
       expect(oracle.domain.shotExecutionPlans.length, 'each chapter must have a durable shot plan').toBe(oracle.domain.chapters.length)
+      expect(oracle.domain.storyboards.length, 'each ready shot plan must atomically materialize one storyboard').toBe(oracle.domain.chapters.length)
+      expect(oracle.domain.panels.length, 'automatic storyboard projection must materialize multiple panels').toBeGreaterThan(oracle.domain.chapters.length)
+      expect(
+        oracle.tasks.some((task) => task.operationId === 'generate_edit_script_storyboard'),
+        'automatic storyboard projection must not create the removed standalone panel Task',
+      ).toBe(false)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
       expect(oracle.domain.finalOutputs.length, 'final output must be durable').toBe(1)
       expect(observedAudioHiddenBeforeVideos, 'main Journey must observe hidden audio nodes before video generation').toBe(true)

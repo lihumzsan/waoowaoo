@@ -9,7 +9,7 @@ function followUp(overrides: Partial<ProjectAgentWaitFollowUp> = {}): ProjectAge
     waitId: 'wait-1',
     followUpKey: 'follow-up-key-1',
     followUpMode: 'resume_agent',
-    operationId: 'generate_edit_script_storyboard',
+    operationId: 'generate_edit_shot_execution_plan',
     taskIds: ['task-1'],
     failedTaskIds: [],
     canceledTaskIds: [],
@@ -37,7 +37,7 @@ describe('project agent task follow-up input', () => {
     const content = readContent(buildTaskFollowUpInputItem(followUp()))
 
     expect(content).toContain('[task_update]')
-    expect(content).toContain('operation=generate_edit_script_storyboard')
+    expect(content).toContain('operation=generate_edit_shot_execution_plan')
     expect(content).toContain('status=completed')
     expect(content).toContain('total=1 succeeded=1 failed=0')
     expect(content).not.toContain('本轮在任何工具调用之前')

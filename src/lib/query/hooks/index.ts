@@ -168,7 +168,6 @@ export {
     useCreateProjectEditBible,
     useCreateProjectEditScript,
     useConfirmProjectEditBible,
-    useGenerateProjectEditScriptStoryboard,
     useReviseProjectEditBible,
     useUpdateProjectEditScriptAssetRequirementDescription,
 } from './useProjectEditScript'

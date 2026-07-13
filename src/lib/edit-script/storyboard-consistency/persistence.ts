@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import type {
   StoryboardConsistencyAssetSnapshot,
   StoryboardConsistencySourceSnapshot,
@@ -64,10 +63,11 @@ function locationForShot(snapshot: StoryboardConsistencySourceSnapshot, location
 }
 
 async function buildCharacterRefsById(
+  client: Prisma.TransactionClient,
   assets: readonly StoryboardConsistencyAssetSnapshot[],
 ): Promise<Map<string, Omit<StoryboardCharacterRef, 'visibility' | 'role' | 'performance' | 'position' | 'screenPosition' | 'facing' | 'eyeline' | 'referenceImageUrl'>>> {
   const characterAssets = assets.filter((asset) => asset.kind === 'character')
-  const characters = await prisma.projectCharacter.findMany({
+  const characters = await client.projectCharacter.findMany({
     where: {
       id: { in: characterAssets.map((asset) => asset.targetId) },
     },
@@ -129,10 +129,11 @@ function dialogueLinesForShot(shot: StoryboardConsistencySourceSnapshot['shots']
 }
 
 export async function upsertEditScriptStoryboard(input: {
+  readonly client: Prisma.TransactionClient
   readonly snapshot: StoryboardConsistencySourceSnapshot
 }) {
   const editScriptId = input.snapshot.editScript.id
-  const existing = await prisma.projectStoryboard.findUnique({
+  const existing = await input.client.projectStoryboard.findUnique({
     where: { editScriptId },
     include: {
       panels: { orderBy: { panelIndex: 'asc' } },
@@ -141,12 +142,13 @@ export async function upsertEditScriptStoryboard(input: {
   const storyboardTextJson = buildStoryboardTextJson(input.snapshot)
 
   if (existing) {
-    return await prisma.projectStoryboard.update({
+    return await input.client.projectStoryboard.update({
       where: { id: existing.id },
       data: {
         chapter: { connect: { id: input.snapshot.chapterId } },
         panelCount: input.snapshot.shots.length,
         storyboardTextJson,
+        lastError: null,
       },
       include: {
         panels: { orderBy: { panelIndex: 'asc' } },
@@ -154,7 +156,7 @@ export async function upsertEditScriptStoryboard(input: {
     })
   }
 
-  return await prisma.projectStoryboard.create({
+  return await input.client.projectStoryboard.create({
     data: {
       episode: { connect: { id: input.snapshot.episodeId } },
       chapter: { connect: { id: input.snapshot.chapterId } },
@@ -236,17 +238,18 @@ function buildPanelDrafts(input: {
 }
 
 export async function upsertStoryboardPanelsFromPrompts(input: {
+  readonly client: Prisma.TransactionClient
   readonly storyboardId: string
   readonly snapshot: StoryboardConsistencySourceSnapshot
   readonly generatedPanels: readonly StoryboardPanelPromptDraft[]
 }): Promise<readonly { readonly id: string; readonly panelIndex: number }[]> {
-  const characterRefsById = await buildCharacterRefsById(input.snapshot.assets)
+  const characterRefsById = await buildCharacterRefsById(input.client, input.snapshot.assets)
   const panelDrafts = buildPanelDrafts({
     snapshot: input.snapshot,
     generatedPanels: input.generatedPanels,
     characterRefsById,
   })
-  const storyboard = await prisma.projectStoryboard.update({
+  const storyboard = await input.client.projectStoryboard.update({
     where: { id: input.storyboardId },
     data: {
       panelCount: panelDrafts.length,
@@ -284,14 +287,14 @@ export async function upsertStoryboardPanelsFromPrompts(input: {
       renderFactsJson: draft.renderFactsJson,
     } satisfies Prisma.ProjectPanelUpdateInput
     if (existingPanel) {
-      const panel = await prisma.projectPanel.update({
+      const panel = await input.client.projectPanel.update({
         where: { id: existingPanel.id },
         data,
       })
       panelTargets.push({ id: panel.id, panelIndex: panel.panelIndex })
       continue
     }
-    const panel = await prisma.projectPanel.create({
+    const panel = await input.client.projectPanel.create({
       data: {
         storyboardId: input.storyboardId,
         panelIndex: draft.panelIndex,

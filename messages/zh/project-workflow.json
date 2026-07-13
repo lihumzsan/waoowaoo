@@ -70,8 +70,6 @@
     "assets_generating": "资产生成中",
     "assets_ready_for_review": "等待确认资产",
     "ready_to_generate_shot_execution_plan": "等待生成镜头执行计划",
-    "ready_to_generate_storyboard": "等待生成分镜结构",
-    "storyboard_generating": "分镜结构生成中",
     "ready_to_generate_storyboard_images": "等待生成分镜图",
     "storyboard_images_generating": "分镜图生成中",
     "ready_to_generate_videos": "等待生成视频片段",

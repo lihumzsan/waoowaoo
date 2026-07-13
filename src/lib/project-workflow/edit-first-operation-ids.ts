@@ -15,7 +15,6 @@ export const EDIT_FIRST_WORKFLOW_OPERATION_IDS = [
   'approve_edit_script_assets',
   'revise_edit_script_assets',
   'generate_edit_shot_execution_plan',
-  'generate_edit_script_storyboard',
   'generate_edit_script_storyboard_images',
   'generate_episode_videos',
   'render_chapters',

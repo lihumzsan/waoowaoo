@@ -21,7 +21,6 @@ import {
   useCreateProjectEditBible,
   useCreateProjectEditScript,
   useCreateProjectEditShotExecutionPlan,
-  useGenerateProjectEditScriptStoryboard,
   useUpdateProjectEditScriptAssetRequirementDescription,
 } from '@/lib/query/hooks'
 import type { WorkspaceEditBibleGenerationInput } from '../WorkspaceRuntimeContext'
@@ -110,7 +109,6 @@ export function useProjectWorkspaceController({
   const createEditBible = useCreateProjectEditBible(projectId)
   const createEditScript = useCreateProjectEditScript(projectId)
   const createEditShotExecutionPlan = useCreateProjectEditShotExecutionPlan(projectId)
-  const generateEditStoryboard = useGenerateProjectEditScriptStoryboard(projectId)
   const updateEditAssetRequirementDescription = useUpdateProjectEditScriptAssetRequirementDescription(projectId)
   const handleGenerateEditBible = async (input: WorkspaceEditBibleGenerationInput) => {
     if (!episodeId) throw new Error('Episode ID is required')
@@ -134,11 +132,6 @@ export function useProjectWorkspaceController({
       episodeId,
       editScriptId,
     })
-    await onRefresh({ mode: 'full' })
-  }
-  const handleGenerateEditStoryboard = async (editScriptId: string) => {
-    if (!episodeId) throw new Error('Episode ID is required')
-    await generateEditStoryboard.mutateAsync({ episodeId, editScriptId })
     await onRefresh({ mode: 'full' })
   }
   const handleUpdateEditAssetRequirementDescription = async (editScriptId: string, requirementId: string, description: string) => {
@@ -167,7 +160,6 @@ export function useProjectWorkspaceController({
     handlePlanSoundscape: videoActions.handlePlanSoundscape,
     handleRenderFinalVideo: videoActions.handleRenderFinalVideo,
     handleGenerateEditShotExecutionPlan,
-    handleGenerateEditStoryboard,
     handleUpdateVideoPrompt: videoActions.handleUpdateVideoPrompt,
     handleUpdateEditAssetRequirementDescription,
     handleUpdatePanelVideoModel: videoActions.handleUpdatePanelVideoModel,

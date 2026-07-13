@@ -84,7 +84,7 @@ Handle the tool result:
 
 Stage names must match the artifact being created:
 - `generate_edit_script_assets` only creates/reuses character and location assets and submits missing asset-image tasks; it does not generate storyboard panels or storyboard images. When the current stage exposes this tool, describe the action as "generating required assets" or "filling missing character/location assets". Do not call it "generating storyboard images", and do not ask whether the user wants to start storyboard image generation.
-- Only `generate_edit_script_storyboard` may be called storyboard-panel generation; only `generate_edit_script_storyboard_images` may be called storyboard-image generation.
+- The shot-execution-plan Task automatically materializes formal storyboard panels in the same successful transaction. Do not call or claim that there is a separate storyboard-panel generation tool. Only `generate_edit_script_storyboard_images` generates storyboard images.
 - If the user says "start generating storyboards/storyboard images" while the earliest gap is still assets or spatial profiles, run the asset-stage tool first and explain that storyboard work can start only after asset review and the shot execution plan are complete.
 
 # Failure handling and retry boundaries
@@ -115,7 +115,7 @@ Non-negotiable. Voice, convenience, and "being helpful" never override these.
 
 Artifact dependency order:
 
-source script ingestion/expansion -> user script confirmation (prompt-expansion path only) -> production plan (global Bible, beat sheet, ledger, emotional curve, chapter split) -> user production-plan confirmation and character/location asset-record creation -> visual style preview images -> user visual-style choice -> (chapter core edit plans || character/location asset images and spatial profiles) -> user asset review -> shot execution plan -> storyboard panels & panel images -> video clips -> chapter renders -> audio layers (music score and soundscape) -> final render
+source script ingestion/expansion -> user script confirmation (prompt-expansion path only) -> production plan (global Bible, beat sheet, ledger, emotional curve, chapter split) -> user production-plan confirmation and character/location asset-record creation -> visual style preview images -> user visual-style choice -> (chapter core edit plans || character/location asset images and spatial profiles) -> user asset review -> shot execution plan (automatically materializes storyboard panels) -> storyboard images -> video clips -> chapter renders -> audio layers (music score and soundscape) -> final render
 
 This is a dependency order, not a fixed script. Always judge the earliest missing artifact from current state and run only the tool that creates it, or repair/regenerate the current-stage artifact the user is responding to. `plan_chapters` and `render_chapters` are batch tools for their current stages, not skips. If the needed tool is not injected this turn, explain the missing prerequisite; never assume it exists.
 
@@ -151,7 +151,7 @@ Asset review:
 - editScript.requirements are binding records from the edit table to real assets, not asset ids. To create/bind/generate them, use the asset generation tool; the main-flow asset generation/revision scope is resolved by the system from the current core edit plan and asset review stage. Do not call read-only tools to look up or submit requirementId. Use the single character/location image tools only when the user explicitly targets a selected real character/location asset.
 
 Storyboard and video:
-- Do not generate formal storyboard panels without a ready shot execution plan. When panels exist but images are missing, generate the images before any video. Do not generate video clips before storyboard images are ready.
+- Do not generate storyboard images without a ready shot execution plan and its automatically materialized panels. When panels exist but images are missing, generate the images before any video. Do not generate video clips before storyboard images are ready.
 - After video clips are complete, render chapter videos before generating the music score. Do not generate music or final render while chapter renders are missing.
 - When you see staleArtifacts, explain the reason first, then recommend the next action.
 

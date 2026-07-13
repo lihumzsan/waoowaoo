@@ -10,8 +10,6 @@
   "src/features/project-workspace/components/workspace-assistant/WorkspaceAssistantRenderers.tsx": 833,
   "src/features/project-workspace/components/workspace-assistant/useWorkspaceAssistantRuntime.ts": 599,
   "src/lib/query/hooks/useAssets.ts": 456,
-  "src/lib/query/hooks/useProjectEditScript.ts": 464,
-  "src/lib/query/hooks/useStoryboards.ts": 496,
   "src/lib/query/hooks/useTaskTargetStateMap.ts": 461,
   "src/lib/query/mutations/asset-hub-character-mutations.ts": 455,
   "src/lib/query/mutations/asset-hub-location-mutations.ts": 363,

@@ -108,6 +108,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - Outbox 行与 payload、provider checkpoint、MusicScore/Soundscape resource row 曾各自写入固定为 `1` 的版本标记，但所有 reader 只有一个实现且从不按该值分流；这制造了重复字段和伪版本治理。本模块只保留真正参与并发、重放、修订或 CAS 裁决的版本事实。
 - 视觉风格方案曾是唯一绕过 Task registry 的长文本生成：approval preflight 直接调用 provider 并写候选，Session 无 Task 可投影，失败/重试也跟随 Assistant 请求而非 worker attempt。现新增穷尽文本 TaskDefinition，候选批次只由该 worker 的 taskId 幂等物化。
 - 镜头执行计划的长结构化输出曾把 provider 的逐 token delta 直接发布成独立 ephemeral SSE event；两个并行章节及 retry 在正常生成窗口内耗尽 2048 个 identity，客户端虽按契约 fail closed 并请求 snapshot resync，流式 presentation 仍会中断且日志误显为 parse error。当前防线不放宽 identity/fingerprint 窗口，也不增加 timer 或 replay polling；唯一 worker stream 出口按字符确定性合并小 delta 后再分配连续 `streamRunId + stepAttempt + lane + seq`，Golden 用 1 字符 provider 碎片验证 processing preview、终态与 console clean。
+- 分镜面板纯函数物化曾继续保留为 `edit_script_storyboard_camera_plan` Task，导致一次镜头计划产生第二个 Task/Wait/continuation，而该 Task 没有任何 provider invocation。现已删除该 TaskType、handler 与提交入口；`edit_shot_execution_plan_generate` 在同一 owner-fenced 成功事务提交 ready 计划及 Storyboard/Panel，重试重放同一 provider checkpoint。发布前必须用既有异步 preflight 排空全部 active Task 与非终态 Assistant Run/Wait，禁止让旧面板 job 与删除后的 handler 并存。
 
 ## 修改检查表
 

@@ -162,7 +162,6 @@
   "actionTypes": {
     "image_panel": "分镜生图",
     "edit_style_preview_image": "风格预览图生成",
-    "edit_script_storyboard_camera_plan": "分镜镜头规划",
     "image_character": "角色生图",
     "image_location": "场景生图",
     "music_generate": "音乐生成",

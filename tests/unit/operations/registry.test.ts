@@ -99,10 +99,7 @@ describe('project agent operation registry', () => {
       tool: true,
       api: true,
     })
-    expect(registry.generate_edit_script_storyboard?.channels).toEqual({
-      tool: true,
-      api: true,
-    })
+    expect('generate_edit_script_storyboard' in registry).toBe(false)
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.channels).toEqual({
         tool: true,
@@ -122,7 +119,6 @@ describe('project agent operation registry', () => {
     expect(registry.generate_edit_script?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_script_assets?.groupPath).toEqual(['edit-script'])
     expect(registry.generate_edit_shot_execution_plan?.groupPath).toEqual(['edit-script'])
-    expect(registry.generate_edit_script_storyboard?.groupPath).toEqual(['edit-script'])
     for (const operationId of EDIT_FIRST_CHOICE_OPERATION_IDS) {
       expect(registry[operationId]?.groupPath).toEqual(['edit-script'])
     }

@@ -17,8 +17,6 @@ export const GOLDEN_EDIT_FIRST_WORKFLOW_STAGES = [
   'assets_generating',
   'assets_ready_for_review',
   'ready_to_generate_shot_execution_plan',
-  'ready_to_generate_storyboard',
-  'storyboard_generating',
   'ready_to_generate_storyboard_images',
   'storyboard_images_generating',
   'ready_to_generate_videos',

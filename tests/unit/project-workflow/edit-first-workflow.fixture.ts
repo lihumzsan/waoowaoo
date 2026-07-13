@@ -34,8 +34,6 @@ function snapshot(overrides: Partial<EditFirstWorkflowSnapshot> = {}): EditFirst
     activeShotExecutionPlanTaskCount: 0,
     shotExecutionPlanStatus: null,
     storyboardCount: 0,
-    storyboardPanelPromptFailed: false,
-    activeStoryboardPanelTaskCount: 0,
     panelCount: 0,
     storyboardPanelImagePromptMissingCount: 0,
     storyboardPanelVideoPromptMissingCount: 0,

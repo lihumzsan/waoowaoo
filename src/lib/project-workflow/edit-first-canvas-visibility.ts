@@ -5,6 +5,8 @@ import type {
 } from './edit-first'
 
 export interface EditFirstCanvasVisibility {
+  readonly editSourceScript: boolean
+  readonly editBible: boolean
   readonly editScript: boolean
   readonly editAssetGroup: boolean
   readonly editShotExecutionPlan: boolean
@@ -46,23 +48,21 @@ const EDIT_FIRST_STAGE_RANK = {
   assets_generating: 13,
   assets_ready_for_review: 14,
   ready_to_generate_shot_execution_plan: 15,
-  ready_to_generate_storyboard: 16,
-  storyboard_generating: 17,
-  ready_to_generate_storyboard_images: 18,
-  storyboard_images_generating: 19,
-  ready_to_generate_videos: 20,
-  videos_generating: 21,
-  ready_to_render_chapters: 22,
-  chapters_rendering: 23,
-  ready_to_generate_bgm_score: 24,
-  bgm_score_generating: 25,
-  ready_to_generate_audio_layers: 26,
-  soundscape_planning: 27,
-  ready_to_generate_soundscape: 28,
-  audio_layers_generating: 29,
-  ready_to_render_final: 30,
-  final_rendering: 31,
-  completed: 32,
+  ready_to_generate_storyboard_images: 16,
+  storyboard_images_generating: 17,
+  ready_to_generate_videos: 18,
+  videos_generating: 19,
+  ready_to_render_chapters: 20,
+  chapters_rendering: 21,
+  ready_to_generate_bgm_score: 22,
+  bgm_score_generating: 23,
+  ready_to_generate_audio_layers: 24,
+  soundscape_planning: 25,
+  ready_to_generate_soundscape: 26,
+  audio_layers_generating: 27,
+  ready_to_render_final: 28,
+  final_rendering: 29,
+  completed: 30,
 } as const satisfies Record<OrderedEditFirstWorkflowStage, number>
 
 function stageRank(stage: EditFirstWorkflowStage): number {
@@ -91,6 +91,8 @@ export function resolveEditFirstCanvasVisibility(
   workflow: EditFirstWorkflowState,
 ): EditFirstCanvasVisibility {
   const operations = operationSet(workflow)
+  const editSourceScript = stageAtLeast(workflow.stage, 'script_generating')
+  const editBible = stageAtLeast(workflow.stage, 'ready_to_generate_bible')
   const editScript = stageAtLeast(workflow.stage, 'ready_to_generate_edit_script')
     || canRunAnyOperation(operations, ['generate_edit_script'])
 
@@ -99,7 +101,6 @@ export function resolveEditFirstCanvasVisibility(
       'generate_edit_script_assets',
       'revise_edit_script_assets',
       'generate_edit_shot_execution_plan',
-      'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
       'render_chapters',
@@ -112,7 +113,6 @@ export function resolveEditFirstCanvasVisibility(
   const editShotExecutionPlan = stageAtLeast(workflow.stage, 'ready_to_generate_shot_execution_plan')
     || canRunAnyOperation(operations, [
       'generate_edit_shot_execution_plan',
-      'generate_edit_script_storyboard',
       'generate_edit_script_storyboard_images',
       'generate_episode_videos',
       'render_chapters',
@@ -166,6 +166,8 @@ export function resolveEditFirstCanvasVisibility(
     ])
 
   return {
+    editSourceScript,
+    editBible,
     editScript,
     editAssetGroup,
     editShotExecutionPlan,

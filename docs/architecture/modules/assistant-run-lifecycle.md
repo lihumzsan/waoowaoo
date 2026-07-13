@@ -137,6 +137,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - 视觉风格方案 LLM 曾在媒体 approval preflight 中同步执行并写入 pending 候选，导致同类长文本生成只有它没有 Task/Wait，专用 presentation 又隐藏通用运行卡；图片 processing Golden 仍能通过，因此未覆盖审批前空窗。当前防线把方案生成迁入文本 Task，图片 plan 只读已完成候选，并要求真实 Journey 在批准前观察通用运行卡与持久文本 Task。
 - 资产审核卡曾把每章重复 requirement 渲染为可选 option，但 Decision parser 从不消费该选择，且真实资产是本集共享的一组 canonical 角色/场景；这制造了没有业务语义的临时选中态。现 `asset_review` Offer 只有“资产满意，继续”与整组修改意见，章节 requirement 仅用于 ready 校验和 fingerprint。
 - `BUG-AR-003` 证明“非领域写”等于“Run 保持 running”是错误推导；更深层地，fence 不得把业务 outcome 当作执行资格。Choice 成功提交其 suspension receipt 后合法进入 `awaiting_choice`；receipt 在 invocation 内被通用验证，Run status 不再参与提交后的重新裁决。
+- 镜头执行计划完成后曾把确定性的 Storyboard/Panel 数据投影暴露成新的 Workflow `nextAction`，迫使 continuation 再调用一次 AI Tool；该 Tool 实际没有 provider invocation，却产生第二个 Wait、Task 与“AI 生成分镜面板”文案。根因是旧 LLM 分镜阶段改为纯函数后只替换实现、没有删除执行入口。现由镜头计划 Task 在同一成功事务自动物化 Panel，Assistant 下一次只处理需要用户媒体授权的分镜图片 Approval；`nextAction` 不再代表系统内部投影。
 
 ## 修改检查表
 

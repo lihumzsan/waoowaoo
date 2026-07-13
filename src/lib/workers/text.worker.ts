@@ -15,14 +15,10 @@ import { handleEditStylePreviewOptionsTask } from './handlers/edit-style-preview
 import {
   handleEditShotExecutionPlanGenerateTask,
 } from './handlers/edit-script-structured-generate'
-import {
-  handleEditScriptStoryboardCameraPlanTask,
-} from './handlers/edit-script-storyboard-consistency-task-handler'
 
 type TextTaskHandler = (job: Job<TaskJobData>) => Promise<Record<string, unknown> | void>
 
 const TEXT_TASK_HANDLERS = {
-  edit_script_camera_plan: handleEditScriptStoryboardCameraPlanTask,
   edit_bible_generate: handleEditBibleGenerateTask,
   edit_style_preview_options_generate: handleEditStylePreviewOptionsTask,
   edit_script_generate: handleEditScriptGenerateTask,

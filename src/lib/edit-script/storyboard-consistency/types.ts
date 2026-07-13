@@ -17,11 +17,6 @@ import type {
 } from '@/lib/edit-script/types'
 import type { StoryboardStillPromptFacts } from '@/lib/edit-script/prompt-builders'
 
-export interface StoryboardConsistencyModelConfigSnapshot {
-  readonly analysisModel: string
-  readonly storyboardModel: string
-}
-
 export interface StoryboardConsistencyAssetSnapshot {
   readonly requirementId: string
   readonly kind: EditAssetRequirement['kind']

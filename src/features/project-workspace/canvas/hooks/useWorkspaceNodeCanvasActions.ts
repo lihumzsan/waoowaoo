@@ -71,10 +71,5 @@ export function useWorkspaceNodeCanvasActions() {
       return
     }
 
-    if (action.type === 'generate_edit_storyboard') {
-      await runtime.onGenerateEditStoryboard(action.editScriptId)
-      return
-    }
-
   }, [runtime])
 }

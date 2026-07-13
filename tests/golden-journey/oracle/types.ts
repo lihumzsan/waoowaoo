@@ -32,6 +32,8 @@ export interface GoldenOracleSnapshot {
     readonly chapters: readonly Record<string, unknown>[]
     readonly editScripts: readonly Record<string, unknown>[]
     readonly shotExecutionPlans: readonly Record<string, unknown>[]
+    readonly storyboards: readonly Record<string, unknown>[]
+    readonly panels: readonly Record<string, unknown>[]
     readonly assetRequirements: readonly Record<string, unknown>[]
     readonly finalOutputs: readonly Record<string, unknown>[]
   }

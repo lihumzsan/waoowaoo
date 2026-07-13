@@ -103,7 +103,6 @@ export type WorkspaceCanvasNodeAction =
   | { readonly type: 'generate_edit_assets'; readonly editScriptId: string }
   | { readonly type: 'generate_edit_asset'; readonly editScriptId: string; readonly requirementId: string }
   | { readonly type: 'regenerate_edit_asset_image'; readonly assetId: string; readonly kind: 'character' | 'location' }
-  | { readonly type: 'generate_edit_storyboard'; readonly editScriptId: string }
 
 export type WorkspaceCanvasNodeActionHandler = (
   action: WorkspaceCanvasNodeAction,

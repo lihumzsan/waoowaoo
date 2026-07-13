@@ -65,7 +65,6 @@ export const TASK_TYPE = {
   IMAGE_PANEL: 'image_panel',
   EDIT_STYLE_PREVIEW_OPTIONS_GENERATE: 'edit_style_preview_options_generate',
   EDIT_STYLE_PREVIEW_IMAGE: 'edit_style_preview_image',
-  EDIT_SCRIPT_STORYBOARD_CAMERA_PLAN: 'edit_script_storyboard_camera_plan',
   IMAGE_CHARACTER: 'image_character',
   IMAGE_LOCATION: 'image_location',
   MUSIC_GENERATE: 'music_generate',

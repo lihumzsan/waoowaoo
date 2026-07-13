@@ -1,7 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { ApiError } from '@/lib/api-errors'
-import { getProjectModelConfig } from '@/lib/config-service'
 import { decodeImageUrlsFromDb } from '@/lib/contracts/image-urls-contract'
 import { editScriptStyleBibleSchema } from '@/lib/edit-script/types'
 import { parsePersistedEditShotExecutionPlan } from '@/lib/edit-script/normalize'
@@ -12,7 +11,6 @@ import type { EditAssetRequirement, EditScriptPayload } from '@/lib/edit-script/
 import type {
   StoryboardConsistencyAssetSnapshot,
   StoryboardConsistencyGenerationSegment,
-  StoryboardConsistencyModelConfigSnapshot,
   StoryboardConsistencySourceSnapshot,
 } from './types'
 
@@ -55,19 +53,6 @@ function parseStyleBible(value: Prisma.JsonValue | null) {
 
 export function buildEditStoryboardGenerationSegmentId(editScriptId: string, segmentIndex: number): string {
   return `${editScriptId}:generationSegment:${segmentIndex + 1}`
-}
-
-function requireModelConfig(config: Awaited<ReturnType<typeof getProjectModelConfig>>): StoryboardConsistencyModelConfigSnapshot {
-  if (!config.analysisModel || !config.storyboardModel) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_STORYBOARD_MODELS_NOT_CONFIGURED',
-      message: 'Analysis model and storyboard image model are required before generating storyboard panels',
-    })
-  }
-  return {
-    analysisModel: config.analysisModel,
-    storyboardModel: config.storyboardModel,
-  }
 }
 
 interface ResolvedAssetImage {
@@ -187,6 +172,54 @@ export async function buildAssetSnapshots(requirements: readonly EditAssetRequir
   })
 }
 
+export function assembleStoryboardConsistencySourceSnapshot(input: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly videoRatio: string
+  readonly editScript: EditScriptPayload
+  readonly shotExecutionPlan: StoryboardConsistencySourceSnapshot['shotExecutionPlan']
+  readonly assets: readonly StoryboardConsistencyAssetSnapshot[]
+}): StoryboardConsistencySourceSnapshot {
+  const editScriptId = input.editScript.id
+  const chapterId = input.editScript.chapterId
+  const styleBible = input.editScript.styleBible
+  if (!editScriptId || !chapterId) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
+  if (!styleBible) {
+    throw new ApiError('INVALID_PARAMS', {
+      code: 'EDIT_SCRIPT_STYLE_BIBLE_REQUIRED',
+      message: 'Style Bible is required before storyboard projection',
+    })
+  }
+  const generationSegments: StoryboardConsistencyGenerationSegment[] = input.editScript.generationSegments.map(
+    (segment, segmentIndex) => ({
+      ...segment,
+      segmentIndex,
+      sourceGenerationSegmentId: buildEditStoryboardGenerationSegmentId(editScriptId, segmentIndex),
+    }),
+  )
+  return {
+    projectId: input.projectId,
+    episodeId: input.episodeId,
+    chapterId,
+    project: { videoRatio: input.videoRatio },
+    editScript: {
+      id: editScriptId,
+      chapterId,
+      durationSec: input.editScript.durationSec,
+      shotCount: input.editScript.shotCount,
+      sourceDocumentId: input.editScript.sourceDocumentId,
+      sourceStart: input.editScript.sourceStart,
+      sourceEnd: input.editScript.sourceEnd,
+      sourceText: input.editScript.sourceText,
+    },
+    styleBible,
+    shots: input.editScript.shots,
+    shotExecutionPlan: input.shotExecutionPlan,
+    generationSegments,
+    assets: input.assets,
+  }
+}
+
 function mapEditScriptPayload(input: {
   readonly script: {
     readonly id: string
@@ -256,9 +289,8 @@ export async function buildStoryboardConsistencySource(input: {
   readonly userId: string
 }): Promise<{
   readonly sourceSnapshot: StoryboardConsistencySourceSnapshot
-  readonly modelConfigSnapshot: StoryboardConsistencyModelConfigSnapshot
 }> {
-  const [project, script, editBible, executionPlan, config, knownAssets] = await Promise.all([
+  const [project, script, editBible, executionPlan, knownAssets] = await Promise.all([
     prisma.project.findFirst({
       where: { id: input.projectId, userId: input.userId },
       select: {
@@ -299,7 +331,6 @@ export async function buildStoryboardConsistencySource(input: {
         editScriptId: input.editScriptId,
       },
     }),
-    getProjectModelConfig(input.projectId, input.userId),
     loadKnownPlanAssets(input.projectId),
   ])
   if (!project || !script || !editBible) throw new ApiError('NOT_FOUND')
@@ -317,51 +348,23 @@ export async function buildStoryboardConsistencySource(input: {
   }
   const editScript = mapEditScriptPayload({ script, styleBibleJson: editBible.styleBibleJson, knownAssets })
   if (!editScript.id) throw new Error('EDIT_SCRIPT_ID_REQUIRED')
-  const styleBible = editScript.styleBible
-  if (!styleBible) {
-    throw new ApiError('INVALID_PARAMS', {
-      code: 'EDIT_SCRIPT_STYLE_BIBLE_REQUIRED',
-      message: 'Style Bible is required before storyboard generation',
-    })
-  }
   const parsedExecutionPlan = parsePersistedEditShotExecutionPlan(
     executionPlan.executionPlanJson,
     editScript.shots,
     editScript.generationSegments,
   )
   const assets = await buildAssetSnapshots(editScript.requirements)
-  const generationSegments: StoryboardConsistencyGenerationSegment[] = editScript.generationSegments.map((segment, segmentIndex) => ({
-    ...segment,
-    segmentIndex,
-    sourceGenerationSegmentId: buildEditStoryboardGenerationSegmentId(editScript.id ?? input.editScriptId, segmentIndex),
-  }))
   return {
-    modelConfigSnapshot: requireModelConfig(config),
-    sourceSnapshot: {
+    sourceSnapshot: assembleStoryboardConsistencySourceSnapshot({
       projectId: input.projectId,
       episodeId: input.episodeId,
-      chapterId: script.chapterId,
-      project: {
-        videoRatio: project.videoRatio,
-      },
-      editScript: {
-        id: editScript.id,
-        chapterId: editScript.chapterId,
-        durationSec: editScript.durationSec,
-        shotCount: editScript.shotCount,
-        sourceDocumentId: editScript.sourceDocumentId,
-        sourceStart: editScript.sourceStart,
-        sourceEnd: editScript.sourceEnd,
-        sourceText: editScript.sourceText,
-      },
-      styleBible,
-      shots: editScript.shots,
+      videoRatio: project.videoRatio,
+      editScript,
       shotExecutionPlan: {
         shots: parsedExecutionPlan.shots,
         generationSegmentExecutions: parsedExecutionPlan.generationSegmentExecutions,
       },
-      generationSegments,
       assets,
-    },
+    }),
   }
 }
