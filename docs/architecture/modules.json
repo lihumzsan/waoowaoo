@@ -23,6 +23,7 @@
         "src/lib/operations/channel-policy.ts",
         "src/lib/operations/invocation.ts",
         "src/lib/query/operation-plan-client.ts",
+        "src/lib/query/media-operation-plan-input.ts",
         "messages/en/errors.json",
         "messages/zh/errors.json",
         "src/features/project-workspace/canvas/WorkspaceCanvasBillingContext.tsx",

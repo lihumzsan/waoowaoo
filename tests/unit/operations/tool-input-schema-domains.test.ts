@@ -111,6 +111,32 @@ describe('tool input schema compatibility', () => {
     }
   })
 
+  it('requires explicit chapter scope for chapter-owned video segment plans', () => {
+    const registry = createProjectAgentOperationRegistry()
+    const scopedInputs = {
+      generate_video_group: {
+        gridMode: '2x2',
+        shotIds: ['shot-1'],
+      },
+      generate_episode_video_groups: {
+        gridMode: '2x2',
+      },
+      generate_asset_reference_video: {
+        segmentIndex: 0,
+        referenceImageUrls: ['/m/reference-1'],
+      },
+      generate_episode_asset_reference_videos: {
+        referenceImageUrls: ['/m/reference-1'],
+      },
+    } as const
+
+    for (const [operationId, input] of Object.entries(scopedInputs)) {
+      const operation = registry[operationId]
+      expect(operation.inputSchema.safeParse(input).success, operationId).toBe(false)
+      expect(operation.inputSchema.safeParse({ ...input, chapterId: 'chapter-1' }).success, operationId).toBe(true)
+    }
+  })
+
   it('makes every model-facing tool property required for OpenAI strict schema conversion', () => {
     const registry = createProjectAgentOperationRegistry()
     const violations: Array<{ id: string; path: string }> = []

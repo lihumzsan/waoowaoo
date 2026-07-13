@@ -86,12 +86,14 @@ export type WorkspaceCanvasNodeAction =
     }
   | {
       readonly type: 'generate_video_group'
+      readonly chapterId: string
       readonly gridMode: '2x2' | '3x3'
       readonly shotIds: readonly string[]
       readonly generationOptions?: Record<string, string | number | boolean>
     }
   | {
       readonly type: 'generate_asset_reference_video'
+      readonly chapterId: string
       readonly segmentIndex: number
       readonly referenceImageUrls: readonly string[]
       readonly generationOptions?: Record<string, string | number | boolean>
@@ -321,6 +323,7 @@ export interface WorkspaceCanvasStyleBibleDetails {
 
 export interface WorkspaceCanvasVideoPlanDetails {
   readonly editScriptId: string
+  readonly chapterId: string
   readonly segmentIndex: number
   readonly kind: 'group'
   readonly videoGroupId?: string | null

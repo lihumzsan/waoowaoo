@@ -42,7 +42,7 @@ const generatePanelVideoInputSchema = z
 const generateVideoGroupInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    chapterId: z.string().min(1).optional(),
+    chapterId: z.string().min(1),
     gridMode: z.enum(VIDEO_GRID_MODES),
     shotIds: z.array(z.string().trim().min(1)).min(1).max(9),
     generationOptions: z.record(z.string(), z.unknown()).optional(),
@@ -52,7 +52,7 @@ const generateVideoGroupInputSchema = z
 const generateEpisodeVideoGroupsInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    chapterId: z.string().min(1).optional(),
+    chapterId: z.string().min(1),
     gridMode: z.enum(VIDEO_GRID_MODES),
     generationOptions: z.record(z.string(), z.unknown()).optional(),
   })
@@ -69,7 +69,7 @@ const generateEpisodeVideosAutoInputSchema = z
 const generateAssetReferenceVideoInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    chapterId: z.string().min(1).optional(),
+    chapterId: z.string().min(1),
     segmentIndex: z.number().int().min(0).max(59),
     referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
     generationOptions: z.record(z.string(), z.unknown()).optional(),
@@ -79,7 +79,7 @@ const generateAssetReferenceVideoInputSchema = z
 const generateEpisodeAssetReferenceVideosInputSchema = z
   .object({
     episodeId: z.string().min(1).optional(),
-    chapterId: z.string().min(1).optional(),
+    chapterId: z.string().min(1),
     referenceImageUrls: z.array(z.string().trim().min(1)).min(1).max(8),
     generationOptions: z.record(z.string(), z.unknown()).optional(),
   })

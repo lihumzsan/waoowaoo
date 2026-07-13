@@ -328,6 +328,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       shotExecutionPlans,
       storyboards,
       panels,
+      videoGroups,
       assetRequirements,
       musicScores,
       soundscapes,
@@ -356,6 +357,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
       queryRows(connection, 'SELECT * FROM project_edit_shot_execution_plans WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_storyboards WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT p.* FROM project_panels p JOIN project_storyboards s ON s.id = p.storyboardId WHERE s.episodeId = ?', [scope.episodeId]),
+      queryRows(connection, 'SELECT * FROM project_video_groups WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_asset_requirements WHERE projectId = ? AND episodeId = ?', [scope.projectId, scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_music_scores WHERE episodeId = ?', [scope.episodeId]),
       queryRows(connection, 'SELECT * FROM project_edit_soundscapes WHERE episodeId = ?', [scope.episodeId]),
@@ -392,6 +394,7 @@ export async function readGoldenOracleSnapshot(scope: GoldenWorkspaceScope): Pro
         shotExecutionPlans: sortOracleRows(shotExecutionPlans, 'createdAt', 'id'),
         storyboards: sortOracleRows(storyboards, 'createdAt', 'id'),
         panels: sortOracleRows(panels, 'createdAt', 'id'),
+        videoGroups: sortOracleRows(videoGroups, 'createdAt', 'id'),
         assetRequirements: sortOracleRows(assetRequirements, 'createdAt', 'id'),
         musicScores: musicScores.map((item) => ({
           ...item,

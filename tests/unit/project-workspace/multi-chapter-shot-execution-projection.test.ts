@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildWorkspaceNodeCanvasProjection } from '@/features/project-workspace/canvas/projection/workspace-node-canvas-projection'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
-import type { ProjectEditScript } from '@/types/project'
+import type { ProjectEditScript, ProjectVideoGroup } from '@/types/project'
 
 /**
  * Logic Specification
@@ -25,6 +25,71 @@ function editScript(id: string, chapterId: string): ProjectEditScript {
     shots: [],
     generationSegments: [],
     requirements: [],
+  }
+}
+
+function editScriptWithVideoSegment(
+  id: string,
+  chapterId: string,
+  shotId: string,
+): ProjectEditScript {
+  return {
+    ...editScript(id, chapterId),
+    durationSec: 6,
+    shotCount: 1,
+    shots: [{
+      shotId,
+      shotNumber: 1,
+      shotPurpose: 'action',
+      durationSec: 6,
+      scene: {
+        locationId: `location-${chapterId}`,
+        name: `location-${chapterId}`,
+        subScene: 'main',
+      },
+      action: `action-${chapterId}`,
+      characters: [],
+      keyObjects: [],
+      dialogue: [],
+      sound: '',
+    }],
+    generationSegments: [{
+      shotIds: [shotId],
+      continuity: `continuity-${chapterId}`,
+    }],
+  }
+}
+
+function completedVideoGroup(
+  id: string,
+  chapterId: string,
+  shotId: string,
+): ProjectVideoGroup {
+  return {
+    id,
+    projectId: 'project-1',
+    episodeId: 'episode-1',
+    chapterId,
+    gridMode: '2x2',
+    shotIds: [shotId],
+    durationSec: 6,
+    prompt: `prompt-${chapterId}`,
+    status: 'completed',
+    taskId: `task-${id}`,
+    errorCode: null,
+    errorMessage: null,
+    referenceImageUrl: null,
+    videoUrl: `/m/${id}`,
+    videoMedia: {
+      id: `media-${id}`,
+      publicId: id,
+      url: `/m/${id}`,
+      mimeType: 'video/mp4',
+      sizeBytes: null,
+      width: null,
+      height: null,
+      durationMs: 6_000,
+    },
   }
 }
 
@@ -75,6 +140,73 @@ describe('multi-chapter shot execution Canvas projection', () => {
       expect.objectContaining({
         source: workspaceNodeId.editScript('episode-1', 'chapter-2'),
         target: workspaceNodeId.editShotExecutionPlan('edit-script-2'),
+      }),
+    ]))
+  })
+
+  it('projects every completed chapter video in the all-chapters scope', () => {
+    const scripts = [
+      editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1'),
+      editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2'),
+    ]
+    const videoGroups = [
+      completedVideoGroup('video-group-1', 'chapter-1', 'shot-1'),
+      completedVideoGroup('video-group-2', 'chapter-2', 'shot-2'),
+    ]
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      storyboards: [],
+      editFirstWorkflow: {
+        active: true,
+        stage: 'ready_to_render_final',
+        blocking: { kind: 'none', reason: null },
+        nextAction: null,
+        allowedOperationIds: ['render_final_video'],
+        operationGroup: null,
+      },
+      editScript: null,
+      editScripts: scripts,
+      editShotExecutionPlans: [],
+      videoGroups,
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+
+    const nodes = projection.nodes.filter((node) => node.data.kind === 'videoPlan')
+    expect(nodes.map((node) => node.id)).toEqual([
+      workspaceNodeId.videoPlan('edit-script-1', 1),
+      workspaceNodeId.videoPlan('edit-script-2', 1),
+    ])
+    expect(nodes.map((node) => node.data.videoPlanDetails?.outputUrl)).toEqual([
+      '/m/video-group-1',
+      '/m/video-group-2',
+    ])
+    expect(nodes.map((node) => node.data.videoPlanDetails?.chapterId)).toEqual([
+      'chapter-1',
+      'chapter-2',
+    ])
+    expect(nodes.map((node) => node.data.runtimeTargets)).toEqual([
+      [{ targetType: 'ProjectVideoGroup', targetId: 'video-group-1', types: ['video_group'] }],
+      [{ targetType: 'ProjectVideoGroup', targetId: 'video-group-2', types: ['video_group'] }],
+    ])
+    expect(nodes[0]?.position).not.toEqual(nodes[1]?.position)
+    expect(projection.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source: workspaceNodeId.editShotExecutionPlan('edit-script-1'),
+        target: workspaceNodeId.videoPlan('edit-script-1', 1),
+      }),
+      expect.objectContaining({
+        source: workspaceNodeId.editShotExecutionPlan('edit-script-2'),
+        target: workspaceNodeId.videoPlan('edit-script-2', 1),
+      }),
+      expect.objectContaining({
+        source: workspaceNodeId.videoPlan('edit-script-1', 1),
+        target: workspaceNodeId.finalTimeline('episode-1'),
+      }),
+      expect.objectContaining({
+        source: workspaceNodeId.videoPlan('edit-script-2', 1),
+        target: workspaceNodeId.finalTimeline('episode-1'),
       }),
     ]))
   })

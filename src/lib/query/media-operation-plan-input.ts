@@ -3,6 +3,7 @@ export type VideoGenerationOptions = Record<string, VideoGenerationOptionValue>
 
 export interface BatchVideoGenerationPlanParams {
   episodeId: string
+  chapterId?: string
   generationOptions?: VideoGenerationOptions
   mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
   gridMode?: '2x2' | '3x3'
@@ -16,6 +17,7 @@ export interface BatchVideoGenerationPlanRequest {
   input: {
     all: boolean
     episodeId: string
+    chapterId?: string
     generationOptions?: VideoGenerationOptions
     mode?: 'single' | 'grid' | 'auto' | 'asset-reference'
     gridMode?: '2x2' | '3x3'
@@ -48,6 +50,7 @@ export function buildBatchVideoGenerationPlanRequest(params: BatchVideoGeneratio
     all,
     episodeId: params.episodeId,
   }
+  if (params.chapterId) input.chapterId = params.chapterId
   if (params.mode === 'grid' || params.mode === 'auto' || params.mode === 'asset-reference') {
     input.mode = params.mode
   }

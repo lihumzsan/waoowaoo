@@ -93,6 +93,7 @@ export function resolveWorkspaceCanvasBillableActionRequest(params: {
       if (!params.episodeId) return null
       const request = buildBatchVideoGenerationPlanRequest({
         episodeId: params.episodeId,
+        chapterId: params.action.chapterId,
         generationOptions: params.action.generationOptions,
         mode: 'grid',
         gridMode: params.action.gridMode,
@@ -106,6 +107,7 @@ export function resolveWorkspaceCanvasBillableActionRequest(params: {
       if (!params.episodeId) return null
       const request = buildBatchVideoGenerationPlanRequest({
         episodeId: params.episodeId,
+        chapterId: params.action.chapterId,
         generationOptions: params.action.generationOptions,
         mode: 'asset-reference',
         segmentIndex: params.action.segmentIndex,

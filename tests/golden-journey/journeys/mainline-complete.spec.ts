@@ -369,6 +369,22 @@ async function assertAudioNodeVisibility(
   await expect(page.locator('article[data-node-id^="soundscape:"]')).toHaveCount(expectedCount, { timeout: 30_000 })
 }
 
+async function assertAllScopeVideoProjection(
+  page: import('@playwright/test').Page,
+  videoGroups: readonly Record<string, unknown>[],
+): Promise<void> {
+  expect(videoGroups.length, 'main Journey must persist at least one continuous video group').toBeGreaterThan(0)
+  expect(videoGroups.every((group) => (
+    group.status === 'completed'
+    && typeof group.videoUrl === 'string'
+    && group.videoUrl.length > 0
+    && typeof group.videoMediaId === 'string'
+    && group.videoMediaId.length > 0
+  )), 'every durable video group must have a completed media output').toBe(true)
+  await expect(page.locator('article[data-node-id^="video-plan:"]')).toHaveCount(videoGroups.length)
+  await expect(page.locator('article[data-node-id^="video-plan:"] video[src]')).toHaveCount(videoGroups.length)
+}
+
 async function submitObservedBoundary(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
@@ -539,6 +555,7 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
       expect(oracle.domain.shotExecutionPlans.length, 'each chapter must have a durable shot plan').toBe(oracle.domain.chapters.length)
       expect(oracle.domain.storyboards.length, 'each ready shot plan must atomically materialize one storyboard').toBe(oracle.domain.chapters.length)
       expect(oracle.domain.panels.length, 'automatic storyboard projection must materialize multiple panels').toBeGreaterThan(oracle.domain.chapters.length)
+      await assertAllScopeVideoProjection(page, oracle.domain.videoGroups)
       expect(
         oracle.tasks.some((task) => task.operationId === 'generate_edit_script_storyboard'),
         'automatic storyboard projection must not create the removed standalone panel Task',

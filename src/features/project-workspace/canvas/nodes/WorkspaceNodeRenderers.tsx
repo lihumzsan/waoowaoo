@@ -2070,6 +2070,7 @@ export function VideoPlanContent({
     : generationMode === 'asset-reference'
       ? {
         type: 'generate_asset_reference_video',
+        chapterId: details.chapterId,
         segmentIndex: details.segmentIndex,
         referenceImageUrls: assetReferenceImageUrls,
         generationOptions: videoPlanGenerationOptions(data),
@@ -2077,6 +2078,7 @@ export function VideoPlanContent({
       : details.kind === 'group'
         ? {
           type: 'generate_video_group',
+          chapterId: details.chapterId,
           gridMode: details.gridMode === '3x3' ? '3x3' : '2x2',
           shotIds: details.shotIds,
           generationOptions: videoPlanGenerationOptions(data),

@@ -684,8 +684,11 @@ function videoPlanDetails(input: {
       aspectRatio: null,
     }
   })
+  const chapterId = input.editScript.chapterId?.trim()
+  if (!chapterId) throw new Error(`VIDEO_PLAN_CHAPTER_SCOPE_REQUIRED:${input.editScript.id}`)
   return {
     editScriptId: input.editScript.id,
+    chapterId,
     segmentIndex: input.segmentIndex,
     kind: 'group',
     videoGroupId: input.videoGroup?.id ?? null,
@@ -1484,79 +1487,86 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
   }
   const storyboardStageBottomY = maxNodeBottomY(nodes, 'shot') ?? defaultStoryboardBottomY(visibleStoryboardPanelCount)
   const videoPlanStartY = nextDefaultStageY(storyboardStageBottomY)
+  const projectedVideoPlans = editFirstCanvasVisibility.videoPlan
+    ? projectedEditScripts.flatMap((script) => script.generationSegments.map((segment, segmentIndex) => ({
+        script,
+        segment,
+        segmentIndex,
+      })))
+    : []
 
-  if (editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
-    editScript.generationSegments.forEach((segment, index) => {
-      const nodeId = workspaceNodeId.videoPlan(editScript.id, index + 1)
-      const videoGroup = videoGroupForShotIds(videoGroups, segment.shotIds)
-      const details = videoPlanDetails({
-        editScript,
-        segmentIndex: index,
-        videoGroup,
-        panelsByShot,
-        requirements: editScript.requirements,
-        defaultVideoModel: defaultSequenceVideoModel ?? defaultVideoModel,
-      })
-      const gridMode = inferGridMode(segment.shotIds.length)
-      const canGenerateGroup = Boolean(gridMode && details.sourceImages.every((image) => Boolean(image.imageUrl)))
-      const videoGroupPresentation = videoGroup
-        ? resourcePresentationFromStatus(videoGroup.status)
-          ?? workspaceCanvasPendingResourcePresentation()
-        : null
-      nodes.push(createMediaNode({
-        id: nodeId,
-        position: layoutPosition(savedLayouts, nodeId, gridPosition({
-          index,
-          columns: VIDEO_PLAN_GRID_COLUMNS,
-          startX: SHOT_GRID_START_X,
-          startY: videoPlanStartY,
-          itemWidth: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
-          columnGapX: SHOT_GRID_GAP_X,
-          rowStepY: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + VIDEO_PLAN_GRID_GAP_Y,
-        })),
-        width: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
-        height: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height,
-        loadingContext: { styleImageUrl: stylePreviewImageUrl },
-        data: {
-          projectId,
-          episodeName,
-          kind: 'videoPlan',
-          layoutNodeType: 'videoPlan',
-          targetType: 'videoGroup',
-          targetId: videoGroup?.id ?? `${editScript.id}:generationSegment:${index + 1}`,
-          title: translate('nodes.videoPlan.title', { index: index + 1 }),
-          eyebrow: translate('nodes.videoPlan.eyebrow'),
-          body: segment.continuity,
-          meta: translate('nodes.videoPlan.meta', {
-            mode: translate('nodeFields.videoPlanGroup'),
-            shots: segment.shotIds.length,
-            duration: details.durationSec,
-          }),
-          ...(videoGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
-          runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
-          actionLabel: canGenerateGroup
-            ? translate(details.outputUrl ? 'actions.regenerateVideo' : 'actions.generateVideo')
-            : undefined,
-          action: canGenerateGroup && gridMode
-            ? {
-                type: 'generate_video_group',
-                gridMode,
-                shotIds: segment.shotIds,
-              }
-            : undefined,
-          videoPlanDetails: details,
-          onAction,
-        },
-      }))
-      segment.shotIds.forEach((shotId) => {
-        const shotNodeId = shotNodeIdsByShotId.get(shotId)
-        if (shotNodeId) edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotId}`, shotNodeId, nodeId))
-      })
-      if (!segment.shotIds.some((shotId) => shotNodeIdsByShotId.has(shotId)) && executionNodeId) {
-        edges.push(createEdge(`edge:${executionNodeId}:${nodeId}`, executionNodeId, nodeId))
-      }
+  projectedVideoPlans.forEach(({ script, segment, segmentIndex }, projectionIndex) => {
+    const nodeId = workspaceNodeId.videoPlan(script.id, segmentIndex + 1)
+    const videoGroup = videoGroupForShotIds(videoGroups, segment.shotIds)
+    const details = videoPlanDetails({
+      editScript: script,
+      segmentIndex,
+      videoGroup,
+      panelsByShot,
+      requirements: script.requirements,
+      defaultVideoModel: defaultSequenceVideoModel ?? defaultVideoModel,
     })
-  }
+    const gridMode = inferGridMode(segment.shotIds.length)
+    const canGenerateGroup = Boolean(gridMode && details.sourceImages.every((image) => Boolean(image.imageUrl)))
+    const videoGroupPresentation = videoGroup
+      ? resourcePresentationFromStatus(videoGroup.status)
+        ?? workspaceCanvasPendingResourcePresentation()
+      : null
+    nodes.push(createMediaNode({
+      id: nodeId,
+      position: layoutPosition(savedLayouts, nodeId, gridPosition({
+        index: projectionIndex,
+        columns: VIDEO_PLAN_GRID_COLUMNS,
+        startX: SHOT_GRID_START_X,
+        startY: videoPlanStartY,
+        itemWidth: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
+        columnGapX: SHOT_GRID_GAP_X,
+        rowStepY: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height + VIDEO_PLAN_GRID_GAP_Y,
+      })),
+      width: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.width,
+      height: WORKSPACE_CANVAS_VIDEO_PLAN_NODE_SIZE.height,
+      loadingContext: { styleImageUrl: stylePreviewImageUrl },
+      data: {
+        projectId,
+        episodeName,
+        kind: 'videoPlan',
+        layoutNodeType: 'videoPlan',
+        targetType: 'videoGroup',
+        targetId: videoGroup?.id ?? `${script.id}:generationSegment:${segmentIndex + 1}`,
+        title: translate('nodes.videoPlan.title', { index: projectionIndex + 1 }),
+        eyebrow: translate('nodes.videoPlan.eyebrow'),
+        body: segment.continuity,
+        meta: translate('nodes.videoPlan.meta', {
+          mode: translate('nodeFields.videoPlanGroup'),
+          shots: segment.shotIds.length,
+          duration: details.durationSec,
+        }),
+        ...(videoGroupPresentation ?? workspaceCanvasPendingResourcePresentation()),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoGroup(videoGroup?.id ?? null)),
+        actionLabel: canGenerateGroup
+          ? translate(details.outputUrl ? 'actions.regenerateVideo' : 'actions.generateVideo')
+          : undefined,
+        action: canGenerateGroup && gridMode
+          ? {
+              type: 'generate_video_group',
+              chapterId: details.chapterId,
+              gridMode,
+              shotIds: segment.shotIds,
+            }
+          : undefined,
+        videoPlanDetails: details,
+        onAction,
+      },
+    }))
+    segment.shotIds.forEach((shotId) => {
+      const shotNodeId = shotNodeIdsByShotId.get(shotId)
+      if (shotNodeId) edges.push(createEdge(`edge:${shotNodeId}:${nodeId}:${shotId}`, shotNodeId, nodeId))
+    })
+    const sourceExecutionNodeId = executionNodeIdsByEditScriptId.get(script.id) ?? executionNodeId
+    if (!segment.shotIds.some((shotId) => shotNodeIdsByShotId.has(shotId)) && sourceExecutionNodeId) {
+      edges.push(createEdge(`edge:${sourceExecutionNodeId}:${nodeId}`, sourceExecutionNodeId, nodeId))
+    }
+  })
   const videoPlanStageBottomY = maxNodeBottomY(nodes, 'videoPlan')
   const bgmScoreDefaultY = nextDefaultStageY(Math.max(
     storyboardStageBottomY,
@@ -1752,9 +1762,13 @@ export function buildWorkspaceNodeCanvasProjection(input: BuildWorkspaceNodeCanv
     }))
   }
 
-  if (finalNodeId && editScript?.generationSegments.length && editFirstCanvasVisibility.videoPlan) {
-    editScript.generationSegments.forEach((_segment, index) => {
-      edges.push(createEdge(`edge:video-plan-final:${index}`, workspaceNodeId.videoPlan(editScript.id, index + 1), finalNodeId))
+  if (finalNodeId) {
+    projectedVideoPlans.forEach(({ script, segmentIndex }) => {
+      edges.push(createEdge(
+        `edge:video-plan-final:${script.id}:${segmentIndex + 1}`,
+        workspaceNodeId.videoPlan(script.id, segmentIndex + 1),
+        finalNodeId,
+      ))
     })
   }
   if (bgmNodeId && finalNodeId) {
