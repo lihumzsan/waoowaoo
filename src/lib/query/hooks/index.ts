@@ -199,6 +199,19 @@ export {
     type MatchedVoiceLinesData,
 } from './useVoiceLines'
 
+export {
+    useFreeVoices,
+    type FreeVoiceRecord,
+    type FreeVoiceVersion,
+    type FreeVoiceTaskState,
+} from './useFreeVoices'
+export {
+    useCreateFreeVoice,
+    useGenerateFreeVoiceVersion,
+    useKeepFreeVoiceVersion,
+    useDeleteFreeVoiceRecord,
+} from '../mutations/useFreeVoiceMutations'
+
 // 实时任务
 export {
     useSSE,
