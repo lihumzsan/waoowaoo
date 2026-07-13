@@ -29,6 +29,7 @@
     "TASK_NOT_READY": "任务正在处理中",
     "NO_RESULT": "任务无结果",
     "CONFLICT": "资源状态冲突",
+    "OPERATION_PLAN_CHANGED": "任务计划或价格已经变化，请重新生成报价后再继续。",
     "VIDEO_API_FORMAT_UNSUPPORTED": "当前视频接口格式暂不支持",
     "WATCHDOG_TIMEOUT": "任务执行超时，系统已终止该任务",
     "WORKER_EXECUTION_ERROR": "任务执行失败，请稍后重试",

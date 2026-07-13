@@ -29,6 +29,7 @@
     "TASK_NOT_READY": "Task is still processing",
     "NO_RESULT": "Task has no result",
     "CONFLICT": "Resource state conflict",
+    "OPERATION_PLAN_CHANGED": "The task plan or price changed. Generate a new quote before continuing.",
     "VIDEO_API_FORMAT_UNSUPPORTED": "This video API format is not supported",
     "WATCHDOG_TIMEOUT": "Task execution timed out and was stopped",
     "WORKER_EXECUTION_ERROR": "Task execution failed. Please retry later",

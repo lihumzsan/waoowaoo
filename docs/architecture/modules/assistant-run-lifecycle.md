@@ -126,6 +126,8 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 
 ## 历史回归
 
+- 收费 approval interruption 曾可长期显示，但其绑定的 Operation plan 仅有 15 分钟 TTL。用户点击旧卡片时，control transaction 已把 interruption 消费并开始 response execution segment，随后 Grant issuer 才抛 `OPERATION_PLAN_EXPIRED`，客户端最终只显示原始 Runtime Error。时间有效性现已从审批协议删除：卡片批准后仍恢复同一 frozen RunState，收费 Operation 的唯一 invoke 重新运行 registry planner；内容未变则执行，内容变化则撤销旧 Grant，并以 typed fatal Tool outcome 零副作用结束本次尝试，禁止同一 run 复用 stale Grant，用户可重新生成报价。
+
 - `227b2d288` 收敛 server-owned append、heartbeat 与 Redis lock；`41c5a13a` 随后仍修复 run settlement race，说明局部加锁不能替代完整 run 语义。
 - `7f8e161be` 修复 stale bootstrap、heartbeat、tool leak、noop/stall 等多个症状，表明需要把这些症状收敛为同一生命周期契约。
 - 制作规划 choice 曾通过局部副作用提交视觉风格 Task，导致模型文案、候选记录、run/Wait 三套状态分离；Choice 只负责落用户决定，异步执行必须回到 registry 与 runtime。

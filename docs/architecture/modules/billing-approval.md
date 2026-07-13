@@ -30,13 +30,14 @@
 - **BA-16 — 零 Task 计划是原子 noop。** `billable_media` 的最终计划允许因全部目标已复用而包含零 Task；Grant、Execution 与 operation-specific plan writes 仍由同一 commit transaction 结算，Task submitter 返回空结果，invocation 投影为 `noop`。零 Task 不得与重复 Task identity 混为无效计划，也不得伪造占位 Task、跳过 plan writes 或建立第二条零 Task commit 分支。
 - **BA-17 — 直接 UI 批准只能消费当前展示计划。** Canvas 等直接操作入口可以把用户点击已展示价格的按钮视为批准，但按钮必须持有完整 `OperationPlanView`，Grant 与 execute 必须消费该 View 的同一 `planSnapshotId`；Canvas 按钮正文只展示紧凑的“动作 + 格式化价格”，完整任务数与预计消耗通过同一 quote 的 title/可访问标签提供。禁止预览 plan A、点击后重新 plan B，或用不展示报价的普通按钮提交收费媒体。所有 Canvas 收费 action 只能经过 `CanvasActionButton`，免费规划与非计费合成不得伪装成收费按钮。
 - **BA-18 — Episode scope 由计划产物裁决。** planner 必须从经过 project ownership 校验的真实 target 派生每个 PlannedTask 的 `episodeId`；snapshot writer 拒绝同一计划包含多个 episode，并以计划 Task scope 为 canonical episode。execute 只校验 session、project、operation 与可选的显式 scope 限制，commit context 必须从已批准 snapshot 注入 episode；禁止要求客户端在批准后重复提交同一 episode 事实或从 route body 重建 scope。
+- **BA-19 — 计划只因内容变化失效。** `OperationPlanSnapshot` 与 `ApprovalGrant` 不得使用 TTL、`expiresAt`、timer 或轮询决定有效性。未消费 Grant 的唯一最终校验由 `invokeApprovedOperationPlan` 重新调用当前 registry definition 的纯 `plan` 与统一 quote，比较 `inputHash`、`planHash`、`quoteHash`；完全一致才进入 Grant 锁事务消费，任一变化必须在该事务撤销 Grant，且不得创建 Execution、Task、冻结或 Outbox。已完成 Execution 的幂等重放直接返回同一持久 output，不得因后续计划变化重新执行。planner 必须对相同事实确定性输出；随机预留 identity、时间戳或调用顺序不得进入计划 Hash。
 
 ## 权威入口
 
 - 媒体类型和是否属于收费媒体：`src/lib/billing/media-approval-policy.ts`。
 - operation confirmation 分类：`src/lib/operations/types.ts` 和 `src/lib/operations/registry.ts`。
 - 不可变计划与 hash：`src/lib/operations/operation-plan-snapshot.ts`。
-- Grant 发放、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
+- Grant 发放、registry 驱动的当前计划重验证、Grant row lock 与单事务 plan invoke：`src/lib/operations/planned-operation-invocation.ts`。
 - API/Tool channel 许可：`src/lib/operations/channel-policy.ts`；执行与 plan endpoint 必须在解析业务输入前调用同一 policy。
 - API/Tool Operation 调用与审批分流：`src/lib/operations/invocation.ts`。
 - Project UI 的唯一收费执行 route：`src/app/api/projects/[projectId]/operations/[operationId]/execute/route.ts`；route 只鉴权并把 immutable Grant provenance 交给统一 invocation，不解释媒体类型或 episode。
@@ -52,7 +53,8 @@
 
 ## 验证
 
-- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-grant-expiry-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、并发重复、过期和持久重放。
+- `tests/integration/task/approved-operation-plan-batch*.integration.test.ts` 与 `approval-plan-change-replay.integration.test.ts` 使用真实 MySQL 验证 Grant/Execution/业务写入/Task/freeze/outbox 全有或全无、计划或报价变化时原子撤销，以及已完成 Execution 的持久重放。
+- `tests/unit/operations/video-group-canonical-identity.test.ts` 验证尚未物化的视频分组 identity 只由项目、episode、chapter、grid mode 与有序 shot identity 确定，防止 registry 重验证因随机 UUID 误判计划变化。
 - `tests/integration/billing/{ledger,service,submitter,user-transactions,stripe-recharge,invite-codes,api-contract}.integration.test.ts` 与 `tests/concurrency/billing/ledger.concurrency.test.ts` 验证真实账本事务、冻结/确认/回滚和并发一致性。
 - `tests/unit/billing/{cost,mode,media-approval-policy,task-policy-base,task-policy-media,transaction-aggregation}.test.ts` 与 `tests/unit/operations/planning.test.ts` 只验证纯金额、policy、quote 和 plan 输入输出。
 - `scripts/guards/{single-task-billing-owner-guard,no-hardcoded-operation-confirmed,single-operation-invocation-guard,task-submission-atomicity-guard}.mjs` 阻止第二 billing writer、审批旁路和事务外 Task 创建；结构 guard 不替代真实账本场景。
@@ -62,7 +64,7 @@
 | 事实                                                           | 唯一所有者 / 写入者                                                                | 消费者                                        |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------- |
 | 规范化输入、最终 Task 列表与报价                               | `OperationPlanSnapshot` / plan endpoint                                            | Grant issuer、Execution、审计                 |
-| 用户对该计划的授权与单次消费                                   | `ApprovalGrant` / `issueApprovalGrant` 发放、`invokeApprovedOperationPlan` 唯一消费 | 原子批次提交入口                              |
+| 用户对该计划的授权、内容重验证与单次消费                       | `ApprovalGrant` / `issueApprovalGrant` 发放、`invokeApprovedOperationPlan` 唯一重验证、撤销或消费 | 原子批次提交入口                              |
 | 一次幂等执行与原子 output                                      | `OperationExecution` / `invokeApprovedOperationPlan`                               | 重复调用、审计                                |
 | operation 业务投影、MutationBatch、计划内 Task、冻结与入队责任 | `invokeApprovedOperationPlan` 的同一 transaction；各 commit 只使用授权 transaction | Outbox dispatcher、Task worker、UI projection |
 | BullMQ job                                                     | `task.enqueue` Outbox consumer                                                     | worker；不得解释审批或报价                    |
@@ -76,6 +78,7 @@
 - 制作规划确认曾在 `bible_review` 副作用中直接提交视觉风格任务：后端虽持有报价，UI 未清楚展示 credits，且 Task 未绑定 Agent Wait。免费结果确认与收费媒体授权必须保持两个显式边沿。
 - 视觉风格媒体 plan 曾为了得到精确图片 Prompt 而在 approval preflight 同步调用 LLM 并创建候选记录；虽然图片报价准确，却让 plan 成为第二个长任务执行器和领域 writer。现由普通文本 Task 先持久化方案，图片 plan 只读该 Task 的成功结果。
 - Canvas 曾为按钮价格预取 plan A，点击 mutation 又创建 plan B 并自动签发 Grant；分镜图片和单镜头视频的专用 route 还遗漏 episode context，导致合法 Grant 被 scope mismatch 拒绝，视频详情普通按钮则完全不展示价格。旧 unit/conformance 只覆盖 plan、Grant 或节点结构，没有走通直接 UI 的“可见 quote → 同 snapshot Grant → commit”。现删除媒体专用提交 route 和各自 mutation，Canvas 只持有一个 plan handle，snapshot 从真实 Task target 取得 canonical episode，通用 execute 不再重新解释 scope。
+- Operation plan 与 Grant 曾统一写入 15 分钟 `expiresAt`。真实创作流程中用户在报价卡停留超过 15 分钟后，Assistant control 先消费 interruption，再由 `issueApprovalGrant` 抛出 `OPERATION_PLAN_EXPIRED`，导致一张仍可点击的卡片变成原始 Runtime Error；旧 Critical 场景只证明“过期 Grant 无副作用”和“已消费 Grant 可重放”，没有覆盖真实 Assistant 控制顺序，也把 timer 固化成正确性来源。当前协议删除两个 `expiresAt` 与所有时间判断；所有收费 Operation 由同一 registry planner 和三个 Hash 进行内容重验证，变化时撤销旧 Grant，未变化时无论停留多久都可执行。
 
 ## 修改检查表
 

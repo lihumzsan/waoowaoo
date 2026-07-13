@@ -80,7 +80,6 @@ export interface OperationPlanView {
   inputHash?: string
   planHash?: string
   quoteHash?: string
-  expiresAt?: string
   operationId: ProjectAgentOperationId
   kind: OperationPlanKind
   taskCount: number

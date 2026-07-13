@@ -6,7 +6,7 @@ import { persistOperationPlanSnapshot } from '@/lib/operations/operation-plan-sn
 import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
 import { submitApprovedOperationPlanTasks } from '@/lib/task/approved-plan-submitter'
 import { TASK_TYPE, type TaskBillingInfo } from '@/lib/task/types'
-import type { BillingQuoteView, OperationPlan } from '@/lib/operations/planning'
+import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/planning'
 import { makeTestOperation, EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
 import { z } from 'zod'
 import { createProjectAgentUserTurnRun } from '@/lib/project-agent/runs'
@@ -53,26 +53,7 @@ async function seedExecution(balance: number) {
       priority: 0,
     })),
   }
-  const quote: BillingQuoteView = {
-    showCredits: true,
-    billingMode: 'ENFORCE',
-    billable: true,
-    taskCount: 2,
-    mediaTaskCount: 2,
-    totalMaxFrozenCost: 2,
-    currency: 'credits',
-    items: plan.tasks.map((task) => ({
-      id: task.id,
-      taskType: task.taskType,
-      targetType: task.target.targetType,
-      targetId: task.target.targetId,
-      apiType: 'image',
-      model: 'fal::gpt-image-2',
-      quantity: 1,
-      unit: 'image',
-      maxFrozenCost: 1,
-    })),
-  }
+  const quote = await quoteOperationPlan(plan)
   const snapshot = await persistOperationPlanSnapshot({
     plan,
     normalizedInput: { episodeId: null },

@@ -4,8 +4,6 @@ import { prisma } from '@/lib/prisma'
 import type { BillingQuoteView, OperationPlan, OperationPlanView, PlannedTask } from './planning'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 
-const DEFAULT_PLAN_TTL_MS = 15 * 60 * 1000
-
 function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(canonicalJson(value)) as Prisma.InputJsonValue
 }
@@ -107,7 +105,24 @@ export interface PersistedOperationPlanSnapshot {
   planHash: string
   quote: BillingQuoteView
   quoteHash: string
-  expiresAt: Date
+}
+
+export interface OperationPlanArtifactHashes {
+  readonly inputHash: string
+  readonly planHash: string
+  readonly quoteHash: string
+}
+
+export function hashOperationPlanArtifacts(params: {
+  readonly normalizedInput: unknown
+  readonly plan: OperationPlan
+  readonly quote: BillingQuoteView
+}): OperationPlanArtifactHashes {
+  return {
+    inputHash: hashCanonicalJson(params.normalizedInput),
+    planHash: hashCanonicalJson(params.plan),
+    quoteHash: hashCanonicalJson(params.quote),
+  }
 }
 
 export async function persistOperationPlanSnapshot(params: {
@@ -115,17 +130,17 @@ export async function persistOperationPlanSnapshot(params: {
   normalizedInput: unknown
   quote: BillingQuoteView
   episodeId?: string | null
-  expiresAt?: Date
 }): Promise<PersistedOperationPlanSnapshot> {
   const scopeKind = params.plan.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId
   const normalizedInput = toInputJson(params.normalizedInput)
   const planSnapshot = toInputJson(params.plan)
   const quoteSnapshot = toInputJson(params.quote)
-  const inputHash = hashCanonicalJson(normalizedInput)
-  const planHash = hashCanonicalJson(planSnapshot)
-  const quoteHash = hashCanonicalJson(quoteSnapshot)
-  const expiresAt = params.expiresAt ?? new Date(Date.now() + DEFAULT_PLAN_TTL_MS)
+  const { inputHash, planHash, quoteHash } = hashOperationPlanArtifacts({
+    normalizedInput,
+    plan: params.plan,
+    quote: params.quote,
+  })
   const created = await prisma.operationPlanSnapshot.create({
     data: {
       id: randomUUID(),
@@ -141,7 +156,6 @@ export async function persistOperationPlanSnapshot(params: {
       planHash,
       quoteSnapshot,
       quoteHash,
-      expiresAt,
     },
   })
   return {
@@ -158,7 +172,6 @@ export async function persistOperationPlanSnapshot(params: {
     planHash,
     quote: params.quote,
     quoteHash,
-    expiresAt,
   }
 }
 
@@ -197,7 +210,6 @@ export async function loadOperationPlanSnapshot(
     planHash: record.planHash,
     quote,
     quoteHash: record.quoteHash,
-    expiresAt: record.expiresAt,
   }
 }
 
@@ -208,6 +220,5 @@ export function attachPersistedPlanIdentity(view: OperationPlanView, snapshot: P
     inputHash: snapshot.inputHash,
     planHash: snapshot.planHash,
     quoteHash: snapshot.quoteHash,
-    expiresAt: snapshot.expiresAt.toISOString(),
   }
 }

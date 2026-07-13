@@ -84,18 +84,20 @@ export async function executeProjectAgentOperationFromTool(params: {
       const reasonCode = typeof error.details?.code === 'string' ? error.details.code : null
       const mappedCode = reasonCode === 'OPERATION_NOT_FOUND'
         ? 'OPERATION_NOT_FOUND'
-        : reasonCode === 'OPERATION_NOT_ALLOWED'
-          ? 'OPERATION_NOT_ALLOWED'
-          : reasonCode === 'OPERATION_PREREQUISITE_MISSING'
-            ? 'OPERATION_PREREQUISITE_MISSING'
-            : reasonCode === 'OPERATION_INPUT_INVALID' ||
-                reasonCode === 'LEGACY_OPERATION_CONFIRMATION_UNSUPPORTED' ||
-                reasonCode === 'OPERATION_PLAN_INVOCATION_AMBIGUOUS' ||
-                reasonCode === 'APPROVAL_GRANT_NOT_APPLICABLE'
-              ? 'OPERATION_INPUT_INVALID'
-              : reasonCode === 'OPERATION_OUTPUT_INVALID'
-                ? 'OPERATION_OUTPUT_INVALID'
-                : null
+        : reasonCode === 'OPERATION_PLAN_CHANGED'
+          ? 'OPERATION_PLAN_CHANGED'
+          : reasonCode === 'OPERATION_NOT_ALLOWED'
+            ? 'OPERATION_NOT_ALLOWED'
+            : reasonCode === 'OPERATION_PREREQUISITE_MISSING'
+              ? 'OPERATION_PREREQUISITE_MISSING'
+              : reasonCode === 'OPERATION_INPUT_INVALID' ||
+                  reasonCode === 'LEGACY_OPERATION_CONFIRMATION_UNSUPPORTED' ||
+                  reasonCode === 'OPERATION_PLAN_INVOCATION_AMBIGUOUS' ||
+                  reasonCode === 'APPROVAL_GRANT_NOT_APPLICABLE'
+                ? 'OPERATION_INPUT_INVALID'
+                : reasonCode === 'OPERATION_OUTPUT_INVALID'
+                  ? 'OPERATION_OUTPUT_INVALID'
+                  : null
       if (mappedCode) {
         return failedToolExecution(buildToolError({
             code: mappedCode,

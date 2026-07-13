@@ -60,6 +60,13 @@ export const ERROR_CATALOG = {
     userMessageKey: 'errors.CONFLICT',
     defaultMessage: 'Conflict',
   },
+  OPERATION_PLAN_CHANGED: {
+    httpStatus: 409,
+    retryable: false,
+    category: ERROR_CATEGORY.VALIDATION,
+    userMessageKey: 'errors.OPERATION_PLAN_CHANGED',
+    defaultMessage: 'The task plan or price changed. Generate a new quote before continuing.',
+  },
   TASK_NOT_READY: {
     httpStatus: 202,
     retryable: true,

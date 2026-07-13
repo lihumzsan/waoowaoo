@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
@@ -28,6 +27,7 @@ import { normalizeEditScriptStructure } from '@/lib/edit-script/normalize'
 import { requireOperationExecutionTransaction } from '@/lib/operations/planned-operation-invocation'
 import { buildStoryboardConsistencySource } from '@/lib/edit-script/storyboard-consistency/source-snapshot'
 import { resolveDefaultEditChapter } from '@/lib/edit-chapter'
+import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import {
   applySystemVideoDuration,
   buildVideoTaskPayload,
@@ -55,6 +55,25 @@ function shotNumbersForShots(shots: readonly VideoGroupShot[]): number[] {
 function sameShotIds(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false
   return left.every((value, index) => value === right[index])
+}
+
+export function buildCanonicalVideoGroupId(params: {
+  readonly projectId: string
+  readonly episodeId: string
+  readonly chapterId: string
+  readonly gridMode: string
+  readonly shotIds: readonly string[]
+}): string {
+  const hex = hashCanonicalJson({
+    kind: 'project_video_group',
+    projectId: params.projectId,
+    episodeId: params.episodeId,
+    chapterId: params.chapterId,
+    gridMode: params.gridMode,
+    shotIds: params.shotIds,
+  }).slice(0, 32)
+  const variant = ((Number.parseInt(hex[16] ?? '0', 16) & 0x3) | 0x8).toString(16)
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 
 export async function resolveEditChapterId(episodeId: string, chapterId?: string): Promise<string> {
@@ -453,7 +472,13 @@ export async function planAssetReferenceGenerationSegmentTask(params: {
     editScriptId: params.editScriptId,
     shotIds,
   })
-  const groupId = previous?.id ?? randomUUID()
+  const groupId = previous?.id ?? buildCanonicalVideoGroupId({
+    projectId: params.ctx.projectId,
+    episodeId: params.episodeId,
+    chapterId,
+    gridMode,
+    shotIds,
+  })
   const planTaskId = `${params.operationId}:asset_reference:${params.segmentIndex ?? shotIds.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({
     taskType: TASK_TYPE.VIDEO_GROUP,
@@ -545,7 +570,13 @@ export async function planVideoGroupTask(params: {
     editScriptId: resolved.editScript.id,
     shotIds: resolved.shotIds,
   })
-  const groupId = previous?.id ?? randomUUID()
+  const groupId = previous?.id ?? buildCanonicalVideoGroupId({
+    projectId: params.ctx.projectId,
+    episodeId: params.episodeId,
+    chapterId: resolved.chapterId,
+    gridMode: params.gridMode,
+    shotIds: resolved.shotIds,
+  })
   const planTaskId = `${params.operationId}:${params.gridMode}:${resolved.shotIds.join('-')}:${groupId}`
   const billingInfo = requirePlannedTaskBillingInfo({
     taskType: TASK_TYPE.VIDEO_GROUP,

@@ -6,6 +6,10 @@ import type { ProjectAgentOperationContext, ProjectAgentOperationDefinition } fr
 import { loadOperationPlanSnapshot } from './operation-plan-snapshot'
 import { hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
 import { assertProjectAgentOperationExecutionFenceInTransaction } from '@/lib/project-agent/operation-execution-fence'
+import {
+  buildCurrentOperationPlanArtifactHashes,
+  changedOperationPlanArtifacts,
+} from './operation-plan-revalidation'
 
 const APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS = 60_000
 
@@ -91,14 +95,11 @@ export async function issueApprovalGrant(params: {
   if (snapshot.userId !== params.userId) {
     throw new ApiError('FORBIDDEN', { code: 'OPERATION_PLAN_SCOPE_MISMATCH' })
   }
-  if (snapshot.expiresAt.getTime() <= Date.now()) {
-    throw new ApiError('CONFLICT', { code: 'OPERATION_PLAN_EXPIRED' })
-  }
   const existing = await prisma.approvalGrant.findUnique({
     where: { planSnapshotId: snapshot.id },
   })
   if (existing) {
-    if (existing.userId !== params.userId || existing.revokedAt || existing.expiresAt.getTime() <= Date.now()) {
+    if (existing.userId !== params.userId || existing.revokedAt) {
       throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
     }
     return {
@@ -123,7 +124,6 @@ export async function issueApprovalGrant(params: {
         quoteHash: snapshot.quoteHash,
         quoteCeiling: snapshot.quote.totalMaxFrozenCost ?? null,
         currency: snapshot.quote.currency ?? null,
-        expiresAt: snapshot.expiresAt,
       },
     })
     return { approvalGrantId: grant.id, operationRequestId: grant.requestId }
@@ -144,7 +144,6 @@ function assertSnapshotScope(params: {
   operationId: string
   normalizedInput: unknown
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
-  allowExpired: boolean
 }): void {
   const expectedScopeKind = params.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
   const requestedEpisodeId = params.episodeId ?? null
@@ -158,12 +157,6 @@ function assertSnapshotScope(params: {
     throw new ApiError('FORBIDDEN', {
       code: 'OPERATION_PLAN_SCOPE_MISMATCH',
       message: 'the approved plan does not belong to this user, scope, episode, or operation',
-    })
-  }
-  if (!params.allowExpired && params.snapshot.expiresAt.getTime() <= Date.now()) {
-    throw new ApiError('CONFLICT', {
-      code: 'OPERATION_PLAN_EXPIRED',
-      message: 'the approved operation plan has expired',
     })
   }
   if (hashCanonicalJson(params.normalizedInput) !== params.snapshot.inputHash) {
@@ -186,6 +179,36 @@ async function lockApprovalGrant(tx: Prisma.TransactionClient, approvalGrantId: 
   }
 }
 
+async function settleApprovalGrant(
+  tx: Prisma.TransactionClient,
+  params:
+    | { readonly kind: 'revoke'; readonly grantId: string }
+    | { readonly kind: 'consume'; readonly grantId: string; readonly executionId: string },
+): Promise<void> {
+  const settled = await tx.approvalGrant.updateMany({
+    where: {
+      id: params.grantId,
+      version: 0,
+      consumedAt: null,
+      consumedExecutionId: null,
+      revokedAt: null,
+    },
+    data: params.kind === 'consume'
+      ? {
+          consumedAt: new Date(),
+          consumedExecutionId: params.executionId,
+          version: { increment: 1 },
+        }
+      : {
+          revokedAt: new Date(),
+          version: { increment: 1 },
+        },
+  })
+  if (settled.count !== 1) {
+    throw new Error(`APPROVAL_GRANT_${params.kind === 'consume' ? 'CONSUME' : 'REVOKE'}_RACED:${params.grantId}`)
+  }
+}
+
 function assertGrantMatchesSnapshot(params: {
   grant: {
     id: string
@@ -194,8 +217,6 @@ function assertGrantMatchesSnapshot(params: {
     planHash: string
     quoteHash: string
     revokedAt: Date | null
-    expiresAt: Date
-    consumedExecutionId: string | null
   }
   requestId: string
   snapshot: NonNullable<Awaited<ReturnType<typeof loadOperationPlanSnapshot>>>
@@ -209,8 +230,7 @@ function assertGrantMatchesSnapshot(params: {
     params.grant.inputHash !== params.snapshot.inputHash ||
     params.grant.planHash !== params.snapshot.planHash ||
     params.grant.quoteHash !== params.snapshot.quoteHash ||
-    params.grant.revokedAt ||
-    (params.grant.expiresAt.getTime() <= Date.now() && !params.grant.consumedExecutionId)
+    params.grant.revokedAt
   ) {
     throw new ApiError('CONFLICT', { code: 'APPROVAL_GRANT_NOT_USABLE' })
   }
@@ -242,7 +262,37 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       bufferedParts.push(part)
     },
   } as OperationWriter
-  const output = await prisma.$transaction(
+  const previewGrant = await prisma.approvalGrant.findUnique({
+    where: { id: params.invocation.approvalGrantId },
+  })
+  if (!previewGrant) throw new ApiError('NOT_FOUND', { code: 'APPROVAL_GRANT_NOT_FOUND' })
+  const previewSnapshot = await loadOperationPlanSnapshot(previewGrant.planSnapshotId)
+  if (!previewSnapshot) throw new ApiError('NOT_FOUND', { code: 'OPERATION_PLAN_SNAPSHOT_NOT_FOUND' })
+  assertGrantMatchesSnapshot({
+    grant: previewGrant,
+    requestId: params.invocation.requestId,
+    snapshot: previewSnapshot,
+  })
+  assertSnapshotScope({
+    userId: params.ctx.userId,
+    projectId: params.ctx.projectId,
+    episodeId: params.ctx.context.episodeId ?? null,
+    operationId: params.operation.id,
+    normalizedInput: params.normalizedInput,
+    snapshot: previewSnapshot,
+  })
+  const existingExecution = await prisma.operationExecution.findUnique({
+    where: { approvalGrantId: previewGrant.id },
+    select: { id: true },
+  })
+  const currentArtifacts = existingExecution
+    ? null
+    : await buildCurrentOperationPlanArtifactHashes({
+        operation: params.operation,
+        ctx: params.ctx,
+        normalizedInput: params.normalizedInput,
+      })
+  const transactionResult = await prisma.$transaction(
     async (tx) => {
       if (params.ctx.executionFence) {
         await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
@@ -269,7 +319,6 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         operationId: params.operation.id,
         normalizedInput: params.normalizedInput,
         snapshot,
-        allowExpired: Boolean(grant.consumedExecutionId),
       })
 
       const existing = await tx.operationExecution.findUnique({
@@ -282,10 +331,21 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
         if (params.ctx.executionFence) {
           await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
         }
-        return existing.output as Output
+        return { kind: 'output' as const, output: existing.output as Output }
       }
       if (grant.consumedAt || grant.consumedExecutionId) {
         throw new Error(`APPROVAL_GRANT_CONSUMED_WITHOUT_EXECUTION:${grant.id}`)
+      }
+      if (!currentArtifacts) {
+        throw new Error(`OPERATION_PLAN_REVALIDATION_MISSING:${grant.id}`)
+      }
+      const changedArtifacts = changedOperationPlanArtifacts(snapshot, currentArtifacts)
+      if (changedArtifacts.length > 0) {
+        await settleApprovalGrant(tx, {
+          kind: 'revoke',
+          grantId: grant.id,
+        })
+        return { kind: 'plan_changed' as const, changedArtifacts }
       }
 
       const execution = await tx.operationExecution.create({
@@ -303,24 +363,11 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
           status: 'committing',
         },
       })
-      const consumed = await tx.approvalGrant.updateMany({
-        where: {
-          id: grant.id,
-          version: 0,
-          consumedAt: null,
-          consumedExecutionId: null,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: {
-          consumedAt: new Date(),
-          consumedExecutionId: execution.id,
-          version: { increment: 1 },
-        },
+      await settleApprovalGrant(tx, {
+        kind: 'consume',
+        grantId: grant.id,
+        executionId: execution.id,
       })
-      if (consumed.count !== 1) {
-        throw new Error(`APPROVAL_GRANT_CONSUME_RACED:${grant.id}`)
-      }
       const committedOutput = await commit(
         {
           ...params.ctx,
@@ -390,16 +437,22 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       if (params.ctx.executionFence && !params.ctx.taskBatchBinding?.isBound()) {
         await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
       }
-      return output
+      return { kind: 'output' as const, output }
     },
     {
       maxWait: 10_000,
       timeout: APPROVED_OPERATION_TRANSACTION_TIMEOUT_MS,
     },
   )
+  if (transactionResult.kind === 'plan_changed') {
+    throw new ApiError('OPERATION_PLAN_CHANGED', {
+      code: 'OPERATION_PLAN_CHANGED',
+      changedArtifacts: transactionResult.changedArtifacts,
+    })
+  }
   params.ctx.taskBatchBinding?.markCommitted()
   for (const part of bufferedParts) {
     params.ctx.writer?.write(part)
   }
-  return output
+  return transactionResult.output
 }

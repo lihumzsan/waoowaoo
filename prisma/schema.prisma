@@ -1187,13 +1187,11 @@ model OperationPlanSnapshot {
   planHash        String               @db.VarChar(64)
   quoteSnapshot   Json
   quoteHash       String               @db.VarChar(64)
-  expiresAt       DateTime
   createdAt       DateTime             @default(now())
   approvalGrants  ApprovalGrant[]
   executions      OperationExecution[]
 
   @@index([userId, scopeKind, scopeId, operationId, createdAt])
-  @@index([expiresAt])
   @@map("operation_plan_snapshots")
 }
 
@@ -1213,7 +1211,6 @@ model ApprovalGrant {
   quoteCeiling        Decimal?              @db.Decimal(18, 6)
   currency            String?               @db.VarChar(16)
   issuedAt            DateTime              @default(now())
-  expiresAt           DateTime
   revokedAt           DateTime?
   consumedAt          DateTime?
   consumedExecutionId String?               @db.VarChar(191)
@@ -1227,7 +1224,6 @@ model ApprovalGrant {
   @@unique([planSnapshotId])
   @@index([userId, scopeKind, scopeId, operationId])
   @@index([consumedExecutionId])
-  @@index([expiresAt])
   @@map("approval_grants")
 }
 

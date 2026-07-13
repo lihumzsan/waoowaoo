@@ -1,0 +1,124 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { prisma } from '../../helpers/prisma'
+import { resetBillingState } from '../../helpers/db-reset'
+import { createTestProject, createTestUser } from '../../helpers/billing-fixtures'
+import { makeTestOperation, EFFECTS_BILLABLE } from '../../helpers/project-agent-operations'
+import { persistOperationPlanSnapshot } from '@/lib/operations/operation-plan-snapshot'
+import { invokeApprovedOperationPlan, issueApprovalGrant } from '@/lib/operations/planned-operation-invocation'
+import { quoteOperationPlan, type OperationPlan } from '@/lib/operations/planning'
+
+const OPERATION_ID = 'approval_plan_change_fixture'
+
+async function seedGrant() {
+  const user = await createTestUser()
+  const project = await createTestProject(user.id)
+  const plan: OperationPlan = {
+    kind: 'task_submission',
+    operationId: OPERATION_ID,
+    projectId: project.id,
+    userId: user.id,
+    tasks: [],
+  }
+  const quote = await quoteOperationPlan(plan)
+  const snapshot = await persistOperationPlanSnapshot({
+    plan,
+    normalizedInput: { episodeId: null },
+    quote,
+  })
+  const issued = await issueApprovalGrant({
+    userId: user.id,
+    planSnapshotId: snapshot.id,
+    requestId: 'approval-plan-change-request',
+  })
+  return { user, project, plan, snapshot, issued }
+}
+
+function buildOperation(params: {
+  plan: ReturnType<typeof vi.fn<() => Promise<OperationPlan>>>
+  commit: ReturnType<typeof vi.fn<() => Promise<{ durable: string }>>>
+}) {
+  return makeTestOperation({
+    id: OPERATION_ID,
+    intent: 'act',
+    effects: EFFECTS_BILLABLE,
+    confirmation: { kind: 'billable_media', required: true },
+    inputSchema: z.object({ episodeId: z.null() }),
+    outputSchema: z.object({ durable: z.string() }),
+    plan: async () => await params.plan(),
+    commit: async () => await params.commit(),
+  })
+}
+
+function invocationParams(input: {
+  seeded: Awaited<ReturnType<typeof seedGrant>>
+  operation: ReturnType<typeof buildOperation>
+}) {
+  return {
+    operation: input.operation,
+    ctx: {
+      request: new NextRequest('http://localhost/api/operations/execute'),
+      userId: input.seeded.user.id,
+      projectId: input.seeded.project.id,
+      context: {},
+      source: 'integration-test',
+      writer: null,
+      toolCallId: null,
+    },
+    normalizedInput: { episodeId: null },
+    invocation: {
+      approvalGrantId: input.seeded.issued.approvalGrantId,
+      requestId: input.seeded.issued.operationRequestId,
+    },
+  } as const
+}
+
+describe('Approval plan change and durable replay integration', () => {
+  beforeEach(async () => {
+    await resetBillingState()
+    await prisma.operationExecution.deleteMany()
+    await prisma.approvalGrant.deleteMany()
+    await prisma.operationPlanSnapshot.deleteMany()
+  })
+
+  it('revokes an unconsumed Grant when the current registry plan changed', async () => {
+    const seeded = await seedGrant()
+    const plan = vi.fn(async (): Promise<OperationPlan> => ({
+      ...seeded.plan,
+      metadata: { revision: 'changed' },
+    }))
+    const commit = vi.fn(async () => ({ durable: 'must-not-run' }))
+
+    await expect(invokeApprovedOperationPlan(invocationParams({
+      seeded,
+      operation: buildOperation({ plan, commit }),
+    }))).rejects.toMatchObject({
+      code: 'OPERATION_PLAN_CHANGED',
+    })
+
+    expect(plan).toHaveBeenCalledTimes(1)
+    expect(commit).not.toHaveBeenCalled()
+    expect(await prisma.operationExecution.count()).toBe(0)
+    expect(await prisma.task.count()).toBe(0)
+    expect((await prisma.approvalGrant.findUniqueOrThrow({ where: { id: seeded.issued.approvalGrantId } })).revokedAt)
+      .not.toBeNull()
+  })
+
+  it('returns persisted output without replanning an already consumed execution', async () => {
+    const seeded = await seedGrant()
+    let currentPlan = seeded.plan
+    const plan = vi.fn(async (): Promise<OperationPlan> => currentPlan)
+    const commit = vi.fn(async () => ({ durable: 'persisted-output' }))
+    const params = invocationParams({ seeded, operation: buildOperation({ plan, commit }) })
+
+    await expect(invokeApprovedOperationPlan(params)).resolves.toEqual({ durable: 'persisted-output' })
+    currentPlan = { ...seeded.plan, metadata: { revision: 'changed-after-commit' } }
+    await expect(invokeApprovedOperationPlan(params)).resolves.toEqual({ durable: 'persisted-output' })
+
+    expect(plan).toHaveBeenCalledTimes(1)
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(await prisma.operationExecution.count()).toBe(1)
+    expect(await prisma.task.count()).toBe(0)
+  })
+})
