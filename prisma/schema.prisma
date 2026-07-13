@@ -273,6 +273,7 @@ model NovelPromotionProject {
   importStatus    String?
   characters      NovelPromotionCharacter[]
   episodes        NovelPromotionEpisode[]
+  freeVoiceRecords NovelPromotionFreeVoiceRecord[]
   locations       NovelPromotionLocation[]
   project         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -512,6 +513,49 @@ model NovelPromotionVoiceLine {
   @@index([matchedPanelId])
   @@index([audioMediaId])
   @@map("novel_promotion_voice_lines")
+}
+
+model NovelPromotionFreeVoiceRecord {
+  id                      String   @id @default(uuid())
+  novelPromotionProjectId String
+  text                    String   @db.Text
+  characterId             String?
+  characterName           String
+  voiceSourceType         String
+  voiceSourceId           String?
+  voiceName               String
+  referenceAudioUrl       String   @db.Text
+  referenceAudioMediaId   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @default(now()) @updatedAt
+
+  novelPromotionProject NovelPromotionProject @relation(fields: [novelPromotionProjectId], references: [id], onDelete: Cascade)
+  referenceAudioMedia   MediaObject? @relation("NovelPromotionFreeVoiceReferenceAudioMedia", fields: [referenceAudioMediaId], references: [id], onDelete: SetNull)
+  versions              NovelPromotionFreeVoiceVersion[]
+
+  @@index([novelPromotionProjectId, createdAt])
+  @@index([referenceAudioMediaId])
+  @@map("novel_promotion_free_voice_records")
+}
+
+model NovelPromotionFreeVoiceVersion {
+  id            String   @id @default(uuid())
+  recordId      String
+  versionNumber Int
+  audioModel    String
+  audioUrl      String?  @db.Text
+  audioMediaId  String?
+  audioDuration Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  record     NovelPromotionFreeVoiceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  audioMedia MediaObject? @relation("NovelPromotionFreeVoiceVersionAudioMedia", fields: [audioMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([recordId, versionNumber])
+  @@index([recordId, createdAt])
+  @@index([audioMediaId])
+  @@map("novel_promotion_free_voice_versions")
 }
 
 model VoicePreset {
@@ -981,6 +1025,8 @@ model MediaObject {
   novelPromotionShotImages              NovelPromotionShot[]        @relation("NovelPromotionShotImageMedia")
   supplementaryPanelImages              SupplementaryPanel[]        @relation("SupplementaryPanelImageMedia")
   novelPromotionVoiceLineAudios         NovelPromotionVoiceLine[]   @relation("NovelPromotionVoiceLineAudioMedia")
+  novelPromotionFreeVoiceReferenceAudios NovelPromotionFreeVoiceRecord[] @relation("NovelPromotionFreeVoiceReferenceAudioMedia")
+  novelPromotionFreeVoiceVersionAudios  NovelPromotionFreeVoiceVersion[] @relation("NovelPromotionFreeVoiceVersionAudioMedia")
   voicePresetAudios                     VoicePreset[]               @relation("VoicePresetAudioMedia")
   globalCharacterVoices                 GlobalCharacter[]           @relation("GlobalCharacterVoiceMedia")
   globalCharacterAppearanceImages       GlobalCharacterAppearance[] @relation("GlobalCharacterAppearanceImageMedia")
