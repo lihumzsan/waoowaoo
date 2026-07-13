@@ -57,7 +57,7 @@ Assistant 是受服务端运行时约束的决策者，不是流程状态的权�
 - Tool 写 Operation 穷尽 authority：`src/lib/operations/write-authority.ts` 与实际 registry conformance；Thread clear 唯一入口：`src/lib/project-agent/thread-clear.ts`。
 - Assistant Task batch 接线：`submitOperationTaskBatch` 只负责编排通用 Task persistence primitive；`ProjectAgentOperationTaskBatchBinding` 在同一 transaction 调用 `bindProjectAgentWaitToTasksInTransaction`，不得复制 Task/billing/Event/enqueue。
 - Operation 类型和 agentFlow：`src/lib/operations/types.ts`。
-- Active Operation 运行外壳：`WorkspaceAssistantActiveRunCard.tsx` 统一消费 Session `activeTasks`；`workspace-assistant-panel-state.ts` 的 presentation registry 只选择附加内容。视觉风格内容由 `style-preview-set-view.ts` 构造后交给独立 `EditStylePreviewGenerationDataCard.tsx`。该卡在 processing 阶段只读，在 Session 投影持久 `choiceType=style` 时复用通用 Choice output builder 提交选择；它不直接写领域数据，renderer 无权读取 Query、Task 或消息快照。跨 Canvas/Assistant 的品牌加载纯展示唯一入口是 `src/components/media/MediaGenerationLoading.tsx` 的 `MediaGenerationLoadingView`。
+- Active Operation 运行外壳：`WorkspaceAssistantActiveRunCard.tsx` 统一消费 Session `activeTasks`；`workspace-assistant-panel-state.ts` 的 presentation registry 只选择附加内容。视觉风格内容由 `style-preview-set-view.ts` 构造后交给独立 `EditStylePreviewGenerationDataCard.tsx`。该卡在 processing 阶段只读，在 Session 投影持久 `choiceType=style` 时复用通用 Choice output builder 提交选择；它不直接写领域数据，renderer 无权读取 Query、Task 或消息快照。跨 Canvas/Assistant 的品牌加载纯展示唯一入口是 `src/components/media/MediaGenerationLoading.tsx` 的 `MediaGenerationLoadingView`；共享本地估算时钟是 `src/lib/query/hooks/useEstimatedTaskProgress.ts`，只消费规范化 Task 原始事实，不解释或写回业务生命周期。
 - Assistant Session 变更 envelope、持久重放和唯一 publisher：`src/lib/project-agent/session-event.ts`；事件与 Outbox 原子创建：`src/lib/project-agent/event/append.ts`。
 
 ## 验证

@@ -212,10 +212,10 @@ function shouldRemoveStoredStartMillisOnInactive(key: string): boolean {
   return !key.startsWith('group:')
 }
 
-function resolveInitialStartMillis(source: EstimatedTaskProgressSource, key: string, now: number): number {
+function resolveInitialStartMillis(updatedAt: string | null, key: string, now: number): number {
   const stored = readStoredStartMillis(key, now)
   if (stored !== null) return sanitizeStartMillis(stored, now)
-  const updatedAtMillis = parseIsoMillis(source.updatedAt)
+  const updatedAtMillis = parseIsoMillis(updatedAt)
   const startMillis = sanitizeStartMillis(updatedAtMillis ?? now, now)
   writeStoredStartMillis(key, startMillis, now)
   return startMillis
@@ -230,17 +230,21 @@ export function useEstimatedTaskProgress(
     readonly millis: number
   } | null>(null)
 
+  const hasSource = source !== null && source !== undefined
+  const phase = source?.phase ?? null
+  const taskType = source?.runningTaskType ?? null
+  const updatedAt = source?.updatedAt ?? null
   const key = taskProgressKey(source)
-  const active = source?.phase === 'queued' || source?.phase === 'processing'
+  const active = phase === 'queued' || phase === 'processing'
 
   useEffect(() => {
-    if (!source || !key) {
-      setStartState(null)
+    if (!key) {
+      setStartState((current) => current === null ? current : null)
       return
     }
     if (!active) {
       if (shouldRemoveStoredStartMillisOnInactive(key)) removeStoredStartMillis(key)
-      setStartState(null)
+      setStartState((current) => current === null ? current : null)
       return
     }
     setStartState((current) => {
@@ -248,10 +252,10 @@ export function useEstimatedTaskProgress(
       const currentNow = Date.now()
       return {
         key,
-        millis: resolveInitialStartMillis(source, key, currentNow),
+        millis: resolveInitialStartMillis(updatedAt, key, currentNow),
       }
     })
-  }, [active, key, source])
+  }, [active, key, updatedAt])
 
   useEffect(() => {
     if (!active) return undefined
@@ -262,14 +266,14 @@ export function useEstimatedTaskProgress(
   }, [active])
 
   return useMemo(() => {
-    if (!source) return null
+    if (!hasSource) return null
     const startMillis = startState?.key === key
       ? startState.millis
       : now
     return calculateEstimatedTaskProgress({
-      phase: source.phase,
-      taskType: source.runningTaskType,
+      phase,
+      taskType,
       elapsedMs: Math.max(0, now - startMillis),
     })
-  }, [key, now, source, startState])
+  }, [hasSource, key, now, phase, startState, taskType])
 }
