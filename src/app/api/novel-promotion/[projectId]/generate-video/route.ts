@@ -9,6 +9,7 @@ import { hasPanelVideoOutput } from '@/lib/task/has-output'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { parseModelKeyStrict, type CapabilityValue } from '@/lib/model-config-contract'
 import { normalizeVideoModelKey } from '@/lib/novel-promotion/video-model-defaults'
+import { resolveBerniniCapabilityValidationDuration } from '@/lib/model-capabilities/video-recommended-duration'
 import {
   resolveBuiltinCapabilitiesByModelKey,
 } from '@/lib/model-capabilities/lookup'
@@ -142,8 +143,20 @@ function normalizeVideoRuntimeSelectionsForModel(
 ): Record<string, CapabilityValue> {
   if (!isSeedance2BerniniWorkflowKey(modelKey)) return runtimeSelections
 
+  const requestedDuration = readPositiveFiniteNumber(runtimeSelections.duration)
+  const durationOptions = resolveBuiltinCapabilitiesByModelKey('video', modelKey)?.video?.durationOptions
+
   return {
     ...runtimeSelections,
+    ...(requestedDuration !== null
+      ? {
+          duration: resolveBerniniCapabilityValidationDuration(
+            modelKey,
+            requestedDuration,
+            durationOptions,
+          ),
+        }
+      : {}),
     fps: SEEDANCE2_BERNINI_DEFAULT_FPS,
   }
 }

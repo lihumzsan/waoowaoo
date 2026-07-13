@@ -13,6 +13,24 @@ export function normalizeRecommendedVideoDuration(value: unknown): number | null
   return Number(parsed.toFixed(2))
 }
 
+export function resolveBerniniCapabilityValidationDuration(
+  modelKey: string,
+  requestedDuration: number,
+  durationOptions: readonly unknown[] | null | undefined,
+): number {
+  if (!isSeedance2BerniniWorkflowKey(modelKey)) return requestedDuration
+
+  const sortedOptions = Array.isArray(durationOptions)
+    ? durationOptions
+      .filter((option): option is number => typeof option === 'number' && Number.isFinite(option) && option > 0)
+      .sort((left, right) => left - right)
+    : []
+  if (sortedOptions.length === 0) return requestedDuration
+
+  return sortedOptions.find((option) => option + 0.001 >= requestedDuration)
+    ?? sortedOptions[sortedOptions.length - 1]
+}
+
 export function withRecommendedVideoDuration(
   definitions: EffectiveVideoCapabilityDefinition[],
   input: RecommendedVideoDurationInput,

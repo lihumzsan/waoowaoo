@@ -212,6 +212,63 @@ describe('worker utils video generation resume', () => {
     )
   })
 
+  it.each([6, 16])(
+    'validates exact Bernini duration %ss with a catalog preset but submits the exact duration',
+    async (duration) => {
+      configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
+        runtimeSelections?: Record<string, unknown>
+      }) => {
+        expect(input.runtimeSelections).toEqual(expect.objectContaining({
+          duration: 10,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        }))
+        return {
+          duration: 10,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        }
+      })
+      generatorApiMock.generateVideo.mockResolvedValueOnce({
+        success: true,
+        videoUrl: `https://comfy.test/seedance2-bernini-${duration}s.mp4`,
+      })
+
+      const result = await resolveVideoSourceFromGeneration(buildJob(), {
+        userId: 'user-1',
+        modelId: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        imageUrl: 'data:image/png;base64,QQ==',
+        allowCustomDuration: true,
+        options: {
+          prompt: 'animate this frame',
+          duration,
+          fps: 24,
+          generationMode: 'normal',
+          motionStrength: 1,
+          resolution: '480p',
+        },
+      })
+
+      expect(result).toEqual({ url: `https://comfy.test/seedance2-bernini-${duration}s.mp4` })
+      expect(generatorApiMock.generateVideo).toHaveBeenCalledWith(
+        'user-1',
+        'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        'data:image/png;base64,QQ==',
+        expect.objectContaining({
+          duration,
+          fps: 24,
+          motionStrength: 1,
+          prompt: 'animate this frame',
+          resolution: '480p',
+        }),
+      )
+    },
+  )
+
   it('passes Seedance2 Bernini fps and motion strength into worker capability validation', async () => {
     configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (input: {
       runtimeSelections?: Record<string, unknown>

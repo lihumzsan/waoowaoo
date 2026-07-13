@@ -16,6 +16,7 @@ import {
   resolveProjectModelCapabilityGenerationOptions,
 } from '@/lib/config-service'
 import { resolveBuiltinCapabilitiesByModelKey } from '@/lib/model-capabilities/lookup'
+import { resolveBerniniCapabilityValidationDuration } from '@/lib/model-capabilities/video-recommended-duration'
 import { parseModelKeyStrict } from '@/lib/model-config-contract'
 import { TaskTerminatedError } from '@/lib/task/errors'
 import { isTaskActive, trySetTaskExternalId } from '@/lib/task/service'
@@ -423,6 +424,13 @@ export async function resolveImageSourcesFromGeneration(
 function resolveCapabilityValidationDuration(modelId: string, requestedDuration: number): number {
   const durationOptions = resolveBuiltinCapabilitiesByModelKey('video', modelId)?.video?.durationOptions
     ?? getLtx23WorkflowProfile(modelId)?.durationOptions
+  const berniniDuration = resolveBerniniCapabilityValidationDuration(
+    modelId,
+    requestedDuration,
+    durationOptions,
+  )
+  if (berniniDuration !== requestedDuration) return berniniDuration
+
   const sortedOptions = Array.isArray(durationOptions)
     ? durationOptions
       .filter((option): option is number => typeof option === 'number' && Number.isFinite(option) && option > 0)

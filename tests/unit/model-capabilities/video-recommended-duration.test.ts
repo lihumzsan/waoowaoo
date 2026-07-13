@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyRecommendedVideoDurationSelection,
   normalizeRecommendedVideoDuration,
+  resolveBerniniCapabilityValidationDuration,
   withRecommendedVideoDuration,
 } from '@/lib/model-capabilities/video-recommended-duration'
 
@@ -52,5 +53,12 @@ describe('video recommended duration', () => {
       { duration: 5, motionStrength: 2 },
       { modelKey: bernini, recommendedDuration: undefined },
     )).toEqual({ duration: 5, motionStrength: 2 })
+  })
+
+  it('maps exact Bernini seconds onto a catalog preset only for capability validation', () => {
+    expect(resolveBerniniCapabilityValidationDuration(bernini, 4, [5, 10])).toBe(5)
+    expect(resolveBerniniCapabilityValidationDuration(bernini, 6, [5, 10])).toBe(10)
+    expect(resolveBerniniCapabilityValidationDuration(bernini, 16, [5, 10])).toBe(10)
+    expect(resolveBerniniCapabilityValidationDuration('comfyui::other', 6, [5, 10])).toBe(6)
   })
 })

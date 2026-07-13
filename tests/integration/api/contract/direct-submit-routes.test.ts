@@ -288,7 +288,17 @@ vi.mock('@/lib/media/outbound-image', () => ({
   })),
 }))
 vi.mock('@/lib/model-capabilities/lookup', () => ({
-  resolveBuiltinCapabilitiesByModelKey: vi.fn(() => ({ video: { firstlastframe: true } })),
+  resolveBuiltinCapabilitiesByModelKey: vi.fn((_modelType: string, modelKey: string) => (
+    modelKey.includes('seedance2/bernini-480p-i2v')
+      ? {
+          video: {
+            firstlastframe: false,
+            durationOptions: [5, 10],
+            fpsOptions: [24],
+          },
+        }
+      : { video: { firstlastframe: true } }
+  )),
 }))
 vi.mock('@/lib/model-pricing/lookup', () => ({
   resolveBuiltinPricing: vi.fn(() => ({ status: 'ok' })),
@@ -1148,6 +1158,91 @@ describe('api contract - direct submit routes (behavior)', () => {
         fps: 24,
         resolution: '480p',
         motionStrength: 2,
+      }),
+    }))
+  })
+
+  it('single generate-video accepts an exact Bernini card duration outside the catalog presets', async () => {
+    prismaMock.novelPromotionPanel.findFirst.mockResolvedValueOnce({
+      id: 'panel-1',
+      storyboardId: 'storyboard-1',
+      panelIndex: 5,
+      imageUrl: 'cos/panel.png',
+      videoUrl: 'cos/video.mp4',
+      videoPrompt: 'a glowing will reaches toward the bright point',
+      videoPromptEditedByUser: false,
+      description: 'a glowing will reaches toward the bright point',
+      srtSegment: '',
+      videoDurationBinding: null,
+      shotType: 'medium',
+      cameraMove: 'push in',
+      sceneType: 'action',
+      storyboard: {
+        episodeId: 'episode-1',
+        clip: {
+          content: 'fantasy negotiation',
+        },
+      },
+      matchedVoiceLines: [],
+    })
+    prismaMock.novelPromotionVoiceLine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    let capabilityInput: (CapabilityGenerationOptionsInput & { modelKey?: string }) | undefined
+    configServiceMock.resolveProjectModelCapabilityGenerationOptions.mockImplementationOnce(async (
+      input?: CapabilityGenerationOptionsInput & { modelKey?: string },
+    ): Promise<CapabilityGenerationOptions> => {
+      capabilityInput = input
+      return {
+        duration: 10,
+        fps: 24,
+        resolution: '480p',
+        generationMode: 'normal',
+        motionStrength: 1,
+      }
+    })
+
+    const res = await invokePostRoute({
+      routeFile: 'src/app/api/novel-promotion/[projectId]/generate-video/route.ts',
+      body: {
+        videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+        storyboardId: 'storyboard-1',
+        panelIndex: 5,
+        generationOptions: {
+          duration: 6,
+          generationMode: 'normal',
+          fps: 24,
+          resolution: '480p',
+          motionStrength: 1,
+        },
+        videoDurationBinding: {
+          mode: 'manual',
+          voiceLineIds: [],
+        },
+      },
+      params: { projectId: 'project-1' },
+      expectedTaskType: TASK_TYPE.VIDEO_PANEL,
+      expectedTargetType: 'NovelPromotionPanel',
+      expectedProjectId: 'project-1',
+    })
+
+    expect(res.status).toBe(200)
+    expect(capabilityInput?.modelKey).toBe('comfyui::basevideo/seedance2/bernini-480p-i2v')
+    expect(capabilityInput?.runtimeSelections).toEqual(expect.objectContaining({
+      duration: 10,
+      fps: 24,
+      resolution: '480p',
+      generationMode: 'normal',
+      motionStrength: 1,
+    }))
+    const submitArg = submitTaskMock.mock.calls.at(-1)?.[0] as { payload?: Record<string, unknown> } | undefined
+    expect(submitArg?.payload).toEqual(expect.objectContaining({
+      videoModel: 'comfyui::basevideo/seedance2/bernini-480p-i2v',
+      generationOptions: expect.objectContaining({
+        duration: 6,
+        fps: 24,
+        resolution: '480p',
+        motionStrength: 1,
       }),
     }))
   })
