@@ -173,7 +173,8 @@
 - 提交前必须用 `git status` 和 `git diff --cached` 核对范围并排除无关 staged 文件。
 - commit message 必须有清晰标题和简洁正文，说明变更摘要、验证结果、风险或后续。
 - Husky pre-commit/pre-push 只负责敏感信息扫描；测试运行时机由后续独立策略决定。`npm run verify:push` 当前只提供 lint、typecheck 和架构结构检查，不代表完整产品行为验证。
-- 自动 commit 成功后必须立即 push；用户要求不 push 时保留本地并明确说明。
+- 自动 commit 成功后必须立即 push（除非实在一个大任务进行中的commit可以等待全部完成后再push）；用户要求不 push 时保留本地并明确说明。
+- 在进行大量修改，计划的时候修改完成后应该一次性全部分类commit，而不是一个大commit提交。
 
 ## 15. 理解真实需求与合理质疑
 
