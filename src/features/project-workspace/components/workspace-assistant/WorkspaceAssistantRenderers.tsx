@@ -21,6 +21,7 @@ import {
 } from '@/lib/billing/action-quote-preview'
 import type {
   ProjectAgentChoiceCardPartData,
+  ProjectAgentOperationSubmittedPartData,
   ProjectAgentOperationPlanPreviewPartData,
   ProjectAgentStopPartData,
   ProjectContextPartData,
@@ -44,7 +45,6 @@ import { localizeProjectAgentOperationTitle } from '@/lib/project-agent/copy'
 import { normalizeProjectAgentLocale } from '@/lib/project-agent/locale'
 import { readProjectAssistantTextAttachmentsFromMetadata } from '@/lib/project-agent/text-attachments'
 import { submitFromEnterKey } from '@/lib/ui/keyboard-submit'
-import type { OperationSubmissionState } from '@/lib/runtime/lifecycle-states'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -645,6 +645,20 @@ function TaskBatchSubmittedDataCard({ data }: DataMessagePartProps<TaskBatchSubm
   return null
 }
 
+function OperationSubmittedDataCard({ data }: DataMessagePartProps<ProjectAgentOperationSubmittedPartData>) {
+  const t = useTranslations('assistantAgent')
+  const locale = normalizeProjectAgentLocale(useLocale())
+  const operationTitle = localizeProjectAgentOperationTitle(data.operationId, locale)
+  return (
+    <div className="text-[12px] leading-5 text-[var(--glass-text-tertiary)]">
+      <div className="flex items-center gap-2">
+        <AppIcon name="settingsHex" className="h-3.5 w-3.5 shrink-0" />
+        <span className="min-w-0 truncate">{t('toolCall.submitted')} · {operationTitle}</span>
+      </div>
+    </div>
+  )
+}
+
 function ProjectContextDataCard({ data }: DataMessagePartProps<ProjectContextPartData>) {
   const t = useTranslations('assistantAgent')
   return (
@@ -671,48 +685,22 @@ function readToolResultFailureMessage(result: unknown): string | null {
   return code || null
 }
 
-function readOperationSubmissionState(result: unknown): OperationSubmissionState | null {
-  if (!isRecord(result) || result.ok !== true || !isRecord(result.data) || result.data.async !== true) return null
-  const taskIds = typeof result.data.taskId === 'string'
-    ? [result.data.taskId]
-    : Array.isArray(result.data.taskIds)
-      ? result.data.taskIds
-      : []
-  const taskRefs = taskIds.flatMap((taskId) => (
-    typeof taskId === 'string' && taskId.trim() ? [{ taskId: taskId.trim() }] : []
-  ))
-  return taskRefs.length > 0 ? { phase: 'submitted', taskRefs } : null
-}
-
 export function WorkspaceAssistantToolCallCard(props: ToolCallMessagePartProps) {
   const t = useTranslations('assistantAgent')
   const locale = normalizeProjectAgentLocale(useLocale())
   const operationTitle = localizeProjectAgentOperationTitle(props.toolName, locale)
-  const toolStatus = props.status.type
   const failureMessage = readToolResultFailureMessage(props.result)
-  const submissionState = toolStatus === 'complete' ? readOperationSubmissionState(props.result) : null
-  const summaryText = toolStatus === 'complete'
-    ? failureMessage ? t('toolCall.failed') : submissionState?.phase === 'submitted' ? t('toolCall.submitted') : t('toolCall.success')
-    : toolStatus === 'requires-action'
-      ? t('toolCall.needsAction')
-      : t('toolCall.running')
-  const iconName = toolStatus === 'incomplete'
-    ? 'loader'
-    : failureMessage
-      ? 'alert'
-      : 'settingsHex'
+  if (!failureMessage) return null
 
   return (
-    <div className={`text-[12px] leading-5 ${failureMessage ? 'text-[var(--glass-tone-warn-fg)]' : 'text-[var(--glass-text-tertiary)]'}`}>
+    <div className="text-[12px] leading-5 text-[var(--glass-tone-warn-fg)]">
       <div className="flex items-center gap-2">
-        <AppIcon name={iconName} className={`h-3.5 w-3.5 shrink-0 ${toolStatus === 'incomplete' ? 'animate-spin' : ''}`} />
-        <span className="min-w-0 truncate">{summaryText} · {operationTitle}</span>
+        <AppIcon name="alert" className="h-3.5 w-3.5 shrink-0" />
+        <span className="min-w-0 truncate">{t('toolCall.failed')} · {operationTitle}</span>
       </div>
-      {failureMessage ? (
-        <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[11px] leading-4">
-          {t('toolCall.failedDetail')}
-        </div>
-      ) : null}
+      <div className="ml-5 mt-1 rounded-lg bg-[var(--glass-tone-warn-bg)]/45 px-2 py-1 text-[11px] leading-4">
+        {t('toolCall.failedDetail')}
+      </div>
     </div>
   )
 }
@@ -741,7 +729,7 @@ export function useWorkspaceAssistantMessagePartComponents({
     data: {
       by_name: {
         'agent-run': HiddenRuntimeContextDataCard,
-        'agent-operation-start': HiddenRuntimeContextDataCard,
+        'agent-operation-submitted': OperationSubmittedDataCard,
         'agent-operation-plan-preview': OperationPlanPreviewDataCard,
         'agent-stop': AgentStopDataCard,
         'agent-runtime-context': HiddenRuntimeContextDataCard,

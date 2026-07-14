@@ -85,13 +85,7 @@ function createTextProtocolGuard(): (chunk: ProjectAgentUiChunk) => void {
   }
 }
 
-function inferToolNameFromCallId(toolCallId: string, toolNames: readonly string[]): string {
-  const normalized = toolCallId.startsWith('tool_') ? toolCallId.slice('tool_'.length) : toolCallId
-  const match = [...toolNames]
-    .sort((left, right) => right.length - left.length)
-    .find((toolName) => normalized === toolName || normalized.startsWith(`${toolName}_`))
-  return match ?? (normalized.split('_').slice(0, -1).join('_') || 'tool')
-}
+const SYNTHETIC_TOOL_NAME = 'call'
 
 function createSyntheticToolInputChunks(params: {
   toolCallId: string
@@ -124,7 +118,6 @@ export function createDataChunk(type: string, data: unknown): ProjectAgentUiChun
 export function createProjectAgentUiMessageStream(params: {
   source: Parameters<typeof createAiSdkUiMessageStream>[0]
   initialChunks: ProjectAgentUiChunk[]
-  toolNames?: readonly string[]
   drainChunks?: () => ProjectAgentUiChunk[]
   beforeFinish: () => Promise<ProjectAgentUiChunk[]>
   onChunk?: (chunk: ProjectAgentUiChunk) => void
@@ -161,8 +154,12 @@ export function createProjectAgentUiMessageStream(params: {
           startedToolCallIds.add(toolCallId)
         }
         if (toolCallId && (isToolApprovalRequestChunk(chunk) || isToolOutputChunk(chunk)) && !startedToolCallIds.has(toolCallId)) {
-          const toolName = inferToolNameFromCallId(toolCallId, params.toolNames ?? [])
-          for (const syntheticChunk of createSyntheticToolInputChunks({ toolCallId, toolName })) {
+          // The SDK requires an input chunk before approval/output. This transport-only
+          // placeholder is never projected as product identity or user-visible state.
+          for (const syntheticChunk of createSyntheticToolInputChunks({
+            toolCallId,
+            toolName: SYNTHETIC_TOOL_NAME,
+          })) {
             startedToolCallIds.add(toolCallId)
             emitChunk(syntheticChunk)
           }

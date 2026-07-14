@@ -542,6 +542,25 @@ async function submitObservedBoundary(input: {
     }
     return
   }
+  if (
+    input.boundary === 'approval'
+    && (pendingOperationId === 'generate_episode_bgm_score' || pendingOperationId === 'generate_episode_ambient_sound')
+  ) {
+    await expect(input.page.getByText('已提交 · 生成配乐', { exact: true })).toHaveCount(1)
+    await expect(input.page.getByText('已提交 · 生成环境音层', { exact: true })).toHaveCount(1)
+    await expect(input.page.getByText('已提交 · 项目操作', { exact: true })).toHaveCount(0)
+    await setGoldenMediaStatusDelay(15_000)
+    try {
+      await submitGoldenBoundary(input.page, input.boundary)
+      await expect(input.page.getByText('进行中 · 2 个任务', { exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(input.page.getByText('已提交 · 生成配乐', { exact: true })).toHaveCount(1)
+      await expect(input.page.getByText('已提交 · 生成环境音层', { exact: true })).toHaveCount(1)
+      await expect(input.page.getByText('已提交 · 项目操作', { exact: true })).toHaveCount(0)
+    } finally {
+      await setGoldenMediaStatusDelay(0)
+    }
+    return
+  }
 
   await submitGoldenBoundary(input.page, input.boundary)
 }

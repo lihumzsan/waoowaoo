@@ -269,6 +269,8 @@
       "title": "Assistant Run 生命周期",
       "sourcePaths": [
         "src/lib/project-agent",
+        "messages/zh/assistantAgent.json",
+        "messages/en/assistantAgent.json",
         "src/lib/project-projection",
         "src/lib/ai-prompts/templates/project-agent",
         "src/lib/operations",

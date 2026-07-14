@@ -154,6 +154,46 @@ const GENERAL_PROJECT_AGENT_OPERATION_TITLE_COPY = {
     zh: '章节详情',
     en: 'Chapter detail',
   },
+  generate_project_music: {
+    zh: '生成项目音乐',
+    en: 'Generate project music',
+  },
+  ai_create_character: {
+    zh: '创建角色',
+    en: 'Create character',
+  },
+  ai_create_location: {
+    zh: '创建场景',
+    en: 'Create location',
+  },
+  ai_modify_appearance: {
+    zh: '修改角色外观',
+    en: 'Modify character appearance',
+  },
+  ai_modify_location: {
+    zh: '修改场景',
+    en: 'Modify location',
+  },
+  ai_modify_prop: {
+    zh: '修改道具',
+    en: 'Modify prop',
+  },
+  regenerate_group: {
+    zh: '重新生成图片组',
+    en: 'Regenerate image group',
+  },
+  regenerate_single_image: {
+    zh: '重新生成图片',
+    en: 'Regenerate image',
+  },
+  generate_character_image: {
+    zh: '生成角色图片',
+    en: 'Generate character image',
+  },
+  generate_location_image: {
+    zh: '生成场景图片',
+    en: 'Generate location image',
+  },
   reference_to_character: {
     zh: '参考图生成角色',
     en: 'Generate character from references',
@@ -305,6 +345,10 @@ export function localizeProjectAgentOperationTitle(
   const copy = PROJECT_AGENT_OPERATION_TITLE_COPY[operationId]
   if (!copy) return locale === 'en' ? 'Project operation' : '项目操作'
   return copy[locale]
+}
+
+export function hasProjectAgentOperationTitle(operationId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PROJECT_AGENT_OPERATION_TITLE_COPY, operationId)
 }
 
 export function buildCompressionPrompt(locale: ProjectAgentLocale, transcript: string): {

@@ -1449,7 +1449,6 @@ export async function createProjectAgentChatResponse(input: {
     const stream = createProjectAgentUiMessageStream({
       source: result,
       initialChunks,
-      toolNames: operationIds,
       drainChunks: drainSideChannelChunks,
       onChunk: recordAssistantChunk,
       beforeFinish: async () => {

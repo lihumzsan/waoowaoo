@@ -47,10 +47,10 @@ export interface ProjectAgentRunPartData {
   stopReason?: string | null
 }
 
-export interface ProjectAgentOperationStartPartData {
-  runId?: string | null
+export interface ProjectAgentOperationSubmittedPartData {
+  runId: string
   operationId: string
-  toolCallId?: string | null
+  toolCallId: string
 }
 
 export interface ProjectAgentActivityPartData {
@@ -293,7 +293,7 @@ export type WorkspaceAssistantPartType =
   | 'data-agent-interruption'
   | 'data-agent-interruption-resolved'
   | 'data-agent-runtime-context'
-  | 'data-agent-operation-start'
+  | 'data-agent-operation-submitted'
   | 'data-agent-operation-plan-preview'
   | 'data-agent-activity'
   | 'data-agent-stop'
