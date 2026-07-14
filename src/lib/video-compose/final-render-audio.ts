@@ -1,12 +1,6 @@
-export type FinalRenderAudioCommandResult = {
-  readonly stdout: string
-  readonly stderr: string
-}
+import type { FfmpegCommandRunner } from './ffmpeg-command'
 
-export type FinalRenderAudioCommandRunner = (
-  command: string,
-  args: readonly string[],
-) => Promise<FinalRenderAudioCommandResult>
+export type FinalRenderAudioCommandRunner = FfmpegCommandRunner
 
 export type AudioLoudnessTarget = {
   readonly integratedLufs: number
@@ -110,6 +104,11 @@ function formatFilterNumber(value: number): string {
   return value.toFixed(3)
 }
 
+function exactAudioDurationFilter(durationSeconds: number): string {
+  const duration = formatFilterNumber(durationSeconds)
+  return `apad=whole_dur=${duration},atrim=0:${duration},asetpts=PTS-STARTPTS`
+}
+
 function loudnormAnalyzeFilter(target: AudioLoudnessTarget): string {
   return [
     `I=${formatFilterNumber(target.integratedLufs)}`,
@@ -174,9 +173,11 @@ export async function renderFinalRenderClipAudio(input: {
       '-i',
       'anullsrc=r=48000:cl=stereo',
       '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
+      'pcm_s16le',
+      '-ar',
+      '48000',
+      '-ac',
+      '2',
       input.outputPath,
     ])
     return false
@@ -190,11 +191,13 @@ export async function renderFinalRenderClipAudio(input: {
     input.durationSeconds.toFixed(3),
     '-vn',
     '-af',
-    `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,loudnorm=${loudnormNormalizeFilter(MAIN_AUDIO_TARGET)}`,
+    `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,loudnorm=${loudnormNormalizeFilter(MAIN_AUDIO_TARGET)},${exactAudioDurationFilter(input.durationSeconds)}`,
     '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
+    'pcm_s16le',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
     input.outputPath,
   ])
   return true
@@ -204,6 +207,7 @@ export async function concatFinalRenderAudioClips(input: {
   readonly runCommand: FinalRenderAudioCommandRunner
   readonly clipAudioPaths: readonly string[]
   readonly outputPath: string
+  readonly durationSeconds: number
 }): Promise<void> {
   if (input.clipAudioPaths.length === 0) throw new Error('FINAL_VIDEO_RENDER_NO_AUDIO_CLIPS')
   const audioInputs = input.clipAudioPaths.flatMap((clipPath) => ['-i', clipPath])
@@ -212,13 +216,15 @@ export async function concatFinalRenderAudioClips(input: {
     '-y',
     ...audioInputs,
     '-filter_complex',
-    `${filterInputs}concat=n=${input.clipAudioPaths.length}:v=0:a=1[aout]`,
+    `${filterInputs}concat=n=${input.clipAudioPaths.length}:v=0:a=1,${exactAudioDurationFilter(input.durationSeconds)}[aout]`,
     '-map',
     '[aout]',
     '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
+    'pcm_s16le',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
     input.outputPath,
   ])
 }
@@ -236,6 +242,7 @@ export async function muxFinalRenderAudio(input: {
 }): Promise<FinalRenderAudioMixResult> {
   const fadeDuration = Math.min(2, Math.max(0.4, input.durationSeconds / 8))
   const fadeOutStart = Math.max(0, input.durationSeconds - fadeDuration)
+  const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
   const bgmMeasurement = await analyzeAudioLoudness(input.runCommand, input.musicPath, BGM_AUDIO_TARGET)
   const ambientSoundPath = input.ambientSoundPath?.trim() || null
   const ambientSoundMeasurement = ambientSoundPath
@@ -254,8 +261,8 @@ export async function muxFinalRenderAudio(input: {
         ambientSoundPath,
         '-filter_complex',
         [
-          `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
-          `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambientSoundMeasurement)}[ambientSound_norm]`,
+          `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter}[bgm_norm]`,
+          `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambientSoundMeasurement)},${exactDurationFilter}[ambientSound_norm]`,
           '[ambientSound_norm][bgm_norm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
         ].join(';'),
         '-map',
@@ -270,7 +277,8 @@ export async function muxFinalRenderAudio(input: {
         '192k',
         '-movflags',
         '+faststart',
-        '-shortest',
+        '-t',
+        input.durationSeconds.toFixed(3),
         input.outputPath,
       ])
       return {
@@ -287,7 +295,7 @@ export async function muxFinalRenderAudio(input: {
       '-i',
       input.musicPath,
       '-filter_complex',
-      `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},alimiter=limit=0.95[aout]`,
+      `[1:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter},alimiter=limit=0.95[aout]`,
       '-map',
       '0:v:0',
       '-map',
@@ -300,7 +308,8 @@ export async function muxFinalRenderAudio(input: {
       '192k',
       '-movflags',
       '+faststart',
-      '-shortest',
+      '-t',
+      input.durationSeconds.toFixed(3),
       input.outputPath,
     ])
     return {
@@ -323,9 +332,9 @@ export async function muxFinalRenderAudio(input: {
       ambientSoundPath,
       '-filter_complex',
       [
-        `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[main_norm]`,
-        `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
-        `[3:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambientSoundMeasurement)}[ambientSound_norm]`,
+        `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[main_norm]`,
+        `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter}[bgm_norm]`,
+        `[3:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,loudnorm=${loudnormApplyFilter(AMBIENT_SOUND_AUDIO_TARGET, ambientSoundMeasurement)},${exactDurationFilter}[ambientSound_norm]`,
         '[main_norm]asplit=2[main_mix][main_sidechain]',
         `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
         '[main_mix][ambientSound_norm][ducked_bgm]amix=inputs=3:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
@@ -342,7 +351,8 @@ export async function muxFinalRenderAudio(input: {
       '192k',
       '-movflags',
       '+faststart',
-      '-shortest',
+      '-t',
+      input.durationSeconds.toFixed(3),
       input.outputPath,
     ])
     return {
@@ -363,8 +373,8 @@ export async function muxFinalRenderAudio(input: {
       input.musicPath,
     '-filter_complex',
     [
-      `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[main_norm]`,
-      `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)}[bgm_norm]`,
+      `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[main_norm]`,
+      `[2:a]atrim=0:${input.durationSeconds.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fadeDuration.toFixed(3)},afade=t=out:st=${fadeOutStart.toFixed(3)}:d=${fadeDuration.toFixed(3)},loudnorm=${loudnormApplyFilter(BGM_AUDIO_TARGET, bgmMeasurement)},volume=${input.volume.toFixed(3)},${exactDurationFilter}[bgm_norm]`,
       '[main_norm]asplit=2[main_mix][main_sidechain]',
       `[bgm_norm][main_sidechain]sidechaincompress=threshold=${BGM_DUCKING_THRESHOLD}:ratio=${BGM_DUCKING_RATIO}:attack=${BGM_DUCKING_ATTACK_MS}:release=${BGM_DUCKING_RELEASE_MS}[ducked_bgm]`,
       '[main_mix][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[aout]',
@@ -381,7 +391,8 @@ export async function muxFinalRenderAudio(input: {
     '192k',
     '-movflags',
     '+faststart',
-    '-shortest',
+    '-t',
+    input.durationSeconds.toFixed(3),
     input.outputPath,
   ])
   return {
@@ -397,7 +408,9 @@ export async function muxFinalRenderSourceAudio(input: {
   readonly mainAudioPath: string
   readonly hasSourceAudio: boolean
   readonly outputPath: string
+  readonly durationSeconds: number
 }): Promise<{ readonly hasSourceAudio: boolean; readonly mainAudio?: AudioLoudnessMeasurement }> {
+  const exactDurationFilter = exactAudioDurationFilter(input.durationSeconds)
   if (!input.hasSourceAudio) {
     await input.runCommand('ffmpeg', [
       '-y',
@@ -409,6 +422,8 @@ export async function muxFinalRenderSourceAudio(input: {
       '0:v:0',
       '-map',
       '1:a:0',
+      '-af',
+      exactDurationFilter,
       '-c:v',
       'copy',
       '-c:a',
@@ -417,7 +432,8 @@ export async function muxFinalRenderSourceAudio(input: {
       '192k',
       '-movflags',
       '+faststart',
-      '-shortest',
+      '-t',
+      input.durationSeconds.toFixed(3),
       input.outputPath,
     ])
     return { hasSourceAudio: false }
@@ -431,7 +447,7 @@ export async function muxFinalRenderSourceAudio(input: {
     '-i',
     input.mainAudioPath,
     '-filter_complex',
-    `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)}[aout]`,
+    `[1:a]loudnorm=${loudnormApplyFilter(MAIN_AUDIO_TARGET, mainMeasurement)},${exactDurationFilter}[aout]`,
     '-map',
     '0:v:0',
     '-map',
@@ -444,7 +460,8 @@ export async function muxFinalRenderSourceAudio(input: {
     '192k',
     '-movflags',
     '+faststart',
-    '-shortest',
+    '-t',
+    input.durationSeconds.toFixed(3),
     input.outputPath,
   ])
   return {

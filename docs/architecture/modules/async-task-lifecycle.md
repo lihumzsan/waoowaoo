@@ -13,6 +13,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-02A — 单个 attempt 只有一个执行者。** worker 开始必须由 DB 以 `status=queued` 原子 CAS 为 `status=processing, attempt=attempt+1`，并返回穷尽的 `claimed / already_processing / terminal / missing` 结果；`processing → processing` 不是合法领取边沿。同一 BullMQ job 的重复、stalled 重投或并发 delivery 只有一个执行者能进入 handler。`already_processing` delivery 必须以运输失败结束，禁止正常 return 后让 BullMQ 把未交接的业务 Task 记为 completed；只有 `terminal / missing` 可以幂等跳过。heartbeat、progress、retry、终态提交与 worker 日志均必须携带该 DB attempt，旧 worker 的晚到写入必须成为 no-op；BullMQ `attemptsMade` 是可丢失的运输事实，Redis 丢失后重建 job 也无权重置业务 attempt。
 - **TL-02B — Worker/Redis 运行参数只有一个解析入口。** image/video/music/text/outbox concurrency、provider poll timeout/interval、Outbox lease 与最大持久投递次数必须由 `workers/runtime-config.ts` 的穷尽 registry 解析；Redis host/port/TLS/credentials 必须由 `redis-config.ts` 解析。变量未配置时使用权威入口声明的缺省值；变量一旦存在但格式非法、非正整数、越界或非法布尔值必须原地失败，禁止 worker/Redis client 用 `parseInt(...) || default` 静默改写配置。Outbox dead-letter 只使用 DB `deliveryCount`，BullMQ `attemptsMade` 无业务写权。
 - **TL-02C — Worker attempt 上下文必须并发隔离。** Node worker 必须通过真正的 `AsyncLocalStorage` 传播 `taskId + taskAttempt`；ESM 启动时缺少该能力必须原地失败，禁止静默退化为进程全局变量。并发 Task 的日志、progress、LLM/vision 和 provider 回调必须始终读到各自 DB claim 分配的 attempt，不能因另一 Task 先完成或切换异步链而丢失 fence。
+- **TL-02D — 本地媒体子进程必须有界且服从权威时间线。** Final/Chapter render 只能经 `video-compose/ffmpeg-command.ts` 启动 FFmpeg/FFprobe；FFmpeg 禁止读取交互 stdin，并必须由显式 stitched canonical duration 派生硬 deadline，超时按当前 Task attempt 失败，heartbeat 不得把静止子进程解释为仍在推进。参与最终混流的临时原声必须统一为 48kHz PCM WAV；主声、BGM 与 Ambient Sound 都必须在唯一混流入口按 canonical duration 执行 `pad → trim → reset PTS`，最终容器由显式 `-t` 裁决时长，不得依赖多路编码 EOF、`-shortest` 或事件到达顺序。
 - **TL-03 — 范围与目标一致。** project、episode、chapter 和 target identity 必须从统一 payload/normalizer 派生；写入方与读取方不得使用不同 scope 语义。
 - **TL-04 — 提交失败原子回滚。** Task 创建事务中的 target ownership、Wait、billing、event 或 Outbox 任一步失败必须整体回滚，不得留下 Task、冻结金额、孤儿记录或不可恢复 dedupe 状态。Redis 在事务提交后不可用时由持久 `task.enqueue` responsibility 恢复，不得把已正确提交的 Task 伪造为业务失败再补偿。
 - **TL-04A — Dedupe 绑定服从当前锁定事实。** 普通读取只可发现 dedupe 候选；复用决定必须在同一事务以 `FOR UPDATE` 重读 Task。候选已经终态、identity/fingerprint 冲突或缺失完整 event/outbox bundle 时必须失败，不得把 REPEATABLE READ 旧快照中的 active Task 绑定给新 Wait。
@@ -74,6 +75,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - Task/Operation 资源影响声明与唯一 resolver：`src/lib/workspace-resource/resource-impact.ts`；同步 Operation 持久事件：`src/lib/workspace-resource/resource-change-events.ts`；终态通知与 Query 重新读取：`src/lib/query/workspace-sse-event-sync.ts`、`src/lib/query/resource-change-sync.ts`。
 - 重试判定：`src/lib/task/retry-policy.ts`；LLM Task registry：`src/lib/llm-observe/task-policy.ts`。
 - Provider invocation fence：`src/lib/task/provider-invocation.ts`；媒体/LLM/vision 调用统一门禁：`src/lib/ai-exec/engine.ts`；稳定 Task 产物 key：`src/lib/task/artifact-storage.ts`。
+- Final/Chapter render 的 FFmpeg 子进程门禁：`src/lib/video-compose/ffmpeg-command.ts`；临时 PCM 与 canonical duration 混流：`src/lib/video-compose/final-render-audio.ts`。
 - 维护窗口只读排空门禁：`npm run db:async-migration-preflight` / `scripts/check-async-migration-preflight.ts`。
 - Worker concurrency 与 external poll 配置：`src/lib/workers/runtime-config.ts`；Redis 配置：`src/lib/redis-config.ts`；共享正整数解析：`src/lib/runtime-config/positive-integer.ts`。
 
@@ -84,6 +86,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证并发终态通过锁定 Wait aggregate 收敛且 continuation command 唯一。
 - `tests/integration/task/worker-log-context-concurrency.integration.test.ts` 在真实 tsx worker 启动方式下交错两个 Task，验证 `taskId + taskAttempt` 不会退化为共享进程变量。
 - `tests/integration/task/{provider-invocation-at-most-once,async-migration-preflight,edit-script-ownership-migration}.integration.test.ts` 验证 provider POST fence 的同 attempt 单提交、成功兄弟重放、仅失败 invocation 由更高 attempt 重取、external terminal failed 重开、永久拒绝与结果未知零重提，以及维护窗口 fail-closed 与真实 schema 安装。
+- `tests/integration/task/final-render-ffmpeg.integration.test.ts` 使用真实 FFmpeg 反证短原声与两条 M4A 音频的编码尾差会截断或挂起最终混流，并验证临时原声为 PCM、最终容器服从 stitched canonical duration 且同时包含音视频流。
 - `tests/unit/task/{job-envelope,retry-policy,target-ownership,normalize-error,operation-result-normalizer}.test.ts` 与 `tests/unit/sse/{protocol,server-session}.test.ts` 只验证纯协议和 resolver 边界。
 - `tests/contracts/task-definition-conformance.test.ts` 从生产 Task registry 穷尽验证 queue、handler、billing、retry、execution 和 terminal projector 声明。
 - Task 相关静态 guards 只阻止已知第二 writer/入口重新出现，不作为 route → worker → DB 行为证明。
@@ -99,6 +102,8 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 6. `20260712233000` 会删除 Outbox、provider checkpoint、审批链和持久 JSON 中没有分流语义的固定标记；旧代码仍会写这些字段，新代码会 strict-reject 旧 JSON，因此必须在同一维护窗口先排空、迁移，再一次性切换全部应用与 worker。
 
 ## 历史回归
+
+- 最终成片在真实三路音频组合中曾长期停在估算 99%：Task DB 实际停于 `final_render_music`，FFmpeg 已写出不含 `moov` 的半成品后不再推进，但 worker heartbeat 仍持续刷新。根因是章节原声先逐段编码为 AAC/M4A、再拼接为 AAC/M4A，编码 priming 与帧取整让权威 110 秒时间线出现 `109.921 / 110.039 / 110.001` 秒的三路尾差；最终滤镜又用 `amix duration=first + -shortest` 把终止裁决交给不同 EOF，且共享 FFmpeg 执行入口没有 deadline，因而一次子进程失活会永久保持业务 `processing`。旧 unit 只 mock `runCommand` 并断言滤镜字符串，主 Journey 的对齐合成资产也没有反证短原声与两条 M4A 音频的真实组合。当前 Final/Chapter render 的临时原声统一为 48kHz PCM WAV，所有混流输入按 stitched canonical duration 执行 `pad → trim → reset PTS`，最终输出使用显式 `-t`；唯一 `ffmpeg-command` 入口禁用 stdin 并按媒体时长设置硬 deadline，超时显式失败后仍由既有 Task Terminal Service 投影。`final-render-ffmpeg.integration.test.ts` 使用真实 FFmpeg 验证短原声、M4A BGM 与 M4A Ambient Sound 仍生成完整时长且同时含音视频流；超长真实媒体在不同硬件上的最坏性能仍是未验证盲区。持久 BGM/Ambient Sound 保持 `audio/mp4`（M4A、仅音轨），不误改为同样有编码延迟且更不适合精确剪辑的 MP3。
 
 - BGM 与 Ambient Sound 拆成“免费文本规划 → 收费媒体生成”后，资源表仍只有一个 `taskId`；生成 Task 启动会覆盖规划 Task identity，Canvas 因而用生成 owner 接管规划 stream 的终态交接，完整主 Journey 稳定观察到 presentation 空窗。旧分层测试只分别验证两个 Task 的终态，没有验证跨 Task 的连续交接。当前 `taskId` 只表示当前执行 owner，`planTaskId` 只由规划 worker 写入并保留为规划流 owner，Canvas 只用 `planTaskId` 完成该流的终态交接；Golden 同时断言两阶段 Task 时序、正式资源 owner 与连续 presentation。
 

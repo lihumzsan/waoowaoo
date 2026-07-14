@@ -11,6 +11,7 @@ import type { TaskJobData } from '@/lib/task/types'
 import { assertFinalRenderClipsHaveSources, normalizeFinalRenderErrorLocale } from '@/lib/video-compose/final-render-errors'
 import { buildFinalRenderClips, resolveFinalRenderDimensions } from '@/lib/video-compose/final-render-plan'
 import { concatFinalRenderAudioClips, muxFinalRenderSourceAudio, renderFinalRenderClipAudio } from '@/lib/video-compose/final-render-audio'
+import { createFfmpegCommandRunner } from '@/lib/video-compose/ffmpeg-command'
 import { reportTaskProgress } from './shared'
 import { assertTaskActive } from './utils'
 import {
@@ -18,7 +19,6 @@ import {
   concatClips,
   normalizeClip,
   probeDurationSeconds,
-  runCommand,
   writeVideoSourceToFile,
 } from './final-video-render'
 
@@ -132,13 +132,14 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
     })
 
     const dimensions = resolveFinalRenderDimensions(project.videoRatio)
+    const plannedDurationSeconds = clips.reduce((sum, clip) => sum + clip.durationSeconds, 0)
     const normalizedPaths: string[] = []
     const clipAudioPaths: string[] = []
     let hasSourceAudio = false
     for (const clip of clips) {
       const sourcePath = path.join(workspaceDir, `source-${clip.order}.mp4`)
       const normalizedPath = path.join(workspaceDir, `clip-${clip.order}.mp4`)
-      const clipAudioPath = path.join(workspaceDir, `clip-audio-${clip.order}.m4a`)
+      const clipAudioPath = path.join(workspaceDir, `clip-audio-${clip.order}.wav`)
       await writeVideoSourceToFile(clip.source, sourcePath)
       await normalizeClip({
         sourcePath,
@@ -148,7 +149,10 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
         height: dimensions.height,
       })
       const clipHasAudio = await renderFinalRenderClipAudio({
-        runCommand,
+        runCommand: createFfmpegCommandRunner({
+          stage: 'chapter_render_clip_audio',
+          expectedDurationSeconds: clip.durationSeconds,
+        }),
         sourcePath,
         outputPath: clipAudioPath,
         durationSeconds: clip.durationSeconds,
@@ -164,21 +168,30 @@ export async function handleChapterRenderTask(job: Job<TaskJobData>) {
       clipPaths: normalizedPaths,
       listPath: path.join(workspaceDir, 'concat.txt'),
       outputPath: stitchedPath,
+      durationSeconds: plannedDurationSeconds,
     })
     const durationSeconds = await probeDurationSeconds(stitchedPath)
-    const mainAudioPath = path.join(workspaceDir, 'main-audio.m4a')
+    const mainAudioPath = path.join(workspaceDir, 'main-audio.wav')
     await concatFinalRenderAudioClips({
-      runCommand,
+      runCommand: createFfmpegCommandRunner({
+        stage: 'chapter_render_concat_audio',
+        expectedDurationSeconds: durationSeconds,
+      }),
       clipAudioPaths,
       outputPath: mainAudioPath,
+      durationSeconds,
     })
     const outputPath = path.join(workspaceDir, 'chapter.mp4')
     await muxFinalRenderSourceAudio({
-      runCommand,
+      runCommand: createFfmpegCommandRunner({
+        stage: 'chapter_render_mux_source_audio',
+        expectedDurationSeconds: durationSeconds,
+      }),
       stitchedPath,
       mainAudioPath,
       hasSourceAudio,
       outputPath,
+      durationSeconds,
     })
 
     await reportTaskProgress(job, 92, { stage: 'chapter_render_persist', chapterId })

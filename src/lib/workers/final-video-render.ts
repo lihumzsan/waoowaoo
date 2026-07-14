@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import type { Job } from 'bullmq'
 import { prisma } from '@/lib/prisma'
 import {
@@ -41,21 +39,15 @@ import {
 } from '@/lib/video-compose/final-render-audio'
 import { buildBgmTimelineSignature } from '@/lib/bgm-score/timeline'
 import {
-  buildFfmpegExecFileOptions,
-  resolveFfmpegBinary,
-} from '@/lib/video-compose/ffmpeg-binaries'
+  createFfmpegCommandRunner,
+  runFfmpegCommand,
+} from '@/lib/video-compose/ffmpeg-command'
 
 type FinalVideoRenderPayload = {
   readonly episodeId?: unknown
   readonly bgmVolume?: unknown
 }
 
-type CommandResult = {
-  readonly stdout: string
-  readonly stderr: string
-}
-
-const execFileAsync = promisify(execFile)
 const DEFAULT_FINAL_RENDER_BGM_VOLUME = 1
 const FINAL_RENDER_BGM_DURATION_TOLERANCE_SECONDS = 0.25
 const FINAL_RENDER_AMBIENT_SOUND_DURATION_TOLERANCE_SECONDS = 0.25
@@ -164,29 +156,8 @@ function extensionFromMimeType(mimeType: string): string {
   return 'mp3'
 }
 
-export async function runCommand(command: string, args: readonly string[]): Promise<CommandResult> {
-  if (command !== 'ffmpeg' && command !== 'ffprobe') {
-    const result = await execFileAsync(command, [...args], {
-      maxBuffer: 32 * 1024 * 1024,
-    })
-    return {
-      stdout: String(result.stdout ?? ''),
-      stderr: String(result.stderr ?? ''),
-    }
-  }
-
-  const execution = resolveFfmpegBinary(command)
-  const result = await execFileAsync(execution.command, [...args], buildFfmpegExecFileOptions(execution, {
-    maxBuffer: 32 * 1024 * 1024,
-  }))
-  return {
-    stdout: String(result.stdout ?? ''),
-    stderr: String(result.stderr ?? ''),
-  }
-}
-
 export async function probeDurationSeconds(filePath: string): Promise<number> {
-  const result = await runCommand('ffprobe', [
+  const result = await runFfmpegCommand('ffprobe', [
     '-v',
     'error',
     '-show_entries',
@@ -194,7 +165,7 @@ export async function probeDurationSeconds(filePath: string): Promise<number> {
     '-of',
     'default=noprint_wrappers=1:nokey=1',
     filePath,
-  ])
+  ], { stage: 'final_render_probe' })
   const duration = Number.parseFloat(result.stdout.trim())
   if (!Number.isFinite(duration) || duration <= 0) {
     throw new Error('FINAL_VIDEO_RENDER_PROBE_DURATION_FAILED')
@@ -271,7 +242,7 @@ export async function normalizeClip(input: {
   readonly width: number
   readonly height: number
 }): Promise<void> {
-  await runCommand('ffmpeg', [
+  await runFfmpegCommand('ffmpeg', [
     '-y',
     '-i',
     input.sourcePath,
@@ -287,17 +258,21 @@ export async function normalizeClip(input: {
     '-crf',
     '20',
     input.outputPath,
-  ])
+  ], {
+    stage: 'final_render_normalize_clip',
+    expectedDurationSeconds: input.durationSeconds,
+  })
 }
 
 export async function concatClips(input: {
   readonly clipPaths: readonly string[]
   readonly listPath: string
   readonly outputPath: string
+  readonly durationSeconds: number
 }): Promise<void> {
   const lines = input.clipPaths.map((clipPath) => `file '${escapeConcatPath(clipPath)}'`).join('\n')
   await writeFile(input.listPath, `${lines}\n`, 'utf8')
-  await runCommand('ffmpeg', [
+  await runFfmpegCommand('ffmpeg', [
     '-y',
     '-f',
     'concat',
@@ -308,7 +283,10 @@ export async function concatClips(input: {
     '-c',
     'copy',
     input.outputPath,
-  ])
+  ], {
+    stage: 'final_render_concat_video',
+    expectedDurationSeconds: input.durationSeconds,
+  })
 }
 
 async function persistEpisodeFinalOutputSuccess(input: {
@@ -421,13 +399,14 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
     })
 
     const dimensions = resolveFinalRenderDimensions(project.videoRatio)
+    const plannedDurationSeconds = clips.reduce((sum, clip) => sum + clip.durationSeconds, 0)
     const normalizedPaths: string[] = []
     const clipAudioPaths: string[] = []
     let hasSourceAudio = false
     for (const clip of clips) {
       const sourcePath = path.join(workspaceDir, `source-${clip.order}.mp4`)
       const normalizedPath = path.join(workspaceDir, `clip-${clip.order}.mp4`)
-      const clipAudioPath = path.join(workspaceDir, `clip-audio-${clip.order}.m4a`)
+      const clipAudioPath = path.join(workspaceDir, `clip-audio-${clip.order}.wav`)
       await writeVideoSourceToFile(clip.source, sourcePath)
       await normalizeClip({
         sourcePath,
@@ -437,7 +416,10 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         height: dimensions.height,
       })
       const clipHasAudio = await renderFinalRenderClipAudio({
-        runCommand,
+        runCommand: createFfmpegCommandRunner({
+          stage: 'final_render_clip_audio',
+          expectedDurationSeconds: clip.durationSeconds,
+        }),
         sourcePath,
         outputPath: clipAudioPath,
         durationSeconds: clip.durationSeconds,
@@ -452,13 +434,18 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       clipPaths: normalizedPaths,
       listPath: path.join(workspaceDir, 'concat.txt'),
       outputPath: stitchedPath,
+      durationSeconds: plannedDurationSeconds,
     })
     const stitchedDurationSeconds = await probeDurationSeconds(stitchedPath)
-    const mainAudioPath = path.join(workspaceDir, 'main-audio.m4a')
+    const mainAudioPath = path.join(workspaceDir, 'main-audio.wav')
     await concatFinalRenderAudioClips({
-      runCommand,
+      runCommand: createFfmpegCommandRunner({
+        stage: 'final_render_concat_audio',
+        expectedDurationSeconds: stitchedDurationSeconds,
+      }),
       clipAudioPaths,
       outputPath: mainAudioPath,
+      durationSeconds: stitchedDurationSeconds,
     })
 
     await reportTaskProgress(job, 78, { stage: 'final_render_compose' })
@@ -487,7 +474,10 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
         await writeFile(ambientSoundPath, await getObjectBuffer(ambientSoundMix.storageKey))
       }
       await muxFinalRenderAudio({
-        runCommand,
+        runCommand: createFfmpegCommandRunner({
+          stage: 'final_render_mux_audio',
+          expectedDurationSeconds: stitchedDurationSeconds,
+        }),
         stitchedPath,
         mainAudioPath,
         hasSourceAudio,
@@ -499,11 +489,15 @@ export async function handleFinalVideoRenderTask(job: Job<TaskJobData>) {
       })
     } else {
       await muxFinalRenderSourceAudio({
-        runCommand,
+        runCommand: createFfmpegCommandRunner({
+          stage: 'final_render_mux_source_audio',
+          expectedDurationSeconds: stitchedDurationSeconds,
+        }),
         stitchedPath,
         mainAudioPath,
         hasSourceAudio,
         outputPath: finalPath,
+        durationSeconds: stitchedDurationSeconds,
       })
     }
     const outputBuffer = await readFile(finalPath)
