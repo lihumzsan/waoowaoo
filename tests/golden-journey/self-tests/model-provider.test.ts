@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { GoldenModelServer } from '../providers/model/server'
 import { startGoldenModelServer } from '../providers/model/server'
-import { decideGoldenModelResponse } from '../providers/model/policy'
+import {
+  decideGoldenModelResponse,
+  GOLDEN_REMAINING_VIDEO_REQUEST,
+} from '../providers/model/policy'
 import type { GoldenProviderGateway } from '../providers/gateway'
 import { startGoldenProviderGateway } from '../providers/gateway'
 import type { GoldenMediaServer } from '../providers/media/server'
@@ -497,6 +500,60 @@ describe('Golden local model provider', () => {
       kind: 'tool_call',
       toolName: 'plan_chapters',
       argumentsJson: '{"chapterIds":null}',
+    })
+  })
+
+  it('pauses the mainline for one Canvas video before submitting the remaining batch', () => {
+    const request = (userText: string) => ({
+      model: 'golden-model',
+      messages: [
+        {
+          role: 'system' as const,
+          content: '[project_state_snapshot]\nworkflowStep=video_segments\nworkflowStatus=ready\nworkflowRecommendedOperation=render_chapters\n[/project_state_snapshot]',
+        },
+        { role: 'user' as const, content: userText },
+      ],
+      tools: [
+        {
+          type: 'function' as const,
+          function: {
+            name: 'generate_video_segments',
+            parameters: {
+              type: 'object',
+              required: ['scope'],
+              properties: {
+                scope: {
+                  type: 'object',
+                  required: ['kind', 'chapterId'],
+                  properties: {
+                    kind: { type: 'string', enum: ['pending'] },
+                    chapterId: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          type: 'function' as const,
+          function: { name: 'render_chapters', parameters: { type: 'object' } },
+        },
+      ],
+    })
+
+    expect(decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 19,
+      request: request('wait for the Canvas action'),
+    })).toMatchObject({ kind: 'text' })
+    expect(decideGoldenModelResponse({
+      scenarioId: 'normal-mainline',
+      requestOrdinal: 20,
+      request: request(GOLDEN_REMAINING_VIDEO_REQUEST),
+    })).toMatchObject({
+      kind: 'tool_call',
+      toolName: 'generate_video_segments',
+      argumentsJson: JSON.stringify({ scope: { kind: 'pending', chapterId: null } }),
     })
   })
 

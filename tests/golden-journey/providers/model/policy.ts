@@ -64,7 +64,7 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   request_edit_asset_review_choice: {},
   approve_edit_script_assets: {},
   generate_edit_shot_execution_plan: { chapterId: null },
-  generate_video_segments: { chapterId: null },
+  generate_video_segments: { scope: { kind: 'pending', chapterId: null } },
   render_chapters: { chapterId: null },
   plan_episode_bgm_score: {},
   generate_episode_bgm_score: {},
@@ -72,6 +72,8 @@ const TOOL_ARGUMENT_OVERRIDES: Readonly<Record<string, Readonly<Record<string, u
   generate_episode_ambient_sound: {},
   render_final_video: {},
 }
+
+export const GOLDEN_REMAINING_VIDEO_REQUEST = '生成剩余视频'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -609,6 +611,12 @@ function selectWriteTool(request: GoldenChatCompletionRequest): string | null {
     }
   }
   const workflowPosition = readWorkflowPosition(request)
+  if (workflowPosition === 'video_segments:ready') {
+    if (!messageText(request).includes(GOLDEN_REMAINING_VIDEO_REQUEST)) return null
+    if (available.has('generate_video_segments') && !alreadyCalled.has('generate_video_segments')) {
+      return 'generate_video_segments'
+    }
+  }
   const choiceTool = workflowPosition ? WORKFLOW_POSITION_CHOICE_TOOL[workflowPosition] : undefined
   if (choiceTool && available.has(choiceTool) && !alreadyCalled.has(choiceTool)) {
     return choiceTool

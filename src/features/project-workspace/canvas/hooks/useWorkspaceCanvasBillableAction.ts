@@ -60,7 +60,10 @@ export function resolveWorkspaceCanvasBillableActionRequest(params: {
     case 'generate_video_segments': {
       if (!params.episodeId) return null
       operationId = 'generate_video_segments'
-      input = { episodeId: params.episodeId }
+      input = {
+        episodeId: params.episodeId,
+        scope: params.action.scope,
+      }
       break
     }
     case 'generate_bgm_score':

@@ -36,24 +36,51 @@ describe('resolveCanvasMediaSurfacePhase', () => {
 /**
  * Logic Specification
  * Authority: CN-01 and BA-18 explicit resource scope.
- * Rejects: restoring separate grid and asset-reference video modes instead of the single
- * canonical full-reference segment operation.
+ * Rejects: pricing or executing every episode segment when one Canvas segment action is clicked.
  * Production entry: resolveWorkspaceCanvasBillableActionRequest.
- * Oracle: the Canvas submits only the episode-scoped canonical segment operation.
+ * Oracle: the Canvas submits the canonical operation with the exact projected segment scope.
  * Command: npx vitest run tests/unit/project-workspace/canvas-media-generation-surface.test.ts
  */
 describe('resolveWorkspaceCanvasBillableActionRequest', () => {
-  it('submits the single full-reference segment operation', () => {
+  it('quotes and submits only the clicked full-reference segment', () => {
     const shared = {
       projectId: 'project-1',
       episodeId: 'episode-1',
     }
-
-    expect(resolveWorkspaceCanvasBillableActionRequest({
+    const first = resolveWorkspaceCanvasBillableActionRequest({
       ...shared,
-      action: { type: 'generate_video_segments' },
-    })?.input).toEqual({
-      episodeId: 'episode-1',
+      action: {
+        type: 'generate_video_segments',
+        scope: {
+          kind: 'segment',
+          chapterId: 'chapter-1',
+          editScriptId: 'edit-script-1',
+          segmentId: 'segment-1',
+        },
+      },
     })
+    const second = resolveWorkspaceCanvasBillableActionRequest({
+      ...shared,
+      action: {
+        type: 'generate_video_segments',
+        scope: {
+          kind: 'segment',
+          chapterId: 'chapter-1',
+          editScriptId: 'edit-script-1',
+          segmentId: 'segment-2',
+        },
+      },
+    })
+
+    expect(first?.input).toEqual({
+      episodeId: 'episode-1',
+      scope: {
+        kind: 'segment',
+        chapterId: 'chapter-1',
+        editScriptId: 'edit-script-1',
+        segmentId: 'segment-1',
+      },
+    })
+    expect(second?.cacheKey).not.toBe(first?.cacheKey)
   })
 })

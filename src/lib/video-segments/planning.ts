@@ -23,7 +23,10 @@ import { prisma } from '@/lib/prisma'
 import { TASK_TYPE } from '@/lib/task/types'
 import { withTaskUiPayload } from '@/lib/task/ui-payload'
 import { resolveSystemModelKey } from '@/lib/model-access/system-model-resolver'
+import { canonicalVideoSegmentId } from './identity'
+import { resolveVideoSegmentPlanningDecision } from './planning-policy'
 import { buildVideoSegmentPrompt } from './prompt'
+import { videoSegmentGenerationScopeSchema } from './scope'
 import {
   type VideoSegmentReferenceImage,
   type VideoSegmentTaskPayload,
@@ -54,12 +57,6 @@ function normalizeString(value: unknown): string {
 
 function resolveLocale(ctx: ProjectAgentOperationContext): 'en' | 'zh' {
   return ctx.context.locale === 'en' ? 'en' : 'zh'
-}
-
-function canonicalVideoSegmentId(editScriptId: string, segmentId: string): string {
-  const hex = hashCanonicalJson({ kind: 'project_video_segment', editScriptId, segmentId }).slice(0, 32)
-  const variant = ((Number.parseInt(hex[16] ?? '0', 16) & 0x3) | 0x8).toString(16)
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 
 function parseStyleBible(value: unknown) {
@@ -174,7 +171,7 @@ export async function planGenerateVideoSegments(input: {
     throw new Error('VIDEO_SEGMENT_NATIVE_AUDIO_NOT_CONFIGURABLE')
   }
   const episodeId = normalizeString(input.payload.episodeId) || normalizeString(input.ctx.context.episodeId)
-  const chapterId = normalizeString(input.payload.chapterId)
+  const scope = videoSegmentGenerationScopeSchema.parse(input.payload.scope)
   if (!episodeId) throw new Error('VIDEO_SEGMENT_EPISODE_REQUIRED')
 
   const [project, bible, scripts, videoModel] = await Promise.all([
@@ -190,7 +187,8 @@ export async function planGenerateVideoSegments(input: {
       where: {
         projectId: input.ctx.projectId,
         episodeId,
-        ...(chapterId ? { chapterId } : {}),
+        ...(scope.chapterId ? { chapterId: scope.chapterId } : {}),
+        ...(scope.kind === 'segment' ? { id: scope.editScriptId } : {}),
       },
       orderBy: { chapter: { chapterIndex: 'asc' } },
       select: {
@@ -213,7 +211,12 @@ export async function planGenerateVideoSegments(input: {
   if (!bible || bible.status !== EDIT_BIBLE_STATUS.CONFIRMED) {
     throw new Error('VIDEO_SEGMENT_EDIT_BIBLE_NOT_READY')
   }
-  if (scripts.length === 0) throw new Error('VIDEO_SEGMENT_EDIT_SCRIPT_REQUIRED')
+  if (scripts.length === 0) {
+    if (scope.kind === 'segment') {
+      throw new Error(`VIDEO_SEGMENT_SCOPE_NOT_FOUND:${scope.editScriptId}:${scope.segmentId}`)
+    }
+    throw new Error('VIDEO_SEGMENT_EDIT_SCRIPT_REQUIRED')
+  }
   const styleBible = parseStyleBible(bible.styleBibleJson)
 
   const parsedScripts = scripts.map((script) => {
@@ -229,10 +232,21 @@ export async function planGenerateVideoSegments(input: {
       core.shots,
       core.generationSegments,
     )
-    return { script, core, execution }
+    const generationSegments = scope.kind === 'segment'
+      ? core.generationSegments.filter((segment) => segment.segmentId === scope.segmentId)
+      : core.generationSegments
+    if (scope.kind === 'segment' && generationSegments.length !== 1) {
+      throw new Error(`VIDEO_SEGMENT_SCOPE_NOT_FOUND:${scope.editScriptId}:${scope.segmentId}`)
+    }
+    const selectedShotIds = new Set(generationSegments.flatMap((segment) => segment.shotIds))
+    const selectedShots = core.shots.filter((shot) => selectedShotIds.has(shot.shotId))
+    if (selectedShots.length !== selectedShotIds.size) {
+      throw new Error(`VIDEO_SEGMENT_SCOPE_SHOTS_MISSING:${script.id}`)
+    }
+    return { script, core, execution, generationSegments, selectedShots }
   })
 
-  const allShots = parsedScripts.flatMap(({ core }) => core.shots)
+  const allShots = parsedScripts.flatMap(({ selectedShots }) => selectedShots)
   const allCharacterIds = uniqueInOrder(allShots.flatMap((shot) => shot.characters.map((character) => character.characterId)))
   const allLocationIds = uniqueInOrder(allShots.map((shot) => shot.scene.locationId))
   const [characters, locations, existingSegments] = await Promise.all([
@@ -257,13 +271,21 @@ export async function planGenerateVideoSegments(input: {
       },
     }),
     prisma.projectVideoSegment.findMany({
-      where: { projectId: input.ctx.projectId, episodeId },
+      where: {
+        projectId: input.ctx.projectId,
+        episodeId,
+        ...(scope.chapterId ? { chapterId: scope.chapterId } : {}),
+        ...(scope.kind === 'segment'
+          ? { editScriptId: scope.editScriptId, segmentId: scope.segmentId }
+          : {}),
+      },
       select: {
         id: true,
         editScriptId: true,
         segmentId: true,
         inputSignature: true,
         status: true,
+        generationTaskId: true,
         videoMediaId: true,
       },
     }),
@@ -274,6 +296,9 @@ export async function planGenerateVideoSegments(input: {
   const maxReferenceImages = requireVideoModelMaxReferenceImages(videoModel)
   const tasks: PlannedTask[] = []
   const metadata: PlannedVideoSegmentMetadata[] = []
+  const taskDependencies: NonNullable<OperationPlan['taskDependencies']> = []
+  let skippedCompletedCount = 0
+  let skippedActiveCount = 0
 
   for (const parsed of parsedScripts) {
     const voiceContext = resolveEditScriptDialogueVoiceContext({
@@ -282,7 +307,7 @@ export async function planGenerateVideoSegments(input: {
     })
     const shotsById = new Map(parsed.core.shots.map((shot) => [shot.shotId, shot]))
     const executionBySegmentId = new Map(parsed.execution.generationSegments.map((segment) => [segment.segmentId, segment]))
-    for (const segment of parsed.core.generationSegments) {
+    for (const segment of parsed.generationSegments) {
       const shots = segment.shotIds.map((shotId) => {
         const shot = shotsById.get(shotId)
         if (!shot) throw new Error(`VIDEO_SEGMENT_SHOT_NOT_FOUND:${segment.segmentId}:${shotId}`)
@@ -328,16 +353,27 @@ export async function planGenerateVideoSegments(input: {
         durationSec,
       })
       const existing = existingByIdentity.get(`${parsed.script.id}:${segment.segmentId}`)
-      if (existing?.inputSignature === inputSignature && existing.status === 'completed') {
-        if (!existing.videoMediaId) throw new Error(`VIDEO_SEGMENT_COMPLETED_MEDIA_MISSING:${existing.id}`)
+      const decision = resolveVideoSegmentPlanningDecision({
+        existing: existing ?? null,
+        inputSignature,
+      })
+      if (decision.kind === 'skip_completed') {
+        skippedCompletedCount += 1
         continue
       }
-      if (
-        existing
-        && existing.inputSignature !== inputSignature
-        && ['queued', 'processing', 'generating'].includes(existing.status)
-      ) {
-        throw new Error(`VIDEO_SEGMENT_REPLAN_IN_FLIGHT:${existing.id}`)
+      if (decision.kind === 'skip_active') {
+        if (!existing) throw new Error(`VIDEO_SEGMENT_ACTIVE_FACT_MISSING:${parsed.script.id}:${segment.segmentId}`)
+        skippedActiveCount += 1
+        taskDependencies.push({
+          taskId: decision.taskId,
+          taskType: TASK_TYPE.VIDEO_SEGMENT,
+          target: {
+            targetType: 'ProjectVideoSegment',
+            targetId: existing.id,
+          },
+          episodeId,
+        })
+        continue
       }
       const id = existing?.id ?? canonicalVideoSegmentId(parsed.script.id, segment.segmentId)
       const taskPayload: VideoSegmentTaskPayload = videoSegmentTaskPayloadSchema.parse({
@@ -390,10 +426,13 @@ export async function planGenerateVideoSegments(input: {
     projectId: input.ctx.projectId,
     userId: input.ctx.userId,
     tasks,
+    ...(taskDependencies.length > 0 ? { taskDependencies } : {}),
     metadata: {
       episodeId,
+      scope,
       videoSegments: metadata,
-      skippedCompletedCount: parsedScripts.reduce((count, parsed) => count + parsed.core.generationSegments.length, 0) - tasks.length,
+      skippedCompletedCount,
+      skippedActiveCount,
     },
   }
 }
@@ -471,5 +510,6 @@ export async function commitGenerateVideoSegments(input: {
     taskIds: results.map((result) => result.taskId),
     results,
     skippedCompletedCount: Number(input.plan.metadata?.skippedCompletedCount ?? 0),
+    skippedActiveCount: Number(input.plan.metadata?.skippedActiveCount ?? 0),
   }
 }

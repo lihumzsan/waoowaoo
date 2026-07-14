@@ -36,6 +36,7 @@ function editScriptWithVideoSegment(
   id: string,
   chapterId: string,
   shotId: string,
+  videoSegmentId: string,
 ): ProjectEditScript {
   return {
     ...editScript(id, chapterId),
@@ -57,6 +58,7 @@ function editScriptWithVideoSegment(
       synchronousSound: 'room tone',
     }],
     generationSegments: [{
+      videoSegmentId,
       segmentId: `segment-${chapterId}`,
       shotIds: [shotId],
       continuity: `continuity-${chapterId}`,
@@ -140,10 +142,63 @@ describe('multi-chapter shot execution Canvas projection', () => {
     ]))
   })
 
+  it('projects canonical video Task identities before Segment rows exist', () => {
+    const scripts = [
+      editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1', 'video-segment-1'),
+      editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2', 'video-segment-2'),
+    ]
+    const projection = buildWorkspaceNodeCanvasProjection({
+      projectId: 'project-1',
+      episodeId: 'episode-1',
+      editFirstWorkflow: createEditFirstWorkflowView({
+        step: 'video_segments',
+        status: { kind: 'ready', reason: null },
+        operationPolicy: createEditFirstWorkflowOperationPolicy({
+          allowedOperationIds: ['generate_video_segments'],
+        }),
+      }),
+      editScripts: scripts,
+      editShotExecutionPlans: [],
+      videoSegments: [],
+      savedLayouts: [],
+      translate: (key) => key,
+    })
+
+    const nodes = projection.nodes.filter((node) => node.data.kind === 'videoPlan')
+    expect(nodes.map((node) => node.data.targetId)).toEqual([
+      'video-segment-1',
+      'video-segment-2',
+    ])
+    expect(nodes.map((node) => node.data.runtimeTargets)).toEqual([
+      [{ targetType: 'ProjectVideoSegment', targetId: 'video-segment-1', types: ['video_segment'] }],
+      [{ targetType: 'ProjectVideoSegment', targetId: 'video-segment-2', types: ['video_segment'] }],
+    ])
+    expect(nodes.map((node) => node.data.action)).toEqual([
+      {
+        type: 'generate_video_segments',
+        scope: {
+          kind: 'segment',
+          chapterId: 'chapter-1',
+          editScriptId: 'edit-script-1',
+          segmentId: 'segment-chapter-1',
+        },
+      },
+      {
+        type: 'generate_video_segments',
+        scope: {
+          kind: 'segment',
+          chapterId: 'chapter-2',
+          editScriptId: 'edit-script-2',
+          segmentId: 'segment-chapter-2',
+        },
+      },
+    ])
+  })
+
   it('projects every completed chapter video in the all-chapters scope', () => {
     const scripts = [
-      editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1'),
-      editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2'),
+      editScriptWithVideoSegment('edit-script-1', 'chapter-1', 'shot-1', 'video-segment-1'),
+      editScriptWithVideoSegment('edit-script-2', 'chapter-2', 'shot-2', 'video-segment-2'),
     ]
     const videoSegments = [
       completedVideoSegment('video-segment-1', 'edit-script-1', 'chapter-1'),

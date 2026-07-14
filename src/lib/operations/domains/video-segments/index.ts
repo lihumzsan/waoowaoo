@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
+import { EDIT_FIRST_VIDEO_SEGMENTS_TOOL_INPUT_SCHEMA } from '@/lib/project-workflow/edit-first-tool-input-schema'
 import { defineOperation } from '@/lib/operations/define-operation'
 import {
   refineTaskBatchSubmitOperationOutputSchema,
@@ -7,15 +7,17 @@ import {
 } from '@/lib/operations/output-schemas'
 import type { ProjectAgentOperationRegistryDraft } from '@/lib/operations/types'
 import { commitGenerateVideoSegments, planGenerateVideoSegments } from '@/lib/video-segments/planning'
+import { videoSegmentGenerationScopeSchema } from '@/lib/video-segments/scope'
 
 const inputSchema = z.object({
   episodeId: z.string().trim().min(1).optional(),
-  chapterId: z.string().trim().min(1).nullable().optional(),
+  scope: videoSegmentGenerationScopeSchema,
 }).strict()
 
 const outputSchema = refineTaskBatchSubmitOperationOutputSchema(
   taskBatchSubmitOperationOutputSchemaBase.extend({
     skippedCompletedCount: z.number().int().min(0),
+    skippedActiveCount: z.number().int().min(0),
     results: z.array(z.object({
       refId: z.string().min(1),
       taskId: z.string().min(1),
@@ -48,7 +50,7 @@ export function createVideoSegmentOperations(): ProjectAgentOperationRegistryDra
         required: true,
         summary: '将按已批准资产、核心分段和镜头执行计划生成收费视频；批准后执行不可变任务计划。',
       },
-      toolInputSchema: EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA,
+      toolInputSchema: EDIT_FIRST_VIDEO_SEGMENTS_TOOL_INPUT_SCHEMA,
       inputSchema,
       outputSchema,
       plan: async (ctx, payload) => await planGenerateVideoSegments({

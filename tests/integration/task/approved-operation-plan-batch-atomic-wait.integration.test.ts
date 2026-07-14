@@ -239,9 +239,52 @@ describe('approved operation plan Task batch integration', () => {
       }),
     ).resolves.toBe(2)
   })
-  it('commits an approved Task batch and its single Assistant Wait in the same transaction', async () => {
+  /**
+   * Authority: immutable OperationPlan task dependencies and the single Assistant Wait binding.
+   * Rejects: resubmitting an already-active Task or waiting only for newly billed Tasks, which can
+   * strand the workflow when the pre-existing Task finishes last.
+   * Production entry: persistOperationPlanSnapshot -> invokeApprovedOperationPlan -> bindProjectAgentWaitToTasksInTransaction.
+   * Oracle: two new billed Tasks are created while one existing active dependency joins the same durable Wait.
+   * Command: BILLING_TEST_BOOTSTRAP=1 npx vitest run tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts
+   */
+  it('commits a billed Task batch and binds an existing active dependency into the same Assistant Wait', async () => {
     const seeded = await seedExecution(10)
     await prisma.operationExecution.delete({ where: { id: seeded.execution.id } })
+    const dependency = await prisma.task.create({
+      data: {
+        userId: seeded.user.id,
+        projectId: seeded.project.id,
+        episodeId: seeded.episode.id,
+        type: TASK_TYPE.VIDEO_SEGMENT,
+        targetType: 'ProjectVideoSegment',
+        targetId: 'existing-video-segment-1',
+        status: 'processing',
+        payload: {},
+      },
+    })
+    const plan: OperationPlan = {
+      ...seeded.plan,
+      taskDependencies: [{
+        taskId: dependency.id,
+        taskType: TASK_TYPE.VIDEO_SEGMENT,
+        target: {
+          targetType: dependency.targetType,
+          targetId: dependency.targetId,
+        },
+        episodeId: seeded.episode.id,
+      }],
+    }
+    const snapshot = await persistOperationPlanSnapshot({
+      plan,
+      normalizedInput: { episodeId: seeded.episode.id },
+      quote: await quoteOperationPlan(plan),
+      episodeId: seeded.episode.id,
+    })
+    const issued = await issueApprovalGrant({
+      userId: seeded.user.id,
+      planSnapshotId: snapshot.id,
+      requestId: 'approved-dependent-task-request-1',
+    })
     const { run: initialRun } = await createProjectAgentUserTurnRun({
       runId: 'approved-assistant-run-1',
       requestId: 'approved-assistant-request-1',
@@ -270,7 +313,7 @@ describe('approved operation plan Task batch integration', () => {
           runId: initialRun.id,
           activityId: operationActivityId,
           type: 'operation',
-          operationId: seeded.plan.operationId,
+          operationId: plan.operationId,
         },
       }],
     })
@@ -301,7 +344,7 @@ describe('approved operation plan Task batch integration', () => {
       getCommittedSuspension: () => committed ? committedSuspension : null,
     }
     const output = await invokeApprovedOperationPlan({
-      operation: createApprovedBatchOperation(seeded.plan),
+      operation: createApprovedBatchOperation(plan),
       ctx: {
         request: new Request('http://localhost') as never,
         userId: seeded.user.id,
@@ -317,20 +360,24 @@ describe('approved operation plan Task batch integration', () => {
       },
       normalizedInput: { episodeId: seeded.episode.id },
       invocation: {
-        approvalGrantId: seeded.issued.approvalGrantId,
-        requestId: seeded.issued.operationRequestId,
+        approvalGrantId: issued.approvalGrantId,
+        requestId: issued.operationRequestId,
       },
     })
-    const [storedRun, waits, tasks] = await Promise.all([
+    const [storedRun, waits, submittedTasks, allTaskCount, freezeCount] = await Promise.all([
       prisma.projectAgentRun.findUniqueOrThrow({ where: { id: initialRun.id } }),
       prisma.projectAgentWait.findMany({ where: { runId: initialRun.id } }),
       prisma.task.findMany({ where: { id: { in: output.taskIds } } }),
+      prisma.task.count({ where: { projectId: seeded.project.id } }),
+      prisma.balanceFreeze.count(),
     ])
     expect(taskBatchBinding.isCommitted()).toBe(true)
     expect(storedRun.status).toBe('awaiting_task')
     expect(waits).toHaveLength(1)
-    expect((waits[0]?.taskIds as string[]).sort()).toEqual([...output.taskIds].sort())
-    expect(tasks).toHaveLength(2)
+    expect((waits[0]?.taskIds as string[]).sort()).toEqual([...output.taskIds, dependency.id].sort())
+    expect(submittedTasks).toHaveLength(2)
+    expect(allTaskCount).toBe(3)
+    expect(freezeCount).toBe(2)
   })
 
   it('collects two independent Operation task batches into one sealed Assistant Wait', async () => {

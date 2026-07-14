@@ -8,7 +8,7 @@ export const GOLDEN_SCENARIO_CONTRACTS = [
   {
     id: 'GJ-MAIN-STORY-TO-FINAL-DELIVERABLE',
     kind: 'mainline',
-    title: 'an empty project reaches one durable final video through a real multi-chapter browser workflow',
+    title: 'an empty project generates one Canvas video, skips it in the remaining batch, and reaches one durable final video',
     startStep: 'unavailable',
     expectedTerminal: { step: 'final_render', status: 'completed' },
     requiresWorkers: true,

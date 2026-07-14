@@ -63,6 +63,22 @@ export const EDIT_FIRST_CHAPTER_SCOPE_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSc
   chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a specific chapter or the current selection resolves to a chapter. Otherwise pass null so the system resolves the current/default scope.'),
 })
 
+export const EDIT_FIRST_VIDEO_SEGMENTS_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
+  scope: {
+    type: 'object',
+    properties: {
+      kind: {
+        type: 'string',
+        enum: ['pending'],
+        description: 'Generate every currently pending video segment in the requested chapter scope.',
+      },
+      chapterId: nullableStringProperty('Pass an exact chapterId only when the user explicitly targets a chapter. Otherwise pass null to generate pending segments across the episode.'),
+    },
+    required: ['kind', 'chapterId'],
+    additionalProperties: false,
+  },
+})
+
 export const EDIT_FIRST_REQUIRED_CHAPTER_TOOL_INPUT_SCHEMA: ProjectAgentToolInputSchema = createToolInputSchema({
   chapterId: stringProperty('Exact chapterId to replan. This operation cannot infer a default chapter and must not receive null.'),
 })

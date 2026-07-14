@@ -30,6 +30,7 @@ import {
 } from '@/lib/edit-chapter/asset-menu'
 import { EDIT_BIBLE_STATUS } from '@/lib/edit-bible/constraints'
 import { EDIT_STYLE_PREVIEW_GRID_ASPECT_RATIO } from '@/lib/edit-script/style-preview-image-constants'
+import { canonicalVideoSegmentId } from '@/lib/video-segments/identity'
 import type { Locale } from '@/i18n/routing'
 import {
   normalizeEditScriptStructure,
@@ -741,7 +742,10 @@ async function mapPersistedEditScript(script: PersistedEditScript): Promise<Edit
     generationTaskId: script.generationTaskId,
     assetReviewStatus: normalizeAssetReviewStatus(script.assetReviewStatus),
     shots: core.shots,
-    generationSegments: core.generationSegments,
+    generationSegments: core.generationSegments.map((segment) => ({
+      ...segment,
+      videoSegmentId: canonicalVideoSegmentId(script.id, segment.segmentId),
+    })),
     requirements,
   }
 }

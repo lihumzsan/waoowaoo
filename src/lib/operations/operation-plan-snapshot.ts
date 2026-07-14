@@ -7,8 +7,10 @@ import {
   type OperationPlan,
   type OperationPlanView,
   type PlannedTask,
+  type PlannedTaskDependency,
 } from './planning'
 import { canonicalJson, hashCanonicalJson } from '@/lib/operation-plan-contract/canonical-json'
+import { isTaskType } from '@/lib/task/types'
 
 function toInputJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(canonicalJson(value)) as Prisma.InputJsonValue
@@ -46,6 +48,16 @@ function readStringArray(value: unknown, field: string): string[] {
   })
 }
 
+function readOptionalArray<T>(
+  value: unknown,
+  field: string,
+  parseItem: (item: unknown) => T,
+): T[] | undefined {
+  if (value === null || value === undefined) return undefined
+  if (!Array.isArray(value)) throw new Error(`OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:${field}`)
+  return value.map(parseItem)
+}
+
 function parsePlannedTask(value: unknown): PlannedTask {
   const record = readRecord(value, 'tasks[]')
   const target = readRecord(record.target, 'tasks[].target')
@@ -72,6 +84,24 @@ function parsePlannedTask(value: unknown): PlannedTask {
   }
 }
 
+function parsePlannedTaskDependency(value: unknown): PlannedTaskDependency {
+  const record = readRecord(value, 'taskDependencies[]')
+  const target = readRecord(record.target, 'taskDependencies[].target')
+  const taskType = readString(record, 'taskType')
+  if (!isTaskType(taskType)) {
+    throw new Error(`OPERATION_PLAN_SNAPSHOT_FIELD_INVALID:taskDependencies[].taskType:${taskType}`)
+  }
+  return {
+    taskId: readString(record, 'taskId'),
+    taskType,
+    target: {
+      targetType: readString(target, 'targetType'),
+      targetId: readString(target, 'targetId'),
+    },
+    episodeId: readNullableString(record, 'episodeId'),
+  }
+}
+
 function parseOperationPlan(value: unknown): OperationPlan {
   const record = readRecord(value, 'planSnapshot')
   if (record.kind !== 'task_submission') {
@@ -85,15 +115,61 @@ function parseOperationPlan(value: unknown): OperationPlan {
   const reservedIdentityIds = record.reservedIdentityIds === null || record.reservedIdentityIds === undefined
     ? undefined
     : readStringArray(record.reservedIdentityIds, 'reservedIdentityIds')
+  const taskDependencies = readOptionalArray(
+    record.taskDependencies,
+    'taskDependencies',
+    parsePlannedTaskDependency,
+  )
   return {
     kind: 'task_submission',
     operationId: readString(record, 'operationId'),
     projectId: readString(record, 'projectId'),
     userId: readString(record, 'userId'),
     tasks: record.tasks.map(parsePlannedTask),
+    ...(taskDependencies ? { taskDependencies } : {}),
     ...(reservedIdentityIds ? { reservedIdentityIds } : {}),
     ...(summary !== null ? { summary } : {}),
     ...(metadata ? { metadata } : {}),
+  }
+}
+
+async function assertOperationPlanTaskDependencies(plan: OperationPlan): Promise<void> {
+  const dependencies = plan.taskDependencies ?? []
+  if (dependencies.length === 0) return
+  const dependencyIds = dependencies.map((dependency) => dependency.taskId)
+  if (new Set(dependencyIds).size !== dependencyIds.length) {
+    throw new Error(`OPERATION_PLAN_TASK_DEPENDENCY_DUPLICATE:${plan.operationId}`)
+  }
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: dependencyIds } },
+    select: {
+      id: true,
+      userId: true,
+      projectId: true,
+      episodeId: true,
+      type: true,
+      targetType: true,
+      targetId: true,
+      status: true,
+    },
+  })
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  for (const dependency of dependencies) {
+    const task = taskById.get(dependency.taskId)
+    if (!task) throw new Error(`OPERATION_PLAN_TASK_DEPENDENCY_NOT_FOUND:${dependency.taskId}`)
+    if (
+      task.userId !== plan.userId
+      || task.projectId !== plan.projectId
+      || task.episodeId !== dependency.episodeId
+      || task.type !== dependency.taskType
+      || task.targetType !== dependency.target.targetType
+      || task.targetId !== dependency.target.targetId
+    ) {
+      throw new Error(`OPERATION_PLAN_TASK_DEPENDENCY_SCOPE_MISMATCH:${dependency.taskId}`)
+    }
+    if (task.status !== 'queued' && task.status !== 'processing') {
+      throw new Error(`OPERATION_PLAN_TASK_DEPENDENCY_NOT_ACTIVE:${dependency.taskId}:${task.status}`)
+    }
   }
 }
 
@@ -138,6 +214,7 @@ export async function persistOperationPlanSnapshot(params: {
   episodeId?: string | null
 }): Promise<PersistedOperationPlanSnapshot> {
   assertOperationPlanTaskResourceScopes(params.plan)
+  await assertOperationPlanTaskDependencies(params.plan)
   const scopeKind = params.plan.projectId === 'global-asset-hub' ? 'global_asset_hub' : 'project'
   const scopeId = params.plan.projectId
   const normalizedInput = toInputJson(params.normalizedInput)

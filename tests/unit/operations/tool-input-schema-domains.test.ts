@@ -105,14 +105,22 @@ describe('tool input schema compatibility', () => {
     }
   })
 
-  it('accepts only canonical chapter scope for video segment generation', () => {
+  it('accepts only explicit pending or exact segment scope for video segment generation', () => {
     const registry = createProjectAgentOperationRegistry()
     const operation = registry.generate_video_segments
-    expect(operation.inputSchema.safeParse({ chapterId: null }).success).toBe(true)
-    expect(operation.inputSchema.safeParse({ chapterId: 'chapter-1' }).success).toBe(true)
     expect(operation.inputSchema.safeParse({
-      chapterId: 'chapter-1',
-      gridMode: '2x2',
+      scope: { kind: 'pending', chapterId: null },
+    }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      scope: {
+        kind: 'segment',
+        chapterId: 'chapter-1',
+        editScriptId: 'edit-script-1',
+        segmentId: 'segment-1',
+      },
+    }).success).toBe(true)
+    expect(operation.inputSchema.safeParse({
+      chapterId: null,
     }).success).toBe(false)
   })
 

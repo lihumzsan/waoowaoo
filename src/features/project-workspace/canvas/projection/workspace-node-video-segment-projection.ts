@@ -80,6 +80,9 @@ export function appendWorkspaceVideoSegmentProjection(
   projectedVideoPlans.forEach(({ script, segment, segmentIndex, videoSegment }, projectionIndex) => {
     const chapterId = script.chapterId
     if (!chapterId) throw new Error(`VIDEO_SEGMENT_CHAPTER_REQUIRED:${script.id}`)
+    if (videoSegment && videoSegment.id !== segment.videoSegmentId) {
+      throw new Error(`VIDEO_SEGMENT_VIEW_IDENTITY_MISMATCH:${videoSegment.id}:${segment.videoSegmentId}`)
+    }
     const shots = segment.shotIds.map((shotId) => {
       const shot = script.shots.find((candidate) => candidate.shotId === shotId)
       if (!shot) throw new Error(`VIDEO_SEGMENT_SHOT_UNKNOWN:${script.id}:${segment.segmentId}:${shotId}`)
@@ -104,7 +107,7 @@ export function appendWorkspaceVideoSegmentProjection(
         kind: 'videoPlan',
         layoutNodeType: 'videoPlan',
         targetType: 'videoSegment',
-        targetId: videoSegment?.id ?? `${script.id}:${segment.segmentId}`,
+        targetId: segment.videoSegmentId,
         title: translate('nodes.videoPlan.title', { index: projectionIndex + 1 }),
         eyebrow: translate('nodes.videoPlan.eyebrow'),
         body: segment.continuity,
@@ -116,11 +119,19 @@ export function appendWorkspaceVideoSegmentProjection(
         ...(videoSegment
           ? resourcePresentationFromStatus(videoSegment.status) ?? workspaceCanvasPendingResourcePresentation()
           : workspaceCanvasPendingResourcePresentation()),
-        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoSegment(videoSegment?.id ?? null)),
+        runtimeTargets: runtimeTargets(TASK_RUNTIME_TARGETS.projectVideoSegment(segment.videoSegmentId)),
         ...(actionAvailable
           ? {
               actionLabel: translate(videoSegment?.videoMedia ? 'actions.regenerateVideo' : 'actions.generateVideo'),
-              action: { type: 'generate_video_segments' as const },
+              action: {
+                type: 'generate_video_segments' as const,
+                scope: {
+                  kind: 'segment' as const,
+                  chapterId,
+                  editScriptId: script.id,
+                  segmentId: segment.segmentId,
+                },
+              },
             }
           : {}),
         previewImageUrl: null,
@@ -130,7 +141,7 @@ export function appendWorkspaceVideoSegmentProjection(
           chapterId,
           segmentId: segment.segmentId,
           segmentIndex,
-          videoSegmentId: videoSegment?.id ?? null,
+          videoSegmentId: segment.videoSegmentId,
           shotIds: segment.shotIds,
           shotNumbers: shots.map((shot) => shot.shotNumber),
           durationSec: shots.reduce((sum, shot) => sum + shot.durationSec, 0),

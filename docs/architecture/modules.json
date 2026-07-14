@@ -50,6 +50,7 @@
         "tests/unit/operations/planning.test.ts",
         "tests/unit/project-agent/edit-first-choice-serialization.test.ts",
         "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
+        "tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts",
         "tests/integration/task/approval-plan-change-replay.integration.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
         "tests/integration/task/task-target-terminal-ownership.integration.test.ts",
@@ -166,6 +167,7 @@
       "testPaths": [
         "tests/unit/edit-chapter/persistent-facts.test.ts",
         "tests/unit/project-workflow/edit-first-planning.test.ts",
+        "tests/unit/video-segments/planning-policy.test.ts",
         "tests/golden-journey/self-tests/model-provider.test.ts",
         "tests/golden-journey/journeys/mainline-complete.spec.ts"
       ],
@@ -227,6 +229,7 @@
         "tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts",
         "tests/integration/task/task-reconcile-queue.integration.test.ts",
         "tests/integration/task/approved-operation-plan-batch.integration.test.ts",
+        "tests/integration/task/approved-operation-plan-batch-atomic-wait.integration.test.ts",
         "tests/integration/task/provider-invocation-at-most-once.integration.test.ts",
         "tests/integration/task/task-attempt-claim.integration.test.ts",
         "tests/integration/task/task-target-terminal-projectors.integration.test.ts",
@@ -274,6 +277,7 @@
         "src/lib/project-workflow/edit-first.ts",
         "src/lib/project-workflow/edit-first-view.ts",
         "src/lib/project-workflow/edit-first-operation-ids.ts",
+        "src/lib/project-workflow/edit-first-tool-input-schema.ts",
         "src/lib/edit-script/style-preview-operation-plan.ts",
         "scripts/guards/assistant-choice-offer-authority-guard.mjs",
         "scripts/guards/no-client-agent-control.mjs",

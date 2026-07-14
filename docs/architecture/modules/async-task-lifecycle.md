@@ -17,6 +17,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 - **TL-03 — 范围与目标一致。** project、episode、chapter 和 target identity 必须从统一 payload/normalizer 派生；写入方与读取方不得使用不同 scope 语义。
 - **TL-04 — 提交失败原子回滚。** Task 创建事务中的 target ownership、Wait、billing、event 或 Outbox 任一步失败必须整体回滚，不得留下 Task、冻结金额、孤儿记录或不可恢复 dedupe 状态。Redis 在事务提交后不可用时由持久 `task.enqueue` responsibility 恢复，不得把已正确提交的 Task 伪造为业务失败再补偿。
 - **TL-04A — Dedupe 绑定服从当前锁定事实。** 普通读取只可发现 dedupe 候选；复用决定必须在同一事务以 `FOR UPDATE` 重读 Task。候选已经终态、identity/fingerprint 冲突或缺失完整 event/outbox bundle 时必须失败，不得把 REPEATABLE READ 旧快照中的 active Task 绑定给新 Wait。
+- **TL-04B — 已提交 Task 只按 canonical identity 复用生命周期。** 同 target、同输入签名的 active Task 只能作为不可变 Operation Plan dependency 加入调用方的唯一 Wait，不得再次创建、入队或收费；同 target、不同输入签名在 active 期间必须拒绝新计划。completed target 由领域资源事实跳过，failed/cancelled target 才可形成新的 PlannedTask。dependency 在 snapshot 写入前必须验证 user/project/episode/type/target 与 active 状态，Wait 绑定继续使用既有锁定 Task 的原子 terminal fold，不得靠客户端状态、refetch 或 dedupe key 猜测。
 - **TL-05 — 重试有唯一策略。** 错误分类决定是否进入更高 DB Task attempt；空输出、截断、JSON 解析、Schema 和业务计划校验统一属于 `OUTPUT_VALIDATION`，仅 LLM Task 可由队列重试，临时供应商错误同样可重试，鉴权、配置、余额、内容安全和 outcome unknown 等永久失败不得重试。队列、worker 与 Agent 不能叠加隐式重试或把永久失败吞掉。
 - **TL-06 — 终态驱动下游。** Task 完成/失败是唤醒 Agent 和刷新 Canvas 的唯一业务边；不得用轮询、历史消息或局部 loading 推断替代。
 - **TL-06A — 终态立即撤销瞬时运行态。** 结构化流和 optimistic runtime 在 Task completed/failed/canceled 终态到达时必须立即退出；历史 `task-submitted` 消息不得继续充当 active Task。Overlay 不得用 TTL 承担清理正确性。Structured stream 以 `streamRunId + stepAttempt + seq` 拒绝旧、重复和乱序 chunk，旧 attempt 的终态不得封锁新 retry。源剧本生成和制作规划生成即使复用同一 worker，也必须使用不同 Task type 与 target。
@@ -81,7 +82,7 @@ route、queue、worker、DB、Agent 和 Canvas 必须对同一个 Task 生命周
 
 ## 验证
 
-- `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts` 和 `outbox-delivery-lifecycle.integration.test.ts` 使用真实 MySQL/Redis 验证 Task/freeze/event/outbox 的原子创建、去重、回滚和恢复。
+- `tests/integration/task/create-task-dedupe.integration.test.ts`、`approved-operation-plan-batch*.integration.test.ts` 和 `outbox-delivery-lifecycle.integration.test.ts` 使用真实 MySQL/Redis 验证 Task/freeze/event/outbox 的原子创建、去重、active dependency 进入同一 Wait、回滚和恢复。
 - `tests/integration/task/task-attempt-claim.integration.test.ts`、`task-reconcile-queue.integration.test.ts`、`task-target-terminal-{ownership,projectors}.integration.test.ts` 验证并发 attempt owner 的穷尽 claim、queue unavailable、真实 Redis terminal delivery 后保留 external id/target owner 的同 Task 恢复、late terminal 和唯一业务 projector。
 - `tests/integration/task/project-agent-task-terminal-wait-concurrency.integration.test.ts` 验证并发终态通过锁定 Wait aggregate 收敛且 continuation command 唯一。
 - `tests/integration/task/worker-log-context-concurrency.integration.test.ts` 在真实 tsx worker 启动方式下交错两个 Task，验证 `taskId + taskAttempt` 不会退化为共享进程变量。

@@ -14,6 +14,7 @@ import { attachGoldenOracleEvidence } from '../oracle/evidence'
 import { readGoldenOracleSnapshot } from '../oracle/reader'
 import type { GoldenOracleSnapshot } from '../oracle/types'
 import { setGoldenMediaStatusDelay, setGoldenStreamPacing } from '../providers/control'
+import { GOLDEN_REMAINING_VIDEO_REQUEST } from '../providers/model/policy'
 import { workspaceNodeId } from '@/features/project-workspace/canvas/workspace-canvas-node-ids'
 import { TASK_TYPE } from '@/lib/task/types'
 
@@ -379,6 +380,78 @@ async function assertAllScopeVideoProjection(
   await expect(page.locator('article[data-node-id^="video-plan:"] video[src]')).toHaveCount(videoSegments.length)
 }
 
+async function submitSingleCanvasVideo(input: {
+  readonly page: import('@playwright/test').Page
+  readonly scope: GoldenScope
+}): Promise<string> {
+  await setGoldenMediaStatusDelay(60_000)
+  try {
+    const generateButton = input.page
+      .getByRole('button', { name: /^生成视频/ })
+      .filter({ visible: true })
+      .first()
+    await expect(generateButton).toBeEnabled({ timeout: 60_000 })
+    await expect(generateButton).toHaveAttribute('title', /1 个媒体生成任务/)
+    await generateButton.click()
+
+    await expect.poll(async () => {
+      const snapshot = await readGoldenOracleSnapshot(input.scope)
+      return {
+        tasks: snapshot.tasks.filter((task) => task.type === TASK_TYPE.VIDEO_SEGMENT).length,
+        segments: snapshot.domain.videoSegments.length,
+      }
+    }, {
+      timeout: 30_000,
+      message: 'one Canvas video action must create exactly one durable Segment and Task',
+    }).toEqual({ tasks: 1, segments: 1 })
+
+    await expect.poll(async () => {
+      const nodes = input.page.locator('article[data-node-id^="video-plan:"]')
+      const phases = await nodes.evaluateAll((items) => items.map((item) => (
+        item.getAttribute('data-lifecycle-phase')
+      )))
+      return {
+        active: phases.filter((phase) => phase === 'queued' || phase === 'processing').length,
+        pending: phases.filter((phase) => phase === 'pending').length,
+        total: phases.length,
+      }
+    }, {
+      timeout: 30_000,
+      message: 'only the clicked Canvas video node may enter an active lifecycle',
+    }).toEqual(expect.objectContaining({ active: 1 }))
+
+    const active = await readGoldenOracleSnapshot(input.scope)
+    const task = active.tasks.find((candidate) => candidate.type === TASK_TYPE.VIDEO_SEGMENT)
+    const segment = active.domain.videoSegments[0]
+    expect(task).toMatchObject({
+      targetType: 'ProjectVideoSegment',
+      targetId: segment?.id,
+    })
+    if (typeof segment?.id !== 'string') throw new Error('GOLDEN_SINGLE_VIDEO_SEGMENT_ID_MISSING')
+    return segment.id
+  } finally {
+    await setGoldenMediaStatusDelay(0)
+  }
+}
+
+async function waitForSingleCanvasVideoCompletion(input: {
+  readonly page: import('@playwright/test').Page
+  readonly scope: GoldenScope
+  readonly segmentId: string
+}): Promise<void> {
+  await expect.poll(async () => {
+    const snapshot = await readGoldenOracleSnapshot(input.scope)
+    return snapshot.domain.videoSegments.find((segment) => segment.id === input.segmentId)?.status ?? null
+  }, {
+    timeout: 90_000,
+    message: 'the single Canvas video must complete before the remaining Assistant batch',
+  }).toBe('completed')
+
+  const composer = input.page.getByPlaceholder('和 AI 一起创造').filter({ visible: true })
+  await composer.fill(GOLDEN_REMAINING_VIDEO_REQUEST)
+  await input.page.getByRole('button', { name: '发送', exact: true }).filter({ visible: true }).click()
+}
+
 async function submitObservedBoundary(input: {
   readonly page: import('@playwright/test').Page
   readonly scope: GoldenScope
@@ -491,6 +564,8 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
   let observedAudioHiddenBeforeVideos = false
   let observedAudioVisibleAtAudioStage = false
   let observedFinalTimelineHiddenBeforeAudioCompletion = false
+  let singleCanvasVideoSegmentId: string | null = null
+  let requestedRemainingVideoBatch = false
   let lastBoundary: GoldenMainlineBoundary = 'waiting'
   let missingChoiceSurfaceSince: number | null = null
   const deadline = Date.now() + 25 * 60_000
@@ -541,6 +616,28 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
     }
 
     const boundary = await readGoldenMainlineBoundary(page)
+    if (
+      workflowPosition === 'video_segments:ready'
+      && boundary === 'waiting'
+      && singleCanvasVideoSegmentId === null
+    ) {
+      singleCanvasVideoSegmentId = await submitSingleCanvasVideo({ page, scope })
+      continue
+    }
+    if (
+      workflowPosition === 'video_segments:ready'
+      && boundary === 'waiting'
+      && singleCanvasVideoSegmentId !== null
+      && !requestedRemainingVideoBatch
+    ) {
+      await waitForSingleCanvasVideoCompletion({
+        page,
+        scope,
+        segmentId: singleCanvasVideoSegmentId,
+      })
+      requestedRemainingVideoBatch = true
+      continue
+    }
     if (workflow.status === 'needs_user_choice' && boundary === 'waiting') {
       missingChoiceSurfaceSince ??= Date.now()
       if (Date.now() - missingChoiceSurfaceSince >= 15_000) {
@@ -568,6 +665,13 @@ test('[GJ-MAIN-STORY-TO-FINAL-DELIVERABLE] real multi-chapter browser journey re
         oracle.tasks.some((task) => task.targetType === 'ProjectVideoSegment' && task.type !== TASK_TYPE.VIDEO_SEGMENT),
         'every video segment must use the canonical video_segment Task',
       ).toBe(false)
+      const videoTasks = oracle.tasks.filter((task) => task.type === TASK_TYPE.VIDEO_SEGMENT)
+      expect(singleCanvasVideoSegmentId, 'main Journey must exercise exact Canvas video generation').not.toBeNull()
+      expect(requestedRemainingVideoBatch, 'main Journey must request the remaining Assistant video batch').toBe(true)
+      expect(videoTasks, 'the remaining batch must skip the already-completed Canvas Segment').toHaveLength(
+        oracle.domain.videoSegments.length,
+      )
+      expect(new Set(videoTasks.map((task) => task.targetId)).size).toBe(oracle.domain.videoSegments.length)
       expect(oracle.domain.assetRequirements.length, 'main Journey must exercise multiple planned assets').toBeGreaterThanOrEqual(2)
       const audioPlanTasks = assertOperationGroupWait(oracle, [
         'plan_episode_bgm_score',

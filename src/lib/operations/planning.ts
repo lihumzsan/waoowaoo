@@ -43,12 +43,20 @@ export interface PlannedTask {
   locale: Locale
 }
 
+export interface PlannedTaskDependency {
+  taskId: string
+  taskType: TaskType
+  target: PlannedTaskTarget
+  episodeId: string | null
+}
+
 export interface OperationPlan {
   kind: OperationPlanKind
   operationId: ProjectAgentOperationId
   projectId: string
   userId: string
   tasks: PlannedTask[]
+  taskDependencies?: PlannedTaskDependency[]
   reservedIdentityIds?: string[]
   summary?: string | null
   metadata?: Record<string, unknown>

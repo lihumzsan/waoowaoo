@@ -104,11 +104,11 @@ describe('tool input schema compatibility', () => {
       'generate_edit_script_assets',
       'revise_edit_script_assets',
       'generate_edit_shot_execution_plan',
-      'generate_video_segments',
       'render_chapters',
     ]) {
       expect(Object.keys(registry[operationId]?.toolInputSchema.properties ?? {})).toContain('chapterId')
     }
+    expect(Object.keys(registry.generate_video_segments.toolInputSchema.properties)).toEqual(['scope'])
 
     for (const operationId of [
       'ingest_script',

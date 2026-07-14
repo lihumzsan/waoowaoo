@@ -273,6 +273,7 @@ export interface ProjectEditScript {
 }
 
 export interface ProjectEditScriptGenerationSegment {
+  videoSegmentId: string
   segmentId: string
   shotIds: string[]
   continuity: string

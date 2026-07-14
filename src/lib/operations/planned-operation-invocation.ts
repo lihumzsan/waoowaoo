@@ -463,10 +463,14 @@ export async function invokeApprovedOperationPlan<Input, Output>(params: {
       if (params.ctx.executionFence) {
         await assertProjectAgentOperationExecutionFenceInTransaction(tx, params.ctx.executionFence)
       }
-      if (tasks.length > 0) {
+      const waitTaskIds = Array.from(new Set([
+        ...tasks.map((task) => task.id),
+        ...(snapshot.plan.taskDependencies ?? []).map((dependency) => dependency.taskId),
+      ])).sort()
+      if (waitTaskIds.length > 0) {
         await params.ctx.taskBatchBinding?.bindInTransaction(tx, {
           operationId: params.operation.id,
-          taskIds: tasks.map((task) => task.id),
+          taskIds: waitTaskIds,
         })
       }
       await tx.operationExecution.update({

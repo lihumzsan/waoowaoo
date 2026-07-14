@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { CanvasLayoutNodeType } from '@/lib/project-canvas/layout/canvas-layout-contract'
 import type { TaskRuntimeTarget } from '@/lib/task/runtime-targets'
+import type { VideoSegmentGenerationScope } from '@/lib/video-segments/scope'
 import type { WorkspaceCanvasLifecycle } from './lifecycle/workspace-canvas-lifecycle'
 
 export type WorkspaceCanvasNodeKind =
@@ -48,7 +49,10 @@ export type WorkspaceCanvasNodeAction =
       readonly requirementId: string
       readonly description: string
     }
-  | { readonly type: 'generate_video_segments' }
+  | {
+      readonly type: 'generate_video_segments'
+      readonly scope: Extract<VideoSegmentGenerationScope, { readonly kind: 'segment' }>
+    }
   | { readonly type: 'render_final_video' }
   | { readonly type: 'plan_bgm_score' }
   | { readonly type: 'generate_bgm_score' }
@@ -225,7 +229,7 @@ export interface WorkspaceCanvasVideoPlanDetails {
   readonly chapterId: string
   readonly segmentId: string
   readonly segmentIndex: number
-  readonly videoSegmentId?: string | null
+  readonly videoSegmentId: string
   readonly shotIds: readonly string[]
   readonly shotNumbers: readonly number[]
   readonly durationSec: number
