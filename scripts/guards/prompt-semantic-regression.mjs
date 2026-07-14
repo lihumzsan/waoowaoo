@@ -17,6 +17,23 @@ const criticalTemplateTokens = new Map([
   ['edit-script/shot-execution-plan', ['"shotScale"', '"cameraMovement"', '"movement"', '"stability"']],
 ])
 
+const criticalLocalizedTemplateTokens = new Map([
+  ['project-agent/system', {
+    en: [
+      'Choice tools are governed by `workflowStatus` and `enabledOperationIds`',
+      'When `workflowRecommendedOperation` is non-empty and appears in both `allowedOperationIds` and `enabledOperationIds`',
+      'When `workflowStatus=needs_user_choice` and `enabledOperationIds` contains the current-stage choice tool',
+      'A text-only request, presentation, or “please confirm” message is not a valid terminal condition.',
+    ],
+    zh: [
+      'Choice 工具由 `workflowStatus` 与 `enabledOperationIds` 共同约束',
+      '`workflowRecommendedOperation` 非空且同时出现在 `allowedOperationIds` 与 `enabledOperationIds`',
+      '`workflowStatus=needs_user_choice` 且 `enabledOperationIds` 中存在当前阶段的 Choice 工具',
+      '纯文字提问、展示内容或“请确认”不是有效终点。',
+    ],
+  }],
+])
+
 function fail(title, details = []) {
   console.error(`\n[prompt-semantic-regression] ${title}`)
   for (const line of details) {
@@ -108,6 +125,22 @@ for (const entry of entries) {
   for (const token of requiredTokens) {
     if (!template.includes(token)) {
       violations.push(`missing semantic token ${token} in ${relTemplatePath}`)
+    }
+  }
+
+  const localizedTokens = criticalLocalizedTemplateTokens.get(entry.pathStem)
+  for (const [locale, tokens] of Object.entries(localizedTokens || {})) {
+    const localizedTemplatePath = path.join(root, 'src', 'lib', 'ai-prompts', 'templates', entry.pathStem, `${entry.promptId}.${locale}.txt`)
+    const relLocalizedTemplatePath = `src/lib/ai-prompts/templates/${entry.pathStem}/${entry.promptId}.${locale}.txt`
+    if (!fs.existsSync(localizedTemplatePath)) {
+      violations.push(`missing localized semantic template: ${relLocalizedTemplatePath}`)
+      continue
+    }
+    const localizedTemplate = fs.readFileSync(localizedTemplatePath, 'utf8')
+    for (const token of tokens) {
+      if (!localizedTemplate.includes(token)) {
+        violations.push(`missing semantic token ${token} in ${relLocalizedTemplatePath}`)
+      }
     }
   }
 }

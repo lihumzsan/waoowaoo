@@ -45,6 +45,7 @@ Prompt 是模型行为指令，不是结构化业务事实的第二权威。每�
 - 已删除的 location spatial profile、旧 Soundscape plan 与 source script 曾要求模型重复输出固定版本标记，但系统没有第二协议或 reader 分支；这些字段只会扩大 Prompt/schema/fixture 漂移面。当前 Ambient Sound 只保留真实规划形状。
 - 核心剪辑、镜头执行计划与旧 Soundscape 曾分别要求模型回传资产 UUID、系统 shot identity 或 shot UUID；Canvas/对白/时间线再用 ID 作为缺名 fallback。当前核心计划与 Ambient Sound 统一使用 raw 名称/短引用/clip order，服务端解析成 final identity。
 - 2026-07 的分镜协议曾同时保留 Panel 图片链与全能参考旁路，Prompt owner 仍绑在旧链。当前核心镜头输出已缩减为动作/表演/对白/同步声音/连续性，执行计划只输出景别、运镜方式和运镜稳定性，视频 Prompt 只由 `src/lib/video-segments/prompt.ts` 构建。
+- 项目助手系统 Prompt 曾在视频链路重构中被整体简化，推荐操作同轮调用、`needs_user_choice` 的持久 Choice 以及 Choice/Approval 不能由纯文字替代的闭环语义随旧媒体说明一起被删除。真实模型在视觉风格图片完成后只输出“请选择”，而 deterministic Golden provider 硬编码了正确 Choice 工具，既有 guard 又没有覆盖非结构化系统 Prompt 的关键行为语义。当前 `prompt-semantic-regression` 对中英文模板同时保留这组最小语义 token；它只能反证契约被删除，不能证明真实外部模型服从 Prompt。
 - 一分钟创作简报曾生成 1757 字源剧本并被全局规划估成 275 秒；首次纠正只强化源剧本 Prompt，又用“每个 Beat 通常 15-45 秒”的通用区间估时。真实复发中，源剧本已压缩为单场、4 个 Beat、509 字，但全局规划仍按固定区间估成 115 秒，证明旧防线没有覆盖“紧凑剧本 + 多 Beat”的真实组合。当前防线让源剧本按用户时长控制全部正文规模，同时要求 Beat 时长只从对白、动作、反应、停顿和转场的实际表演时间派生；Beat 数量不得成为扩大片长的第二解释源。尚未用真实模型重复生成该案例，模型服从性仍是未验证盲区。
 
 ## 修改检查表
